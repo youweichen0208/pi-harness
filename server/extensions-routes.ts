@@ -1,4 +1,5 @@
 import { nativeSkills } from "./skills-service.js";
+import { builtinExtensionsState, toggleBuiltinDocument } from "./builtin-extensions.js";
 import { mkdirSync, readFileSync, writeFileSync, renameSync, statSync, realpathSync, existsSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { killPidTree } from "./process-utils.js";
@@ -76,6 +77,17 @@ export function installExtensionsRoutes(app: Express, service: () => AgentServic
 		if (!cs || cs.cwd !== cwd || cs.switchingWorkspace || service().quiesceInfo().quiesced) { res.status(409).json({ error: "Workspace unavailable" }); return; }
 		const agentDir = getAgentDir();
 		try {
+			if (["builtin-list", "builtin-toggle"].includes(action)) {
+				const conversationId = req.body.conversationId;
+				const valid = () => cs.cwd === cwd && !cs.switchingWorkspace && cs.conversationId === conversationId && !service().quiesceInfo().quiesced;
+				if (!valid()) throw Error("Conversation changed; refresh and retry");
+				if (action === "builtin-toggle") {
+					if (mutation) throw Error("Extension manager busy");
+					toggleBuiltinDocument(req.body.id, req.body.enabled, req.body.version);
+				}
+				res.json(builtinExtensionsState(cs.session, conversationId, cs.session.isIdle));
+				return;
+			}
 			if (action === "open-info" && req.body.id === "skills:user") {
 				const path = join(agentDir, "skills");
 				res.json({ absolute: existsSync(path) ? path : agentDir }); return;

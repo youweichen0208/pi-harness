@@ -1,7 +1,7 @@
+import type { BuiltinExtensionId } from "./protocol.js";
 import { createPlanExtension } from "./plan/extension.js";
-import { createDocumentMarkdownExtension } from "./document-conversion/extension.js";
 import { createOkfExtension } from "./okf/extension.js";
-import { SettingsManager, createCodemodeExtension, createMcpExtension, createToolSearchExtension, type InlineExtension } from "@earendil-works/pi-coding-agent";
+import { SettingsManager, createCodemodeExtension, createMcpExtension, createToolSearchExtension, type InlineExtension, type ExtensionFactory } from "@earendil-works/pi-coding-agent";
 
 const runOverrides = new WeakMap<SettingsManager, { compaction?: { enabled: boolean }; retry?: { enabled: boolean } }>();
 export function setConversationRunSettings(settings: SettingsManager, values: { autoCompaction?: boolean; autoRetry?: boolean }) {
@@ -22,16 +22,18 @@ export function conversationSettings(cwd: string, agentDir: string): SettingsMan
 	return settings;
 }
 
+/** Shared by resource loading and the built-in extension inventory. */
+export const nativeExtensionRegistry = [
+	{ name: "pi-harness-plan", replaceable: true, factory: createPlanExtension },
+	{ name: "pi-harness-okf", replaceable: true, factory: createOkfExtension },
+	{ name: "codemode", builtin: true, replaceable: true, factory: createCodemodeExtension },
+	{ name: "tool-search", builtin: true, replaceable: true, factory: createToolSearchExtension },
+	{ name: "mcp", builtin: true, replaceable: true, factory: createMcpExtension },
+] satisfies { name: BuiltinExtensionId; builtin?: boolean; replaceable: boolean; factory: () => ExtensionFactory }[];
+
 /** Same native extensions as the Pi CLI; activation follows the user's settings. */
 export function nativeToolExtensions(): InlineExtension[] {
-	return [
-		{ name: "pi-harness-plan", replaceable: true, factory: createPlanExtension() },
-		{ name: "pi-harness-pdf-markdown", replaceable: true, factory: createDocumentMarkdownExtension() },
-		{ name: "pi-harness-okf", replaceable: true, factory: createOkfExtension() },
-		{ name: "codemode", builtin: true, replaceable: true, factory: createCodemodeExtension() },
-		{ name: "tool-search", builtin: true, replaceable: true, factory: createToolSearchExtension() },
-		{ name: "mcp", builtin: true, replaceable: true, factory: createMcpExtension() },
-	];
+	return nativeExtensionRegistry.map(extension => ({ ...extension, factory: extension.factory() }));
 }
 
 /** Stable settings aliases for the SDK's named inline extension paths. */

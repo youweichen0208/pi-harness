@@ -1,6 +1,7 @@
 import { isTopDialog, useDialogFocus } from "../use-dialog-focus";
 import { ComponentUpdatesPanel } from "./ComponentUpdatesPanel";
 import { SystemPromptPanel } from "./SystemPromptPanel";
+import { BuiltinExtensionsPanel } from "./BuiltinExtensionsPanel";
 import { ExtensionsPanel } from "./ExtensionsPanel";
 import { useState, useEffect } from "react";
 import { FiX, FiSettings, FiCpu, FiPackage, FiBox, FiRefreshCw } from "react-icons/fi";
@@ -16,7 +17,7 @@ interface SettingsModalProps {
 	chat: {
 		ready: boolean;
 		settings: UiSettingsState | null;
-		state?: { cwd: string; conversationId: string; planSettings?: import("../types").PlanSettingsState; tree?: import("../types").UiTreeState } | null;
+		state?: { isStreaming?: boolean; cwd: string; conversationId: string; planSettings?: import("../types").PlanSettingsState; tree?: import("../types").UiTreeState } | null;
 		dialog: { id: string; conversationId: string; kind: "select" | "confirm" | "input" | "editor"; title: string; args: unknown[] } | null;
 		update?: Omit<Extract<ServerMessage, { type: "update_status" }>, "type"> | null;
 		componentUpdates: Extract<ServerMessage, { type: "component_updates" }> | null;
@@ -51,14 +52,18 @@ export function SettingsModal({ chat, send, onClose, initialTab = "prompt" }: Se
 				<div className="modal-body"><div className="set-section">
 					{!settings ? <p>{t("loading")}</p> : <>
 						<label className="tree-edit-preference"><input type="checkbox" checked={settings.editResendNewSession ?? false} onChange={event => send({ type: "set_settings", editResendNewSession: event.target.checked })} />{t("treeEditNewSession")}</label>
-						{chat.state?.planSettings && <div className="plan-settings">
-							<label><input type="checkbox" checked={chat.state.planSettings.enabled} disabled={!chat.ready} onChange={event => send({ type: "set_plan_enabled", conversationId: chat.state!.conversationId, enabled: event.target.checked })} />{t("planEnabled")}</label>
-							<p>{t("planEnabledHint")}</p>
-							{!chat.state.planSettings.available ? <p>{t(chat.state.planSettings.reason === "conflict" ? "planConflict" : "planMissing")}</p> : chat.state.planSettings.pending ? <p>{t("planPending")}</p> : null}
-						</div>}
 						{tab === "prompt" && chat.state && <SystemPromptPanel key={`${chat.state.cwd}:${chat.state.conversationId}`} cwd={chat.state.cwd} conversationId={chat.state.conversationId} />}
 						{tab === "skills" && chat.state && <SkillsPanel key={chat.state.cwd} cwd={chat.state.cwd} reload={() => send({ type: "extensions_reload" })} />}
-						{tab === "extensions" && chat.state?.cwd && <ExtensionsPanel key={chat.state.cwd} cwd={chat.state.cwd} onUpdateCount={setExtensionUpdates} reload={() => send({ type: "extensions_reload" })} />}
+						{tab === "extensions" && chat.state?.cwd && <ExtensionsPanel
+							key={chat.state.cwd} cwd={chat.state.cwd} onUpdateCount={setExtensionUpdates}
+							reload={() => send({ type: "extensions_reload" })}
+							builtins={<BuiltinExtensionsPanel
+								key={chat.state.conversationId} cwd={chat.state.cwd} conversationId={chat.state.conversationId}
+								ready={chat.ready} canReload={!chat.state.isStreaming && !chat.state.tree?.verifying && !chat.state.tree?.externallyModified && !chat.state.tree?.busy}
+								plan={chat.state.planSettings} togglePlan={enabled => send({ type: "set_plan_enabled", conversationId: chat.state!.conversationId, enabled })}
+								reload={() => send({ type: "extensions_reload" })} openNative={() => setTab("native-mcp")}
+							/>}
+						/>}
 						{tab === "native-mcp" && chat.state?.cwd && <NativeMcpPanel key={`${chat.state.cwd}:${chat.state.conversationId}`} cwd={chat.state.cwd} send={send} dialog={chat.dialog} />}
 						{tab === "updates" && <ComponentUpdatesPanel cwd={chat.state?.cwd ?? ""} updates={updates} onUpdateCount={setExtensionUpdates} reload={() => send({ type: "extensions_reload" })} />}
 					</>}

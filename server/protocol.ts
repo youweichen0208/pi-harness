@@ -1414,6 +1414,26 @@ export interface ExtensionPackage {
 	latest?: string; update?: boolean; checkError?: string; protected?: boolean;
 }
 export interface ExtensionsState { packages: ExtensionPackage[]; version: string; trusted: boolean; checkedAt?: number; autoCheck?: boolean; }
+
+export type BuiltinExtensionId = "pi-harness-plan" | "pi-harness-okf" | "codemode" | "tool-search" | "mcp";
+export interface BuiltinExtensionState {
+	id: BuiltinExtensionId;
+	status: "loaded" | "disabled" | "pending" | "unavailable" | "error";
+	enabled?: boolean;
+	reason?: "missing" | "conflict" | "filtered";
+	error?: string;
+	tools: string[];
+	commands: string[];
+}
+export interface BuiltinExtensionsState {
+	conversationId: string;
+	items: BuiltinExtensionState[];
+	documentVersion?: string;
+	canReload: boolean;
+}
+export type BuiltinExtensionsRequest =
+	| { action: "builtin-list"; conversationId: string }
+	| { action: "builtin-toggle"; conversationId: string; id: "pi-harness-okf"; enabled: boolean; version: string };
 export interface ExtensionCatalogItem { name: string; description: string; descriptionZh?: string; version?: string; author?: string; downloads?: number; date?: number; types: string[]; image?: string; url: string; repository?: string; }
 export interface ExtensionCatalog { items: ExtensionCatalogItem[]; page: number; pages: number; total?: number; }
 export interface ExtensionPackageDetails { source: string; name: string; version?: string; description?: string; author?: string; repository?: string; license?: string; resources: Record<string, string[]>; canPin: boolean; }

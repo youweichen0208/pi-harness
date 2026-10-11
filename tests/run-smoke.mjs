@@ -29,7 +29,7 @@ const WIN32_KNOWN_ENV_FAIL = new Set(["terminal-smoke-test", "restart-handoff-te
 
 const ALL = [
 	"project-workspaces-test",
-	"document-extensions-sdk-test",
+	"builtin-extensions-test",
 	"context-corpus-test",
 	"context-eval-test",
 	"context-session-test",

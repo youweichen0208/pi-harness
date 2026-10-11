@@ -166,8 +166,8 @@ function scanInputs(cwd: string, inputs: string[], knownSourcePaths: Set<string>
 			total += stat.size;
 			if (files.size >= MAX_FILES || total > MAX_TOTAL_BYTES) throw new Error("An ingestion batch is limited to 1000 files and 2 GiB");
 			files.add(path);
-		} else if (depth === 0) throw new Error(`OKF accepts Markdown or normalized evidence bundles only. Convert this source with document_to_markdown first: ${path}`);
-		else if (stat.isFile() && ![".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"].includes(extname(path).toLowerCase()) && warnings.length < 100) warnings.push(`Skipped non-Markdown source; convert with document_to_markdown first: ${path}`);
+		} else if (depth === 0) throw new Error(`OKF accepts Markdown or normalized evidence bundles only. Provide this source as Markdown: ${path}`);
+		else if (stat.isFile() && ![".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"].includes(extname(path).toLowerCase()) && warnings.length < 100) warnings.push(`Skipped non-Markdown source; provide Markdown instead: ${path}`);
 	};
 	for (const path of roots) visit(path, 0);
 	return { roots, files: [...files], dependencyRoots, excludedRoots, warnings };

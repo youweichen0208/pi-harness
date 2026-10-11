@@ -1,11 +1,8 @@
-import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { convertDocument } from "../../server/document-conversion/service.js";
-import { readDocumentBundle } from "../../server/document-bundle.js";
-import { updateDocumentSettings } from "../../server/document-extension-settings.js";
+import { bundleHash, readDocumentBundle } from "../../server/document-bundle.js";
 import { nextIngestion, previewKnowledgeReview, publishKnowledge, readCandidates, startIngestion, submitCandidates, verifyKnowledge } from "../../server/okf/service.js";
 import type { CandidateInput } from "../../server/okf/types.js";
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
@@ -28,18 +25,29 @@ async function draft(basis: CandidateInput["basis"] = "fact", staleAfter?: strin
 	return { jobId: job.jobId, result };
 }
 
+function evidenceFixture(outputDir: string) {
+	mkdirSync(join(outputDir, "original"), { recursive: true });
+	const original = "export const code = 1032;\n", hash = bundleHash(original), commit = "a".repeat(40);
+	const files = {
+		"original/source.ts": original,
+		"document.md": "# Source\n\n" + original,
+		"structure.json": "{}",
+		"source-map.json": JSON.stringify({ sourceHash: hash, blocks: [{ id: "code", text: original, locator: { lineStart: 1, lineEnd: 1, path: "replication.ts", commit } }] }),
+	};
+	for (const [name, content] of Object.entries(files)) writeFileSync(join(outputDir, name), content);
+	writeFileSync(join(outputDir, "bundle.json"), JSON.stringify({ kind: "pi-harness-normalized-document", version: 1,
+		source: { id: "source", name: "replication.ts", format: "ts", contentHash: hash, original: "original/source.ts", inputPath: "replication.ts", git: { repository: "fixture", commit, path: "replication.ts", dirty: false } },
+		markdown: "document.md", sourceMap: "source-map.json", structure: "structure.json", parserVersion: "fixture", status: "complete", warnings: [], files: Object.fromEntries(Object.entries(files).map(([name, content]) => [name, bundleHash(content)])) }));
+	return { markdownPath: join(outputDir, "document.md") };
+}
+
 test("portable bundle preserves source snapshots and Git line locations without a conversion dependency in OKF", async () => {
-	const git = (...args: string[]) => execFileSync("git", args, { cwd, stdio: "pipe" });
-	git("init");
-	writeFileSync(join(cwd, "replication.ts"), "export const code = 1032;\n");
-	git("add", "replication.ts"); git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "-c", "commit.gpgsign=false", "commit", "-m", "fixture");
 	const outputDir = join(cwd, "parsed");
-	await convertDocument({ inputPath: join(cwd, "replication.ts"), outputDir });
+	evidenceFixture(outputDir);
 	const { bundle, blocks } = readDocumentBundle(outputDir);
 	expect(bundle.source.git?.dirty).toBe(false);
 	expect(bundle.source.git?.commit).toMatch(/^[a-f0-9]{40}$/);
 	expect(blocks[0].locator).toMatchObject({ lineStart: 1, lineEnd: 1, path: "replication.ts", commit: bundle.source.git?.commit });
-	updateDocumentSettings({ pdfEnabled: false });
 	const job = await startIngestion({ cwd, inputPaths: [outputDir] });
 	expect(job.sourceCount).toBe(1);
 	expect((await nextIngestion({ cwd, jobId: job.jobId })).sourceCounts.complete).toBe(1);
@@ -54,15 +62,14 @@ test("portable bundle preserves source snapshots and Git line locations without 
 
 test("OKF rejects unconverted raw formats and detects bundle tampering before archiving", async () => {
 	writeFileSync(join(cwd, "manual.pdf"), "%PDF-fixture");
-	await expect(startIngestion({ cwd, inputPaths: ["manual.pdf"] })).rejects.toThrow(/document_to_markdown/);
+	await expect(startIngestion({ cwd, inputPaths: ["manual.pdf"] })).rejects.toThrow(/Provide this source as Markdown/);
 	writeFileSync(join(cwd, "raw.txt"), "Raw evidence.");
-	const converted = await convertDocument({ inputPath: join(cwd, "raw.txt"), outputDir: join(cwd, "parsed") });
+	const converted = evidenceFixture(join(cwd, "parsed"));
 	writeFileSync(converted.markdownPath, "Untracked rewrite.");
 	await expect(startIngestion({ cwd, inputPaths: ["parsed"] })).rejects.toThrow(/modified/);
 });
 
-test("plain Markdown intake works with conversion disabled and no Python runtime", async () => {
-	updateDocumentSettings({ pdfEnabled: false, pythonPath: join(root, "missing-python") });
+test("plain Markdown intake works without a converter or Python runtime", async () => {
 	const { result } = await draft();
 	expect(result?.stable).toEqual([]); expect(result?.draft).toEqual(["support"]);
 	const page = readFileSync(join(cwd, "knowledge/wiki/concepts/support.md"), "utf8");

@@ -1,8 +1,20 @@
 # Extensions 原生包管理
 
-应用内置的多格式转 Markdown 与 Markdown → OKF 知识蒸馏是两个独立具名 inline extension，随 server/dist 分发，不属于本页的原生安装包列表。二者通过证据包交接，可独立启停，知识扩展不调用转换器。开关、解析环境和使用命令见 [文档转换与 OKF](architecture-document-knowledge.md)。
+应用内置 Markdown → OKF 知识蒸馏，随 server/dist 分发。文档转 Markdown 已从默认原生扩展注册和设置清单移除，不再提供聊天工具、命令或解析环境检查入口；转换器实现、Python 资源和打包支持也已删除。
 
 设置 › Extensions 对接 Pi 1.0.4 的 `DefaultPackageManager`、`SettingsManager` 和 `ProjectTrustStore`。安装、移除、更新与资源发现运行在独立 Node worker；浏览页面不执行扩展入口，缺失依赖采用 `resolve(() => "skip")`，不会因浏览自动安装。包变更在新会话生效，当前会话仅在用户点击重载时通过已有 `extensions_reload` 生效。宿主不向模型注册工具、注入消息或系统提示词。
+
+## 内置扩展清单
+
+已安装页按内置扩展、安装包、单文件分组。五个内置条目由 `nativeExtensionRegistry` 与会话资源共同投影；包页签数量只统计安装包。内置清单独立请求，即使包 worker 失败仍能展示；不提供包更新、卸载或源码编辑。
+
+`/api/extensions` 的 `builtin-list`、`builtin-toggle` 都绑定活动 conversationId，并沿用 cwd/clientId、同源与 quiesce 校验。清单读取已有资源，不执行工厂、不加载包。工具来源必须匹配具名 inline/builtin 路径；第三方同名工具显示冲突。状态区分加载、关闭、待生效、不可用和配置/加载失败，MCP 的加载状态不代表服务器连接成功。查看设置跳转已有 MCP/Codemode 页。
+
+计划开关移入内置条目，继续使用现有计划协议和延迟生效规则。文档开关复用 document-extensions.json，使用版本校验避免覆盖其他客户端的修改；关闭立即拒绝后续执行，开启后按会话实际工具状态提示重载或新建会话。内置页重载按钮仅在连接正常、空闲且会话可写时可用。页面打开时轮询轻量清单，切换会话和关闭页面取消请求，迟到结果不覆盖新状态。
+
+复制命令只写剪贴板，不自动发送聊天请求。
+
+回归：`tests/builtin-extensions-test.mjs` 使用隔离 WebSocket 服务、真实 SDK 和本地模型夹具验证清单、关闭拒绝、跨客户端配置、版本冲突、新会话/重载，以及Markdown 导入到 OKF Wiki 草稿；`--browser` 覆盖五个条目、开关、命令复制、转换入口缺失、设置跳转、包列表失败、中英文与窄屏。它不证明外部模型的自主语义能力或真实 PDF 解析质量。
 
 ## 请求与运行边界
 

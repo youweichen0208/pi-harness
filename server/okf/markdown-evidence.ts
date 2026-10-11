@@ -20,7 +20,7 @@ export function evidenceDependencies(path: string, roots: string[]): SourceDepen
 /** Markdown-only intake: no converter, Python environment, or model invocation. */
 export async function normalizeMarkdownEvidence(input: { inputPath: string; outputDir: string; bundlePath?: string; signal?: AbortSignal; markdownAssets?: Record<string, string | null> }) {
 	input.signal?.throwIfAborted();
-	if (![".md", ".markdown"].includes(extname(input.inputPath).toLowerCase())) throw new Error("This legacy job contains raw files. Convert with document_to_markdown and start a new Markdown ingestion job.");
+	if (![".md", ".markdown"].includes(extname(input.inputPath).toLowerCase())) throw new Error("This legacy job contains raw files. Provide Markdown and start a new ingestion job.");
 	const sourceHash = bundleHash(readFileSync(input.inputPath));
 	if (input.bundlePath) {
 		const { bundle, blocks } = readDocumentBundle(input.bundlePath);

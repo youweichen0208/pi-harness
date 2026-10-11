@@ -104,6 +104,4 @@ Pi 1.0.4 专项：`pi-104-prompt-contract-test.mjs` 核对 Codemode on/only 的�
 
 原生计划回归：`plan-sdk-test.mjs` 与 `plan-settings-test.mjs` 纳入零 token 冒烟；浏览器单独执行 `node tests/plan-chat-browser-test.mjs`。均使用隔离目录与本地模拟模型，不调用真实服务。
 
-文档扩展回归：`document-extensions-sdk-test.mjs` 纳入零 token 冒烟，配合 document/okf 单测验证流程；真实 Docling/PDF 质量与平台资格单独验证，参见 [文档转换与 OKF](architecture-document-knowledge.md)。原生上下文基线同时关闭 plan、PDF 和 OKF 内置工具。
-
-CHM 离线解析测试：`python tests/document-chm-test.py`（Python 3.12，依赖见 `server/document-conversion/python/chm/requirements.txt`），CI 在三平台独立运行；设置好隔离环境后，`PI_CHM_TEST_RUNTIME=<包含 chm-html-v1 的目录> node tests/document-chm-integration-test.mjs` 验证实际转换至 OKF 发布，不调用模型。
+文档扩展回归：`builtin-extensions-test.mjs` 纳入零 token 冒烟，配合 OKF 单测验证 Markdown 导入和 Wiki 草稿发布；参见 [OKF 知识蒸馏](architecture-document-knowledge.md)。原生上下文基线关闭 plan 和 OKF 内置工具。

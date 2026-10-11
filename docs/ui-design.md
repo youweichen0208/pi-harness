@@ -188,6 +188,7 @@ Windows 浅色界面在 React 渲染前设置 data-platform，正文字号按原
 - 停止输入 800ms 后自动保存；选中文字时才显示格式工具条；`/` 打开 300px 宽的单列菜单。
 
 ## 8. 设置
+- Extensions 已安装页依次展示内置扩展、安装包、单文件及各自数量；五个内置条目显示用途、当前会话状态和可展开的工具/命令。计划开关在对应条目内。OKF 扩展提供服务全局开关和命令复制；文档转 Markdown 不再注册或展示；MCP/Codemode/工具搜索链接已有设置页。操作与生效规则见 architecture-extensions.md「内置扩展清单」。
 - Extensions 中通用入口（index/main/extension/plugin）显示所属扩展名称，完整路径保留在副行；开关、编辑等操作始终使用原生资源 ID。
 - 窗口最大 1240×800，圆角 `--r-lg`；侧栏 216px，内容区最宽 820px。
 - 一共五页：系统提示词、技能、Extensions、MCP 与 Codemode、更新。默认打开系统提示词。

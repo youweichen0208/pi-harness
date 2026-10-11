@@ -30,7 +30,6 @@ import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import express from "express";
-import { shutdownDocumentRuntime } from "./document-conversion/runtime.js";
 import compression from "compression";
 import { WebSocket, WebSocketServer } from "ws";
 import { VERSION, getAgentDir } from "@earendil-works/pi-coding-agent";
@@ -1052,7 +1051,6 @@ async function shutdown(): Promise<void> {
 
 
 	await service.disposeAll();
-	await shutdownDocumentRuntime();
 	wss.close();
 	httpServer.close();
 	process.exit(0);
