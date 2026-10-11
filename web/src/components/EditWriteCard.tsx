@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { FiChevronRight, FiMoreHorizontal } from "react-icons/fi";
+import { LuChevronRight as FiChevronRight, LuEllipsis as FiMoreHorizontal } from "react-icons/lu";
 import type { UiToolCallBlock } from "../types";
 import { useT } from "../i18n";
 import { editWriteChange, type ChangeLine, type EditWriteChange } from "../edit-write-presentation";

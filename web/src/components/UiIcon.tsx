@@ -4,5 +4,5 @@ const icons = { search: LuSearch, bug: LuBug, flask: LuFlaskConical, brush: LuBr
 export type UiIconName = keyof typeof icons;
 export function UiIcon({ name }: { name: UiIconName }) {
 	const Icon = icons[name];
-	return <Icon className="ui-icon" size={16} strokeWidth={1.5} aria-hidden="true" focusable="false" />;
+	return <Icon className="ui-icon" size={16} strokeWidth={2.5} aria-hidden="true" focusable="false" />;
 }

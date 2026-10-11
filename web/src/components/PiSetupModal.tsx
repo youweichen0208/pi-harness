@@ -1,7 +1,7 @@
 import { useDialogFocus } from "../use-dialog-focus";
 import { UiIcon } from "./UiIcon";
 import { useEffect, useState } from "react";
-import { FiCpu, FiRefreshCw, FiX } from "react-icons/fi";
+import { LuCpu as FiCpu, LuRefreshCw as FiRefreshCw, LuX as FiX } from "react-icons/lu";
 import type { ClientMessage, ProviderStatus } from "../types";
 import { useT } from "../i18n";
 

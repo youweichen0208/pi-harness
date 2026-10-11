@@ -8,7 +8,7 @@ import {
 	useState,
 	type RefObject,
 } from "react";
-import { FiChevronDown, FiChevronUp, FiX } from "react-icons/fi";
+import { LuChevronDown as FiChevronDown, LuChevronUp as FiChevronUp, LuX as FiX } from "react-icons/lu";
 import type { UiMessage } from "../types";
 import { buildSearchHits } from "../search-text";
 import { useT } from "../i18n";

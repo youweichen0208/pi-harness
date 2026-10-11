@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { FiList, FiSearch, FiChevronsDown, FiX, FiChevronDown, FiChevronRight, FiExternalLink } from "react-icons/fi";
+import { LuList as FiList, LuSearch as FiSearch, LuChevronsDown as FiChevronsDown, LuX as FiX, LuChevronDown as FiChevronDown, LuChevronRight as FiChevronRight, LuExternalLink as FiExternalLink } from "react-icons/lu";
 import { changedWords, foldDiff, parseUnifiedDiff, type ChangedFile } from "../changes";
 import { useChanges, type ChangesScope } from "../changes-context";
 import type { ClientMessage, ServerMessage, ScmBranchEntry } from "../types";

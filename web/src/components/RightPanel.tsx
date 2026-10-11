@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
-import { FiChevronRight, FiFolder, FiFile, FiSearch, FiDownload, FiLink, FiMaximize2, FiMoreHorizontal, FiPlus, FiRefreshCw, FiX } from "react-icons/fi";
+import { LuChevronRight as FiChevronRight, LuFolder as FiFolder, LuFile as FiFile, LuSearch as FiSearch, LuDownload as FiDownload, LuLink as FiLink, LuMaximize2 as FiMaximize2, LuEllipsis as FiMoreHorizontal, LuPlus as FiPlus, LuRefreshCw as FiRefreshCw, LuX as FiX } from "react-icons/lu";
 import type { FileEntry, FileListing, ScmFileEntry, ServerMessage, TaskProgress, UiMessage } from "../types";
 import { useT } from "../i18n";
 import { downloadFile } from "../download";

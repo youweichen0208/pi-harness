@@ -1,7 +1,7 @@
 import { useDialogFocus } from "../use-dialog-focus";
 import { UiIcon } from "./UiIcon";
 import { useEffect, useState } from "react";
-import { FiLayers, FiRefreshCw, FiSquare, FiTerminal, FiX } from "react-icons/fi";
+import { LuLayers as FiLayers, LuRefreshCw as FiRefreshCw, LuSquare as FiSquare, LuTerminal as FiTerminal, LuX as FiX } from "react-icons/lu";
 import type { BgServer, ClientMessage } from "../types";
 import { useT } from "../i18n";
 

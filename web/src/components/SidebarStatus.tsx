@@ -1,10 +1,10 @@
 import { compactWorkspacePath } from "../display-path";
 import { useEffect, useRef, useState } from "react";
-import { FiFile, FiFolder } from "react-icons/fi";
+import { LuFile as FiFile, LuFolder as FiFolder } from "react-icons/lu";
 import type { ChatState } from "../use-chat";
 import { useT } from "../i18n";
 
-interface FooterBarProps {
+interface SidebarStatusProps {
 	chat: ChatState;
 	send: (
 		msg:
@@ -14,11 +14,8 @@ interface FooterBarProps {
 	) => boolean;
 }
 
-/**
- * Compact status bar: connection, context usage, Git branch, session, queue, and the
- * workspace path — click the path to switch directories (with completion).
- */
-export function FooterBar({ chat, send }: FooterBarProps) {
+/** Workspace path and extension status retained below the sidebar controls. */
+export function SidebarStatus({ chat, send }: SidebarStatusProps) {
 	const t = useT();
 	const state = chat.state;
 	const [editing, setEditing] = useState(false);
@@ -58,14 +55,6 @@ export function FooterBar({ chat, send }: FooterBarProps) {
 	}, [selIdx]);
 
 	if (!state) return null;
-	const git = chat.gitBranch?.cwd === state.cwd ? chat.gitBranch : null;
-	const branchLabel = git?.notRepo ? t("notGitRepoShort") : git?.branch ? (git.detached ? `${t("scmDetached")} · ${git.branch}` : git.branch) : "—";
-
-	const connClass = chat.ready ? "ok" : "busy";
-	const connLabel = chat.ready ? t("connected") : t("connecting");
-
-
-
 	const startEdit = () => {
 		setDraft(state.cwd);
 		setEditing(true);
@@ -127,28 +116,14 @@ export function FooterBar({ chat, send }: FooterBarProps) {
 	};
 
 	return (
-		<footer className="statusbar">
-			<span className={`status-dot ${connClass}`} title={connLabel} />
-			<span className="status-item status-connection">{connLabel}</span>
-			{chat.serverVersion && <span className="status-item status-version" title={`pi-harness v${chat.serverVersion}`}>v{chat.serverVersion}</span>}
-			<span className="status-sep">·</span>
-
-
-			<span className="status-item status-branch" title={git?.notRepo ? branchLabel : `${t("scmCurrentBranch")}: ${branchLabel}`}>
-				{!git?.notRepo && <span className="workspace-stat-label">{t("workspaceBranch")}</span>}
-				<span className="status-branch-name">{branchLabel}</span>
-			</span>
-
+		<div className="sidebar-status-details">
 			{chat.statuses.length > 0 && (
 				<>
-					<span className="status-sep">·</span>
 					<span className="status-item ext-status" title={t("pluginStatus")}>
 						{chat.statuses.map((st) => st.text).join(" · ")}
 					</span>
 				</>
 			)}
-
-			<span id="wiki-status-slot" />
 
 			{editing ? (
 				<div className="status-cwd-wrap">
@@ -199,6 +174,6 @@ export function FooterBar({ chat, send }: FooterBarProps) {
 					<span className="workspace-stat-label">{t("workspacePath")}</span><span className="workspace-stat-path">{compactWorkspacePath(state.cwd)}</span>
 				</button>
 			)}
-		</footer>
+		</div>
 	);
 }

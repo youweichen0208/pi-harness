@@ -50,7 +50,7 @@ try {
 	assert.equal(await page.locator('.time-gap').count(),1);
 	assert.equal(await page.getByText('本次对话涉及').count(),0);
 	assert.equal(await page.locator('.conversation-files').count(),0);
-	await page.locator('.status-branch-name', {hasText:'非 Git 仓库'}).waitFor();
+	assert.equal(await page.locator('.changes-current-branch').count(), 0);
 	await page.locator('.msg-collapsed').first().waitFor();
 	const widths=await page.evaluate(()=>Object.fromEntries(['.msg-collapsed','.msg','.inputbox'].map(s=>[s,document.querySelector(s).getBoundingClientRect().width])));
 	assert.equal(widths['.msg-collapsed'],widths['.msg']);
@@ -78,19 +78,18 @@ try {
 	await page.locator('.inputbox textarea').evaluate(el=>el.blur());
 	await page.waitForTimeout(250);
 	const idleBorder=await page.locator('.inputbox').evaluate(el=>getComputedStyle(el).borderColor);
-	const borderDifference=await page.evaluate(([a,b])=>{
-		const canvas=document.createElement('canvas');canvas.width=canvas.height=1;
-		const context=canvas.getContext('2d');
-		const rgb=color=>{context.fillStyle=color;context.fillRect(0,0,1,1);return [...context.getImageData(0,0,1,1).data].slice(0,3)};
-		return Math.max(...rgb(a).map((value,index)=>Math.abs(value-rgb(b)[index])));
-	},[emptyFocusBorder,idleBorder]);
-	assert(borderDifference<=1,`empty focus changed the border by ${borderDifference}`);
+	const focusToken = await page.evaluate(() => {
+		const probe = document.createElement('span'); probe.style.color = 'var(--text-dim)'; document.body.append(probe);
+		const color = getComputedStyle(probe).color; probe.remove(); return color;
+	});
+	assert.equal(emptyFocusBorder, focusToken, 'keyboard focus uses the accessible muted border');
+	assert.notEqual(emptyFocusBorder, idleBorder);
 	await page.locator('.inputbox textarea').focus();
 	await page.locator('.inputbox textarea').fill('test');
 	await page.waitForTimeout(250);
 	assert.notEqual(await page.locator('.inputbox').evaluate(el=>getComputedStyle(el).borderColor),idleBorder);
-	assert.equal(await page.locator('.msg-collapsed-role.role-assistant').first().evaluate(e=>getComputedStyle(e,'::before').content),'"π"');
-	assert.equal(await page.locator('.msg-collapsed-action svg polyline').first().getAttribute('points'),'9 18 15 12 9 6');
+	assert((await page.locator('.msg-collapsed-role.role-assistant').first().evaluate(e=>getComputedStyle(e,'::before').backgroundImage)).includes('/icon/1a-mark.svg'));
+	assert.equal(await page.locator('.msg-collapsed-action svg path').first().getAttribute('d'),'m9 18 6-6-6-6');
 	const foldedRow = page.locator('.msg-collapsed-role.role-assistant').first().locator('..');
 	assert.equal(await foldedRow.locator('.msg-collapsed-chips').count(), 0, 'statistics do not occupy a second line');
 	assert((await foldedRow.getAttribute('title')).includes('思考'), 'statistics remain available in the tooltip');
@@ -120,8 +119,8 @@ try {
 	});
 	assert(bottom.edge<2 && bottom.gap>=0,JSON.stringify(bottom));
 	await page.locator('.msg-collapsed').first().click();
-	assert.equal(await page.locator('.msg-collapse-btn svg polyline').first().getAttribute('points'),'6 9 12 15 18 9');
+	assert.equal(await page.locator('.msg-collapse-btn svg path').first().getAttribute('d'),'m6 9 6 6 6-6');
 	await page.locator('button[data-tree-node="AGENTS.md"]').click();
-	await page.locator('.fp-markdown h1').waitFor();
+	await page.locator('.wiki-document-heading h1').waitFor();
 	console.log('PASS non-Git state, shared widths, folded avatars and file tree preview');
 } finally { await browser?.close();server?.kill('SIGTERM');await sleep(200); }

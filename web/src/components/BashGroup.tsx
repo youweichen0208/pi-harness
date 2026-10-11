@@ -1,5 +1,5 @@
 import { useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { FiChevronDown, FiChevronRight } from "react-icons/fi";
+import { LuChevronDown as FiChevronDown, LuChevronRight as FiChevronRight } from "react-icons/lu";
 import { commandReading, consecutiveAttempts } from "../command-reading";
 import { useT, useI18n } from "../i18n";
 import { WorkspacePathContext } from "../workspace-context";

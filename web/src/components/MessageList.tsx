@@ -12,7 +12,7 @@ import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRe
 import { createPortal, flushSync } from "react-dom";
 
 import type { ReactNode } from "react";
-import { FiArrowDown } from "react-icons/fi";
+import { LuArrowDown as FiArrowDown } from "react-icons/lu";
 import type {
 	PromptAttachment,
 	ToolStatus,

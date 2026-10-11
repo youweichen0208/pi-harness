@@ -41,7 +41,7 @@ import { ChatInput } from "./components/ChatInput";
 import { AgentSilenceStatus } from "./components/AgentSilenceStatus";
 import type { CurrentFileContext, ReadCurrentFile, SaveCurrentFile } from "./current-file";
 
-import { FooterBar } from "./components/FooterBar";
+import { SidebarStatus } from "./components/SidebarStatus";
 import { Dialog } from "./components/Dialog";
 // 终端视图懒加载：xterm.js 体积大且只在切到终端时才需要，拆出主包
 const TerminalPanel = lazy(() =>
@@ -72,7 +72,7 @@ import type {
 import { useI18n, useT } from "./i18n";
 import { conversationDisplayTitle } from "./conversation-display-title";
 import { skillAwarePreview } from "./skill-block";
-import { FiAlertCircle, FiAlertTriangle, FiInfo, FiX } from "react-icons/fi";
+import { LuCircleAlert as FiAlertCircle, LuTriangleAlert as FiAlertTriangle, LuInfo as FiInfo, LuX as FiX } from "react-icons/lu";
 import type { Notice } from "./use-chat";
 import { fileToProcessedImage, isRasterImage, type ProcessedImage } from "./image-paste";
 import { keepNonPreviewAttachments } from "./preview-attachments";
@@ -970,6 +970,8 @@ export function App() {
 				className={`panel-drawer drawer-left ${drawer === "left" ? "open" : ""}`}
 			>
 				<LeftPanel
+					footer={<SidebarStatus chat={chat} send={send} />}
+					serverVersion={chat.serverVersion ?? null}
 					incidentState={conversationState ? toolTextIncidents(conversationState.streamingMessage ? [...conversationState.messages, conversationState.streamingMessage] : conversationState.messages, conversationState.isStreaming).current?.state : undefined}
 					onOpenSettings={() => { setSettingsInitialTab("prompt"); setSettingsOpen(true); }}
 					onNewChat={() => { setView("chat"); panelSend({ type: "new_chat" }); }}
@@ -1206,7 +1208,6 @@ export function App() {
 					})}
 				</div>
 			</div>
-			<FooterBar chat={chat} send={send} />
 			{databaseOpen && chat.state?.cwd && <WikiDocumentModal title={t("dbTitle")} onClose={() => setDatabaseOpen(false)} chatHost={setWikiChatHost} chatOpen={wikiChatOpen} onChatOpen={setWikiChatOpen}>
 				<DatabaseWorkbench cwd={chat.state.cwd} conversationId={chat.activeConversationId} onReference={receiveWikiReference} onRevoke={revokeDatabase} />
 			</WikiDocumentModal>}

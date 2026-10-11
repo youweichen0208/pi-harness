@@ -4,7 +4,7 @@ import { SystemPromptPanel } from "./SystemPromptPanel";
 import { BuiltinExtensionsPanel } from "./BuiltinExtensionsPanel";
 import { ExtensionsPanel } from "./ExtensionsPanel";
 import { useState, useEffect } from "react";
-import { FiX, FiSettings, FiCpu, FiPackage, FiBox, FiRefreshCw } from "react-icons/fi";
+import { LuX as FiX, LuSettings as FiSettings, LuCpu as FiCpu, LuPackage as FiPackage, LuBox as FiBox, LuRefreshCw as FiRefreshCw } from "react-icons/lu";
 import { useT } from "../i18n";
 import type { ClientMessage, ServerMessage, UiSettingsState } from "../types";
 import { NativeMcpPanel } from "./NativeMcpPanel";

@@ -116,8 +116,8 @@ console.log('PASS tree expansion/change markers, numbered output/wrap/copy, sett
 assert.equal(await page.locator('.goal-event:not(.cwd-event)').count(),1);
 assert.equal(await page.locator('.goal-event-count').textContent(),'×3');
 assert((await page.locator('.thinking-duration').first().textContent()).includes('3 秒'));
-assert.equal(await page.locator('.sidebar-connection').isVisible(),false);
-assert.equal((await page.locator('.design-workspace > .statusbar').boundingBox()).width,1600);
+assert.equal(await page.locator('.sidebar-connection').isVisible(),true);
+assert.equal(await page.locator('.design-workspace > .statusbar').count(),0);
 assert.equal(await page.locator('.project-item.active').evaluate(e=>getComputedStyle(e).backgroundColor),'rgba(0, 0, 0, 0)');
 assert.equal(await page.locator('.usage-popover').count(),0);
 assert.match(await page.locator('.usage-trigger').textContent(),/2%.*86%/);

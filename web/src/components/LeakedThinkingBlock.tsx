@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FiAlertTriangle, FiChevronDown, FiChevronRight } from "react-icons/fi";
+import { LuTriangleAlert as FiAlertTriangle, LuChevronDown as FiChevronDown, LuChevronRight as FiChevronRight } from "react-icons/lu";
 import { useT } from "../i18n";
 
 /**

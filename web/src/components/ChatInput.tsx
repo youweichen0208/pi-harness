@@ -9,7 +9,7 @@ import type { CurrentFileContext, ReadCurrentFile, SaveCurrentFile } from "../cu
 import { mergeCurrentFile } from "../current-file";
 import { randomUuid } from "../uuid";
 import { memo, useLayoutEffect, useEffect, useRef, useState } from "react";
-import { FiCornerUpLeft, FiPlus, FiSquare, FiPaperclip, FiArrowUp } from "react-icons/fi";
+import { LuCornerUpLeft as FiCornerUpLeft, LuPlus as FiPlus, LuSquare as FiSquare, LuPaperclip as FiPaperclip, LuArrowUp as FiArrowUp } from "react-icons/lu";
 import type { ClientMessage, PromptAttachment, ServerMessage, ModelInfo, SlashCommandInfo, UiMessage, UiState } from "../types";
 import { useT, useI18n } from "../i18n";
 import { isRasterImage } from "../image-paste";

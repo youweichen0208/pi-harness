@@ -13,14 +13,7 @@
 /* ------------------------------------------------------------------ */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-	FiArrowDown,
-	FiArrowUp,
-	FiCheck,
-	FiGitBranch,
-	FiRefreshCw,
-	FiTerminal,
-} from "react-icons/fi";
+import { LuArrowDown as FiArrowDown, LuArrowUp as FiArrowUp, LuCheck as FiCheck, LuGitBranch as FiGitBranch, LuRefreshCw as FiRefreshCw, LuTerminal as FiTerminal } from "react-icons/lu";
 import type { ChatState, TerminalMeta } from "../use-chat";
 import type { ClientMessage, CommandDef, ServerMessage } from "../types";
 import { randomUuid } from "../uuid";

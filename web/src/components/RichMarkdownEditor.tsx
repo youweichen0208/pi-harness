@@ -7,7 +7,7 @@ import { createPortal } from "react-dom";
 import { WikiReadingDialog } from "./WikiReading";
 import { TEXT_HIGHLIGHT_COLORS } from "../remark-text-highlight";
 import { Fragment, memo, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { FiCalendar, FiBold, FiItalic, FiRotateCcw, FiRotateCw, FiSquare, FiType, FiCode, FiList, FiCheckSquare, FiMinus, FiLink, FiImage } from "react-icons/fi";
+import { LuCalendar as FiCalendar, LuBold as FiBold, LuItalic as FiItalic, LuRotateCcw as FiRotateCcw, LuRotateCw as FiRotateCw, LuSquare as FiSquare, LuType as FiType, LuCode as FiCode, LuList as FiList, LuSquareCheck as FiCheckSquare, LuMinus as FiMinus, LuLink as FiLink, LuImage as FiImage } from "react-icons/lu";
 import { markdownImageUrl } from "../markdown-image";
 import { withToken } from "../auth-token";
 import { getClientId } from "../use-chat";

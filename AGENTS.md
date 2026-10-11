@@ -140,7 +140,7 @@ pi-harness/
 | `ChangesPanel.tsx` / `ChangeSummaryCard.tsx` | 35a 对话改动面板及每轮汇总；修改范围、定位、折叠、搜索或轮次统计前读取 `docs/chat-diff-design.md` 与 `docs/architecture-terminal.md`；本轮共用 `task-outputs.ts`，Git 范围走 `scm_diff`（协议 v41） |
 | `TerminalPanel.tsx` / `TermXterm.tsx` | 终端视图 + xterm 实例桥接 |
 | `SCMPanel.tsx` | 源代码管理（Git）视图：status/branch/diff；提交/推送/拉取/切换分支 |
-| `TopBar.tsx` / `FooterBar.tsx` | 顶栏（项目／会话标题、后台任务、视图切换、文件栏开关）、状态栏（版本／分支／消息／工作目录）；模型与思考强度在 `ChatInput.tsx` 底部 |
+| `TopBar.tsx` / `SidebarStatus.tsx` | 顶栏（对话／终端／Git，其他工作台在更多菜单）、左栏底部连接／版本／路径与扩展状态；模型与思考强度在 `ChatInput.tsx` 底部 |
 | `Dialog.tsx` | 扩展 `ui.select/confirm/input` → 浏览器弹窗 |
 | `ModelConfigModal.tsx` / `PiSetupModal.tsx` | models.json 管理 / 首次配置引导 |
 | `SystemPromptPanel.tsx` | 原生提示词分段、全文复制、SYSTEM/APPEND/上下文文件编辑；见 `docs/architecture-system-prompt.md` |
@@ -201,7 +201,7 @@ npm run test:smoke   # 零 token 协议冒烟聚合跑器
 
 依赖安装前先运行 `npm run check:lockfile`，确保下载地址全部使用 HTTPS npm 官方源且与声明版本一致；安装验证流程见 `docs/development.md`。
 
-**界面规则**：修改界面前读取 `docs/ui-design.md`，以其为准；颜色和圆角只能用 CSS 变量，例外见该文档。
+**界面规则**：修改界面前读取 `docs/ui-design.md`，以其为准；浅色采用 Organic 交接配色、Figtree 正文与限用 Caprasimo 标题，图标用 Lucide。字体及许可证在 `web/public/fonts/` 本地分发。颜色和圆角只能用 CSS 变量，例外见该文档。
 
 **关键约定**：缩进用 Tab；i18n 走 `useT()`（zh/en 同时加）；样式全部在 `styles.css`；新增协议消息只改 `protocol.ts` 再两端 switch 加分支。
 

@@ -1,15 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { randomUuid } from "../uuid";
-import {
-	FiEdit2,
-	FiMenu,
-	FiPlay,
-	FiPlus,
-	FiRefreshCw,
-	FiTerminal,
-	FiTrash2,
-	FiX,
-} from "react-icons/fi";
+import { LuPencil as FiEdit2, LuMenu as FiMenu, LuPlay as FiPlay, LuPlus as FiPlus, LuRefreshCw as FiRefreshCw, LuTerminal as FiTerminal, LuTrash2 as FiTrash2, LuX as FiX } from "react-icons/lu";
 import type { ChatState, TerminalMeta } from "../use-chat";
 import type { ClientMessage, CommandDef } from "../types";
 import { TermXterm } from "./TermXterm";

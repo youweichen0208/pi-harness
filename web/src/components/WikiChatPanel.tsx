@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { FiCheck, FiLoader, FiX, FiMoreHorizontal } from "react-icons/fi";
+import { LuCheck as FiCheck, LuLoader as FiLoader, LuX as FiX, LuEllipsis as FiMoreHorizontal } from "react-icons/lu";
 import { useT } from "../i18n";
 import type { UiMessage, UiToolCallBlock, UiThinkingBlock, UiModelInfo, ToolStatus, WikiRevision } from "../types";
 import { wikiReplyParts } from "../wiki-chat";

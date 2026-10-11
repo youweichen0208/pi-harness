@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { FiDatabase, FiTable, FiSearch, FiPlus, FiRefreshCw, FiLink, FiX } from "react-icons/fi";
+import { LuDatabase as FiDatabase, LuTable as FiTable, LuSearch as FiSearch, LuPlus as FiPlus, LuRefreshCw as FiRefreshCw, LuLink as FiLink, LuX as FiX } from "react-icons/lu";
 import { useT } from "../i18n";
 import { databaseRequest } from "../database-api";
 import { randomUuid } from "../uuid";

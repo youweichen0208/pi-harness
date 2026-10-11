@@ -2,7 +2,7 @@ import { UiIcon } from "./UiIcon";
 import { toolTextIncidents } from "../tool-text";
 import { conversationWait } from "../waiting-indicator";
 import { useEffect, useRef, useState } from "react";
-import { FiChevronRight, FiFile } from "react-icons/fi";
+import { LuChevronRight as FiChevronRight, LuFile as FiFile } from "react-icons/lu";
 import type { ServerMessage, TaskProgress, UiMessage } from "../types";
 import { useT } from "../i18n";
 import { planStepArtifacts } from "../task-progress-view";

@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { FiChevronRight } from "react-icons/fi";
+import { LuChevronRight as FiChevronRight } from "react-icons/lu";
 import type { UiMessage } from "../types";
 import { useT } from "../i18n";
 import {

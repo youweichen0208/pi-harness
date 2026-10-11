@@ -41,28 +41,33 @@ try {
 			await page.goto(`http://127.0.0.1:${port}`);
 			await page.locator('.topbar-actions .topbar-more').waitFor();
 			await page.locator('.tab-change-count', { hasText: String(changeCount) }).waitFor();
-			assert.equal(await page.locator('.tab-change-count').evaluate(el => getComputedStyle(el).color), 'rgb(138, 90, 0)');
-			assert.equal(await page.locator('.tab-change-count').evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(253, 241, 214)');
-			await page.waitForFunction(() => getComputedStyle(document.querySelector('.view-switch button.active')).color === 'rgb(47, 122, 174)');
+			assert.equal(await page.locator('.tab-change-count').evaluate(el => getComputedStyle(el).color), 'rgb(140, 73, 26)');
+			assert.equal(await page.locator('.tab-change-count').evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(255, 225, 208)');
+			await page.waitForFunction(() => getComputedStyle(document.querySelector('.view-switch button.active')).color === 'rgb(198, 113, 57)');
 			assert.equal(await page.locator('.topbar').evaluate(el => el.getBoundingClientRect().height), 44);
 			assert.equal(await page.locator('.status-messages').count(), 0);
 			assert.equal(await page.locator('.topbar-actions > .icon-btn').count(), 0);
 			const input = page.locator('.inputbox textarea'), sendButton = page.locator('.inputbox .btn.send:visible');
 			assert(await sendButton.isDisabled());
-			assert.equal(await sendButton.evaluate(el => getComputedStyle(el).backgroundColor), 'oklch(0.9 0.004 80)');
+			assert.equal(await sendButton.evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(220, 211, 196)');
 			await input.fill('draft');
-			await page.waitForFunction(() => [...document.querySelectorAll('.inputbox .btn.send')].filter(el => el.getClientRects().length).every(el => getComputedStyle(el).backgroundColor === 'rgb(47, 122, 174)'));
-			assert.equal(await sendButton.evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(47, 122, 174)');
-			await page.waitForFunction(() => getComputedStyle(document.querySelector('.inputbox')).borderTopColor === 'rgb(47, 122, 174)');
+			await page.waitForFunction(() => [...document.querySelectorAll('.inputbox .btn.send')].filter(el => el.getClientRects().length).every(el => getComputedStyle(el).backgroundColor === 'rgb(198, 113, 57)'));
+			assert.equal(await sendButton.evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(198, 113, 57)');
+			await page.waitForFunction(() => getComputedStyle(document.querySelector('.inputbox')).borderTopColor === 'rgb(198, 113, 57)');
 			await input.fill('');
-			assert.equal(await page.locator('.workspace-jobs .bg-task-badge').textContent(), '2');
+			await page.locator('.workspace-more > .dropdown > button').click();
+			assert.equal(await page.locator('.workspace-view-menu .bg-task-badge').textContent(), '2');
+			await page.keyboard.press('Escape');
 			assert.equal(await page.locator('.header-task-progress').textContent(), '●第 2 / 5 步');
 			assert.equal(await page.locator('.view-switch').evaluate(el => getComputedStyle(el).backgroundColor), 'rgba(0, 0, 0, 0)');
 			assert.equal(await page.locator('.project-panel-toggle').evaluate(el => getComputedStyle(el).borderTopWidth), '0px');
 			assert.equal(await page.locator('.topbar-actions > .panel-toggle').evaluate(el => getComputedStyle(el).borderTopWidth), '0px');
 			if (platform === 'darwin') assert.equal((await page.locator('.project-panel-toggle').boundingBox()).x, 92);
 			for (const view of ['chat', 'nodes']) {
-				if (view === 'nodes') await page.getByRole('tab', { name: '节点', exact: true }).click();
+				if (view === 'nodes') {
+					await page.locator('.workspace-more > .dropdown > button').click();
+					await page.locator('.workspace-view-menu').getByRole('button', { name: '节点', exact: true }).click();
+				}
 				const actions = await page.locator('.topbar-actions').boundingBox();
 				const controls = await page.locator('.desktop-window-controls').count() ? await page.locator('.desktop-window-controls').boundingBox() : null;
 				await page.locator('.topbar').screenshot({ path: `tests/scratch/toolbar-${platform}-${width}-${view}.png` });
@@ -93,9 +98,9 @@ try {
 				changeCount++;
 				socket.send(JSON.stringify({ type: 'scm_changed' }));
 				await page.locator('.tab-change-count', { hasText: String(changeCount) }).waitFor();
-			assert.equal(await page.locator('.tab-change-count').evaluate(el => getComputedStyle(el).color), 'rgb(138, 90, 0)');
-			assert.equal(await page.locator('.tab-change-count').evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(253, 241, 214)');
-			await page.waitForFunction(() => getComputedStyle(document.querySelector('.view-switch button.active')).color === 'rgb(47, 122, 174)');
+			assert.equal(await page.locator('.tab-change-count').evaluate(el => getComputedStyle(el).color), 'rgb(140, 73, 26)');
+			assert.equal(await page.locator('.tab-change-count').evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(255, 225, 208)');
+			await page.waitForFunction(() => getComputedStyle(document.querySelector('.view-switch button.active')).color === 'rgb(198, 113, 57)');
 				await page.locator('.topbar-actions > .panel-toggle').click();
 				await page.locator('.tree-filter', { hasText: `改动 ${changeCount}` }).waitFor();
 				await page.locator('.project-panel-toggle').click();

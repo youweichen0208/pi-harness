@@ -1,6 +1,6 @@
 import { isProcessNarration } from "../command-reading";
 import { useState } from "react";
-import { FiCopy, FiRefreshCw } from "react-icons/fi";
+import { LuCopy as FiCopy, LuRefreshCw as FiRefreshCw } from "react-icons/lu";
 import { useT } from "../i18n";
 import type { UiMessage } from "../types";
 

@@ -2,7 +2,7 @@
  * vscode-editor 插件 — 浏览器 UI 冒烟测试（零 token）。
  *
  * 起隔离端口 server（临时 data-dir + 临时工作区），Chrome headless 加载页面：
- * - 顶栏出现 📝 插件 tab，点击切到插件视图
+ * - 顶栏出现 📝 插件菜单项，点击切到插件视图
  * - 文件树渲染工作区条目
  * - 点击文件 → 标签页出现 + CodeMirror 编辑器带内容
  * - 修改内容 + Ctrl+S → 磁盘落盘核对
@@ -60,10 +60,12 @@ try {
 	page.on("pageerror", (e) => console.error("[pageerror]", e.message));
 	await page.goto(URL);
 
-	// 等插件清单到达（顶栏出现插件 tab）
-	await page.waitForSelector("button.plugin-tab", { timeout: 20000 });
-	const tab = page.locator("button.plugin-tab", { hasText: "代码编辑器" }).first();
-	check("顶栏出现 📝 插件 tab", (await tab.count()) > 0);
+	// 等插件清单到达（顶栏出现插件菜单项）
+	await page.locator(".workspace-more > .dropdown > button").click();
+	await page.waitForSelector(".workspace-view-menu button", { timeout: 20000 });
+	const tab = page.locator(".workspace-view-menu button", { hasText: "编辑器" }).first();
+	await tab.waitFor();
+	check("更多菜单包含编辑器插件", (await tab.count()) > 0);
 	await tab.click();
 
 	// 视图挂载 + 文件树渲染

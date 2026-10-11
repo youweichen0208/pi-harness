@@ -1,6 +1,6 @@
 import { UiIcon } from "./UiIcon";
 import { memo, useEffect, useMemo, useState } from "react";
-import { FiCpu, FiSearch, FiZap } from "react-icons/fi";
+import { LuCpu as FiCpu, LuSearch as FiSearch, LuZap as FiZap } from "react-icons/lu";
 import type { ClientMessage, ModelInfo, UiState } from "../types";
 import { Dropdown, DropdownItem } from "./Dropdown";
 import { useT } from "../i18n";

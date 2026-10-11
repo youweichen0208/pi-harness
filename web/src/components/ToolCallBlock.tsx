@@ -7,17 +7,7 @@ import { CodemodeCard } from "./CodemodeCard";
 import { commandPresentation, gitStatusLine, gitStatusSummary, numberedOutputLine, differentCommandDirectory, searchOutputKind, isLikelyErrorLine, selectVisibleOutputLines, displayBashCommand } from "../bash-presentation";
 import { WorkspacePathContext } from "../workspace-context";
 import { Fragment, memo, useContext, useEffect, useRef, useState } from "react";
-import {
-	FiTool,
-	FiCopy,
-	FiCheck,
-	FiMaximize2,
-	FiChevronDown,
-	FiChevronRight,
-	FiSquare,
-	FiTerminal,
-	FiX,
-} from "react-icons/fi";
+import { LuWrench as FiTool, LuCopy as FiCopy, LuCheck as FiCheck, LuMaximize2 as FiMaximize2, LuChevronDown as FiChevronDown, LuChevronRight as FiChevronRight, LuSquare as FiSquare, LuTerminal as FiTerminal, LuX as FiX } from "react-icons/lu";
 import type { ToolStatus, UiMessage, UiToolCallBlock } from "../types";
 import { useT } from "../i18n";
 import { Markdown } from "./Markdown";

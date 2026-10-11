@@ -52,7 +52,7 @@ try {
 	await page.getByText("语言", { exact: true }).waitFor();
 	await page.keyboard.press("Escape");
 	await page.setViewportSize({ width: 1500, height: 950 });
-	await page.getByRole("tab", { name: "节点" }).click();
+	await page.locator('.workspace-more > .dropdown > button').click(); await page.locator('.workspace-view-menu').getByRole('button', { name: '节点', exact: true }).click();
 	await page.locator(".node-sidebar header button").click();
 	const form = page.locator(".node-modal");
 	await page.waitForFunction(() => document.querySelector('.node-modal')?.contains(document.activeElement));

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FiFile, FiChevronRight } from "react-icons/fi";
+import { LuFile as FiFile, LuChevronRight as FiChevronRight } from "react-icons/lu";
 import type { ChangedFile } from "../changes";
 import { useChanges } from "../changes-context";
 import { useT } from "../i18n";

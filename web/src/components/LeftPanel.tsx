@@ -1,13 +1,5 @@
-import { memo, useEffect, useRef, useState } from "react";
-import {
-	FiCheck,
-	FiChevronDown,
-	FiChevronRight,
-	FiMoreHorizontal,
-	FiPlus,
-	FiSettings,
-	FiX,
-} from "react-icons/fi";
+import { memo, useEffect, useRef, useState, type ReactNode } from "react";
+import { LuCheck as FiCheck, LuChevronDown as FiChevronDown, LuChevronRight as FiChevronRight, LuEllipsis as FiMoreHorizontal, LuPlus as FiPlus, LuSettings as FiSettings, LuX as FiX } from "react-icons/lu";
 import type {
 	ConversationSummary,
 	DirBrowse,
@@ -32,6 +24,8 @@ import { useI18n } from "../i18n";
  *  and conversation lists on every delta. Add a prop here when adding a chat
  *  field usage — TypeScript enforces it at the call site. */
 interface LeftPanelProps {
+	footer: ReactNode;
+	serverVersion: string | null;
 	incidentState?: "stopped" | "reminding" | "recovered";
 	onOpenSettings: () => void;
 	onNewChat: () => void;
@@ -79,7 +73,7 @@ function formatModified(ts: number, yesterday: string): string {
 	return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
-export const LeftPanel = memo(function LeftPanel({
+export const LeftPanel = memo(function LeftPanel({ footer, serverVersion,
 	incidentState, onOpenSettings, onNewChat, ready, status, cwd, sessionFile, conversations, sessions, projects, projectWorkspaces, projectWorkspaceResult, dirBrowse, activeConversationId, send, active }: LeftPanelProps) {
 	const { t, locale } = useI18n();
 	const [selectedWorkspace, setSelectedWorkspace] = useState(() => {
@@ -477,8 +471,10 @@ export const LeftPanel = memo(function LeftPanel({
 				</div>
 			</div>}
 			<div className="sidebar-footer">
-				<span className="sidebar-connection"><i className={ready ? "ok" : "busy"} />{t(ready ? "connected" : "connecting")}</span>
+				<span className="sidebar-connection"><i className={`conn-dot ${ready ? "ok" : "busy"}`} />{t(ready ? "connected" : "connecting")}</span>
+				{serverVersion && <span className="sidebar-server-version">v{serverVersion}</span>}
 				<span id="sidebar-settings-slot"><button type="button" onClick={onOpenSettings}><FiSettings aria-hidden="true" /> {t("settings")}</button></span>
+				{footer}
 			</div>
 
 			{picking && selectedGroup && (

@@ -4,14 +4,7 @@ import { ToolRecoveryCard, type ToolRecoveryActions } from "./ToolRecoveryCard";
 import { isProcessNarration } from "../command-reading";
 import { navigateSibling } from "../tree-events";
 import { memo, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import {
-	FiChevronDown,
-	FiChevronRight,
-	FiChevronUp,
-	FiEdit3,
-	FiImage,
-	FiX,
-} from "react-icons/fi";
+import { LuChevronDown as FiChevronDown, LuChevronRight as FiChevronRight, LuChevronUp as FiChevronUp, LuPencilLine as FiEdit3, LuImage as FiImage, LuX as FiX } from "react-icons/lu";
 import type {
 	PromptAttachment,
 	ToolStatus,

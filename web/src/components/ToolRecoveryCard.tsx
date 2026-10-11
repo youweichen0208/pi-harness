@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { FiChevronDown } from "react-icons/fi";
+import { LuChevronDown as FiChevronDown } from "react-icons/lu";
 import { useT } from "../i18n";
 import type { ModelInfo } from "../types";
 import type { ToolTextIncident } from "../tool-text";

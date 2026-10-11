@@ -4,29 +4,11 @@ import { toolTextIncidents } from "../tool-text";
 import { openSessionTree } from "../tree-events";
 import { createPortal } from "react-dom";
 import { useEffect, useState } from "react";
-import {
-	FiSidebar,
-	FiDatabase,
-	FiGitBranch,
-	FiGlobe,
-	FiMenu,
-	FiMessageSquare,
-	FiSearch,
-	FiPlus,
-	FiSettings,
-	FiTarget,
-	FiLayers,
-	FiTerminal,
-	FiMinus,
-	FiSquare,
-	FiCopy,
-	FiX,
-} from "react-icons/fi";
+import { LuPanelLeft as FiSidebar, LuDatabase as FiDatabase, LuGitBranch as FiGitBranch, LuGlobe as FiGlobe, LuMenu as FiMenu, LuMessageSquare as FiMessageSquare, LuSearch as FiSearch, LuPlus as FiPlus, LuSettings as FiSettings, LuTarget as FiTarget, LuLayers as FiLayers, LuTerminal as FiTerminal, LuMinus as FiMinus, LuSquare as FiSquare, LuCopy as FiCopy, LuX as FiX } from "react-icons/lu";
 import { desktopAPI, type DesktopWindowState } from "../desktop";
 import type { ChatState } from "../use-chat";
 import type { ClientMessage, CommandDef } from "../types";
 import { Dropdown, DropdownItem } from "./Dropdown";
-import { ModelThinking } from "./ModelThinking";
 import { SoundSettingsPanel } from "./SoundSettings";
 import type { SoundKind, SoundSettings } from "../sounds";
 import { useI18n, type Locale } from "../i18n";
@@ -97,8 +79,8 @@ export function TopBar({
 }: TopBarProps) {
 	const { locale, setLocale, t } = useI18n();
 	const changes = useChanges();
-	const [langOpen, setLangOpen] = useState(false);
 	const [moreOpen, setMoreOpen] = useState(false);
+	const [viewsOpen, setViewsOpen] = useState(false);
 	const [menuHost, setMenuHost] = useState<HTMLElement | null>(null);
 	useEffect(() => {
 		setMenuHost(!leftCollapsed ? document.getElementById("sidebar-settings-slot") : null);
@@ -130,13 +112,6 @@ export function TopBar({
 		{ value: "zh", label: t("langZh") },
 		{ value: "en", label: t("langEn") },
 	];
-
-	const connLabel = chat.ready
-		? t("connected")
-		: chat.status === "closed"
-			? t("reconnecting")
-			: t("connecting");
-	const connClass = chat.ready ? "ok" : "busy";
 
 	const settingsMenu = (
 				<div className="topbar-more">
@@ -216,14 +191,11 @@ export function TopBar({
 						pi-harness <span className="desktop-title-separator">/</span> {projectName || t("desktopWorkspace")}
 					</span>
 				)}
-				<span className={`conn-dot ${connClass}`} title={connLabel} />
-				<span className="conn-label">{connLabel}</span>
 			</div>
 
 			{view !== "nodes" && <button type="button" className="project-panel-toggle" title={t(leftCollapsed ? "expandProjects" : "collapseProjects")} aria-label={t(leftCollapsed ? "expandProjects" : "collapseProjects")} aria-expanded={!leftCollapsed} onClick={() => onOpenPanel("left")}><FiSidebar /></button>}
 			<div className="header-location"><span title={chat.state?.cwd}>{projectName || t("desktopWorkspace")}</span><i>/</i><button className="conversation-title-button" title={t("treeTitle")} onClick={() => openSessionTree()}><strong title={conversationTitle}>{conversationTitle}</strong><span aria-hidden="true">⌄</span></button>{view === "chat" && chat.gitBranch?.branch && <code className="changes-current-branch">{chat.gitBranch.branch}</code>}{(interrupted || reminding || currentStep >= 0 || !!task?.plan?.awaitingConfirmation) && <button type="button" className={`header-task-progress${interrupted ? " interrupted" : reminding ? " reminding" : ""}`} title={t("taskProgress")} onClick={onOpenTask}><span aria-hidden="true">●</span>{interrupted ? t("toolRecoveryInterrupted") : reminding ? t("working") : task?.plan?.awaitingConfirmation ? t("taskProgress") : t("taskPlanPosition", { current: currentStep + 1, total: planItems.length })}</button>}</div>
 			<div className="topbar-actions">
-				{view === "chat" && changes && (changes.files.length > 0 || gitChangeCount > 0 || changes.open) && <button className="changes-toggle" aria-pressed={changes.open} title="⌘D" onClick={() => changes.set({ open: !changes.open })}><FiLayers aria-hidden="true" />{t("changesTitle")} <ChangeCounts files={changes.files} /></button>}
 				<div
 					className="view-switch"
 					role="tablist"
@@ -253,19 +225,6 @@ export function TopBar({
 						<FiTerminal />
 						<span>{t("terminal")}</span>
 					</button>
-					<button type="button" aria-label={t("dbTitle")} onClick={onOpenDatabase}><FiDatabase /><span>{t("dbTitle")}</span></button>
-					<button
-						type="button"
-						role="tab"
-						aria-label={t("nodes")}
-						title={t("nodes")}
-						aria-selected={view === "nodes"}
-						className={view === "nodes" ? "active" : ""}
-						onClick={() => onViewChange("nodes")}
-					>
-						<FiGlobe />
-						<span>{t("nodes")}</span>
-					</button>
 					<button
 						type="button"
 						role="tab"
@@ -280,105 +239,19 @@ export function TopBar({
 						<span>{t("scmTab")}</span>
 						{!notGitRepo && gitChangeCount > 0 && <em className="tab-change-count">{gitChangeCount}</em>}
 					</button>
-					<button type="button" className="workspace-jobs" onClick={onOpenBgTasks} title={t("bgTasksTip")}><FiLayers /><span>{t("bgTasks")}</span>{chat.bgServers.length > 0 && <em className="bg-task-badge">{chat.bgServers.length}</em>}</button>
-					{plugins.map((p) => {
-						const tip = p.error
-							? `${p.name}: ${p.error}`
-							: p.description
-								? `${p.name} — ${p.description}`
-								: p.name;
-						return (
-							<button
-								key={p.id}
-								type="button"
-								role="tab"
-								aria-selected={view === `plugin:${p.id}`}
-								className={`plugin-tab${view === `plugin:${p.id}` ? " active" : ""}${p.error ? " broken" : ""}`}
-								title={tip}
-								onClick={() => onViewChange(`plugin:${p.id}`)}
-							>
-								{p.icon ? <span aria-hidden>{p.icon}</span> : null}
-								<span>{p.name}</span>
-							</button>
-						);
-					})}
+
 				</div>
 
-				{/* Desktop toolbar — hidden on mobile (model/thinking move into the
-				    input row; sound/lang fold into "⋯" below). Update-check and
-				    GitHub link live only inside the "⋯" panel now, on both
-				    desktop and mobile — no separate top-level chips for them. */}
-				<div className="topbar-desktop">
-					{/* Background tasks — AI-started servers still listening. Always shown
-					    so the list survives the conversation that started them (badge = count). */}
-					<button
-						type="button"
-						className="chip bg-task-chip"
-						data-tip={t("bgTasksTip")}
-						onClick={onOpenBgTasks}
-					>
-						<FiLayers />
-						<span className="chip-sub">{t("bgTasks")}</span>
-						{chat.bgServers.length > 0 && (
-							<span className="bg-task-badge">{chat.bgServers.length}</span>
-						)}
-					</button>
-					<ModelThinking
-						state={chat.state ? { conversationId: chat.state.conversationId, runSettings: chat.state.runSettings, model: chat.state.model, routedModel: chat.state.routedModel, thinkingLevel: chat.state.thinkingLevel, availableThinkingLevels: chat.state.availableThinkingLevels } : null}
-						models={chat.models}
-						modelsLoading={chat.modelsLoading}
-						send={send}
-						onManageModels={onManageModels}
-					/>
-
-					<button
-						type="button"
-						className="chip"
-						title={t("settingsTitle")}
-						onClick={onOpenSettings}
-					>
-						<FiSettings />
-						<span className="chip-sub">{t("settings")}</span>
-					</button>
-
-					<Dropdown
-						trigger={
-							<>
-								<FiGlobe />
-								<span className="chip-sub">
-									{locale === "zh" ? t("langZh") : "EN"}
-								</span>
-							</>
-						}
-						open={langOpen}
-						onOpenChange={setLangOpen}
-					>
-						<div className="dd-header">{t("language")}</div>
-						{LANGUAGES.map((l) => (
-							<DropdownItem
-								key={l.value}
-								active={locale === l.value}
-								onClick={() => {
-									setLocale(l.value);
-									setLangOpen(false);
-								}}
-							>
-								{l.label}
-							</DropdownItem>
-						))}
+				<div className="workspace-more">
+					<Dropdown trigger={<span>{t("more")}</span>} open={viewsOpen} onOpenChange={setViewsOpen} menuClassName="workspace-view-menu">
+						<DropdownItem onClick={() => { setViewsOpen(false); send({ type: "new_chat" }); }}><FiPlus />{t("newChat")}</DropdownItem>
+						<DropdownItem onClick={() => { setViewsOpen(false); onOpenDatabase(); }}><FiDatabase />{t("dbTitle")}</DropdownItem>
+						<DropdownItem active={view === "nodes"} onClick={() => { setViewsOpen(false); onViewChange("nodes"); }}><FiGlobe />{t("nodes")}</DropdownItem>
+						<DropdownItem onClick={() => { setViewsOpen(false); onOpenBgTasks(); }}><FiLayers />{t("bgTasks")}{chat.bgServers.length > 0 && <em className="bg-task-badge">{chat.bgServers.length}</em>}</DropdownItem>
+						{view === "chat" && changes && <DropdownItem active={changes.open} onClick={() => { setViewsOpen(false); changes.set({ open: !changes.open }); }}><FiLayers />{t("changesTitle")}<ChangeCounts files={changes.files} /></DropdownItem>}
+						{plugins.map(p => <DropdownItem key={p.id} active={view === `plugin:${p.id}`} title={p.error || p.description || p.name} onClick={() => { setViewsOpen(false); onViewChange(`plugin:${p.id}`); }}>{p.name}</DropdownItem>)}
 					</Dropdown>
-
 				</div>
-
-				<button
-					type="button"
-					className="chip newchat"
-					data-tip={t("newChatTip")}
-					onClick={() => send({ type: "new_chat" })}
-				>
-					<FiPlus />
-					<span>{t("newChat")}</span>
-				</button>
 
 				{/* Mobile "⋯" panel — folds sound / language. */}
 				{view !== "nodes" && (menuHost ? createPortal(settingsMenu, menuHost) : settingsMenu)}

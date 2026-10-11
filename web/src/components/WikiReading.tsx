@@ -1,7 +1,7 @@
 import { useDialogFocus } from "../use-dialog-focus";
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
-import { FiX } from "react-icons/fi";
+import { LuX as FiX } from "react-icons/lu";
 import type { WikiIndexStatus } from "../types";
 import { wikiIndexIssueGroups } from "../wiki-index-summary";
 import { useI18n, useT } from "../i18n";
