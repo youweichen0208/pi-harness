@@ -10,12 +10,12 @@ export function WikiReadingDialog({ title, onClose, children }: { title: string;
 	const t = useT(), dialog = useDialogFocus<HTMLElement>();
 	return createPortal(<div className="wiki-modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
 		<section ref={dialog} className="wiki-reading-dialog" role="dialog" aria-modal="true" aria-label={title} onKeyDown={e => {
-			if (e.key === "Escape") { e.stopPropagation(); onClose(); }
+			if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onClose(); }
 		}}>
 			<header><h2>{title}</h2><button aria-label={t("close")} onClick={onClose}><FiX /></button></header>
 			{children}
 		</section>
-	</div>, document.body);
+	</div>, document.querySelector(".wiki-document-dialog") ?? document.body);
 }
 
 export function WikiIndexIndicator({ status }: { status: WikiIndexStatus }) {

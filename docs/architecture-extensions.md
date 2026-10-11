@@ -6,7 +6,7 @@
 
 ## 内置扩展清单
 
-已安装页按内置扩展、安装包、单文件分组。五个内置条目由 `nativeExtensionRegistry` 与会话资源共同投影；包页签数量只统计安装包。内置清单独立请求，即使包 worker 失败仍能展示；不提供包更新、卸载或源码编辑。
+已安装页按内置扩展、安装包、单文件分组。六个内置条目由 `nativeExtensionRegistry` 与会话资源共同投影；包页签数量只统计安装包。内置清单独立请求，即使包 worker 失败仍能展示；不提供包更新、卸载或源码编辑。
 
 `/api/extensions` 的 `builtin-list`、`builtin-toggle` 都绑定活动 conversationId，并沿用 cwd/clientId、同源与 quiesce 校验。清单读取已有资源，不执行工厂、不加载包。工具来源必须匹配具名 inline/builtin 路径；第三方同名工具显示冲突。状态区分加载、关闭、待生效、不可用和配置/加载失败，MCP 的加载状态不代表服务器连接成功。查看设置跳转已有 MCP/Codemode 页。
 
@@ -14,7 +14,7 @@
 
 复制命令只写剪贴板，不自动发送聊天请求。
 
-回归：`tests/builtin-extensions-test.mjs` 使用隔离 WebSocket 服务、真实 SDK 和本地模型夹具验证清单、关闭拒绝、跨客户端配置、版本冲突、新会话/重载，以及Markdown 导入到 OKF Wiki 草稿；`--browser` 覆盖五个条目、开关、命令复制、转换入口缺失、设置跳转、包列表失败、中英文与窄屏。它不证明外部模型的自主语义能力或真实 PDF 解析质量。
+回归：`tests/builtin-extensions-test.mjs` 使用隔离 WebSocket 服务、真实 SDK 和本地模型夹具验证清单、关闭拒绝、跨客户端配置、版本冲突、新会话/重载，以及Markdown 导入到 OKF Wiki 草稿；`--browser` 覆盖六个条目、开关、命令复制、转换入口缺失、设置跳转、包列表失败、中英文与窄屏。它不证明外部模型的自主语义能力或真实 PDF 解析质量。
 
 ## 请求与运行边界
 
@@ -68,3 +68,5 @@ pi.dev 当前通过服务端 HTML 提供目录，没有依赖未公开 JSON API�
 已安装页签数量仅统计包，不包括单文件；文件保留路径、打开/复制、重载、开关和展开编辑。键盘支持页签方向键、弹窗焦点循环及关闭后焦点恢复。更新页继续隐藏 pi-harness 和单文件。扩展回归同时覆盖失败重试、详情只读权限、中英文、深色与 390px 窄屏。
 
 #46 回归：`tests/extensions-worker-test.mjs` 在真实 npm 卸载后的 SettingsManager.reload 注入无活跃句柄的异步等待，证明 IPC 不会提前退出；这用于生命周期故障注入，不表示已还原用户原始机器的具体触发条件。另有普通 Node / Electron 原生卸载和并发 HTTP 列表测试。
+
+数据库查询由原生内置扩展 `pi-harness-database` 提供 `database_read`，权限绑定显式附加连接的当前会话；连接与只读执行见 [数据库工作台](architecture-database.md)。

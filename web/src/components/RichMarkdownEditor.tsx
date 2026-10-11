@@ -54,6 +54,14 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		return code && root.current?.contains(code) && selection?.focusNode && code.contains(selection.focusNode) ? code : null;
 	};
 	const [floating, setFloating] = useState<{ x: number; y: number } | null>(null);
+	useEffect(() => {
+		if (!wiki || !floating) return;
+		const escape = (event: KeyboardEvent) => {
+			if (event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); setFloating(null); }
+		};
+		window.addEventListener("keydown", escape);
+		return () => window.removeEventListener("keydown", escape);
+	}, [wiki, floating]);
 	const [linkInput, setLinkInput] = useState<string | null>(null);
 	const linkRange = useRef<Range | null>(null), imageRange = useRef<Range | null>(null);
 	const imageInput = useRef<HTMLInputElement>(null);
@@ -549,7 +557,7 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 			<button aria-label={t("wikiAddLink")} title={t("wikiAddLink")} disabled={readOnly} onClick={() => { linkRange.current = highlightSelection()?.cloneRange() ?? null; setLinkInput(""); }}><FiLink /></button><i />
 			{TEXT_HIGHLIGHT_COLORS.slice(0, 2).map(color => <button className={`fp-highlight-swatch fp-highlight-${color.name}`} key={color.name} aria-label={t(`richHighlight_${color.name}`)} title={t(`richHighlight_${color.name}`)} disabled={readOnly} onClick={() => toggleHighlight(color)}><span /></button>)}<i />
 			<button className="wiki-ask-selection" onClick={() => { wiki.ask(window.getSelection()?.toString() ?? ""); setFloating(null); }}>{t("wikiAskPi")}</button>
-		</div>, document.body)}
+		</div>, document.querySelector(".wiki-document-dialog") ?? document.body)}
 		<input ref={imageInput} type="file" accept="image/*" hidden onChange={event => { const image = event.target.files?.[0], range = imageRange.current; if (image && range && root.current?.contains(range.startContainer)) { root.current.focus(); const selection = window.getSelection(); selection?.removeAllRanges(); selection?.addRange(range); void pasteImage(image); } event.target.value = ""; }} />
 		{linkInput !== null && <WikiReadingDialog title={t("wikiAddLink")} onClose={() => setLinkInput(null)}><form className="wiki-link-form" onSubmit={event => { event.preventDefault(); insertLink(linkInput); }}><input aria-label={t("wikiLinkAddress")} placeholder={t("wikiLinkAddress")} value={linkInput} onChange={e => setLinkInput(e.target.value)} /><button type="submit" disabled={!linkInput.trim() || linkInput.startsWith("[[")}>{t("wikiInsertLinkAction")}</button></form>{linkInput.startsWith("[[") && <div className="wiki-link-results">{wiki?.paths.filter(path => /\.(md|markdown|mdown)$/i.test(path) && path.toLowerCase().includes(linkInput.slice(2).toLowerCase())).slice(0, 30).map(path => <button key={path} onClick={() => insertLink(path, true)}>{path}</button>)}</div>}</WikiReadingDialog>}
 		{menu && !readOnly && createPortal(<div ref={popup} className={`fp-slash-menu ${wiki ? "wiki-slash-menu" : ""}`} style={{ left: menu.x, top: menu.y }}>
@@ -560,7 +568,7 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 					<span className="fp-slash-icon" aria-hidden="true">{icons[item.label]}</span><span className="fp-slash-label">{itemLabel(item)}{wiki && <small>{t(help[item.alias])}</small>}</span><kbd aria-hidden="true">{wiki ? hints[item.alias] : `/${item.alias}`}</kbd>
 				</button></Fragment>) : <span className="wiki-slash-empty">{t(wiki ? "wikiNoInsertResults" : "richNoElements")}</span>}
 			</div>{wiki && <footer>{t("wikiInsertKeys")}</footer>}
-		</div>, document.body)}
+		</div>, document.querySelector(".wiki-document-dialog") ?? document.body)}
 		<div className="fp-markdown msg-text">
 			<div className="fp-markdown-zoom">
 				<div ref={root} className="md fp-rich-document" role="textbox" aria-label={t("richEditMarkdown")} aria-multiline="true"

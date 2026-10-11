@@ -5,8 +5,9 @@ import { getDocumentSettings, updateDocumentSettings } from "./document-extensio
 import { planSettings } from "./plan/settings.js";
 import type { BuiltinExtensionId, BuiltinExtensionsState, BuiltinExtensionState } from "./protocol.js";
 
-const documentKeys = { "pi-harness-okf": "okfEnabled" } as const;
+const documentKeys = { "pi-harness-database": "databaseEnabled", "pi-harness-okf": "okfEnabled" } as const;
 const expectedTools: Partial<Record<BuiltinExtensionId, string[]>> = {
+	"pi-harness-database": ["database_read"],
 	"pi-harness-okf": ["okf_ingest", "okf_candidates", "okf_publish"],
 	"pi-harness-plan": ["plan"], codemode: ["codemode"], "tool-search": ["tool_search"],
 };
@@ -15,7 +16,7 @@ export function documentSettingsVersion(): string {
 	return createHash("sha256").update(JSON.stringify(getDocumentSettings())).digest("hex");
 }
 export function toggleBuiltinDocument(id: unknown, enabled: unknown, version: unknown): void {
-	if (id !== "pi-harness-okf" || typeof enabled !== "boolean") throw Error("Invalid built-in extension change");
+	if ((id !== "pi-harness-okf" && id !== "pi-harness-database") || typeof enabled !== "boolean") throw Error("Invalid built-in extension change");
 	if (version !== documentSettingsVersion()) throw Error("Document settings changed; refresh and retry");
 	updateDocumentSettings({ [documentKeys[id]]: enabled });
 }
@@ -42,7 +43,7 @@ export function builtinExtensionsState(session: AgentSession, conversationId: st
 			const plan = planSettings().state(session);
 			return { ...item, enabled: plan.enabled, status: !plan.available ? "unavailable" : plan.pending ? "pending" : plan.effective ? "loaded" : "disabled", reason: plan.reason };
 		}
-		if (id === "pi-harness-okf") {
+		if (id === "pi-harness-okf" || id === "pi-harness-database") {
 			if (!documentSettings) return { ...item, status: "error", error: documentError };
 			item.enabled = documentSettings[documentKeys[id]];
 		}

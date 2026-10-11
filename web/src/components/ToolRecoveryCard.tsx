@@ -48,7 +48,7 @@ function RecoveryModelMenu({ recovery }: { recovery: ToolRecoveryActions }) {
 				const index = e.key === "Home" ? 0 : e.key === "End" ? buttons.length - 1 : (current + (e.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length;
 				buttons[index]?.focus();
 			}
-		}}>{recovery.models.length ? recovery.models.map(model => <button type="button" role="menuitemradio" aria-checked={model.id === recovery.currentModelId} className={`dd-item ${model.id === recovery.currentModelId ? "active" : ""}`} key={model.id} onClick={() => { close(); recovery.retry(model.id); }}><span className="dd-model-name">{model.name}</span><span className="dd-model-provider">{model.provider}</span></button>) : <span className="tool-model-empty">{t("loading")}</span>}</div>, document.body)}
+		}}>{recovery.models.length ? recovery.models.map(model => <button type="button" role="menuitemradio" aria-checked={model.id === recovery.currentModelId} className={`dd-item ${model.id === recovery.currentModelId ? "active" : ""}`} key={model.id} onClick={() => { close(); recovery.retry(model.id); }}><span className="dd-model-name">{model.name}</span><span className="dd-model-provider">{model.provider}</span></button>) : <span className="tool-model-empty">{t("loading")}</span>}</div>, document.querySelector(".wiki-document-dialog") ?? document.body)}
 	</>;
 }
 export function ToolRecoveryCard({ incident, model, recovery }: { incident: ToolTextIncident; model: string; recovery?: ToolRecoveryActions }) {

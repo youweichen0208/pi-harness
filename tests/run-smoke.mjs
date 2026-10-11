@@ -65,7 +65,7 @@ const ALL = [
 	"file-editor-protocol-test",
 	"wiki-protocol-test",
 	"wiki-thinking-level-test",
-	"wiki-ui-test",
+	"wiki-modal-browser-test",
 	"wiki-format-editor-test",
 	"wiki-insert-position-test",
 	"current-file-protocol-test",
@@ -103,6 +103,8 @@ const ALL = [
 ];
 
 // 不在默认清单里的脚本：
+//   - 旧 Wiki 独立会话/输入胶囊：wiki-ui-test；由 wiki-modal-browser-test
+//     覆盖原会话、聊天停靠、保存、选区引用、焦点与小屏新交互。
 //   - 需外部已运行 server（attach 型，默认 8787）：ws-session-test /
 //     file-upload-test / image-paste-test / commands-test(8791) /
 //     edit-reask-test / projects-test —— 本地先起 server 再单独跑；

@@ -11917,3 +11917,117 @@ html.pi-desktop-linux .design-workspace.wiki-mode .topbar { padding-right: 148px
 	.builtin-row-head > div:first-child { flex-basis: 100%; }
 	.builtin-command { align-items: flex-start; }
 }
+
+/* Document modal: the workspace remains mounted behind a native modal dialog. */
+.wiki-document-dialog { box-sizing: border-box; width: 92vw; max-width: 1440px; height: 90dvh; max-height: 100dvh; padding: 0; margin: auto; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--bg-elev); color: var(--text); overflow: hidden; }
+.wiki-document-dialog[open] { display: flex; flex-direction: column; }
+.wiki-document-dialog::backdrop { background: color-mix(in srgb, var(--shadow-color) 35%, transparent); }
+.wiki-document-dialog.maximized { width: 100vw; max-width: none; height: 100dvh; border-radius: 0; }
+.wiki-modal-header { display: flex; align-items: center; flex: none; gap: 8px; min-height: 48px; padding: 0 12px; border-bottom: 1px solid var(--border); }
+#wiki-modal-toolbar { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; }
+.wiki-modal-header > button { display: grid; place-items: center; width: 30px; height: 30px; flex: none; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--text-dim); cursor: pointer; }
+.wiki-modal-header > button:hover { background: var(--bg-elev2); color: var(--text); }
+.wiki-document-dialog .wiki-sidebar[hidden] { display: none; }
+.wiki-document-dialog .wiki-mobile-tools { display: flex; align-items: center; flex: none; padding: 0; gap: 8px; border: 0; }
+.wiki-document-dialog .wiki-mobile-tools button { padding: 3px; border: 0; background: transparent; }
+.wiki-document-dialog .wiki-document-toolbar { flex: none; }
+.wiki-document-dialog .wiki-main > .wiki-index-indicator { flex: none; }
+@media (min-width: 851px) { .wiki-document-dialog .wiki-sidebar-scrim { display: none; } }
+@media (max-width: 760px) {
+	.wiki-document-dialog { width: 100vw; max-width: none; height: 100dvh; border-radius: 0; }
+	.wiki-modal-header { padding: 0 6px; gap: 4px; }
+	#wiki-modal-toolbar { gap: 4px; }
+	.wiki-modal-header .wiki-toolbar-actions button { font-size: 11px; padding: 4px; }
+	.wiki-modal-header .wiki-path-parent { display: none; }
+}
+
+/* The document modal docks the original conversation beside the editor. */
+.wiki-modal-body { display: flex; flex: 1; min-width: 0; min-height: 0; position: relative; overflow: hidden; }
+.wiki-agent-chat { position: relative; display: flex; flex-direction: column; flex: none; width: var(--wiki-chat-width, 400px); max-width: 55%; min-width: 280px; min-height: 0; border-left: 1px solid var(--border); background: var(--bg); }
+.wiki-agent-chat[hidden] { display: none; }
+.wiki-agent-header { display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 14px; flex: none; border-bottom: 1px solid var(--border-soft); }
+.wiki-agent-header img { width: 18px; height: 18px; }
+.wiki-agent-header strong { font-size: 13px; font-weight: 600; }
+.wiki-agent-header span { font-size: 11px; color: var(--text-faint); margin-left: auto; }
+.wiki-agent-header button { display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--text-dim); cursor: pointer; }
+.wiki-agent-header button:hover { background: var(--bg-elev2); }
+.wiki-agent-host { display: flex; flex: 1; min-height: 0; min-width: 0; }
+.wiki-agent-chat .main { --composer-gutter: 16px; }
+.wiki-agent-chat .messages { padding-top: 20px; }
+.wiki-agent-chat .inputbar { padding-bottom: 14px; }
+.wiki-agent-chat .empty { padding-inline: 16px; }
+.wiki-agent-toggle[aria-expanded="true"] { background: var(--accent-soft); color: var(--accent); }
+.wiki-agent-scrim { display: none; }
+@media (max-width: 900px) {
+	.wiki-agent-chat { position: absolute; z-index: 15; inset: 0 0 0 auto; width: min(var(--wiki-chat-width, 400px), calc(100% - 24px)); max-width: calc(100% - 24px); min-width: 0; }
+	.wiki-agent-chat .wiki-resize-handle { display: none; }
+	.wiki-agent-scrim { display: block; position: absolute; z-index: 14; inset: 0; border: 0; background: color-mix(in srgb, var(--shadow-color) 20%, transparent); }
+}
+
+/* Shared file explorer: search, aligned outline icons and path references. */
+.file-search-trigger, .wiki-workbench .file-search-trigger { display: flex; align-items: center; gap: 10px; min-height: 38px; flex: none; margin: 12px 12px 6px; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-elev); color: var(--text-dim); font: 13px var(--sans); text-align: left; cursor: pointer; }
+.file-search-trigger > svg { width: 17px; height: 17px; flex: none; }
+.file-search-trigger > span { flex: 1; }
+.file-search-trigger kbd { font: 11px var(--sans); color: var(--text-dim); white-space: nowrap; }
+.design-workspace .file-item, .wiki-workbench .wiki-tree-row { height: 32px; min-height: 32px; gap: 6px; border-radius: var(--r-sm); }
+.design-workspace .file-item > .file-name, .design-workspace .file-dir-main, .design-workspace .file-dir-main > .file-name, .wiki-workbench .wiki-tree-main { font: 13px var(--sans); font-weight: 400; color: var(--text-dim); }
+.file-tree-icon { display: inline-flex; width: 17px; height: 17px; flex: none; color: var(--text-dim); }
+.file-tree-icon svg { width: 100%; height: 100%; }
+.design-workspace .file-item .tree-caret, .wiki-tree-main .tree-caret { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; flex: none; color: var(--text-dim); }
+.wiki-tree-main { display: flex; align-items: center; gap: 7px; flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; background: transparent; text-align: left; }
+.wiki-tree-main .file-name-text { color: inherit; }
+.design-workspace .file-item:hover, .design-workspace .file-item:focus-within, .wiki-workbench .wiki-tree-row:hover, .wiki-workbench .wiki-tree-row:focus-within, .wiki-workbench .wiki-tree-row.selected { background: var(--wiki-tree-selected); box-shadow: none; }
+.wiki-workbench .file-reference-action, .design-workspace .file-attach.ref { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; flex: none; border: 0; border-radius: var(--r-sm); background: var(--yellow-bg); color: var(--yellow-fg); cursor: pointer; opacity: 0; }
+.file-reference-action svg { width: 14px; height: 14px; }
+.wiki-tree-row:hover .file-reference-action, .wiki-tree-row:focus-within .file-reference-action, .design-workspace .file-item:hover .file-attach.ref, .design-workspace .file-item:focus-within .file-attach.ref { opacity: 1; }
+.design-workspace .file-item:focus-within .file-attach { display: inline-flex; }
+@media (hover: none) { .file-reference-action, .design-workspace .file-attach.ref { opacity: 1; } }
+
+/* Database workbench: shared modal shell, connection tree and bounded result grid. */
+.database-workbench { display: flex; flex: 1; min-width: 0; min-height: 0; background: var(--bg-elev); }
+.database-sidebar { display: flex; flex-direction: column; flex: 0 0 220px; min-width: 0; border-right: 1px solid var(--border); background: var(--bg); }
+.database-sidebar .file-search-trigger { margin: 12px 10px; }
+.database-sidebar .file-search-trigger input { width: 100%; min-width: 0; border: 0; background: transparent; color: var(--text); outline: none; }
+.database-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 8px 12px; }
+.database-workbench button, .database-workbench select { cursor: pointer; font: inherit; color: var(--text-dim); border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--bg-elev); padding: 5px 8px; }
+.database-workbench button:disabled { opacity: .5; cursor: default; }
+.database-workbench button:hover:not(:disabled) { background: var(--bg-elev2); }
+.database-tree { flex: 1; min-height: 0; overflow: auto; padding: 0 8px; }
+.database-tree .database-tree-row { display: flex; align-items: center; gap: 7px; width: 100%; min-height: 32px; border: 0; background: transparent; text-align: left; }
+.database-tree-row svg { flex: none; width: 16px; }
+.database-tree-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.database-tree .selected { background: var(--wiki-tree-selected); }
+.database-indent { padding-left: 14px; }
+.database-indent summary { padding: 6px 2px; color: var(--text-dim); cursor: pointer; }
+.database-table-row { display: flex; align-items: center; }
+.database-table-row > button:last-child { border: 0; padding: 4px; color: var(--yellow-fg); background: var(--yellow-bg); opacity: 0; }
+.database-table-row:hover > button:last-child, .database-table-row:focus-within > button:last-child { opacity: 1; }
+.database-main { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; overflow: auto; }
+.database-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 16px; }
+.database-heading > div { min-width: 0; }
+.database-heading small { display: block; color: var(--text-faint); overflow-wrap: anywhere; margin-top: 4px; }
+.database-hint { font-size: 12px; line-height: 1.6; color: var(--text-dim); margin: 8px 12px; }
+.database-tabs { display: flex; gap: 8px; padding: 8px 12px; border-block: 1px solid var(--border); }
+.database-tabs button[aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); }
+.database-form, .database-import { padding: 20px; overflow: auto; }
+.database-form label, .database-import > label { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; color: var(--text-dim); }
+.database-form input, .database-form select, .database-form textarea, .database-import input:not([type="checkbox"]), .database-sql textarea { padding: 8px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--bg); color: var(--text); font: inherit; }
+.database-form .database-checkbox { flex-direction: row; align-items: center; }
+.database-form .database-actions { padding-inline: 0; }
+.database-source { display: block; width: 100%; text-align: left; overflow-wrap: anywhere; margin-bottom: 6px; }
+.database-upload { position: relative; padding: 5px 8px; border: 1px solid var(--border); border-radius: var(--r-sm); cursor: pointer; }
+.database-upload input { position: absolute; inset: 0; opacity: 0; width: 100%; cursor: pointer; }
+.database-import-list > label { display: flex; align-items: flex-start; gap: 8px; padding: 12px 0; border-bottom: 1px solid var(--border-soft); }
+.database-import-list small { display: block; color: var(--text-dim); overflow-wrap: anywhere; }
+.database-error { color: var(--red); background: var(--red-soft); padding: 10px 12px; display: flex; justify-content: space-between; overflow-wrap: anywhere; }
+.database-busy, .database-result-meta { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; gap: 8px; color: var(--text-dim); font-size: 12px; }
+.database-sql { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; padding: 12px; }
+.database-sql textarea { box-sizing: border-box; width: 100%; min-height: 110px; resize: vertical; font-family: var(--mono); }
+.database-grid { flex: 1; min-height: 100px; overflow: auto; border-block: 1px solid var(--border); }
+.database-grid table { border-collapse: collapse; font-size: 12px; width: 100%; }
+.database-grid th, .database-grid td { padding: 8px 12px; border: 1px solid var(--border-soft); white-space: pre-wrap; max-width: 320px; min-width: 60px; overflow-wrap: anywhere; text-align: left; }
+.database-grid th { position: sticky; top: 0; background: var(--bg-elev2); }
+.database-null { color: var(--text-faint); }
+.database-empty { margin: auto; padding: 32px; color: var(--text-dim); text-align: center; }
+@media (max-width: 760px) { .database-workbench { flex-direction: column; } .database-sidebar { flex: 0 0 200px; border-right: 0; border-bottom: 1px solid var(--border); } .database-table-row > button:last-child { opacity: 1; } }
+.database-sidebar .database-actions { padding: 8px; gap: 6px; font-size: 12px; }

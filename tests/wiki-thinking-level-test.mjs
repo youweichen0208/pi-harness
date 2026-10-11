@@ -59,9 +59,9 @@ try {
 	await page.locator('.thinking-control .chip', { hasText: '标准' }).waitFor({ timeout: 1000 });
 	await page.locator('.file-name', { hasText: 'note.md' }).click();
 	await page.locator('.wiki-prose .fp-rich-document').waitFor();
-	await page.getByRole('textbox', { name: '问 pi', exact: true }).fill('可以帮我读一下吗');
-	await page.getByRole('button', { name: '发送', exact: true }).click();
-	await page.locator('.wiki-chat-answer', { hasText: 'Hello.' }).waitFor({ timeout: 15000 });
+	await page.locator('.wiki-agent-chat .inputbar textarea').fill('可以帮我读一下吗');
+	await page.locator('.wiki-agent-chat .inputbar button.send').click();
+	await page.locator('.wiki-agent-chat .messages', { hasText: 'Hello.' }).waitFor({ timeout: 15000 });
 	assert.deepEqual(thinking, ['enabled'], 'the Wiki request keeps thinking enabled');
 	console.log('PASS Wiki chat keeps the main chat thinking level');
 } finally {

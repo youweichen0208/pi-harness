@@ -53,3 +53,4 @@ Claude outputs/
 
 # Isolated development worktrees
 .claude/
+.playwright-mcp/

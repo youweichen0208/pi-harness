@@ -1,4 +1,5 @@
 import { UiIcon } from "./UiIcon";
+import { appendChatReference, takeChatReference, type ChatReferenceRequest } from "../chat-reference";
 import { Dropdown, DropdownItem } from "./Dropdown";
 import { queuedMessagePreview } from "../skill-block";
 import { TreeDraftRestore } from "./TreeDraftRestore";
@@ -21,6 +22,11 @@ import { UsagePopover } from "./UsagePopover";
  *  by the server when the persisted set is unchanged), so the shallow-compared
  *  memo() below skips this input bar on every text delta. */
 interface ChatInputProps {
+	databaseReferences?: { id: string; name: string; version: string }[];
+	onRemoveDatabase?: (id: string) => void;
+	beforeSend?: () => Promise<boolean>;
+	cwd: string;
+	referenceRequest?: ChatReferenceRequest | null;
 	active?: boolean;
 	/** Mirrors the preview panel: the file currently open there, or null.
 	 *  Drives the current-file chip above the composer. */
@@ -90,7 +96,7 @@ interface ChatInputProps {
 }
 
 export const ChatInput = memo(function ChatInput({
-	active = true,
+	active = true, cwd, referenceRequest, beforeSend, databaseReferences = [], onRemoveDatabase,
 	currentFile, contextReader, contextSaver,
 	stats,
 	ready, promptResult, verifying, pendingCount = 0, queue, workingStatus,
@@ -117,6 +123,9 @@ export const ChatInput = memo(function ChatInput({
 	// preview opens a (different) file — key is the open instance id.
 	const [dismissed, setDismissed] = useState<Record<string, string>>({});
 	const autoFile = currentFile && dismissed[activeConversationId] !== currentFile.id ? currentFile : null;
+	const preparing = useRef(false);
+	const owner = useRef({ cwd, activeConversationId });
+	owner.current = { cwd, activeConversationId };
 	const pendingSubmit = useRef<{ id: string; conversation: string; text: string; queued: boolean; attachments: ChatInputProps["attachments"] } | null>(null);
 
 	const { locale } = useI18n();
@@ -174,6 +183,17 @@ export const ChatInput = memo(function ChatInput({
 	 *  the whole viewport, so it must measure the chat column to match. */
 	const [helpWidth, setHelpWidth] = useState<number | undefined>(undefined);
 	const taRef = useRef<HTMLTextAreaElement>(null);
+	const consumedReferences = useRef(new Set<string>());
+	useEffect(() => {
+		const request = takeChatReference(referenceRequest, cwd, activeConversationId, consumedReferences.current);
+		if (!request) return;
+		setText(previous => appendChatReference(previous, request));
+		const frame = requestAnimationFrame(() => {
+			taRef.current?.focus({ preventScroll: true });
+			taRef.current?.setSelectionRange(taRef.current.value.length, taRef.current.value.length);
+		});
+		return () => cancelAnimationFrame(frame);
+	}, [referenceRequest, cwd, activeConversationId]);
 	const fileInputRef = useRef<HTMLInputElement>(null);
 	const menuRef = useRef<HTMLDivElement>(null);
 
@@ -312,7 +332,7 @@ export const ChatInput = memo(function ChatInput({
 	useEffect(() => {
 		if (!showHelp) return;
 		const onKey = (e: KeyboardEvent) => {
-			if (e.key === "Escape") setShowHelp(false);
+			if (e.key === "Escape") { e.preventDefault(); setShowHelp(false); }
 		};
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
@@ -358,7 +378,7 @@ export const ChatInput = memo(function ChatInput({
 		// in agent-service.ts. Follow-up delivery passes queue=true,
 		// which the server delivers as followUp instead — the prompt is sent
 		// only after the WHOLE run finishes ("AI 生成结束才发送").
-		const dispatchPrompt = () => {
+		const deliverPrompt = () => {
 			let outgoing: PromptAttachment[] = attachments.map(({ key, isDir, ...attachment }) => attachment);
 			// 当前文件 chip：发送时才取编辑器快照（含未保存修改），并取代同路径的
 			// 整文件附件 — chip 始终只指向当前打开的文件，不随历史累积。
@@ -378,6 +398,14 @@ export const ChatInput = memo(function ChatInput({
 			if (send({ type: "prompt", text: trimmed, queue, requestId, attachments: outgoing })) {
 				pendingSubmit.current = { id: requestId, conversation: activeConversationId, text, queued: streaming, attachments };
 			}
+		};
+		const dispatchPrompt = () => {
+			if (!beforeSend) { deliverPrompt(); return; }
+			if (preparing.current) return;
+			preparing.current = true;
+			void beforeSend().then(ok => {
+				if (ok && owner.current.cwd === cwd && owner.current.activeConversationId === activeConversationId) deliverPrompt();
+			}).catch(error => onNotice("error", (error as Error).message)).finally(() => { preparing.current = false; });
 		};
 		// 发送即保存：携带当前文件且草稿未保存时，先落盘再发送（磁盘 == 快照 ==
 		// 模型的工作基准）。落盘冲突/失败由编辑器的冲突 UI 呈现且不回调 —
@@ -566,8 +594,9 @@ export const ChatInput = memo(function ChatInput({
 			</div>}
 			<div className={`inputbox${text.length > 0 ? " has-draft" : ""}`}>
 			{promptResult?.commandExecuted && promptResult.conversationId === activeConversationId && attachments.length > 0 && <div role="status">{t("commandAttachmentsRetained")}</div>}
-			{(attachments.length > 0 || autoFile) && (
+			{(attachments.length > 0 || databaseReferences.length > 0 || autoFile) && (
 				<div className="attach-row">
+					{databaseReferences.map(db => <span key={db.id} className="attach-chip reference" title={t("dbAttachmentHint")}>◫ {db.name}<button type="button" className="attach-remove" aria-label={`${t("dbRevoke")} ${db.name}`} onClick={() => onRemoveDatabase?.(db.id)}>×</button></span>)}
 					{autoFile && <span className="attach-chip current-file" title={`${autoFile.cwd}/${autoFile.path}`}>
 						@{autoFile.name}{autoFile.dirty ? ` · ${t("currentFileUnsaved")}` : ""}
 						<button type="button" className="attach-remove" title={t("removeAttachment")}

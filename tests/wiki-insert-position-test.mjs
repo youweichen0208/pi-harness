@@ -69,7 +69,7 @@ try {
 	console.log('PASS toolbar positioning and insertion/save');
 	await page.screenshot({ path: '/tmp/pi-wiki-toolbar-full.png' });
 	await page.setViewportSize({ width: 800, height: 900 });
-	await page.locator('.wiki-chat-panel > header button[aria-label]').click();
+	await page.locator('.wiki-agent-header button[aria-label]').click();
 	await toolbar.getByRole('button', { name: '提及日期', exact: true }).click();
 	assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'toolbar does not widen the page');
 	await toolbar.getByRole('button', { name: '代码块', exact: true }).click();

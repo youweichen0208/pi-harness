@@ -38,7 +38,7 @@ async function connect(id) {
 		if (message.type === "snapshot_delta" && client.state) client.state = { ...client.state, ...message.state, messages: [...client.state.messages, ...(message.appended ?? [])] };
 	});
 	await new Promise((resolve, reject) => { ws.once("open", resolve); ws.once("error", reject); });
-	client.send({ type: "hello", clientId: id, protocolVersion: 42 });
+	client.send({ type: "hello", clientId: id, protocolVersion: 41 });
 	await wait(() => client.state && !client.state.tree?.verifying, "initial snapshot");
 	return client;
 }
@@ -71,7 +71,7 @@ try {
 	child.stdout.on("data", value => logs += value); child.stderr.on("data", value => logs += value);
 	await wait(async () => { try { return (await (await fetch(`http://127.0.0.1:${port}/api/health`)).json()).pid === child.pid; } catch { return false; } }, "server health");
 	const a = await connect("builtin-a"), b = await connect("builtin-b");
-	const state = await request(a, "builtin-list"); assert.equal(state.items.length, 5);
+	const state = await request(a, "builtin-list"); assert.equal(state.items.length, 6);
 	assert.equal(item(state, "pi-harness-pdf-markdown"), undefined);
 	assert.match((await request(a, "builtin-toggle", { id: "pi-harness-pdf-markdown", enabled: true, version: state.documentVersion }, 400)).error, /Invalid/);
 	assert.equal(item(state, "pi-harness-okf").status, "loaded");
@@ -84,8 +84,8 @@ try {
 	await wait(() => a.wire.some(message => message.type === "slash_commands" && message.commands.some(command => command.name === "okf")), "OKF command");
 	const commands = a.wire.findLast(message => message.type === "slash_commands").commands;
 	assert(!commands.some(command => ["documents", "pdf-md"].includes(command.name)), "conversion commands removed");
-	await prompt(a, "Check removed conversion tool", 'text(typeof tools.document_to_markdown);');
-	assert.match(JSON.stringify(a.state.messages.findLast(message => message.role === "toolResult")), /document_to_markdown does not exist/);
+	await prompt(a, "Check removed conversion tool", 'text("document_to_markdown" in tools);');
+	assert.match(JSON.stringify(a.state.messages.findLast(message => message.role === "toolResult")), /false/);
 	await prompt(a, "/okf ingest raw/policy.md", `const start=(await tools.okf_ingest({action:'start',paths:['raw/policy.md']})).result;
 const id=start.jobId;
 await tools.okf_ingest({action:'next',jobId:id});
@@ -115,7 +115,7 @@ text(await tools.okf_publish({jobId:id}));`);
 	const c = await connect("builtin-c"); assert.equal(item(await request(c, "builtin-list"), "pi-harness-okf").status, "loaded");
 	const saved = readFileSync(join(data, "document-extensions.json"), "utf8");
 	writeFileSync(join(data, "document-extensions.json"), "broken-json");
-	const broken = await request(a, "builtin-list"); assert.equal(broken.items.length, 5); assert.equal(item(broken, "pi-harness-okf").status, "error"); assert.equal(item(broken, "codemode").status, "loaded");
+	const broken = await request(a, "builtin-list"); assert.equal(broken.items.length, 6); assert.equal(item(broken, "pi-harness-okf").status, "error"); assert.equal(item(broken, "codemode").status, "loaded");
 	writeFileSync(join(data, "document-extensions.json"), saved);
 	console.log("PASS built-in inventory, removed conversion, version conflicts, cross-client settings, disabled calls, new chat/reload and real WebSocket OKF workflow");
 
@@ -135,7 +135,7 @@ text(await tools.okf_publish({jobId:id}));`);
 		}
 		await openSettings();
 		const panel = page.locator(".builtin-extensions"), okf = panel.locator('[data-builtin-id="pi-harness-okf"]');
-		assert.equal(await panel.locator(".builtin-row").count(), 5);
+		assert.equal(await panel.locator(".builtin-row").count(), 6);
 		await page.getByRole("tab", { name: "已安装 · 0", exact: true }).waitFor();
 		await okf.getByRole("switch").click(); await wait(() => JSON.parse(readFileSync(join(data, "document-extensions.json"), "utf8")).okfEnabled === false, "browser toggle off");
 		await okf.getByRole("switch").click(); await wait(() => JSON.parse(readFileSync(join(data, "document-extensions.json"), "utf8")).okfEnabled === true, "browser toggle on");
@@ -149,7 +149,7 @@ text(await tools.okf_publish({jobId:id}));`);
 			if (route.request().postDataJSON()?.action === "list") return route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "Package fixture unavailable" }) });
 			await route.continue();
 		});
-		await page.reload(); await openSettings(); assert.equal(await panel.locator(".builtin-row").count(), 5);
+		await page.reload(); await openSettings(); assert.equal(await panel.locator(".builtin-row").count(), 6);
 		await page.getByText("Package fixture unavailable", { exact: false }).waitFor();
 		await page.unroute("**/api/extensions"); await page.reload(); await openSettings();
 		mkdirSync("tests/scratch", { recursive: true });
@@ -163,7 +163,7 @@ text(await tools.okf_publish({jobId:id}));`);
 		assert.equal(await panel.getByText("Document to Markdown", { exact: true }).count(), 0);
 		await page.screenshot({ path: "tests/scratch/builtin-extensions-en.png", fullPage: true });
 		assert.deepEqual(errors, []); assert(!existsSync(join(data, "runtimes")));
-		console.log("PASS built-in browser: five entries, toggles, copy, settings links, package failure isolation, Chinese/English and narrow layout");
+		console.log("PASS built-in browser: six entries, toggles, copy, settings links, package failure isolation, Chinese/English and narrow layout");
 	}
 } finally {
 	release?.();

@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 
 export interface DocumentExtensionSettings {
 	okfEnabled: boolean;
+	databaseEnabled: boolean;
 }
 
 export function documentDataDir(): string {
@@ -23,8 +24,8 @@ function readSettings(): Record<string, unknown> {
 }
 
 function validate(value: Record<string, unknown>): DocumentExtensionSettings {
-	const result: DocumentExtensionSettings = { okfEnabled: true };
-	for (const key of ["okfEnabled"] as const) {
+	const result: DocumentExtensionSettings = { okfEnabled: true, databaseEnabled: true };
+	for (const key of ["okfEnabled", "databaseEnabled"] as const) {
 		if (value[key] !== undefined) {
 			if (typeof value[key] !== "boolean") throw new Error(`${key} must be a boolean`);
 			result[key] = value[key];

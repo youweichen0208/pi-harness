@@ -1,3 +1,4 @@
+import { databaseScope } from "./database/service.js";
 import { planSettings } from "./plan/settings.js";
 import { reloadSession } from "./session-reload.js";
 import { resolveNativeAttachments } from "./user-attachments.js";
@@ -604,7 +605,7 @@ export class ClientSession {
 				agentDir: this.agentDir,
 				modelRuntime: this.sharedModelRuntime,
 				settingsManager: conversationSettings(cwd, this.agentDir),
-				resourceLoaderOptions: { extensionFactories: nativeToolExtensions() },
+				resourceLoaderOptions: { extensionFactories: nativeToolExtensions(() => databaseScope(this.clientId, cwd, sessionManager)) },
 			});
 			// A second native reload invalidates the process-wide extension factory cache.
 			if (refreshResources) { await services.resourceLoader.reload(); refreshResources = false; }

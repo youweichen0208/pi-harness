@@ -105,3 +105,19 @@ Pi 1.0.4 专项：`pi-104-prompt-contract-test.mjs` 核对 Codemode on/only 的�
 原生计划回归：`plan-sdk-test.mjs` 与 `plan-settings-test.mjs` 纳入零 token 冒烟；浏览器单独执行 `node tests/plan-chat-browser-test.mjs`。均使用隔离目录与本地模拟模型，不调用真实服务。
 
 文档扩展回归：`builtin-extensions-test.mjs` 纳入零 token 冒烟，配合 OKF 单测验证 Markdown 导入和 Wiki 草稿发布；参见 [OKF 知识蒸馏](architecture-document-knowledge.md)。原生上下文基线关闭 plan 和 OKF 内置工具。
+
+
+### 数据库工作台回归
+
+`npx vitest run tests/unit/database.test.ts` 无外部服务。真实驱动与浏览器回归使用专用测试实例，不可指向业务数据库：
+
+```bash
+docker run --rm -d --name pi-db-test-pg -e POSTGRES_PASSWORD=pi_test_only -e POSTGRES_DB=analytics -p 127.0.0.1:9277:5432 postgres:17-alpine
+docker run --rm -d --name pi-db-test-mysql -e MYSQL_ROOT_PASSWORD=pi_test_only -e MYSQL_DATABASE=analytics -p 127.0.0.1:9278:3306 mysql:8.0
+npm run build
+node tests/database-test.mjs --browser
+node tests/database-tls-test.mjs
+docker rm -f pi-db-test-pg pi-db-test-mysql
+```
+
+先等待两个数据库完成初始化；端口冲突时使用其它 ≥8900 的端口，并以 PI_TEST_PG_PORT / PI_TEST_MYSQL_PORT 传给测试。协议/浏览器测试另使用 9274/9275，TLS 测试使用 9280，启动前检查端口；临时应用 data-dir、模型夹具及 TLS 容器由测试自行清理。MariaDB 可替换 MySQL 测试实例，用相同 PI_TEST_MYSQL_PORT 运行。

@@ -1,3 +1,4 @@
+import { createDatabaseExtension } from "./database/extension.js";
 import type { BuiltinExtensionId } from "./protocol.js";
 import { createPlanExtension } from "./plan/extension.js";
 import { createOkfExtension } from "./okf/extension.js";
@@ -25,6 +26,7 @@ export function conversationSettings(cwd: string, agentDir: string): SettingsMan
 /** Shared by resource loading and the built-in extension inventory. */
 export const nativeExtensionRegistry = [
 	{ name: "pi-harness-plan", replaceable: true, factory: createPlanExtension },
+	{ name: "pi-harness-database", replaceable: true, factory: createDatabaseExtension },
 	{ name: "pi-harness-okf", replaceable: true, factory: createOkfExtension },
 	{ name: "codemode", builtin: true, replaceable: true, factory: createCodemodeExtension },
 	{ name: "tool-search", builtin: true, replaceable: true, factory: createToolSearchExtension },
@@ -32,8 +34,8 @@ export const nativeExtensionRegistry = [
 ] satisfies { name: BuiltinExtensionId; builtin?: boolean; replaceable: boolean; factory: () => ExtensionFactory }[];
 
 /** Same native extensions as the Pi CLI; activation follows the user's settings. */
-export function nativeToolExtensions(): InlineExtension[] {
-	return nativeExtensionRegistry.map(extension => ({ ...extension, factory: extension.factory() }));
+export function nativeToolExtensions(databaseScope?: () => string): InlineExtension[] {
+	return nativeExtensionRegistry.map(extension => ({ ...extension, factory: extension.name === "pi-harness-database" ? createDatabaseExtension(databaseScope) : extension.factory() }));
 }
 
 /** Stable settings aliases for the SDK's named inline extension paths. */

@@ -345,7 +345,7 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true }: ToolCall
 	useEffect(() => {
 		if (!zoomed) return;
 		const onKey = (e: KeyboardEvent) => {
-			if (e.key === "Escape") setZoomed(false);
+			if (e.key === "Escape") { e.preventDefault(); setZoomed(false); }
 		};
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
