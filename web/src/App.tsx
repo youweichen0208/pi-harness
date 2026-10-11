@@ -1,3 +1,5 @@
+import { DatabaseWorkbench } from "./components/DatabaseWorkbench";
+import { databaseRequest } from "./database-api";
 import { isLegacyMcpNotice } from "./notices";
 import { ChangesProvider } from "./changes-context";
 import { taskChanges } from "./changes";
@@ -8,9 +10,10 @@ import { randomUuid } from "./uuid";
 import { SessionTreeWorkbench } from "./components/SessionTreeWorkbench";
 import { RecoveryStatus } from "./components/RecoveryStatus";
 import { LinkedText } from "./components/LinkedText";
-import type { WikiConversationResult } from "./types";
-import { wikiRequest } from "./wiki-api";
 import { WikiWorkbench } from "./components/WikiWorkbench";
+import { ChatDock } from "./components/ChatDock";
+import { WikiDocumentModal } from "./components/WikiDocumentModal";
+import type { ChatReferenceRequest } from "./chat-reference";
 
 import { ProviderAuthModal } from "./components/ProviderAuthModal";
 import { WorkspacePathContext } from "./workspace-context";
@@ -220,7 +223,7 @@ function ResizeHandle({
 }
 
 /** 顶栏视图：内置三个 + 每个已装插件一个 `plugin:<id>`。 */
-type ViewName = "wiki" | "chat" | "terminal" | "git" | "nodes" | `plugin:${string}`;
+type ViewName = "chat" | "terminal" | "git" | "nodes" | `plugin:${string}`;
 
 export function App() {
 	useEffect(() => desktopAPI?.onBeforeClose?.(flushWindowSaves), []);
@@ -276,12 +279,10 @@ export function App() {
 	}, [switching, chat.state?.cwd, previewFile]);
 	const fileGuard = useRef<FileNavigationGuard | null>(null);
 	const wikiGuard = useRef<((next: () => void) => void) | null>(null);
-	const wikiOpening = useRef(false);
-	const wikiWaiting = useRef<string | null>(null);
+	const wikiSave = useRef<(() => Promise<boolean>) | null>(null);
 	const send = useCallback((message: ClientMessage) => {
 		const navigation = message.type === "switch_conversation" || message.type === "new_chat" || message.type === "set_cwd" || message.type === "switch_session" ||
 			(message.type === "prompt" && /^\/cwd(?:\s|$)/.test(message.text));
-		if (navigation && (wikiOpening.current || wikiWaiting.current)) return false;
 		if (navigation && wikiGuard.current) { wikiGuard.current(() => { rawSend(message); }); return false; }
 		if (navigation && fileGuard.current) {
 			setView("chat");
@@ -316,59 +317,63 @@ export function App() {
 		return () => window.removeEventListener("pi-configure-radius", configure);
 	}, [chat.state?.cwd, send]);
 	const [view, setView] = useState<ViewName>("chat");
-	const [wikiFileRequest, setWikiFileRequest] = useState<{cwd:string;path:string;token:string} | null>(null);
-	const [wikiContentToken, setWikiContentToken] = useState<string | null>(null);
-	const [wikiPending, setWikiPending] = useState(false);
-	const [wikiTargetId, setWikiTargetId] = useState<string | null>(null);
-	const [wikiBoundToken, setWikiBoundToken] = useState<string | null>(null);
-	const [wikiSessionError, setWikiSessionError] = useState("");
-	const wikiProcessed = useRef<string | null>(null);
-	const wikiLatestToken = useRef(wikiFileRequest?.token);
-	wikiLatestToken.current = wikiFileRequest?.token;
-	const wikiCurrent = useRef({ cwd: chat.state?.cwd, conversationId: chat.activeConversationId, epoch: 0 });
-	if (wikiCurrent.current.cwd !== chat.state?.cwd) {
-		wikiCurrent.current.epoch++;
-		wikiWaiting.current = null;
-	}
-	wikiCurrent.current = { ...wikiCurrent.current, cwd: chat.state?.cwd, conversationId: chat.activeConversationId };
+	const [wikiFileRequest, setWikiFileRequest] = useState<{cwd:string;conversationId:string;path:string;token:string} | null>(null);
+	const [databaseOpen, setDatabaseOpen] = useState(false);
+	const [databaseReferences, setDatabaseReferences] = useState<{ id: string; name: string; version: string }[]>([]);
+	const [wikiChatHost, setWikiChatHost] = useState<HTMLElement | null>(null);
+	const [wikiChatOpen, setWikiChatOpen] = useState(true);
+	const wikiRequestRef = useRef(wikiFileRequest);
+	wikiRequestRef.current = wikiFileRequest;
+	const [chatReference, setChatReference] = useState<ChatReferenceRequest | null>(null);
+	const wikiCurrent = useRef({ cwd: chat.state?.cwd, conversationId: chat.activeConversationId });
+	wikiCurrent.current = { cwd: chat.state?.cwd, conversationId: chat.activeConversationId };
 	const openWikiDocument = useCallback(async (path: string) => {
 		const current = wikiCurrent.current;
 		if (!current.cwd) return;
-		setWikiSessionError("");
-		setWikiFileRequest({ cwd: current.cwd, path, token: randomUuid() });
-		setPreviewFile(null); setView("wiki"); setDrawer(null);
+		setDatabaseOpen(false);
+		setWikiChatOpen(!window.matchMedia("(max-width: 900px)").matches);
+		setWikiFileRequest({ cwd: current.cwd, conversationId: current.conversationId, path, token: randomUuid() });
+	}, []);
+	const closeWiki = useCallback(() => {
+		const close = () => setWikiFileRequest(null);
+		if (wikiGuard.current) wikiGuard.current(close); else close();
+	}, []);
+	const receiveWikiReference = useCallback((request: ChatReferenceRequest) => {
+		const current = wikiCurrent.current;
+		if (request.cwd !== current.cwd || request.conversationId !== current.conversationId) return;
+		if (request.database) setDatabaseReferences(items => [...items.filter(i => i.id !== request.database!.id), request.database!]);
+		setChatReference(request);
+		setWikiChatOpen(true);
 	}, []);
 	useEffect(() => {
-		if (wikiWaiting.current) {
-			if (wikiWaiting.current !== chat.state?.conversationId || wikiWaiting.current !== chat.activeConversationId) return;
-			wikiWaiting.current = null;
-		}
-		const target = wikiFileRequest;
-		if (!target || wikiContentToken !== target.token || target.cwd !== chat.state?.cwd || wikiOpening.current || wikiProcessed.current === target.token || !chat.ready || switching) return;
-		wikiProcessed.current = target.token;
-		wikiOpening.current = true; setWikiPending(true); setWikiSessionError("");
-		const conversationId = chat.activeConversationId, epoch = wikiCurrent.current.epoch;
-		void wikiRequest<WikiConversationResult>(target.cwd, "new-conversation", { path: target.path, conversationId }).then(result => {
-			if (wikiCurrent.current.cwd !== target.cwd || wikiCurrent.current.epoch !== epoch) return;
-			wikiWaiting.current = result.conversationId;
-			setWikiTargetId(result.conversationId);
-			setWikiBoundToken(target.token);
-		}).catch(error => {
-			if (wikiCurrent.current.cwd === target.cwd && wikiCurrent.current.epoch === epoch && wikiLatestToken.current === target.token) setWikiSessionError((error as Error).message);
-		}).finally(() => { wikiOpening.current = false; setWikiPending(false); });
-	}, [wikiFileRequest, wikiContentToken, chat.state?.cwd, chat.state?.conversationId, chat.activeConversationId, chat.ready, switching, wikiPending]);
-	const wikiConversationMatches = wikiBoundToken === wikiFileRequest?.token && wikiTargetId === chat.activeConversationId && wikiTargetId === chat.state?.conversationId;
-	const wikiSessionReady = chat.ready && !switching && !wikiPending && wikiConversationMatches;
-	const leavingWikiConversation = useRef<string | null>(null);
-	useEffect(() => {
-		// A late Wiki initialization must not turn ordinary chat into a Wiki transcript.
-		if (view !== "chat" || !wikiSessionReady || leavingWikiConversation.current === chat.activeConversationId) return;
-		if (rawSend({ type: "new_chat" })) leavingWikiConversation.current = chat.activeConversationId;
-	}, [view, wikiSessionReady, chat.activeConversationId, rawSend]);
-	useEffect(() => {
-		// Returning after a chat-side session switch needs a new document conversation.
-		if (view === "wiki" && chat.ready && !switching && !wikiPending && !wikiWaiting.current && wikiFileRequest && wikiFileRequest.cwd === chat.state?.cwd && wikiBoundToken === wikiFileRequest.token && wikiTargetId && wikiTargetId !== chat.activeConversationId) void openWikiDocument(wikiFileRequest.path);
-	}, [view, chat.ready, switching, wikiPending, wikiFileRequest, chat.state?.cwd, chat.activeConversationId, wikiBoundToken, wikiTargetId, openWikiDocument]);
+		setChatReference(null);
+		setWikiFileRequest(null);
+		setDatabaseOpen(false);
+		setDatabaseReferences([]);
+	}, [chat.state?.cwd, chat.activeConversationId]);
+	const saveWikiBeforePrompt = useCallback(async () => {
+		const request = wikiFileRequest;
+		if (!request) return true;
+		if (wikiRequestRef.current?.token !== request.token) return false;
+		const saved = await wikiSave.current?.();
+		return !!saved && wikiRequestRef.current?.token === request.token && wikiCurrent.current.cwd === request.cwd && wikiCurrent.current.conversationId === request.conversationId;
+	}, [wikiFileRequest, databaseOpen]);
+	const openDatabase = () => {
+		const open = () => { setWikiFileRequest(null); setDatabaseOpen(true); setWikiChatOpen(!window.matchMedia("(max-width: 900px)").matches); };
+		if (wikiGuard.current) wikiGuard.current(open); else open();
+	};
+	const revokeDatabase = async (id: string) => {
+		const current = wikiCurrent.current;
+		if (!current.cwd) return;
+		await databaseRequest(current.cwd, current.conversationId, { action: "revoke", id });
+		if (wikiCurrent.current.cwd === current.cwd && wikiCurrent.current.conversationId === current.conversationId) setDatabaseReferences(items => items.filter(i => i.id !== id));
+	};
+	const prepareChatPrompt = async () => {
+		const current = wikiCurrent.current;
+		if (!(await saveWikiBeforePrompt())) return false;
+		if (databaseReferences.length && current.cwd) await databaseRequest(current.cwd, current.conversationId, { action: "grant", ids: databaseReferences.map(c => c.id), versions: Object.fromEntries(databaseReferences.map(c => [c.id, c.version])) });
+		return current.cwd === wikiCurrent.current.cwd && current.conversationId === wikiCurrent.current.conversationId;
+	};
 	const [commitJump, setCommitJump] = useState<{ hash: string; token: number } | null>(null);
 	const visited = useRef(new Set<ViewName>(["chat"]));
 	visited.current.add(view);
@@ -537,6 +542,8 @@ export function App() {
 	const [bgTasksOpen, setBgTasksOpen] = useState(false);
 	// Global search panel (sessions / projects / workspace files).
 	const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
+	const [globalSearchFilesOnly, setGlobalSearchFilesOnly] = useState(false);
+	const openFileSearch = useCallback(() => { setGlobalSearchFilesOnly(true); setGlobalSearchOpen(true); }, []);
 
 	// 插件视图桥：插件无 chat 上下文，通过窗口事件请求在可见终端执行命令
 	// （与 SCM 面板同款：已有同名 tab 原地重跑，否则新建并自动切到终端视图）。
@@ -581,13 +588,14 @@ export function App() {
 	// Ctrl+K / Cmd+K opens global search (also reachable via the topbar button).
 	useEffect(() => {
 		const onKey = (e: KeyboardEvent) => {
-			if (view === "wiki" || !(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "k") return;
+			if (wikiFileRequest || databaseOpen || !(e.ctrlKey || e.metaKey) || !["k", "p"].includes(e.key.toLowerCase())) return;
 			e.preventDefault();
+			setGlobalSearchFilesOnly(e.key.toLowerCase() === "p");
 			setGlobalSearchOpen((v) => !v);
 		};
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
-	}, [view]);
+	}, [wikiFileRequest]);
 
 	// -- sound notifications --------------------------------------------------
 	const [sound, setSound] = useState<SoundSettings>(loadSoundSettings);
@@ -700,6 +708,7 @@ export function App() {
 
 	useEffect(() => {
 		const onNewChat = (event: KeyboardEvent) => {
+			if (document.querySelector(".wiki-document-dialog[open]")) return;
 			if ((event.metaKey || event.ctrlKey) && !event.shiftKey && event.key.toLowerCase() === "n") {
 				event.preventDefault();
 				if (wikiGuard.current) { wikiGuard.current(() => { setView("chat"); rawSend({ type: "new_chat" }); }); return; }
@@ -814,7 +823,10 @@ export function App() {
 	// Stable callbacks for memoized panels (LeftPanel/RightPanel/ChatInput/
 	// GoalBar skip re-render while tokens stream in — inline closures here
 	// would break their shallow prop comparison every render).
-	const openManageModels = useCallback(() => setManageModelsOpen(true), []);
+	const openManageModels = useCallback(() => {
+		const open = () => { setWikiFileRequest(null); setManageModelsOpen(true); };
+		if (wikiGuard.current) wikiGuard.current(open); else open();
+	}, []);
 	const clearAttachments = useCallback((conversationId: string, sent: PendingAttachment[]) => {
 		const remaining = (items: PendingAttachment[]) => items.filter((item) => !sent.includes(item));
 		if (attachmentKey.current === conversationId) setAttachments(remaining);
@@ -893,7 +905,7 @@ export function App() {
 		// navigating away; children with their own handlers (input bar / edit
 		// composer) call stopPropagation and keep priority.
 		<ChangesProvider conversationId={conversationState?.conversationId ?? ""} files={changedFiles} active={view === "chat"} onOpenChange={onChangesOpen}><div
-			className={`app design-workspace ${changesOpen && view === "chat" ? "changes-open" : ""} ${view === "wiki" ? "wiki-mode" : ""} ${leftCollapsed ? "left-collapsed" : ""} ${previewFile && view === "chat" ? "document-open" : ""}`}
+			className={`app design-workspace ${changesOpen && view === "chat" ? "changes-open" : ""} ${leftCollapsed ? "left-collapsed" : ""} ${previewFile && view === "chat" ? "document-open" : ""}`}
 			style={{ "--left-w": `${leftWidth}px`, "--right-w": `${rightWidth}px` } as CSSProperties}
 			onDragOver={(e) => {
 				if (!Array.from(e.dataTransfer?.types ?? []).includes("Files")) return;
@@ -926,7 +938,7 @@ export function App() {
 					<span>📎 {t("dropHereToAttach")}</span>
 				</div>
 			)}
-			{view !== "nodes" && view !== "wiki" && <div
+			{view !== "nodes" && <div
 				className={`panel-drawer drawer-left ${drawer === "left" ? "open" : ""}`}
 			>
 				<LeftPanel
@@ -946,12 +958,13 @@ export function App() {
 					activeConversationId={chat.activeConversationId}
 				/>
 			</div>}
-			{view !== "nodes" && view !== "wiki" && !isMobile && !leftCollapsed && (
+			{view !== "nodes" && !isMobile && !leftCollapsed && (
 				<ResizeHandle side="left" width={leftWidth} onResize={resizeLeft} />
 			)}
 
 			<div className="workspace-column">
 				<TopBar
+					onOpenDatabase={openDatabase}
 					leftCollapsed={leftCollapsed}
 					gitChangeCount={workspaceScm.files.length}
 					onOpenTask={openTask}
@@ -969,9 +982,7 @@ export function App() {
 							terminalOpenRequested.current = false;
 						}
 						const changeView = () => { setView(v); setDrawer(null); };
-						if (view === "wiki" && wikiGuard.current) wikiGuard.current(changeView);
-						else if (v === "wiki" && fileGuard.current) fileGuard.current(changeView);
-						else changeView();
+						changeView();
 					}}
 					onOpenPanel={(side) => {
 						if (side === "left" && !isMobile) {
@@ -987,20 +998,18 @@ export function App() {
 					onManageModels={() => setManageModelsOpen(true)}
 					onOpenSettings={() => { setSettingsInitialTab("prompt"); setSettingsOpen(true); }}
 					onOpenBgTasks={() => setBgTasksOpen(true)}
-					onOpenGlobalSearch={() => setGlobalSearchOpen(true)}
+					onOpenGlobalSearch={() => { setGlobalSearchFilesOnly(false); setGlobalSearchOpen(true); }}
 					sound={sound}
 					onSoundChange={setSound}
 					onSoundPreview={(kind: SoundKind) => playSound(kind, sound)}
 				/>
 				<RecoveryStatus state={conversationState} send={send} connected={chat.ready} />
 				{chat.pendingDialogs.filter(d => d.conversationId !== chat.activeConversationId).map(d => <button className="protocol-banner" key={d.id} onClick={() => {
-					if (wikiOpening.current || wikiWaiting.current) return;
 					const navigate = () => { if (rawSend({ type: "switch_conversation", id: d.conversationId })) setView("chat"); };
 					if (wikiGuard.current) wikiGuard.current(navigate);
 					else if (fileGuard.current) fileGuard.current(navigate);
 					else navigate();
 				}}>{t("pluginRequest")} · {d.source} · {d.title}</button>)}
-				{view === "wiki" && chat.dialog && <Dialog dialog={chat.dialog} send={send} />}
 				{switchError && <div className="protocol-banner" role="alert"><button onClick={() => send({ type: "set_cwd", path: switchError, source: "ui" })}>{t("retryProjectSwitch")}</button> {switchError}</div>}
 				{switching && <div className="protocol-banner" role="status">{t("switchingProject")} {switching}</div>}
 				{chat.protocolMismatch && (
@@ -1019,10 +1028,10 @@ export function App() {
 						<div className="drawer-backdrop" onClick={() => setDrawer(null)} />
 					)}
 					<div className={`view-pane ${previewFile ? "preview-open" : ""} ${view === "chat" ? "" : "hidden"}`}>
-						<main className="main">
+						<ChatDock target={wikiFileRequest || databaseOpen ? wikiChatHost : null}>
 							{conversationState ? (
 								<WorkspacePathContext.Provider value={conversationState.cwd}><MessageList recovery={{ ...toolRecovery, models: chat.models, onLoadModels: () => { if (!chat.models.length && !chat.modelsLoading) send({ type: "list_models" }); } }}
-									active={view === "chat"}
+									active={view === "chat" || !!wikiFileRequest || databaseOpen}
 									connected={chat.ready}
 									silenceNotified={chat.agentSilence?.conversationId === conversationState.conversationId && chat.agentSilence.phase === "silent"}
 									key={conversationState.conversationId}
@@ -1049,7 +1058,12 @@ export function App() {
 								{chat.notices.map((n) => <NoticeToast key={n.id} notice={n} onDismiss={dismissNotice} onOpenExtensions={openExtensionSettings} />)}
 							</div>}
 							<ChatInput
-								active={view === "chat" && !wikiConversationMatches}
+								active={view === "chat" || !!wikiFileRequest || databaseOpen}
+								beforeSend={prepareChatPrompt}
+								databaseReferences={databaseReferences}
+								onRemoveDatabase={id => void revokeDatabase(id).catch(error => pushNotice("error", error.message))}
+								cwd={chat.state?.cwd ?? ""}
+								referenceRequest={chatReference}
 								currentFile={!switching && currentFile?.cwd === chat.state?.cwd ? currentFile : null}
 								contextReader={contextReader}
 								contextSaver={contextSaver}
@@ -1059,7 +1073,7 @@ export function App() {
 								queue={conversationState?.queue}
 								pendingCount={(conversationState?.queue.steering.length ?? 0) + (conversationState?.queue.followUp.length ?? 0)}
 								send={send}
-								ready={chat.ready && !!conversationState && !(view === "chat" && (wikiPending || wikiConversationMatches))}
+								ready={chat.ready && !!conversationState}
 								streaming={conversationState?.isStreaming ?? false}
 								silentActivity={chat.agentSilence?.conversationId === chat.activeConversationId ? chat.agentSilence.activity : null}
 										messages={conversationState?.messages ?? EMPTY_MESSAGES}
@@ -1077,7 +1091,7 @@ export function App() {
 								onManageModels={openManageModels}
 								onSent={clearAttachments}
 							/>
-						</main>
+						</ChatDock>
 						<ChangesPanel key={conversationState?.conversationId ?? ""} cwd={conversationState?.cwd ?? ""} data={chat.scmData} send={send} ready={chat.ready && !switching} notRepo={workspaceScm.notRepo} branch={workspaceScm.branch} defaultBase={workspaceScm.base} branches={workspaceScm.branches} dirty={chat.scmDirty} />
 						{!isMobile && (!isNarrow || !!previewFile) && (!filesCollapsed || !!previewFile) && (
 							<ResizeHandle side={previewFile ? "editor" : "right"} width={previewFile ? 480 : rightWidth} onResize={previewFile ? resizeEditor : resizeRight} onReset={previewFile ? () => { setEditorShare(0.45); localStorage.setItem("pi-harness:editor-share", "0.45"); } : undefined} />
@@ -1087,6 +1101,7 @@ export function App() {
 						>
 							<div className="file-list-host" hidden={!!previewFile}>
 								<RightPanel
+									onSearch={openFileSearch}
 									active={!filesCollapsed && !previewFile && !switching && view === "chat" && ((!isMobile && !isNarrow) || drawer === "right")}
 									send={send}
 									files={chat.files}
@@ -1132,7 +1147,7 @@ export function App() {
 							)}
 						</div>
 					</div>
-					<div className={`view-pane ${view === "wiki" ? "" : "hidden"}`}>{visited.current.has("wiki") && chat.state && <WikiWorkbench recovery={conversationState?.recovery} key={chat.state.cwd} cwd={chat.state.cwd} conversationId={chat.activeConversationId} fileRequest={wikiFileRequest?.cwd === chat.state.cwd ? wikiFileRequest : null} messages={wikiConversationMatches ? chat.state.messages : []} streaming={wikiSessionReady && chat.state.isStreaming} live={wikiSessionReady ? chat.state.streamingMessage : null} model={chat.state.model} contextPercent={chat.state.stats.contextUsage.percent} toolStatuses={chat.toolStatuses} active={view === "wiki"} ready={wikiSessionReady} onContentRequested={setWikiContentToken} sessionError={wikiSessionError} writingBlocked={!!switching || chat.state.isStreaming} openDocument={openWikiDocument} thinkingWrap={chat.settings?.thinkingWrap ?? false} connected={chat.ready} silenceNotified={chat.agentSilence?.conversationId === chat.state.conversationId && chat.agentSilence.phase === "silent"} send={send} guard={wikiGuard} />}</div>
+
 					<div className={`view-pane ${view === "terminal" ? "" : "hidden"}`}>
 						<Suspense fallback={null}>
 							{visited.current.has("terminal") && <TerminalPanel active={view === "terminal" && !switching} chat={chat} send={send} terminal={terminal} />}
@@ -1162,6 +1177,12 @@ export function App() {
 				</div>
 			</div>
 			<FooterBar chat={chat} send={send} />
+			{databaseOpen && chat.state?.cwd && <WikiDocumentModal title={t("dbTitle")} onClose={() => setDatabaseOpen(false)} chatHost={setWikiChatHost} chatOpen={wikiChatOpen} onChatOpen={setWikiChatOpen}>
+				<DatabaseWorkbench cwd={chat.state.cwd} conversationId={chat.activeConversationId} onReference={receiveWikiReference} onRevoke={revokeDatabase} />
+			</WikiDocumentModal>}
+			{wikiFileRequest && wikiFileRequest.cwd === chat.state?.cwd && wikiFileRequest.conversationId === chat.activeConversationId && <WikiDocumentModal onClose={closeWiki} chatHost={setWikiChatHost} chatOpen={wikiChatOpen} onChatOpen={setWikiChatOpen}>
+				<WikiWorkbench key={wikiFileRequest.cwd} cwd={wikiFileRequest.cwd} conversationId={wikiFileRequest.conversationId} fileRequest={wikiFileRequest} streaming={!!conversationState?.isStreaming} active ready={chat.ready && !switching} writingBlocked={!!switching || !!conversationState?.isStreaming} openDocument={openWikiDocument} connected={chat.ready} guard={wikiGuard} saveBeforePrompt={wikiSave} onAttach={(path, name, isDir) => { attach(path, name, "reference", isDir); setWikiChatOpen(true); }} onReference={receiveWikiReference} />
+			</WikiDocumentModal>}
 
 			{chat.ready &&
 				chat.state &&
@@ -1207,6 +1228,7 @@ export function App() {
 			)}
 			{globalSearchOpen && (
 				<GlobalSearchModal
+					filesOnly={globalSearchFilesOnly}
 					send={send}
 					sessions={chat.sessions}
 					projects={chat.projects}

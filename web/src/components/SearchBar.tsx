@@ -123,6 +123,7 @@ export function SearchBar({
 	useEffect(() => {
 		if (!open) return;
 		const onKey = (e: KeyboardEvent) => {
+			if (document.querySelector(".wiki-document-dialog[open]") && !(e.target instanceof HTMLElement && e.target.closest(".wiki-agent-chat"))) return;
 			if (e.key === "Escape") {
 				e.preventDefault();
 				e.stopPropagation();

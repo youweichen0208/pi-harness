@@ -40,6 +40,17 @@ pi-harness --port 9000 --cwd /path/to/project
 - 中文和英文界面、声音提醒、可选插件及 pi 扩展。
 - CLI、开机自启服务、Docker 与 Electron 桌面版。
 
+## OKF Wiki 知识蒸馏
+
+内置 OKF 扩展直接接收 Markdown／已有证据包，由当前 Agent 提取候选、去重、核对版本与冲突，生成 Wiki 草稿；实际人工复核后才标记为 stable。无需 Python 解析环境。
+
+```text
+/okf ingest ./raw
+/okf review <jobId>
+```
+
+设置与资料移交见 [知识扩展说明](https://github.com/youweichen0208/pi-harness/blob/develop/docs/architecture-document-knowledge.md)。
+
 ## 运行与部署
 
 ```bash
@@ -67,6 +78,8 @@ npm run test:smoke
 ## English
 
 pi-harness is an independently maintained web and Electron interface for the pi coding agent SDK. It includes chat, file browsing and editing, attachments, a local terminal, model management, and a built-in SSH node workbench with grouped hosts, multiple PTY tabs, SFTP files, and a separate Agent conversation for each node.
+
+The built-in OKF extension ingests Markdown or existing evidence bundles and uses the current Pi Agent to extract and cross-check knowledge. Use `/okf ingest ./raw` and `/okf review <jobId>`. Generated Wiki pages remain drafts until human review. No document converter or Python runtime is bundled.
 
 Requires Node.js **>= 22.19.0** and a configured pi model provider. Install with `npm install -g @youweichen/pi-harness`, then run `pi-harness`. See the [SSH workbench guide](https://github.com/youweichen0208/pi-harness/blob/develop/docs/ssh-workbench.md), [Xshell guide](https://github.com/youweichen0208/pi-harness/blob/develop/docs/xshell.md), and [deployment guide](https://github.com/youweichen0208/pi-harness/blob/develop/docs/deployment.md).
 

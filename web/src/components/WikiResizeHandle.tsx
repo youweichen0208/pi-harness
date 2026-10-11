@@ -36,7 +36,7 @@ export function WikiResizeHandle({ side, width, onResize }: { side: Side; width:
 		onPointerDown={event => {
 			if (event.button !== 0) return;
 			event.preventDefault(); event.currentTarget.focus(); event.currentTarget.setPointerCapture(event.pointerId);
-			const workbench = event.currentTarget.closest(".wiki-workbench")!;
+			const workbench = event.currentTarget.closest(".wiki-workbench, .wiki-modal-body")!;
 			const available = workbench.getBoundingClientRect().width;
 			const overlay = window.matchMedia("(max-width: 1099px)").matches;
 			const other = workbench.querySelector(side === "sidebar" ? ".wiki-chat-panel" : ".wiki-sidebar")?.getBoundingClientRect().width ?? 0;

@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import { useEffect, useState } from "react";
 import {
 	FiSidebar,
+	FiDatabase,
 	FiGitBranch,
 	FiGlobe,
 	FiMenu,
@@ -33,6 +34,7 @@ import { skillAwarePreview } from "../skill-block";
 import { conversationDisplayTitle } from "../conversation-display-title";
 
 interface TopBarProps {
+	onOpenDatabase: () => void;
 	leftCollapsed?: boolean;
 	gitChangeCount: number;
 	onOpenTask: () => void;
@@ -53,8 +55,8 @@ interface TopBarProps {
 		}) => void;
 		restart: (id: string) => void;
 	};
-	view: "wiki" | "chat" | "terminal" | "git" | "nodes" | `plugin:${string}`;
-	onViewChange: (view: "wiki" | "chat" | "terminal" | "git" | "nodes" | `plugin:${string}`) => void;
+	view: "chat" | "terminal" | "git" | "nodes" | `plugin:${string}`;
+	onViewChange: (view: "chat" | "terminal" | "git" | "nodes" | `plugin:${string}`) => void;
 	/** Installed optional plugins (<dataDir>/plugins) — one view tab each. */
 	plugins: { id: string; name: string; icon?: string; description?: string; error?: string }[];
 	/** Open a side panel as a mobile drawer ("left" = history, "right" = files). */
@@ -74,6 +76,7 @@ interface TopBarProps {
 }
 
 export function TopBar({
+	onOpenDatabase,
 	leftCollapsed = false,
 	gitChangeCount,
 	onOpenTask,
@@ -218,7 +221,7 @@ export function TopBar({
 			</div>
 
 			{view !== "nodes" && <button type="button" className="project-panel-toggle" title={t(leftCollapsed ? "expandProjects" : "collapseProjects")} aria-label={t(leftCollapsed ? "expandProjects" : "collapseProjects")} aria-expanded={!leftCollapsed} onClick={() => onOpenPanel("left")}><FiSidebar /></button>}
-			<div id="wiki-toolbar-slot" /><div className="header-location"><span title={chat.state?.cwd}>{projectName || t("desktopWorkspace")}</span><i>/</i><button className="conversation-title-button" title={t("treeTitle")} onClick={() => openSessionTree()}><strong title={conversationTitle}>{conversationTitle}</strong><span aria-hidden="true">⌄</span></button>{view === "chat" && chat.gitBranch?.branch && <code className="changes-current-branch">{chat.gitBranch.branch}</code>}{(interrupted || reminding || currentStep >= 0 || !!task?.plan?.awaitingConfirmation) && <button type="button" className={`header-task-progress${interrupted ? " interrupted" : reminding ? " reminding" : ""}`} title={t("taskProgress")} onClick={onOpenTask}><span aria-hidden="true">●</span>{interrupted ? t("toolRecoveryInterrupted") : reminding ? t("working") : task?.plan?.awaitingConfirmation ? t("taskProgress") : t("taskPlanPosition", { current: currentStep + 1, total: planItems.length })}</button>}</div>
+			<div className="header-location"><span title={chat.state?.cwd}>{projectName || t("desktopWorkspace")}</span><i>/</i><button className="conversation-title-button" title={t("treeTitle")} onClick={() => openSessionTree()}><strong title={conversationTitle}>{conversationTitle}</strong><span aria-hidden="true">⌄</span></button>{view === "chat" && chat.gitBranch?.branch && <code className="changes-current-branch">{chat.gitBranch.branch}</code>}{(interrupted || reminding || currentStep >= 0 || !!task?.plan?.awaitingConfirmation) && <button type="button" className={`header-task-progress${interrupted ? " interrupted" : reminding ? " reminding" : ""}`} title={t("taskProgress")} onClick={onOpenTask}><span aria-hidden="true">●</span>{interrupted ? t("toolRecoveryInterrupted") : reminding ? t("working") : task?.plan?.awaitingConfirmation ? t("taskProgress") : t("taskPlanPosition", { current: currentStep + 1, total: planItems.length })}</button>}</div>
 			<div className="topbar-actions">
 				{view === "chat" && changes && (changes.files.length > 0 || gitChangeCount > 0 || changes.open) && <button className="changes-toggle" aria-pressed={changes.open} title="⌘D" onClick={() => changes.set({ open: !changes.open })}><FiLayers aria-hidden="true" />{t("changesTitle")} <ChangeCounts files={changes.files} /></button>}
 				<div
@@ -238,7 +241,6 @@ export function TopBar({
 						<FiMessageSquare />
 						<span>{t("chat")}</span>
 					</button>
-					{view === "wiki" && <button type="button" role="tab" aria-selected="true" className="active wiki-view-tab"><span>Wiki</span></button>}
 					<button
 						type="button"
 						role="tab"
@@ -251,6 +253,7 @@ export function TopBar({
 						<FiTerminal />
 						<span>{t("terminal")}</span>
 					</button>
+					<button type="button" aria-label={t("dbTitle")} onClick={onOpenDatabase}><FiDatabase /><span>{t("dbTitle")}</span></button>
 					<button
 						type="button"
 						role="tab"

@@ -15,7 +15,7 @@ export function UsagePopover({ stats }: { stats?: Stats }) {
 	useEffect(() => {
 		if (!open) return;
 		const outside = (event: PointerEvent) => { if (!root.current?.contains(event.target as Node)) { setOpen(false); pinned.current = false; } };
-		const escape = (event: KeyboardEvent) => { if (event.key === "Escape") { setOpen(false); pinned.current = false; } };
+		const escape = (event: KeyboardEvent) => { if (event.key === "Escape") { event.preventDefault(); setOpen(false); pinned.current = false; } };
 		document.addEventListener("pointerdown", outside, true);
 		document.addEventListener("keydown", escape);
 		return () => { document.removeEventListener("pointerdown", outside, true); document.removeEventListener("keydown", escape); };

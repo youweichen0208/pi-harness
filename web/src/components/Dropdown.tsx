@@ -44,7 +44,7 @@ export function Dropdown({
 			}
 		};
 		const onKey = (e: KeyboardEvent) => {
-			if (e.key === "Escape") onOpenChange(false);
+			if (e.key === "Escape") { e.preventDefault(); onOpenChange(false); }
 		};
 		document.addEventListener("mousedown", onDown);
 		document.addEventListener("keydown", onKey);

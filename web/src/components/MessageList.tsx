@@ -482,6 +482,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 	// Ctrl+F / Cmd+F 打开搜索（可编辑元素内不抢占）
 	useEffect(() => {
 		const onKey = (e: KeyboardEvent) => {
+			if (document.querySelector(".wiki-document-dialog[open]") && !(e.target instanceof HTMLElement && e.target.closest(".wiki-agent-chat"))) return;
 			if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "f") return;
 			const target = e.target as HTMLElement | null;
 			if (
@@ -651,7 +652,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 	useEffect(() => {
 		if (!navOpen) return;
 		const closeOutside = (event: PointerEvent) => { if (!railRef.current?.contains(event.target as Node)) setNavOpen(false); };
-		const closeEscape = (event: KeyboardEvent) => { if (event.key === "Escape") setNavOpen(false); };
+		const closeEscape = (event: KeyboardEvent) => { if (event.key === "Escape") { event.preventDefault(); setNavOpen(false); } };
 		document.addEventListener("pointerdown", closeOutside, true);
 		document.addEventListener("keydown", closeEscape);
 		return () => { document.removeEventListener("pointerdown", closeOutside, true); document.removeEventListener("keydown", closeEscape); };

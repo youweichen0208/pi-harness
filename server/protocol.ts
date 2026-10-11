@@ -1390,6 +1390,26 @@ export interface ExtensionPackage {
 	latest?: string; update?: boolean; checkError?: string; protected?: boolean;
 }
 export interface ExtensionsState { packages: ExtensionPackage[]; version: string; trusted: boolean; checkedAt?: number; autoCheck?: boolean; }
+
+export type BuiltinExtensionId = "pi-harness-database" | "pi-harness-plan" | "pi-harness-okf" | "codemode" | "tool-search" | "mcp";
+export interface BuiltinExtensionState {
+	id: BuiltinExtensionId;
+	status: "loaded" | "disabled" | "pending" | "unavailable" | "error";
+	enabled?: boolean;
+	reason?: "missing" | "conflict" | "filtered";
+	error?: string;
+	tools: string[];
+	commands: string[];
+}
+export interface BuiltinExtensionsState {
+	conversationId: string;
+	items: BuiltinExtensionState[];
+	documentVersion?: string;
+	canReload: boolean;
+}
+export type BuiltinExtensionsRequest =
+	| { action: "builtin-list"; conversationId: string }
+	| { action: "builtin-toggle"; conversationId: string; id: "pi-harness-okf" | "pi-harness-database"; enabled: boolean; version: string };
 export interface ExtensionCatalogItem { name: string; description: string; descriptionZh?: string; version?: string; author?: string; downloads?: number; date?: number; types: string[]; image?: string; url: string; repository?: string; }
 export interface ExtensionCatalog { items: ExtensionCatalogItem[]; page: number; pages: number; total?: number; }
 export interface ExtensionPackageDetails { source: string; name: string; version?: string; description?: string; author?: string; repository?: string; license?: string; resources: Record<string, string[]>; canPin: boolean; }
@@ -1428,4 +1448,38 @@ export interface NodeAgentState {
 	notice?: string;
 	error?: string;
 	editorText?: { id: string; text: string };
+}
+
+/** Built-in read-only database workbench HTTP protocol. Secrets are input-only. */
+export type DatabaseDriver = "mysql" | "postgres";
+export interface DatabaseConfig {
+	name: string; driver: DatabaseDriver; host: string; port: number; user: string; db_name: string;
+	tls?: { enabled: boolean; ca?: string };
+}
+export interface DatabaseConnection extends DatabaseConfig {
+	id: string; version: string; hasPassword: boolean; source?: { path: string; id: string; kind: "datagrip" | "dbeaver" };
+	issue?: string; needsTest?: boolean;
+}
+export interface DatabaseImportItem {
+	key: string; connection: DatabaseConfig; sourceId: string; issue?: string; hasPassword: boolean;
+	change: "new" | "updated" | "unchanged" | "missing";
+}
+export interface DatabaseImportPreview { ticket: string; source: string; items: DatabaseImportItem[] }
+export interface DatabaseGrid { columns: string[]; rows: (string | number | boolean | null)[][]; truncated: boolean; elapsedMs: number; sql: string; database: string; connectionId: string }
+export type DatabaseOperation =
+	| { action: "list" }
+	| { action: "save"; connection: DatabaseConfig & { id?: string; version?: string; password?: string } }
+	| { action: "delete"; id: string; version: string }
+	| { action: "test"; connection: DatabaseConfig & { id?: string; version?: string; password?: string } }
+	| { action: "scan" }
+	| { action: "preview"; kind: "datagrip" | "dbeaver"; path: string; content?: string }
+	| { action: "import"; ticket: string; keys: string[] }
+	| { action: "grant"; ids: string[]; versions: Record<string, string> }
+	| { action: "revoke"; id: string }
+	| { action: "run"; id: string; version: string; database?: string; operation: "databases" | "tables" | "describe" | "page" | "query"; schema?: string; table?: string; offset?: number; sql?: string }
+	| { action: "cancel"; target: string };
+export type DatabaseRequest = DatabaseOperation & { clientId: string; cwd: string; conversationId: string; requestId: string };
+export interface DatabaseResponse {
+	requestId: string; error?: string; connections?: DatabaseConnection[]; grants?: string[];
+	sources?: { kind: "datagrip" | "dbeaver"; path: string }[]; preview?: DatabaseImportPreview; grid?: DatabaseGrid;
 }

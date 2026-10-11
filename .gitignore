@@ -10,6 +10,8 @@ coverage/
 test-results/
 playwright-report/
 *.tsbuildinfo
+__pycache__/
+*.py[cod]
 *.tgz
 *.log
 npm-debug.log*
@@ -43,6 +45,12 @@ tests/scratch/
 dev/*.png
 dev/*-preview.html
 .cache/
+.context-eval/
+dev/context-eval/local/
 
 # Cowork 在仓库根建的输出目录
 Claude outputs/
+
+# Local worktrees and browser inspection snapshots
+.claude/worktrees/
+.playwright-mcp/

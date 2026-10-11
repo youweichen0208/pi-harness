@@ -19,7 +19,7 @@ export function WikiInsertPopover({ popup, onClose, children }: { popup: WikiIns
 		window.addEventListener("pointerdown", outside); window.addEventListener("resize", onClose);
 		return () => { window.removeEventListener("pointerdown", outside); window.removeEventListener("resize", onClose); };
 	}, [onClose]);
-	return createPortal(<div ref={ref} className={`wiki-insert-popover wiki-${popup.kind}-popover`} role="dialog" onKeyDown={e => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onClose(); } }} style={{ left: popup.x, top: popup.y }}>{children}</div>, document.body);
+	return createPortal(<div ref={ref} className={`wiki-insert-popover wiki-${popup.kind}-popover`} role="dialog" onKeyDown={e => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onClose(); } }} style={{ left: popup.x, top: popup.y }}>{children}</div>, document.querySelector(".wiki-document-dialog") ?? document.body);
 }
 export function WikiToolbar({ readOnly, focused, onWidth, items, popup, onPrepare, onSelect, onPopup }: { readOnly: boolean; focused: boolean; onWidth: () => void; items: WikiInsertItem[]; popup: WikiInsertPopup | null; onPrepare: () => void; onSelect: (id: string) => void; onPopup: (popup: WikiInsertPopup) => void }) {
 	const t = useT();

@@ -1,3 +1,4 @@
+import { installDatabaseRoutes } from "./database/routes.js";
 import { installSystemPromptRoutes } from "./system-prompt-routes.js";
 import { installExtensionsRoutes } from "./extensions-routes.js";
 import { installCodemodeImageRoutes } from "./codemode-image-routes.js";
@@ -147,6 +148,7 @@ if (AUTH_TOKEN) {
 
 installCodemodeImageRoutes(app, () => service, originAllowed);
 installExtensionsRoutes(app, () => service, originAllowed);
+installDatabaseRoutes(app, () => service, originAllowed);
 installSystemPromptRoutes(app, () => service, originAllowed);
 installWikiRoutes(app, () => service, join(DATA_DIR, "wiki"), originAllowed);
 

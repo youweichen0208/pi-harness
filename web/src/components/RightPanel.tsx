@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
-import { FiChevronRight, FiDownload, FiLink, FiMaximize2, FiMoreHorizontal, FiPlus, FiRefreshCw, FiX } from "react-icons/fi";
+import { FiChevronRight, FiFile, FiFolder, FiSearch, FiDownload, FiLink, FiMaximize2, FiMoreHorizontal, FiPlus, FiRefreshCw, FiX } from "react-icons/fi";
 import type { FileEntry, FileListing, ScmFileEntry, ServerMessage, TaskProgress, UiMessage } from "../types";
 import { useT } from "../i18n";
 import { downloadFile } from "../download";
@@ -24,11 +24,12 @@ interface RightPanelProps {
 	cwd: string;
 	send: (msg: { type: "list_files"; path?: string }) => boolean;
 	onAttach: (path: string, name: string, mode: AttachMode, isDir?: boolean) => void;
+	onSearch: () => void;
 	onPreview: (path: string, name: string) => void;
 	onNotice: (level: "info" | "warning" | "error", text: string) => void;
 }
 
-export const RightPanel = memo(function RightPanel({ active, files, fileChanged, changed, notRepo, widgets, messages, streamingMessage, isStreaming, taskProgress, conversationId, agentSilence, cwd, send, onAttach, onPreview, onNotice }: RightPanelProps) {
+export const RightPanel = memo(function RightPanel({ active, files, fileChanged, changed, notRepo, widgets, messages, streamingMessage, isStreaming, taskProgress, conversationId, agentSilence, cwd, send, onAttach, onPreview, onSearch, onNotice }: RightPanelProps) {
 	const t = useT();
 	const [creating, setCreating] = useState(false);
 	useEffect(() => setCreating(false), [cwd, conversationId, active]);
@@ -138,9 +139,10 @@ export const RightPanel = memo(function RightPanel({ active, files, fileChanged,
 		const mentioned = dir && entry.name.startsWith(".") && hiddenMentioned.has(entry.name);
 		if ((!showHidden && entry.name.startsWith(".") || onlyChanged && !count) && !mentioned) return null;
 		return <div key={entry.path} role="treeitem" aria-expanded={dir ? open : undefined}>
-			<div className={`file-item ${dir ? "dir" : "file"}`} style={{ paddingLeft: 6 + depth * 16 }}>
+			<div className={`file-item ${dir ? "dir" : "file"}`} style={{ paddingLeft: 6 + depth * 18 }}>
 				<button type="button" data-tree-node={entry.path} className={dir ? "file-dir-main" : "file-name"} title={entry.path} disabled={virtual && !dir} onClick={() => dir ? virtual ? setExpanded((previous) => { const next = new Set(previous); if (next.has(entry.path)) next.delete(entry.path); else next.add(entry.path); return next; }) : toggle(entry.path) : onPreview(entry.path, entry.name)}>
 					<span className={`tree-caret ${open ? "open" : ""}`}>{dir && <FiChevronRight />}</span>
+					<span className="file-tree-icon" aria-hidden="true">{dir ? <FiFolder /> : <FiFile />}</span>
 					<span className={dir ? "file-name" : "file-name-text"}>{entry.name}</span>
 				</button>
 				{dir && count > 0 && <span className="tree-modified-count" title={t("workspaceChanges", { n: count })}>{count}</span>}
@@ -163,6 +165,7 @@ export const RightPanel = memo(function RightPanel({ active, files, fileChanged,
 	const otherDirectories = directoryEntries("").filter(({ entry }) => entry.type === "dir" && !changed.some((change) => change.path === entry.path || change.path.startsWith(`${entry.path}/`)) && (showHidden || !entry.name.startsWith("."))).length;
 	return <aside className="panel panel-right has-task-progress">
 		<div className="panel-title"><span>{t("workspaceFiles")}</span>{!notRepo && changed.length > 0 && <button type="button" className="tree-filter" aria-pressed={onlyChanged} onClick={() => setOnlyChanged(value => !value)}>{t("changedCount", { n: changed.length })}</button>}<button type="button" className="tree-menu-trigger" aria-label={t("newWorkspaceFile")} title={t("newWorkspaceFile")} disabled={isStreaming || !cwd} onClick={() => setCreating(value => !value)}><FiPlus /></button><button type="button" className="tree-menu-trigger" aria-label={t("refreshWorkspaceFiles")} title={t("refreshWorkspaceFiles")} onClick={refreshFiles}><FiRefreshCw /></button><div className="tree-controls" ref={controlsRef}><button type="button" className="tree-menu-trigger" aria-label={t("more")} aria-expanded={controlsOpen} onClick={() => setControlsOpen(value => !value)}><FiMoreHorizontal /></button>{controlsOpen && <div className="tree-controls-menu"><button type="button" className="tree-hidden-toggle" role="switch" aria-checked={showHidden} onClick={() => setShowHidden(value => !value)}><span>{t("showHiddenFiles")}</span><span className="tree-switch-track" /></button></div>}</div></div>
+		<button className="file-search-trigger" onClick={onSearch}><FiSearch /><span>{t("fileTreeSearch")}</span><kbd>{navigator.platform.includes("Mac") ? "⌘ P" : "Ctrl P"}</kbd></button>
 		{creating && <CreateFileForm key={`${cwd}:${conversationId}`} cwd={cwd} conversationId={conversationId} disabled={isStreaming} onCancel={() => setCreating(false)} onCreated={path => { setCreating(false); refreshFiles(); onPreview(path, path.split("/").at(-1)!); }} />}
 		<div className="panel-body" role="tree" aria-label={t("workspaceFiles")} onKeyDown={(event) => {
 			const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-tree-node]");

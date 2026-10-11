@@ -28,8 +28,10 @@ Windows 计划任务部署。
 
 SDK 与 pi-ai 精确锁定 1.0.4，不应用本项目的 SDK 补丁。Codemode 与工具搜索使用原生 defaultTools 默认开启，已有原生配置优先。
 系统提示词：修改分段来源、原生文件编辑或重载时，读取 `docs/architecture-system-prompt.md`。
-Extensions：修改包安装、启停、更新、作用域迁移、目录浏览或单文件编辑时，读取 `docs/architecture-extensions.md`。
+Extensions：修改内置扩展清单/状态、包安装、启停、更新、作用域迁移、目录浏览或单文件编辑时，读取 `docs/architecture-extensions.md`。
 Codemode 卡片与 MCP/Codemode 设置遵循 15a/15b 设计；状态、项目覆盖、费用及输出限制读取 `docs/architecture-plugins.md`。
+工程上下文：修改跨仓来源、OpenViking 接入或本地评测时，读取 `docs/engineering-context.md`；先验证检索收益，再增加产品界面。
+文档知识：修改证据包导入、Markdown 知识蒸馏、候选核对、人工复核或 OKF 发布时，读取 `docs/architecture-document-knowledge.md`。
 
 SDK 生命周期：以 `agent_settled` 判定整个任务结束，`agent_end` 只表示一次循环结束。修改队列、纠正、压缩/重试状态、扩展 UI 对话隔离或工具完整输出下载前读 `docs/architecture-core.md`；修改桌面扩展子进程或打包前读 `docs/deployment.md`。
 
@@ -178,7 +180,7 @@ pi SDK 和 pi-ai 精确锁定 1.0.4，使用原版 SDK，不应用本项目的 S
 | **后台任务列表** | `docs/architecture-core.md` | bash 前后端口快照 diff；按客户端持久；单停/全部关闭 |
 | **扩展 UI 桥** | `docs/architecture-core.md` | setWidget/setStatus/notify/select/confirm/input → 浏览器消息；dialog_response 回传 |
 
-Wiki：点击 `.md` / `.markdown` 自动进入文档工作台，顶栏无独立 Wiki 模式入口，点「对话」返回。修改阅读布局/本页目录、右侧对话面板/建议跳转、文档切换性能/正文独立读取、文档会话隔离/等待状态、索引状态、双链/标签索引、全文/PDF 搜索、请求改动记录、撤销重做或桌面默认应用打开时，读取 `docs/architecture-wiki.md`。34a 插入工具栏为 `WikiToolbar.tsx`（表格尺寸、代码语言及宽版）；具体排版见 `docs/wiki-doc-v2-design.md`。入口为 `WikiWorkbench.tsx` / `WikiReading.tsx` / `WikiChatPanel.tsx`、`wiki-routes.ts` 与 `wiki-service.ts`；提问复用原生 pi 会话。
+Wiki：点击 `.md` / `.markdown` 打开可编辑文档弹窗，右侧 Agent Chat 复用原聊天实例；打开、关闭及切换文档保留原会话。修改弹窗焦点／尺寸、聊天停靠与发送前保存、选区「问 pi」回填原聊天、保存与关闭保护、正文读取、索引／双链／搜索、改动记录或桌面默认应用打开时，读取 `docs/architecture-wiki.md`。34a 工具栏为 `WikiToolbar.tsx`，正文排版见 `docs/wiki-doc-v2-design.md`；弹窗外壳以 `docs/ui-design.md` 第 7 节为准。入口为 `WikiDocumentModal.tsx` / `WikiWorkbench.tsx`、`wiki-routes.ts` 与 `wiki-service.ts`。
 
 会话树：修改树过滤/搜索、分支切换/摘要/label、编辑重问、派生会话、外部修改检测或返回文本的草稿保护时，读取 `docs/architecture-session-tree.md`。树状态由原生 SDK 管理，协议 v40，默认编辑重问留在同一会话文件。修改附件卡片、原生条目冻结恢复或模板附件时，读取 `docs/architecture-attachments.md`。
 
@@ -261,3 +263,5 @@ Windows job 的终端冒烟测试必须通过才能上传安装包；`AttachCons
 
 ---
 *结构/流程变更时同步更新本文件及相关 `docs/` 文档。修改后运行 `/reload` 生效。*
+
+数据库：顶栏打开三栏数据库弹窗，右侧复用原 Agent Chat。修改连接导入/同步、MySQL/PostgreSQL 查询、只读校验或 Agent 授权前读取 `docs/architecture-database.md`。后端在 `server/database/`，界面为 `DatabaseWorkbench.tsx`；旧 db-client 界面插件保持独立。
