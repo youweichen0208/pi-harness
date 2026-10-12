@@ -2,6 +2,9 @@ import { randomUUID } from "node:crypto";
 import type { SessionEntry } from "@earendil-works/pi-coding-agent";
 import type { PlanSnapshot, PlanState, PlanChange } from "../protocol.js";
 
+/** customType of the plan settle reminder; the transport renders it as an auto-reminder event. */
+export const PLAN_REMINDER_TYPE = "pi-harness:plan-remind-completion";
+
 const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 function text(v: unknown, name: string, max: number): string {
 	if (typeof v !== "string" || !v.trim() || v.length > max) throw new Error(`${name} must be non-empty and at most ${max} characters`);

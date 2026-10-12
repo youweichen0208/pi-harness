@@ -1,5 +1,5 @@
 import { useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { LuChevronDown as FiChevronDown, LuChevronRight as FiChevronRight } from "react-icons/lu";
+import { FiChevronDown, FiChevronRight } from "react-icons/fi";
 import { commandReading, consecutiveAttempts } from "../command-reading";
 import { useT, useI18n } from "../i18n";
 import { WorkspacePathContext } from "../workspace-context";
@@ -14,11 +14,14 @@ const seconds = (ms: number) => ms < 1000 ? "" : commandDuration(ms);
 function stateOf(view: ToolView) {
 	if (view.result) return view.result.isError ? "err" : "ok";
 	if (view.status && !view.status.running) return view.status.isError ? "err" : "ok";
+	// Calls in an aborted/errored message never executed (issue #66) — show
+	// them as empty rather than a misleading error mark.
+	if (view.abandoned) return "empty";
 	return view.streaming ? "run" : "err";
 }
 
 /** Presentation only: tool IDs and the authoritative result lookup stay intact. */
-export function BashGroup({ items, onKill, active = false, title }: { items: Item[]; onKill?: () => void; active?: boolean; title?: string }) {
+export function BashGroup({ items, onKill, active = false }: { items: Item[]; onKill?: () => void; active?: boolean }) {
 	const t = useT();
 	const cwd = useContext(WorkspacePathContext);
 	const attempts = consecutiveAttempts(items, item => commandReading(commandPresentation(bashCommand(item.block.argumentsText) ?? "", cwd).command).title);
@@ -29,7 +32,8 @@ export function BashGroup({ items, onKill, active = false, title }: { items: Ite
 	const latest = attempts.map(group => group[group.length - 1]);
 	const failed = latest.filter(({ view }) => stateOf(view) === "err").length;
 	const running = latest.some(({ view }) => stateOf(view) === "run");
-	const state = failed ? "err" : running ? "run" : "ok";
+	const skipped = latest.length > 0 && latest.every(({ view }) => view.abandoned && !view.result && !view.status);
+	const state = failed ? "err" : running ? "run" : skipped ? "empty" : "ok";
 	const durations = items.map(({ view }) => view.status?.durationMs);
 	const measured = durations.every((ms) => ms !== undefined);
 	useEffect(() => {
@@ -42,8 +46,8 @@ export function BashGroup({ items, onKill, active = false, title }: { items: Ite
 	}, [items]);
 	return <section className={`bash-group ${state} ${!open ? "historical-step" : ""}`}>
 		{(!active || items.length > 1) && <button type="button" className="bash-group-head" aria-expanded={open} onClick={() => setOpen(!open)}>
-			<span className={`bash-state ${state}`} aria-label={t(failed ? "error" : running ? "running" : "done")}>{failed ? "✗" : running ? "●" : "✓"}</span>
-			<strong>{!open ? title || commandReading(commandPresentation(bashCommand(items[0].block.argumentsText) ?? "", cwd).command).title : t(running ? "bashGroupRunning" : "bashGroupCount", { n: items.length })}</strong>{!open && <span> · {t("changesCommands", { n: items.length })}</span>}
+			<span className={`bash-state ${state}`} aria-label={t(failed ? "error" : running ? "running" : skipped ? "toolNotExecuted" : "done")}>{failed ? "✗" : running ? "●" : skipped ? "−" : "✓"}</span>
+			<strong>{!open ? commandReading(commandPresentation(bashCommand(items[0].block.argumentsText) ?? "", cwd).command).title : t(running ? "bashGroupRunning" : "bashGroupCount", { n: items.length })}</strong>{!open && <span> · {t("changesCommands", { n: items.length })}</span>}
 			{failed > 0 && <span className="bash-state err">{t("bashGroupFailed", { n: failed })}</span>}
 			{measured && seconds(durations.reduce<number>((sum, ms) => sum + (ms ?? 0), 0)) && <span className="bash-group-duration">{seconds(durations.reduce<number>((sum, ms) => sum + (ms ?? 0), 0))}</span>}
 			{open ? <FiChevronDown /> : <FiChevronRight />}
@@ -85,10 +89,10 @@ function BashRow({ block, view, onKill, revealed, messageId, attempts, historica
 	};
 	return <div className={`bash-row ${state}`} data-tool-call-id={block.id} data-msg-id={messageId} onMouseEnter={() => window.dispatchEvent(new CustomEvent("pi:tool-hover", { detail: { toolCallId: block.id } }))} onMouseLeave={() => window.dispatchEvent(new CustomEvent("pi:tool-hover", { detail: { toolCallId: null } }))}>
 		<button type="button" className="bash-row-head" title={command} aria-expanded={open} onClick={() => setOpen(!open)}>
-			<span className={`bash-state ${state}`} aria-label={t(state === "run" ? "running" : state === "err" ? "error" : "done")}>{state === "run" ? "●" : state === "err" ? "✗" : state === "empty" ? "−" : "✓"}</span>
+			<span className={`bash-state ${state}`} aria-label={t(state === "run" ? "running" : state === "err" ? "error" : state === "empty" && view.abandoned ? "toolNotExecuted" : "done")}>{state === "run" ? "●" : state === "err" ? "✗" : state === "empty" ? "−" : "✓"}</span>
 			<span className="bash-readable-title">{reading.title}</span>{attempts && <span className="bash-attempt-count">{t("commandAttempts", { n: attempts })}</span>}{reading.title !== compactCommandLabel(reading.command) && <code className="bash-command-secondary">{reading.command}</code>}
 			{commandLines.length > 1 && <span className="bash-extra-lines">{t("bashExtraLines", { n: commandLines.length - 1 })}</span>}
-			<span className="bash-row-stats">{state === "run" ? t("running") : exitCode !== undefined && state === "err" ? t("bashExitCode", { n: exitCode }) : t("toolLineCount", { n: lines.length })}{view.status?.durationMs !== undefined && seconds(view.status.durationMs) ? ` · ${seconds(view.status.durationMs)}` : ""}</span>
+			<span className="bash-row-stats">{state === "run" ? t("running") : state === "empty" && view.abandoned ? t("toolNotExecuted") : exitCode !== undefined && state === "err" ? t("bashExitCode", { n: exitCode }) : t("toolLineCount", { n: lines.length })}{view.status?.durationMs !== undefined && seconds(view.status.durationMs) ? ` · ${seconds(view.status.durationMs)}` : ""}</span>
 			{open ? <FiChevronDown /> : <FiChevronRight />}
 		</button>
 		{open && <div className="bash-row-body">

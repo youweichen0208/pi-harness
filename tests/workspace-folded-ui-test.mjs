@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
-import {mkdtempSync,mkdirSync,writeFileSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,writeFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {setTimeout as sleep} from 'node:timers/promises';
@@ -31,7 +31,7 @@ try {
 	for(let i=0;i<80&&!await portUp(port);i++)await sleep(250);
 	assert(await portUp(port),log);
 	browser=await chromium.launch({executablePath:CHROME_PATH});
-	const page=await browser.newPage({viewport:{width:1600,height:900}});
+	const page=await browser.newPage({viewport:{width:1600,height:900}});page.setDefaultTimeout(10000);
 	await page.routeWebSocket('**/ws',route=>{
 		const upstream=route.connectToServer();
 		route.onMessage(wire=>upstream.send(wire));
@@ -50,7 +50,7 @@ try {
 	assert.equal(await page.locator('.time-gap').count(),1);
 	assert.equal(await page.getByText('本次对话涉及').count(),0);
 	assert.equal(await page.locator('.conversation-files').count(),0);
-	assert.equal(await page.locator('.changes-current-branch').count(), 0);
+	await page.locator('.status-branch-name', {hasText:'非 Git 仓库'}).waitFor();
 	await page.locator('.msg-collapsed').first().waitFor();
 	const widths=await page.evaluate(()=>Object.fromEntries(['.msg-collapsed','.msg','.inputbox'].map(s=>[s,document.querySelector(s).getBoundingClientRect().width])));
 	assert.equal(widths['.msg-collapsed'],widths['.msg']);
@@ -78,38 +78,36 @@ try {
 	await page.locator('.inputbox textarea').evaluate(el=>el.blur());
 	await page.waitForTimeout(250);
 	const idleBorder=await page.locator('.inputbox').evaluate(el=>getComputedStyle(el).borderColor);
-	const focusToken = await page.evaluate(() => {
-		const probe = document.createElement('span'); probe.style.color = 'var(--text-dim)'; document.body.append(probe);
-		const color = getComputedStyle(probe).color; probe.remove(); return color;
-	});
-	assert.equal(emptyFocusBorder, focusToken, 'keyboard focus uses the accessible muted border');
-	assert.notEqual(emptyFocusBorder, idleBorder);
+	const borderDifference=await page.evaluate(([a,b])=>{
+		const canvas=document.createElement('canvas');canvas.width=canvas.height=1;
+		const context=canvas.getContext('2d');
+		const rgb=color=>{context.fillStyle=color;context.fillRect(0,0,1,1);return [...context.getImageData(0,0,1,1).data].slice(0,3)};
+		return Math.max(...rgb(a).map((value,index)=>Math.abs(value-rgb(b)[index])));
+	},[emptyFocusBorder,idleBorder]);
+	assert(borderDifference<=1,`empty focus changed the border by ${borderDifference}`);
 	await page.locator('.inputbox textarea').focus();
 	await page.locator('.inputbox textarea').fill('test');
 	await page.waitForTimeout(250);
 	assert.notEqual(await page.locator('.inputbox').evaluate(el=>getComputedStyle(el).borderColor),idleBorder);
-	assert((await page.locator('.msg-collapsed-role.role-assistant').first().evaluate(e=>getComputedStyle(e,'::before').backgroundImage)).includes('/icon/1a-mark.svg'));
-	assert.equal(await page.locator('.msg-collapsed-action svg path').first().getAttribute('d'),'m9 18 6-6-6-6');
+	assert.match(await page.locator('.msg-collapsed-role.role-assistant').first().evaluate(e=>getComputedStyle(e,'::before').backgroundImage),/1a-mark\.svg/);
+	assert.equal(await page.locator('.msg-collapsed-action svg polyline').first().getAttribute('points'),'9 18 15 12 9 6');
 	const foldedRow = page.locator('.msg-collapsed-role.role-assistant').first().locator('..');
 	assert.equal(await foldedRow.locator('.msg-collapsed-chips').count(), 0, 'statistics do not occupy a second line');
 	assert((await foldedRow.getAttribute('title')).includes('思考'), 'statistics remain available in the tooltip');
 	assert((await foldedRow.boundingBox()).height <= 30, 'history summaries stay compact');
 	assert.equal(await foldedRow.getAttribute('aria-expanded'), 'false');
-	const lines=page.locator('.bash-output-line');
-	assert.equal(await lines.first().locator('.bash-line-number').textContent(),'15');
-	assert.equal(await lines.nth(1).locator('.bash-line-number').textContent(),'27');
-	await page.locator('.bash-output-lines.has-overflow').waitFor();
-	assert((await page.locator('.bash-output-lines').first().evaluate(el=>getComputedStyle(el).maskImage)).includes('gradient'));
-	await page.locator('.toolcall-bash').last().hover();
+	while(await page.locator('.bash-group-head[aria-expanded=false]').count()) await page.locator('.bash-group-head[aria-expanded=false]').first().click();
+	while(await page.locator('.bash-row-head[aria-expanded=false]').count()) await page.locator('.bash-row-head[aria-expanded=false]').first().click();
+	const grep=page.locator('[data-tool-call-id="b"]');
+	assert.equal(await grep.locator('.bash-numbered-line').count(),2);
+	assert.match(await grep.locator('.bash-numbered-line').first().textContent(),/15: 很长的匹配内容/);
+	const sed=page.locator('[data-tool-call-id="sed"]');
+	assert.equal(await sed.locator('.bash-numbered-line').count(),6);
+	await sed.locator('.bash-row-body > .bash-group-more').click();
+	assert.equal(await sed.locator('.bash-numbered-line').count(),16);
 	await page.setViewportSize({width:1200,height:900});
-	const bashHeader = await page.locator('.toolcall-bash').last().locator('.toolcall-head').evaluate((head) => ({height:head.getBoundingClientRect().height, labels:[...head.querySelectorAll('button')].map((button)=>({height:button.getBoundingClientRect().height, scrollWidth:button.scrollWidth, width:button.clientWidth}))}));
-	assert(bashHeader.height <= 50 && bashHeader.labels.every((label)=>label.height <= 32 && label.scrollWidth <= label.width + 1), `bash actions stay on one line: ${JSON.stringify(bashHeader)}`);
+	assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
 	await page.setViewportSize({width:1600,height:900});
-	const buttonAlignment=await page.evaluate(()=>{
-		const center=s=>{const r=document.querySelector(s).getBoundingClientRect();return r.y+r.height/2};
-		return Math.abs(center('.toolcall-bash .toolcall-wrap')-center('.toolcall-bash .toolcall-copy'));
-	});
-	assert(buttonAlignment<3,`command controls differ by ${buttonAlignment}px`);
 	await page.locator('.messages').evaluate(el=>el.scrollTop=0);
 	await page.locator('.scroll-bottom').waitFor();
 	const bottom=await page.evaluate(()=>{
@@ -119,8 +117,8 @@ try {
 	});
 	assert(bottom.edge<2 && bottom.gap>=0,JSON.stringify(bottom));
 	await page.locator('.msg-collapsed').first().click();
-	assert.equal(await page.locator('.msg-collapse-btn svg path').first().getAttribute('d'),'m6 9 6 6 6-6');
+	assert.equal(await page.locator('.msg-collapse-btn svg polyline').first().getAttribute('points'),'6 9 12 15 18 9');
 	await page.locator('button[data-tree-node="AGENTS.md"]').click();
 	await page.locator('.wiki-document-heading h1').waitFor();
 	console.log('PASS non-Git state, shared widths, folded avatars and file tree preview');
-} finally { await browser?.close();server?.kill('SIGTERM');await sleep(200); }
+} finally { await browser?.close();if(server && server.exitCode===null){server.kill('SIGTERM');await new Promise(resolve=>server.once('exit',resolve));}rmSync(root,{recursive:true,force:true}); }

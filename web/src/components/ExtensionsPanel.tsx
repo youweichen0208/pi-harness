@@ -3,7 +3,7 @@ import { UiIcon } from "./UiIcon";
 import { ExtensionCatalogList, extensionResourceKeys } from "./ExtensionCatalogList";
 import { extensionDownloads } from "../extensions-presentation";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { LuSearch as FiSearch, LuChevronDown as FiChevronDown, LuChevronRight as FiChevronRight, LuExternalLink as FiExternalLink, LuFolder as FiFolder, LuLock as FiLock, LuX as FiX, LuDownload as FiDownload } from "react-icons/lu";
+import { FiSearch, FiChevronDown, FiChevronRight, FiExternalLink, FiFolder, FiLock, FiX, FiDownload } from "react-icons/fi";
 import { useI18n, useT } from "../i18n";
 import { withToken } from "../auth-token";
 import { getClientId } from "../use-chat";

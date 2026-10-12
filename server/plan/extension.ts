@@ -1,6 +1,7 @@
 import { Type } from "typebox";
-import type { ExtensionFactory, ContextEvent, SessionEntry } from "@earendil-works/pi-coding-agent";
-import { editableState, latestPlan, snapshotFromDetails, transition } from "./state.js";
+import type { ExtensionFactory, ContextEvent, SessionEntry, AgentBeforeSettleEvent } from "@earendil-works/pi-coding-agent";
+import { PLAN_REMINDER_TYPE, editableState, latestPlan, snapshotFromDetails, transition } from "./state.js";
+import { TOOL_TEXT_CONTINUE_PROMPT } from "../tool-text.js";
 
 const string = (maxLength: number) => Type.String({ minLength: 1, maxLength });
 export const planParameters = Type.Object({
@@ -46,6 +47,39 @@ export function restorePlanContext(messages: ContextEvent["messages"], branch: r
 	return [...messages.slice(0, at), reminder, ...messages.slice(at)];
 }
 
+/** Settle reminders: at most one per plan per user request, so a model that
+ *  keeps answering without closing the plan cannot loop the boundary. */
+const reminded = new WeakMap<object, Map<string, string>>();
+
+/** The plan looks finished but the model never closed it: every step except
+ *  the current one is completed, and the current one has calls attributed in
+ *  this user request — after this request's plan call — that all have
+ *  results (issue #63). Earlier requests never count, so an unfinished plan
+ *  does not trigger a reminder on every later message. */
+function planLooksConcluded(event: AgentBeforeSettleEvent, latest: NonNullable<ReturnType<typeof latestPlan>>): boolean {
+	const { snapshot } = latest;
+	const pending = snapshot.steps.filter(step => !snapshot.completedStepIds.includes(step.id) && step.id !== snapshot.currentStepId);
+	if (pending.length) return false;
+	const messages = event.context.contextMessages;
+	const start = messages.findLastIndex(message => message.role === "user" && userText(message.content) !== TOOL_TEXT_CONTINUE_PROMPT);
+	const turn = messages.slice(start + 1);
+	const results = new Set(turn.filter(message => message.role === "toolResult").map(message => message.toolCallId));
+	let attributed = 0, seen = false;
+	for (const message of turn) {
+		if (message.role !== "assistant") continue;
+		for (const block of message.content) {
+			if (block.type !== "toolCall") continue;
+			if (block.name === "plan") { seen = block.id === latest.toolCallId; continue; }
+			if (!seen) continue;
+			attributed++;
+			if (!results.has(block.id)) return false; // step work still in flight
+		}
+	}
+	return attributed > 0 || (seen && !snapshot.currentStepId); // all steps completed, only the status was left active
+}
+
+const userText = (content: string | readonly { type: string; text?: string }[]): string => typeof content === "string" ? content : content.map(block => block.type === "text" ? block.text ?? "" : "").join("");
+
 export const createPlanExtension = (): ExtensionFactory => pi => {
 	pi.registerTool({
 		name: "plan", label: "Plan", description: "Create or update a complete, versioned implementation plan on this session branch. Every call requires title, status, steps, currentStepId, completedStepIds and completionCriteria, even when completing or only changing status. Updates also require the latest planId and expectedRevision. This is full replacement, not a partial patch. Explicit completed status completes all submitted steps and clears currentStepId; cancelled/failed only clear currentStepId. Ended plans require create.",
@@ -62,5 +96,24 @@ export const createPlanExtension = (): ExtensionFactory => pi => {
 	pi.on("context", (event, ctx) => {
 		if (!pi.getActiveTools().includes("plan") || !["builtin:pi-harness-plan", "<inline:pi-harness-plan>"].includes(pi.getAllTools().find(tool => tool.name === "plan")?.sourceInfo.path ?? "")) return;
 		return { messages: restorePlanContext(event.messages, ctx.sessionManager.getBranch()) };
+	});
+	// Issue #63: the model often finishes the work but never submits a closing
+	// plan call, leaving the progress panel frozen mid-plan. When a normally
+	// completed turn leaves an active plan that looks concluded, remind it once
+	// (per plan, per user request) to record the terminal state. The reminder
+	// is a visible auto-reminder event — the only host-initiated model call
+	// besides the unexecuted tool-text reminder (see AGENTS.md).
+	pi.on("agent_before_settle", (event, ctx) => {
+		if (event.outcome !== "completed" || !pi.getActiveTools().includes("plan")) return;
+		const branch = ctx.sessionManager.getBranch();
+		const latest = latestPlan(branch);
+		if (!latest || latest.snapshot.status !== "active" || !planLooksConcluded(event, latest)) return;
+		const user = [...branch].reverse().find(entry => entry.type === "message" && entry.message.role === "user" && userText(entry.message.content) !== TOOL_TEXT_CONTINUE_PROMPT)?.id ?? "";
+		const state = reminded.get(ctx.sessionManager) ?? new Map();
+		if (state.get(latest.snapshot.planId) === user) return;
+		state.set(latest.snapshot.planId, user);
+		reminded.set(ctx.sessionManager, state);
+		const content = `Plan status reminder: this turn's step work has concluded, but the plan below is still active. If the work is complete, submit an update with status completed (full state, all steps). If a step genuinely failed, use status failed. If you are intentionally pausing for the user, leave the plan active and reply normally. This reminder does not authorize new work; do not redo or extend the task.\n${JSON.stringify({ action: "update", planId: latest.snapshot.planId, expectedRevision: latest.snapshot.revision, ...editableState(latest.snapshot) })}`;
+		return { entries: [{ type: "custom_message", customType: PLAN_REMINDER_TYPE, content, display: true }], continue: true };
 	});
 };

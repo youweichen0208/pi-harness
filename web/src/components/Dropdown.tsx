@@ -1,5 +1,5 @@
 import { useEffect, useRef, type ReactNode } from "react";
-import { LuChevronDown as FiChevronDown } from "react-icons/lu";
+import { FiChevronDown } from "react-icons/fi";
 
 interface DropdownProps {
 	/** The clickable trigger (chip/button). */

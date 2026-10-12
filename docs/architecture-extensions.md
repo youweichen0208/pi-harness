@@ -4,6 +4,8 @@
 
 设置 › Extensions 对接 Pi 1.0.4 的 `DefaultPackageManager`、`SettingsManager` 和 `ProjectTrustStore`。安装、移除、更新与资源发现运行在独立 Node worker；浏览页面不执行扩展入口，缺失依赖采用 `resolve(() => "skip")`，不会因浏览自动安装。包变更在新会话生效，当前会话仅在用户点击重载时通过已有 `extensions_reload` 生效。宿主不向模型注册工具、注入消息或系统提示词。
 
+扩展代码刷新（issue #64）：jiti 对原生 .js/.mjs 走 Node import()/require()，进程内缓存会让 `/restart`、`/reload` 和 `extensions_reload` 重建扩展工厂后仍命中旧代码——扩展内的 MCP 连接等顶层状态也随之遗留。`server/extension-module-cache.ts` 在每次创建 runtime 前注册受控目录（agentDir/extensions、agentDir/npm、cwd/.pi/extensions、cwd/.pi/npm，realpath 双形式匹配），并仅在用户显式触发的重建前（restartSession、`/reload` 命令、`reloadExtensions`）bump 代数——ESM 缓存不可释放，每次刷新多留一份模块实例，所以设置、提示词、MCP 保存共用的 `session.reload()` 不刷新；代数进程全局，刷新后其他对话懒加载受控模块也拿到新实例。bump 机制：resolve 钩子给受控模块 URL 追加 `?piextgen=<代数>` 绕开 ESM loader 永久缓存（CJS 的 require 会剥掉 search，无副作用），同时清空受控目录下的 require.cache 条目刷新 CJS 本体；`module.registerHooks` 不可用时 ESM 优雅降级为旧行为。.ts 由 jiti 每次实例化重新转译，天然新鲜。回归：`tests/restart-extension-cache-test.mjs` 覆盖 .ts 文件、npm CJS 包、npm ESM 包在 /restart、二次重启与 reloadExtensions() 下拿到新代码与新状态，普通 session.reload() 保持旧代码。
+
 ## 内置扩展清单
 
 已安装页按内置扩展、安装包、单文件分组。六个内置条目由 `nativeExtensionRegistry` 与会话资源共同投影；包页签数量只统计安装包。内置清单独立请求，即使包 worker 失败仍能展示；不提供包更新、卸载或源码编辑。

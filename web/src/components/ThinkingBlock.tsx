@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { LuChevronDown as FiChevronDown, LuChevronRight as FiChevronRight } from "react-icons/lu";
+import { FiChevronDown, FiChevronRight } from "react-icons/fi";
 import { useT } from "../i18n";
 
 interface ThinkingBlockProps {

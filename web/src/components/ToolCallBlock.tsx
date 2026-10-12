@@ -7,7 +7,17 @@ import { CodemodeCard } from "./CodemodeCard";
 import { commandPresentation, gitStatusLine, gitStatusSummary, numberedOutputLine, differentCommandDirectory, searchOutputKind, isLikelyErrorLine, selectVisibleOutputLines, displayBashCommand } from "../bash-presentation";
 import { WorkspacePathContext } from "../workspace-context";
 import { Fragment, memo, useContext, useEffect, useRef, useState } from "react";
-import { LuWrench as FiTool, LuCopy as FiCopy, LuCheck as FiCheck, LuMaximize2 as FiMaximize2, LuChevronDown as FiChevronDown, LuChevronRight as FiChevronRight, LuSquare as FiSquare, LuTerminal as FiTerminal, LuX as FiX } from "react-icons/lu";
+import {
+	FiTool,
+	FiCopy,
+	FiCheck,
+	FiMaximize2,
+	FiChevronDown,
+	FiChevronRight,
+	FiSquare,
+	FiTerminal,
+	FiX,
+} from "react-icons/fi";
 import type { ToolStatus, UiMessage, UiToolCallBlock } from "../types";
 import { useT } from "../i18n";
 import { Markdown } from "./Markdown";
@@ -27,6 +37,9 @@ export interface ToolView {
 	/** Set the moment tool_execution_end fires (tool_status) — the command
 	 *  exited but the model hasn't responded yet. */
 	status?: ToolStatus;
+	/** The owning assistant message ended aborted/error — calls in it that
+	 *  never received a result were never executed (issue #66). */
+	abandoned?: boolean;
 }
 
 export function liveNestedCalls(parentId: string, statuses: ReadonlyMap<string, ToolStatus>): UiMessage["nestedCalls"] {
@@ -50,7 +63,8 @@ export function ReadGroup({ items, wrap }: { items: { block: UiToolCallBlock; vi
 	const t = useT();
 	const [open, setOpen] = useState(false);
 	const paths = items.map(({ block }) => readPath(block.argumentsText) ?? block.name);
-	const pending = items.some(({ view }) => view.streaming && !view.result && !view.status);
+	const pending = items.some(({ view }) => view.streaming && !view.result && !view.status && !view.abandoned);
+	const skipped = items.every(({ view }) => !view.result && !view.status && view.abandoned);
 	const completed = items.every(({ view }) => view.result || view.status);
 	const failed = items.some(({ view }) => view.result?.isError || view.status?.isError);
 	const duration = items.reduce((sum, { view }) => sum + (view.status?.durationMs ?? 0), 0);
@@ -59,7 +73,7 @@ export function ReadGroup({ items, wrap }: { items: { block: UiToolCallBlock; vi
 			<span aria-hidden="true">{open ? "⌄" : "›"}</span><UiIcon name="file" />
 			<strong>{t("readFiles", { n: items.length })}</strong>
 			<span className="read-group-paths" title={paths.join("\n")}>{paths.map((path) => path.split("/").slice(-2).join("/")).join(", ")}</span>
-			<span className="read-group-status">{failed ? t("error") : pending ? t("running") : completed ? `${t("done")}${duration ? ` · ${formatDuration(duration)}` : ""}` : t("toolQueued")}</span>
+			<span className="read-group-status">{failed ? t("error") : pending ? t("running") : skipped ? t("toolNotExecuted") : completed ? `${t("done")}${duration ? ` · ${formatDuration(duration)}` : ""}` : t("toolQueued")}</span>
 		</button>
 		{open && <div className="read-group-items">{items.map(({ block, view }) => <ReadFileRow key={block.id} block={block} view={view} wrap={wrap} />)}</div>}
 	</div>;
@@ -341,7 +355,10 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true }: ToolCall
 		return () => window.removeEventListener("keydown", onKey);
 	}, [zoomed]);
 
-	const running = !view.result && view.streaming && !view.status;
+	// A call whose message ended aborted/error and that never got a result
+	// was never executed — show that instead of a live "running" pill.
+	const abandoned = !!view.abandoned && !view.result && !view.status;
+	const running = !view.result && view.streaming && !view.status && !abandoned;
 	useEffect(() => {
 		if (!running) return;
 		const start = Date.now();
@@ -395,11 +412,13 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true }: ToolCall
 		? t("error")
 		: done
 			? t("done")
-			: running
-				? t("running")
-				: waitingModel
-					? t("done")
-					: t("toolQueued");
+			: abandoned
+				? t("toolNotExecuted")
+				: running
+					? t("running")
+					: waitingModel
+						? t("done")
+						: t("toolQueued");
 	const duration =
 		view.status?.durationMs !== undefined
 			? formatDuration(view.status.durationMs)

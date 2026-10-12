@@ -4,7 +4,14 @@ import { ToolRecoveryCard, type ToolRecoveryActions } from "./ToolRecoveryCard";
 import { isProcessNarration } from "../command-reading";
 import { navigateSibling } from "../tree-events";
 import { memo, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { LuChevronDown as FiChevronDown, LuChevronRight as FiChevronRight, LuChevronUp as FiChevronUp, LuPencilLine as FiEdit3, LuImage as FiImage, LuX as FiX } from "react-icons/lu";
+import {
+	FiChevronDown,
+	FiChevronRight,
+	FiChevronUp,
+	FiEdit3,
+	FiImage,
+	FiX,
+} from "react-icons/fi";
 import type {
 	PromptAttachment,
 	ToolStatus,
@@ -112,7 +119,6 @@ interface MessageProps {
 	recovery?: ToolRecoveryActions;
 	toolsRunning?: boolean;
 	bashActive?: boolean;
-	bashTitle?: string;
 	toolMessageIds?: ReadonlyMap<string, string>;
 	planViews?: ReadonlyMap<string, PlanPresentation>;
 	continuation?: boolean;
@@ -162,7 +168,6 @@ export const Message = memo(function Message({
 	recovery,
 	toolsRunning,
 	bashActive,
-	bashTitle,
 	toolMessageIds,
 	planViews,
 	continuation,
@@ -231,7 +236,7 @@ export const Message = memo(function Message({
 	// toolResult content is rendered inside its toolCall card — never standalone
 	// (otherwise the same output shows twice: formatted card + plain text).
 	if (message.role === "toolResult") return null;
-	if (message.origin === "auto-reminder") return <div className="tool-reminder-event" data-msg-id={message.id} title={message.content.map(b => b.type === "text" ? b.text : "").join("\n")}><span>↻ {t("toolReminderEvent")}{message.timestamp ? ` · ${formatTime(message.timestamp)}` : ""}</span></div>;
+	if (message.origin === "auto-reminder") return <div className="tool-reminder-event" data-msg-id={message.id} title={message.content.map(b => b.type === "text" ? b.text : "").join("\n")}><span>↻ {t(message.role === "custom" ? "planReminderEvent" : "toolReminderEvent")}{message.timestamp ? ` · ${formatTime(message.timestamp)}` : ""}</span></div>;
 	if (message.role === "system" && !message.content.some(b => b.type === "text" ? typeof b.text === "string" && b.text.trim() : b.type !== "thinking")) return null;
 	// Attached files are rendered as their own collapsible card, separate from
 	// the user message text.
@@ -349,7 +354,10 @@ export const Message = memo(function Message({
 	const renderContentBlocks = (skipText: boolean): ReactNode[] => {
 
 		const elements: ReactNode[] = [];
-		const viewFor = (item: UiToolCallBlock): ToolView => ({ result: toolResults.get(item.id), nestedCalls: liveNestedCalls(item.id, toolStatuses), liveOutput: liveOutputs.get(item.id)?.text, codemode: liveOutputs.get(item.id)?.codemode, status: toolStatuses.get(item.id), streaming });
+		// Tools in a message that ended aborted/error and never received a
+		// result were never executed (issue #66) — mark them for the cards.
+		const abandoned = message.role === "assistant" && (message.stopReason === "aborted" || message.stopReason === "error");
+		const viewFor = (item: UiToolCallBlock): ToolView => ({ result: toolResults.get(item.id), nestedCalls: liveNestedCalls(item.id, toolStatuses), liveOutput: liveOutputs.get(item.id)?.text, codemode: liveOutputs.get(item.id)?.codemode, status: toolStatuses.get(item.id), streaming, ...(abandoned ? { abandoned: true } : {}) });
 		for (let i = 0; i < message.content.length; i++) {
 			const block = message.content[i];
 			if (skipText && block.type === "text") continue;
@@ -379,7 +387,7 @@ export const Message = memo(function Message({
 					if (next?.name !== "bash") break;
 					calls.push(next); i++;
 				}
-				elements.push(<BashGroup active={bashActive ?? toolsRunning ?? streaming} title={bashTitle} key={first.id} items={calls.map((item) => ({ block: item, view: { ...viewFor(item), streaming: toolsRunning ?? streaming }, messageId: toolMessageIds?.get(item.id) ?? message.id }))} onKill={onKillBash} />);
+				elements.push(<BashGroup active={bashActive ?? toolsRunning ?? streaming} key={first.id} items={calls.map((item) => ({ block: item, view: { ...viewFor(item), streaming: toolsRunning ?? streaming }, messageId: toolMessageIds?.get(item.id) ?? message.id }))} onKill={onKillBash} />);
 				continue;
 			}
 			if (first?.name === "read") {
@@ -398,7 +406,7 @@ export const Message = memo(function Message({
 				elements.push(<GrepSummary key={`${message.id}-${first.id}`} block={first} view={viewFor(first)} wrap={toolsWrap} />);
 				continue;
 			}
-			elements.push(<Block key={`${message.id}-${i}`} suppressLeak={!!incident} block={block} user={message.role === "user"} toolResults={toolResults} liveOutputs={liveOutputs} toolStatuses={toolStatuses} streaming={streaming} isLast={isLast && i === message.content.length - 1} onKillBash={onKillBash} toolsWrap={toolsWrap} thinkingWrap={thinkingWrap} />);
+			elements.push(<Block key={`${message.id}-${i}`} suppressLeak={!!incident} block={block} user={message.role === "user"} toolResults={toolResults} liveOutputs={liveOutputs} toolStatuses={toolStatuses} streaming={streaming} abandoned={abandoned} isLast={isLast && i === message.content.length - 1} onKillBash={onKillBash} toolsWrap={toolsWrap} thinkingWrap={thinkingWrap} />);
 		}
 		return elements;
 	};
@@ -773,6 +781,7 @@ function Block({
 	liveOutputs,
 	toolStatuses,
 	streaming,
+	abandoned,
 	isLast,
 	onKillBash,
 	thinkingWrap,
@@ -785,6 +794,8 @@ function Block({
 	liveOutputs: ReadonlyMap<string, { toolName: string; text: string; codemode?: UiMessage["codemode"] }>;
 	toolStatuses: ReadonlyMap<string, ToolStatus>;
 	streaming: boolean;
+	/** Owning assistant message ended aborted/error (issue #66). */
+	abandoned?: boolean;
 	isLast: boolean;
 	onKillBash?: () => void;
 	/** 思考文本是否换行（false = 不换行横向滚动）。 */
@@ -843,6 +854,7 @@ function Block({
 			liveOutput: live?.text,
 			codemode: live?.codemode,
 			streaming,
+			...(abandoned ? { abandoned: true } : {}),
 			status: toolStatuses.get(toolCall.id),
 		};
 		return <ToolCallBlock block={toolCall} view={view} onKillBash={onKillBash} wrap={toolsWrap} />;

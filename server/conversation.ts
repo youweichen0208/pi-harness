@@ -76,6 +76,11 @@ export interface Conversation {
 
 	/** Session event subscription — events are routed to THIS conversation. */
 	unsubscribe?: () => void;
+	/** The runtime is being force-rebuilt, or its last rebuild failed: the
+	 *  previous session was disposed and must not receive prompts — a disposed
+	 *  session persists nothing and re-errors every turn (issue #65). Cleared
+	 *  once a live session is bound back. */
+	rebuilding?: boolean;
 	/** Monotonic sequence for message_delta/tool_delta pushes of this conversation —
 	 *  a gap on the client triggers a get_state resync. */
 	deltaSeq: number;

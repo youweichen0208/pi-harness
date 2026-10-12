@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { LuCheck as FiCheck, LuCopy as FiCopy, LuChevronDown as FiChevronDown, LuChevronRight as FiChevronRight } from "react-icons/lu";
+import { FiCheck, FiCopy, FiChevronDown, FiChevronRight } from "react-icons/fi";
 import { useT } from "../i18n";
 import { withToken } from "../auth-token";
 import { getClientId } from "../use-chat";

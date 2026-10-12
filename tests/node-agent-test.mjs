@@ -186,7 +186,7 @@ try {
 		const errors = []; page.on("pageerror", error => errors.push(error.message)); page.on("dialog", dialog => dialog.accept());
 		await page.goto("http://127.0.0.1:9234");
 		await page.locator(".setup-modal .modal-close").click();
-		await page.locator('.workspace-more > .dropdown > button').click(); await page.locator('.workspace-view-menu').getByRole('button', { name: '节点', exact: true }).click();
+		await page.getByRole("tab", { name: "节点", exact: true }).click();
 		await page.locator(".node-item", { hasText: "Remote" }).locator("button").first().click();
 		const before = requests;
 		await page.getByRole("button", { name: "打开工作台", exact: true }).click();

@@ -42,9 +42,45 @@ try {
 	assert.match(text(a), /ORIGINAL_A/, "A keeps its own history");
 	assert.doesNotMatch(text(a), /RECENT_B/);
 	assert.equal(typeof a.unsubscribe, "function", "background A is subscribed to its new session");
+	assert(!a.rebuilding, "a successful rebuild clears the rebuilding mark (issue #65)");
 	assert.equal(client.activeId, b.id, "the active chat is unchanged");
 	assert.equal(b.session.sessionFile, fileB);
 	assert.match(text(b), /RECENT_B/);
+
+	// Issue #65: a rebuild whose runtime creation fails must not leave the
+	// conversation bound to the disposed session (prompts to it are silently
+	// lost and every turn re-errors). It stays marked — prompts are rejected
+	// with a clear message — with no silent switch to a fresh session file,
+	// and /restart reopens the original file.
+	{
+		const work = join(root, "rebuild-broken"); mkdirSync(work);
+		const victim = await ClientSession.create("rebuild-broken", work, new ClientStateStore(join(root, "broken.json")), new ThinkingDurationStore(join(root, "broken-thinking.json")));
+		const proto = Object.getPrototypeOf(victim);
+		const factory = proto.makeRuntimeFactory;
+		try {
+			const target = victim.conv; seed(target, "ORIGINAL");
+			const deadFile = target.session.sessionFile;
+			let calls = 0;
+			proto.makeRuntimeFactory = function () { calls++; throw new Error("simulated rebuild failure"); };
+			await victim.forceResetConversation(target, "broken reset");
+			assert.equal(calls, 1, "a failed rebuild does not fall back to a fresh session file");
+			assert(target.rebuilding, "a failed rebuild keeps the conversation marked");
+			proto.makeRuntimeFactory = factory;
+			let accepted; const outcome = new Promise(resolve => { accepted = resolve; });
+			await victim.prompt("hello", undefined, false, "guard-rejected", ok => accepted(ok));
+			assert.equal(await outcome, false, "prompts to a broken conversation are rejected, not delivered");
+			// /restart is the recovery path: it rebuilds from the original file.
+			let restarted; const restartOutcome = new Promise(resolve => { restarted = resolve; });
+			await victim.prompt("/restart", undefined, false, "broken-restart", ok => restarted(ok));
+			assert.equal(await restartOutcome, true, "/restart is accepted on a broken conversation");
+			assert(!target.rebuilding, "/restart clears the rebuilding mark");
+			assert.equal(target.session.sessionFile, deadFile, "/restart keeps the original session file");
+			assert.match(text(target), /ORIGINAL/, "/restart restores the original history");
+		} finally {
+			proto.makeRuntimeFactory = factory;
+			await victim.dispose();
+		}
+	}
 	// Public Stop entry, with deterministic disposal scheduling. Shorten only
 	// the settle duration; retain the actual abort/rebuild/bind lifecycle.
 	ClientSession.HARD_ABORT_SETTLE_MS = 5;

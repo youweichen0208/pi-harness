@@ -111,7 +111,7 @@ try {
 		await page.goto(`http://127.0.0.1:${port}`); await page.locator(".conn-dot.ok").first().waitFor({state:"attached"});
 		const input = page.locator(".inputbar textarea"); await input.fill("Existing analysis draft");
 		await page.locator('.inputbar input[type=file]').first().setInputFiles({name:"keep.txt",mimeType:"text/plain",buffer:Buffer.from("keep")});
-		await page.locator(".workspace-more > .dropdown > button").click(); await page.getByRole("button", { name: "数据库", exact: true }).click();
+		await page.getByRole("button", { name: "数据库", exact: true }).click();
 		await page.locator(".database-workbench").waitFor();
 		await page.locator(".database-tree-row", {hasText:"Postgres analytics"}).click();
 		await page.locator(".database-tree-row", {hasText:/^analytics$/}).click();
@@ -129,7 +129,7 @@ try {
 		await page.waitForFunction(() => document.querySelector('.messages')?.textContent.includes('120'));
 		await page.screenshot({path:"/tmp/pi-database-workbench.png"});
 		await page.locator(".wiki-modal-header > button").last().click(); await page.locator(".database-workbench").waitFor({state:"detached"});
-		await page.locator(".workspace-more > .dropdown > button").click(); await page.getByRole("button", {name:"数据库",exact:true}).click();
+		await page.getByRole("button", {name:"数据库",exact:true}).click();
 		await page.getByRole("button", {name:"导入连接",exact:true}).click(); await page.getByRole("button", {name:"扫描服务所在机器"}).click(); await page.locator(".database-source").first().waitFor();
 		await page.locator(".database-source").first().click(); await page.getByRole("button", {name:"预览同步"}).click(); await page.locator(".database-import-list").waitFor();
 		for (let i=0;i<20;i++){await page.keyboard.press("Tab");assert(await page.locator(".wiki-document-dialog").evaluate(el=>el.contains(document.activeElement)));}

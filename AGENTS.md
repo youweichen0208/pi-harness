@@ -51,6 +51,7 @@ pi-harness/
 │   ├── uploads.ts              # 文件对话上传 + 保留期清理
 │   ├── bg-servers.ts           # 后台任务跟踪（bash 前后端口快照 diff + 存活刷新）
 │   ├── component-updates.ts    # pi Agent / 扩展版本检查、来源校验与包更新
+│   ├── extension-module-cache.ts # /restart、/reload 与扩展重载刷新扩展模块缓存（registerHooks 代数 + require.cache 清理，issue #64）
 │   ├── system-prompt-view.ts / system-prompt-files.ts / system-prompt-routes.ts # 原生提示词分段、文件编辑与 reload
 │   ├── session-reload.ts         # 提示词、设置、MCP 与斜杠命令共用的按会话重载队列
 │   ├── settings-service.ts     # 界面偏好与原生资源只读视图（扩展命名见 extension-display.ts）
@@ -131,9 +132,8 @@ pi-harness/
 | 组件 | 职责 |
 | --- | --- |
 | `FilePreview.tsx` | 右栏代码高亮编辑与媒体/SQLite 只读预览；Markdown 点击自动进入 Wiki；当前文件 chip 严格镜像预览面板，发送时携带编辑器快照（含未保存改动）；版本校验保存与离开保护（详见 docs/architecture-attachments.md） |
-| `LeftPanel.tsx` | 全高项目栏：品牌、新对话、可折叠项目及会话、悬停更多菜单（重命名／删除）、连接／语言／设置；布局见 `docs/ui-design.md` |
-| `RightPanel.tsx` / `TaskProgressPanel.tsx` | 本轮／文件页签：原生计划与输出、目录树、Git 改动标记和文件预览；布局见 `docs/ui-design.md` |
-| `ConversationHome.tsx` / `ProcessSummary.tsx` | 首页 1a：首次 Workspace 创建、新对话居中输入、可展开过程摘要；修改首页状态、草稿建议或过程折叠前读 `docs/ui-design.md`，分组逻辑在 `web/src/process-groups.ts` |
+| `LeftPanel.tsx` / `WorkspaceSwitcher.tsx` | 全高项目栏：品牌、Workspace 切换器（自定义弹出菜单）、可折叠项目及会话、悬停更多菜单（重命名／删除）、连接／语言／设置；布局见 `docs/ui-design.md` |
+| `RightPanel.tsx` / `TaskProgressPanel.tsx` | 可展开目录树、Git 改动标记、文件预览；当前任务进度由服务端 transcript 推断，右栏展示合并后的任务阶段和结果；布局见 `docs/ui-design.md` |
 | `ChatInput.tsx` | 输入框 + 附件 chips（inline/reference/lines 三色）+ 当前文件 chip（镜像预览面板，发送取编辑器快照）；全窗口拖放目标；followUp 排队/steer 插队；斜杠命令选择器 |
 | `Message.tsx` / `MessageList.tsx` / `WorkingStatus.tsx` | 消息渲染、流式等待标题与静默状态、tool 结果关联；编辑重问、惰性窗口化、问题导航；等待态切换与间距见 `docs/ui-design.md` |
 | `PlanChecklist.tsx` | Web/桌面共用清单卡和变化行；修改计划更新合并、替换隔离或步骤跳转时，读取 `web/src/plan-presentation.ts`、`docs/architecture-plan.md` 和 `docs/ui-design.md` |
@@ -141,7 +141,7 @@ pi-harness/
 | `ChangesPanel.tsx` / `ChangeSummaryCard.tsx` | 35a 对话改动面板及每轮汇总；修改范围、定位、折叠、搜索或轮次统计前读取 `docs/chat-diff-design.md` 与 `docs/architecture-terminal.md`；本轮共用 `task-outputs.ts`，Git 范围走 `scm_diff`（协议 v41） |
 | `TerminalPanel.tsx` / `TermXterm.tsx` | 终端视图 + xterm 实例桥接 |
 | `SCMPanel.tsx` | 源代码管理（Git）视图：status/branch/diff；提交/推送/拉取/切换分支 |
-| `TopBar.tsx` / `SidebarStatus.tsx` | 顶栏（对话／终端／Git，其他工作台在更多菜单）、左栏底部连接／版本／路径与扩展状态；模型与思考强度在 `ChatInput.tsx` 底部 |
+| `TopBar.tsx` / `FooterBar.tsx` | 顶栏（项目／会话标题、后台任务、视图切换、文件栏开关）、状态栏（连接／版本／分支／工作目录及扩展状态）；模型与思考强度在 `ChatInput.tsx` 底部 |
 | `Dialog.tsx` | 扩展 `ui.select/confirm/input` → 浏览器弹窗 |
 | `ModelConfigModal.tsx` / `PiSetupModal.tsx` | models.json 管理 / 首次配置引导 |
 | `SystemPromptPanel.tsx` | 原生提示词分段、全文复制、SYSTEM/APPEND/上下文文件编辑；见 `docs/architecture-system-prompt.md` |
@@ -158,7 +158,7 @@ pi-harness/
 
 ## 原生代理边界
 
-pi SDK 和 pi-ai 精确锁定 1.0.4，使用原版 SDK，不应用本项目的 SDK 补丁。会话加载 pi 原生配置、上下文文件、技能、扩展与官方 Codemode/tool_search/MCP。WebUI 不覆盖 bash，不自动续跑或发起额外模型调用；唯一例外：回复以“写成文本、未执行的工具调用”结尾时，请模型重新调用，界面显示为自动提醒事件（每条用户请求最多 1 次，见 `docs/architecture-core.md`「未执行的工具调用」）；原生 plan 扩展默认开启（保留已保存的关闭选择），启用时由扩展提供工具规则与条件性历史背景。修改工具、全局开关、压缩恢复或计划投影时读取 `docs/architecture-plan.md`。设置中的提示词支持原生文件编辑与空闲时 reload，技能支持原生发现、筛选和启停（见 docs/architecture-extensions.md）；Extensions 管理原生包声明及资源过滤规则，变更通过新会话或用户重载生效。界面偏好不改变模型上下文。SSH 工作台连接后自动准备本机隔离 pi 会话，复用本机模型、仅启用 SSH 节点工具；节点会话不加载本机上下文、扩展、技能或 MCP。修改启动、消息流、工具或断开清理时读取 `docs/architecture-nodes.md`。
+pi SDK 和 pi-ai 精确锁定 1.0.4，使用原版 SDK，不应用本项目的 SDK 补丁。会话加载 pi 原生配置、上下文文件、技能、扩展与官方 Codemode/tool_search/MCP。WebUI 不覆盖 bash，不自动续跑或发起额外模型调用；仅两个例外，界面均显示为自动提醒事件、每条用户请求最多 1 次：回复以“写成文本、未执行的工具调用”结尾时，请模型重新调用（见 `docs/architecture-core.md`「未执行的工具调用」）；本轮工具已全部完成但计划仍为 active 时，原生 plan 扩展在 settle 前提醒模型补一次终态调用（见 `docs/architecture-plan.md`）；原生 plan 扩展默认开启（保留已保存的关闭选择），启用时由扩展提供工具规则与条件性历史背景。修改工具、全局开关、压缩恢复或计划投影时读取 `docs/architecture-plan.md`。设置中的提示词支持原生文件编辑与空闲时 reload，技能支持原生发现、筛选和启停（见 docs/architecture-extensions.md）；Extensions 管理原生包声明及资源过滤规则，变更通过新会话或用户重载生效。界面偏好不改变模型上下文。SSH 工作台连接后自动准备本机隔离 pi 会话，复用本机模型、仅启用 SSH 节点工具；节点会话不加载本机上下文、扩展、技能或 MCP。修改启动、消息流、工具或断开清理时读取 `docs/architecture-nodes.md`。
 
 ## 4. 核心架构（摘要）
 
@@ -202,7 +202,7 @@ npm run test:smoke   # 零 token 协议冒烟聚合跑器
 
 依赖安装前先运行 `npm run check:lockfile`，确保下载地址全部使用 HTTPS npm 官方源且与声明版本一致；安装验证流程见 `docs/development.md`。
 
-**界面规则**：修改界面前读取 `docs/ui-design.md`，以其为准；浅色采用 Organic 交接配色、Figtree 正文与限用 Caprasimo 标题，图标用 Lucide。字体及许可证在 `web/public/fonts/` 本地分发。颜色和圆角只能用 CSS 变量，例外见该文档。
+**界面规则**：修改界面前读取 `docs/ui-design.md`，以其为准；主界面沿用 v1.3.1 的暖白／蓝色、IBM Plex Sans 和贴边三栏布局，数据库、文档弹窗及内置扩展管理保留最新交互；颜色和圆角只能用 CSS 变量，例外见该文档。
 
 **关键约定**：缩进用 Tab；i18n 走 `useT()`（zh/en 同时加）；样式全部在 `styles.css`；新增协议消息只改 `protocol.ts` 再两端 switch 加分支。
 

@@ -1,6 +1,14 @@
 import { useDialogFocus } from "../use-dialog-focus";
 import { useEffect, useState } from "react";
-import { LuCheck as FiCheck, LuChevronRight as FiChevronRight, LuCornerLeftUp as FiCornerLeftUp, LuFolder as FiFolder, LuHardDrive as FiHardDrive, LuHouse as FiHome, LuX as FiX } from "react-icons/lu";
+import {
+	FiCheck,
+	FiChevronRight,
+	FiCornerLeftUp,
+	FiFolder,
+	FiHardDrive,
+	FiHome,
+	FiX,
+} from "react-icons/fi";
 import type { DirBrowse } from "../types";
 import { useT } from "../i18n";
 

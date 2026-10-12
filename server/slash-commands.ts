@@ -14,6 +14,7 @@
  */
 import type { AgentSession } from "@earendil-works/pi-coding-agent";
 import { reloadSession } from "./session-reload.js";
+import { bumpExtensionModuleCache } from "./extension-module-cache.js";
 import type { ServerMessage, SlashCommandInfo } from "./protocol.js";
 import type {  } from "./plugins.js";
 
@@ -269,6 +270,10 @@ export class SlashCommandsService {
 				try {
 					// Re-discovers extensions / skills / prompt templates from disk and
 					// re-pushes the picker catalog (the CLI's /reload semantics).
+					// Only this explicit command refreshes extension module code;
+					// settings/prompt/MCP saves share reloadSession without it, since
+					// each refresh keeps another module copy in the ESM cache (issue #64).
+					bumpExtensionModuleCache();
 					await reloadSession(s);
 					// reload() 会把 custom 工具加回活跃集——重放设置门控（终端开关等）。
 					if (this.host.getSession() === s) {

@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import type { UiMessage } from "../../server/protocol.js";
+import type { PlanSnapshot, UiMessage } from "../../server/protocol.js";
 import { deriveTaskProgress } from "../../server/task-progress.js";
 
 const user = (id: string, text: string): UiMessage => ({ id, role: "user", timestamp: 100, content: [{ type: "text", text }] });
@@ -107,4 +107,47 @@ test("an unresolved plan validation error cannot turn successful commands into a
 	expect(deriveTaskProgress("c", messages, null, true)?.status).toBe("running");
 	expect(deriveTaskProgress("c", messages, null, false)?.status).toBe("failed");
 	expect(deriveTaskProgress("c", [messages[0], { ...messages[1], content: [call("plan", "plan", {})] }, messages[3]], null, false)?.status).toBe("failed");
+});
+
+const snapshot = (overrides: Partial<PlanSnapshot>): PlanSnapshot => ({ schemaVersion: 3, planId: "p1", revision: 1, status: "active", title: "接入服务", steps: [{ id: "s1", title: "读取约定" }, { id: "s2", title: "实现服务" }], currentStepId: "s1", completedStepIds: [], completionCriteria: "测试通过", changes: [], ...overrides });
+const planTurn = (final: PlanSnapshot, outcome: "ok" | "error", calls: { id: string; name: string }[]): UiMessage[] => [user("u", "完成服务实现"),
+	{ id: "a1", role: "assistant", timestamp: 110, content: [call("p1", "plan", { action: "create" }), call("w1", "write", { path: "README.md", content: "x" })] },
+	{ id: "r1", role: "toolResult", toolCallId: "p1", timestamp: 111, planSnapshot: snapshot({}), content: [{ type: "text", text: "Plan p1, revision 1: active." }] },
+	{ id: "r2", role: "toolResult", toolCallId: "w1", timestamp: 112, content: [{ type: "text", text: "done" }] },
+	{ id: "a3", role: "assistant", timestamp: 130, content: [call("p2", "plan", { action: "update" }), ...calls.map(({ id, name }) => call(id, name, name === "bash" ? { command: "npm test" } : { path: "service.ts", content: "x" }))] },
+	{ id: "r3", role: "toolResult", toolCallId: "p2", timestamp: 131, planSnapshot: final, content: [{ type: "text", text: `Plan p1, revision ${final.revision}: ${final.status}.` }] },
+	{ id: "r4", role: "toolResult", toolCallId: "b1", timestamp: 141, ...(outcome === "error" ? { isError: true } : {}), content: [{ type: "text", text: outcome === "error" ? "exit 1" : "48 passed" }] }];
+
+test("issue #63: the projection never infers completion — only a plan call closes the plan", () => {
+	// The settle reminder asks the model to close the plan; a model pausing
+	// for the user may leave it active, and the panel must reflect that.
+	const messages = planTurn(snapshot({ revision: 2, currentStepId: "s2", completedStepIds: ["s1"] }), "ok", [{ id: "b1", name: "bash" }]);
+	const task = deriveTaskProgress("c", messages, null, false)!;
+	expect(task.status).toBe("waiting");
+	expect(task.plan?.status).toBe("active");
+	expect(task.plan?.items.map((item) => item.status)).toEqual(["done", "running"]);
+});
+
+test("a settled call that never received a result concludes its step as failed, not done", () => {
+	const messages: UiMessage[] = [user("u", "跑测试"), { id: "a1", role: "assistant", timestamp: 110, stopReason: "error", content: [call("b1", "bash", { command: "npm test" })] }];
+	const step = deriveTaskProgress("c", messages, null, false)!.steps[0];
+	expect(step.status).toBe("failed");
+	expect(step.hint).toBe("有工具未执行");
+	expect(deriveTaskProgress("c", messages, null, true)!.steps[0].status).toBe("running");
+});
+
+test("issue #63: a failed attributed call keeps the active plan waiting", () => {
+	const messages = planTurn(snapshot({ revision: 2, currentStepId: "s2", completedStepIds: ["s1"] }), "error", [{ id: "b1", name: "bash" }]);
+	const task = deriveTaskProgress("c", messages, null, false)!;
+	expect(task.status).toBe("failed");
+	expect(task.plan?.status).toBe("active");
+	expect(task.plan?.items.map((item) => item.status)).toEqual(["done", "running"]);
+});
+
+test("issue #63: a running step without attributed calls cannot be inferred complete", () => {
+	const messages = planTurn(snapshot({ revision: 2, currentStepId: "s2", completedStepIds: ["s1"] }), "ok", []);
+	const task = deriveTaskProgress("c", messages, null, false)!;
+	expect(task.status).toBe("waiting");
+	expect(task.plan?.status).toBe("active");
+	expect(task.plan?.items.map((item) => item.status)).toEqual(["done", "running"]);
 });
