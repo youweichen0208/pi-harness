@@ -3,7 +3,9 @@ import { useChangesAvailable } from "../changes-context";
 import { ToolRecoveryCard, type ToolRecoveryActions } from "./ToolRecoveryCard";
 import { isProcessNarration } from "../command-reading";
 import { navigateSibling } from "../tree-events";
-import { memo, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { isValidElement, memo, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { parseReplySegments } from "../question-cards";
+import { QuestionCards } from "./QuestionCards";
 import {
 	FiChevronDown,
 	FiChevronRight,
@@ -161,6 +163,10 @@ interface MessageProps {
 	thinkingWrap?: boolean;
 	/** 工具调用是否默认展开（设置面板开关；false = 默认折叠）。 */
 	toolsWrap?: boolean;
+	/** Identical consecutive user messages render once with a count (3a). */
+	repeatCount?: number;
+	/** Newest settled reply: question cards are answerable from the composer. */
+	questionsActive?: boolean;
 }
 
 export const Message = memo(function Message({
@@ -189,6 +195,8 @@ export const Message = memo(function Message({
 	onJump,
 	thinkingWrap,
 	toolsWrap,
+	repeatCount = 1,
+	questionsActive,
 }: MessageProps) {
 	const t = useT();
 	const changesPanel = useChangesAvailable();
@@ -237,7 +245,8 @@ export const Message = memo(function Message({
 	// (otherwise the same output shows twice: formatted card + plain text).
 	if (message.role === "toolResult") return null;
 	if (message.origin === "auto-reminder") return <div className="tool-reminder-event" data-msg-id={message.id} title={message.content.map(b => b.type === "text" ? b.text : "").join("\n")}><span>↻ {t(message.role === "custom" ? "planReminderEvent" : "toolReminderEvent")}{message.timestamp ? ` · ${formatTime(message.timestamp)}` : ""}</span></div>;
-	if (message.role === "system" && !message.content.some(b => b.type === "text" ? typeof b.text === "string" && b.text.trim() : b.type !== "thinking")) return null;
+	// SDK system messages are system-prompt snapshots: one quiet divider, not a chat row (3a).
+	if (message.role === "system") return <SystemEvent message={message} />;
 	// Attached files are rendered as their own collapsible card, separate from
 	// the user message text.
 	const isFileAttachment =
@@ -353,7 +362,9 @@ export const Message = memo(function Message({
 
 	const renderContentBlocks = (skipText: boolean): ReactNode[] => {
 
-		const elements: ReactNode[] = [];
+		// 3a: consecutive thinking/command/read/search rows share one list.
+		const elements: { node: ReactNode; process: boolean }[] = [];
+		const push = (node: ReactNode, process = false) => elements.push({ node, process });
 		// Tools in a message that ended aborted/error and never received a
 		// result were never executed (issue #66) — mark them for the cards.
 		const abandoned = message.role === "assistant" && (message.stopReason === "aborted" || message.stopReason === "error");
@@ -364,7 +375,7 @@ export const Message = memo(function Message({
 			const first = asToolCall(block);
 			const planView = first && planViews?.get(first.id);
 			if (first && planView) {
-				elements.push(<PlanChecklist key={first.id} toolCallId={first.id} view={planView} />);
+				push(<PlanChecklist key={first.id} toolCallId={first.id} view={planView} />);
 				continue;
 			}
 			if (first?.name === "write" || first?.name === "edit") {
@@ -376,8 +387,8 @@ export const Message = memo(function Message({
 					i++;
 				}
 				const visibleChanges = changesPanel ? changes.filter(item => !toolResults.get(item.id) || toolResults.get(item.id)?.isError) : changes;
-				if (visibleChanges.length >= 3) elements.push(<EditWriteGroup key={`${message.id}-${first.id}`} items={visibleChanges.map((item) => ({ block: item, view: viewFor(item) }))} retriedIds={retriedEditIds} />);
-				else elements.push(...visibleChanges.map((item) => <EditWriteCard key={`${message.id}-${item.id}`} item={{ block: item, view: viewFor(item) }} retried={retriedEditIds?.has(item.id)} />));
+				if (visibleChanges.length >= 3) push(<EditWriteGroup key={`${message.id}-${first.id}`} items={visibleChanges.map((item) => ({ block: item, view: viewFor(item) }))} retriedIds={retriedEditIds} />);
+				else for (const item of visibleChanges) push(<EditWriteCard key={`${message.id}-${item.id}`} item={{ block: item, view: viewFor(item) }} retried={retriedEditIds?.has(item.id)} />);
 				continue;
 			}
 			if (first?.name === "bash") {
@@ -387,7 +398,7 @@ export const Message = memo(function Message({
 					if (next?.name !== "bash") break;
 					calls.push(next); i++;
 				}
-				elements.push(<BashGroup active={bashActive ?? toolsRunning ?? streaming} key={first.id} items={calls.map((item) => ({ block: item, view: { ...viewFor(item), streaming: toolsRunning ?? streaming }, messageId: toolMessageIds?.get(item.id) ?? message.id }))} onKill={onKillBash} />);
+				push(<BashGroup active={bashActive ?? toolsRunning ?? streaming} key={first.id} items={calls.map((item) => ({ block: item, view: { ...viewFor(item), streaming: toolsRunning ?? streaming }, messageId: toolMessageIds?.get(item.id) ?? message.id }))} onKill={onKillBash} />, true);
 				continue;
 			}
 			if (first?.name === "read") {
@@ -398,17 +409,29 @@ export const Message = memo(function Message({
 					reads.push(next);
 					i++;
 				}
-				elements.push(<ReadGroup key={`${message.id}-${first.id}`} items={reads.map((item) => ({ block: item, view: viewFor(item) }))} wrap={toolsWrap} />);
+				push(<ReadGroup key={`${message.id}-${first.id}`} items={reads.map((item) => ({ block: item, view: viewFor(item) }))} wrap={toolsWrap} />, true);
 				continue;
 			}
 
 			if (first?.name === "grep") {
-				elements.push(<GrepSummary key={`${message.id}-${first.id}`} block={first} view={viewFor(first)} wrap={toolsWrap} />);
+				push(<GrepSummary key={`${message.id}-${first.id}`} block={first} view={viewFor(first)} wrap={toolsWrap} />, true);
 				continue;
 			}
-			elements.push(<Block key={`${message.id}-${i}`} suppressLeak={!!incident} block={block} user={message.role === "user"} toolResults={toolResults} liveOutputs={liveOutputs} toolStatuses={toolStatuses} streaming={streaming} abandoned={abandoned} isLast={isLast && i === message.content.length - 1} onKillBash={onKillBash} toolsWrap={toolsWrap} thinkingWrap={thinkingWrap} />);
+			const thinking = message.role === "assistant" ? asThinking(block) : null;
+			if (thinking && !thinking.thinking.trim()) continue;
+			push(<Block key={`${message.id}-${i}`} suppressLeak={!!incident} block={block} user={message.role === "user"} toolResults={toolResults} liveOutputs={liveOutputs} toolStatuses={toolStatuses} streaming={streaming} abandoned={abandoned} isLast={isLast && i === message.content.length - 1} onKillBash={onKillBash} toolsWrap={toolsWrap} thinkingWrap={thinkingWrap} answerKey={questionsActive ? `${message.id}-${i}` : undefined} conversationId={conversationId} />, !!thinking);
 		}
-		return elements;
+		const grouped: ReactNode[] = [];
+		for (let i = 0; i < elements.length; i++) {
+			if (!elements[i].process) { grouped.push(elements[i].node); continue; }
+			const run: ReactNode[] = [];
+			const start = i;
+			while (i < elements.length && elements[i].process) run.push(elements[i++].node);
+			i--;
+			// Key by the first row so appending rows during streaming never remounts the list.
+			grouped.push(<div className="process-list" key={`process-${isValidElement(run[0]) ? run[0].key : start}`}>{run}</div>);
+		}
+		return grouped;
 	};
 
 	return (
@@ -430,9 +453,8 @@ export const Message = memo(function Message({
 						: roleLabel(message.role, t)}
 				</span>
 
-				{message.model && <span className="msg-model">{message.model}</span>}
 				{message.timestamp && (
-					<span className="msg-time" title={new Date(message.timestamp).toLocaleString()}>{formatTime(message.timestamp)}</span>
+					<span className="msg-time" title={[message.model, new Date(message.timestamp).toLocaleString()].filter(Boolean).join(" · ")}>{formatTime(message.timestamp)}</span>
 				)}
 				{onCollapse && (
 					<button
@@ -608,6 +630,10 @@ export const Message = memo(function Message({
 					</>
 				)}
 			</div>
+			{message.role === "user" && !editing && (message.timestamp || repeatCount > 1) && <div className="msg-user-foot">
+				{repeatCount > 1 && <span className="msg-repeat">{t("repeatedMessage", { n: repeatCount })}</span>}
+				{message.timestamp && <span className="msg-time" title={new Date(message.timestamp).toLocaleString()}>{formatTime(message.timestamp)}</span>}
+			</div>}
 			{canEdit && !editing && (
 				<div className="msg-actions">
 					<button
@@ -623,6 +649,23 @@ export const Message = memo(function Message({
 		</div>
 	);
 });
+
+export function SystemEvent({ message }: { message: UiMessage }) {
+	const t = useT();
+	const text = message.content.map(b => asText(b)?.text ?? "").filter(Boolean).join("\n");
+	return <div className="system-event" data-msg-id={message.id} title={text || undefined}>
+		<span>{t("systemPromptLoaded")}{message.timestamp ? ` · ${formatTime(message.timestamp)}` : ""}</span>
+	</div>;
+}
+
+/** Reply prose, with grilling-style questions lifted into answerable cards (4a). */
+function ReplyMarkdown({ text, answerKey, conversationId }: { text: string; answerKey?: string; conversationId?: string }) {
+	const segments = useMemo(() => parseReplySegments(text), [text]);
+	if (segments.length === 1 && segments[0].kind === "markdown") return <Markdown text={text} />;
+	return <>{segments.map((segment, index) => segment.kind === "markdown"
+		? <Markdown key={index} text={segment.text} />
+		: <QuestionCards key={index} questions={segment.questions} answerKey={answerKey} conversationId={conversationId} />)}</>;
+}
 
 /** Collapsible card for an attached file (customType "file"). */
 function AttachmentCard({ message }: { message: UiMessage }) {
@@ -786,6 +829,8 @@ function Block({
 	onKillBash,
 	thinkingWrap,
 	toolsWrap,
+	answerKey,
+	conversationId,
 }: {
 	block: UiContentBlock;
 	suppressLeak?: boolean;
@@ -802,6 +847,9 @@ function Block({
 	thinkingWrap?: boolean;
 	/** 工具调用是否默认展开（false = 默认折叠）。 */
 	toolsWrap?: boolean;
+	/** Set on the newest settled reply: its question cards accept answers (4a). */
+	answerKey?: string;
+	conversationId?: string;
 }) {
 	const t = useT();
 	const text = asText(block);
@@ -823,8 +871,10 @@ function Block({
 				{body &&
 					(live ? (
 						<StreamMarkdown text={user ? preserveUserTree(body) : body} />
+					) : user ? (
+						<Markdown text={preserveUserTree(body)} fileLinks />
 					) : (
-						<Markdown text={user ? preserveUserTree(body) : body} fileLinks={user} />
+						<ReplyMarkdown text={body} answerKey={answerKey} conversationId={conversationId} />
 					))}
 				{text.truncated && <div className="trunc-note">{t("truncated")}</div>}
 			</div>

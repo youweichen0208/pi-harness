@@ -9,6 +9,7 @@ import {
 	asThinking,
 	asToolCall,
 	roleLabel,
+	SystemEvent,
 } from "./Message";
 
 import { collapsedPreview } from "../collapsed-groups";
@@ -34,6 +35,7 @@ export const CollapsedGroup = memo(function CollapsedGroup({
 }: CollapsedGroupProps) {
 	const t = useT();
 	const head = messages[0];
+	if (head.role === "system") return <SystemEvent message={head} />;
 
 	// Plain-text preview: the first text block of the run, first line, ~90 chars
 	// (no Markdown). Skill invocations collapse to a `skill:name · <args>` chip
@@ -115,7 +117,7 @@ export const CollapsedGroup = memo(function CollapsedGroup({
 	return (
 		<button
 			type="button"
-			className="msg-collapsed"
+			className={`msg-collapsed role-${head.role}`}
 			data-msg-id={head.id}
 			title={[t("expandMsg"), preview, chips.map((c) => c.label).join(" · ")].filter(Boolean).join(" · ")}
 			aria-expanded={false}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { groupBashMessages } from "../../web/src/bash-groups.js";
+import { groupBashMessages, withStreamingMessage } from "../../web/src/bash-groups.js";
 import { compactCommandLabel, commandRecordLabel, commandDuration } from "../../web/src/bash-presentation.js";
 import type { UiMessage } from "../../server/protocol.js";
 const call = (id: string): UiMessage => ({ id, role: "assistant", content: [{ type: "toolCall", id: `tool-${id}`, name: "bash", argumentsText: '{"command":"pwd"}' }] });
@@ -14,15 +14,30 @@ describe("command groups", () => {
 		expect([...groups.owners]).toEqual([["b", "a"], ["c", "a"]]);
 		expect(JSON.stringify(messages)).toBe(before);
 	});
-	it("respects user, prose, thinking, history and event boundaries", () => {
+	it("respects user, prose, edit, error, history and event boundaries", () => {
 		for (const separator of [
 			{ id: "user", role: "user", content: [{ type: "text", text: "continue" }] },
 			{ id: "text", role: "assistant", content: [{ type: "text", text: "next" }] },
-			{ id: "thinking", role: "assistant", content: [{ type: "thinking", thinking: "check" }] },
-			{ id: "read", role: "assistant", content: [{ type: "toolCall", id: "read", name: "read" }] },
-		]) expect(groupBashMessages([call("a"), separator, call("b")]).owners.size).toBe(0);
+			{ id: "edit", role: "assistant", content: [{ type: "toolCall", id: "edit", name: "edit" }] },
+			{ id: "aborted", role: "assistant", stopReason: "aborted", content: [{ type: "toolCall", id: "x", name: "bash" }] },
+		] as UiMessage[]) expect(groupBashMessages([call("a"), separator, call("b")]).owners.has("b")).toBe(false);
 		expect(groupBashMessages([call("a"), call("b")], 1).owners.size).toBe(0);
 		expect(groupBashMessages([call("a"), call("b")], 0, new Set([1])).owners.size).toBe(0);
+	});
+	it("keeps thinking, reads and a reply's leading rows in the same process list (3a)", () => {
+		const thinking: UiMessage = { id: "t", role: "assistant", content: [{ type: "thinking", thinking: "check" }, { type: "toolCall", id: "read", name: "read" }] };
+		const reply: UiMessage = { id: "r", role: "assistant", content: [{ type: "thinking", thinking: "done" }, { type: "text", text: "Found it." }] };
+		const groups = groupBashMessages([call("a"), result("a"), thinking, reply]);
+		expect(groups.owners.get("t")).toBe("a");
+		expect(groups.projected.get("a")?.content.map(block => block.type)).toEqual(["toolCall", "thinking", "toolCall", "thinking"]);
+		expect(groups.projected.get("r")?.content.map(block => block.type)).toEqual(["text"]);
+	});
+	it("adds the streaming message without re-projecting settled owners", () => {
+		const settled = groupBashMessages([call("a"), result("a")]);
+		const live = withStreamingMessage(settled, [call("a"), result("a")], { id: "s", role: "assistant", content: [{ type: "thinking", thinking: "…" }] });
+		expect(live.owners.get("s")).toBe("a");
+		expect(settled.owners.has("s")).toBe(false);
+		expect(withStreamingMessage(settled, [], null)).toBe(settled);
 	});
 	it("shortens path interiors and multiline headers while preserving executable and leaf", () => {
 		expect(compactCommandLabel("cat /Users/alice/projects/app/config.json")).toBe("cat …/config.json");

@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
-import { preserveUserTree } from "../../web/src/user-message-presentation.js";
+import { preserveUserTree, repeatedUserMessages } from "../../web/src/user-message-presentation.js";
+import type { UiMessage } from "../../server/protocol.js";
 
 test("pasted tree lines become a fixed-width block with line breaks", () => {
 	expect(preserveUserTree("Campaign\n├── Batch\n│  └── Forecast\n\nNext"))
@@ -20,4 +21,15 @@ test("pasted box-rule tables become a single scrollable code block", () => {
 test("plain user file paths become local links without changing code", () => {
 	expect(preserveUserTree("Read docs/a.md:23 and `docs/b.md:4`"))
 		.toBe("Read [docs/a.md:23](#pi-file=docs%2Fa.md:23) and `docs/b.md:4`");
+});
+
+test("identical user messages without a reply between them render once", () => {
+	const user = (id: string, text: string): UiMessage => ({ id, role: "user", content: [{ type: "text", text }] });
+	const { counts, hidden } = repeatedUserMessages([
+		user("a", "hello"), { id: "s", role: "system", content: [] }, user("b", " hello "),
+		{ id: "r", role: "assistant", content: [{ type: "text", text: "hi" }] }, user("c", "hello"),
+	]);
+	expect([...counts]).toEqual([["a", 2]]);
+	expect([...hidden]).toEqual([["b", "a"]]);
+	expect(repeatedUserMessages([user("a", "one"), user("b", "two")]).hidden.size).toBe(0);
 });

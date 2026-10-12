@@ -12107,3 +12107,132 @@ html.pi-desktop-linux .design-workspace.wiki-mode .topbar { padding-right: 148px
 .database-empty { margin: auto; padding: 32px; color: var(--text-dim); text-align: center; }
 @media (max-width: 760px) { .database-workbench { flex-direction: column; } .database-sidebar { flex: 0 0 200px; border-right: 0; border-bottom: 1px solid var(--border); } .database-table-row > button:last-child { opacity: 1; } }
 .database-sidebar .database-actions { padding: 8px; gap: 6px; font-size: 12px; }
+
+/* ---- Design 3a: one chat stream (process lists, quiet events, flat right panel) ---- */
+/* Thinking, commands, reads and searches between two prose paragraphs share one list. */
+:root .design-workspace .process-list, .process-list { margin: 10px 0; border: 1px solid var(--border-soft); border-radius: var(--r-md); background: var(--bg-elev); overflow: hidden; font-size: 12px; }
+:root .design-workspace .process-list > :is(.thinking, .bash-group, .read-group, .grep-summary) { margin: 0; border: 0; border-radius: 0; background: transparent; }
+:root .design-workspace .process-list > * + * { border-top: 1px solid var(--border-soft); }
+:root .design-workspace .process-list :is(.thinking-toggle, .bash-group-head, .bash-row-head, .read-group-head, .grep-summary-head) { gap: 10px; min-height: 34px; padding: 8px 12px; font-size: 12px; line-height: 1.5; }
+:root .design-workspace .process-list :is(.bash-row-head, .read-group-head, .grep-summary-head):hover, :root .design-workspace .process-list .thinking-toggle:hover { background: var(--output-bg); }
+:root .design-workspace .process-list .bash-row { border-top: 1px solid var(--border-soft); }
+:root .design-workspace .process-list .bash-group-items > .bash-row:first-child { border-top: 1px solid var(--border-soft); }
+:root .design-workspace .process-list .bash-group-head { background: var(--output-bg); color: var(--text); font-size: 12px; }
+:root .design-workspace .process-list .bash-group-head strong { font-weight: 600; }
+:root .design-workspace .process-list .bash-group.historical-step .bash-group-head { background: transparent; font-weight: 400; }
+:root .design-workspace .process-list .bash-group.historical-step .bash-group-head strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 400 12px var(--mono); }
+:root .design-workspace .process-list .bash-group.historical-step .bash-group-head > span:not(.bash-state) { flex: none; color: var(--text-dim); }
+.process-list .bash-state { display: inline-grid; place-items: center; flex: none; width: 12px; }
+.process-list .bash-state.ok { color: var(--green); }
+.process-list .bash-state .thinking-spinner, .process-list .thinking.live .thinking-spinner { width: 10px; height: 10px; border-width: 2px; }
+.process-list .grep-summary-head > svg, .process-list .thinking-toggle > svg { flex: none; width: 12px; }
+/* Thinking rows stay one line; the body opens beneath the row. */
+:root .design-workspace .process-list .thinking-toggle { color: var(--text-faint); }
+:root .design-workspace .process-list .thinking-toggle .thinking-label { flex: none; }
+:root .design-workspace .process-list .thinking-body { max-height: 320px; overflow-y: auto; padding: 2px 12px 10px 34px; border-top: 0; font-size: 12.5px; line-height: 1.6; }
+:root .design-workspace .process-list .thinking.live { background: color-mix(in srgb, var(--accent-soft) 55%, transparent); }
+:root .design-workspace .process-list .thinking.live .thinking-label { color: var(--accent); font-weight: 600; }
+.thinking.live .thinking-live-label { display: block; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-faint); font-style: italic; }
+/* Message rhythm: one header per reply, no negative margins pulling rows into it. */
+.design-workspace .msg-continuation { margin-top: -12px; padding-top: 0; }
+.design-workspace .msg-assistant > .msg-meta { gap: 8px; margin-bottom: 8px; }
+.design-workspace .msg-assistant > .msg-meta .msg-role { color: var(--heading); font-size: 13px; font-weight: 600; }
+.design-workspace .msg-assistant > .msg-meta .msg-time { margin-left: 0; }
+.design-workspace .msg-assistant > .msg-meta .qn-tag, .design-workspace .msg-assistant > .msg-meta .msg-collapse-btn { margin-left: auto; }
+.msg-user-foot { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 6px; font-size: 11px; color: var(--text-faint); }
+.msg-user-foot .msg-time { margin-left: 0; }
+.msg-repeat { padding: 0 6px; border-radius: var(--r-sm); background: var(--bg-elev2); color: var(--text-dim); }
+/* System prompt snapshots and other quiet events: a centered divider. */
+.system-event { display: flex; align-items: center; gap: 10px; width: calc(100% - 2 * var(--composer-gutter, 20px)); max-width: 780px; margin: 4px auto 18px; color: var(--text-faint); font-size: 11px; }
+.system-event::before, .system-event::after { content: ""; flex: 1; height: 1px; background: var(--border-soft); }
+/* Folded history uses the same shapes as the live stream. */
+:root .design-workspace .msg-collapsed { align-items: center; gap: 8px; padding: 5px 0; border: 0; border-radius: var(--r-sm); background: transparent; }
+:root .design-workspace .msg-collapsed:hover { background: transparent; }
+:root .design-workspace .msg-collapsed:hover .msg-collapsed-preview { color: var(--text); }
+.design-workspace .msg-collapsed .msg-collapsed-role { flex: none; gap: 8px; min-width: 0; color: var(--heading); font-size: 12px; font-weight: 600; letter-spacing: 0; text-transform: none; }
+.design-workspace .msg-collapsed.role-user { justify-content: flex-end; }
+.design-workspace .msg-collapsed.role-user .msg-collapsed-role { display: none; }
+.design-workspace .msg-collapsed.role-user .msg-collapsed-body { flex: 0 1 auto; max-width: 75%; padding: 6px 12px; border-radius: var(--r-md); background: var(--bubble-bg); }
+.design-workspace .msg-collapsed.role-user .msg-collapsed-preview { color: var(--text); }
+.design-workspace .msg-collapsed .msg-collapsed-time { order: 0; margin-left: 0; }
+.design-workspace .msg-collapsed:not(.role-user) .msg-collapsed-body { order: 1; }
+.design-workspace .msg-collapsed:not(.role-user) .msg-collapsed-action { order: 2; }
+.design-workspace .msg-collapsed.role-user .msg-collapsed-time { order: 1; }
+.design-workspace .msg-collapsed.role-user .msg-collapsed-action { order: 2; }
+/* Top tabs: the underline alone marks the current view; unavailable views stay legible. */
+.design-workspace .view-switch button.active { background: transparent; }
+.design-workspace .view-switch button[aria-disabled="true"] { opacity: 1; color: var(--text-faint); }
+/* Right panel: progress and outputs are plain sections, not a card inside the panel. */
+.panel-lower:has(.task-sections) { padding: 0; border-top: 1px solid var(--border-soft); }
+.task-sections { border: 0; border-radius: 0; background: transparent; }
+.task-section + .task-section { border-top: 1px solid var(--border-soft); }
+.task-section-heading { padding: 14px 14px 8px; color: var(--text-faint); font: 600 11px/1.5 var(--sans); letter-spacing: .04em; }
+.task-section-heading > svg { width: 11px; }
+.task-section-empty { padding: 0 14px 6px 32px; text-align: left; }
+.task-section-empty p { margin: 0; max-width: none; }
+.task-empty-circles, .task-section-empty .task-empty-file { display: none; }
+/* Running: Stop is the primary action; Send appears once there is something to send. */
+:root .design-workspace .inputbox .btn.composer-action.stop { width: auto; min-width: 0; max-width: none; flex: none; gap: 6px; height: 30px; padding: 0 12px; border: 0; border-radius: var(--r-md); background: var(--heading); color: var(--bg); font: 600 12px var(--sans); }
+:root .design-workspace .inputbox .btn.composer-action.stop svg { width: 8px; height: 8px; }
+:root .design-workspace .inputbox .btn.composer-action.stop:hover { background: var(--red); color: var(--accent-fg); }
+:root .design-workspace .inputbox .btn.composer-action.stop + .send:disabled { display: none; }
+/* Context usage: a small meter; cache hit rate moves to the popover. */
+.usage-meter { position: relative; width: 36px; height: 4px; overflow: hidden; border-radius: var(--r-sm); background: var(--bg-elev2); }
+.usage-meter i { position: absolute; inset: 0 auto 0 0; background: var(--accent); }
+.usage-meter i.warn { background: var(--yellow-fg); }
+.design-workspace .usage-meter ~ .usage-cache-short { display: none; }
+.process-list .bash-group-count { margin-left: auto; }
+.process-list .bash-group-head > strong + svg, .process-list .bash-group-head > .bash-state.err + svg { margin-left: auto; }
+:root[data-appearance="dark"] .design-workspace .view-switch button.active { background: transparent; }
+/* ---- Design 4a: structured replies ---- */
+/* Back to bottom floats centered above the composer and never pushes it down. */
+.design-workspace .inputbar:has(> .scroll-bottom) { padding-top: 12px; }
+.design-workspace .inputbar { position: relative; }
+:root .design-workspace .inputbar > .scroll-bottom { position: absolute; top: -40px; right: auto; bottom: auto; left: 50%; z-index: 6; transform: translateX(-50%); height: 30px; padding: 0 14px; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--bg-elev); box-shadow: 0 4px 14px color-mix(in srgb, var(--shadow-color) 12%, transparent); }
+/* Design trees: light rows, IDs in mono, tags only where a branch differs. */
+.design-tree { position: relative; margin: 10px 0 14px; padding: 12px 16px; border: 1px solid var(--border-soft); border-radius: var(--r-md); background: var(--bg-elev); font-size: 13px; }
+.design-tree-root { display: flex; align-items: baseline; gap: 8px; padding: 2px 32px 9px 0; margin-bottom: 4px; border-bottom: 1px solid var(--border-soft); }
+.design-tree-root-label { flex: none; color: var(--text-faint); font-size: 11px; font-weight: 600; }
+.design-tree-root strong { min-width: 0; font-weight: 600; color: var(--heading); }
+.design-tree-summary { margin-left: auto; flex: none; color: var(--text-faint); font-size: 12px; }
+.design-tree .copy-btn { position: absolute; top: 8px; right: 8px; }
+.design-tree ul { margin: 0; padding: 0; list-style: none; }
+.design-tree-children { margin-left: 9px !important; padding-left: 20px !important; border-left: 1.5px solid var(--border-soft); }
+.design-tree-row { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; padding: 5px 0; line-height: 1.5; }
+.design-tree-id { flex: none; min-width: 20px; color: var(--accent); font: 600 12px var(--mono); }
+.design-tree-children .design-tree-id { color: var(--text-dim); font-weight: 500; }
+.design-tree-title { color: var(--text); }
+.design-tree-note { color: var(--text-faint); }
+.design-tree-tag { padding: 1px 7px; border-radius: var(--r-sm); background: var(--yellow-bg); color: var(--yellow-fg); font-size: 11px; }
+/* Question cards: one card per question; options are full rows. */
+.question-cards { display: grid; gap: 12px; margin: 12px 0 16px; }
+.question-card { display: grid; gap: 10px; padding: 14px 16px; border: 1px solid var(--border-soft); border-radius: var(--r-md); background: var(--bg-elev); }
+.question-card header { display: flex; align-items: baseline; gap: 10px; }
+.question-id { flex: none; min-width: 18px; color: var(--accent); font: 600 12px var(--mono); }
+.question-card h4 { margin: 0; color: var(--heading); font-size: 14px; font-weight: 600; line-height: 1.5; }
+.question-card header p { margin: 3px 0 0; color: var(--text-dim); font-size: 13px; line-height: 1.6; }
+.question-options { display: grid; gap: 4px; padding-left: 28px; }
+.question-option { display: flex; align-items: flex-start; gap: 10px; width: 100%; padding: 8px 10px; border: 1px solid var(--border-soft); border-radius: var(--r-md); background: transparent; color: var(--text); font: 13px/1.55 var(--sans); text-align: left; cursor: pointer; }
+.question-option:hover:not(:disabled) { border-color: var(--border); background: var(--bg-elev2); }
+.question-option:disabled { cursor: default; }
+.question-option:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.question-option.selected { border-color: var(--accent); background: var(--accent-soft); }
+.question-option:disabled:not(.selected) { color: var(--text-dim); }
+.question-radio { flex: none; width: 14px; height: 14px; margin-top: 3px; border: 1.5px solid var(--border); border-radius: 50%; }
+.question-option.selected .question-radio { border: 4px solid var(--accent); }
+.question-option-body { display: grid; gap: 4px; min-width: 0; }
+.question-option-text { overflow-wrap: anywhere; }
+.question-option-text b { margin-right: 6px; color: var(--text-faint); font: 500 12px var(--mono); }
+.question-option-text em { display: inline-block; margin-left: 8px; padding: 0 6px; border-radius: var(--r-sm); background: var(--accent); color: var(--accent-fg); font-size: 11px; font-style: normal; font-weight: 600; line-height: 18px; vertical-align: 1px; }
+.question-option small { color: var(--text-dim); font-size: 12px; line-height: 1.6; }
+/* Answer bar above the composer while the newest reply has open questions. */
+.question-answer-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; width: 100%; max-width: 780px; margin: 0 auto 8px; padding: 8px 10px 8px 14px; border-radius: var(--r-md); background: var(--bg-elev2); font-size: 12px; }
+.question-answer-bar strong { color: var(--text); font-weight: 600; }
+.question-answer-bar span { color: var(--text-faint); }
+.question-answer-bar .question-accept { margin-left: auto; }
+.question-answer-bar button { height: 28px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--bg-elev); color: var(--text); font: 12px var(--sans); cursor: pointer; }
+.question-answer-bar .question-send { border-color: transparent; background: var(--accent); color: var(--accent-fg); font-weight: 600; }
+.question-answer-bar .question-send:disabled { background: var(--send-disabled-bg); color: var(--text-faint); cursor: default; }
+.question-answer-bar button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 600px) { .question-options { padding-left: 0; } .question-answer-bar .question-accept { margin-left: 0; } }
+.msg-body > .process-list:last-child { margin-bottom: 0; }

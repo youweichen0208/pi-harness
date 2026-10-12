@@ -16,6 +16,8 @@ import { isRasterImage } from "../image-paste";
 
 import { ModelThinking } from "./ModelThinking";
 import { UsagePopover } from "./UsagePopover";
+import { acceptRecommended, useQuestionAnswers } from "../question-answers";
+import { composeAnswers } from "../question-cards";
 
 /** Props are deliberately NARROW (no whole-ChatState object): every field is
  *  stable while tokens stream in (the messages ARRAY reference is kept stable
@@ -348,9 +350,14 @@ export const ChatInput = memo(function ChatInput({
 		ta.style.overflowY = capped ? "auto" : "hidden";
 	}, [text]);
 
-	const submit = (queue = false) => {
+	// 4a: the newest reply's question cards are answered from here.
+	const questionState = useQuestionAnswers();
+	const answering = !streaming && questionState.active?.conversationId === activeConversationId ? questionState.active : null;
+	const answeredCount = answering ? answering.questions.filter(question => question.options[questionState.answers[question.id]]).length : 0;
+	const unanswered = answering ? answering.questions.filter(question => !question.options[questionState.answers[question.id]]).map(question => question.id) : [];
+	const submit = (queue = false, override?: string) => {
 		if (verifying) { onNotice("info", t("treeVerifying")); return; }
-		const trimmed = text.trim();
+		const trimmed = (override ?? text).trim();
 		const extensionCommand = slashCommands.some(c => c.source === "extension" && c.name === trimmed.slice(1).split(" ", 1)[0]) && trimmed.startsWith("/");
 		const hasRawAttach = attachments.some((a) => a.imageData || a.fileData);
 		if (pendingSubmit.current || !connected || (!trimmed && !hasRawAttach)) return;
@@ -476,7 +483,7 @@ export const ChatInput = memo(function ChatInput({
 	// Both states use the same compact controls in the bottom toolbar.
 	const renderActions = () => (
 		<div className="inputbox-actions">
-			{streaming && <button type="button" className="btn composer-action stop" title={`${t("stopTask")} · Esc`} aria-label={t("stopTask")} onClick={stop}><FiSquare aria-hidden="true" /></button>}
+			{streaming && <button type="button" className="btn composer-action stop" title={`${t("stopTask")} · Esc`} aria-label={t("stopTask")} onClick={stop}><FiSquare aria-hidden="true" /><span>{t("stop")}</span></button>}
 			<button type="button" className="btn composer-action send" title={t("sendTip")} aria-label={t("sendTip")}
 				disabled={!connected || verifying || (!text.trim() && !attachments.some(a => a.imageData || a.fileData))}
 				onClick={() => submit(streaming && delivery === "followUp")}><FiArrowUp aria-hidden="true" /></button>
@@ -592,6 +599,12 @@ export const ChatInput = memo(function ChatInput({
 				</div>
 				{queueOpen && pendingCount > 1 && <div className="composer-queue-list">{queued.map((item, i) => <div className="composer-queue-item" key={i}><span className="queue-badge">{t(item.steer ? "queueSteerTag" : "queueFollowTag")}</span><span className="queued-text" title={queuedMessagePreview(item.text)}>{queuedMessagePreview(item.text)}</span><span className="queue-when">{t(item.steer ? "deliverySteerHint" : "deliveryFollowHint")}</span></div>)}</div>}
 			</div>}
+			{answering && <div className="question-answer-bar" role="group" aria-label={t("questionSend")}>
+				<strong>{t("questionSelected", { n: answeredCount, total: answering.questions.length })}</strong>
+				{unanswered.length > 0 && <span>{t("questionPending", { ids: unanswered.slice(0, 3).join("、") + (unanswered.length > 3 ? "…" : "") })}</span>}
+				<button type="button" className="question-accept" onClick={() => acceptRecommended(answering.key)}>{t("questionAcceptAll")}</button>
+				<button type="button" className="question-send" disabled={!connected || answeredCount === 0} onClick={() => submit(false, composeAnswers(answering.questions, questionState.answers, text))}>{t("questionSend")}</button>
+			</div>}
 			<div className={`inputbox${text.length > 0 ? " has-draft" : ""}`}>
 			{promptResult?.commandExecuted && promptResult.conversationId === activeConversationId && attachments.length > 0 && <div role="status">{t("commandAttachmentsRetained")}</div>}
 			{(attachments.length > 0 || databaseReferences.length > 0 || autoFile) && (
@@ -682,7 +695,7 @@ export const ChatInput = memo(function ChatInput({
 															connected
 																? streaming
 																	? silentActivity ? t(silentActivity === "model" ? "placeholderModelSilent" : "placeholderToolSilent") : t("placeholderStreamingModes", { primary: t(delivery === "steer" ? "queueSteerTag" : "queueFollowTag"), alternate: t(delivery === "steer" ? "queueFollowTag" : "queueSteerTag") })
-																	: t("composerPlaceholder")
+																	: t(answering ? "questionPlaceholder" : "composerPlaceholder")
 																: t("placeholderConnecting")
 														}
 														disabled={!connected}

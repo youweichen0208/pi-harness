@@ -58,12 +58,12 @@ try {
 	await page.goto(`http://localhost:${port}`);
 	await page.locator('.bash-group.historical-step .bash-group-head').waitFor();
 	await page.locator('.bash-group-head').click();
-	await page.locator('.bash-group-head', { hasText: '运行了 10 条命令' }).waitFor();
+	await page.locator('.bash-group-head', { hasText: 'Ran 10 commands' }).waitFor();
 	assert.equal(await page.locator('.bash-group').count(), 1);
 	assert.equal(await page.locator('.bash-row').count(), 8);
 	assert.equal(await page.locator('.bash-row.err .bash-row-head').getAttribute('aria-expanded'), 'true');
 	assert.equal(await page.locator('.bash-row.ok .bash-numbered-output').count(), 0);
-	assert.match(await page.locator('.bash-group-head').textContent(), /1 条失败/);
+	assert.match(await page.locator('.bash-group-head').textContent(), /1 failed/);
 	assert.match(await page.locator('.bash-row.err .bash-row-stats').textContent(), /退出码 128/);
 	assert.equal(await page.locator('.bash-numbered-line.error').count(), 1);
 	assert.equal(await page.locator('.bash-readable-title').first().textContent(), 'git show …/file-2.ts');
@@ -120,7 +120,7 @@ try {
 	snapshot.state.isStreaming = true;
 	snapshot.state.streamingMessage = { id: 'a-live', role: 'assistant', content: [{ type: 'toolCall', id: 'live-call', name: 'bash', argumentsText: '{"command":"sleep 1"}' }] };
 	snapshot.state.rev += 1; socket.send(JSON.stringify(snapshot));
-	await page.locator('.bash-group-head', { hasText: '正在运行 11 条命令' }).waitFor();
+	await page.locator('.bash-group-head', { hasText: 'Running 11 commands' }).waitFor();
 	assert.equal(await page.locator('.bash-group').count(), 1);
 	assert.equal(await page.locator('.bash-row.run').count(), 1);
 	// A previous interrupted tool must not become running again on a new turn.
