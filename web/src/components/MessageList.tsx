@@ -1,5 +1,3 @@
-import { processGroups } from "../process-groups";
-import { ProcessSummary } from "./ProcessSummary";
 import { UiIcon, type UiIconName } from "./UiIcon";
 import { ReplyActions } from "./ReplyActions";
 import { turnChangeSummaries } from "../changes";
@@ -14,7 +12,7 @@ import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRe
 import { createPortal, flushSync } from "react-dom";
 
 import type { ReactNode } from "react";
-import { LuArrowDown as FiArrowDown } from "react-icons/lu";
+import { FiArrowDown } from "react-icons/fi";
 import type {
 	PromptAttachment,
 	ToolStatus,
@@ -233,9 +231,6 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 	const predecessors = assistantPredecessors(messages);
 	const streamingHasContent = state.streamingMessage?.content.some((block) => block.type === "text" ? (typeof block.text === "string" && !!block.text.trim()) || !!block.truncated : block.type === "thinking" ? typeof block.thinking === "string" && !!block.thinking.trim() : true) ?? false;
 	const changeSummaries = useMemo(() => turnChangeSummaries(state.messages, state.taskProgress, state.cwd, state.isStreaming), [state.messages, state.taskProgress, state.cwd, state.isStreaming]);
-	const processes = useMemo(() => processGroups(state.messages, state.isStreaming), [state.messages, state.isStreaming]);
-	const [openProcesses, setOpenProcesses] = useState<Set<string>>(new Set());
-	const toggleProcess = (id: string) => setOpenProcesses(previous => { const next = new Set(previous); if (next.has(id)) next.delete(id); else next.add(id); return next; });
 	const lastUserIndex = state.messages.findLastIndex((message) => message.role === "user");
 	const lastId = messages.length > 0 ? messages[messages.length - 1].id : null;
 	// Only the last KEEP_RECENT persisted messages are fully rendered; older
@@ -488,15 +483,13 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 			const owner = bashGroups.owners.get(sourceId) ?? sourceId;
 			const idx = state.messages.findIndex((message) => message.id === owner);
 			flushSync(() => {
-				const group = processes.members.get(owner) ?? processes.members.get(id);
-				if (group) setOpenProcesses(previous => new Set(previous).add(group.id));
 				if (idx >= 0 && idx < recentStart && !expanded.has(owner)) expand(owner);
 				setPinned((prev) => prev.has(owner) ? prev : new Set(prev).add(owner));
 			});
 			const toolIds = source?.toolCallId ? [source.toolCallId] : source?.content.flatMap((block) => block.type === "toolCall" && block.name === "bash" && typeof block.id === "string" ? [block.id] : []) ?? [];
 			for (const toolCallId of toolIds) flushSync(() => window.dispatchEvent(new CustomEvent("pi:reveal-tool", { detail: { toolCallId, search: true } })));
 		},
-		[state.messages, recentStart, expanded, expand, bashGroups, processes],
+		[state.messages, recentStart, expanded, expand, bashGroups],
 	);
 
 	// Ctrl+F / Cmd+F 打开搜索（可编辑元素内不抢占）
@@ -531,7 +524,13 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 	const jumpTo = useCallback(
 		(id: string) => {
 			id = bashGroups.owners.get(id) ?? id;
-			ensureExpanded(id);
+			const idx = state.messages.findIndex((m) => m.id === id);
+			// 占位中的目标先同步恢复真实渲染（折叠行同步展开），再滚动定位——
+			// flushSync 保证本轮 commit 后 DOM 即为最终形态。
+			flushSync(() => {
+				if (idx >= 0 && idx < recentStart && !expanded.has(id)) expand(id);
+				setPinned((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
+			});
 			const qIdx = questionsRef.current.findIndex((q) => q.id === id);
 			activeIdxRef.current = qIdx;
 			setActiveIdx(qIdx);
@@ -554,7 +553,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 				}
 			});
 		},
-		[ensureExpanded, bashGroups],
+		[state.messages, recentStart, expanded, expand, bashGroups],
 	);
 	useEffect(() => {
 		const onTaskJump = (event: Event) => {
@@ -759,16 +758,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 						{event.kind === "complete" && <details className="goal-event-details"><summary>{t("goalReviewDetails")}</summary><pre>{m.content.map(block => block.type === "text" ? block.text : "").join("\n")}</pre></details>}
 						{event.ids.slice(1).map((id) => <span key={id} data-msg-id={id} />)}
 					</div>);
-					const process = processes.members.get(m.id);
-					const processOpen = !!process && (openProcesses.has(process.id) || searchOpen);
-					const summary = process?.id === m.id ? <ProcessSummary group={process} open={processOpen} onToggle={() => toggleProcess(process.id)} /> : null;
-					if (process && !processOpen) {
-						if (!summary) return null;
-						return withGap(<LazyMount key={m.id} id={m.id} show={!virtualOn || alwaysSet.has(m.id) || pinned.has(m.id) || !hidden.has(m.id)} height={heightsRef.current.get(m.id) ?? 56} containerRef={scrollRef} onMeasured={storeHeight} lazyRef={attachEl}>
-							{summary}{process.ids.flatMap(id => changeSummaries.has(id) ? [<ChangeSummaryCard key={id} files={changeSummaries.get(id)!} />] : [])}
-						</LazyMount>);
-					}
-					const isOld = i < recentStart && !process && !processes.replies.has(m.id);
+					const isOld = i < recentStart;
 					const isExpandedOld = isOld && expanded.has(m.id);
 					if (isOld && !isExpandedOld) {
 						// Folded into an earlier group's summary row (or a toolResult,
@@ -808,7 +798,6 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 							onMeasured={storeHeight}
 							lazyRef={attachEl}
 						>
-						{summary}
 						<Message recovery={recovery} incident={incidentFor.get(m.id)}
 							key={m.id}
 							message={bashGroups.projected.get(m.id) ?? m}
@@ -825,7 +814,6 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 							streaming={state.isStreaming && connected && i > lastUserIndex}
 							toolsRunning={state.isStreaming && i > lastUserIndex}
 							bashActive={state.isStreaming && i > lastUserIndex && !state.messages.slice(i + 1).some(message => message.role === "assistant" && message.content.some(block => block.type === "text" && typeof block.text === "string" && block.text.trim())) && !state.streamingMessage?.content.some(block => block.type === "text" && typeof block.text === "string" && block.text.trim())}
-							bashTitle={state.messages.slice(lastUserIndex < i ? lastUserIndex : 0, i + 1).findLast(message => message.role === "assistant" && message.content.some(block => block.type === "text" && typeof block.text === "string" && block.text.trim()))?.content.filter(block => block.type === "text").map(block => block.type === "text" && typeof block.text === "string" ? block.text : "").join(" ").slice(0, 80)}
 							onKillBash={onKillBash}
 							toolsWrap={toolsWrap}
 							thinkingWrap={thinkingWrap}

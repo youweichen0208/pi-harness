@@ -48,11 +48,6 @@ try {
 	browser = await chromium.launch({ executablePath: CHROME_PATH || chromium.executablePath() });
 	const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
 	await page.goto(`http://127.0.0.1:${port}`);
-	await page.locator('.home-onboarding input').fill('Documents');
-	await page.locator('.home-onboarding button[type=submit]').click();
-	await page.locator('.fpk-modal').waitFor();
-	await page.keyboard.press('Escape');
-	await page.locator('.workspace-outside button').click();
 	// Pick the level once the session state has arrived, as a user would.
 	await page.locator('.thinking-control .chip').waitFor();
 	await page.locator('.file-name', { hasText: 'note.md' }).waitFor();

@@ -1,17 +1,18 @@
 import { UiIcon } from "./UiIcon";
 import { toolTextIncidents } from "../tool-text";
 import { conversationWait } from "../waiting-indicator";
-import { useEffect, useRef, useState } from "react";
-import { LuChevronRight as FiChevronRight, LuFile as FiFile } from "react-icons/lu";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { FiChevronRight, FiFile } from "react-icons/fi";
 import type { ServerMessage, TaskProgress, UiMessage } from "../types";
-import { useT } from "../i18n";
-import { planStepArtifacts } from "../task-progress-view";
+import { useI18n, useT } from "../i18n";
+import { phaseSummary, planStepArtifacts, progressPhases } from "../task-progress-view";
 import { taskOutputs } from "../task-outputs";
 
 type Silence = Extract<ServerMessage, { type: "agent_silence" }> | null;
 
-export function TaskProgressPanel({ task, silence, cwd, messages, onPreview, streaming, live }: { task?: TaskProgress | null; streaming?: boolean; live?: UiMessage | null; silence: Silence; cwd: string; messages: UiMessage[]; onPreview: (path: string, name: string) => void }) {
+export function TaskProgressPanel({ task, silence, cwd, messages, onPreview, streaming, live }: { task?: TaskProgress | null; silence: Silence; cwd: string; messages: UiMessage[]; onPreview: (path: string, name: string) => void; streaming?: boolean; live?: UiMessage | null }) {
 	const t = useT();
+	const { locale } = useI18n();
 	const incident = toolTextIncidents(live ? [...messages, live] : messages, streaming ?? task?.status === "running").current;
 	const interrupted = incident?.state === "stopped";
 	const reminding = incident?.state === "reminding";
@@ -43,17 +44,19 @@ export function TaskProgressPanel({ task, silence, cwd, messages, onPreview, str
 		onPreview(relative, relative.replace(/\\/g, "/").split("/").at(-1) ?? relative);
 	};
 	const files = taskOutputs(task, messages, cwd);
+	// 无 plan 的任务也给出可读的阶段进度（issue #63）：相邻工具步骤归并为阶段，
+	// 复用 plan 清单的行样式；有 plan 时清单已经是更权威的进度，不再叠加。
+	const phases = useMemo(() => task && !task.plan ? progressPhases(task) : [], [task]);
 	const planMessage = messages.find(message => message.role === "toolResult" && message.planSnapshot?.planId === task?.plan?.origin);
 	const planSource = planMessage && messages.find(message => message.role === "assistant" && message.content.some(block => block.type === "toolCall" && block.id === planMessage.toolCallId));
-	const status = interrupted ? t("toolRecoveryInterrupted") : reminding ? `${t("working")} · ${t("waitSeconds", { n: elapsed })}` : task?.status === "failed" ? t("taskFailed") : task?.status === "cancelled" ? t("taskCancelled") : task?.plan?.awaitingConfirmation ? t("planPrevious") : task?.status === "waiting" ? t("taskPaused") : silence && task && silence.conversationId === task.conversationId ? t(phase?.label ?? "working") : "";
+	const status = interrupted ? t("toolRecoveryInterrupted") : reminding ? `${t("working")} · ${t("waitSeconds", { n: elapsed })}` : task?.status === "failed" ? t("taskFailed") : task?.status === "cancelled" ? t("taskCancelled") : task?.plan?.awaitingConfirmation ? t("planPrevious") : task?.status === "waiting" ? t("taskPlanOpen") : silence && task && silence.conversationId === task.conversationId ? t(phase?.label ?? "working") : "";
 	return <div className={`task-progress task-sections ${interrupted ? "interrupted" : reminding ? "reminding" : task?.status ?? "empty"}`} tabIndex={-1} aria-label={t("taskProgress")}>
 		<div className="task-sections-scroll" ref={scrollRef}>
 			<section className="task-section">
-				<button type="button" className="task-section-heading" aria-expanded={progressOpen} onClick={() => setProgressOpen(value => !value)}><FiChevronRight className={progressOpen ? "open" : ""} />{t("taskProgressHeading")}{items.length > 0 && <small>{t("homePlanCount", { done: items.filter(item => item.status === "done").length, total: items.length })}</small>}</button>
+				<button type="button" className="task-section-heading" aria-expanded={progressOpen} onClick={() => setProgressOpen(value => !value)}><FiChevronRight className={progressOpen ? "open" : ""} />{t("taskProgressHeading")}</button>
 				{progressOpen && <div className="task-section-content">
 					{status && (!interrupted || !!task?.plan) && <p className={`task-progress-status task-progress-source ${interrupted ? "interrupted" : reminding ? "reminding" : task?.status}`} role="status">{reminding && <i aria-hidden="true" />}{status}</p>}
 					{task?.plan && items.length ? <>
-						<progress className="home-plan-progress" aria-label={t("taskProgressHeading")} max={items.length} value={items.filter(item => item.status === "done").length} />
 						{task.plan.completionCriteria && <p className="task-outline-criteria">{t("taskCompletionCriteria")}：{task.plan.completionCriteria}</p>}
 						<div className="task-plan-list">{items.map(item => <div key={item.id} className={`task-plan-step ${interrupted && item.status === "running" ? "interrupted" : item.status}${expanded === item.id ? " expanded" : ""}`}>
 							<button type="button" className="task-plan-step-head" aria-expanded={expanded === item.id} onClick={() => setExpanded(value => value === item.id ? null : item.id)}>
@@ -70,11 +73,20 @@ export function TaskProgressPanel({ task, silence, cwd, messages, onPreview, str
 								<button type="button" className="task-step-jump" onClick={() => window.dispatchEvent(new CustomEvent("pi:jump-message", { detail: { messageId: planSource?.id ?? task.sourceMessageId } }))}>{t("taskJumpToChat")} →</button>
 							</div>}
 						</div>)}</div>
-					</> : interrupted ? <div className="task-interrupted-hint"><strong>● {t("taskInterruptedTitle")}</strong><p>{t("taskInterruptedHint")}</p></div> : reminding ? null : <div className="task-section-empty"><div className="task-empty-circles" aria-hidden="true"><i /><i /><i /></div><p>{t("taskProgressEmpty")}</p></div>}
+					</> : phases.length && !interrupted && !reminding ? <div className="task-plan-list task-phase-list">{phases.map(phase => {
+						const summary = phaseSummary(phase, undefined, locale);
+						return <div key={phase.id} className={`task-plan-step ${phase.status}`}>
+							<span className="task-plan-mark" aria-hidden="true">{phase.status === "done" ? "✓" : phase.status === "failed" ? "×" : "●"}</span>
+							<div className="task-phase-body">
+								<span className="task-plan-step-title">{phase.title}</span>
+								{summary && <small className="task-phase-summary" title={summary}>{summary}</small>}
+							</div>
+						</div>;
+					})}</div> : interrupted ? <div className="task-interrupted-hint"><strong>● {t("taskInterruptedTitle")}</strong><p>{t("taskInterruptedHint")}</p></div> : reminding ? null : <div className="task-section-empty"><div className="task-empty-circles" aria-hidden="true"><i /><i /><i /></div><p>{t("taskProgressEmpty")}</p></div>}
 				</div>}
 			</section>
 			<section className="task-section">
-				<button type="button" className="task-section-heading" aria-expanded={outputsOpen} onClick={() => setOutputsOpen(value => !value)}><FiChevronRight className={outputsOpen ? "open" : ""} />{t("taskOutputsHeading")}<small>{files.length}</small></button>
+				<button type="button" className="task-section-heading" aria-expanded={outputsOpen} onClick={() => setOutputsOpen(value => !value)}><FiChevronRight className={outputsOpen ? "open" : ""} />{t("taskOutputsHeading")}</button>
 				{outputsOpen && <div className="task-section-content">{files.length ? <div className="task-file-results">{files.map(file => <div className="task-file-result" key={file.path}>
 					<FiFile aria-hidden="true" /><button type="button" title={file.path} onClick={() => preview(file.path)}><span>{file.path.split("/").at(-1)}</span>{file.path.includes("/") && <small>{file.path}</small>}</button>
 					{file.counted && <span className="task-file-counts"><span>+{file.added}</span> <span>−{file.removed}</span></span>}

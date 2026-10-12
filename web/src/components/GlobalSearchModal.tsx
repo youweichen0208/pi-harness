@@ -8,7 +8,13 @@ import {
 	useState,
 	type ReactNode,
 } from "react";
-import { LuFileText as FiFileText, LuFolder as FiFolder, LuMessageSquare as FiMessageSquare, LuSearch as FiSearch, LuX as FiX } from "react-icons/lu";
+import {
+	FiFileText,
+	FiFolder,
+	FiMessageSquare,
+	FiSearch,
+	FiX,
+} from "react-icons/fi";
 import type { ClientMessage, FileSearchResult, ProjectSummary, SessionSummary } from "../types";
 import { skillAwarePreview } from "../skill-block";
 import { useT } from "../i18n";

@@ -45,6 +45,18 @@ test("replacement fallback excludes unchanged surrounding lines from counts", ()
 	expect(change?.hunks[0].lines.map((line) => line.marker)).toEqual([" ", "-", "+", " "]);
 });
 
+test("issue #66: a live edit without a result previews its streamed arguments", () => {
+	const change = editWriteChange(call("e-live", "edit", { path: "api/main.py", oldText: "old", newText: "new" }));
+	expect(change).toMatchObject({ added: 1, removed: 1, empty: false, fromArguments: true });
+	expect(change?.hunks[0].lines.map((line) => [line.marker, line.text])).toEqual([["-", "old"], ["+", "new"]]);
+});
+
+test("issue #66: an edit whose arguments never streamed stays empty, not a fake diff", () => {
+	expect(editWriteChange(call("e-trunc", "edit", {}))).toMatchObject({ path: "", empty: true, fromArguments: false });
+	const streamed = { ...call("e-half", "edit", {}), argumentsText: '{"path":"api/main.py","oldText":"ol' } as UiToolCallBlock;
+	expect(editWriteChange(streamed)).toMatchObject({ path: "", empty: true, fromArguments: false });
+});
+
 test("a later successful edit of the same path marks only the earlier failure as retried", () => {
 	const failedCall = call("e1", "edit", { path: "src/a.ts", oldText: "old" });
 	const successCall = call("e2", "edit", { path: "src/a.ts", oldText: "new" });

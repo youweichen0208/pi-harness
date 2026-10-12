@@ -3,7 +3,7 @@ import { wikiProperties } from "../wiki-properties";
 import ReactMarkdown from "react-markdown";
 import { useCallback, useEffect, useMemo, useLayoutEffect, useRef, useState, type CSSProperties, type MutableRefObject } from "react";
 import { createPortal } from "react-dom";
-import { LuPlus as FiPlus, LuCalendar as FiCalendar, LuBookOpen as FiBookOpen, LuChevronDown as FiChevronDown, LuChevronRight as FiChevronRight, LuCode as FiCode, LuFile as FiFile, LuFolder as FiFolder, LuMenu as FiMenu, LuRefreshCw as FiRefreshCw, LuSearch as FiSearch, LuX as FiX, LuClock as FiClock, LuCornerUpLeft as FiCornerUpLeft, LuCornerUpRight as FiCornerUpRight, LuLink as FiLink } from "react-icons/lu";
+import { FiPlus, FiCalendar, FiBookOpen, FiChevronDown, FiChevronRight, FiCode, FiFile, FiFolder, FiMenu, FiRefreshCw, FiSearch, FiX, FiClock, FiCornerUpLeft, FiCornerUpRight, FiLink } from "react-icons/fi";
 import { useI18n, useT } from "../i18n";
 import type { WikiState, WikiDirectory, WikiDocument, WikiDocumentContent, WikiDocumentReferences, WikiRevision, WikiChange, WikiSearchResult } from "../types";
 import { wikiRequest, wikiMedia } from "../wiki-api";

@@ -2,7 +2,7 @@ import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 /** Move a stable portal container so messages, composer and drafts never remount. */
-export function ChatDock({ target, children, className = "" }: { target: HTMLElement | null; children: ReactNode; className?: string }) {
+export function ChatDock({ target, children }: { target: HTMLElement | null; children: ReactNode }) {
 	const home = useRef<HTMLDivElement>(null);
 	const homeScroll = useRef(0);
 	const docked = useRef(false);
@@ -11,7 +11,6 @@ export function ChatDock({ target, children, className = "" }: { target: HTMLEle
 		element.className = "main";
 		return element;
 	});
-	useLayoutEffect(() => { container.className = `main ${className}`; }, [container, className]);
 	useLayoutEffect(() => {
 		const scroll = container.querySelector<HTMLElement>(".messages");
 		if (target && !docked.current) homeScroll.current = scroll?.scrollTop ?? 0;

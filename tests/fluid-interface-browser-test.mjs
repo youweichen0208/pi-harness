@@ -21,10 +21,8 @@ try {
 	const errors=[];page.on('pageerror',e=>errors.push(String(e)));
 	await page.goto(`http://localhost:${port}`);
 	await page.locator('.setup-modal .modal-close').click();
-	await page.locator('.home-onboarding input').fill('Engineering');
-	await page.locator('.home-onboarding button[type=submit]').click();
-	await page.locator('.fpk-modal').waitFor();
-	await page.keyboard.press('Escape');
+	await page.locator('.workspace-group-manager input').fill('Engineering');
+	await page.locator('.workspace-group-actions button[type=submit]').click();
 	await page.locator('.workspace-outside button').click();
 	await page.locator('.project-item.active').waitFor();
 	const resize=page.locator('.resize-left');

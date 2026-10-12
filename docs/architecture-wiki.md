@@ -16,7 +16,7 @@
 
 ## 阅读交互
 
-正文默认直接编辑，独立 44px 插入工具栏、选区浮动格式栏和源码切换。标准正文 760px、宽版 1000px；H1/H2 使用本地 Caprasimo（中文回退 UI SC），正文 Figtree / UI SC，代码 JetBrains Mono。元信息保留更新时间、阅读时间和标签，frontmatter、重复 H1 及开头属性表隐藏于正文但保存时保留原文。
+正文默认直接编辑，独立 44px 插入工具栏、选区浮动格式栏和源码切换。标准正文 760px、宽版 1000px；标题使用本地 Source Serif 4 / Noto Serif SC，正文 IBM Plex Sans，代码 JetBrains Mono。元信息保留更新时间、阅读时间和标签，frontmatter、重复 H1 及开头属性表隐藏于正文但保存时保留原文。
 
 隐藏根目录分组、文件栏拖动宽度、目录树按需加载、双链和索引详情沿用已有行为。搜索支持 Cmd/Ctrl+P（兼容 Cmd/Ctrl+K），Cmd/Ctrl+Enter 把命中路径与片段按保存后的引用流程送回聊天。右栏使用原聊天完整能力，不创建文档专用会话，不显示底部输入胶囊或「对话 | Wiki」切换。
 

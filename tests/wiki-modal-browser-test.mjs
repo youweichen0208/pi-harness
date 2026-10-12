@@ -60,11 +60,6 @@ try {
 	});
 	await page.goto(`http://127.0.0.1:${port}`);
 	await page.locator(".conn-dot.ok").first().waitFor({state: "attached"});
-	await page.locator(".home-onboarding input").fill("Documents");
-	await page.locator(".home-onboarding button[type=submit]").click();
-	await page.locator(".fpk-modal").waitFor();
-	await page.keyboard.press("Escape");
-	await page.locator(".workspace-outside button").click();
 	const input = page.locator(".inputbar textarea"), modal = page.locator(".wiki-document-dialog"), editor = page.locator(".wiki-prose .fp-rich-document");
 	const open = async () => { await page.locator(".file-name", {hasText: "README.md"}).first().evaluate(el => el.click()); await editor.waitFor(); };
 	const close = () => page.locator(".wiki-modal-header > button").last().click();

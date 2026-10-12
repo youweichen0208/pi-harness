@@ -144,11 +144,14 @@ export function deriveTaskProgress(conversationId: string, messages: UiMessage[]
 		let group = 0;
 		const flush = () => {
 			if (!calls.length) return;
-			const completed = calls.filter((call) => results.has(call.id)).length;
-			const failed = calls.some((call) => results.get(call.id)?.isError);
+			// Once the turn settled, calls without results are over (interrupted
+			// or never executed) — conclude them as failed, never as done.
+			const unexecuted = !isStreaming && calls.some((call) => !results.has(call.id));
+			const completed = calls.filter((call) => results.has(call.id) || !isStreaming).length;
+			const failed = unexecuted || calls.some((call) => results.get(call.id)?.isError);
 			const status: TaskStep["status"] = completed < calls.length ? "running" : failed ? "failed" : "done";
 			const endedAt = Math.max(message.timestamp ?? 0, ...calls.map((call) => results.get(call.id)?.timestamp ?? 0));
-			steps.push({ id: `${message.id}:${group++}`, messageId: message.id, title: short(narrative, 24) || defaultTitle(calls), status, startedAt: message.timestamp ?? user.timestamp ?? 0, ...(status !== "running" ? { endedAt } : {}), hint: status === "running" ? `${completed}/${calls.length} 项完成` : failed ? "有工具执行失败" : `${calls.length} 项完成`, artifacts: calls.map((call) => {
+			steps.push({ id: `${message.id}:${group++}`, messageId: message.id, title: short(narrative, 24) || defaultTitle(calls), status, startedAt: message.timestamp ?? user.timestamp ?? 0, ...(status !== "running" ? { endedAt } : {}), hint: status === "running" ? `${completed}/${calls.length} 项完成` : unexecuted ? "有工具未执行" : failed ? "有工具执行失败" : `${calls.length} 项完成`, artifacts: calls.map((call) => {
 				const item = artifact(call);
 				const output = results.get(call.id)?.content.filter((part) => part.type === "text" && typeof (part as { text?: unknown }).text === "string").map((part) => (part as { text: string }).text).join("\n");
 				const outputLines = output ? output.replace(/\n$/, "").split("\n").length : 0;

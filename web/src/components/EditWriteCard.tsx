@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { LuChevronRight as FiChevronRight, LuEllipsis as FiMoreHorizontal } from "react-icons/lu";
+import { FiChevronRight, FiMoreHorizontal } from "react-icons/fi";
 import type { UiToolCallBlock } from "../types";
 import { useT } from "../i18n";
 import { editWriteChange, type ChangeLine, type EditWriteChange } from "../edit-write-presentation";
@@ -10,6 +10,9 @@ type Item = { block: UiToolCallBlock; view: ToolView };
 
 function status(item: Item) {
 	const error = item.view.result?.isError || item.view.status?.isError;
+	// Calls in an aborted/errored message that never got a result were never
+	// executed (issue #66) — not "running", not "queued".
+	if (item.view.abandoned && !item.view.result && !item.view.status) return "skipped";
 	return error ? "err" : item.view.result || item.view.status ? "done" : item.view.streaming ? "running" : "pending";
 }
 
@@ -18,14 +21,14 @@ function Lines({ lines, path }: { lines: ChangeLine[]; path: string }) {
 	return <div className="change-lines">{lines.map((line, index) => <div key={index} className={`change-line ${line.marker === "+" ? "add" : line.marker === "-" ? "del" : "context"}`}><span className="change-old">{line.oldLine ?? ""}</span><span className="change-new">{line.newLine ?? ""}</span><span className="change-marker">{line.marker === "-" ? "−" : line.marker}</span><code className="hljs" dangerouslySetInnerHTML={{ __html: highlightLine(line.text, lang) || "&#8203;" }} /></div>)}</div>;
 }
 
-function ChangeBody({ change }: { change: EditWriteChange }) {
+function ChangeBody({ change, state }: { change: EditWriteChange; state: string }) {
 	const t = useT();
 	const [expanded, setExpanded] = useState(false);
 	const allLines = change.hunks.reduce((sum, hunk) => sum + hunk.lines.length, 0);
 	let remaining = expanded ? Infinity : 12;
 	return <div className="change-card-body">
 		{change.error && <div className="change-error">{change.errorText.split("\n").find((line) => line.trim()) || t("changeFailed")}</div>}
-		{change.empty ? <div className="change-empty">{change.error ? t("changeNoOriginal") : change.kind === "write" ? `${t("emptyFile")} (${change.path.split("/").at(-1)})` : t("changeNoDiff")}</div> : change.hunks.map((hunk, index) => {
+		{change.empty ? <div className="change-empty">{change.error ? t("changeNoOriginal") : change.kind === "write" ? `${t("emptyFile")} (${change.path.split("/").at(-1)})` : state === "done" ? t("changeNoDiff") : state === "skipped" ? t("changeNotExecuted") : t("changeWaiting")}</div> : change.hunks.map((hunk, index) => {
 			if (remaining <= 0) return null;
 			const visible = hunk.lines.slice(0, remaining);
 			remaining -= visible.length;
@@ -58,11 +61,11 @@ export function EditWriteCard({ item, compact = false, retried = false }: { item
 		<div className="change-card-head">
 			<button type="button" className="change-card-toggle" aria-expanded={open && !noDiff} disabled={noDiff} onClick={() => setOpen((value) => !value)}>{!noDiff && <FiChevronRight className={open ? "open" : ""} />}<span className="change-verb">{item.block.name === "edit" ? t("changeEdit") : t("changeWrite")}</span><code title={path}>{path}</code></button>
 			<span className="change-counts">{!change.error && <>{change.added > 0 && <span className="add">+{change.added}</span>}{change.removed > 0 && <span className="del">−{change.removed}</span>}</>}</span>
-			<span className={`change-state ${state}`}><i />{retried ? t("changeRetried") : state === "err" ? t("error") : state === "done" ? t("done") : state === "running" ? t("running") : t("toolQueued")}</span>
+			<span className={`change-state ${state}`}><i />{retried ? t("changeRetried") : state === "err" ? t("error") : state === "done" ? t("done") : state === "skipped" ? t("toolNotExecuted") : state === "running" ? t("running") : t("toolQueued")}</span>
 			{change.path && <button type="button" className="change-open" onClick={openFile}>{t("changeOpen")}</button>}
 			<details className="change-raw"><summary aria-label={t("more")}><FiMoreHorizontal /></summary><div><strong>{t("changeRawArgs")}</strong><pre>{item.block.argumentsText}</pre>{change.output && <><strong>{t("changeRawOutput")}</strong><pre>{change.output}</pre></>}</div></details>
 		</div>
-		{open && !noDiff && <ChangeBody change={change} />}
+		{open && !noDiff && <ChangeBody change={change} state={state} />}
 	</div>;
 }
 
@@ -81,7 +84,10 @@ export function EditWriteGroup({ items, retriedIds }: { items: Item[]; retriedId
 	const added = changes.reduce((sum, change) => sum + (change?.added ?? 0), 0);
 	const removed = changes.reduce((sum, change) => sum + (change?.removed ?? 0), 0);
 	const failed = items.some((item) => status(item) === "err" && !retriedIds?.has(item.block.id));
-	const done = items.every((item) => ["done", "err"].includes(status(item)));
+	// Skipped calls (never executed, issue #66) conclude the group — it must
+	// not linger in "running" forever.
+	const done = items.every((item) => ["done", "err", "skipped"].includes(status(item)));
+	const skipped = items.every((item) => status(item) === "skipped");
 	const verb = items.every((item) => item.block.name === "edit") ? t("changeEdit") : items.every((item) => item.block.name === "write") ? t("changeWrite") : t("taskChanges");
-	return <div className={`change-group ${failed ? "err" : done ? "done" : "running"}`}><button type="button" className="change-group-head" aria-expanded={open} onClick={() => setOpen((value) => !value)}><FiChevronRight className={open ? "open" : ""} /><strong>{verb} {items.length} {t("taskFiles")}</strong><span className="change-counts">{added > 0 && <span className="add">+{added}</span>}{removed > 0 && <span className="del">−{removed}</span>}</span><span className="change-state">{failed ? t("error") : done ? t("done") : t("running")}</span></button>{open && <div className="change-group-items">{items.map((item) => <EditWriteCard key={item.block.id} item={item} compact retried={retriedIds?.has(item.block.id)} />)}</div>}</div>;
+	return <div className={`change-group ${failed ? "err" : done ? "done" : "running"}`}><button type="button" className="change-group-head" aria-expanded={open} onClick={() => setOpen((value) => !value)}><FiChevronRight className={open ? "open" : ""} /><strong>{verb} {items.length} {t("taskFiles")}</strong><span className="change-counts">{added > 0 && <span className="add">+{added}</span>}{removed > 0 && <span className="del">−{removed}</span>}</span><span className="change-state">{failed ? t("error") : skipped ? t("toolNotExecuted") : done ? t("done") : t("running")}</span></button>{open && <div className="change-group-items">{items.map((item) => <EditWriteCard key={item.block.id} item={item} compact retried={retriedIds?.has(item.block.id)} />)}</div>}</div>;
 }

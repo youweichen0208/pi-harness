@@ -1,5 +1,5 @@
 import { memo, useState } from "react";
-import { LuCheck as FiCheck, LuCopy as FiCopy } from "react-icons/lu";
+import { FiCheck, FiCopy } from "react-icons/fi";
 import { useT } from "../i18n";
 
 export const CopyButton = memo(function CopyButton({ text, label = false }: { text: string; label?: boolean }) {

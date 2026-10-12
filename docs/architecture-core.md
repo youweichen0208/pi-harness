@@ -90,13 +90,13 @@ SDK `tool_execution_update.partialResult` 是累计输出快照，服务端发�
 
 ### 当前任务进度（`taskProgress`）
 
-服务端只在当前用户轮次至少调用一次工具后，从权威 transcript 推断当前任务；纯聊天的 taskProgress 可以为空，右栏仍显示进度与输出空状态。相邻工具调用组成步骤，工具结果决定完成或失败；流式回复期间工具已完成但模型尚未继续时保留“正在分析请求”步骤。短句“继续”等沿用上一条实际任务请求作标题。任务耗时从用户消息时间算到 `agent_settled`；恢复历史时用消息时间回退。`taskProgress` 随全量和增量快照传递，ID 来源于原消息 ID，切换对话不会串进度。前端右栏只展示原生或兼容历史计划，不从命令推测步骤。进度与输出始终挂载并共用滚动区域；输出通过 task-outputs.ts 从当前任务步骤的成功 write/edit 工具结果收集，按工具 ID 去重、按路径合并，不包含只读文件和工作区其他改动。详情见 ui-design.md「进度与输出」。
+服务端只在当前用户轮次至少调用一次工具后，从权威 transcript 推断当前任务；纯聊天的 taskProgress 可以为空，右栏仍显示进度与输出空状态。相邻工具调用组成步骤，工具结果决定完成或失败；流式回复期间工具已完成但模型尚未继续时保留“正在分析请求”步骤；settle 后仍无结果的调用视为已结束但未执行（中断或丢失），所在步骤记为失败（提示“有工具未执行”），不显示完成，也不再停留“执行中”。短句“继续”等沿用上一条实际任务请求作标题。任务耗时从用户消息时间算到 `agent_settled`；恢复历史时用消息时间回退。`taskProgress` 随全量和增量快照传递，ID 来源于原消息 ID，切换对话不会串进度。前端右栏优先展示原生或兼容历史计划的清单；无计划的任务按工具步骤归并为阶段行（task-progress-view.ts 的 progressPhases/phaseSummary，复用计划行样式），不虚构计划。进度与输出始终挂载并共用滚动区域；输出通过 task-outputs.ts 从当前任务步骤的成功 write/edit 工具结果收集，按工具 ID 去重、按路径合并，不包含只读文件和工作区其他改动。详情见 ui-design.md「进度与输出」。
 
-计划校验失败虽然不生成执行步骤，仍参与本轮失败判定，成功纠正后清除；不会把失败的完成请求当成步骤已完成。任务展示从成功 plan 快照投影，遵循 [计划扩展](architecture-plan.md) 的分支身份、轮次确认和工具归属规则。第三方 todo 使用普通工具卡；历史 task_plan 保留只读兼容。
+计划校验失败虽然不生成执行步骤，仍参与本轮失败判定，成功纠正后清除；不会把失败的完成请求当成步骤已完成。任务展示从成功 plan 快照投影，遵循 [计划扩展](architecture-plan.md) 的分支身份、轮次确认和工具归属规则；settle 时未收尾的 active 计划由扩展提醒模型补终态调用，投影不推断完成（issue #63）。第三方 todo 使用普通工具卡；历史 task_plan 保留只读兼容。
 
 ### 工具挂死看门狗
 
-每个 `tool_execution_start` 都会为 toolCallId arm 一个 `TOOL_WATCHDOG_TIMEOUT_MS`（默认 20 分钟，环境变量 `PI_WEB_TOOL_TIMEOUT_MS`（毫秒）覆盖）的 timer——超时仍在跑就 `session.abort()`（杀进程树）+ warning notice，`tool_execution_end` / `removeConversation` / `dispose` 都会清掉对应 timer。恢复重建 + 重绑会话（同一 conv 记录，UI 不掉线）；看门狗超时也走同一 `interruptRun`。**只停止运行，不碰后台服务**——那些由「后台任务」面板单独管理。
+每个 `tool_execution_start` 都会为 toolCallId arm 一个 `TOOL_WATCHDOG_TIMEOUT_MS`（默认 20 分钟，环境变量 `PI_WEB_TOOL_TIMEOUT_MS`（毫秒）覆盖）的 timer——超时仍在跑就 `session.abort()`（杀进程树）+ warning notice，`tool_execution_end` / `removeConversation` / `dispose` 都会清掉对应 timer。恢复重建 + 重绑会话（同一 conv 记录，UI 不掉线）；旧 runtime 释放后到新会话绑定前标记 `rebuilding`，拒绝提示（issue #65）。重建失败时保持标记、不改用新会话文件，仅放行 `/restart`——它从原会话文件重新打开，不再释放已死的 runtime；看门狗超时也走同一 `interruptRun`。**只停止运行，不碰后台服务**——那些由「后台任务」面板单独管理。
 
 ### 后台任务列表
 

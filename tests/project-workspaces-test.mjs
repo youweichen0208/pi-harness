@@ -51,6 +51,11 @@ try {
 		await first.goto(`http://127.0.0.1:${port}`);
 		await first.locator(".setup-modal .modal-close").waitFor(); await first.locator(".setup-modal .modal-close").click();
 		await first.locator(".workspace-group-manager input").waitFor();
+		assert.equal(await first.locator(".workspace-switcher-trigger.empty").textContent(), "未选择 Workspace");
+		await first.locator(".workspace-switcher-trigger").click();
+		assert.equal(await first.locator(".workspace-switcher-create input").evaluate((input) => input === document.activeElement), true, "the empty menu focuses its name input");
+		await first.keyboard.press("Escape");
+		assert.equal(await first.locator(".workspace-switcher-menu").count(), 0);
 		assert.equal(await first.locator(".project-item, .session-item, .sidebar-new").count(), 0);
 		assert.equal(await first.getByText("全部项目", {exact:true}).count(), 0);
 		assert.equal(await first.locator(".lp-add-project").count(), 0);
@@ -85,12 +90,17 @@ try {
 		page.on("websocket", (socket) => socket.on("framesent", ({ payload }) => outgoing.push(JSON.parse(String(payload)))));
 		await page.goto(`http://127.0.0.1:${port}`);
 		await page.locator(".setup-modal .modal-close").waitFor(); await page.locator(".setup-modal .modal-close").click();
-		const selector = page.locator(".workspace-group-row select");
-		await selector.locator(`option[value="${id}"]`).waitFor({ state: "attached" });
+		const current = () => page.evaluate(() => document.querySelector(".workspace-switcher-trigger:not(.empty) .workspace-switcher-name")?.textContent ?? "");
+		const currentIs = (name) => page.waitForFunction((name) => document.querySelector(".workspace-switcher-trigger:not(.empty) .workspace-switcher-name")?.textContent === name, name);
+		await currentIs("Work");
 		const switches = () => outgoing.filter((m) => m.type === "set_cwd").length;
 		const before = switches();
-		assert.equal(await selector.inputValue(), id, "select the first existing workspace automatically");
-		assert.equal(await selector.locator('option[value=""]').count(), 0);
+		// 2c: the menu lists workspaces with the current one checked, then new/manage actions.
+		await page.locator(".workspace-switcher-trigger").click();
+		assert.equal(await page.locator(".workspace-switcher-item").count(), 1);
+		assert.equal(await page.locator('.workspace-switcher-item[aria-checked="true"]').count(), 1, "select the first existing workspace automatically");
+		assert.equal(await page.getByRole("menuitem", { name: "新建 Workspace" }).count(), 1);
+		await page.keyboard.press("Escape");
 		await page.locator(`.project-item[title="${projects[1]}"]`).waitFor();
 		assert.equal(await page.locator(`.project-item[title="${projects[0]}"]`).count(), 0);
 		assert.equal(await page.locator(".workspace-outside").count(), 1);
@@ -98,17 +108,18 @@ try {
 		await page.reload();
 		await page.locator(".setup-modal .modal-close").waitFor(); await page.locator(".setup-modal .modal-close").click();
 		await page.locator(`.project-item[title="${projects[1]}"]`).waitFor();
-		assert.equal(await selector.inputValue(), id);
+		assert.equal(await current(), "Work");
 		await page.locator(".workspace-project-search").fill("missing");
 		assert.equal(await page.locator(".project-item").count(), 0);
 		await page.locator(".workspace-project-search").fill("");
-		await page.locator(".workspace-group-row button").click();
+		await page.locator(".workspace-switcher-trigger").click();
+		await page.getByRole("menuitem", { name: "管理 Workspace…" }).click();
 		await page.locator(".workspace-group-manager input").fill("Engineering");
 		a.send({ type: "project_workspace_action", requestId: "remote-rename", revision: 2, action: { kind: "rename", id, name: "Remote name" } });
-		await page.waitForFunction(() => document.querySelector(".workspace-group-row select")?.selectedOptions[0]?.textContent === "Remote name");
+		await currentIs("Remote name");
 		assert.equal(await page.locator(".workspace-group-manager input").inputValue(), "Engineering");
 		await page.locator(".workspace-group-actions button[type=button]").click();
-		await page.waitForFunction(() => document.querySelector(".workspace-group-row select")?.selectedOptions[0]?.textContent === "Engineering");
+		await currentIs("Engineering");
 		await page.locator(`.project-item[title="${projects[1]}"]`).click();
 		await page.locator(`.project-item.active[title="${projects[1]}"]`).waitFor();
 		assert.equal(switches(), before + 1);
@@ -117,7 +128,8 @@ try {
 		await page.keyboard.press("Escape");
 		await page.screenshot({ path: join(tmpdir(), "pi-53-workspaces-desktop.png") });
 		await page.locator(".workspace-group-delete").click(); await page.locator(".workspace-group-delete").click();
-		await page.waitForFunction(() => document.querySelector(".workspace-group-row select")?.value === "");
+		await page.locator(".workspace-onboarding .workspace-step.current input").waitFor();
+		assert.equal(await page.locator(".workspace-switcher-trigger.empty").count(), 1, "deleting the last workspace returns to the first-start state");
 		assert(existsSync(projects[1]));
 		assert.equal(await page.locator(".project-item, .session-item, .sidebar-new").count(), 0, "deleting the last workspace does not expose recent projects");
 		// Manage a group on a narrow viewport without closing the drawer.
@@ -125,7 +137,7 @@ try {
 		await page.locator(".topbar .brand .panel-toggle").click();
 		await page.locator(".workspace-group-manager input").fill("Mobile");
 		await page.locator(".workspace-group-actions button[type=submit]").click();
-		await page.waitForFunction(() => document.querySelector(".workspace-group-row select")?.selectedOptions[0]?.textContent === "Mobile");
+		await currentIs("Mobile");
 		assert.equal(await page.locator(".drawer-left.open").count(), 1);
 		assert.equal(await page.locator(".project-item").count(), 0, "new workspaces start empty");
 		await page.locator(".lp-add-project").click();

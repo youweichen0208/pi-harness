@@ -1,4 +1,4 @@
-import { LuChevronDown as FiChevronDown, LuVolume2 as FiVolume2 } from "react-icons/lu";
+import { FiChevronDown, FiVolume2 } from "react-icons/fi";
 import type { SoundKind, SoundSettings } from "../sounds";
 import { useT } from "../i18n";
 

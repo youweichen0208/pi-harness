@@ -2,7 +2,7 @@ import { useDialogFocus } from "../use-dialog-focus";
 import { ToolOutputDownload } from "./ToolOutputDownload";
 import { getClientId } from "../use-chat";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { LuGitBranch as FiGitBranch, LuX as FiX, LuChevronRight as FiChevronRight, LuChevronDown as FiChevronDown, LuTag as FiTag, LuCopy as FiCopy, LuArchive as FiArchive } from "react-icons/lu";
+import { FiGitBranch, FiX, FiChevronRight, FiChevronDown, FiTag, FiCopy, FiArchive } from "react-icons/fi";
 import type { ClientMessage, TreeFilterMode, TreeRequest, TreeResponse, UiState, UiTreeNode } from "../types";
 import { useT } from "../i18n";
 import { randomUuid } from "../uuid";

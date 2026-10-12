@@ -1,6 +1,15 @@
 import { useDialogFocus } from "../use-dialog-focus";
 import { useEffect, useRef, useState } from "react";
-import { LuCopy as FiCopy, LuDownload as FiDownload, LuPencil as FiEdit2, LuKey as FiKey, LuPlus as FiPlus, LuRefreshCw as FiRefreshCw, LuTrash2 as FiTrash2, LuX as FiX } from "react-icons/lu";
+import {
+	FiCopy,
+	FiDownload,
+	FiEdit2,
+	FiKey,
+	FiPlus,
+	FiRefreshCw,
+	FiTrash2,
+	FiX,
+} from "react-icons/fi";
 import type {
 	ClientMessage,
 	ProviderStatus,

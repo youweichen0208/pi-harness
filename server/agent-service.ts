@@ -1,6 +1,7 @@
 import { databaseScope } from "./database/service.js";
 import { planSettings } from "./plan/settings.js";
 import { reloadSession } from "./session-reload.js";
+import { bumpExtensionModuleCache, registerExtensionModuleScope } from "./extension-module-cache.js";
 import { resolveNativeAttachments } from "./user-attachments.js";
 import { estimateTokens } from "@earendil-works/pi-coding-agent";
 import { SessionTreeController } from "./session-tree-controller.js";
@@ -600,6 +601,11 @@ export class ClientSession {
 	 */
 	private makeRuntimeFactory(refreshResources = false, state?: Pick<AgentSession, "model" | "thinkingLevel">): CreateAgentSessionRuntimeFactory {
 		return async ({ cwd, sessionManager }) => {
+			// 注册该工作区的扩展代码目录，使 /restart 与 reload 能刷新其模块缓存（issue #64）。
+			registerExtensionModuleScope(join(this.agentDir, "extensions"));
+			registerExtensionModuleScope(join(this.agentDir, "npm"));
+			registerExtensionModuleScope(join(cwd, ".pi", "extensions"));
+			registerExtensionModuleScope(join(cwd, ".pi", "npm"));
 			const services = await createAgentSessionServices({
 				cwd,
 				agentDir: this.agentDir,
@@ -1545,6 +1551,8 @@ export class ClientSession {
 	 *  terminal): re-run session.reload() and re-push state. Streaming-safe —
 	 *  deferred to agent_settled, same as settings reloads. */
 	async reloadExtensions(): Promise<void> {
+		// Extension code changed on disk: refresh the module cache (issue #64).
+		bumpExtensionModuleCache();
 		return this.settingsSvc.applyRuntime();
 	}
 
@@ -1640,6 +1648,18 @@ export class ClientSession {
 		};
 		try {
 			if (this.restartingSession) throw new Error("当前会话正在重启，请稍后重试。");
+			// Issue #65: a force-rebuilt conversation whose old runtime was
+			// disposed must not accept prompts — they would be delivered to a
+			// dead session that persists nothing and re-errors every turn.
+			// A failed rebuild stays recoverable through /restart, which rebuilds
+			// from the original session file without touching the dead session.
+			if (conv.rebuilding) {
+				if (parseSlash(text)?.name !== "restart" || this.forcedResets.has(conv)) throw new Error("当前会话正在强制重建或恢复失败，请输入 /restart 重试或新开对话。");
+				await this.restartSession(conv.id);
+				acknowledge(true);
+				this.flushSnapshot();
+				return;
+			}
 			if (!["tree", "fork"].includes(parseSlash(text)?.name ?? "")) await conv.tree?.waitForVerification();
 			const s = conv.session;
 			if (parseSlash(text)?.name !== "restart") {
@@ -1647,7 +1667,7 @@ export class ClientSession {
 				const promptReloadError = promptReloadStatus(s).reloadError;
 				if (promptReloadError) throw new Error(`Native prompt reload failed: ${promptReloadError}`);
 			}
-			if (this.conv !== conv || conv.session !== s) throw new Error("Conversation changed");
+			if (this.conv !== conv || conv.session !== s || conv.rebuilding) throw new Error("Conversation changed");
 			const extensionCommand = text.startsWith("/") && s.extensionRunner.getCommand(text.slice(1).split(" ", 1)[0]);
 			if (!extensionCommand) { attachments = resolveNativeAttachments(s, attachments); validateEditorSnapshots(this.cwd, attachments); }
 			// Native slash commands (see NATIVE_COMMANDS) are executed here and
@@ -1681,7 +1701,7 @@ export class ClientSession {
 				extensionCommand ? undefined : attachments,
 			);
 			await conv.tree?.waitForVerification();
-			if (this.conv !== conv || conv.session !== s) throw new Error("Conversation changed");
+			if (this.conv !== conv || conv.session !== s || conv.rebuilding) throw new Error("Conversation changed");
 			if (!s.isStreaming) { conv.toolsExecutedSincePrompt = false; conv.lastTaskEndedAt = undefined; }
 			conv.toolTextContinues = 0;
 			this.coordinatePlan(conv);
@@ -1780,7 +1800,7 @@ export class ClientSession {
 		conv.toolTextContinues += 1;
 		conv.toolRanSinceContinue = false;
 		try {
-			if (conv.session !== session || session.isStreaming) return;
+			if (conv.session !== session || session.isStreaming || conv.rebuilding) return;
 			await deliverPrompt(session, TOOL_TEXT_CONTINUE_PROMPT, [], false, () => {});
 		} catch (error) {
 			this.emit({ type: "notice", level: "error", conversationId: conv.id, text: `自动继续失败：${(error as Error).message}` });
@@ -1903,6 +1923,25 @@ export class ClientSession {
 		const current = () => !this.disposed && this.convs.get(conv.id) === conv && conv.runtime === previous;
 		if (!current()) return;
 
+		const adopt = async (runtime: AgentSessionRuntime): Promise<void> => {
+			if (!current()) {
+				await runtime.dispose();
+				return;
+			}
+			conv.runtime = runtime;
+			conv.webUi.dispose();
+			conv.webUi = new WebUIContext(msg => this.emit(msg), conv.id, () => `${conv.cwd} · ${conv.title}`);
+			conv.recovery = {};
+			conv.session = runtime.session;
+			conv.rebuilding = false;
+			this.emit({ type: "notice", level: "warning", text: reason });
+			// Rebind the recovered conversation itself, which may be in the background.
+			await this.bindSession(conv);
+			if (this.disposed || this.convs.get(conv.id) !== conv || conv.runtime !== runtime) return;
+			this.emitConversations();
+			void this.pushSlashCommands();
+		};
+
 		try {
 			conv.unsubscribe?.();
 			conv.unsubscribe = undefined;
@@ -1914,36 +1953,31 @@ export class ClientSession {
 			// recently written session of the project, which may be another open chat.
 			const sessionFile = conv.session.sessionFile;
 			conv.toolStartTimes.clear();
+			// Issue #65: the moment the old runtime is disposed, prompts delivered
+			// to it are lost (nothing persists) and every turn re-errors — mark the
+			// conversation until a live session is bound back.
+			conv.rebuilding = true;
 			await previous.dispose();
 			if (!current()) return;
-			const runtime = await createAgentSessionRuntime(
+			await adopt(await createAgentSessionRuntime(
 				this.makeRuntimeFactory(),
 				{
 					cwd: conv.cwd,
 					agentDir: this.agentDir,
 					sessionManager: wikiManager ?? (sessionFile ? SessionManager.open(sessionFile) : SessionManager.create(conv.cwd)),
 				},
-			);
-			if (!current()) {
-				await runtime.dispose();
-				return;
-			}
-			conv.runtime = runtime;
-			conv.webUi.dispose();
-			conv.webUi = new WebUIContext(msg => this.emit(msg), conv.id, () => `${conv.cwd} · ${conv.title}`);
-			conv.recovery = {};
-			conv.session = runtime.session;
-			this.emit({ type: "notice", level: "warning", text: reason });
-			// Rebind the recovered conversation itself, which may be in the background.
-			await this.bindSession(conv);
-			if (this.disposed || this.convs.get(conv.id) !== conv || conv.runtime !== runtime) return;
-			this.emitConversations();
-			void this.pushSlashCommands();
+			));
 		} catch (err) {
+			// Issue #65: the old runtime may already be disposed. Keep the
+			// conversation marked so prompts are rejected with a clear message
+			// instead of reaching a dead session; /restart reopens the original
+			// file. No silent switch to a fresh session file.
+			if (!current()) return;
 			this.emit({
 				type: "notice",
 				level: "error",
-				text: `强制中断失败：${(err as Error).message}`,
+				conversationId: conv.id,
+				text: `强制中断后恢复失败：${(err as Error).message}。请输入 /restart 重试或新开对话。`,
 			});
 		}
 	}
@@ -1954,17 +1988,26 @@ export class ClientSession {
 		const conv = this.conv;
 		if (conv.id !== conversationId || this.switchingWorkspace || this.creatingConversation) throw new Error("对话正在切换或重启，请稍后重试。");
 		if (this.quiesceBlocked()) throw new Error("服务暂停接收新操作。");
-		conv.tree?.assertWritable();
+		// A conversation left broken by a failed force rebuild is reopened from
+		// its file: the tree controller still watches the dead runtime.
+		const broken = !!conv.rebuilding;
+		if (!broken) conv.tree?.assertWritable();
 		if (!conv.session.isIdle || isRecovering(conv.recovery)) throw new Error("请先停止当前任务，再重启会话。");
 		this.restartingSession = true;
 		let replacement: AgentSessionRuntime | undefined;
 		try {
 			const previous = conv.runtime, model = conv.session.model, thinking = conv.session.thinkingLevel;
+			// 重建扩展工厂前刷新模块缓存，否则 jiti 命中 Node 的 ESM/require 缓存，拿到的还是旧扩展代码（issue #64）。
+			bumpExtensionModuleCache();
 			replacement = await createAgentSessionRuntime(this.makeRuntimeFactory(true, { model, thinkingLevel: thinking }), {
-				cwd: conv.cwd, agentDir: this.agentDir, sessionManager: conv.session.sessionManager,
+				cwd: conv.cwd, agentDir: this.agentDir,
+				sessionManager: broken && !conv.wiki && conv.session.sessionFile ? SessionManager.open(conv.session.sessionFile) : conv.session.sessionManager,
 			});
 			if (this.disposed || this.conv !== conv) throw new Error("对话已切换。");
-			await previous.dispose();
+			// A failed force rebuild already disposed the previous runtime;
+			// disposing again would re-emit session_shutdown on a stale runner.
+			if (!broken) await previous.dispose();
+			conv.rebuilding = false;
 			conv.unsubscribe?.(); conv.unsubscribe = undefined;
 			conv.tree?.dispose(); conv.tree = undefined;
 			conv.runtime = replacement; replacement = undefined;

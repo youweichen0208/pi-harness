@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { LuMaximize2 as FiMaximize2, LuMinimize2 as FiMinimize2, LuMessageSquare as FiMessageSquare, LuX as FiX } from "react-icons/lu";
+import { FiMaximize2, FiMinimize2, FiMessageSquare, FiX } from "react-icons/fi";
 import { useT } from "../i18n";
 import { WikiResizeHandle, useWikiPanelWidth } from "./WikiResizeHandle";
 

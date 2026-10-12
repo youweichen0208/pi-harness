@@ -1,4 +1,3 @@
-import { ConversationHome } from "./components/ConversationHome";
 import { FluidDrawer } from "./components/FluidDrawer";
 import { UiIcon } from "./components/UiIcon";
 import { DatabaseWorkbench } from "./components/DatabaseWorkbench";
@@ -42,7 +41,7 @@ import { ChatInput } from "./components/ChatInput";
 import { AgentSilenceStatus } from "./components/AgentSilenceStatus";
 import type { CurrentFileContext, ReadCurrentFile, SaveCurrentFile } from "./current-file";
 
-import { SidebarStatus } from "./components/SidebarStatus";
+import { FooterBar } from "./components/FooterBar";
 import { Dialog } from "./components/Dialog";
 // 终端视图懒加载：xterm.js 体积大且只在切到终端时才需要，拆出主包
 const TerminalPanel = lazy(() =>
@@ -73,7 +72,7 @@ import type {
 import { useI18n, useT } from "./i18n";
 import { conversationDisplayTitle } from "./conversation-display-title";
 import { skillAwarePreview } from "./skill-block";
-import { LuCircleAlert as FiAlertCircle, LuTriangleAlert as FiAlertTriangle, LuInfo as FiInfo, LuX as FiX } from "react-icons/lu";
+import { FiAlertCircle, FiAlertTriangle, FiInfo, FiX } from "react-icons/fi";
 import type { Notice } from "./use-chat";
 import { fileToProcessedImage, isRasterImage, type ProcessedImage } from "./image-paste";
 import { keepNonPreviewAttachments } from "./preview-attachments";
@@ -691,14 +690,6 @@ export function App() {
 
 	const closePreview = useCallback(() => setPreviewFile(null), []);
 	const [taskFocusRequest, setTaskFocusRequest] = useState(0);
-	useEffect(() => { if (chat.ready) send({ type: "list_project_workspaces" }); }, [chat.ready, send]);
-	const [welcomeHost, setWelcomeHost] = useState<HTMLDivElement | null>(null);
-	const [openedDirect, setOpenedDirect] = useState(false);
-	const emptyConversation = !!conversationState && !conversationState.messages.length && !conversationState.streamingMessage && !conversationState.isStreaming && !conversationState.taskProgress && !chat.pendingEcho && !chat.dialog;
-	const homeVisible = view === "chat" && emptyConversation && !wikiFileRequest && !databaseOpen;
-	const onboarding = homeVisible && !!chat.projectWorkspaces && chat.projectWorkspaces.workspaces.length === 0 && !openedDirect;
-	const previousSession = chat.sessions.filter(session => session.path !== conversationState?.sessionFile && session.messageCount > 0).sort((a, b) => b.modified - a.modified)[0];
-	const homeProps = { cwd: conversationState?.cwd ?? "", branch: workspaceScm.branch ?? "", changed: workspaceScm.files, notRepo: !workspaceScm.loaded || workspaceScm.notRepo, previous: previousSession, onContinue: (path: string) => { send({ type: "switch_session", path }); } };
 	const openTask = () => {
 		const open = () => {
 			setPreviewFile(null);
@@ -709,7 +700,12 @@ export function App() {
 		};
 		if (fileGuard.current) fileGuard.current(open); else open();
 	};
-
+	useEffect(() => {
+		if (!taskFocusRequest) return;
+		const panel = document.querySelector<HTMLElement>(".view-pane:not(.hidden) .task-progress");
+		panel?.focus({ preventScroll: true });
+		panel?.querySelector(".task-plan-step.running")?.scrollIntoView({ block: "nearest" });
+	}, [taskFocusRequest]);
 	const attachPreviewLines = useCallback((path: string, name: string, start: number, end: number) => {
 		attach(path, name, "lines", false, { start, end });
 	}, [attach]);
@@ -974,10 +970,6 @@ export function App() {
 				className={`panel-drawer drawer-left ${drawer === "left" ? "open" : ""}`}
 			>
 				<LeftPanel
-					welcomeHost={onboarding ? welcomeHost : null}
-					onOpenDirect={() => setOpenedDirect(true)}
-					footer={<SidebarStatus chat={chat} send={send} />}
-					serverVersion={chat.serverVersion ?? null}
 					incidentState={conversationState ? toolTextIncidents(conversationState.streamingMessage ? [...conversationState.messages, conversationState.streamingMessage] : conversationState.messages, conversationState.isStreaming).current?.state : undefined}
 					onOpenSettings={() => { setSettingsInitialTab("prompt"); setSettingsOpen(true); }}
 					onNewChat={() => { setView("chat"); panelSend({ type: "new_chat" }); }}
@@ -1065,10 +1057,8 @@ export function App() {
 					{drawer && (isMobile || (isNarrow && !previewFile) || (drawer === "left" && !!previewFile)) && (
 						<div className="drawer-backdrop" onClick={() => setDrawer(null)} />
 					)}
-					<div className={`view-pane ${onboarding ? "onboarding-pane" : ""} ${previewFile ? "preview-open" : ""} ${view === "chat" ? "" : "hidden"}`}>
-						<ChatDock target={wikiFileRequest || databaseOpen ? wikiChatHost : null} className={homeVisible ? onboarding ? "onboarding-main" : "conversation-home" : ""}>
-							<div className="home-welcome-host" ref={setWelcomeHost} hidden={!onboarding} />
-							{homeVisible && !onboarding && <ConversationHome {...homeProps} />}
+					<div className={`view-pane ${previewFile ? "preview-open" : ""} ${view === "chat" ? "" : "hidden"}`}>
+						<ChatDock target={wikiFileRequest || databaseOpen ? wikiChatHost : null}>
 							{conversationState ? (
 								<WorkspacePathContext.Provider value={conversationState.cwd}><MessageList recovery={{ ...toolRecovery, models: chat.models, onLoadModels: () => { if (!chat.models.length && !chat.modelsLoading) send({ type: "list_models" }); } }}
 									active={view === "chat" || !!wikiFileRequest || databaseOpen}
@@ -1131,9 +1121,8 @@ export function App() {
 								onManageModels={openManageModels}
 								onSent={clearAttachments}
 							/>
-							{homeVisible && !onboarding && <ConversationHome {...homeProps} suggestions />}
 						</ChatDock>
-						<ChangesPanel key={conversationState?.conversationId ?? ""} cwd={conversationState?.cwd ?? ""} data={chat.scmDiffData} send={send} ready={chat.ready && !switching} notRepo={workspaceScm.notRepo} branch={workspaceScm.branch} defaultBase={workspaceScm.base} branches={workspaceScm.branches} dirty={chat.scmDirty} />
+						<ChangesPanel key={conversationState?.conversationId ?? ""} cwd={conversationState?.cwd ?? ""} data={chat.scmDiffData} send={send} ready={chat.ready && !switching} notRepo={!workspaceScm.loaded || workspaceScm.notRepo} branch={workspaceScm.branch} defaultBase={workspaceScm.base} branches={workspaceScm.branches} dirty={chat.scmDirty} />
 						{!isMobile && (!isNarrow || !!previewFile) && (!filesCollapsed || !!previewFile) && (
 							<ResizeHandle side={previewFile ? "editor" : "right"} width={previewFile ? 480 : rightWidth} onResize={previewFile ? resizeEditor : resizeRight} onReset={previewFile ? () => { setEditorShare(0.45); localStorage.setItem("pi-harness:editor-share", "0.45"); } : undefined} />
 						)}
@@ -1142,8 +1131,6 @@ export function App() {
 						>
 							<div className="file-list-host" hidden={!!previewFile}>
 								<RightPanel
-									focusTaskRequest={taskFocusRequest}
-									onOpenGit={() => setView("git")}
 									onSearchFiles={openFileSearch}
 									active={!filesCollapsed && !previewFile && !switching && view === "chat" && ((!isMobile && !isNarrow) || drawer === "right")}
 									send={send}
@@ -1219,6 +1206,7 @@ export function App() {
 					})}
 				</div>
 			</div>
+			<FooterBar chat={chat} send={send} />
 			{databaseOpen && chat.state?.cwd && <WikiDocumentModal title={t("dbTitle")} onClose={() => setDatabaseOpen(false)} chatHost={setWikiChatHost} chatOpen={wikiChatOpen} onChatOpen={setWikiChatOpen}>
 				<DatabaseWorkbench cwd={chat.state.cwd} conversationId={chat.activeConversationId} onReference={receiveWikiReference} onRevoke={revokeDatabase} />
 			</WikiDocumentModal>}

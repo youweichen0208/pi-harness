@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, type ReactNode } from "react";
-import { LuX as FiX } from "react-icons/lu";
+import { FiX } from "react-icons/fi";
 import { drawerDestination, rubberband, springStep } from "../fluid-motion";
 import { useT } from "../i18n";
 

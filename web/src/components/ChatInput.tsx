@@ -9,7 +9,7 @@ import type { CurrentFileContext, ReadCurrentFile, SaveCurrentFile } from "../cu
 import { mergeCurrentFile } from "../current-file";
 import { randomUuid } from "../uuid";
 import { memo, useLayoutEffect, useEffect, useRef, useState } from "react";
-import { LuCornerUpLeft as FiCornerUpLeft, LuPlus as FiPlus, LuSquare as FiSquare, LuPaperclip as FiPaperclip, LuArrowUp as FiArrowUp } from "react-icons/lu";
+import { FiCornerUpLeft, FiPlus, FiSquare, FiPaperclip, FiArrowUp } from "react-icons/fi";
 import type { ClientMessage, PromptAttachment, ServerMessage, ModelInfo, SlashCommandInfo, UiMessage, UiState } from "../types";
 import { useT, useI18n } from "../i18n";
 import { isRasterImage } from "../image-paste";
@@ -327,17 +327,6 @@ export const ChatInput = memo(function ChatInput({
 		window.addEventListener("pi-web:fill", onFill);
 		return () => window.removeEventListener("pi-web:fill", onFill);
 	}, []);
-
-	useEffect(() => {
-		const append = (event: Event) => {
-			const detail = (event as CustomEvent<{ cwd: string; text: string }>).detail;
-			if (!active || detail.cwd !== cwd) return;
-			setText(previous => previous ? `${previous}\n\n${detail.text}` : detail.text);
-			taRef.current?.focus();
-		};
-		window.addEventListener("pi-web:append-prompt", append);
-		return () => window.removeEventListener("pi-web:append-prompt", append);
-	}, [active, cwd]);
 
 	// Esc closes the /help modal.
 	useEffect(() => {

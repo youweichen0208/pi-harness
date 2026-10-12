@@ -2,7 +2,7 @@
  * 编辑器插件（vscode-editor，含 Remote-SSH）— 浏览器 UI 冒烟测试（零 token、自包含）。
  *
  * 起隔离端口 server（临时 data-dir）+ 内嵌 mock SSH 远端，Chrome headless：
- * - 顶栏插件菜单项 → 编辑器视图挂载
+ * - 顶栏插件 tab → 编辑器视图挂载
  * - 侧栏「＋」新建主机弹层 → 主机出现在列表
  * - 点击主机连接 → 远端目录树展开；底部终端面板开 xterm
  * - 点击远端文件 → CodeMirror 加载内容；编辑 + Ctrl+S 保存回远端（磁盘核对）
@@ -60,10 +60,9 @@ try {
 	page.on("pageerror", (e) => console.error("[pageerror]", e.message));
 	await page.goto(URL);
 
-	// -- 1. 插件菜单项 出现并切换 -------------------------------------------------
-	await page.locator(".workspace-more > .dropdown > button").click();
-	await page.waitForSelector(".workspace-view-menu button", { timeout: 20000 });
-	await page.locator(".workspace-view-menu button", { hasText: "编辑器" }).first().click();
+	// -- 1. 插件 tab 出现并切换 -------------------------------------------------
+	await page.waitForSelector("button.plugin-tab", { timeout: 20000 });
+	await page.locator("button.plugin-tab", { hasText: "编辑器" }).first().click();
 	await page.waitForSelector(".vsc", { timeout: 15000 });
 	check("插件视图挂载", true);
 

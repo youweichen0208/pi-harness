@@ -1,5 +1,5 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { LuChevronRight as FiChevronRight, LuFolder as FiFolder, LuFile as FiFile, LuSearch as FiSearch, LuDownload as FiDownload, LuLink as FiLink, LuMaximize2 as FiMaximize2, LuEllipsis as FiMoreHorizontal, LuPlus as FiPlus, LuRefreshCw as FiRefreshCw, LuX as FiX } from "react-icons/lu";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { FiChevronRight, FiFolder, FiFile, FiSearch, FiDownload, FiLink, FiMaximize2, FiMoreHorizontal, FiPlus, FiRefreshCw, FiX } from "react-icons/fi";
 import type { FileEntry, FileListing, ScmFileEntry, ServerMessage, TaskProgress, UiMessage } from "../types";
 import { useT } from "../i18n";
 import { downloadFile } from "../download";
@@ -9,8 +9,6 @@ import { TaskProgressPanel } from "./TaskProgressPanel";
 
 type AttachMode = "inline" | "reference";
 interface RightPanelProps {
-	focusTaskRequest?: number;
-	onOpenGit?: () => void;
 	active: boolean;
 	onSearchFiles: () => void;
 	files: FileListing | null;
@@ -31,25 +29,8 @@ interface RightPanelProps {
 	onNotice: (level: "info" | "warning" | "error", text: string) => void;
 }
 
-export const RightPanel = memo(function RightPanel({ focusTaskRequest = 0, onOpenGit, onSearchFiles, active, files, fileChanged, changed, notRepo, widgets, messages, streamingMessage, isStreaming, taskProgress, conversationId, agentSilence, cwd, send, onAttach, onPreview, onNotice }: RightPanelProps) {
+export const RightPanel = memo(function RightPanel({ onSearchFiles, active, files, fileChanged, changed, notRepo, widgets, messages, streamingMessage, isStreaming, taskProgress, conversationId, agentSilence, cwd, send, onAttach, onPreview, onNotice }: RightPanelProps) {
 	const t = useT();
-	const [selection, setSelection] = useState<{ owner: string; taskId?: string; tab: "turn" | "files" } | null>(null);
-	const tab = selection?.owner === conversationId && selection.taskId === taskProgress?.id ? selection.tab : taskProgress ? "turn" : "files";
-	const chooseTab = (next: "turn" | "files") => setSelection({ owner: conversationId, taskId: taskProgress?.id, tab: next });
-	useLayoutEffect(() => { if (focusTaskRequest) chooseTab("turn"); }, [focusTaskRequest]);
-
-	const panelRef = useRef<HTMLElement>(null);
-	const focusedRequest = useRef(0);
-	useEffect(() => {
-		if (!active || tab !== "turn" || !focusTaskRequest || focusedRequest.current === focusTaskRequest) return;
-		const frame = requestAnimationFrame(() => {
-			const panel = panelRef.current?.querySelector<HTMLElement>(".task-progress");
-			panel?.focus({ preventScroll: true });
-			panel?.querySelector(".task-plan-step.running")?.scrollIntoView({ block: "nearest" });
-			focusedRequest.current = focusTaskRequest;
-		});
-		return () => cancelAnimationFrame(frame);
-	}, [active, tab, focusTaskRequest]);
 	const [rootOpen, setRootOpen] = useState(true);
 	useEffect(() => setRootOpen(true), [cwd]);
 	const [creating, setCreating] = useState(false);
@@ -184,12 +165,7 @@ export const RightPanel = memo(function RightPanel({ focusTaskRequest = 0, onOpe
 		{directories[path]?.truncated && <div className="panel-empty files-truncated">{t("filesTruncated")}</div>}
 	</>;
 	const otherDirectories = directoryEntries("").filter(({ entry }) => entry.type === "dir" && !changed.some((change) => change.path === entry.path || change.path.startsWith(`${entry.path}/`)) && (showHidden || !entry.name.startsWith("."))).length;
-	return <aside ref={panelRef} className="panel panel-right has-task-progress quiet-right-panel">
-		<div className="workbench-panel-tabs" role="tablist" aria-label={t("homePanelTabs")}>
-			{(["turn", "files"] as const).map(value => <button key={value} type="button" role="tab" id={`right-${value}-tab`} aria-selected={tab === value} aria-controls={`right-${value}-panel`} tabIndex={tab === value ? 0 : -1} onClick={() => chooseTab(value)} onKeyDown={event => { if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) { event.preventDefault(); const next = event.key === "Home" ? "turn" : event.key === "End" ? "files" : tab === "turn" ? "files" : "turn"; chooseTab(next); document.getElementById(`right-${next}-tab`)?.focus(); } }}>{t(value === "turn" ? "homeThisTurn" : "workspaceFiles")}</button>)}
-		</div>
-		<div className="right-files-content" id="right-files-panel" role="tabpanel" aria-labelledby="right-files-tab" hidden={tab !== "files"}>
-
+	return <aside className="panel panel-right has-task-progress">
 		<div className="panel-title"><span>{t("workspaceFiles")}</span>{!notRepo && changed.length > 0 && <button type="button" className="tree-filter" aria-pressed={onlyChanged} onClick={() => setOnlyChanged(value => !value)}>{t("changedCount", { n: changed.length })}</button>}<button type="button" className="tree-menu-trigger" aria-label={t("newWorkspaceFile")} title={t("newWorkspaceFile")} disabled={isStreaming || !cwd} onClick={() => setCreating(value => !value)}><FiPlus /></button><button type="button" className="tree-menu-trigger" aria-label={t("refreshWorkspaceFiles")} title={t("refreshWorkspaceFiles")} onClick={refreshFiles}><FiRefreshCw /></button><div className="tree-controls" ref={controlsRef}><button type="button" className="tree-menu-trigger" aria-label={t("more")} aria-expanded={controlsOpen} onClick={() => setControlsOpen(value => !value)}><FiMoreHorizontal /></button>{controlsOpen && <div className="tree-controls-menu"><button type="button" className="tree-hidden-toggle" role="switch" aria-checked={showHidden} onClick={() => setShowHidden(value => !value)}><span>{t("showHiddenFiles")}</span><span className="tree-switch-track" /></button></div>}</div></div>
 		{creating && <CreateFileForm key={`${cwd}:${conversationId}`} cwd={cwd} conversationId={conversationId} disabled={isStreaming} onCancel={() => setCreating(false)} onCreated={path => { setCreating(false); refreshFiles(); onPreview(path, path.split("/").at(-1)!); }} />}
 		<button type="button" className="tree-search" onClick={onSearchFiles}><FiSearch aria-hidden="true" /><span>{t("treeSearchFiles")}</span><kbd>{/Mac|iPhone|iPad/.test(navigator.platform) ? "⌘ P" : "Ctrl P"}</kbd></button>
@@ -224,9 +200,7 @@ export const RightPanel = memo(function RightPanel({ focusTaskRequest = 0, onOpe
 			</div>}
 			</div>
 		</div>
-		</div>
-		<div className="panel-lower" id="right-turn-panel" role="tabpanel" aria-labelledby="right-turn-tab" hidden={tab !== "turn"}><TaskProgressPanel key={conversationId} task={taskProgress} streaming={isStreaming} live={streamingMessage} silence={agentSilence ?? null} cwd={cwd} messages={messages} onPreview={onPreview} /></div>
-		{!notRepo && onOpenGit && <button type="button" className="home-git-card" onClick={onOpenGit}><span>{t("homeChanges", { n: changed.length })}</span><strong>{t("homeOpenGit")} →</strong></button>}
+		<div className="panel-lower"><TaskProgressPanel key={conversationId} task={taskProgress} streaming={isStreaming} live={streamingMessage} silence={agentSilence ?? null} cwd={cwd} messages={messages} onPreview={onPreview} /></div>
 			{widgets.filter((w) => w.lines.length > 0).length > 0 && (
 				<div className="panel-widgets">
 					{widgets

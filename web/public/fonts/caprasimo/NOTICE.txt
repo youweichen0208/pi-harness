@@ -1,3 +1,0 @@
-Unmodified WOFF2 Latin and Latin-ext fonts embedded in Organic-Token-Map.html, supplied in the Organic handoff on 2026-10-12.
-Copyright and OFL license metadata verified from the font name table.
-Copyright 2023 The Caprasimo Project Authors (https://github.com/docrepair-fonts/caprasimo-fonts).

@@ -1,4 +1,4 @@
-import { LuDownload as FiDownload } from "react-icons/lu";
+import { FiDownload } from "react-icons/fi";
 import { useEffect, useState } from "react";
 import { withToken } from "../auth-token";
 import { useT } from "../i18n";

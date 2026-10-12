@@ -27,23 +27,22 @@ try {
 	}
 	browser = await chromium.launch({ executablePath: CHROME_PATH, headless: true });
 	const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
-	page.setDefaultTimeout(15000);
 	await page.goto(`http://127.0.0.1:${port}`);
 	await page.locator(".setup-modal .modal-close").click();
-	const waitBranch = (text) => page.waitForFunction((text) => document.querySelector(".changes-current-branch")?.textContent === text, text);
+	const waitBranch = (text) => page.waitForFunction((text) => document.querySelector(".status-branch-name")?.textContent === text, text);
 	await waitBranch("main");
-	assert.equal(await page.locator(".statusbar").count(), 0);
+	assert(!(await page.locator("footer").innerText()).includes("$"));
 	git("-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-m", "fixture");
 	git("checkout", "-b", "feature/footer");
 	await waitBranch("feature/footer");
 	git("checkout", "--detach", "HEAD");
+	await page.waitForFunction(() => document.querySelector(".status-branch-name")?.textContent.includes("HEAD"));
 	const hash = git("rev-parse", "--short", "HEAD").toString().trim();
-	await waitBranch(hash);
-	assert((await page.locator(".changes-current-branch").innerText()).includes(hash));
+	assert((await page.locator(".status-branch-name").innerText()).includes(hash));
 	await page.locator(".status-cwd").click();
 	await page.locator(".status-cwd-input").fill(plain + "/");
 	await page.locator(".status-cwd-input").press("Enter");
-	await page.locator(".changes-current-branch").waitFor({ state: "detached" });
+	await waitBranch("非 Git 仓库");
 	await page.waitForFunction((cwd) => document.querySelector(".status-cwd")?.getAttribute("title")?.includes(cwd), plain);
 	await page.screenshot({ path: join(base,"footer.png") });
 	console.log("PASS footer: unborn branch, external checkout auto-refresh, detached HEAD, non-repo, cost removed");

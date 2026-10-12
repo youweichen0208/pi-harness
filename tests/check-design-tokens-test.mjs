@@ -83,7 +83,7 @@ test("TSX scans strings and templates but skips comments and HTML entities", () 
 });
 
 
-test("Organic palette and radii remain inside the root token boundary", () => {
-	assert.deepEqual(checkCss(':root { --accent: #c67139; --red: oklch(.5 .15 28); --r-sm: 999px; --r-md: 22px; --r-lg: 28px; } .error { color: var(--red); border-radius: var(--r-lg); }'), []);
-	assert.equal(errors(checkCss('.error { color: #c67139; }')).length, 1);
+test("Classic palette and radii remain inside the root token boundary", () => {
+	assert.deepEqual(checkCss(':root { --accent: #2f7aae; --red: oklch(.5 .15 28); --r-sm: 6px; --r-md: 8px; --r-lg: 12px; } .error { color: var(--red); border-radius: var(--r-lg); }'), []);
+	assert.equal(errors(checkCss('.error { color: #2f7aae; }')).length, 1);
 });

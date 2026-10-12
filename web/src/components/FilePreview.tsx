@@ -2,7 +2,13 @@ import { UiIcon } from "./UiIcon";
 import type { CurrentFileContext, ReadCurrentFile, SaveCurrentFile } from "../current-file";
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, MutableRefObject } from "react";
-import { LuCheck as FiCheck, LuSave as FiSave, LuEllipsis as FiMoreHorizontal, LuZoomIn as FiZoomIn, LuZoomOut as FiZoomOut } from "react-icons/lu";
+import {
+	FiCheck,
+	FiSave,
+	FiMoreHorizontal,
+	FiZoomIn,
+	FiZoomOut,
+} from "react-icons/fi";
 import type { ClientMessage, FileContent, ServerMessage } from "../types";
 import { SqlitePreview } from "./SqlitePreview";
 import { CodeFileEditor } from "./CodeFileEditor";

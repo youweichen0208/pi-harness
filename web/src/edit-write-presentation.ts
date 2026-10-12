@@ -24,7 +24,9 @@ export interface EditWriteChange {
 	errorText: string;
 	output: string;
 	empty: boolean;
-	/** Replacement text from the completed tool call when the SDK supplied no diff. */
+	/** Replacement text preview from the tool arguments when the SDK supplied
+	 * no diff — covers done calls without details.diff and live calls whose
+	 * arguments already streamed completely (issue #66). */
 	fromArguments?: boolean;
 	diffTruncated?: boolean;
 }
@@ -83,7 +85,10 @@ export function editWriteChange(block: UiToolCallBlock, result?: UiMessage, cont
 	const diff = !error && typeof details?.diff === "string" ? details.diff : "";
 	let hunks = parseEditDiff(diff, context);
 	let fromArguments = false;
-	if (!error && result && hunks.length === 0) {
+	// Issue #66: don't require a result — a live edit whose arguments already
+	// streamed can preview the planned change instead of a misleading
+	// "no diff" placeholder.
+	if (!error && hunks.length === 0) {
 		const edits = Array.isArray(args.edits) ? args.edits : [args];
 		hunks = edits.flatMap((edit) => {
 			if (!edit || typeof edit !== "object") return [];
