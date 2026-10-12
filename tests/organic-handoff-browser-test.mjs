@@ -59,6 +59,13 @@ try {
 	await page.locator('.project-item.active').waitFor();
 	assert.equal(await page.locator('.conversation-home-suggestions > button').count(), 2, 'unknown Git status must not be presented as a clean tree');
 	assert(!(await page.locator('.conversation-home-heading').textContent()).includes('未提交改动'));
+	await page.waitForFunction(() => document.querySelector('.conversation-home-heading'));
+	assert(heldScm.length > 0, 'the Git response fixture is available');
+	const failedStatus = JSON.parse(heldScm.at(-1));
+	socket.send(JSON.stringify({ type: 'scm_data', kind: 'status', cwd: failedStatus.cwd, reqId: failedStatus.reqId, ok: false, error: 'Git status unavailable' }));
+	await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+	assert.equal(await page.locator('.conversation-home-suggestions > button').count(), 2, 'failed Git queries must not be presented as a clean tree');
+	assert(!(await page.locator('.conversation-home-heading').textContent()).includes('未提交改动'));
 	holdScm = false; for (const wire of heldScm) socket.send(wire);
 	await page.locator('.conversation-home-suggestions > button', {hasText:'整理 1 处改动'}).waitFor();
 	await page.evaluate(async () => { await document.fonts.load('400 18px Caprasimo'); await document.fonts.load('400 14px Figtree'); await document.fonts.load('600 14px Figtree'); await document.fonts.ready; });

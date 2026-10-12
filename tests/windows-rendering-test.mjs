@@ -28,10 +28,12 @@ try {
 		for (let i = 0; i < 200; i++) { page = app.windows().find(p => p.url().startsWith('http://127.0.0.1:')); if (page) break; await sleep(100); }
 		assert(page, 'local app window starts'); page.setDefaultTimeout(15000);
 		let conversation = false;
+		const scmResponses = [];
 		await page.routeWebSocket('**/ws*', socket => {
 			const upstream = socket.connectToServer(); socket.onMessage(message => upstream.send(message));
 			upstream.onMessage(wire => {
 				const message = JSON.parse(wire.toString());
+				if (message.type === 'scm_data' && message.kind === 'status') scmResponses.push({ ok: message.ok, notRepo: message.notRepo, error: message.error, reqId: message.reqId, cwd: message.cwd });
 				if (message.type === 'snapshot' || message.type === 'snapshot_delta') { message.state.piConfigured = true; message.state.messages = conversation ? transcript : []; message.state.isStreaming = false; message.state.streamingMessage = null; if (message.type === 'snapshot_delta') { message.type = 'snapshot'; delete message.appended; delete message.baseRev; } }
 				socket.send(JSON.stringify(message));
 			});
@@ -59,7 +61,7 @@ try {
 		await page.evaluate(async () => { await Promise.all([400, 500, 600].map(weight => document.fonts.load(`${weight} 16px "UI SC"`, '本质检查'))); await document.fonts.load('400 12px "JetBrains Mono"', '.ruff_cache'); await document.fonts.ready; });
 		const prefix = `${process.platform}-${Math.round(scale * 100)}`;
 		await page.screenshot({ path: join(output, `${prefix}-empty.png`) });
-		assert.equal(await page.locator('.conversation-home-suggestions > button').count(), 2);
+		assert.equal(await page.locator('.conversation-home-suggestions > button').count(), 2, `Non-repository home suggestions; SCM responses: ${JSON.stringify(scmResponses)}`);
 		assert.equal(failures.length, 0, `font resources load successfully: ${JSON.stringify(fonts)}`);
 		assert.equal(new Set(fonts.filter(font => /ui-sc-/.test(font.url)).map(font => font.url)).size, 3);
 		assert(fonts.some(font => /jetbrains-mono/.test(font.url) && font.status === 200));

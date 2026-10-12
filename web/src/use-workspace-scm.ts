@@ -25,7 +25,11 @@ export function useWorkspaceScm(cwd: string, ready: boolean, dirty: number, data
 	}, [cwd, ready, dirty, send]);
 	useEffect(() => {
 		if (data?.type !== "scm_data" || data.kind !== "status" || data.reqId !== request.current || data.cwd !== cwd) return;
-		setStatus({ cwd, files: data.ok ? (data.files ?? []).map((file) => ({ ...file, path: file.path.replaceAll("\\", "/") })) : [], base: data.base ?? "", branch: data.branch ?? "", branches: data.branches ?? [], notRepo: !!data.notRepo });
+		if (!data.ok) {
+			setStatus(null);
+			return;
+		}
+		setStatus({ cwd, files: (data.files ?? []).map((file) => ({ ...file, path: file.path.replaceAll("\\", "/") })), base: data.base ?? "", branch: data.branch ?? "", branches: data.branches ?? [], notRepo: !!data.notRepo });
 	}, [data, cwd]);
 	return status?.cwd === cwd ? { ...status, loaded: true } : { loaded: false, cwd, files: emptyFiles, notRepo: false, base: "", branch: "", branches: [] };
 }
