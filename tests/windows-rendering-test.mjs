@@ -40,7 +40,7 @@ try {
 		await app.evaluate(({ app, BrowserWindow }) => { app.focus({ steal: true }); const w = BrowserWindow.getAllWindows().find(w => w.webContents.getURL().startsWith('http://127.0.0.1:')); w.setContentSize(1440, 900); w.show(); w.focus(); });
 		const cdp = await page.context().newCDPSession(page);
 		const nativeWindow = await app.evaluate(({ app, BrowserWindow }) => { app.focus({ steal: true }); const w = BrowserWindow.getAllWindows().find(w => w.webContents.getURL().startsWith('http://127.0.0.1:')); return { size: w.getContentSize(), background: w.getBackgroundColor() }; });
-		assert.equal(nativeWindow.background.toUpperCase(), '#FBF9F6');
+		assert.equal(nativeWindow.background.toUpperCase(), '#F5EAD8');
 		// Hosted macOS can clamp native windows to its small virtual display. Keep
 		// the comparison canvas identical; still use this OS/Electron font renderer.
 		if (nativeWindow.size[0] !== 1440 || nativeWindow.size[1] !== 900) await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: scale, mobile: false });
@@ -48,20 +48,22 @@ try {
 		const fonts = [], failures = [];
 		page.on('response', response => { if (/\.woff2(?:\?|$)/.test(response.url())) { fonts.push({ url: new URL(response.url()).pathname, status: response.status() }); if (!response.ok()) failures.push(response.url()); } });
 		await page.reload(); await page.locator('.conn-dot.ok').first().waitFor({ state: 'attached' });
-		await page.locator('.workspace-group-manager input').fill('Rendering');
-		await page.locator('.workspace-group-actions button[type=submit]').click();
+		await page.locator('.home-onboarding input').fill('Rendering');
+		await page.locator('.home-onboarding button[type=submit]').click();
+		await page.locator('.fpk-modal').waitFor();
+		await page.keyboard.press('Escape');
 		await page.locator('.workspace-outside button').click();
 		await page.locator('.project-item.active').waitFor();
-		await page.locator('.empty-example-icon svg').first().waitFor();
+		await page.locator('.conversation-home-heading').waitFor();
 		assert.equal(await page.evaluate(() => document.documentElement.dataset.platform), process.platform);
 		await page.evaluate(async () => { await Promise.all([400, 500, 600].map(weight => document.fonts.load(`${weight} 16px "UI SC"`, '本质检查'))); await document.fonts.load('400 12px "JetBrains Mono"', '.ruff_cache'); await document.fonts.ready; });
 		const prefix = `${process.platform}-${Math.round(scale * 100)}`;
 		await page.screenshot({ path: join(output, `${prefix}-empty.png`) });
-		assert.equal(await page.locator('.empty-example-icon svg').count(), 4);
+		assert.equal(await page.locator('.conversation-home-suggestions > button').count(), 2);
 		assert.equal(failures.length, 0, `font resources load successfully: ${JSON.stringify(fonts)}`);
 		assert.equal(new Set(fonts.filter(font => /ui-sc-/.test(font.url)).map(font => font.url)).size, 3);
 		assert(fonts.some(font => /jetbrains-mono/.test(font.url) && font.status === 200));
-		conversation = true; await page.reload(); await page.locator('.msg-text', { hasText: '职责分离' }).waitFor().catch(async error => { await page.screenshot({ path: join(output, `${prefix}-failure.png`) }); writeFileSync(join(output, `${prefix}-failure.txt`), await page.locator('body').innerText()); throw error; }); await page.evaluate(() => document.fonts.ready);
+		conversation = true; await page.reload(); await page.locator('.process-summary').click(); await page.locator('.msg-text', { hasText: '职责分离' }).waitFor().catch(async error => { await page.screenshot({ path: join(output, `${prefix}-failure.png`) }); writeFileSync(join(output, `${prefix}-failure.txt`), await page.locator('body').innerText()); throw error; }); await page.evaluate(() => document.fonts.ready);
 		await cdp.send('DOM.enable'); await cdp.send('CSS.enable');
 		const { root } = await cdp.send('DOM.getDocument'); const { nodeId } = await cdp.send('DOM.querySelector', { nodeId: root.nodeId, selector: '.msg-text h2' });
 		const rendered = await cdp.send('CSS.getPlatformFontsForNode', { nodeId });
@@ -73,11 +75,11 @@ try {
 		assert(await page.locator('[data-tree-node=".ruff_cache"] .file-name').evaluate(el => getComputedStyle(el).fontFamily === getComputedStyle(el.closest('[data-tree-node]')).fontFamily), 'tree labels use the reference UI font');
 		const metrics = await page.evaluate(() => ({ width: innerWidth, height: innerHeight, dpr: devicePixelRatio, platform: document.documentElement.dataset.platform, appearance: document.documentElement.dataset.appearance, bodySize: getComputedStyle(document.body).fontSize, fontSmoothing: getComputedStyle(document.body).webkitFontSmoothing, treeLabelWidth: (() => { const range = document.createRange(); range.selectNodeContents(document.querySelector('[data-tree-node=".ruff_cache"] .file-name')); return range.getBoundingClientRect().width; })() }));
 		if (process.platform === 'win32') assert.equal(metrics.fontSmoothing, 'auto');
-		assert.equal(metrics.bodySize, process.platform === 'win32' ? '14.5px' : '14px');
+		assert.equal(metrics.bodySize, '14.5px');
 		assert.equal(metrics.width, 1440); assert.equal(metrics.height, 900); assert.equal(metrics.dpr, scale);
-		for (const selector of ['.panel-right > .panel-title > span:first-child', '.bash-group-head > span']) for (const item of await page.locator(selector).all()) assert.equal(await item.evaluate(el => getComputedStyle(el).whiteSpace), 'nowrap');
+		for (const selector of ['.panel-right .panel-title > span:first-child', '.bash-group-head > span']) for (const item of await page.locator(selector).all()) assert.equal(await item.evaluate(el => getComputedStyle(el).whiteSpace), 'nowrap');
 		await page.mouse.move(720, 880); await page.screenshot({ path: join(output, `${prefix}-conversation.png`) });
-		const scroll = page.locator('.panel-right > .panel-body');
+		const scroll = page.locator('.panel-right .panel-body');
 		await scroll.waitFor();
 		assert(await scroll.evaluate(el => el.scrollHeight > el.clientHeight), 'fixture must exercise a real scroll container');
 		const scrollbarState = () => scroll.evaluate(el => { const track = getComputedStyle(el, '::-webkit-scrollbar'), thumb = getComputedStyle(el, '::-webkit-scrollbar-thumb'); return { width: track.width, border: thumb.borderLeftWidth, radius: thumb.borderRadius, background: thumb.backgroundColor, scrollTop: el.scrollTop }; });
@@ -89,7 +91,7 @@ try {
 			return page.evaluate(async ({ png, scale, bounds }) => { const img = new Image(); img.src = `data:image/png;base64,${png}`; await img.decode(); const canvas = document.createElement('canvas'); canvas.width = img.width; canvas.height = img.height; const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0); const bytes = ctx.getImageData(Math.round((bounds.x + bounds.width - 4) * scale), Math.round(bounds.y * scale), 1, Math.floor(bounds.height * scale)).data; return Array.from({ length: Math.floor(bounds.height * scale) }, (_, y) => [...bytes.slice(y * 4, y * 4 + 4)]); }, { png, scale, bounds });
 		};
 		await page.mouse.move(720, 880);
-		await page.waitForFunction(() => !document.querySelector('.panel-right > .panel-body').matches(':hover'));
+		await page.waitForFunction(() => !document.querySelector('.panel-right .panel-body').matches(':hover'));
 		await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 		const baseline = await thumbRaster();
 		const paintedThumb = pixels => {
@@ -106,7 +108,7 @@ try {
 		const resting = { ...await scrollbarState(), pixel: baseline[Math.round(12 * scale)] };
 		assert.equal(resting.width, '8px'); assert.equal(parseFloat(resting.border), Math.floor(2 * scale) / scale, '2 CSS px borders are snapped to whole device pixels'); assert.equal(resting.radius, '4px'); assert.equal(resting.background, 'rgba(0, 0, 0, 0)');
 		await scroll.hover();
-		await page.waitForFunction(() => document.querySelector('.panel-right > .panel-body').matches(':hover'));
+		await page.waitForFunction(() => document.querySelector('.panel-right .panel-body').matches(':hover'));
 		await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 		const hovered = { ...await scrollbarState(), ...paintedThumb(await thumbRaster()) };
 		await page.screenshot({ path: join(output, `${prefix}-scrollbar.png`) });

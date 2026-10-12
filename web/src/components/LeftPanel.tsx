@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import { memo, useEffect, useRef, useState, type ReactNode } from "react";
 import { LuCheck as FiCheck, LuChevronDown as FiChevronDown, LuChevronRight as FiChevronRight, LuEllipsis as FiMoreHorizontal, LuPlus as FiPlus, LuSettings as FiSettings, LuX as FiX } from "react-icons/lu";
 import type {
@@ -24,6 +25,8 @@ import { useI18n } from "../i18n";
  *  and conversation lists on every delta. Add a prop here when adding a chat
  *  field usage — TypeScript enforces it at the call site. */
 interface LeftPanelProps {
+	welcomeHost?: HTMLElement | null;
+	onOpenDirect?: () => void;
 	footer: ReactNode;
 	serverVersion: string | null;
 	incidentState?: "stopped" | "reminding" | "recovered";
@@ -74,7 +77,7 @@ function formatModified(ts: number, yesterday: string): string {
 }
 
 export const LeftPanel = memo(function LeftPanel({ footer, serverVersion,
-	incidentState, onOpenSettings, onNewChat, ready, status, cwd, sessionFile, conversations, sessions, projects, projectWorkspaces, projectWorkspaceResult, dirBrowse, activeConversationId, send, active }: LeftPanelProps) {
+	welcomeHost, onOpenDirect, incidentState, onOpenSettings, onNewChat, ready, status, cwd, sessionFile, conversations, sessions, projects, projectWorkspaces, projectWorkspaceResult, dirBrowse, activeConversationId, send, active }: LeftPanelProps) {
 	const { t, locale } = useI18n();
 	const [selectedWorkspace, setSelectedWorkspace] = useState(() => {
 		try { return localStorage.getItem("pi-harness:project-workspace") ?? ""; } catch { return ""; }
@@ -85,6 +88,7 @@ export const LeftPanel = memo(function LeftPanel({ footer, serverVersion,
 	const [workspaceQuery, setWorkspaceQuery] = useState("");
 	const [workspaceError, setWorkspaceError] = useState("");
 	const [deletingWorkspace, setDeletingWorkspace] = useState(false);
+	const welcomeCreation = useRef(false);
 	const [workspacePending, setWorkspacePending] = useState<{ requestId: string; kind: ProjectWorkspaceAction["kind"] } | null>(null);
 	const selectedGroup = projectWorkspaces?.workspaces.find((group) => group.id === selectedWorkspace);
 	const workspaceBusy = !ready || status !== "open" || !projectWorkspaces || !!workspacePending;
@@ -109,7 +113,10 @@ export const LeftPanel = memo(function LeftPanel({ footer, serverVersion,
 	useEffect(() => {
 		if (!workspacePending || projectWorkspaceResult?.requestId !== workspacePending.requestId) return;
 		if (projectWorkspaceResult.ok) {
-			if (workspacePending.kind === "create") chooseWorkspace(projectWorkspaceResult.workspaceId ?? "");
+			if (workspacePending.kind === "create") {
+				chooseWorkspace(projectWorkspaceResult.workspaceId ?? "");
+				if (welcomeCreation.current) { setPicking(true); welcomeCreation.current = false; }
+			}
 			if (workspacePending.kind === "add") setPicking(false);
 			setWorkspaceError("");
 		} else setWorkspaceError(projectWorkspaceResult.error ?? t("workspaceSaveFailed"));
@@ -124,6 +131,7 @@ export const LeftPanel = memo(function LeftPanel({ footer, serverVersion,
 	const changeWorkspace = (action: ProjectWorkspaceAction) => {
 		if (workspaceBusy || !projectWorkspaces) return;
 		const requestId = randomUuid();
+		welcomeCreation.current = action.kind === "create" && !!welcomeHost;
 		if (send({ type: "project_workspace_action", requestId, revision: projectWorkspaces.revision, action })) {
 			setWorkspacePending({ requestId, kind: action.kind }); setWorkspaceError("");
 		} else setWorkspaceError(t("workspaceSaveFailed"));
@@ -181,7 +189,6 @@ export const LeftPanel = memo(function LeftPanel({ footer, serverVersion,
 		if (!cwd) return;
 		send({ type: "list_sessions" });
 		send({ type: "list_projects" });
-		send({ type: "list_project_workspaces" });
 	}, [active, ready, status, cwd, send]);
 
 	const displayName = (s: SessionSummary): string => {
@@ -369,8 +376,8 @@ export const LeftPanel = memo(function LeftPanel({ footer, serverVersion,
 	);
 	return (
 		<aside className="panel panel-left">
-			<div className="sidebar-brand"><span className="sidebar-logo"><img src="/icon/1a-mark.svg" alt="" /></span><strong>pi-harness</strong></div>
-			<div className="workspace-groups">
+			<div className="sidebar-brand"><span className="sidebar-logo"><img src="/icon/1a-mark.svg" alt="" /></span><strong>pi-harness</strong>{!welcomeHost && <button type="button" className="sidebar-new-chat" title={t("newChat")} aria-label={t("newChat")} disabled={!ready} onClick={onNewChat}><FiPlus /></button>}</div>
+			<div className="workspace-groups" hidden={!!welcomeHost}>
 				<div className="workspace-group-row">
 					<select aria-label={t("workspaceSelect")} value={selectedGroup?.id ?? ""} disabled={!projectWorkspaces || !!workspacePending} onChange={(event) => chooseWorkspace(event.target.value)}>
 						{!selectedGroup && <option value="" disabled>{t("workspaceSelect")}</option>}
@@ -378,7 +385,7 @@ export const LeftPanel = memo(function LeftPanel({ footer, serverVersion,
 					</select>
 					<button type="button" aria-label={t("workspaceManage")} title={t("workspaceManage")} aria-expanded={managingWorkspace || projectWorkspaces?.workspaces.length === 0} onClick={() => setManagingWorkspace((value) => !value)}><FiSettings /></button>
 				</div>
-				{projectWorkspaces && (managingWorkspace || projectWorkspaces.workspaces.length === 0) && <div className="workspace-group-manager">
+				{projectWorkspaces && (managingWorkspace || (projectWorkspaces.workspaces.length === 0 && !welcomeHost)) && <div className="workspace-group-manager">
 					{projectWorkspaces.workspaces.length === 0 && <p>{t("workspaceFirstStart")}</p>}
 					<form onSubmit={(event) => { event.preventDefault(); if (workspaceName.trim()) changeWorkspace({ kind: "create", name: workspaceName }); }}>
 						<input aria-label={t("workspaceName")} placeholder={t("workspaceName")} value={workspaceName} maxLength={80} disabled={workspaceBusy} onChange={(event) => setWorkspaceName(event.target.value)} />
@@ -397,6 +404,17 @@ export const LeftPanel = memo(function LeftPanel({ footer, serverVersion,
 				{selectedGroup && <input className="workspace-project-search" type="search" aria-label={t("workspaceSearch")} placeholder={t("workspaceSearch")} value={workspaceQuery} onChange={(event) => setWorkspaceQuery(event.target.value)} />}
 				{selectedGroup && !selectedGroup.paths.includes(currentCwd) && <div className="workspace-outside"><span>{t("workspaceOutside")}</span><button type="button" disabled={workspaceBusy} onClick={() => changeWorkspace({ kind: "add", id: selectedGroup.id, path: currentCwd })}>{t("workspaceAddCurrent")}</button></div>}
 			</div>
+			{welcomeHost && <div className="sidebar-welcome-hint"><span>{t("workspaceProjects")}</span><p>{t("homeSidebarHint")}</p></div>}
+			{welcomeHost && createPortal(<section className="home-onboarding">
+				<h1>{t("homeWelcomeTitle")}</h1><p>{t("homeWelcomeDescription")}</p>
+				<ol><li>{t("homeStepName")}</li><li>{t("homeStepFolder")}</li><li>{t("homeStepChat")}</li></ol>
+				<form onSubmit={event => { event.preventDefault(); if (workspaceName.trim()) changeWorkspace({ kind: "create", name: workspaceName }); }}>
+					<input aria-label={t("workspaceName")} placeholder={t("homeNamePlaceholder")} value={workspaceName} maxLength={80} disabled={workspaceBusy} onChange={event => setWorkspaceName(event.target.value)} />
+					<button type="submit" disabled={workspaceBusy || !workspaceName.trim()}>{t("workspaceCreate")}</button>
+				</form>
+				{workspaceError && <p role="alert">{workspaceError}</p>}
+				<button type="button" className="home-open-folder" disabled={!ready} onClick={() => setPicking(true)}>{t("homeOpenFolder")}</button>
+			</section>, welcomeHost)}
 			{selectedGroup && <div className="panel-projects">
 				{/* 加项目收进分组标题行：它是个偶尔用一次的动作，不值得在列表
 				    最上面常驻一整行。 */}
@@ -477,7 +495,7 @@ export const LeftPanel = memo(function LeftPanel({ footer, serverVersion,
 				{footer}
 			</div>
 
-			{picking && selectedGroup && (
+			{picking && createPortal(
 				<FolderPickerModal
 					dirBrowse={dirBrowse}
 					busy={workspaceBusy}
@@ -485,10 +503,11 @@ export const LeftPanel = memo(function LeftPanel({ footer, serverVersion,
 					pickLabel={t("workspaceAddProject")}
 					onBrowse={(path) => send({ type: "browse_dirs", path })}
 					onPick={(path) => {
-						changeWorkspace({ kind: "add", id: selectedGroup.id, path });
+						if (selectedGroup) changeWorkspace({ kind: "add", id: selectedGroup.id, path });
+						else if (send({ type: "set_cwd", path, source: "ui" })) { setPicking(false); onOpenDirect?.(); }
 					}}
 					onClose={() => setPicking(false)}
-				/>
+				/>, document.body
 			)}
 		</aside>
 	);

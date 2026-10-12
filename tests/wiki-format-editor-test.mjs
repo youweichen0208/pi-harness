@@ -18,6 +18,11 @@ try {
 	const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
 	await page.goto(`http://127.0.0.1:${port}`);
 	await page.locator('.setup-modal .modal-close').click();
+	await page.locator('.home-onboarding input').fill('Documents');
+	await page.locator('.home-onboarding button[type=submit]').click();
+	await page.locator('.fpk-modal').waitFor();
+	await page.keyboard.press('Escape');
+	await page.locator('.workspace-outside button').click();
 	await page.locator('.file-name', { hasText: 'note.md' }).click();
 	const editor = page.locator('.wiki-prose .fp-rich-document');
 	await page.waitForFunction(() => [...(CSS.highlights.get('rich-code-keyword') ?? [])].some(range => range.toString() === 'public'));

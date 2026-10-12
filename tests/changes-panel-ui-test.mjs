@@ -49,6 +49,8 @@ try {
 	await page.goto(`http://localhost:${port}`);
 	await page.locator('.change-summary').waitFor();
 	assert.equal(await page.locator('.change-card').count(),0);
+	assert.equal(await page.locator('.process-summary').getAttribute('aria-expanded'), 'false');
+	await page.locator('.process-summary').click();
 	assert.equal(await page.locator('.bash-group.historical-step').count(),1);
 	assert.match(await page.locator('.bash-group-head').textContent(),/先检查应用配置/);
 	await page.locator('.bash-group-head').click(); assert.equal(await page.locator('.bash-row').count(),1);

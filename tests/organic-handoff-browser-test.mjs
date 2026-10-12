@@ -1,6 +1,6 @@
 /** Organic handoff: real UI, offline fonts, navigation and responsive surfaces. */
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -9,6 +9,7 @@ import { CHROME_PATH } from './lib/chrome.mjs';
 import { portUp } from './lib/port-utils.mjs';
 const port = 9286, root = mkdtempSync(join(tmpdir(), 'pi-organic-'));
 const cwd = join(root, 'organic-workspace'); mkdirSync(cwd);
+execFileSync('git', ['init', '-q'], { cwd });
 writeFileSync(join(cwd, 'README.md'), '# Organic workspace\n\n用于阅读、编辑和分析的工作区。\n\n## A calmer workspace\n\nFigtree body text and 中文正文。\n\n```js\nconst workspace = "organic";\n```\n');
 let server, browser;
 try {
@@ -31,8 +32,28 @@ try {
 	await page.goto(`http://127.0.0.1:${port}`);
 	await page.locator('.setup-modal .modal-close').click();
 	await page.locator('.sidebar-connection .conn-dot.ok').waitFor();
-	await page.locator('.workspace-group-manager input').fill('Studio');
-	await page.locator('.workspace-group-actions button[type=submit]').click();
+	mkdirSync('tests/scratch', { recursive: true });
+	await page.locator('.home-onboarding').waitFor();
+	assert.equal(await page.locator('.inputbar').isVisible(), false);
+	await page.screenshot({path:'tests/scratch/home-1a-first.png'});
+	const mobile = await browser.newPage({viewport:{width:390,height:844}});
+	await mobile.goto(`http://127.0.0.1:${port}`);
+	await mobile.locator('.setup-modal .modal-close').click();
+	await mobile.locator('.home-onboarding').waitFor();
+	assert(await mobile.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+	await mobile.screenshot({path:'tests/scratch/home-1a-mobile-first.png'});
+	await mobile.locator('.home-open-folder').click();
+	await mobile.locator('.fpk-modal').waitFor();
+	await mobile.locator('.fpk-modal input').fill(cwd);
+	await mobile.locator('.fpk-open-btn').click();
+	await mobile.locator('.conversation-home-heading').waitFor();
+	assert(await mobile.locator('.inputbar textarea').isVisible());
+	await mobile.screenshot({path:'tests/scratch/home-1a-mobile-new.png'});
+	await mobile.close();
+	await page.locator('.home-onboarding input').fill('Studio');
+	await page.locator('.home-onboarding button[type=submit]').click();
+	await page.locator('.fpk-modal').waitFor();
+	await page.keyboard.press('Escape');
 	await page.locator('.workspace-outside button').click();
 	await page.locator('.project-item.active').waitFor();
 	await page.evaluate(async () => { await document.fonts.load('400 18px Caprasimo'); await document.fonts.load('400 14px Figtree'); await document.fonts.load('600 14px Figtree'); await document.fonts.ready; });
@@ -40,7 +61,7 @@ try {
 	const tokens = await page.evaluate(() => Object.fromEntries(['--bg','--accent','--link','--sidebar-bg','--r-sm','--r-md','--r-lg','--r-waiting','--fs-base'].map(k => [k, getComputedStyle(document.documentElement).getPropertyValue(k).trim()])));
 	assert.deepEqual(tokens, {'--bg':'#f5ead8','--accent':'#c67139','--link':'#8c491a','--sidebar-bg':'#ebddc5','--r-sm':'999px','--r-md':'22px','--r-lg':'28px','--r-waiting':'50%','--fs-base':'14.5px'});
 	assert.equal(await page.locator('.statusbar').count(), 0);
-	assert.deepEqual(await page.locator('.view-switch [role=tab]').allTextContents(), ['对话','终端','Git']);
+	assert.deepEqual((await page.locator('.view-switch [role=tab]').allTextContents()).map(text => text.replace(/\d+$/, '')), ['对话','终端','Git']);
 	assert.equal(await page.locator('.sidebar-brand strong').evaluate(el => getComputedStyle(el).fontFamily.split(',')[0].replaceAll('"','')), 'Caprasimo');
 	assert.equal(await page.locator('.panel-left').evaluate(el => getComputedStyle(el).borderTopLeftRadius), '28px');
 	assert((await page.locator('.drawer-left').boundingBox()).x >= 9);
@@ -48,6 +69,9 @@ try {
 	assert.equal(await page.locator('.inputbox').evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(249, 244, 237)');
 	assert.equal(await page.locator('.topbar .view-switch svg').first().evaluate(el => getComputedStyle(el).strokeWidth), '2.5px');
 	mkdirSync('tests/scratch', { recursive: true });
+	await page.locator('.inputbar textarea').fill('Review this workspace');
+	await page.locator('.conversation-home-suggestions > button').last().click();
+	assert((await page.locator('.inputbar textarea').inputValue()).startsWith('Review this workspace\n\n'));
 	await page.locator('.inputbar textarea').fill('Review this workspace');
 	await page.screenshot({path:'tests/scratch/organic-chat.png'});
 	const more = page.locator('.workspace-more > .dropdown > button');
@@ -87,6 +111,31 @@ try {
 	await page.locator('.drawer-left.open .sidebar-connection').waitFor();
 	await page.screenshot({path:'tests/scratch/organic-mobile-sidebar.png'});
 	await page.setViewportSize({width:1440,height:1000});
+	const processMessages = [
+		{id:'home-user',role:'user',content:[{type:'text',text:'Review the workspace'}]},
+		{id:'home-read',role:'assistant',content:[{type:'text',text:'Inspecting the project.'},{type:'toolCall',id:'home-read-call',name:'read',argumentsText:JSON.stringify({path:'README.md'})}]},
+		{id:'home-read-result',role:'toolResult',toolCallId:'home-read-call',toolName:'read',content:[{type:'text',text:'Project overview'}]},
+		{id:'home-bash',role:'assistant',content:[{type:'toolCall',id:'home-bash-call',name:'bash',argumentsText:JSON.stringify({command:'pwd'})}]},
+		{id:'home-bash-result',role:'toolResult',toolCallId:'home-bash-call',toolName:'bash',content:[{type:'text',text:cwd}]},
+		{id:'home-answer',role:'assistant',content:[{type:'text',text:'The workspace is ready for review.'}]},
+	];
+	socket.send(JSON.stringify({type:'snapshot',state:{...baseState,isStreaming:false,streamingMessage:null,messages:processMessages,taskProgress:{id:'home-task',conversationId:baseState.conversationId,sourceMessageId:'home-user',title:'Review workspace',status:'done',startedAt:Date.now(),completed:2,steps:[],plan:{revision:1,added:0,removed:0,items:[{id:'inspect',title:'Read the project',status:'done'},{id:'review',title:'Review the workspace',status:'done'}]}}}}));
+	await page.locator('.process-summary').waitFor();
+	assert.equal(await page.locator('.process-summary').count(),1);
+	assert.equal(await page.locator('.process-summary').getAttribute('aria-expanded'),'false');
+	assert.equal(await page.locator('.msg-text',{hasText:'Inspecting the project.'}).isVisible(),false);
+	await page.getByText('The workspace is ready for review.',{exact:true}).waitFor();
+	await page.screenshot({path:'tests/scratch/home-1a-conversation.png'});
+	await page.locator('.process-summary').click();
+	await page.getByText('Inspecting the project.',{exact:true}).first().waitFor();
+	await page.locator('.process-summary').click();
+	await page.evaluate(() => window.dispatchEvent(new CustomEvent('pi:jump-tool',{detail:{messageId:'home-bash',toolCallId:'home-bash-call'}})));
+	await page.waitForFunction(() => document.querySelector('.process-summary')?.getAttribute('aria-expanded') === 'true');
+	await page.locator('#right-turn-tab').click();
+	await page.locator('#right-turn-panel').waitFor();
+	await page.locator('#right-turn-tab').press('ArrowRight');
+	assert.equal(await page.locator('#right-files-tab').getAttribute('aria-selected'),'true');
+	assert.equal(await page.locator('.inputbar textarea').inputValue(),'Review this workspace');
 	socket.send(JSON.stringify({type:'snapshot',state:{...baseState,isStreaming:true,streamingMessage:null,messages:[{id:'organic-wait',role:'user',content:[{type:'text',text:'Analyze this workspace'}]}]}}));
 	await page.locator('.waiting-brand').waitFor();
 	const dots = await page.locator('.waiting-brand i').evaluateAll(nodes => nodes.map(el => { const style = getComputedStyle(el); return [style.backgroundColor, style.borderRadius, style.animationName]; }));

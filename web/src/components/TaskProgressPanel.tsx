@@ -49,10 +49,11 @@ export function TaskProgressPanel({ task, silence, cwd, messages, onPreview, str
 	return <div className={`task-progress task-sections ${interrupted ? "interrupted" : reminding ? "reminding" : task?.status ?? "empty"}`} tabIndex={-1} aria-label={t("taskProgress")}>
 		<div className="task-sections-scroll" ref={scrollRef}>
 			<section className="task-section">
-				<button type="button" className="task-section-heading" aria-expanded={progressOpen} onClick={() => setProgressOpen(value => !value)}><FiChevronRight className={progressOpen ? "open" : ""} />{t("taskProgressHeading")}</button>
+				<button type="button" className="task-section-heading" aria-expanded={progressOpen} onClick={() => setProgressOpen(value => !value)}><FiChevronRight className={progressOpen ? "open" : ""} />{t("taskProgressHeading")}{items.length > 0 && <small>{t("homePlanCount", { done: items.filter(item => item.status === "done").length, total: items.length })}</small>}</button>
 				{progressOpen && <div className="task-section-content">
 					{status && (!interrupted || !!task?.plan) && <p className={`task-progress-status task-progress-source ${interrupted ? "interrupted" : reminding ? "reminding" : task?.status}`} role="status">{reminding && <i aria-hidden="true" />}{status}</p>}
 					{task?.plan && items.length ? <>
+						<progress className="home-plan-progress" aria-label={t("taskProgressHeading")} max={items.length} value={items.filter(item => item.status === "done").length} />
 						{task.plan.completionCriteria && <p className="task-outline-criteria">{t("taskCompletionCriteria")}：{task.plan.completionCriteria}</p>}
 						<div className="task-plan-list">{items.map(item => <div key={item.id} className={`task-plan-step ${interrupted && item.status === "running" ? "interrupted" : item.status}${expanded === item.id ? " expanded" : ""}`}>
 							<button type="button" className="task-plan-step-head" aria-expanded={expanded === item.id} onClick={() => setExpanded(value => value === item.id ? null : item.id)}>
@@ -73,7 +74,7 @@ export function TaskProgressPanel({ task, silence, cwd, messages, onPreview, str
 				</div>}
 			</section>
 			<section className="task-section">
-				<button type="button" className="task-section-heading" aria-expanded={outputsOpen} onClick={() => setOutputsOpen(value => !value)}><FiChevronRight className={outputsOpen ? "open" : ""} />{t("taskOutputsHeading")}</button>
+				<button type="button" className="task-section-heading" aria-expanded={outputsOpen} onClick={() => setOutputsOpen(value => !value)}><FiChevronRight className={outputsOpen ? "open" : ""} />{t("taskOutputsHeading")}<small>{files.length}</small></button>
 				{outputsOpen && <div className="task-section-content">{files.length ? <div className="task-file-results">{files.map(file => <div className="task-file-result" key={file.path}>
 					<FiFile aria-hidden="true" /><button type="button" title={file.path} onClick={() => preview(file.path)}><span>{file.path.split("/").at(-1)}</span>{file.path.includes("/") && <small>{file.path}</small>}</button>
 					{file.counted && <span className="task-file-counts"><span>+{file.added}</span> <span>−{file.removed}</span></span>}

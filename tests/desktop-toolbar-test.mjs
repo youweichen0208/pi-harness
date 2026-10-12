@@ -43,7 +43,7 @@ try {
 			await page.locator('.tab-change-count', { hasText: String(changeCount) }).waitFor();
 			assert.equal(await page.locator('.tab-change-count').evaluate(el => getComputedStyle(el).color), 'rgb(140, 73, 26)');
 			assert.equal(await page.locator('.tab-change-count').evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(255, 225, 208)');
-			await page.waitForFunction(() => getComputedStyle(document.querySelector('.view-switch button.active')).color === 'rgb(198, 113, 57)');
+			await page.waitForFunction(() => getComputedStyle(document.querySelector('.view-switch button.active')).color === 'rgb(140, 73, 26)');
 			assert.equal(await page.locator('.topbar').evaluate(el => el.getBoundingClientRect().height), 44);
 			assert.equal(await page.locator('.status-messages').count(), 0);
 			assert.equal(await page.locator('.topbar-actions > .icon-btn').count(), 0);
@@ -90,8 +90,13 @@ try {
 			}
 			await page.locator('.header-task-progress').click();
 			await page.locator('.task-progress:visible').waitFor();
-			assert(await page.locator('.task-progress').evaluate(el => document.activeElement === el));
-			assert.equal(await page.locator('.panel-right > .panel-title').evaluate(el => el.getBoundingClientRect().height), 40);
+			await page.waitForFunction(() => document.activeElement?.classList.contains('task-progress'));
+			await page.locator('#right-files-tab').click();
+			if (width <= 1100) await page.keyboard.press('Escape');
+			await page.locator('.header-task-progress').click();
+			await page.waitForFunction(() => document.activeElement?.classList.contains('task-progress'));
+			await page.locator('#right-files-tab').click();
+			assert.equal(await page.locator('.panel-right .panel-title').evaluate(el => el.getBoundingClientRect().height), 40);
 			assert.equal(await page.locator('.tree-filter').textContent(), `改动 ${changeCount}`);
 			if (width === 1500) {
 				await page.locator('.topbar-actions > .panel-toggle').click();
@@ -100,7 +105,7 @@ try {
 				await page.locator('.tab-change-count', { hasText: String(changeCount) }).waitFor();
 			assert.equal(await page.locator('.tab-change-count').evaluate(el => getComputedStyle(el).color), 'rgb(140, 73, 26)');
 			assert.equal(await page.locator('.tab-change-count').evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(255, 225, 208)');
-			await page.waitForFunction(() => getComputedStyle(document.querySelector('.view-switch button.active')).color === 'rgb(198, 113, 57)');
+			await page.waitForFunction(() => getComputedStyle(document.querySelector('.view-switch button.active')).color === 'rgb(140, 73, 26)');
 				await page.locator('.topbar-actions > .panel-toggle').click();
 				await page.locator('.tree-filter', { hasText: `改动 ${changeCount}` }).waitFor();
 				await page.locator('.project-panel-toggle').click();

@@ -328,6 +328,17 @@ export const ChatInput = memo(function ChatInput({
 		return () => window.removeEventListener("pi-web:fill", onFill);
 	}, []);
 
+	useEffect(() => {
+		const append = (event: Event) => {
+			const detail = (event as CustomEvent<{ cwd: string; text: string }>).detail;
+			if (!active || detail.cwd !== cwd) return;
+			setText(previous => previous ? `${previous}\n\n${detail.text}` : detail.text);
+			taRef.current?.focus();
+		};
+		window.addEventListener("pi-web:append-prompt", append);
+		return () => window.removeEventListener("pi-web:append-prompt", append);
+	}, [active, cwd]);
+
 	// Esc closes the /help modal.
 	useEffect(() => {
 		if (!showHelp) return;
