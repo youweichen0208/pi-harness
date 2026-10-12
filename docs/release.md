@@ -1,5 +1,9 @@
 # 发布流程
 
+## 1.5.0 安静工作台与数据库分析
+
+完成首页 1a、文档／数据库弹窗与 Organic 界面验证后，基于最新 `origin/develop` 提交并推送，再推送 `v1.5.0` 标签触发三平台桌面发布。版本在 package.json 与 package-lock.json 同步为 1.5.0；SDK 1.0.4、协议 v42 保持不变。本次发布 GitHub Release，不包含 npm 发布。内置文档转换移除及数据库只读限制见 `.github/release-notes/v1.5.0.md`。同一提交 CI、三平台构建与打包回归和附件核对全部通过后公开。
+
 ## 1.3.1 全页面交互与布局优化
 
 从 develop 发布本轮 UI 优化，覆盖文件树、无内层蓝框输入区、响应式工作台、弹窗焦点、媒体状态及插件错误重试。保持 SDK 1.0.4 与协议 v42。GitHub 三平台产物和同一提交 CI 通过后公开；npm 沿用网页登录验证流程。说明见 `.github/release-notes/v1.3.1.md`。
