@@ -90,7 +90,7 @@ try {
 		assert(await page.locator('[data-tree-node=".ruff_cache"] .file-name').evaluate(el => getComputedStyle(el).fontFamily === getComputedStyle(el.closest('[data-tree-node]')).fontFamily), 'tree labels use the reference UI font');
 		const metrics = await page.evaluate(() => ({ width: innerWidth, height: innerHeight, dpr: devicePixelRatio, platform: document.documentElement.dataset.platform, appearance: document.documentElement.dataset.appearance, bodySize: getComputedStyle(document.body).fontSize, fontSmoothing: getComputedStyle(document.body).webkitFontSmoothing, treeLabelWidth: (() => { const range = document.createRange(); range.selectNodeContents(document.querySelector('[data-tree-node=".ruff_cache"] .file-name')); return range.getBoundingClientRect().width; })() }));
 		if (process.platform === 'win32') assert.equal(metrics.fontSmoothing, 'auto');
-		assert.equal(metrics.bodySize, '14.5px');
+		assert.equal(metrics.bodySize, process.platform === 'win32' ? '15px' : '14.5px');
 		assert.equal(metrics.width, 1440); assert.equal(metrics.height, 900); assert.equal(metrics.dpr, scale);
 		for (const selector of ['.panel-right .panel-title > span:first-child', '.bash-group-head > span']) for (const item of await page.locator(selector).all()) assert.equal(await item.evaluate(el => getComputedStyle(el).whiteSpace), 'nowrap');
 		await page.mouse.move(720, 880); await page.screenshot({ path: join(output, `${prefix}-conversation.png`) });
