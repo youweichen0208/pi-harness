@@ -11,6 +11,8 @@ import rehypeHighlight from "rehype-highlight";
 import { remarkCjkAutolink } from "../remark-cjk-autolink";
 import { CopyButton } from "./copy-button";
 import { MermaidDiagram } from "./MermaidDiagram";
+import { DesignTree } from "./DesignTree";
+import { parseTextTree } from "../design-tree";
 
 interface MarkdownProps {
 	text: string;
@@ -77,6 +79,9 @@ export function PreWithCopy({ children, fileLinks, showLanguage, ...props }: JSX
 	const code = codeText(children);
 	const child = Array.isArray(children) ? children[0] : children;
 	const language = child && typeof child === "object" && "props" in child ? /language-([\w+-]+)/.exec(String(child.props.className ?? ""))?.[1] : undefined;
+	// Replies draw design trees as box-drawing art; user-pasted text keeps its exact shape.
+	const tree = !fileLinks && !showLanguage ? parseTextTree(code) : null;
+	if (tree) return <DesignTree tree={tree} source={code} />;
 	return (
 		<div className={`codeblock${asciiTable ? " ascii-table" : ""}`}>
 			{showLanguage ? <div className="codeblock-heading"><span>{language}</span><CopyButton text={code} label /></div> : <CopyButton text={code} />}

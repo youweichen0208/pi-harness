@@ -79,7 +79,7 @@ try {
 	assert.equal(await page.locator('.task-file-result').count(), 0);
 	assert.equal(await page.locator('.task-artifact-row').count(), 0);
 	await page.locator('[data-tool-call-id="attempt-2"] > .bash-row-head').click();
-	assert.match(await page.locator('[data-tool-call-id="attempt-1"] .bash-row-stats').innerText(), /0 行/);
+	assert.match(await page.locator('[data-tool-call-id="attempt-1"] .bash-row-stats').innerText(), /0 lines/);
 	assert(await page.locator('[data-tool-call-id="attempt-1"]').evaluate(el=>el.classList.contains('empty')));
 	for (const id of ['attempt-2','read-3']) socket.send(JSON.stringify({type:'tool_status',conversationId:snapshot.state.conversationId,toolCallId:id,toolName:'bash',isError:false,running:false,durationMs:50}));
 	assert(!(await page.locator('.bash-row-stats').allTextContents()).some(text=>text.includes('0.0s') || text.includes('<0.1s')));

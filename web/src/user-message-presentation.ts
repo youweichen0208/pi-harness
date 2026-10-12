@@ -1,3 +1,34 @@
+import type { UiMessage } from "../../server/protocol.js";
+
+/** Text that identifies a user question, ignoring surrounding whitespace. */
+function userText(message: UiMessage): string {
+	return (message.questionText ?? message.content.map(block => block.type === "text" && typeof block.text === "string" ? block.text : "").join("\n")).trim();
+}
+
+/** Identical user messages with no visible reply between them render once (3a).
+ * Images and attachments make a message distinct, so only plain text repeats merge. */
+export function repeatedUserMessages(messages: readonly UiMessage[]) {
+	const counts = new Map<string, number>();
+	const hidden = new Map<string, string>();
+	let kept: UiMessage | undefined;
+	for (const message of messages) {
+		if (message.role === "user") {
+			const plain = message.content.every(block => block.type === "text") && !message.userAttachments?.length;
+			const text = plain ? userText(message) : "";
+			if (kept && text && text === userText(kept)) {
+				counts.set(kept.id, (counts.get(kept.id) ?? 1) + 1);
+				hidden.set(message.id, kept.id);
+				continue;
+			}
+			kept = plain && text ? message : undefined;
+			continue;
+		}
+		const reply = message.role === "assistant" || message.role === "custom" || message.role === "bashExecution";
+		if (reply) kept = undefined;
+	}
+	return { counts, hidden };
+}
+
 /** Keep pasted box-drawing trees aligned when a user message is rendered as Markdown. */
 export function preserveUserTree(text: string): string {
 	const lines = text.split("\n");

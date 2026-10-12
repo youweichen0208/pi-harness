@@ -5,7 +5,7 @@ import { ChangeSummaryCard } from "./ChangeSummaryCard";
 import { projectToolTextMessages, toolTextIncidents } from "../tool-text";
 import type { ToolRecoveryActions } from "./ToolRecoveryCard";
 import { ConversationWorkingStatus } from "./WorkingStatus";
-import { groupBashMessages } from "../bash-groups";
+import { groupBashMessages, withStreamingMessage } from "../bash-groups";
 import { assistantPredecessors } from "../agent-activity";
 import { goalEventText, goalCompletedText, groupGoalEvents } from "../goal-events";
 import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -23,6 +23,7 @@ import type { PendingEcho, ReloadStatus } from "../use-chat";
 import { Message, asText } from "./Message";
 
 import { collectQuestionAttachments } from "../question-attachments";
+import { repeatedUserMessages } from "../user-message-presentation";
 import { retriedEditIds as findRetriedEditIds } from "../edit-write-presentation";
 import { planPresentation } from "../plan-presentation";
 
@@ -164,6 +165,8 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const [stickBottom, setStickBottom] = useState(true);
 	const [farFromBottom, setFarFromBottom] = useState(false);
+	/** 4a: back-to-bottom appears only while the reader is moving up. */
+	const [scrollingUp, setScrollingUp] = useState(false);
 	const stickRef = useRef(true);
 	/** 上一帧 scrollTop —— 判定滚动方向（向上 = 用户要离开底部）。 */
 	const prevStRef = useRef(0);
@@ -228,10 +231,12 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 	);
 	const goalEvents = useMemo(() => groupGoalEvents(state.messages), [state.messages]);
 	const timeGaps = useMemo(() => messageTimeGaps(state.messages), [state.messages]);
+	const repeatedUsers = useMemo(() => repeatedUserMessages(state.messages), [state.messages]);
 	const predecessors = assistantPredecessors(messages);
 	const streamingHasContent = state.streamingMessage?.content.some((block) => block.type === "text" ? (typeof block.text === "string" && !!block.text.trim()) || !!block.truncated : block.type === "thinking" ? typeof block.thinking === "string" && !!block.thinking.trim() : true) ?? false;
 	const changeSummaries = useMemo(() => turnChangeSummaries(state.messages, state.taskProgress, state.cwd, state.isStreaming), [state.messages, state.taskProgress, state.cwd, state.isStreaming]);
 	const lastUserIndex = state.messages.findLastIndex((message) => message.role === "user");
+	const lastAssistantId = state.messages.findLast((message) => message.role === "assistant")?.id;
 	const lastId = messages.length > 0 ? messages[messages.length - 1].id : null;
 	// Only the last KEEP_RECENT persisted messages are fully rendered; older
 	// ones collapse to summary rows (unless the user expanded them).
@@ -239,8 +244,8 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 		state.messages.length > COLLAPSE_MIN
 			? Math.max(0, state.messages.length - KEEP_RECENT)
 			: 0;
-	const bashStreaming = state.streamingMessage?.content.length && state.streamingMessage.content.every((block) => block.type === "toolCall" && block.name === "bash") ? state.streamingMessage : null;
-	const bashGroups = useMemo(() => groupBashMessages(bashStreaming ? [...state.messages, bashStreaming] : state.messages, recentStart, new Set(timeGaps.keys())), [state.messages, bashStreaming, recentStart, timeGaps]);
+	const settledGroups = useMemo(() => groupBashMessages(state.messages, recentStart, new Set(timeGaps.keys())), [state.messages, recentStart, timeGaps]);
+	const bashGroups = useMemo(() => withStreamingMessage(settledGroups, state.messages, state.streamingMessage), [settledGroups, state.messages, state.streamingMessage]);
 	// 相邻的同角色折叠消息并成一条摘要：一次「想一下 → 调几个工具 → 回话」在
 	// transcript 里是 8 条 assistant 消息，一条一行会把历史区堆成 8 条长得一模
 	// 一样的条带。纯逻辑在 collapsed-groups.ts（有单测）。
@@ -370,14 +375,15 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 		});
 	}, [state.messages, expanded]);
 
-	useEffect(() => () => cancelAnimationFrame(sweepRafRef.current), []);
+	// Reset the handle too: StrictMode re-runs effects, and a stale id blocks every later sweep.
+	useEffect(() => () => { cancelAnimationFrame(sweepRafRef.current); sweepRafRef.current = 0; }, []);
 
 	// All user questions of the current conversation — the source for the
 	// floating question-nav rail (memoized on the stable messages array).
 	const questions = useMemo(() => {
 		const qs: { id: string; text: string }[] = [];
 		for (const m of state.messages) {
-			if (m.role !== "user" || m.origin === "auto-reminder" || goalEventText(m) || goalCompletedText(m)) continue;
+			if (m.role !== "user" || m.origin === "auto-reminder" || repeatedUsers.hidden.has(m.id) || goalEventText(m) || goalCompletedText(m)) continue;
 			const joined = m.content
 				.map((b) => asText(b)?.text ?? "")
 				.filter(Boolean)
@@ -390,7 +396,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 			qs.push({ id: m.id, text });
 		}
 		return qs;
-	}, [state.messages]);
+	}, [state.messages, repeatedUsers]);
 
 	/** Question ordinal by message id — each user question renders its own tag. */
 	const qnIndex = useMemo(() => {
@@ -600,6 +606,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 		if (!el) return;
 		const dSt = el.scrollTop - prevStRef.current;
 		prevStRef.current = el.scrollTop;
+		if (dSt < 0) setScrollingUp(true); else if (dSt > 0) setScrollingUp(false);
 		const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
 		setFarFromBottom(distance > el.clientHeight);
 		const nearBottom = distance < 80;
@@ -778,6 +785,8 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 							</LazyMount>
 						);
 					}
+					// Repeats keep an anchor so search and question jumps still land on the shown copy.
+					if (repeatedUsers.hidden.has(m.id)) return <span key={m.id} data-msg-id={m.id} hidden />;
 					if (bashGroups.owners.has(m.id)) return changeSummaries.has(m.id) ? <ChangeSummaryCard key={m.id} files={changeSummaries.get(m.id)!} /> : null;
 					const qIdx = m.role === "user" ? qnIndex.get(m.id) : undefined;
 					const show =
@@ -817,10 +826,12 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 							onKillBash={onKillBash}
 							toolsWrap={toolsWrap}
 							thinkingWrap={thinkingWrap}
-							isLast={m.id === lastId}
+							isLast={m.id === lastId || (!!lastId && bashGroups.owners.get(lastId) === m.id)}
 							onEdit={onEdit}
 							conversationId={state.conversationId}
 							questionAttachments={questionAttachments.get(m.id)}
+							repeatCount={repeatedUsers.counts.get(m.id)}
+							questionsActive={!state.isStreaming && m.id === lastAssistantId}
 							onCollapse={isExpandedOld ? collapse : undefined}
 						/>
 						{changeSummaries.has(m.id) && <ChangeSummaryCard files={changeSummaries.get(m.id)!} />}
@@ -837,7 +848,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 				{state.streamingMessage && streamingHasContent && !bashGroups.owners.has(state.streamingMessage.id) && (
 					<Message recovery={recovery} incident={incidentFor.get(state.streamingMessage.id)}
 						key={state.streamingMessage.id}
-						message={state.streamingMessage}
+						message={bashGroups.projected.get(state.streamingMessage.id) ?? state.streamingMessage}
 						continuation={!!predecessors.get(state.streamingMessage.id)}
 						toolResults={toolResults}
 						planViews={planViews}
@@ -877,7 +888,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 				)}
 
 			</div>
-			{!stickBottom && farFromBottom && (() => {
+			{!stickBottom && farFromBottom && scrollingUp && (() => {
 				const button = <button type="button" className="scroll-bottom" onClick={scrollToBottom}><FiArrowDown /> {t("backToBottom")}</button>;
 				const composer = document.querySelector<HTMLElement>(".design-workspace .view-pane:not(.hidden) .main > .inputbar");
 				return composer ? createPortal(button, composer) : button;
