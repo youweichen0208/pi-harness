@@ -27,5 +27,5 @@ export function useWorkspaceScm(cwd: string, ready: boolean, dirty: number, data
 		if (data?.type !== "scm_data" || data.kind !== "status" || data.reqId !== request.current || data.cwd !== cwd) return;
 		setStatus({ cwd, files: data.ok ? (data.files ?? []).map((file) => ({ ...file, path: file.path.replaceAll("\\", "/") })) : [], base: data.base ?? "", branch: data.branch ?? "", branches: data.branches ?? [], notRepo: !!data.notRepo });
 	}, [data, cwd]);
-	return status?.cwd === cwd ? status : { cwd, files: emptyFiles, notRepo: false, base: "", branch: "", branches: [] };
+	return status?.cwd === cwd ? { ...status, loaded: true } : { loaded: false, cwd, files: emptyFiles, notRepo: false, base: "", branch: "", branches: [] };
 }

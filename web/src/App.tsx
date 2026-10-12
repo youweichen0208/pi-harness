@@ -698,7 +698,7 @@ export function App() {
 	const homeVisible = view === "chat" && emptyConversation && !wikiFileRequest && !databaseOpen;
 	const onboarding = homeVisible && !!chat.projectWorkspaces && chat.projectWorkspaces.workspaces.length === 0 && !openedDirect;
 	const previousSession = chat.sessions.filter(session => session.path !== conversationState?.sessionFile && session.messageCount > 0).sort((a, b) => b.modified - a.modified)[0];
-	const homeProps = { cwd: conversationState?.cwd ?? "", branch: workspaceScm.branch ?? "", changed: workspaceScm.files, notRepo: workspaceScm.notRepo, previous: previousSession, onContinue: (path: string) => { send({ type: "switch_session", path }); } };
+	const homeProps = { cwd: conversationState?.cwd ?? "", branch: workspaceScm.branch ?? "", changed: workspaceScm.files, notRepo: !workspaceScm.loaded || workspaceScm.notRepo, previous: previousSession, onContinue: (path: string) => { send({ type: "switch_session", path }); } };
 	const openTask = () => {
 		const open = () => {
 			setPreviewFile(null);
@@ -1149,7 +1149,7 @@ export function App() {
 									send={send}
 									files={chat.files}
 									changed={workspaceScm.files}
-									notRepo={workspaceScm.notRepo}
+									notRepo={!workspaceScm.loaded || workspaceScm.notRepo}
 									fileChanged={chat.fileChanged}
 									widgets={chat.widgets}
 									messages={conversationState?.messages ?? []}

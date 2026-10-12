@@ -21,11 +21,12 @@ try {
 	const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
 	page.setDefaultTimeout(12000);
 	const errors = [], external = [];
-	let socket, baseState;
+	let socket, baseState, holdScm = true;
+	const heldScm = [];
 	await page.routeWebSocket('**/ws', route => {
 		socket = route; const upstream = route.connectToServer();
 		route.onMessage(wire => upstream.send(wire));
-		upstream.onMessage(wire => { const message = JSON.parse(wire.toString()); if (message.type === 'snapshot') baseState = message.state; route.send(wire); });
+		upstream.onMessage(wire => { const message = JSON.parse(wire.toString()); if (message.type === 'snapshot') baseState = message.state; if (holdScm && message.type === 'scm_data' && message.kind === 'status') { heldScm.push(wire); return; } route.send(wire); });
 	});
 	page.on('pageerror', e => errors.push(e.message));
 	await page.route('**/*', route => { if (!route.request().url().startsWith(`http://127.0.0.1:${port}`)) { external.push(route.request().url()); return route.abort(); } return route.continue(); });
@@ -56,6 +57,10 @@ try {
 	await page.keyboard.press('Escape');
 	await page.locator('.workspace-outside button').click();
 	await page.locator('.project-item.active').waitFor();
+	assert.equal(await page.locator('.conversation-home-suggestions > button').count(), 2, 'unknown Git status must not be presented as a clean tree');
+	assert(!(await page.locator('.conversation-home-heading').textContent()).includes('未提交改动'));
+	holdScm = false; for (const wire of heldScm) socket.send(wire);
+	await page.locator('.conversation-home-suggestions > button', {hasText:'整理 1 处改动'}).waitFor();
 	await page.evaluate(async () => { await document.fonts.load('400 18px Caprasimo'); await document.fonts.load('400 14px Figtree'); await document.fonts.load('600 14px Figtree'); await document.fonts.ready; });
 	assert(await page.evaluate(() => ['Caprasimo', 'Figtree'].every(name => [...document.fonts].some(font => font.family.replaceAll('"', '') === name && font.status === 'loaded'))));
 	const tokens = await page.evaluate(() => Object.fromEntries(['--bg','--accent','--link','--sidebar-bg','--r-sm','--r-md','--r-lg','--r-waiting','--fs-base'].map(k => [k, getComputedStyle(document.documentElement).getPropertyValue(k).trim()])));
