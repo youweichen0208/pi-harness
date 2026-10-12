@@ -67,12 +67,25 @@ try {
 		assert(fonts.some(font => /jetbrains-mono/.test(font.url) && font.status === 200));
 		conversation = true; await page.reload(); await page.locator('.process-summary').click(); await page.locator('.msg-text', { hasText: '职责分离' }).waitFor().catch(async error => { await page.screenshot({ path: join(output, `${prefix}-failure.png`) }); writeFileSync(join(output, `${prefix}-failure.txt`), await page.locator('body').innerText()); throw error; }); await page.evaluate(() => document.fonts.ready);
 		await cdp.send('DOM.enable'); await cdp.send('CSS.enable');
-		const { root } = await cdp.send('DOM.getDocument'); const { nodeId } = await cdp.send('DOM.querySelector', { nodeId: root.nodeId, selector: '.msg-text h2' });
-		const rendered = await cdp.send('CSS.getPlatformFontsForNode', { nodeId });
+		// React may replace a message node while file-tree data arrives. Resolve
+		// the current node for each sample; only retry detached-node races.
+		const platformFonts = async selector => {
+			for (let attempt = 0; attempt < 20; attempt++) {
+				await page.locator(selector).first().waitFor();
+				const { root } = await cdp.send('DOM.getDocument');
+				const { nodeId } = await cdp.send('DOM.querySelector', { nodeId: root.nodeId, selector });
+				if (nodeId) {
+					try { return await cdp.send('CSS.getPlatformFontsForNode', { nodeId }); }
+					catch (error) { if (!/Could not find node with given id/.test(String(error))) throw error; }
+				}
+				await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
+			}
+			assert.fail(`No stable rendered node for ${selector}`);
+		};
+		const rendered = await platformFonts('.msg-text h2');
 		assert(rendered.fonts.some(font => font.familyName === 'UI SC' && font.isCustomFont && font.glyphCount > 0), JSON.stringify(rendered));
 		await page.locator('[data-tree-node=".ruff_cache"] .file-name').waitFor();
-		const { nodeId: monoNode } = await cdp.send('DOM.querySelector', { nodeId: root.nodeId, selector: '.msg-text pre code' });
-		const monoFonts = await cdp.send('CSS.getPlatformFontsForNode', { nodeId: monoNode });
+		const monoFonts = await platformFonts('.msg-text pre code');
 		assert(monoFonts.fonts.some(font => font.familyName === 'JetBrains Mono' && font.isCustomFont), JSON.stringify(monoFonts));
 		assert(await page.locator('[data-tree-node=".ruff_cache"] .file-name').evaluate(el => getComputedStyle(el).fontFamily === getComputedStyle(el.closest('[data-tree-node]')).fontFamily), 'tree labels use the reference UI font');
 		const metrics = await page.evaluate(() => ({ width: innerWidth, height: innerHeight, dpr: devicePixelRatio, platform: document.documentElement.dataset.platform, appearance: document.documentElement.dataset.appearance, bodySize: getComputedStyle(document.body).fontSize, fontSmoothing: getComputedStyle(document.body).webkitFontSmoothing, treeLabelWidth: (() => { const range = document.createRange(); range.selectNodeContents(document.querySelector('[data-tree-node=".ruff_cache"] .file-name')); return range.getBoundingClientRect().width; })() }));
