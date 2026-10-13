@@ -69,8 +69,6 @@ const zh = {
 
 	builtinTitle: "内置扩展",
 	builtinBundled: "随应用提供和更新",
-	builtinOkf: "OKF 知识整理",
-	builtinOkfHint: "从 Markdown 或证据包提取、核对知识，生成 OKF 0.2 Wiki 草稿，人工复核后发布为稳定知识。",
 	builtinPlan: "计划工具",
 	builtinPlanHint: "在聊天中记录任务步骤、当前进度和完成条件。",
 	builtinMcp: "MCP",
@@ -92,8 +90,6 @@ const zh = {
 	builtinDocumentScope: "服务全局开关，所有客户端共用。关闭后阻止后续调用；开启后可重载当前会话或新建会话。",
 	builtinTools: "当前注册工具",
 	builtinCommands: "聊天命令",
-	builtinCopy: "复制命令",
-	builtinCopied: "已复制",
 
 	nodeAgentTitle: "Agent 工作台",
 	nodeOpenWorkbench: "打开工作台",
@@ -1928,8 +1924,6 @@ const en: Record<keyof typeof zh, string> = {
 
 	builtinTitle: "Built-in extensions",
 	builtinBundled: "Included and updated with the app",
-	builtinOkf: "OKF knowledge distillation",
-	builtinOkfHint: "Extract and cross-check Markdown or evidence bundles into OKF 0.2 Wiki drafts; human review is required for stable knowledge.",
 	builtinPlan: "Plan",
 	builtinPlanHint: "Track task steps, progress and completion criteria in chat.",
 	builtinMcp: "MCP",
@@ -1951,8 +1945,6 @@ const en: Record<keyof typeof zh, string> = {
 	builtinDocumentScope: "Shared across clients of this service. Disabling blocks subsequent calls; after enabling, reload or start a new chat.",
 	builtinTools: "Registered tools",
 	builtinCommands: "Chat commands",
-	builtinCopy: "Copy command",
-	builtinCopied: "Copied",
 
 	nodeAgentTitle: "Agent workbench",
 	nodeOpenWorkbench: "Open workbench",
