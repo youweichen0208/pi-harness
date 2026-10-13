@@ -12026,12 +12026,9 @@ html.pi-desktop-linux .design-workspace.wiki-mode .topbar { padding-right: 148px
 .builtin-row details { margin-top: 12px; }
 .builtin-row summary { color: var(--accent); cursor: pointer; }
 .builtin-row code { overflow-wrap: anywhere; }
-.builtin-command { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 8px 0; }
-.builtin-command code { flex: 1; min-width: 0; }
 @media (max-width: 600px) {
 	.builtin-row-head { flex-wrap: wrap; }
 	.builtin-row-head > div:first-child { flex-basis: 100%; }
-	.builtin-command { align-items: flex-start; }
 }
 
 /* Document modal: the workspace remains mounted behind a native modal dialog. */

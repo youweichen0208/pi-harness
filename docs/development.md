@@ -106,7 +106,7 @@ Pi 1.0.4 起的专项（1.2.0 继续适用，文件名保留 `pi-104-`）：`pi-
 
 原生计划回归：`plan-sdk-test.mjs` 与 `plan-settings-test.mjs` 纳入零 token 冒烟；浏览器单独执行 `node tests/plan-chat-browser-test.mjs`。均使用隔离目录与本地模拟模型，不调用真实服务。
 
-文档扩展回归：`builtin-extensions-test.mjs` 纳入零 token 冒烟，配合 OKF 单测验证 Markdown 导入和 Wiki 草稿发布；参见 [OKF 知识蒸馏](architecture-document-knowledge.md)。原生上下文基线关闭 plan 和 OKF 内置工具。
+内置扩展回归：`builtin-extensions-test.mjs` 纳入零 token 冒烟，验证清单、数据库开关、重载及转换／OKF 入口缺失。原生上下文基线关闭 plan 内置工具。
 
 
 ### 数据库工作台回归

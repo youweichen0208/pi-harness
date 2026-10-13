@@ -4,7 +4,6 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 
 export interface DocumentExtensionSettings {
-	okfEnabled: boolean;
 	databaseEnabled: boolean;
 }
 
@@ -24,8 +23,8 @@ function readSettings(): Record<string, unknown> {
 }
 
 function validate(value: Record<string, unknown>): DocumentExtensionSettings {
-	const result: DocumentExtensionSettings = { okfEnabled: true, databaseEnabled: true };
-	for (const key of ["okfEnabled", "databaseEnabled"] as const) {
+	const result: DocumentExtensionSettings = { databaseEnabled: true };
+	for (const key of ["databaseEnabled"] as const) {
 		if (value[key] !== undefined) {
 			if (typeof value[key] !== "boolean") throw new Error(`${key} must be a boolean`);
 			result[key] = value[key];
@@ -43,7 +42,7 @@ export function updateDocumentSettings(patch: Partial<DocumentExtensionSettings>
 	const saved = readSettings();
 	const next = validate({ ...saved, ...patch });
 	const output: Record<string, unknown> = { ...saved, ...next };
-	for (const key of ["pdfEnabled", "pythonPath", "runtimePath"]) delete output[key];
+	for (const key of ["pdfEnabled", "pythonPath", "runtimePath", "okfEnabled"]) delete output[key];
 	const folder = documentDataDir();
 	mkdirSync(folder, { recursive: true });
 	const target = join(folder, "document-extensions.json");
