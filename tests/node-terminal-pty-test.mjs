@@ -10,8 +10,9 @@ import {NodeWorkbench} from '../dist/server/node-workbench.js';
 if (process.platform === 'win32') { console.log('SKIP: native POSIX PTY regression'); process.exit(0); }
 const root=mkdtempSync(join(tmpdir(),'pi-real-pty-'));
 const key=generateKeyPairSync('rsa',{modulusLength:2048}).privateKey.export({type:'pkcs1',format:'pem'});
+// Without a UTF-8 locale bash readline treats CJK bytes as meta keys and mangles the typed command.
 const peers=new Set(); const terms=new Set();
-const ssh=new Server({hostKeys:[key]},c=>{peers.add(c);c.on('error',()=>{});c.on('authentication',x=>x.accept());c.on('ready',()=>c.on('session',accept=>{const session=accept(); session.on('pty',a=>a());session.on('shell',a=>{const stream=a();const term=pty.spawn('/bin/bash',['--noprofile','--norc'],{cwd:root,env:{...process.env,PS1:'fixture$ '},cols:100,rows:24});terms.add(term);term.onData(s=>stream.write(s));stream.on('data',d=>term.write(d.toString()));stream.on('close',()=>{term.kill();terms.delete(term)});});}));});
+const ssh=new Server({hostKeys:[key]},c=>{peers.add(c);c.on('error',()=>{});c.on('authentication',x=>x.accept());c.on('ready',()=>c.on('session',accept=>{const session=accept(); session.on('pty',a=>a());session.on('shell',a=>{const stream=a();const term=pty.spawn('/bin/bash',['--noprofile','--norc'],{cwd:root,env:{...process.env,LC_ALL:process.platform==='darwin'?'en_US.UTF-8':'C.UTF-8',PS1:'fixture$ '},cols:100,rows:24});terms.add(term);term.onData(s=>stream.write(s));stream.on('data',d=>term.write(d.toString()));stream.on('close',()=>{term.kill();terms.delete(term)});});}));});
 await new Promise(r=>ssh.listen(0,'127.0.0.1',r));
 const client=new Client();await new Promise((resolve,reject)=>{client.on('error',reject);client.on('ready',resolve);client.connect({host:'127.0.0.1',port:ssh.address().port,username:'fixture'});});
 const service=new NodeWorkbench(join(root,'data'));
