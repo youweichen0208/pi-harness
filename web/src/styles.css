@@ -12615,3 +12615,6 @@ html.pi-desktop-linux .design-workspace.wiki-mode .topbar { padding-right: 148px
 .method-tag.delete { background: var(--red-soft); color: var(--red); }
 .header-changes-chip + .changes-current-branch { display: none; }
 .design-workspace .inputbox { box-shadow: var(--card-shadow); }
+/* Underline tabs stay transparent in dark; older dark rules paint the segmented pill. */
+:root[data-appearance="dark"] .design-workspace .topbar-actions > .view-switch { background: transparent; }
+:root[data-appearance="dark"] .design-workspace .topbar-actions > .view-switch button, :root[data-appearance="dark"] .design-workspace .topbar-actions > .view-switch button.active { background: transparent; border-color: transparent; }
