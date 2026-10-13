@@ -8404,6 +8404,17 @@ html.pi-desktop .desktop-window-controls {
 .fp-rich-document pre { white-space: pre-wrap; }
 .rich-source-block { border: 1px solid var(--border); border-radius: var(--r-sm); padding: 8px; margin-block: 12px; background: var(--bg-elev); }
 .rich-source-block small { color: var(--text-dim); }
+.rich-toc { margin-block: 16px 24px; padding: 12px 16px; border: 1px solid var(--border-soft); border-radius: var(--r-md); background: var(--bg-elev); }
+.rich-toc-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+.rich-toc-head strong { font-size: 13px; color: var(--text-dim); }
+.rich-toc-head button { padding: 2px 8px; border: 0; border-radius: var(--r-sm); background: transparent; font-size: 12px; color: var(--text-faint); cursor: pointer; }
+.rich-toc-head button:hover, .rich-toc-head button:focus-visible { background: var(--row-hover); color: var(--text); }
+.fp-rich-document[contenteditable="false"] .rich-toc-head button { display: none; }
+.fp-markdown .fp-rich-document .rich-toc ul { margin: 0; padding: 0; list-style: none; }
+.fp-markdown .fp-rich-document .rich-toc li { margin: 0; padding-left: calc(var(--toc-level, 0) * 18px); line-height: 1.9; }
+.rich-toc a { color: var(--accent); text-decoration: none; cursor: pointer; }
+.rich-toc a:hover { text-decoration: underline; }
+.rich-toc p { margin: 0; font-size: 13px; color: var(--text-faint); }
 
 .fp-rich-document .rich-block:not(.rich-source-block) pre {
 	padding: 14px 16px; border-radius: var(--r-md); background: var(--code-bg); color: var(--code-fg);
