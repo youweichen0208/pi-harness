@@ -8,10 +8,9 @@ import { join } from "node:path";
 import WebSocket from "ws";
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), "pi-builtin-chat-"))), agent = join(root, "agent"), data = join(root, "data");
-mkdirSync(agent); mkdirSync(data); mkdirSync(join(root, "raw"));
+mkdirSync(agent); mkdirSync(data);
 writeFileSync(join(agent, "auth.json"), JSON.stringify({ fixture: { type: "api_key", key: "fixture" } }));
 writeFileSync(join(agent, "webui-extensions.json"), JSON.stringify({ autoCheck: false }));
-writeFileSync(join(root, "raw/policy.md"), "# Policy\n\nThe support desk operates on weekdays.\n");
 let child, browser, logs = "", nextCode, calls = 0, port, holdNext = false, release;
 const clients = [];
 const model = createServer(async (req, res) => {
@@ -59,7 +58,7 @@ async function prompt(client, text, code) {
 }
 async function reload(client) {
 	client.send({ type: "extensions_reload" });
-	await wait(async () => item(await request(client, "builtin-list"), "pi-harness-okf").status === "loaded", "reload");
+	await wait(async () => item(await request(client, "builtin-list"), "pi-harness-database").status === "loaded", "reload");
 }
 
 try {
@@ -71,33 +70,27 @@ try {
 	child.stdout.on("data", value => logs += value); child.stderr.on("data", value => logs += value);
 	await wait(async () => { try { return (await (await fetch(`http://127.0.0.1:${port}/api/health`)).json()).pid === child.pid; } catch { return false; } }, "server health");
 	const a = await connect("builtin-a"), b = await connect("builtin-b");
-	const state = await request(a, "builtin-list"); assert.equal(state.items.length, 6);
+	const state = await request(a, "builtin-list"); assert.equal(state.items.length, 5);
 	assert.equal(item(state, "pi-harness-pdf-markdown"), undefined);
 	assert.match((await request(a, "builtin-toggle", { id: "pi-harness-pdf-markdown", enabled: true, version: state.documentVersion }, 400)).error, /Invalid/);
-	assert.equal(item(state, "pi-harness-okf").status, "loaded");
+	assert.equal(item(state, "pi-harness-database").status, "loaded");
 	assert.equal(item(state, "codemode").status, "loaded");
 	assert.equal(item(state, "tool-search").status, "loaded");
 	assert.equal((await request(a, "list")).packages.length, 0);
 	assert.match((await request(a, "builtin-list", { conversationId: "stale" }, 400)).error, /Conversation changed/);
 	assert.match((await request(a, "builtin-toggle", { id: "mcp", enabled: false, version: state.documentVersion }, 400)).error, /Invalid/);
 	a.send({ type: "get_commands" });
-	await wait(() => a.wire.some(message => message.type === "slash_commands" && message.commands.some(command => command.name === "okf")), "OKF command");
+	await wait(() => a.wire.some(message => message.type === "slash_commands"), "slash commands");
 	const commands = a.wire.findLast(message => message.type === "slash_commands").commands;
-	assert(!commands.some(command => ["documents", "pdf-md"].includes(command.name)), "conversion commands removed");
-	await prompt(a, "Check removed conversion tool", 'text("document_to_markdown" in tools);');
+	assert(!commands.some(command => ["documents", "pdf-md", "okf"].includes(command.name)), "conversion and OKF commands removed");
+	await prompt(a, "Check removed conversion tool", 'text(["document_to_markdown", "okf_ingest"].some(name => name in tools));');
 	assert.match(JSON.stringify(a.state.messages.findLast(message => message.role === "toolResult")), /false/);
-	await prompt(a, "/okf ingest raw/policy.md", `const start=(await tools.okf_ingest({action:'start',paths:['raw/policy.md']})).result;
-const id=start.jobId;
-await tools.okf_ingest({action:'next',jobId:id});
-const evidence=(await tools.okf_candidates({action:'read',jobId:id})).result;
-const source=evidence.sources[0],block=source.blocks.find(b=>b.text.includes('support desk operates'));
-await tools.okf_candidates({action:'submit',jobId:id,sourceId:source.sourceId,candidates:[{basis:'fact',conceptId:'support-hours',title:'Support hours',type:'Policy',statement:'The support desk operates on weekdays.',evidence:[{sourceId:source.sourceId,sourceHash:source.hash,blockId:block.id,quote:'The support desk operates on weekdays.'}],review:{support:'supported',rationale:'The single-source fixture explicitly states the policy.',comparedConceptIds:[],conflicts:[]}}]});
-text(await tools.okf_publish({jobId:id}));`);
-	assert.match(readFileSync(join(root, "knowledge/wiki/concepts/support-hours.md"), "utf8"), /status: draft/);
-	await toggle(a, "pi-harness-okf", false);
-	assert.equal(item(await request(b, "builtin-list"), "pi-harness-okf").status, "disabled");
-	assert.match((await request(a, "builtin-toggle", { id: "pi-harness-okf", enabled: true, version: state.documentVersion }, 400)).error, /changed/);
-	await prompt(a, "Check disabled tool", 'text(await tools.okf_ingest({action:"status"}));');
+	await prompt(a, "Check enabled tool", 'text(await tools.database_read({action:"list"}));');
+	assert(!a.state.messages.findLast(message => message.role === "toolResult")?.isError, "enabled database tool runs");
+	await toggle(a, "pi-harness-database", false);
+	assert.equal(item(await request(b, "builtin-list"), "pi-harness-database").status, "disabled");
+	assert.match((await request(a, "builtin-toggle", { id: "pi-harness-database", enabled: true, version: state.documentVersion }, 400)).error, /changed/);
+	await prompt(a, "Check disabled tool", 'text(await tools.database_read({action:"list"}));');
 	const rejected = a.state.messages.findLast(message => message.role === "toolResult");
 	assert(rejected?.isError && /disabled/.test(JSON.stringify(rejected)), "disabled tool rejects an already loaded call");
 	holdNext = true;
@@ -108,21 +101,21 @@ text(await tools.okf_publish({jobId:id}));`);
 	await wait(() => !a.state.isStreaming, "settled fixture");
 	const old = a.state.conversationId; a.send({ type: "new_chat", fresh: true });
 	await wait(() => a.state.conversationId !== old && !a.state.tree?.verifying, "new chat");
-	assert.equal(item(await request(a, "builtin-list"), "pi-harness-okf").status, "disabled");
-	assert.equal(item(await toggle(a, "pi-harness-okf", true), "pi-harness-okf").status, "pending");
+	assert.equal(item(await request(a, "builtin-list"), "pi-harness-database").status, "disabled");
+	assert.equal(item(await toggle(a, "pi-harness-database", true), "pi-harness-database").status, "pending");
 	await reload(a);
-	assert.equal(JSON.parse(readFileSync(join(data, "document-extensions.json"), "utf8")).okfEnabled, true);
-	const c = await connect("builtin-c"); assert.equal(item(await request(c, "builtin-list"), "pi-harness-okf").status, "loaded");
+	assert.equal(JSON.parse(readFileSync(join(data, "document-extensions.json"), "utf8")).databaseEnabled, true);
+	const c = await connect("builtin-c"); assert.equal(item(await request(c, "builtin-list"), "pi-harness-database").status, "loaded");
 	const saved = readFileSync(join(data, "document-extensions.json"), "utf8");
 	writeFileSync(join(data, "document-extensions.json"), "broken-json");
-	const broken = await request(a, "builtin-list"); assert.equal(broken.items.length, 6); assert.equal(item(broken, "pi-harness-okf").status, "error"); assert.equal(item(broken, "codemode").status, "loaded");
+	const broken = await request(a, "builtin-list"); assert.equal(broken.items.length, 5); assert.equal(item(broken, "pi-harness-database").status, "error"); assert.equal(item(broken, "codemode").status, "loaded");
 	writeFileSync(join(data, "document-extensions.json"), saved);
-	console.log("PASS built-in inventory, removed conversion, version conflicts, cross-client settings, disabled calls, new chat/reload and real WebSocket OKF workflow");
+	console.log("PASS built-in inventory, removed conversion/OKF, version conflicts, cross-client settings, disabled calls and new chat/reload");
 
 	if (process.argv.includes("--browser")) {
 		const { chromium } = await import("playwright-core"), { CHROME_PATH } = await import("./lib/chrome.mjs");
 		browser = await chromium.launch({ executablePath: CHROME_PATH || chromium.executablePath() });
-		const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, permissions: ["clipboard-read", "clipboard-write"] });
+		const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
 		await context.addInitScript(() => { if (!localStorage.getItem("pi-harness:lang")) localStorage.setItem("pi-harness:lang", "zh"); });
 		const page = await context.newPage(), errors = []; page.on("pageerror", error => errors.push(error.message)); page.setDefaultTimeout(15000);
 		await page.goto(`http://127.0.0.1:${port}`);
@@ -131,16 +124,15 @@ text(await tools.okf_publish({jobId:id}));`);
 			catch (error) { throw Error(`${error.message}\nPage errors: ${JSON.stringify(errors)}\nPage: ${(await page.locator("body").innerText()).slice(0, 3000)}`); }
 			await page.getByText(en ? "All settings" : "所有设置", { exact: true }).click();
 			await page.getByRole("button", { name: "Extensions", exact: true }).click();
-			await page.locator('[data-builtin-id="pi-harness-okf"]').waitFor();
+			await page.locator('[data-builtin-id="pi-harness-database"]').waitFor();
 		}
 		await openSettings();
-		const panel = page.locator(".builtin-extensions"), okf = panel.locator('[data-builtin-id="pi-harness-okf"]');
-		assert.equal(await panel.locator(".builtin-row").count(), 6);
+		const panel = page.locator(".builtin-extensions"), database = panel.locator('[data-builtin-id="pi-harness-database"]');
+		assert.equal(await panel.locator(".builtin-row").count(), 5);
 		await page.getByRole("tab", { name: "已安装 · 0", exact: true }).waitFor();
-		await okf.getByRole("switch").click(); await wait(() => JSON.parse(readFileSync(join(data, "document-extensions.json"), "utf8")).okfEnabled === false, "browser toggle off");
-		await okf.getByRole("switch").click(); await wait(() => JSON.parse(readFileSync(join(data, "document-extensions.json"), "utf8")).okfEnabled === true, "browser toggle on");
-		await okf.locator("summary").click(); await okf.getByRole("button", { name: "复制命令", exact: true }).first().click();
-		assert.equal(await page.evaluate(() => navigator.clipboard.readText()), "/okf ingest ./raw");
+		await database.getByRole("switch").click(); await wait(() => JSON.parse(readFileSync(join(data, "document-extensions.json"), "utf8")).databaseEnabled === false, "browser toggle off");
+		await database.getByRole("switch").click(); await wait(() => JSON.parse(readFileSync(join(data, "document-extensions.json"), "utf8")).databaseEnabled === true, "browser toggle on");
+		assert.equal(await panel.locator('[data-builtin-id="pi-harness-okf"]').count(), 0);
 		assert.equal(await panel.locator('[data-builtin-id="pi-harness-pdf-markdown"]').count(), 0);
 		await panel.locator('[data-builtin-id="codemode"]').getByRole("button", { name: "查看设置", exact: true }).click();
 		await page.locator(".native-mcp-panel").waitFor();
@@ -149,7 +141,7 @@ text(await tools.okf_publish({jobId:id}));`);
 			if (route.request().postDataJSON()?.action === "list") return route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "Package fixture unavailable" }) });
 			await route.continue();
 		});
-		await page.reload(); await openSettings(); assert.equal(await panel.locator(".builtin-row").count(), 6);
+		await page.reload(); await openSettings(); assert.equal(await panel.locator(".builtin-row").count(), 5);
 		await page.getByText("Package fixture unavailable", { exact: false }).waitFor();
 		await page.unroute("**/api/extensions"); await page.reload(); await openSettings();
 		mkdirSync("tests/scratch", { recursive: true });
@@ -163,7 +155,7 @@ text(await tools.okf_publish({jobId:id}));`);
 		assert.equal(await panel.getByText("Document to Markdown", { exact: true }).count(), 0);
 		await page.screenshot({ path: "tests/scratch/builtin-extensions-en.png", fullPage: true });
 		assert.deepEqual(errors, []); assert(!existsSync(join(data, "runtimes")));
-		console.log("PASS built-in browser: six entries, toggles, copy, settings links, package failure isolation, Chinese/English and narrow layout");
+		console.log("PASS built-in browser: five entries, toggles, settings links, package failure isolation, Chinese/English and narrow layout");
 	}
 } finally {
 	release?.();

@@ -1,7 +1,6 @@
 import { createDatabaseExtension } from "./database/extension.js";
 import type { BuiltinExtensionId } from "./protocol.js";
 import { createPlanExtension } from "./plan/extension.js";
-import { createOkfExtension } from "./okf/extension.js";
 import { SettingsManager, createCodemodeExtension, createMcpExtension, createToolSearchExtension, type InlineExtension, type ExtensionFactory } from "@earendil-works/pi-coding-agent";
 
 const runOverrides = new WeakMap<SettingsManager, { compaction?: { enabled: boolean }; retry?: { enabled: boolean } }>();
@@ -27,7 +26,6 @@ export function conversationSettings(cwd: string, agentDir: string): SettingsMan
 export const nativeExtensionRegistry = [
 	{ name: "pi-harness-plan", replaceable: true, factory: createPlanExtension },
 	{ name: "pi-harness-database", replaceable: true, factory: createDatabaseExtension },
-	{ name: "pi-harness-okf", replaceable: true, factory: createOkfExtension },
 	{ name: "codemode", builtin: true, replaceable: true, factory: createCodemodeExtension },
 	{ name: "tool-search", builtin: true, replaceable: true, factory: createToolSearchExtension },
 	{ name: "mcp", builtin: true, replaceable: true, factory: createMcpExtension },
