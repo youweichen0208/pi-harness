@@ -86,7 +86,7 @@ export function WorkspaceSwitcher({ workspaces, selected, disabled, busy, name, 
 			onClick={() => setOpen((value) => !value)}
 			onKeyDown={(event) => { if (event.key === "ArrowDown" && !open) { event.preventDefault(); setOpen(true); } }}
 		>
-			{selected ? <Avatar workspace={selected} /> : <span className="workspace-avatar placeholder" aria-hidden="true"><FiPlus /></span>}
+			{!selected && <span className="workspace-avatar placeholder" aria-hidden="true"><FiPlus /></span>}
 			<span className="workspace-switcher-name">{selected?.name ?? t("workspaceNoneSelected")}</span>
 			{open ? <FiChevronUp aria-hidden="true" /> : <FiChevronDown aria-hidden="true" />}
 		</button>
