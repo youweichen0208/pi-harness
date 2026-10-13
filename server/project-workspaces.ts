@@ -1,27 +1,58 @@
 import { randomUUID } from "node:crypto";
-import { readFileSync, statSync } from "node:fs";
+import { readFileSync, renameSync, statSync, unwatchFile, watchFile } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
 import type { ProjectWorkspaceAction, ProjectWorkspaceCatalog } from "./protocol.js";
 import { writeFileAtomic } from "./private-file.js";
 
-/** UI-only catalog. No session or filesystem deletion belongs to this module. */
+/** UI-only catalog. No session or filesystem deletion belongs to this module.
+ * The file may be shared by the desktop app and the CLI server, so every read
+ * checks whether another process replaced it. */
 export class ProjectWorkspaceStore {
 	private catalog: ProjectWorkspaceCatalog | undefined;
+	private stamp = "";
 
 	constructor(private readonly file: string) {}
 
 	read(): ProjectWorkspaceCatalog {
-		if (!this.catalog) {
-			let data: unknown;
-			try { data = JSON.parse(readFileSync(this.file, "utf8")); }
-			catch (error) {
-				if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-				data = { revision: 0, workspaces: [] };
-			}
-			if (!validCatalog(data)) throw new Error("Invalid project workspace catalog");
-			this.catalog = data;
+		const stamp = fileStamp(this.file);
+		if (!this.catalog || stamp !== this.stamp) {
+			this.catalog = readCatalog(this.file);
+			this.stamp = stamp;
 		}
 		return structuredClone(this.catalog);
+	}
+
+	/** Calls back when another process changes the file; returns the unsubscribe function. */
+	watch(onChange: (catalog: ProjectWorkspaceCatalog) => void): () => void {
+		const listener = () => {
+			const before = this.stamp;
+			let catalog: ProjectWorkspaceCatalog;
+			try { catalog = this.read(); } catch { return; /* keep a corrupt file for recovery */ }
+			if (this.stamp !== before) onChange(catalog);
+		};
+		watchFile(this.file, { interval: 1000, persistent: false }, listener);
+		return () => unwatchFile(this.file, listener);
+	}
+
+	/** One-time merge of an older per-app catalog into this one. Same-named workspaces
+	 * combine their projects; the old file is renamed afterwards so it is merged only once. */
+	importFrom(legacyFile: string): void {
+		let legacy: ProjectWorkspaceCatalog;
+		try { legacy = readCatalog(legacyFile, false); } catch { return; /* missing or corrupt: leave it alone */ }
+		const next = this.read();
+		let changed = false;
+		for (const group of legacy.workspaces) {
+			const same = next.workspaces.find((entry) => entry.name.toLowerCase() === group.name.toLowerCase());
+			if (same) {
+				for (const path of group.paths) if (!same.paths.includes(path) && same.paths.length < 1000) { same.paths.push(path); changed = true; }
+			} else if (next.workspaces.length < 100) {
+				const id = next.workspaces.some((entry) => entry.id === group.id) ? randomUUID() : group.id;
+				next.workspaces.push({ id, name: group.name, paths: [...group.paths] });
+				changed = true;
+			}
+		}
+		if (changed) this.write(next);
+		renameSync(legacyFile, `${legacyFile}.merged`);
 	}
 
 	apply(revision: number, action: ProjectWorkspaceAction): { catalog: ProjectWorkspaceCatalog; workspaceId: string } {
@@ -66,11 +97,39 @@ export class ProjectWorkspaceStore {
 				default: throw new Error("Invalid workspace action");
 			}
 		}
+		this.write(next);
+		return { catalog: structuredClone(next), workspaceId };
+	}
+
+	private write(next: ProjectWorkspaceCatalog): void {
 		next.revision++;
 		writeFileAtomic(this.file, JSON.stringify(next, null, "\t") + "\n");
 		this.catalog = next;
-		return { catalog: structuredClone(next), workspaceId };
+		this.stamp = fileStamp(this.file);
 	}
+}
+
+/** Changes whenever the file is replaced (atomic writes swap the inode) or rewritten. */
+function fileStamp(file: string): string {
+	try {
+		const info = statSync(file);
+		if (!info.isFile()) return "";
+		return `${info.ino}:${info.mtimeMs}:${info.size}`;
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === "ENOENT") return "";
+		throw error;
+	}
+}
+
+function readCatalog(file: string, missingIsEmpty = true): ProjectWorkspaceCatalog {
+	let data: unknown;
+	try { data = JSON.parse(readFileSync(file, "utf8")); }
+	catch (error) {
+		if (!missingIsEmpty || (error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+		data = { revision: 0, workspaces: [] };
+	}
+	if (!validCatalog(data)) throw new Error("Invalid project workspace catalog");
+	return data;
 }
 
 function checkedName(value: unknown): string {

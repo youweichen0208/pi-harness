@@ -72,4 +72,37 @@ describe("persistent project workspaces", () => {
 		store.apply(2, { kind: "remove", id, path });
 		expect(store.read().workspaces[0].paths).toEqual([]); expect(existsSync(path)).toBe(false);
 	});
+
+	it("sees writes from another process sharing the same file", () => {
+		const { file, store } = fixture();
+		const other = new ProjectWorkspaceStore(file);
+		expect(store.read().workspaces).toEqual([]);
+		const id = other.apply(0, { kind: "create", name: "Shared" }).workspaceId;
+		expect(store.read().workspaces.map((group) => group.id)).toEqual([id]);
+		// The stale revision is rejected instead of overwriting the other app's change.
+		expect(() => store.apply(0, { kind: "create", name: "Mine" })).toThrow(/another window/);
+		store.apply(1, { kind: "rename", id, name: "Team" });
+		expect(other.read().workspaces[0].name).toBe("Team");
+	});
+
+	it("merges an older per-app catalog once, combining same-named workspaces", () => {
+		const { root, file, store } = fixture();
+		const [a, b, c] = ["a", "b", "c"].map((name) => { const path = join(root, name); mkdirSync(path); return path; });
+		const shared = store.apply(0, { kind: "create", name: "Work" }).workspaceId;
+		store.apply(1, { kind: "add", id: shared, path: a });
+		const legacyFile = join(root, "desktop", "project-workspaces.json");
+		const legacy = new ProjectWorkspaceStore(legacyFile);
+		const work = legacy.apply(0, { kind: "create", name: "work" }).workspaceId;
+		legacy.apply(1, { kind: "add", id: work, path: a });
+		legacy.apply(2, { kind: "add", id: work, path: b });
+		const personal = legacy.apply(3, { kind: "create", name: "Personal" }).workspaceId;
+		legacy.apply(4, { kind: "add", id: personal, path: c });
+		store.importFrom(legacyFile);
+		expect(store.read().workspaces).toEqual([{ id: shared, name: "Work", paths: [a, b] }, { id: personal, name: "Personal", paths: [c] }]);
+		expect(existsSync(legacyFile)).toBe(false);
+		expect(existsSync(`${legacyFile}.merged`)).toBe(true);
+		const revision = store.read().revision;
+		store.importFrom(legacyFile);
+		expect(store.read().revision).toBe(revision);
+	});
 });
