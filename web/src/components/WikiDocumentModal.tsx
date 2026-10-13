@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { FiMaximize2, FiMinimize2, FiMessageSquare, FiX } from "react-icons/fi";
 import { useT } from "../i18n";
@@ -13,6 +13,34 @@ export function WikiDocumentModal({ children, onClose, chatHost, chatOpen, onCha
 	const dialog = useRef<HTMLDialogElement>(null);
 	const [maximized, setMaximized] = useState(false);
 	const [chatWidth, resizeChat] = useWikiPanelWidth("chat");
+	// Screen fullscreen entered by this modal; a dialog cannot be the fullscreen element, so the page is.
+	const ownsFullscreen = useRef(false);
+	useEffect(() => {
+		const sync = () => {
+			if (!ownsFullscreen.current || document.fullscreenElement) return;
+			ownsFullscreen.current = false;
+			setMaximized(false);
+		};
+		document.addEventListener("fullscreenchange", sync);
+		return () => {
+			document.removeEventListener("fullscreenchange", sync);
+			if (ownsFullscreen.current && document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+		};
+	}, []);
+	async function toggleMaximized() {
+		if (maximized) {
+			setMaximized(false);
+			if (ownsFullscreen.current && document.fullscreenElement) {
+				ownsFullscreen.current = false;
+				await document.exitFullscreen().catch(() => {});
+			}
+			return;
+		}
+		setMaximized(true);
+		if (document.fullscreenElement || !document.fullscreenEnabled) return;
+		// Denied fullscreen keeps the in-window maximize.
+		try { await document.documentElement.requestFullscreen(); ownsFullscreen.current = true; } catch { /* in-window only */ }
+	}
 	useLayoutEffect(() => {
 		const previous = document.activeElement;
 		const element = dialog.current!;
@@ -45,7 +73,7 @@ export function WikiDocumentModal({ children, onClose, chatHost, chatOpen, onCha
 		<header className="wiki-modal-header">
 			<div id="wiki-modal-toolbar">{title && <strong>{title}</strong>}</div>
 			<button className="wiki-agent-toggle" aria-label={t("wikiAgentChat")} title={t("wikiAgentChat")} aria-expanded={chatOpen} onClick={() => onChatOpen(!chatOpen)}><FiMessageSquare /></button>
-			<button aria-label={t(maximized ? "wikiRestoreSize" : "wikiMaximize")} title={t(maximized ? "wikiRestoreSize" : "wikiMaximize")} onMouseDown={event => event.preventDefault()} onClick={() => setMaximized(value => !value)}>{maximized ? <FiMinimize2 /> : <FiMaximize2 />}</button>
+			<button aria-label={t(maximized ? "wikiRestoreSize" : "wikiMaximize")} title={t(maximized ? "wikiRestoreSize" : "wikiMaximize")} onMouseDown={event => event.preventDefault()} onClick={() => void toggleMaximized()}>{maximized ? <FiMinimize2 /> : <FiMaximize2 />}</button>
 			<button aria-label={t("close")} onClick={onClose}><FiX /></button>
 		</header>
 		<div className="wiki-modal-body" style={{ "--wiki-chat-width": `${chatWidth}px` } as CSSProperties}>
