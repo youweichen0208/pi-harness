@@ -285,6 +285,7 @@
 	--progress-text: var(--yellow-fg);
 	--progress-soft: var(--yellow-bg);
 	--output-bg: oklch(0.97 0.003 80);
+	--card-shadow: 0 1px 2px color-mix(in oklch, var(--text) 5%, transparent), 0 8px 24px color-mix(in oklch, var(--text) 6%, transparent);
 }
 
 * {
@@ -10464,6 +10465,7 @@ html.pi-desktop .wiki-breadcrumb { -webkit-app-region: drag; app-region: drag; }
 	--green-soft: #243c2b;
 	--red-soft: #452b29;
 	--output-bg: #262624;
+	--card-shadow: 0 1px 2px #0004, 0 8px 24px #0003;
 }
 :root[data-appearance="dark"] .extensions-panel { --ext-accent: var(--accent); --ext-pale: var(--accent-soft); --ext-line: var(--border-soft); --ext-muted: var(--text-dim); --ext-ink: var(--text); }
 :root[data-appearance="dark"] .system-prompt-panel { --prompt-accent: var(--accent); --prompt-line: var(--border-soft); color: var(--text); }
@@ -12569,3 +12571,38 @@ html.pi-desktop-linux .design-workspace.wiki-mode .topbar { padding-right: 148px
 .appearance-switch span { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--bg-elev); box-shadow: 0 1px 2px var(--shadow-soft); transition: left 0.15s; }
 .appearance-switch[aria-checked="true"] span { left: 16px; }
 .appearance-switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ---- Workspace shell v2: the main column floats as a card on the frame ---- */
+.design-workspace { background: var(--sidebar-bg); }
+.design-workspace .panel-left { background: transparent; border-right: 0; }
+.design-workspace .statusbar { background: var(--sidebar-bg); border-top: 1px solid var(--border-soft); }
+.design-workspace .drawer-right:not(:has(.fp-embedded)) { background: transparent; }
+.design-workspace .layout > .view-pane > .main { background: var(--bg); border: solid var(--border); border-width: 0 1px; box-shadow: var(--card-shadow); clip-path: inset(0 -32px 0 -32px); }
+.design-workspace .topbar { margin-top: 8px; background: var(--bg); border: 1px solid var(--border); border-bottom-color: var(--border-soft); border-radius: var(--r-lg) var(--r-lg) 0 0; box-shadow: var(--card-shadow); clip-path: inset(-32px -32px 0 -32px); }
+/* Underline tabs instead of a segmented pill. */
+.design-workspace .view-switch { background: transparent; padding: 0; gap: 2px; height: 100%; align-items: stretch; border-radius: 0; }
+.design-workspace .view-switch button { height: 100%; padding: 0 9px; border-radius: 0; background: transparent; color: var(--text-dim); box-shadow: none; }
+.design-workspace .view-switch button:hover { background: transparent; color: var(--heading); }
+.design-workspace .view-switch button.active { background: transparent; color: var(--accent); font-weight: 600; box-shadow: inset 0 -2px 0 var(--accent); }
+.header-changes-chip { flex: none; display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: var(--r-sm); background: var(--yellow-bg); color: var(--yellow-fg); font-size: 11.5px; font-weight: 500; white-space: nowrap; }
+.design-workspace .header-location > span:first-child { flex: 0 2 auto; max-width: min(220px, 30%); }
+
+/* ---- Reply content: tables, code blocks with a header bar, API route tags ---- */
+.msg-text table { display: table; width: auto; max-width: 100%; border-collapse: separate; border-spacing: 0; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-elev); overflow: hidden; }
+.msg-text th, .msg-text td { border: 0; border-top: 1px solid var(--border-soft); padding: 8px 14px; text-align: left; }
+.msg-text thead th { border-top: 0; padding: 7px 14px; background: var(--output-bg); color: var(--text-faint); font-size: 12px; font-weight: 500; }
+.msg-text td > code { background: transparent; border: 0; padding: 0; color: var(--accent); }
+.codeblock-bar { display: none; }
+.msg-text .codeblock:has(> .codeblock-bar) { border: 1px solid var(--border); border-radius: var(--r-md); background: var(--output-bg); overflow: hidden; }
+.msg-text .codeblock:has(> .codeblock-bar) > .copy-btn { display: none; }
+.msg-text .codeblock:has(> .codeblock-bar) pre { border: 0; border-radius: 0; }
+.msg-text .codeblock-bar { display: flex; align-items: center; height: 32px; padding: 0 8px 0 14px; border-bottom: 1px solid var(--border-soft); font: 11.5px var(--mono); color: var(--text-faint); }
+.msg-text .codeblock-bar .copy-btn { position: static; opacity: 1; display: inline-flex; align-items: center; gap: 5px; width: auto; height: auto; margin-left: auto; padding: 3px 7px; border: 0; border-radius: var(--r-sm); background: transparent; color: inherit; font: 11.5px var(--sans); cursor: pointer; }
+.msg-text .codeblock-bar .copy-btn:hover { background: var(--bg-elev2); color: var(--text); }
+.msg-text li.api-route { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; list-style: none; margin-left: -22px; }
+.msg-text li.api-route > code { background: transparent; border: 0; padding: 0; color: var(--heading); }
+.method-tag { width: 44px; padding: 1px 0; border-radius: var(--r-sm); background: var(--accent-soft); color: var(--accent); font: 500 11px var(--mono); text-align: center; }
+.method-tag:is(.post, .put, .patch) { background: var(--yellow-bg); color: var(--yellow-fg); }
+.method-tag.delete { background: var(--red-soft); color: var(--red); }
+.header-changes-chip + .changes-current-branch { display: none; }
+.design-workspace .inputbox { box-shadow: var(--card-shadow); }

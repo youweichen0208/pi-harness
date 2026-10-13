@@ -63,7 +63,7 @@ export function MarkdownBody({ text, imageSrc, sourceLines, fileLinks }: Markdow
 	const changes = useChangeLinks();
 	const links = changes && !sourceLines ? [...remarkPlugins, remarkChangeLinks(changes.files.map(file => file.path))] : remarkPlugins;
 	return (
-		<ReactMarkdown remarkPlugins={links} rehypePlugins={rehypePlugins} components={{ pre: ({ children, ...props }) => <PreWithCopy {...props} fileLinks={fileLinks}>{children}</PreWithCopy>, a: ({ node: _node, href, children, ...props }) => {
+		<ReactMarkdown remarkPlugins={links} rehypePlugins={rehypePlugins} components={{ pre: ({ children, ...props }) => <PreWithCopy {...props} fileLinks={fileLinks}>{children}</PreWithCopy>, li: RouteListItem, a: ({ node: _node, href, children, ...props }) => {
 			const pr = /^https?:\/\/github\.com\/[^/]+\/[^/]+\/pull\/(\d+)(?:[?#].*)?$/.exec(href ?? "");
 			return <a {...props} href={href} className={pr ? "pr-reference" : undefined} onClick={event => {
 				if (href?.startsWith("#pi-change=")) { event.preventDefault(); const path = decodeURIComponent(href.slice(11)); changes?.show(changes.files, path); }
@@ -98,7 +98,10 @@ export function PreWithCopy({ children, fileLinks, showLanguage, ...props }: JSX
 	if (tree) return <DesignTree tree={tree} source={code} />;
 	return (
 		<div className={`codeblock${asciiTable ? " ascii-table" : ""}`}>
-			{showLanguage ? <div className="codeblock-heading"><span>{language}</span><CopyButton text={code} label /></div> : <CopyButton text={code} />}
+			{showLanguage ? <div className="codeblock-heading"><span>{language}</span><CopyButton text={code} label /></div> : <>
+				{language && <div className="codeblock-bar"><span>{language}</span><CopyButton text={code} label /></div>}
+				<CopyButton text={code} />
+			</>}
 			<pre {...props}>{asciiTable ? <code>{linkedFilePaths(code)}</code> : children}</pre>
 		</div>
 	);
@@ -150,4 +153,17 @@ function codeText(children: unknown): string {
 		return codeText(props?.children);
 	}
 	return "";
+}
+
+const ROUTE = /^(GET|POST|PUT|PATCH|DELETE)\s+(\S+)$/;
+
+/** `GET /todos` list items render as a method tag plus the path. */
+function RouteListItem({ node: _node, children, ...props }: JSX.IntrinsicElements["li"] & { node?: unknown }) {
+	const items = Array.isArray(children) ? children : [children];
+	const first = items.findIndex(child => !(typeof child === "string" && !child.trim()));
+	const head = items[first] as { type?: unknown; props?: { children?: unknown } } | undefined;
+	const text = head?.type === "code" && typeof head.props?.children === "string" ? head.props.children : "";
+	const route = ROUTE.exec(text);
+	if (!route) return <li {...props}>{children}</li>;
+	return <li {...props} className="api-route"><span className={`method-tag ${route[1].toLowerCase()}`}>{route[1]}</span><code>{route[2]}</code>{items.slice(first + 1)}</li>;
 }
