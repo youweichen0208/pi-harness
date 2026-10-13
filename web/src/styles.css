@@ -12593,7 +12593,8 @@ html.pi-desktop-linux .design-workspace.wiki-mode .topbar { padding-right: 148px
 .design-workspace .view-switch button:hover { background: transparent; color: var(--heading); }
 .design-workspace .view-switch button.active { background: transparent; color: var(--accent); font-weight: 600; box-shadow: inset 0 -2px 0 var(--accent); }
 .header-changes-chip { flex: none; display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: var(--r-sm); background: var(--yellow-bg); color: var(--yellow-fg); font-size: 11.5px; font-weight: 500; white-space: nowrap; }
-.design-workspace .header-location > span:first-child { flex: 0 2 auto; max-width: min(220px, 30%); }
+.design-workspace .header-location > span:first-child { flex: 0 0 auto; max-width: min(160px, 30%); }
+.design-workspace .header-location > .conversation-title-button { flex: 0 4 auto; }
 
 /* ---- Reply content: tables, code blocks with a header bar, API route tags ---- */
 .msg-text table { display: table; width: auto; max-width: 100%; border-collapse: separate; border-spacing: 0; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-elev); overflow: hidden; }
