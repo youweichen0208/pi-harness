@@ -1,6 +1,6 @@
 # pi-harness
 
-[![npm](https://img.shields.io/npm/v/@youweichen/pi-harness?label=%40youweichen%2Fpi-harness)](https://www.npmjs.com/package/@youweichen/pi-harness)
+[![Release](https://img.shields.io/github/v/release/youweichen0208/pi-harness)](https://github.com/youweichen0208/pi-harness/releases)
 [![CI](https://github.com/youweichen0208/pi-harness/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/youweichen0208/pi-harness/actions/workflows/ci.yml)
 ![Node.js](https://img.shields.io/badge/node-%3E%3D22.19.0-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-blue)
@@ -43,7 +43,7 @@
 | 左栏 | 项目和历史对话，可以按 Workspace 分组 |
 | 中间 | 和 AI 对话；AI 做了什么（读了哪些文件、跑了什么命令）都会显示出来 |
 | 右栏 | 项目文件树、文件预览与编辑、当前任务进度 |
-| 顶栏 | 在 **对话 / 终端 / 数据库 / 节点 / Git** 等视图之间切换 |
+| 顶栏 | 在 **对话 / 终端 / 数据库 / 节点 / Git** 等视图之间切换；工作区有未提交改动时，标题旁会显示「N 处改动」 |
 
 它**运行在你自己的电脑上**，默认只允许本机访问。你的代码不会上传到 pi-harness 的服务器
 （它没有服务器）；对话内容只会发给你自己选择的 AI 模型服务商。
@@ -63,9 +63,10 @@
 | 管理远程服务器 | “节点”视图保存 SSH 服务器，打开多个远程终端，并让 AI 帮你在服务器上排查问题 |
 | 查询数据库 | “数据库”视图连接 MySQL / PostgreSQL，执行只读查询，并可授权 AI 只读访问 |
 | 多项目并行 | 每个项目可以同时开多个对话，切换项目不会打断正在运行的任务 |
+| 写文档 | 点开 `.md` 文件进入 Wiki 文档编辑，标题下可插入自动更新的目录，右侧可以直接让 AI 帮你改 |
 | 切换模型 | 输入框下方随时切换模型和思考强度，支持 OpenAI、Anthropic、DeepSeek 等几十家服务商 |
 
-界面支持中文 / English（左下角 **设置** → 语言）、浅色 / 深色主题，任务完成时可以响铃提醒。
+界面支持中文 / English（左下角 **设置** → 语言），任务完成时可以响铃提醒。**设置 → 外观** 提供 5 种背景色调（暖白、雾蓝、鼠尾草、燕麦、石墨），也可以跟随系统深浅色。
 
 ---
 
@@ -129,6 +130,8 @@ npm install -g @youweichen/pi-harness
 ```
 
 > 国内网络较慢时，可以先执行 `npm config set registry https://registry.npmmirror.com` 切换到国内镜像。
+
+> ℹ️ 目前正式发布以**桌面版**为主，npm 上的版本可能落后于 [GitHub Releases](https://github.com/youweichen0208/pi-harness/releases) 的最新版；想用最新功能请优先使用桌面版。
 
 ### 步骤 3：在项目目录里启动
 
@@ -228,7 +231,8 @@ AI 执行的每条命令都显示在当前终端里，你随时能看到它在�
 
 - **数据库**：连接 MySQL / PostgreSQL，执行只读查询；你可以为某个对话单独授权 AI 只读访问。
 - **后台任务**：AI 启动的开发服务器（例如 `npm run dev`）会列在这里，可以一键停止。
-- **设置**：查看和编辑系统提示词、技能（Skills）、扩展、MCP 服务，以及检查更新。
+- **设置**：外观（5 种背景色调、跟随系统深浅色）、系统提示词、技能（Skills）、扩展、MCP 服务，以及检查更新。
+- **Wiki 文档**：点击文件树里的 `.md` 文件打开可编辑文档；自动维护的目录会随标题更新，弹窗右侧的 Agent Chat 复用当前对话，可以选中文字后「问 pi」。
 - **快捷键**：`Ctrl/⌘ + K` 全局搜索历史对话和文件，`Ctrl/⌘ + P` 代码搜索，`Ctrl/⌘ + F` 在当前对话中搜索。
 
 ---
@@ -411,7 +415,7 @@ pi-harness is a web and desktop interface for the [pi coding agent](https://www.
 **Quick start**
 
 - **Desktop app (easiest):** download the installer for your OS from [GitHub Releases](https://github.com/youweichen0208/pi-harness/releases) (`.dmg` for Apple Silicon Macs, `setup-x64.exe` for Windows, `.AppImage` / `.deb` for Linux). The builds are not code-signed: on macOS 15+ allow the app under *System Settings → Privacy & Security*; on Windows choose *More info → Run anyway*.
-- **npm:** requires Node.js **>= 22.19.0**.
+- **npm:** requires Node.js **>= 22.19.0**. The npm package may lag behind the latest GitHub Release; the desktop app is the primary distribution.
 
   ```bash
   npm install -g @youweichen/pi-harness
@@ -419,7 +423,7 @@ pi-harness is a web and desktop interface for the [pi coding agent](https://www.
   pi-harness --port 9000 --cwd /path/to/project
   ```
 
-On first launch, pick a model provider (OpenAI, Anthropic, DeepSeek and many more) and paste an API key, or sign in with a supported account under *Manage models*. Keys stay in `~/.pi/agent` on your machine. Then create a workspace, add a project folder and start chatting. To switch the interface to English, open **设置** (Settings) at the bottom-left and choose **English**.
+On first launch, pick a model provider (OpenAI, Anthropic, DeepSeek and many more) and paste an API key, or sign in with a supported account under *Manage models*. Keys stay in `~/.pi/agent` on your machine. Then create a workspace, add a project folder and start chatting. To switch the interface to English, open **设置** (Settings) at the bottom-left and choose **English**. Under *Settings → Appearance* you can pick one of five background tints (warm white, mist blue, sage, oat, graphite) or follow the system light/dark mode.
 
 Before exposing the server to other devices, set `PI_WEB_TOKEN` and read the [deployment guide](docs/deployment.md). See also the [SSH workbench guide](docs/ssh-workbench.md) and [environment variables](docs/env-vars.md).
 
