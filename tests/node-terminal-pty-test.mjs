@@ -36,6 +36,10 @@ await ready();
 await assert.rejects(service.execute('fixture',nodeId,'term',root,'sleep 20',1),/超时/);
 await ready();
 await service.handle('fixture',{type:'node_request',action:'terminal_input',requestId:'manual',nodeId,terminalId:'term',conversationId:opened.conversationId,payload:{data:'sleep 20\n'}});
+// Ctrl+C racing bash's fork of the manual command loses: SIGINT reaches only the interactive
+// shell, sleep runs to completion and the marker returns ~20s later. Give the command time
+// to actually start, like the execute-abort case above.
+await new Promise(r=>setTimeout(r,100));
 await assert.rejects(service.execute('fixture',nodeId,'term',root,'echo must-not-steal',2),/手动终端正忙/);
 await service.handle('fixture',{type:'node_request',action:'interrupt',requestId:'interrupt',nodeId,terminalId:'term',conversationId:opened.conversationId,payload:{}});
 await ready();
