@@ -72,7 +72,8 @@ try {
 	// A reply completes while the editor is open, in the original conversation.
 	await input.fill("local background reply"); await input.press("Enter");
 	await open();
-	assert.equal(await editor.getAttribute("contenteditable"), "false");
+	// The run may still be starting (SDK 1.2 counts it busy first); wait for the lock like the panel case below.
+	await page.waitForFunction(() => document.querySelector(".wiki-prose [contenteditable=false]"));
 	releaseReply();
 	await page.waitForFunction(() => document.querySelector(".wiki-prose [contenteditable=true]"));
 	assert((await page.locator(".messages").innerText()).includes("Reply paragraph 49"));

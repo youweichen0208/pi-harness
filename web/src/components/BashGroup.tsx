@@ -6,7 +6,7 @@ import { WorkspacePathContext } from "../workspace-context";
 import { bashCommand } from "../bash-steps";
 import { commandPresentation, isLikelyErrorLine, compactCommandLabel, commandDuration } from "../bash-presentation";
 import type { UiToolCallBlock } from "../types";
-import type { ToolView } from "./ToolCallBlock";
+import { toolDuration, type ToolView } from "./ToolCallBlock";
 import { ToolOutputDownload } from "./ToolOutputDownload";
 
 type Item = { messageId?: string; block: UiToolCallBlock; view: ToolView };
@@ -42,7 +42,7 @@ export function BashGroup({ items, onKill, active = false, flat = false }: { ite
 	const running = latest.some(({ view }) => stateOf(view) === "run");
 	const skipped = latest.length > 0 && latest.every(({ view }) => view.abandoned && !view.result && !view.status);
 	const state = failed ? "err" : running ? "run" : skipped ? "empty" : "ok";
-	const durations = items.map(({ view }) => view.status?.durationMs);
+	const durations = items.map(({ view }) => toolDuration(view));
 	const measured = durations.every((ms) => ms !== undefined);
 	useEffect(() => {
 		const jump = (event: Event) => {
@@ -101,7 +101,7 @@ function BashRow({ block, view, onKill, revealed, messageId, attempts, historica
 			<span className={`bash-state ${state}`} aria-label={t(state === "run" ? "running" : state === "err" ? "error" : state === "empty" && view.abandoned ? "toolNotExecuted" : "done")}>{state === "run" ? <i className="thinking-spinner" /> : state === "err" ? "✗" : state === "empty" ? "−" : "✓"}</span>
 			<span className="bash-readable-title">{reading.title}</span>{attempts && <span className="bash-attempt-count">{t("commandAttempts", { n: attempts })}</span>}{reading.title !== compactCommandLabel(reading.command) && <code className="bash-command-secondary">{reading.command}</code>}
 			{commandLines.length > 1 && <span className="bash-extra-lines">{t("bashExtraLines", { n: commandLines.length - 1 })}</span>}
-			{compact ? <span className="bash-row-stats">{state === "run" ? t("running") : state === "empty" && view.abandoned ? t("toolNotExecuted") : state === "err" && exitCode !== undefined ? `exit ${exitCode}` : view.status?.durationMs !== undefined && view.status.durationMs >= 100 ? commandDuration(view.status.durationMs) : t("toolLineCount", { n: lines.length })}</span> : <span className="bash-row-stats">{state === "run" ? t("running") : state === "empty" && view.abandoned ? t("toolNotExecuted") : exitCode !== undefined && state === "err" ? t("bashExitCode", { n: exitCode }) : t("toolLineCount", { n: lines.length })}{view.status?.durationMs !== undefined && seconds(view.status.durationMs) ? ` · ${seconds(view.status.durationMs)}` : ""}</span>}
+			{compact ? <span className="bash-row-stats">{state === "run" ? t("running") : state === "empty" && view.abandoned ? t("toolNotExecuted") : state === "err" && exitCode !== undefined ? `exit ${exitCode}` : (toolDuration(view) ?? 0) >= 100 ? commandDuration(toolDuration(view)!) : t("toolLineCount", { n: lines.length })}</span> : <span className="bash-row-stats">{state === "run" ? t("running") : state === "empty" && view.abandoned ? t("toolNotExecuted") : exitCode !== undefined && state === "err" ? t("bashExitCode", { n: exitCode }) : t("toolLineCount", { n: lines.length })}{toolDuration(view) !== undefined && seconds(toolDuration(view)!) ? ` · ${seconds(toolDuration(view)!)}` : ""}</span>}
 			{open ? <FiChevronDown /> : <FiChevronRight />}
 		</button>
 		{open && <div className="bash-row-body">

@@ -1,7 +1,7 @@
 import { ToolOutputDownload } from "./ToolOutputDownload";
-import { useContext, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import type { UiToolCallBlock } from "../types";
-import type { ToolView } from "./ToolCallBlock";
+import { toolDuration, type ToolView } from "./ToolCallBlock";
 import { useT } from "../i18n";
 import { codemodeOptions, codemodeScript } from "../codemode-presentation";
 import { WorkspacePathContext } from "../workspace-context";
@@ -32,7 +32,18 @@ export function CodemodeCard({ block, view, wrap = true }: { block: UiToolCallBl
 	for (const call of calls) groups.set(call.name, (groups.get(call.name) ?? 0) + 1);
 	const priced = calls.filter(call => call.cost !== undefined);
 	const cost = priced.reduce((sum, call) => sum + (call.cost ?? 0), 0);
-	const duration = view.status?.durationMs !== undefined ? `${(view.status.durationMs / 1000).toFixed(1)}s` : /Wall time:?\s*([^\n]+)/i.exec(output)?.[1];
+	const recorded = toolDuration(view);
+	// Live elapsed while the script runs (as pi 1.2 codemode rows); the recorded total replaces it when done.
+	const seenRunning = useRef<number>();
+	if (running && seenRunning.current === undefined) seenRunning.current = Date.now();
+	const [now, setNow] = useState(Date.now());
+	useEffect(() => {
+		if (!running) return;
+		const timer = window.setInterval(() => setNow(Date.now()), 1000);
+		return () => window.clearInterval(timer);
+	}, [running]);
+	const elapsed = running && seenRunning.current !== undefined ? `${Math.max(0, Math.floor((now - seenRunning.current) / 1000))}s` : undefined;
+	const duration = recorded !== undefined ? `${(recorded / 1000).toFixed(1)}s` : elapsed ?? /Wall time:?\s*([^\n]+)/i.exec(output)?.[1];
 	const copy = async (text: string) => { try { await navigator.clipboard.writeText(text); setFeedback(t("copied")); } catch (error) { setFeedback(String(error)); } };
 	const imageAction = async (url: string, attach: boolean, index: number) => {
 		setSaving(true); setFeedback("");

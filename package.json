@@ -71,8 +71,8 @@
     "check:design": "node scripts/check-design-tokens.mjs"
   },
   "dependencies": {
-    "@earendil-works/pi-ai": "1.0.4",
-    "@earendil-works/pi-coding-agent": "1.0.4",
+    "@earendil-works/pi-ai": "1.2.0",
+    "@earendil-works/pi-coding-agent": "1.2.0",
     "@vscode/ripgrep": "1.18.0",
     "compression": "^1.8.1",
     "electron-updater": "^6.0.0",

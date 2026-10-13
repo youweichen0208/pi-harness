@@ -171,6 +171,8 @@ export interface UiMessage {
 	/** Present on toolResult messages; links to the assistant message's toolCall block. */
 	toolCallId?: string;
 	toolName?: string;
+	/** toolResult: execution time recorded by the SDK (1.1+), kept across reloads. */
+	durationMs?: number;
 	toolOutputUrl?: string;
 	isError?: boolean;
 	planSnapshot?: PlanSnapshot;

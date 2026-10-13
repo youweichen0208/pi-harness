@@ -186,6 +186,7 @@ export function serializeMessage(
 				details: nativeToolDetails(m.toolName, m),
 				...(m.toolName === "codemode" ? { codemode: codemodeDetails(m.details) } : {}),
 				isError: m.isError,
+				...(typeof m.durationMs === "number" && Number.isFinite(m.durationMs) ? { durationMs: m.durationMs } : {}),
 				...(plan ? { planSnapshot: plan } : {}),
 				timestamp: m.timestamp,
 			};

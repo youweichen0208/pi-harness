@@ -47,7 +47,7 @@ export function WikiChatPanel({ resizeHandle, messages, live, streaming, toolSta
 		try { const args = JSON.parse(block.argumentsText ?? "{}"); path = String(args.path ?? args.file_path ?? args.command ?? "").split("\n")[0]; } catch { /* Partial streamed arguments. */ }
 		const output = result?.content.filter(c => c.type === "text").map(c => c.type === "text" ? String(c.text ?? "") : "").join("\n");
 		return <details className={`wiki-chat-tool ${error ? "error" : finished ? "done" : "pending"}`} key={block.id}>
-			<summary><span>{error ? <FiX /> : finished ? <FiCheck /> : running ? <FiLoader /> : "−"}</span><code>{block.name} {path}</code><small>{t(error ? "error" : finished ? "done" : running ? "running" : "wikiToolInterrupted")}{status?.durationMs !== undefined ? ` · ${(status.durationMs / 1000).toFixed(1)}s` : ""}</small></summary>
+			<summary><span>{error ? <FiX /> : finished ? <FiCheck /> : running ? <FiLoader /> : "−"}</span><code>{block.name} {path}</code><small>{t(error ? "error" : finished ? "done" : running ? "running" : "wikiToolInterrupted")}{(status?.durationMs ?? result?.durationMs) !== undefined ? ` · ${((status?.durationMs ?? result?.durationMs)! / 1000).toFixed(1)}s` : ""}</small></summary>
 			<pre>{output || block.argumentsText || block.name}</pre>
 		</details>;
 	};

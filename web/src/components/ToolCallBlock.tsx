@@ -42,6 +42,11 @@ export interface ToolView {
 	abandoned?: boolean;
 }
 
+/** Live tool_status timing, else the SDK-recorded time on the persisted result (survives reloads). */
+export function toolDuration(view: Pick<ToolView, "status" | "result">): number | undefined {
+	return view.status?.durationMs ?? view.result?.durationMs;
+}
+
 export function liveNestedCalls(parentId: string, statuses: ReadonlyMap<string, ToolStatus>): UiMessage["nestedCalls"] {
 	const calls = [...statuses.values()].filter(status => status.parentToolCallId === parentId).slice(0, 256).map(status => ({
 		id: status.toolCallId, name: status.toolName, argumentsText: status.argumentsText,
@@ -67,7 +72,7 @@ export function ReadGroup({ items, wrap }: { items: { block: UiToolCallBlock; vi
 	const skipped = items.every(({ view }) => !view.result && !view.status && view.abandoned);
 	const completed = items.every(({ view }) => view.result || view.status);
 	const failed = items.some(({ view }) => view.result?.isError || view.status?.isError);
-	const duration = items.reduce((sum, { view }) => sum + (view.status?.durationMs ?? 0), 0);
+	const duration = items.reduce((sum, { view }) => sum + (toolDuration(view) ?? 0), 0);
 	return <div className={`read-group ${failed ? "err" : pending ? "run" : completed ? "ok" : "idle"}`}>
 		<button type="button" className="read-group-head" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
 			<span aria-hidden="true">{open ? "⌄" : "›"}</span><UiIcon name="file" />
@@ -102,7 +107,8 @@ export function GrepSummary({ block, view, wrap }: { block: UiToolCallBlock; vie
 	const resultText = view.result?.content.map((part) => part.type === "text" && typeof part.text === "string" ? part.text : "").join("") ?? view.liveOutput ?? "";
 	const noMatches = /^\s*(?:No matches|没有匹配)/i.test(resultText);
 	const count = resultText.split("\n").filter((line) => /^\S+?:\d+[:-]/.test(line)).length;
-	const duration = view.status?.durationMs !== undefined ? formatDuration(view.status.durationMs) : "";
+	const recorded = toolDuration(view);
+	const duration = recorded !== undefined ? formatDuration(recorded) : "";
 	return <div className="grep-summary">
 		<button type="button" className="grep-summary-head" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
 			<FiChevronRight className={open ? "open" : ""} /><strong>{t("grepSearch")}</strong><code title={pattern}>{pattern || block.name}</code>
@@ -419,10 +425,8 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true }: ToolCall
 					: waitingModel
 						? t("done")
 						: t("toolQueued");
-	const duration =
-		view.status?.durationMs !== undefined
-			? formatDuration(view.status.durationMs)
-			: "";
+	const recorded = toolDuration(view);
+	const duration = recorded !== undefined ? formatDuration(recorded) : "";
 	if (duration) statusLabel = `${statusLabel} · ${duration}`;
 	if (bashRun) statusLabel = bashRun.status === "partial" ? t("bashPartial", { ok: bashRun.completed, total: bashRun.steps.length }) : bashRun.status === "failed" ? t("bashFailed") : bashRun.status === "no-match" ? t("bashNoMatch") : bashRun.status === "running" ? `${t("bashRunning")}${elapsed ? ` · ${elapsed}s` : ""}` : `${t("done")}${duration ? ` · ${duration}` : ""}`;
 	else if (block.name === "bash" && isError) statusLabel = `${t("bashFailed")}${Number.isFinite(bashExit) ? ` · exit ${bashExit}` : ""}${bashDiagnostics.length ? ` · ${t("bashErrorCount", { n: bashDiagnostics.length })}` : ""}`;

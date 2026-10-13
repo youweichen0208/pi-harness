@@ -145,7 +145,16 @@ export class NodeAgent {
 		await new Promise<void>((resolve, reject) => {
 			void session.prompt(text, { expandPromptTemplates: false, preflightResult: disposition => {
 				// Abort during asynchronous auth/compaction must prevent a later model call.
-				signal.throwIfAborted();
+				// SDK 1.2 marks the run active before "started" and does not guard this
+				// callback, so throwing here would strand the session busy. Abort the
+				// starting run instead: the SDK stops it at agent_start, before any request.
+				if (signal.aborted) {
+					const stopped = () => reject(new Error("已停止"));
+					// Report the stop only once the aborted run has settled, so the next prompt is accepted.
+					if (disposition === "started") void session.abort().catch(() => {}).finally(stopped);
+					else { if (!session.isStreaming) this.set({ running: false }); stopped(); }
+					return;
+				}
 				if (disposition !== "started" && !session.isStreaming) this.set({ running: false });
 				resolve();
 			} }).catch(error => {

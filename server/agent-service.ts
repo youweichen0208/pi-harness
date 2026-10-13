@@ -923,8 +923,9 @@ export class ClientSession {
 				// Bash finished — wait briefly for background servers to bind their
 				// ports, then diff against the pre-run snapshot and record them.
 				if (event.toolName === "bash") void this.bg.trackAfterBash();
-				const durationMs =
-					startedAt !== undefined ? Date.now() - startedAt : undefined;
+				// SDK 1.1+ reports execute() time on a monotonic clock; wall clock is the fallback.
+				const durationMs = event.durationMs ??
+					(startedAt !== undefined ? Date.now() - startedAt : undefined);
 				// 插件扩展点：工具结束执行（带耗时与错误标志）。
 				this.onToolEvent?.({
 					phase: "end",
@@ -977,7 +978,8 @@ export class ClientSession {
 
 				conv.lastTaskEndedAt = Date.now();
 				this.scheduleSessionsRefresh();
-				void this.continueAfterToolText(conv);
+				// SDK 1.1+: a user stop between model calls leaves stopReason "stop"; never remind after it.
+				if (!event.aborted) void this.continueAfterToolText(conv);
 
 				// Deferred settings reload: settings (system prompt / skills /
 				// extensions) changed while the run was streaming — applying now
