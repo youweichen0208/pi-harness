@@ -446,8 +446,18 @@ const service = new AgentService(
 );
 
 const nodeWorkbench = new NodeWorkbench(DATA_DIR);
-const projectWorkspaces = new ProjectWorkspaceStore(join(DATA_DIR, "project-workspaces.json"));
+// The desktop app points this at the CLI's file so both list the same workspaces.
+const localWorkspacesFile = join(DATA_DIR, "project-workspaces.json");
+const workspacesFile = resolve(process.env.PI_WEB_WORKSPACES_FILE || localWorkspacesFile);
+const projectWorkspaces = new ProjectWorkspaceStore(workspacesFile);
+if (workspacesFile !== localWorkspacesFile) {
+	try { projectWorkspaces.importFrom(localWorkspacesFile); }
+	catch (error) { console.warn(`[workspaces] could not merge ${localWorkspacesFile}:`, error); }
+}
 const workspaceSubscribers = new Set<(message: ServerMessage) => void>();
+projectWorkspaces.watch((catalog) => {
+	for (const subscriber of workspaceSubscribers) subscriber({ type: "project_workspaces", catalog });
+});
 
 // Optional UI plugins (<dataDir>/plugins/<id>/): scanned on every client
 // attach so freshly dropped plugins appear without a server restart.

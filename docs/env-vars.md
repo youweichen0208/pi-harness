@@ -5,6 +5,7 @@
 | `PORT` | `8787` | HTTP 端口 |
 | `PI_WEB_CWD` | `process.cwd()` | 智能体工作区（读/写/终端都以此为根） |
 | `PI_WEB_DATA_DIR` | `~/.pi-web` | 每客户端持久化 UI 状态（client-state.json，最近项目/工作目录）；对话会话放 SDK 默认目录 `<agentDir>/sessions/--<cwd>--/`（与 pi CLI/TUI 共享同一对话列表） |
+| `PI_WEB_WORKSPACES_FILE` | `<PI_WEB_DATA_DIR>/project-workspaces.json` | Workspace 列表文件；桌面版默认指向 `~/.pi-web/project-workspaces.json`，与命令行版共用，并一次性并入数据目录里的旧列表 |
 | `PI_WEB_INLINE_FILE_MAX` | `12288` (12KB) | inline 附件的内联阈值，超过自动降级为路径引用 |
 | `PI_WEB_VISION_TIMEOUT_MS` | `90000` | 视觉桥单次转写（整批图片）超时，防止慢视觉模型拖住 prompt |
 | `PI_WEB_STALL_NOTIFY_MS` | `180000` | 模型无进展看门狗：流式运行中 N 毫秒无任何 SDK 事件则发 warning 提示可能失联（不自动 abort——深度思考可合法静默数分钟）；0 = 关闭 |

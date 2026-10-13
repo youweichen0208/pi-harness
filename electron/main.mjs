@@ -117,6 +117,8 @@ async function startServer(reusePort) {
 			PI_WEB_HOST: "127.0.0.1",
 			PI_WEB_TOKEN: serverToken,
 			PI_WEB_DATA_DIR: dataDir,
+			// Workspace 列表与命令行版共用 ~/.pi-web 里的同一份；测试指定数据目录时保持隔离
+			...(process.env.PI_WEB_DATA_DIR ? {} : { PI_WEB_WORKSPACES_FILE: join(process.env.HOME || process.env.USERPROFILE || "~", ".pi-web", "project-workspaces.json") }),
 			PI_WEB_NO_BROWSER: "1", // 不要自动打开浏览器（本身也不会打开，桌面版有自己的窗口）
 			PI_WEB_PKG_ROOT: getPkgRoot(), // 告诉 server 去哪找 web/dist
 			ELECTRON_RUN_AS_NODE: "1", // 以 Node.js 模式运行（非 Electron）

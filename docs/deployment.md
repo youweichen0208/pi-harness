@@ -108,6 +108,11 @@ npm run publish:electron       # 同 build，但 --publish always——本地跑
 - `PI_WEB_DATA_DIR` 桌面版单独用 `~/.pi-web-desktop`，和命令行版的 `~/.pi-web` 分开，
   避免两边同时跑时抢 `client-state.json` 等运行时状态；对话历史本身走 SDK 的
   `~/.pi/agent`，两边共享，不受影响。
+- Workspace 列表两边共用：未显式设置 `PI_WEB_DATA_DIR` 时，主进程传
+  `PI_WEB_WORKSPACES_FILE=~/.pi-web/project-workspaces.json`，桌面版与默认数据目录的命令行版读写同一份。
+  启动时若 `~/.pi-web-desktop/project-workspaces.json` 仍存在，会并入共享文件（同名合并项目），
+  原文件改名为 `.merged`，只合并一次。服务端每秒检查文件，另一边的修改会推给已打开的窗口；
+  过期 revision 的写入被拒绝，不会覆盖另一边的改动。
 - 桌面单窗口客户端 ID 保存到 `<PI_WEB_DATA_DIR>/desktop-client-id`，由主进程通过沙箱 preload
   传给前端，不依赖随机端口的浏览器存储；完整退出再启动仍恢复服务端保存的最近项目和最后工作目录。
   浏览器版继续为每个标签页分配独立 ID。旧版各临时 ID 下的记录保留，不自动合并。
