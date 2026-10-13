@@ -247,7 +247,7 @@ function createWindow() {
 			});
 		}
 	};
-	for (const event of ["maximize", "unmaximize", "enter-full-screen", "leave-full-screen", "restore"]) {
+	for (const event of ["maximize", "unmaximize", "enter-full-screen", "leave-full-screen", "enter-html-full-screen", "leave-html-full-screen", "restore"]) {
 		mainWindow.on(event, publishWindowState);
 	}
 	mainWindow.webContents.on("did-finish-load", publishWindowState);

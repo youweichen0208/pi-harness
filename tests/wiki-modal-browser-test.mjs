@@ -91,10 +91,21 @@ try {
 	assert.equal(await page.locator(".wiki-sidebar").isVisible(), false);
 	const box = await modal.boundingBox(); assert(Math.abs(box.width - 1440 * .92) < 2); assert(Math.abs(box.height - 900) < 2);
 	await page.locator(".wiki-scroll").evaluate(el => el.scrollTop = 500);
-	await page.getByRole("button", {name: "放大文档", exact: true}).click();
+	await page.getByRole("button", {name: "全屏显示文档", exact: true}).click();
+	await page.waitForFunction(() => document.fullscreenElement === document.documentElement);
 	assert.equal(Math.round((await modal.boundingBox()).width), 1440);
-	await page.getByRole("button", {name: "还原大小", exact: true}).click();
+	// The document dialog stays above the fullscreen page.
+	assert(await modal.evaluate(el => el.contains(document.elementFromPoint(innerWidth / 2, innerHeight / 2))));
+	await page.getByRole("button", {name: "退出全屏", exact: true}).click();
+	await page.waitForFunction(() => !document.fullscreenElement);
+	assert(Math.abs((await modal.boundingBox()).width - 1440 * .92) < 2);
 	assert.equal(await page.locator(".wiki-scroll").evaluate(el => el.scrollTop), 500);
+	// Leaving fullscreen elsewhere (Esc, OS controls) restores the size and label.
+	await page.getByRole("button", {name: "全屏显示文档", exact: true}).click();
+	await page.waitForFunction(() => document.fullscreenElement);
+	await page.evaluate(() => document.exitFullscreen());
+	await page.getByRole("button", {name: "全屏显示文档", exact: true}).waitFor();
+	assert(Math.abs((await modal.boundingBox()).width - 1440 * .92) < 2);
 	await close(); await modal.waitFor({state: "detached"});
 	assert.equal(await input.inputValue(), "Existing draft"); assert.equal(await page.locator(".attach-chip.file").count(), 1);
 	assert.equal(await page.locator(".messages").evaluate(el => el.scrollTop), chatScroll);
@@ -115,8 +126,8 @@ try {
 	// Immediate close flushes pending edits; failed saves offer explicit choices.
 	await append(" Saved on close.");
 	const caret = await page.evaluate(() => ({offset: getSelection().anchorOffset, text: getSelection().anchorNode.textContent}));
-	await page.getByRole("button", {name: "放大文档", exact: true}).click();
-	await page.getByRole("button", {name: "还原大小", exact: true}).click();
+	await page.getByRole("button", {name: "全屏显示文档", exact: true}).click();
+	await page.getByRole("button", {name: "退出全屏", exact: true}).click();
 	assert.deepEqual(await page.evaluate(() => ({offset: getSelection().anchorOffset, text: getSelection().anchorNode.textContent})), caret);
 	assert((await editor.innerText()).includes("Saved on close."));
 	await close(); await modal.waitFor({state: "detached"});
