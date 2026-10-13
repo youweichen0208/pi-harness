@@ -3,8 +3,9 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { LanguageProvider } from "./i18n";
-import "./styles.css";
+// github-dark first so styles.css can retint tokens for the light appearance.
 import "highlight.js/styles/github-dark.css";
+import "./styles.css";
 import { initAuthToken } from "./auth-token";
 import { desktopAPI } from "./desktop";
 

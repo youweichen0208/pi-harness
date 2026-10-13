@@ -148,7 +148,7 @@ pi-harness/
 | `SystemPromptPanel.tsx` | 原生提示词分段、全文复制、SYSTEM/APPEND/上下文文件编辑；见 `docs/architecture-system-prompt.md` |
 | `SettingsModal.tsx` | 设置面板（原生提示词/技能/扩展/MCP/更新；更新页不显示 pi-harness 本身；默认打开原生提示词，各页使用设置 v2 带用途说明的分组列表，MCP 常用控件自动保存；见 docs/ui-design.md） |
 | `BgTasksModal.tsx` | 后台任务弹窗：AI 启动的监听端口进程列表 |
-| `ModelThinking.tsx` | 模型 + 思考强度下拉（模型下拉顶部有搜索过滤框；输入工具栏思考档位为带说明的三级菜单） |
+| `ModelThinking.tsx` | 模型 + 思考强度下拉（模型下拉顶部有搜索过滤框；输入工具栏思考档位为带说明的四档菜单：关闭／极简／标准／深度） |
 | `GlobalSearchModal.tsx` | 全局搜索弹窗（Ctrl+K）：搜历史对话/最近项目/工作区文件名 |
 | `CodeSearchModal.tsx` | 代码搜索弹窗（⌘P）：代码 / 文件名两种模式、按文件分组、右侧预览、Enter 打开到行；见 `docs/ui-design.md`「代码搜索」 |
 | `PluginView.tsx` | 插件视图宿主：薄 React 壳 + 动态 import client bundle |
