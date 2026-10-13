@@ -6,7 +6,9 @@ import ts from "typescript";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const hexColor = /(?<![\w&])#(?:[\da-f]{8}|[\da-f]{6}|[\da-f]{4}|[\da-f]{3})\b/gi;
-const rootPalette = /^:root(?:\[data-appearance=(?:"dark"|'dark'|dark)\])?$/;
+const rootPalette = /^:root(?:\[data-appearance=(?:"dark"|'dark'|dark)\]|\[data-theme=(?:"(?:mist|sage|oat|graphite)"|'(?:mist|sage|oat|graphite)')\])?$/;
+// Settings → appearance previews re-declare a theme's tokens on a swatch element.
+const swatchPalette = /^\.theme-swatch\[data-theme="(?:warm|mist|sage|oat|graphite)"\]$/;
 const contentPalette = /^(?:--file-code-|--wiki-code-)/;
 const colorNames = new Set(`aliceblue antiquewhite aqua aquamarine azure beige bisque black blanchedalmond blue blueviolet brown burlywood cadetblue chartreuse chocolate coral cornflowerblue cornsilk crimson cyan darkblue darkcyan darkgoldenrod darkgray darkgreen darkgrey darkkhaki darkmagenta darkolivegreen darkorange darkorchid darkred darksalmon darkseagreen darkslateblue darkslategray darkslategrey darkturquoise darkviolet deeppink deepskyblue dimgray dimgrey dodgerblue firebrick floralwhite forestgreen fuchsia gainsboro ghostwhite gold goldenrod gray green greenyellow grey honeydew hotpink indianred indigo ivory khaki lavender lavenderblush lawngreen lemonchiffon lightblue lightcoral lightcyan lightgoldenrodyellow lightgray lightgreen lightgrey lightpink lightsalmon lightseagreen lightskyblue lightslategray lightslategrey lightsteelblue lightyellow lime limegreen linen magenta maroon mediumaquamarine mediumblue mediumorchid mediumpurple mediumseagreen mediumslateblue mediumspringgreen mediumturquoise mediumvioletred midnightblue mintcream mistyrose moccasin navajowhite navy oldlace olive olivedrab orange orangered orchid palegoldenrod palegreen paleturquoise palevioletred papayawhip peachpuff peru pink plum powderblue purple rebeccapurple red rosybrown royalblue saddlebrown salmon sandybrown seagreen seashell sienna silver skyblue slateblue slategray slategrey snow springgreen steelblue tan teal thistle tomato turquoise violet wheat white whitesmoke yellow yellowgreen`.split(" "));
 const colorProperty = /^(?:--[\w-]+|(?:background|border|outline|text-decoration|column-rule)(?:-[\w-]+)?|(?:box|text)-shadow|(?:caret|accent|stop|flood|lighting)-color|color|fill|stroke|fill-style|stroke-style)$/;
@@ -32,7 +34,7 @@ function literalColors(value, named = true) {
 function allowedPalette(decl) {
 	const rule = decl.parent;
 	if (rule.type !== "rule") return false;
-	if (rootPalette.test(rule.selector) && decl.prop.startsWith("--")) return true;
+	if (rule.selectors.every(selector => rootPalette.test(selector) || swatchPalette.test(selector)) && decl.prop.startsWith("--")) return true;
 	if (contentPalette.test(decl.prop) && rule.selectors.every(selector => /(?:^|\s)\.(?:fp-embedded|wiki-prose)(?:\[data-code-theme="(?:dark|system)"\])?$/.test(selector))) return true;
 	if (decl.prop === "--highlight-color" && /^\.fp-highlight-(?:yellow|green|blue|pink|purple)$/.test(rule.selector)) return true;
 	if (decl.prop === "color" && rule.selectors.every(selector => /^\.fp-markdown \.hljs-[\w-]+$/.test(selector) || /^\.fp-rich-document pre > code::highlight\(rich-code-[\w-]+\)$/.test(selector))) return true;

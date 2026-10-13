@@ -31,6 +31,16 @@
 - 同一个改动数只显示在两处：顶栏 Git 后面和目录树里，用黄色。文件栏标题里的「改动 N」用中性灰。
 - 每个变量只定义一次：浅色在 `:root`，深色在 `:root[data-appearance="dark"]`，不在后面重复覆盖。
 
+### 1.1a 背景色调（设置 → 外观）
+
+五种底色：1a 暖白（默认，即上表浅色）、1b 雾蓝、1c 鼠尾草、1d 燕麦、1e 石墨。只改变底色与中性色（`--bg`、`--bg-elev(2)`、`--border(-soft)`、`--text*`、`--heading`、`--bubble-bg`、`--output-bg`、`--input-border`、`--sidebar-bg`、`--row-active`），蓝色强调色和状态色不变。
+
+- 1e 石墨就是深色外观：`data-appearance="dark"` 的唯一实现；1a–1d 为 `data-appearance="light"` 加 `data-theme`。`<html>` 上始终同时有两者。
+- 浅色色调在 `:root[data-theme="…"]` 中各定义一次；设置页预览色块用同名 `.theme-swatch[data-theme="…"]` 重声明令牌（检查脚本只放行这两种选择器）。
+- 「跟随系统深浅色」：系统深色时用石墨，浅色时用最近选择的浅色色调（从石墨切回时用暖白）；开启后石墨卡片置灰不可选。
+- 存储：`pi-harness:theme`、`pi-harness:theme-follow`；旧 `pi-harness:appearance`（light/dark/system）只读一次迁移。
+- 组件不写死中性灰：表面、边框、次要文字一律用上述令牌，否则换色调时会漏改。
+
 ### 1.2 圆角
 
 | 变量 | 值 | 用于 |
