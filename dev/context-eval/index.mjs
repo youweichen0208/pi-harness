@@ -115,7 +115,7 @@ export async function runEvaluation(config, corpus, output, arm, runner) {
 		process.removeListener("SIGTERM", interrupt);
 		await writeJson(join(output, "report.json"), {
 			createdAt: new Date().toISOString(), config: reportConfig(config),
-			node: process.version, sdk: "1.0.4", interrupted: controller.signal.aborted,
+			node: process.version, sdk: "1.2.0", interrupted: controller.signal.aborted,
 			completedSamples: samples.length, plannedSamples, evidenceChecksPassed: evidenceChecksPassed(),
 			summary: summarize(samples), humanCorrectness: "ungraded", promotionDecision: "pending_real_data_and_human_review",
 			backendEgress: "not_verified", indexFreshness: arm === "baseline" ? "not_applicable" : "not_verified",

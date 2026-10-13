@@ -1,6 +1,6 @@
 # 原生 plan 扩展
 
-`server/plan/` 是 pi 1.0.4 可替换 inline extension，名称 `pi-harness-plan`。它不进入 CLI 自动发现目录，也不修改 SDK、原生 bash 或自动续跑策略。默认开启，尊重已保存的布尔开关（包括关闭）；缺失或无效配置使用默认值。服务实例的 `<dataDir>/plan-settings.json` 保存唯一全局 `enabled` 偏好。
+`server/plan/` 是 pi 1.2.0 可替换 inline extension，名称 `pi-harness-plan`。它不进入 CLI 自动发现目录，也不修改 SDK、原生 bash 或自动续跑策略。默认开启，尊重已保存的布尔开关（包括关闭）；缺失或无效配置使用默认值。服务实例的 `<dataDir>/plan-settings.json` 保存唯一全局 `enabled` 偏好。
 
 ## 工具与持久化
 
@@ -24,7 +24,7 @@ create 生成新 planId，revision=1。update 另传 planId 和 expectedRevision
 
 创建、恢复、reload、树导航、只读恢复以及 agent_settled 共用协调函数。空闲且可写时仅在期望与实际不一致时调用 setActiveToolsByName；运行中或只读的会话显示 pending。当前只读会话也可保存全局偏好，恢复可写后再应用工具激活变更。全局切换保存后广播全部客户端的快照，不触发 reload。prompt 在实际投递前再次协调，快照构建只读取计划开关状态。
 
-树导航后的协调不能省略：SDK 1.0.4 会从历史工具声明恢复激活集合，包括已关闭的 plan。协议 v40 的 UiState.planSettings 提供 enabled、available、effective、pending 和不可用原因；set_plan_enabled 带当前 conversationId。
+树导航后的协调不能省略：SDK（1.0.4 起）会从历史工具声明恢复激活集合，包括已关闭的 plan。协议 v40 的 UiState.planSettings 提供 enabled、available、effective、pending 和不可用原因；set_plan_enabled 带当前 conversationId。
 
 ## 展示投影
 

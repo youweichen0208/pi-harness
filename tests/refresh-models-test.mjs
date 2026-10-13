@@ -12,7 +12,7 @@
 // Usage: npm run build && node tests/refresh-models-test.mjs [port]
 import WebSocket from "ws";
 import { createServer } from "node:http";
-import { mkdtempSync, mkdirSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
@@ -27,6 +27,8 @@ const agentDir = join(base, "agent");
 mkdirSync(workdir, { recursive: true });
 mkdirSync(dataDir, { recursive: true });
 mkdirSync(agentDir, { recursive: true });
+// pi 1.2 publishes config schemas; saving providers must keep `$schema`.
+writeFileSync(join(agentDir, "models.json"), JSON.stringify({ $schema: "https://pi.dev/schemas/models.schema.json", providers: {} }));
 
 // Mock: first hit returns 2 models; after the "bump" flag returns 3 (one new).
 let bumped = false;
@@ -174,6 +176,7 @@ try {
 	c.send({ type: "refresh_provider_models", providerId: "my-provider", reqId: 11 });
 	const r1 = await c.waitFor("refresh_provider_result", 15000, (m) => m.reqId === 11);
 	check("refresh ok, added=1, total=2", r1.ok && r1.added === 1 && r1.total === 2, JSON.stringify(r1));
+	check("$schema kept when models.json is rewritten", JSON.parse(readFileSync(join(agentDir, "models.json"), "utf8")).$schema === "https://pi.dev/schemas/models.schema.json");
 
 	let mc = await c.waitFor(
 		"models_config",

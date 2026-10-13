@@ -57,7 +57,7 @@ it("keeps compaction alive when summary retry finishes and tracks native backoff
 	expect(isRecovering(state)).toBe(false);
 	state = recoveryEvent(state, { type: "auto_retry_start", attempt: 1, maxAttempts: 3, delayMs: 5000, errorMessage: "529" }, 100);
 	expect(state.retry?.deadline).toBe(5100);
-	expect(recoveryEvent(state, { type: "agent_settled" })).toEqual({ lastCompaction: state.lastCompaction });
+	expect(recoveryEvent(state, { type: "agent_settled", aborted: false })).toEqual({ lastCompaction: state.lastCompaction });
 });
 
 it("retains compaction outcome with explicit before and estimated after counts", () => {
@@ -66,7 +66,7 @@ it("retains compaction outcome with explicit before and estimated after counts",
 	state = recoveryEvent(state, { type: "compaction_end", reason: "manual", result: { summary: "short", firstKeptEntryId: "a", tokensBefore: 8500 }, aborted: false, willRetry: false }, 0, 400);
 	expect(state.lastCompaction).toMatchObject({ status: "completed", tokensBefore: 8500, tokensAfter: 400 });
 	expect(isRecovering(state)).toBe(false);
-	expect(recoveryEvent(state, { type: "agent_settled" }).lastCompaction).toEqual(state.lastCompaction);
+	expect(recoveryEvent(state, { type: "agent_settled", aborted: false }).lastCompaction).toEqual(state.lastCompaction);
 });
 
 

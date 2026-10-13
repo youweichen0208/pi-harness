@@ -26,7 +26,7 @@ Windows 计划任务部署。
 | 终端 | node-pty（服务端 PTY）+ `@xterm/xterm`（浏览器渲染，经 terminal bridge 转发） |
 | 样式 | 单文件 `web/src/styles.css`（浅色/深色/跟随系统，CSS 变量） |
 
-SDK 与 pi-ai 精确锁定 1.0.4，不应用本项目的 SDK 补丁。Codemode 与工具搜索使用原生 defaultTools 默认开启，已有原生配置优先。
+SDK 与 pi-ai 精确锁定 1.2.0，不应用本项目的 SDK 补丁。Codemode 与工具搜索使用原生 defaultTools 默认开启，已有原生配置优先。
 系统提示词：修改分段来源、原生文件编辑或重载时，读取 `docs/architecture-system-prompt.md`。
 Extensions：修改内置扩展清单/状态、包安装、启停、更新、作用域迁移、目录浏览或单文件编辑时，读取 `docs/architecture-extensions.md`。
 Codemode 卡片与 MCP/Codemode 设置遵循 15a/15b 设计；状态、项目覆盖、费用及输出限制读取 `docs/architecture-plugins.md`。
@@ -160,7 +160,7 @@ pi-harness/
 
 ## 原生代理边界
 
-pi SDK 和 pi-ai 精确锁定 1.0.4，使用原版 SDK，不应用本项目的 SDK 补丁。会话加载 pi 原生配置、上下文文件、技能、扩展与官方 Codemode/tool_search/MCP。WebUI 不覆盖 bash，不自动续跑或发起额外模型调用；仅两个例外，界面均显示为自动提醒事件、每条用户请求最多 1 次：回复以“写成文本、未执行的工具调用”结尾时，请模型重新调用（见 `docs/architecture-core.md`「未执行的工具调用」）；本轮工具已全部完成但计划仍为 active 时，原生 plan 扩展在 settle 前提醒模型补一次终态调用（见 `docs/architecture-plan.md`）；原生 plan 扩展默认开启（保留已保存的关闭选择），启用时由扩展提供工具规则与条件性历史背景。修改工具、全局开关、压缩恢复或计划投影时读取 `docs/architecture-plan.md`。设置中的提示词支持原生文件编辑与空闲时 reload，技能支持原生发现、筛选和启停（见 docs/architecture-extensions.md）；Extensions 管理原生包声明及资源过滤规则，变更通过新会话或用户重载生效。界面偏好不改变模型上下文。SSH 工作台连接后自动准备本机隔离 pi 会话，复用本机模型、仅启用 SSH 节点工具；节点会话不加载本机上下文、扩展、技能或 MCP。修改启动、消息流、工具或断开清理时读取 `docs/architecture-nodes.md`。
+pi SDK 和 pi-ai 精确锁定 1.2.0，使用原版 SDK，不应用本项目的 SDK 补丁。会话加载 pi 原生配置、上下文文件、技能、扩展与官方 Codemode/tool_search/MCP。WebUI 不覆盖 bash，不自动续跑或发起额外模型调用；仅两个例外，界面均显示为自动提醒事件、每条用户请求最多 1 次：回复以“写成文本、未执行的工具调用”结尾时，请模型重新调用（见 `docs/architecture-core.md`「未执行的工具调用」）；本轮工具已全部完成但计划仍为 active 时，原生 plan 扩展在 settle 前提醒模型补一次终态调用（见 `docs/architecture-plan.md`）；原生 plan 扩展默认开启（保留已保存的关闭选择），启用时由扩展提供工具规则与条件性历史背景。修改工具、全局开关、压缩恢复或计划投影时读取 `docs/architecture-plan.md`。设置中的提示词支持原生文件编辑与空闲时 reload，技能支持原生发现、筛选和启停（见 docs/architecture-extensions.md）；Extensions 管理原生包声明及资源过滤规则，变更通过新会话或用户重载生效。界面偏好不改变模型上下文。SSH 工作台连接后自动准备本机隔离 pi 会话，复用本机模型、仅启用 SSH 节点工具；节点会话不加载本机上下文、扩展、技能或 MCP。修改启动、消息流、工具或断开清理时读取 `docs/architecture-nodes.md`。
 
 ## 4. 核心架构（摘要）
 

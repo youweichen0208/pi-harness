@@ -23,3 +23,9 @@ test("the UI marks nested history incomplete when it truncates arguments", () =>
 	expect(result?.nestedCalls?.complete).toBe(false);
 	expect(result?.nestedCalls?.calls[0].argumentsText).toContain("[truncated]");
 });
+
+test("tool results keep the SDK-recorded execution time across reloads", () => {
+	const base: AgentMessage = { role: "toolResult", toolCallId: "call", toolName: "bash", isError: false, timestamp: 1, content: [{ type: "text", text: "ok" }] };
+	expect(serializeMessage({ ...base, durationMs: 1234 }, 1)?.durationMs).toBe(1234);
+	expect(serializeMessage(base, 1)).not.toHaveProperty("durationMs");
+});

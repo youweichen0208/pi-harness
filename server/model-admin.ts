@@ -426,18 +426,21 @@ export class ModelAdminService {
 	}
 
 	/** Read + parse models.json (tolerating // and /* *\/ comments like the SDK). */
+	/** Top-level keys other than providers (`$schema`, SDK 1.2+) are kept so writes round-trip them. */
 	private readModelsConfig(): {
 		providers: Record<string, Record<string, unknown>>;
+		rest: Record<string, unknown>;
 	} {
 		const path = this.modelsConfigPath();
 		try {
 			const raw = readFileSync(path, "utf8");
 			const parsed = JSON.parse(stripJsonComments(raw)) as {
 				providers?: Record<string, Record<string, unknown>>;
-			};
-			return { providers: parsed?.providers ?? {} };
+			} & Record<string, unknown>;
+			const { providers, ...rest } = parsed ?? {};
+			return { providers: providers ?? {}, rest };
 		} catch {
-			return { providers: {} };
+			return { providers: {}, rest: {} };
 		}
 	}
 
@@ -797,11 +800,11 @@ static async probeModelsEndpoint(
 			return;
 		}
 		try {
-			const { providers } = this.readModelsConfig();
+			const { providers, rest } = this.readModelsConfig();
 			providers[pid] = mergeChatProvider(providers[pid] ?? {}, { ...config, models });
 			// models.json may carry provider apiKeys: atomic, private for new files,
 			// and an existing file keeps the mode its owner chose.
-			writeFileAtomic(this.modelsConfigPath(), JSON.stringify({ providers }, null, 2) + "\n", { keepExistingMode: true });
+			writeFileAtomic(this.modelsConfigPath(), JSON.stringify({ ...rest, providers }, null, 2) + "\n", { keepExistingMode: true });
 
 			// Allow a custom models.json entry to reuse the provider credential
 			// already stored in auth.json.  Seed the shared runtime too, because
@@ -849,7 +852,7 @@ static async probeModelsEndpoint(
 	/** Remove a provider from models.json and hot-reload. */
 	async deleteModelConfig(providerId: string): Promise<void> {
 		try {
-			const { providers } = this.readModelsConfig();
+			const { providers, rest } = this.readModelsConfig();
 			if (!(providerId in providers)) {
 				this.host.emit({
 					type: "notice",
@@ -859,7 +862,7 @@ static async probeModelsEndpoint(
 				return;
 			}
 			delete providers[providerId];
-			writeFileAtomic(this.modelsConfigPath(), JSON.stringify({ providers }, null, 2) + "\n", { keepExistingMode: true });
+			writeFileAtomic(this.modelsConfigPath(), JSON.stringify({ ...rest, providers }, null, 2) + "\n", { keepExistingMode: true });
 			await this.host.modelRuntime().refresh();
 			await this.listModelsConfig();
 			await this.host.pushModels();
