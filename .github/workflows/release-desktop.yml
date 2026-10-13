@@ -130,16 +130,20 @@ jobs:
           installed="$RUNNER_TEMP/pi-installed"
           mount="$RUNNER_TEMP/pi-dmg"
           mkdir -p "$previous" "$installed" "$mount"
-          gh release download v0.99.16 --pattern '*mac-arm64.zip' --dir "$previous"
-          ditto -x -k "$previous/"*mac-arm64.zip "$previous"
-          ditto "$previous/pi.app" "$installed/pi.app"
-          node tests/packaged-upgrade-test.mjs seed "$installed/pi.app/Contents/MacOS/pi" "$installed/pi.app/Contents/Resources/app" "$RUNNER_TEMP/pi-upgrade-state"
-          rm -rf "$installed/pi.app"
+          # Previous version = latest published release; the first release has none and skips the upgrade-data check.
+          prev=$(gh release list --exclude-drafts --limit 1 --json tagName --jq '.[0].tagName // empty')
+          if [ -n "$prev" ]; then
+            gh release download "$prev" --pattern '*mac-arm64.zip' --dir "$previous"
+            ditto -x -k "$previous/"*mac-arm64.zip "$previous"
+            ditto "$previous/pi.app" "$installed/pi.app"
+            node tests/packaged-upgrade-test.mjs seed "$installed/pi.app/Contents/MacOS/pi" "$installed/pi.app/Contents/Resources/app" "$RUNNER_TEMP/pi-upgrade-state"
+            rm -rf "$installed/pi.app"
+          fi
           hdiutil attach release/*mac-arm64.dmg -mountpoint "$mount" -nobrowse -readonly
           ditto "$mount/pi.app" "$installed/pi.app"
           hdiutil detach "$mount"
           node tests/packaged-server-start-test.mjs "$installed/pi.app/Contents/MacOS/pi" "$installed/pi.app/Contents/Resources/app"
-          node tests/packaged-upgrade-test.mjs verify "$installed/pi.app/Contents/MacOS/pi" "$installed/pi.app/Contents/Resources/app" "$RUNNER_TEMP/pi-upgrade-state"
+          if [ -n "$prev" ]; then node tests/packaged-upgrade-test.mjs verify "$installed/pi.app/Contents/MacOS/pi" "$installed/pi.app/Contents/Resources/app" "$RUNNER_TEMP/pi-upgrade-state"; fi
 
       - name: Upload verified macOS packages
         env:
@@ -235,21 +239,27 @@ jobs:
         run: |
           $previous = Join-Path $env:RUNNER_TEMP 'pi-previous'
           $dest = Join-Path $env:LOCALAPPDATA 'Programs\pi-release-test'
-          gh release download v0.99.16 --pattern '*win-x64.zip' --dir $previous
-          if ($LASTEXITCODE -ne 0) { throw 'Previous release download failed' }
-          $zip = Get-ChildItem "$previous/*win-x64.zip" | Select-Object -First 1
-          Expand-Archive $zip.FullName "$previous/app"
-          New-Item -ItemType Directory -Force -Path $dest | Out-Null
-          Copy-Item "$previous/app/*" $dest -Recurse
-          node tests/packaged-upgrade-test.mjs seed "$dest/pi.exe" "$dest/resources/app" "$env:RUNNER_TEMP/pi-upgrade-state"
-          if ($LASTEXITCODE -ne 0) { throw 'Previous runtime seed failed' }
+          # Previous version = latest published release; the first release has none and skips the upgrade-data check.
+          $prev = (gh release list --exclude-drafts --limit 1 --json tagName --jq '.[0].tagName // empty')
+          if ($prev) {
+            gh release download $prev --pattern '*win-x64.zip' --dir $previous
+            if ($LASTEXITCODE -ne 0) { throw 'Previous release download failed' }
+            $zip = Get-ChildItem "$previous/*win-x64.zip" | Select-Object -First 1
+            Expand-Archive $zip.FullName "$previous/app"
+            New-Item -ItemType Directory -Force -Path $dest | Out-Null
+            Copy-Item "$previous/app/*" $dest -Recurse
+            node tests/packaged-upgrade-test.mjs seed "$dest/pi.exe" "$dest/resources/app" "$env:RUNNER_TEMP/pi-upgrade-state"
+            if ($LASTEXITCODE -ne 0) { throw 'Previous runtime seed failed' }
+          }
           $installer = Get-ChildItem release/*setup-x64.exe | Select-Object -First 1
           $proc = Start-Process -FilePath $installer.FullName -ArgumentList @('/S', '/currentuser', "/D=$dest") -PassThru
           if (-not $proc.WaitForExit(180000) -or $proc.ExitCode -ne 0) { throw 'NSIS installation failed' }
           node tests/packaged-server-start-test.mjs "$dest/pi.exe" "$dest/resources/app"
           if ($LASTEXITCODE -ne 0) { throw 'Installed server failed' }
-          node tests/packaged-upgrade-test.mjs verify "$dest/pi.exe" "$dest/resources/app" "$env:RUNNER_TEMP/pi-upgrade-state"
-          if ($LASTEXITCODE -ne 0) { throw 'Previous-version data failed' }
+          if ($prev) {
+            node tests/packaged-upgrade-test.mjs verify "$dest/pi.exe" "$dest/resources/app" "$env:RUNNER_TEMP/pi-upgrade-state"
+            if ($LASTEXITCODE -ne 0) { throw 'Previous-version data failed' }
+          }
 
       - name: Publish verified Windows packages
         shell: pwsh
@@ -316,10 +326,14 @@ jobs:
         run: |
           previous="$RUNNER_TEMP/pi-previous"
           mkdir -p "$previous"
-          gh release download v0.99.16 --pattern '*.deb' --dir "$previous"
-          dpkg-deb -x "$previous/"*.deb "$previous/app"
-          oldroot=$(dirname "$(find "$previous/app" -path '*/resources/app/package.json' -print -quit)")
-          node tests/packaged-upgrade-test.mjs seed "$oldroot/../../pi" "$oldroot" "$RUNNER_TEMP/pi-upgrade-state"
+          # Previous version = latest published release; the first release has none and skips the upgrade-data check.
+          prev=$(gh release list --exclude-drafts --limit 1 --json tagName --jq '.[0].tagName // empty')
+          if [ -n "$prev" ]; then
+            gh release download "$prev" --pattern '*.deb' --dir "$previous"
+            dpkg-deb -x "$previous/"*.deb "$previous/app"
+            oldroot=$(dirname "$(find "$previous/app" -path '*/resources/app/package.json' -print -quit)")
+            node tests/packaged-upgrade-test.mjs seed "$oldroot/../../pi" "$oldroot" "$RUNNER_TEMP/pi-upgrade-state"
+          fi
           sudo apt-get update
           sudo apt-get install -y ./release/*.deb
           package=$(dpkg-deb -f release/*.deb Package)
@@ -327,7 +341,7 @@ jobs:
           test "$(dpkg-query -W -f='${Version}' "$package")" = "$(node -p "require('./package.json').version")"
           root=$(dirname "$(dpkg -L "$package" | sed -n '\|/resources/app/package.json$|p')")
           node tests/packaged-server-start-test.mjs "$root/../../pi-harness" "$root"
-          node tests/packaged-upgrade-test.mjs verify "$root/../../pi-harness" "$root" "$RUNNER_TEMP/pi-upgrade-state"
+          if [ -n "$prev" ]; then node tests/packaged-upgrade-test.mjs verify "$root/../../pi-harness" "$root" "$RUNNER_TEMP/pi-upgrade-state"; fi
 
       - name: Upload verified Linux packages
         env:
