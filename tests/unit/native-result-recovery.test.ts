@@ -68,3 +68,9 @@ it("retains compaction outcome with explicit before and estimated after counts",
 	expect(isRecovering(state)).toBe(false);
 	expect(recoveryEvent(state, { type: "agent_settled" }).lastCompaction).toEqual(state.lastCompaction);
 });
+
+
+it("node command results expose only bounded terminal navigation metadata", () => {
+	expect(nativeToolDetails("remote_command", { details: { terminalId: "term", commandId: "tool", lines: 3, durationMs: 50, secret: "hidden" } })).toEqual({ terminalId: "term", commandId: "tool", lines: 3, durationMs: 50 });
+	expect(nativeToolDetails("remote_command", { details: { terminalId: "x".repeat(257), commandId: {}, lines: -1, durationMs: Infinity } })).toBeUndefined();
+});

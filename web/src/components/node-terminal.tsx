@@ -6,11 +6,12 @@ import { buildTermTheme, THEME_CHANGE_EVENT } from "../theme";
 import { randomUuid } from "../uuid";
 import { useT } from "../i18n";
 import type { ClientMessage, ServerMessage,  } from "../types";
-export type NodeTab = { id: string; conversationId: string; busy: boolean; closed?: boolean; output?: string };
+export type NodeTab = { id: string; conversationId: string; busy: boolean; closed?: boolean; output?: string; welcome?: string };
 export function RemoteTerminal({ nodeId, tab, active, send, initialOutput }: { nodeId: string; tab: NodeTab; active: boolean; send: (msg: ClientMessage) => boolean; initialOutput?: string;  }) {
 	const t = useT();
 	const ref = useRef<HTMLDivElement>(null);
 	const closed = useRef(tab.closed); closed.current = tab.closed;
+	const busy = useRef(tab.busy); busy.current = tab.busy;
 	const [selection, setSelection] = useState("");
 	const [copyError, setCopyError] = useState("");
 	useEffect(() => {
@@ -20,10 +21,23 @@ export function RemoteTerminal({ nodeId, tab, active, send, initialOutput }: { n
 		const updateTheme = () => { term.options.theme = { ...buildTermTheme(), background: style.getPropertyValue("--node-terminal-bg").trim(), foreground: style.getPropertyValue("--node-terminal-fg").trim() }; };
 		window.addEventListener(THEME_CHANGE_EVENT, updateTheme);
 		const fit = new FitAddon(); term.loadAddon(fit); term.open(ref.current);
+		const markers = new Map<string, ReturnType<Terminal["registerMarker"]>>();
+		const parser = term.parser.registerOscHandler(133, data => {
+			if (data.startsWith("C;")) markers.set(data.slice(2), term.registerMarker(0));
+			return true;
+		});
 		if (initialOutput) term.write(initialOutput);
+		const jump = (event: Event) => {
+			const detail = (event as CustomEvent<{ nodeId: string; terminalId: string; commandId: string }>).detail;
+			if (detail.nodeId !== nodeId || detail.terminalId !== tab.id) return;
+			const marker = markers.get(detail.commandId);
+			if (marker && !marker.isDisposed) { term.scrollToLine(marker.line); term.focus(); }
+			else setCopyError(t("nodeTerminalExpired"));
+		};
+		window.addEventListener("pi-node-terminal-jump", jump);
 
 		const request = (action: string, payload: Record<string, unknown> = {}) => send({ type: "node_request", action, requestId: randomUuid(), nodeId, terminalId: tab.id, conversationId: tab.conversationId, payload });
-		const input = term.onData((data) => { if (!closed.current) request(data === "\x03" ? "interrupt" : "terminal_input", { data }); });
+		const input = term.onData((data) => { if (!closed.current && (!busy.current || data === "\x03")) request(data === "\x03" ? "interrupt" : "terminal_input", { data }); });
 		const selectionChange = term.onSelectionChange(() => setSelection(term.getSelection().slice(0, 32000)));
 		const listener = (e: globalThis.Event) => {
 			const msg = (e as CustomEvent<Extract<ServerMessage, { type: "node_event" }>>).detail;
@@ -34,7 +48,7 @@ export function RemoteTerminal({ nodeId, tab, active, send, initialOutput }: { n
 
 		window.addEventListener("pi-node-event", listener);
 		const ro = new ResizeObserver(() => { if (!ref.current?.clientWidth || !ref.current.clientHeight) return; try { fit.fit(); if (!closed.current) request("terminal_resize", { cols: term.cols, rows: term.rows }); } catch { /* hidden panel */ } }); ro.observe(ref.current);
-		return () => { window.removeEventListener(THEME_CHANGE_EVENT, updateTheme); ro.disconnect(); input.dispose(); selectionChange.dispose(); window.removeEventListener("pi-node-event", listener); term.dispose(); };
+		return () => { window.removeEventListener(THEME_CHANGE_EVENT, updateTheme); window.removeEventListener("pi-node-terminal-jump", jump); parser.dispose(); ro.disconnect(); input.dispose(); selectionChange.dispose(); window.removeEventListener("pi-node-event", listener); term.dispose(); };
 	}, [nodeId, tab.id, tab.conversationId, send]);
-	return <div className="node-terminal-wrap" style={{ display: active ? "block" : "none" }}><div ref={ref} className="node-xterm" />{selection && <div className="node-selection-menu"><button onClick={() => void navigator.clipboard.writeText(selection).then(() => setCopyError(t("nodeCopied"))).catch((e) => setCopyError(String(e)))}>{t("nodeCopy")}</button>{copyError && <span role="status">{copyError}</span>}</div>}</div>;
+	return <div className="node-terminal-wrap" style={{ display: active ? "flex" : "none" }}>{tab.welcome && <details className="node-terminal-welcome"><summary>{t("nodeLoginCollapsed")}</summary><pre>{tab.welcome}</pre></details>}{tab.welcome && <div className="node-login-alerts">{tab.welcome.split("\n").filter(line => /restart required|reboot required|updates? (?:can be|available)|security updates?/i.test(line)).join(" · ")}</div>}{copyError && !selection && <div role="status">{copyError}</div>}<div ref={ref} className="node-xterm" />{selection && <div className="node-selection-menu"><button onClick={() => void navigator.clipboard.writeText(selection).then(() => setCopyError(t("nodeCopied"))).catch((e) => setCopyError(String(e)))}>{t("nodeCopy")}</button>{copyError && <span role="status">{copyError}</span>}</div>}</div>;
 }

@@ -114,3 +114,11 @@ export function commandRecordLabel(command: string): string {
 export function commandDuration(ms: number): string {
 	return ms < 100 ? "<0.1s" : `${(ms / 1000).toFixed(1)}s`;
 }
+
+/** Whole-second spans for thinking and step labels: 45s, 1m 17s, 2h 5m. */
+export function elapsedLabel(seconds: number): string {
+	const total = Math.max(0, Math.round(seconds));
+	if (total < 60) return `${total}s`;
+	if (total < 3600) return `${Math.floor(total / 60)}m ${total % 60}s`;
+	return `${Math.floor(total / 3600)}h ${Math.floor(total % 3600 / 60)}m`;
+}

@@ -50,10 +50,12 @@ try {
 	await page.locator('.change-summary').waitFor();
 	assert.equal(await page.locator('.change-card').count(),0);
 	assert.equal(await page.locator('.bash-group.historical-step').count(),1);
-	const groupHead = await page.locator('.bash-group-head').textContent();
+	const groupHead = await page.locator('.process-group-head').textContent();
 	assert.doesNotMatch(groupHead,/先检查应用配置/,'a folded group does not repeat the narration shown above it');
-	assert.match(groupHead,/git status|Git/i,'a folded group summarises its command');
-	await page.locator('.bash-group-head').click(); assert.equal(await page.locator('.bash-row').count(),1);
+	assert.match(groupHead,/Ran 1 command/i,'a folded process group summarises its command count');
+	await page.locator('.process-group-head').click();
+	await page.locator('.bash-row').waitFor({state:'visible'});
+	assert.match(await page.locator('.bash-row').textContent(), /git status/);
 	await page.locator('.change-summary-file').click();
 	await page.locator('.changes-line mark').first().waitFor();
 	assert.equal(await page.locator('.change-summary-file.selected').count(),1);

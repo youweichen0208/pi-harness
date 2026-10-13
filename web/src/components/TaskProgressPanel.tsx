@@ -5,7 +5,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { FiChevronRight, FiFile } from "react-icons/fi";
 import type { ServerMessage, TaskProgress, UiMessage } from "../types";
 import { useI18n, useT } from "../i18n";
-import { phaseSummary, planStepArtifacts, progressPhases } from "../task-progress-view";
+import { phaseHeadline, phaseItems, planStepArtifacts, progressPhases } from "../task-progress-view";
+import { commandDuration, elapsedLabel } from "../bash-presentation";
 import { taskOutputs } from "../task-outputs";
 
 type Silence = Extract<ServerMessage, { type: "agent_silence" }> | null;
@@ -47,13 +48,15 @@ export function TaskProgressPanel({ task, silence, cwd, messages, onPreview, str
 	// 无 plan 的任务也给出可读的阶段进度（issue #63）：相邻工具步骤归并为阶段，
 	// 复用 plan 清单的行样式；有 plan 时清单已经是更权威的进度，不再叠加。
 	const phases = useMemo(() => task && !task.plan ? progressPhases(task) : [], [task]);
+	// Without a native plan the rows are grouped tool steps, not a plan the model wrote.
+	const stepLog = phases.length > 0 && !interrupted && !reminding;
 	const planMessage = messages.find(message => message.role === "toolResult" && message.planSnapshot?.planId === task?.plan?.origin);
 	const planSource = planMessage && messages.find(message => message.role === "assistant" && message.content.some(block => block.type === "toolCall" && block.id === planMessage.toolCallId));
 	const status = interrupted ? t("toolRecoveryInterrupted") : reminding ? `${t("working")} · ${t("waitSeconds", { n: elapsed })}` : task?.status === "failed" ? t("taskFailed") : task?.status === "cancelled" ? t("taskCancelled") : task?.plan?.awaitingConfirmation ? t("planPrevious") : task?.status === "waiting" ? t("taskPlanOpen") : silence && task && silence.conversationId === task.conversationId ? t(phase?.label ?? "working") : "";
 	return <div className={`task-progress task-sections ${interrupted ? "interrupted" : reminding ? "reminding" : task?.status ?? "empty"}`} tabIndex={-1} aria-label={t("taskProgress")}>
 		<div className="task-sections-scroll" ref={scrollRef}>
 			<section className="task-section">
-				<button type="button" className="task-section-heading" aria-expanded={progressOpen} onClick={() => setProgressOpen(value => !value)}><FiChevronRight className={progressOpen ? "open" : ""} />{t("taskProgressHeading")}</button>
+				<button type="button" className="task-section-heading" aria-expanded={progressOpen} onClick={() => setProgressOpen(value => !value)}><FiChevronRight className={progressOpen ? "open" : ""} />{t(stepLog ? "taskStepsHeading" : "taskProgressHeading")}{stepLog && <span className="task-section-count">{t("taskStepsCount", { n: phases.length })}</span>}</button>
 				{progressOpen && <div className="task-section-content">
 					{status && (!interrupted || !!task?.plan) && <p className={`task-progress-status task-progress-source ${interrupted ? "interrupted" : reminding ? "reminding" : task?.status}`} role="status">{reminding && <i aria-hidden="true" />}{status}</p>}
 					{task?.plan && items.length ? <>
@@ -73,16 +76,20 @@ export function TaskProgressPanel({ task, silence, cwd, messages, onPreview, str
 								<button type="button" className="task-step-jump" onClick={() => window.dispatchEvent(new CustomEvent("pi:jump-message", { detail: { messageId: planSource?.id ?? task.sourceMessageId } }))}>{t("taskJumpToChat")} →</button>
 							</div>}
 						</div>)}</div>
-					</> : phases.length && !interrupted && !reminding ? <div className="task-plan-list task-phase-list">{phases.map(phase => {
-						const summary = phaseSummary(phase, undefined, locale);
-						return <div key={phase.id} className={`task-plan-step ${phase.status}`}>
-							<span className="task-plan-mark" aria-hidden="true">{phase.status === "done" ? "✓" : phase.status === "failed" ? "×" : "●"}</span>
-							<div className="task-phase-body">
-								<span className="task-plan-step-title">{phase.title}</span>
-								{summary && <small className="task-phase-summary" title={summary}>{summary}</small>}
-							</div>
-						</div>;
-					})}</div> : interrupted ? <div className="task-interrupted-hint"><strong>● {t("taskInterruptedTitle")}</strong><p>{t("taskInterruptedHint")}</p></div> : reminding ? null : <div className="task-section-empty"><div className="task-empty-circles" aria-hidden="true"><i /><i /><i /></div><p>{t("taskProgressEmpty")}</p></div>}
+					</> : stepLog ? <ol className="task-step-log">{phases.map(phase => {
+						const items = phaseItems(phase, cwd);
+						const shown = items.slice(0, 4);
+						const duration = phase.status !== "running" && phase.endedAt && phase.startedAt ? phase.endedAt - phase.startedAt : undefined;
+						return <li key={phase.id} className={`task-step ${phase.status}`}>
+							<span className="task-step-mark" aria-hidden="true">{phase.status === "done" ? "✓" : phase.status === "failed" ? "×" : <i className="thinking-spinner" />}</span>
+							<span className="task-step-title">{phaseHeadline(phase, locale)}</span>
+							{duration !== undefined && duration >= 100 && <span className="task-step-time">{duration < 60_000 ? commandDuration(duration) : elapsedLabel(duration / 1000)}</span>}
+							{shown.length > 0 && <ul className="task-step-items">
+								{shown.map(item => <li key={item.key}><button type="button" title={item.path ?? item.label} onClick={() => item.path ? preview(item.path) : window.dispatchEvent(new CustomEvent("pi:jump-tool", { detail: { messageId: item.messageId, toolCallId: item.toolCallId } }))}>{item.label}</button></li>)}
+								{items.length > shown.length && <li className="task-step-more">{t("taskStepsMore", { n: items.length - shown.length })}</li>}
+							</ul>}
+						</li>;
+					})}</ol> : interrupted ? <div className="task-interrupted-hint"><strong>● {t("taskInterruptedTitle")}</strong><p>{t("taskInterruptedHint")}</p></div> : reminding ? null : <div className="task-section-empty"><div className="task-empty-circles" aria-hidden="true"><i /><i /><i /></div><p>{t("taskProgressEmpty")}</p></div>}
 				</div>}
 			</section>
 			<section className="task-section">

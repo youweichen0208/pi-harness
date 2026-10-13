@@ -21,12 +21,17 @@ assert(!JSON.parse(readFileSync(join(appRoot, "package.json"), "utf8")).pi?.exte
 // A checkout-local package can otherwise hide missing runtime dependencies by
 // resolving them from the repository's parent node_modules directory.
 const packagedRequire = createRequire(join(appRoot, "package.json"));
-for (const name of ["unified", "remark-parse"]) {
+for (const name of ["unified", "remark-parse", "@vscode/ripgrep"]) {
 	const resolved = packagedRequire.resolve(name);
 	const inside = relative(appRoot, resolved);
 	assert(!isAbsolute(inside) && inside !== ".." && !inside.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`), `${name} must resolve inside the packaged app: ${resolved}`);
 }
 console.log("PASS Markdown parser dependencies resolve inside the packaged app");
+const { rgPath } = packagedRequire("@vscode/ripgrep");
+const rgRelative = relative(appRoot, rgPath);
+assert(existsSync(rgPath) && !isAbsolute(rgRelative) && !rgRelative.startsWith(".."), "ripgrep binary must be shipped inside the app");
+assert.match(execFileSync(rgPath, ["--version"], { encoding: "utf8", timeout: 10000 }), /ripgrep/);
+console.log("PASS packaged ripgrep binary runs without a system installation");
 const { agentRuntimeEnvironment } = await import(pathToFileURL(join(appRoot, "electron/agent-runtime-env.mjs")).href);
 if (process.platform === "win32") {
 	const helper = readFileSync(join(appRoot, "node_modules/node-pty/lib/conpty_console_list_agent.js"), "utf8");

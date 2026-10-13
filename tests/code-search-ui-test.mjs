@@ -1,0 +1,77 @@
+/** Real WebSocket/ripgrep/browser regression, with stale batches injected at the UI boundary. */
+import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
+import { chromium } from "playwright-core";
+import { CHROME_PATH } from "./lib/chrome.mjs";
+import { portUp } from "./lib/port-utils.mjs";
+
+const port = 9244;
+assert.equal(await portUp(port), false, `Port ${port} busy`);
+const root = mkdtempSync(join(tmpdir(), "pi-code-search-ui-"));
+const cwd = join(root, "workspace");
+mkdirSync(cwd);
+writeFileSync(join(cwd, "order.ts"), Array.from({ length: 50 }, (_, i) => i === 19 ? "const placeOrder = 1;" : `// line ${i + 1}`).join("\n"));
+let server, browser, socket;
+const requests = [], errors = [];
+try {
+	server = spawn(process.execPath, ["dist/server/index.js"], { env: { ...process.env, PORT: String(port), PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(root, "data"), PI_CODING_AGENT_DIR: join(root, "agent") }, stdio: "ignore" });
+	for (let i = 0; i < 100 && !await portUp(port); i++) await sleep(100);
+	assert(await portUp(port));
+	browser = await chromium.launch({ executablePath: CHROME_PATH });
+	const page = await browser.newPage();
+	page.setDefaultTimeout(10000);
+	page.on("pageerror", e => errors.push(e.message));
+	await page.routeWebSocket("**/ws", route => {
+		socket = route;
+		const upstream = route.connectToServer();
+		route.onMessage(wire => { const msg = JSON.parse(String(wire)); if (msg.type === "search_content") requests.push(msg); upstream.send(wire); });
+		upstream.onMessage(wire => route.send(wire));
+	});
+	await page.goto(`http://localhost:${port}`);
+	await page.locator(".conn-dot.ok").first().waitFor({ state: "attached" });
+	await page.keyboard.press("Control+p");
+	const input = page.locator(".cs-head input");
+	await input.fill("placeOrder");
+	await page.locator(".cs-row mark", { hasText: "placeOrder" }).waitFor();
+	await page.locator(".cs-preview-line.hit").waitFor();
+	assert.equal(await page.locator(".cs-preview-line").count(), 21);
+	assert.equal(await page.locator(".cs-preview-line").first().locator("span").textContent(), "12");
+	const first = requests.find(r => r.query === "placeOrder").reqId;
+	await input.fill("");
+	await sleep(100);
+	assert(requests.some(r => r.reqId > first && r.query === ""), "clearing the query must immediately cancel the running search");
+	await input.fill("placeOrder");
+	await page.locator(".cs-row").waitFor();
+	await input.press("Enter");
+	await page.locator(".cs-modal").waitFor({ state: "detached" });
+	await page.locator(".fp-editor").waitFor();
+	await page.locator('.from-tool[data-line="20"]').waitFor({ state: "attached" });
+	await page.keyboard.press("Control+p");
+	await input.fill("missing-query");
+	await page.locator(".cs-empty").waitFor();
+	await sleep(400);
+	const latest = requests.filter(r => r.query).at(-1).reqId;
+	assert(latest > first, "request identities must survive dialog remounts");
+	socket.send(JSON.stringify({ type: "search_content_result", cwd, reqId: first, ok: true, done: true, matches: [{ path: "stale.ts", line: 1, column: 1, text: "stale-result", ranges: [[0, 5]] }] }));
+	await sleep(100);
+	assert.equal(await page.locator(".cs-row").count(), 0);
+	await page.getByRole("button", { name: "正则表达式", exact: true }).click();
+	await input.fill("[");
+	await sleep(400);
+	assert.equal(requests.some(r => r.query === "["), false);
+	await input.press("Tab");
+	await input.fill("order");
+	await page.locator(".cs-file", { hasText: "order.ts" }).waitFor();
+	await page.keyboard.press("Escape");
+	assert.deepEqual(errors, []);
+	console.log("PASS code search: streamed hits, preview window, open line, cancellation, stale identity, regex, filename mode");
+} finally {
+	await browser?.close();
+	server?.kill();
+	if (server && server.exitCode === null) await new Promise(resolve => server.once("exit", resolve));
+	rmSync(root, { recursive: true, force: true });
+}

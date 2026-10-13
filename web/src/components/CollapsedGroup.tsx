@@ -12,12 +12,15 @@ import {
 	SystemEvent,
 } from "./Message";
 
-import { collapsedPreview } from "../collapsed-groups";
+import { collapsedPreview, userPreviewParts } from "../collapsed-groups";
+import { UiIcon } from "./UiIcon";
 
 interface CollapsedGroupProps {
 	/** One run of consecutive same-role messages (see collapsed-groups.ts). */
 	messages: UiMessage[];
 	onExpand: (messageIds: string[]) => void;
+	/** The head question was sent this many times in a row (3a). */
+	repeatCount?: number;
 }
 
 /** Distinct tool names to name before falling back to `+n`. */
@@ -32,6 +35,7 @@ const MAX_TOOL_CHIPS = 4;
 export const CollapsedGroup = memo(function CollapsedGroup({
 	messages,
 	onExpand,
+	repeatCount,
 }: CollapsedGroupProps) {
 	const t = useT();
 	const head = messages[0];
@@ -41,7 +45,10 @@ export const CollapsedGroup = memo(function CollapsedGroup({
 	// (no Markdown). Skill invocations collapse to a `skill:name · <args>` chip
 	// instead of the raw SKILL.md dump.
 	let preview = "";
-	outer: for (const m of messages) {
+	// User rows show a skill chip, the question and file chips — never the raw `<file>` wrappers.
+	const userParts = head.role === "user" ? userPreviewParts(head) : null;
+	if (userParts) preview = userParts.text;
+	else outer: for (const m of messages) {
 		for (const b of m.content) {
 			const text = asText(b);
 			if (text && text.text.trim()) {
@@ -55,7 +62,8 @@ export const CollapsedGroup = memo(function CollapsedGroup({
 		const details = (head.details ?? {}) as { name?: string; path?: string };
 		preview = details.name ?? details.path ?? "";
 	}
-	if (preview.length > 90) preview = `${preview.slice(0, 90)}…`;
+	// User bubbles show the full question (clamped by CSS); other rows stay one short line.
+	if (!userParts && preview.length > 90) preview = `${preview.slice(0, 90)}…`;
 
 	// What the run did. Naming the tools (`read ×2`) says far more than the old
 	// opaque `工具调用 2`, and costs nothing — the name is already on the block.
@@ -119,20 +127,25 @@ export const CollapsedGroup = memo(function CollapsedGroup({
 			type="button"
 			className={`msg-collapsed role-${head.role}`}
 			data-msg-id={head.id}
-			title={[t("expandMsg"), preview, chips.map((c) => c.label).join(" · ")].filter(Boolean).join(" · ")}
+			title={[t("expandMsg"), userParts?.skill && `/${userParts.skill}`, preview, ...(userParts?.files ?? []), chips.map((c) => c.label).join(" · ")].filter(Boolean).join(" · ")}
 			aria-expanded={false}
 			onClick={() => onExpand(ids)}
 		>
 			<span className={`msg-collapsed-role role-${head.role}`}>{label}</span>
 			<span className="msg-collapsed-body">
-				<span className="msg-collapsed-preview">{preview || chips.map((c) => c.label).join(" · ") || label}</span>
+				{userParts ? <span className="msg-collapsed-question">
+					{userParts.skill && <code className="msg-collapsed-skill">/{userParts.skill}</code>}
+					<span className="msg-collapsed-preview">{preview}</span>
+				</span> : <span className="msg-collapsed-preview">{preview || chips.map((c) => c.label).join(" · ")}</span>}
+				{userParts?.files.length ? <span className="msg-collapsed-files">{userParts.files.map(file => <span key={file} className="msg-collapsed-file"><UiIcon name="paperclip" /><span>{file}</span></span>)}</span> : null}
 			</span>
-			{head.timestamp ? (
-				<span className="msg-collapsed-time">{formatTime(head.timestamp)}</span>
-			) : null}
-			<span className="msg-collapsed-action" aria-hidden="true">
-				<FiChevronRight />
-			</span>
+			{userParts ? <span className="msg-collapsed-foot">
+				{repeatCount && repeatCount > 1 ? <span className="msg-repeat">{t("repeatedMessage", { n: repeatCount - 1 })}</span> : null}
+				{head.timestamp ? <span className="msg-collapsed-time">{formatTime(head.timestamp)}</span> : null}
+			</span> : <>
+				{head.timestamp ? <span className="msg-collapsed-time">{formatTime(head.timestamp)}</span> : null}
+				<span className="msg-collapsed-action" aria-hidden="true"><FiChevronRight /></span>
+			</>}
 		</button>
 	);
 });

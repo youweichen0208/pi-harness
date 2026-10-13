@@ -48,10 +48,18 @@ Xshell 公钥登录节点可在凭据弹窗指定本机 OpenSSH 私钥路径（�
 
 这是主聊天原生上下文规则的明确例外：节点会话使用限定节点职责的提示词，只启用 `remote_command`、`remote_read`、`remote_write`。不加载本机项目上下文、用户扩展、技能、模板或 MCP，也不暴露本机 bash/read/write，防止误操作本机。主聊天保持原有工具、提示词与配置。
 
-`node-command.ts` 每次在当前 SSH 连接上创建独立 exec，POSIX 引号保护默认绝对目录，目录切换失败立即退出；命令之间不保存 cd。命令与左侧手动 PTY 独立，不抢占用户正在运行的终端任务。输出上限 64 KiB，默认 120 秒，Agent 可显式指定 1–600 秒；取消、超时和断开只向该命令通道发送 TERM 并关闭。远端子进程是否响应信号取决于 SSH 服务及进程行为。读写走现有 SFTP，UTF-8 文件限制 512 KiB；所有工具捕获原连接，不能在异步期间改投到新节点。中断写入可能留下部分内容。
+### 5a 共享终端与执行确认
+
+`remote_command` 在当前选择的手动 SSH PTY 中运行；没有终端时打开一个。`node-command.ts` 引用保护默认绝对目录，每次命令仍从 Agent 的 cwd 开始，cd 不跨命令保留。终端初始化为 Bash / Zsh / POSIX shell 安装不可见提示符标记；Agent 只在确认空闲时写入，不打断已有手动进程。执行期间服务端拒绝普通输入，前端也锁定输入；Ctrl+C、停止、超时或断开取消当前等待。终端不能确认提示符时仍可手动使用，Agent 命令返回明确错误。
+
+`node-terminal-output.ts` 按随机开始／结束标记跨数据包解析输出，过滤 shell 包装回显，持续转发真正输出并保留最多 64 KiB 给模型。超时默认 120 秒，可设 1–600 秒。Agent 结果卡展示实际命令、状态和行数；成功结果保存经过白名单序列化的 terminalId/commandId/lines/durationMs，运行中和失败状态由 NodeAgentState.terminalCommands 补充。终端用 OSC 标记定位，重挂载从缓存重建，超出滚动缓存时说明记录已不可定位。登录信息默认折叠，更新和重启提示单独保留。
+
+`node-command-policy.ts` 在服务端分类只读命令（cd、ls、cat、df、ps、grep 等）；由 `&&`、`||`、`;`、`|` 连接且每段都是只读命令的组合（如 `cd /opt && pwd && ls -la`）直接执行。展开、重定向、子 shell、后台 `&`、未知程序、写命令和 remote_write 均须显式确认。允许/拒绝按一次性 UUID 绑定当前 Agent 实例；仅简单命令可以勾选本次会话免询问该命令族，不把授权推广到 shell 组合。关闭、取消、断开及新对话清理等待，重连与新对话清除临时授权。手动终端和手动文件保存仍由用户直接操作。
+
+读写文件走现有 SFTP，UTF-8 文件限制 512 KiB；所有工具捕获原连接，不能在异步期间改投到新节点。中断写入可能留下部分内容。
 
 运行结束以 `agent_settled` 为准，`agent_end` 不清除工作状态。SDK 提供流式回复、原生工具记录、排队/纠正、停止和模型切换，界面发送确认后才清空输入。节点任务计入应用更新的忙碌检查；quiesce 拒绝连接、凭据验证及新 Agent 工作，允许停止和断开。普通 WebSocket 重连恢复同一 Agent 状态；SSH 断开取消该会话任务。历史由本机 SDK 保存，界面保留最多 200 条或约 4 MiB 的最近消息。
 
 原生远端 RPC 方案已由上述本机 Agent + SSH 工具方案替换。现有远端 pi 历史保持原处，本次不会下载或迁移；此前本机 `node-sessions` 下的历史可继续使用。
 
-回归：`tests/node-agent-test.mjs` 使用本机原版 SDK、本地模型 HTTP 夹具及无 pi/模型配置的 SSH 服务夹具，验证连接即就绪、工具和凭据隔离、SSH exec/SFTP、排队、取消、超时和重连历史；`--browser` 验证连接即聊天、左右分栏及窄屏。命令引用与错误目录由 `tests/unit/node-command.test.ts` 验证；真实生产 Linux 节点仍需实际环境验收。
+回归：`tests/node-agent-test.mjs` 使用本机原版 SDK、本地模型 HTTP 夹具及无 pi/模型配置的 SSH 服务夹具，验证连接即就绪、工具和凭据隔离、共享 SSH PTY/SFTP、确认与拒绝、排队、取消、超时和重连历史；`--browser` 验证连接即聊天、左右分栏及窄屏。命令引用与错误目录由 `tests/unit/node-command.test.ts` 验证；真实生产 Linux 节点仍需实际环境验收。

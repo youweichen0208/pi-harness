@@ -476,6 +476,9 @@ export type ClientMessage =
 	/** Global-search recursive filename match across the active workspace.
 	 *  Server-side bounded walk; reqId echoes back in search_files_result. */
 	| { type: "search_files"; reqId: number; query: string }
+	/** Code search (ripgrep) in the active workspace. A newer reqId cancels the
+	 *  running search; results stream back as search_content_result batches. */
+	| { type: "search_content"; reqId: number; query: string; caseSensitive?: boolean; wholeWord?: boolean; regex?: boolean; include?: string[] }
 	// -- source-control panel (read-only git queries, server-side execFile) --
 	/** SCM refresh payload: status + branches + numstat (history loads
 	 *  lazily via scm_history so big repos don't pay for it every refresh). */
@@ -732,7 +735,16 @@ export interface BgServer {
 	status?: string;
 }
 
-/** One filename match from the global-search recursive workspace walk. */
+/** A code-search hit; ranges are [start, end) UTF-16 offsets into text for highlighting. */
+export interface ContentSearchMatch {
+	/** Workspace-relative path ("/"-separated). */
+	path: string;
+	line: number;
+	column: number;
+	text: string;
+	ranges: [number, number][];
+}
+/** One filename match from the bounded workspace search. */
 export interface FileSearchResult {
 	/** Workspace-relative path ("/"-separated). */
 	path: string;
@@ -1133,6 +1145,8 @@ export type ServerMessage =
 			/** Walk stopped early (result/time/entry budget hit). */
 			truncated?: boolean;
 	  }
+	/** One batch of code-search matches for reqId; done=true ends the stream. */
+	| { type: "search_content_result"; cwd: string; reqId: number; ok: boolean; done: boolean; truncated?: boolean; error?: string; matches: ContentSearchMatch[] }
 	| { type: "projects"; projects: ProjectSummary[] }
 	| { type: "project_workspaces"; catalog: ProjectWorkspaceCatalog }
 	| { type: "project_workspace_result"; requestId: string; ok: boolean; error?: string; workspaceId?: string }
@@ -1468,7 +1482,8 @@ export interface NodeAgentState {
 	messages: UiMessage[];
 	streamingMessage?: UiMessage;
 	tools: { id: string; name: string; running: boolean; isError: boolean }[];
-	dialogs: { id: string; method: "select" | "confirm" | "input" | "editor"; title: string; message?: string; options?: string[]; prefill?: string }[];
+	terminalCommands?: { commandId: string; terminalId: string; status: "running" | "done" | "error"; lines?: number; durationMs?: number }[];
+	dialogs: { id: string; method: "select" | "confirm" | "input" | "editor"; title: string; message?: string; options?: string[]; prefill?: string; commandFamily?: string }[];
 	notice?: string;
 	error?: string;
 	editorText?: { id: string; text: string };

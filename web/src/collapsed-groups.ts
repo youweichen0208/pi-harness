@@ -1,5 +1,5 @@
 import { goalEventText, goalCompletedText } from "./goal-events.js";
-import { skillAwarePreview } from "./skill-block.js";
+import { parseSkillBlock, skillAwarePreview } from "./skill-block.js";
 import { splitLeakedThinking } from "./leaked-thinking.js";
 
 /** Lightweight plain-text summary; full Markdown is rendered only on expansion. */
@@ -12,6 +12,31 @@ export function collapsedPreview(text: string, assistant = true): string {
 		.replace(/\*([^*]+)\*/g, "$1")
 		.replace(/^#{1,6}\s+/, "");
 }
+/** Attached files travel inside the prompt as `<file path="…">` blocks or `<file path="…" />` references. */
+const FILE_BLOCK = /<(?:file|folder) path="([^"<>]+)"[^>]*?(?:\/>|>[\s\S]*?<\/file>)/g;
+
+/** A folded user row: skill chip, plain question and attachment names — never the raw wrappers. */
+export function userPreviewParts(message: UiMessage): { skill?: string; text: string; files: string[] } {
+	const raw = message.questionText ?? message.content.map(block => block.type === "text" && typeof block.text === "string" ? block.text : "").join("\n");
+	const files = [...raw.matchAll(FILE_BLOCK)].map(match => match[1].split(/[\\/]/).filter(Boolean).at(-1) ?? match[1]);
+	for (const attachment of message.userAttachments ?? []) {
+		const name = attachment.path.split(/[\\/]/).filter(Boolean).at(-1) ?? attachment.path;
+		if (!files.includes(name)) files.push(name);
+	}
+	const stripped = raw.replace(FILE_BLOCK, " ");
+	const skill = parseSkillBlock(stripped);
+	const text = collapsedPreview(skill ? skill.userMessage?.replace(FILE_BLOCK, " ") ?? "" : stripped, false);
+	return { ...(skill ? { skill: skill.name } : {}), text, files };
+}
+
+/** A settled reply with nothing to show (no prose, thinking, tools or error) — e.g. an empty retry. */
+export function isEmptyReply(message: UiMessage): boolean {
+	return message.role === "assistant" && !message.errorMessage && !message.content.some(block =>
+		block.type === "text" ? typeof block.text === "string" && !!block.text.trim()
+			: block.type === "thinking" ? typeof block.thinking === "string" && !!block.thinking.trim()
+				: true);
+}
+
 // 直接引协议源（而不是 ./types）：这个模块也被 tsconfig.tests.json 编译，
 // 那边是 NodeNext 解析，要求显式扩展名，而 web/src/types.ts 的再导出写法
 // 不带扩展名。纯类型导入，构建时整体擦除，运行时不解析这条路径。

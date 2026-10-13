@@ -11,7 +11,8 @@ import { ToolOutputDownload } from "./ToolOutputDownload";
 
 type Item = { messageId?: string; block: UiToolCallBlock; view: ToolView };
 const seconds = (ms: number) => ms < 1000 ? "" : commandDuration(ms);
-function stateOf(view: ToolView) {
+/** Run state of one call; shared with the process group header. */
+export function stateOf(view: ToolView): "ok" | "err" | "run" | "empty" {
 	if (view.result) return view.result.isError ? "err" : "ok";
 	if (view.status && !view.status.running) return view.status.isError ? "err" : "ok";
 	// Calls in an aborted/errored message never executed (issue #66) — show
@@ -21,7 +22,14 @@ function stateOf(view: ToolView) {
 }
 
 /** Presentation only: tool IDs and the authoritative result lookup stay intact. */
-export function BashGroup({ items, onKill, active = false }: { items: Item[]; onKill?: () => void; active?: boolean }) {
+/** Latest attempt of each command, as its row shows it (retries collapse into one row). */
+export function latestAttemptStates(items: Item[], cwd: string) {
+	return consecutiveAttempts(items, item => commandReading(commandPresentation(bashCommand(item.block.argumentsText) ?? "", cwd).command).title)
+		.map(group => ({ state: stateOf(group[group.length - 1].view), view: group[group.length - 1].view }));
+}
+
+/** `flat`: rows only, inside a process group that owns the header and collapse. */
+export function BashGroup({ items, onKill, active = false, flat = false }: { items: Item[]; onKill?: () => void; active?: boolean; flat?: boolean }) {
 	const t = useT();
 	const cwd = useContext(WorkspacePathContext);
 	const attempts = consecutiveAttempts(items, item => commandReading(commandPresentation(bashCommand(item.block.argumentsText) ?? "", cwd).command).title);
@@ -45,31 +53,32 @@ export function BashGroup({ items, onKill, active = false }: { items: Item[]; on
 		return () => window.removeEventListener("pi:reveal-tool", jump);
 	}, [items]);
 	return <section className={`bash-group ${state} ${!open ? "historical-step" : ""}`}>
-		{(!active || items.length > 1) && <button type="button" className="bash-group-head" aria-expanded={open} onClick={() => setOpen(!open)}>
+		{!flat && (!active || items.length > 1) && <button type="button" className="bash-group-head" aria-expanded={open} onClick={() => setOpen(!open)}>
 			<span className={`bash-state ${state}`} aria-label={t(failed ? "error" : running ? "running" : skipped ? "toolNotExecuted" : "done")}>{failed ? "✗" : running ? <i className="thinking-spinner" /> : skipped ? "−" : "✓"}</span>
 			<strong>{!open ? commandReading(commandPresentation(bashCommand(items[0].block.argumentsText) ?? "", cwd).command).title : t(running ? "bashGroupRunning" : "bashGroupCount", { n: items.length })}</strong>{!open && items.length > 1 && <span className="bash-group-count">{t("changesCommands", { n: items.length })}</span>}
 			{failed > 0 && <span className="bash-state err">{t("bashGroupFailed", { n: failed })}</span>}
 			{measured && seconds(durations.reduce<number>((sum, ms) => sum + (ms ?? 0), 0)) && <span className="bash-group-duration">{seconds(durations.reduce<number>((sum, ms) => sum + (ms ?? 0), 0))}</span>}
 			{open ? <FiChevronDown /> : <FiChevronRight />}
 		</button>}
-		{(open || (active && items.length === 1)) && <div className="bash-group-items">
+		{(flat || open || (active && items.length === 1)) && <div className="bash-group-items">
 			{!all && attempts.length > 8 && <button type="button" className="bash-group-more" onClick={() => setAll(true)}>{t("bashGroupEarlier", { n: attempts.length - 8 })}</button>}
-			{(all ? attempts : attempts.slice(-8)).map(group => group.length === 1 ? <BashRow key={group[0].block.id} {...group[0]} onKill={onKill} revealed={revealed === group[0].block.id} /> : <BashRow key={group[0].block.id} {...group[group.length - 1]} onKill={onKill} revealed={group.some(item => item.block.id === revealed)} attempts={group.length} history={<div className="bash-attempt-history">{group.slice(0, -1).map(item => <BashRow key={item.block.id} {...item} revealed={item.block.id === revealed} historical />)}</div>} />)}
+			{(all ? attempts : attempts.slice(-8)).map(group => group.length === 1 ? <BashRow key={group[0].block.id} {...group[0]} onKill={onKill} compact={flat} revealed={revealed === group[0].block.id} /> : <BashRow key={group[0].block.id} {...group[group.length - 1]} onKill={onKill} compact={flat} revealed={group.some(item => item.block.id === revealed)} attempts={group.length} history={<div className="bash-attempt-history">{group.slice(0, -1).map(item => <BashRow key={item.block.id} {...item} revealed={item.block.id === revealed} historical />)}</div>} />)}
 		</div>}
 	</section>;
 }
 
-function BashRow({ block, view, onKill, revealed, messageId, attempts, historical, history }: Item & { onKill?: () => void; revealed: boolean; attempts?: number; historical?: boolean; history?: ReactNode }) {
+function BashRow({ block, view, onKill, revealed, messageId, attempts, historical, history, compact }: Item & { onKill?: () => void; revealed: boolean; attempts?: number; historical?: boolean; history?: ReactNode; compact?: boolean }) {
 	const t = useT();
 	const cwd = useContext(WorkspacePathContext);
 	const state = historical && !view.result ? "empty" : stateOf(view);
 	const { locale } = useI18n();
-	const [open, setOpen] = useState(state === "err");
+	// In a process group the group opens on failure; rows stay compact until clicked or revealed.
+	const [open, setOpen] = useState(state === "err" && !compact);
 	const [all, setAll] = useState(false);
 	const [copied, setCopied] = useState<"command" | "output" | null>(null);
 	const copyTimer = useRef<ReturnType<typeof setTimeout>>();
 	useEffect(() => () => clearTimeout(copyTimer.current), []);
-	useEffect(() => { if (state === "err" || revealed) setOpen(true); }, [state, revealed]);
+	useEffect(() => { if (state === "err" && !compact || revealed) setOpen(true); }, [state, revealed, compact]);
 	useEffect(() => {
 		const jump = (event: Event) => { if ((event as CustomEvent).detail?.toolCallId === block.id) { setOpen(true); if ((event as CustomEvent).detail?.search) setAll(true); } };
 		window.addEventListener("pi:reveal-tool", jump);
@@ -92,7 +101,7 @@ function BashRow({ block, view, onKill, revealed, messageId, attempts, historica
 			<span className={`bash-state ${state}`} aria-label={t(state === "run" ? "running" : state === "err" ? "error" : state === "empty" && view.abandoned ? "toolNotExecuted" : "done")}>{state === "run" ? <i className="thinking-spinner" /> : state === "err" ? "✗" : state === "empty" ? "−" : "✓"}</span>
 			<span className="bash-readable-title">{reading.title}</span>{attempts && <span className="bash-attempt-count">{t("commandAttempts", { n: attempts })}</span>}{reading.title !== compactCommandLabel(reading.command) && <code className="bash-command-secondary">{reading.command}</code>}
 			{commandLines.length > 1 && <span className="bash-extra-lines">{t("bashExtraLines", { n: commandLines.length - 1 })}</span>}
-			<span className="bash-row-stats">{state === "run" ? t("running") : state === "empty" && view.abandoned ? t("toolNotExecuted") : exitCode !== undefined && state === "err" ? t("bashExitCode", { n: exitCode }) : t("toolLineCount", { n: lines.length })}{view.status?.durationMs !== undefined && seconds(view.status.durationMs) ? ` · ${seconds(view.status.durationMs)}` : ""}</span>
+			{compact ? <span className="bash-row-stats">{state === "run" ? t("running") : state === "empty" && view.abandoned ? t("toolNotExecuted") : state === "err" && exitCode !== undefined ? `exit ${exitCode}` : view.status?.durationMs !== undefined && view.status.durationMs >= 100 ? commandDuration(view.status.durationMs) : t("toolLineCount", { n: lines.length })}</span> : <span className="bash-row-stats">{state === "run" ? t("running") : state === "empty" && view.abandoned ? t("toolNotExecuted") : exitCode !== undefined && state === "err" ? t("bashExitCode", { n: exitCode }) : t("toolLineCount", { n: lines.length })}{view.status?.durationMs !== undefined && seconds(view.status.durationMs) ? ` · ${seconds(view.status.durationMs)}` : ""}</span>}
 			{open ? <FiChevronDown /> : <FiChevronRight />}
 		</button>
 		{open && <div className="bash-row-body">

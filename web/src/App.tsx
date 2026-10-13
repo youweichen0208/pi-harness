@@ -61,6 +61,7 @@ import { ModelConfigModal } from "./components/ModelConfigModal";
 import { SettingsModal } from "./components/SettingsModal";
 import { BgTasksModal } from "./components/BgTasksModal";
 import { GlobalSearchModal } from "./components/GlobalSearchModal";
+import { CodeSearchModal } from "./components/CodeSearchModal";
 import { FilePreviewContent, type FileNavigationGuard, type PreviewFile } from "./components/FilePreview";
 import { useChat } from "./use-chat";
 import type {
@@ -1256,7 +1257,16 @@ export function App() {
 					onClose={() => setBgTasksOpen(false)}
 				/>
 			)}
-			{globalSearchOpen && (
+			{globalSearchOpen && globalSearchFilesOnly && (
+				<CodeSearchModal
+					send={send}
+					cwd={chat.state?.cwd ?? ""}
+					fileSearch={chat.fileSearch}
+					onClose={() => setGlobalSearchOpen(false)}
+					onPreviewFile={openPreview}
+				/>
+			)}
+			{globalSearchOpen && !globalSearchFilesOnly && (
 				<GlobalSearchModal
 					key={String(globalSearchFilesOnly)}
 					filesOnly={globalSearchFilesOnly}

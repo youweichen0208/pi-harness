@@ -40,6 +40,9 @@ import { emitPluginData } from "./plugin-loader";
 import { appendNotice, type Notice } from "./notices";
 import { PROTOCOL_VERSION } from "./protocol-version";
 
+/** Window event carrying each search_content_result batch to the code-search dialog. */
+export const SEARCH_CONTENT_EVENT = "pi:search-content";
+
 export type ConnStatus = "connecting" | "open" | "closed";
 
 export type { Notice } from "./notices";
@@ -1152,6 +1155,11 @@ export function useChat() {
 							truncated: msg.truncated,
 						},
 					});
+					break;
+				case "search_content_result":
+					// Streamed batches go straight to the open search dialog, not through app state.
+					if (msg.cwd !== confirmedCwd.current || switchRef.current) break;
+					window.dispatchEvent(new CustomEvent(SEARCH_CONTENT_EVENT, { detail: msg }));
 					break;
 				case "scm_changed":
 					dispatch({ type: "scm_changed" });

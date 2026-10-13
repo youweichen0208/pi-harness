@@ -247,9 +247,22 @@ export async function startMockSsh(pluginDir, port, publicKeys = []) {
 							const stream = accept2();
 							stream.write("welcome-to-mock\r\n");
 							let buf = "";
-							let trapped = false;
+							let trapped = false, promptMarker = "";
 							stream.on("data", (d) => {
 								buf += d.toString();
+								if (buf.includes("__pi_prompt=")) {
+									if (!buf.includes("\n")) return;
+									promptMarker = `\x1b]133;A;${buf.match(/133;A;([a-f0-9-]+)/)?.[1]}\x07`;
+									buf = ""; stream.write(promptMarker); return;
+								}
+								if (buf.includes("__PI_BEGIN_")) {
+									const begin = buf.match(/__PI_BEGIN_[a-f0-9]+__/), end = buf.match(/__PI_DONE_[a-f0-9]+__/);
+									if (!begin || !end || !buf.endsWith("\n")) return;
+									const command = buf.split("\n")[1]?.split("'; printf")[0] ?? "";
+									buf = "";
+									if (!trapped) stream.write(`\r\n${begin[0]}\r\necho:${command}\r\n\r\n${end[0]}:0\r\n${promptMarker}`);
+									return;
+								}
 								while (/[\r\n]/.test(buf)) {
 									const i = buf.search(/[\r\n]/);
 									const line = buf.slice(0, i).trim();
@@ -258,7 +271,7 @@ export async function startMockSsh(pluginDir, port, publicKeys = []) {
 									if (line === "trap_foreground") { trapped = true; stream.write("foreground-trap\r\n"); }
 									else if (trapped) { /* foreground app consumes input, including Ctrl+C */ }
 									else if (marker) stream.write(`${marker[1]}${line.includes('"$?"') ? ":0" : ""}\r\n`);
-									else if (line) stream.write(`echo:${line}\r\n`);
+									else if (line) stream.write(`echo:${line}\r\n${promptMarker}`);
 								}
 							});
 						});

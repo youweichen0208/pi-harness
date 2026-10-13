@@ -42,6 +42,15 @@ try {
 	const opened = await call("terminal_open", nodeId, {}, "term-a");
 	assert.equal(opened.event, "result");
 	const conversationId = opened.data.conversationId;
+	const terminalReady = async id => {
+		for (let i = 0; i < 250; i++) {
+			const terminal = service.connections.values().next().value.terminals.get(id);
+			if (terminal && !terminal.initializing) return;
+			await new Promise(resolve => setTimeout(resolve, 20));
+		}
+		throw new Error("terminal initialization timed out");
+	};
+	await terminalReady("term-a");
 	assert.equal((await call("chat_state", nodeId)).event, "failure");
 	assert.equal((await call("chat_prompt", nodeId, { text: "test" })).event, "failure");
 
@@ -49,23 +58,22 @@ try {
 	const echoed = () => events.some((e) => e.event === "terminal_output" && e.nodeId === nodeId && e.terminalId === "term-a" && e.data.text.includes("echo:hello"));
 	for (let i = 0; i < 250 && !echoed(); i++) await new Promise((r) => setTimeout(r, 20)); // poll: a fixed sleep made this timing-dependent
 	assert(echoed());
-	const output = await service.execute("client-a", nodeId, "term-a", "pwd");
-	assert.match(output, /echo:pwd/);
+	const output = await service.execute("client-a", nodeId, "term-a", "/home/test", "pwd", 5);
+	assert.match(output.output, /echo:pwd/);
 	assert(events.some((e) => e.event === "terminal_output" && e.nodeId === nodeId && e.terminalId === "term-a" && e.data.text.includes("echo:pwd")));
-	const truncated = await service.execute("client-a", nodeId, "term-a", "x".repeat(70000));
-	assert(truncated.includes("[输出已截断]"));
-	assert(truncated.length < 66000);
+	const truncated = await service.execute("client-a", nodeId, "term-a", "/home/test", "x".repeat(70000), 5);
+	assert(truncated.output.includes("[输出已截断]"));
+	assert(truncated.output.length < 66000);
 	const secondTerminal = await call("terminal_open", nodeId, {}, "term-b", conversationId);
 	assert.equal(secondTerminal.event, "result");
 
 	await call("terminal_open", nodeId, {}, "term-trap", conversationId);
+	await terminalReady("term-trap");
 	await call("terminal_input", nodeId, { data: "trap_foreground\r" }, "term-trap", conversationId);
-	await assert.rejects(service.execute("client-a", nodeId, "term-trap", "must_not_run"), /无法确认 shell 提示符/);
+	await assert.rejects(service.execute("client-a", nodeId, "term-trap", "/home/test", "must_not_run", 5), /手动终端正忙/);
 	assert(!events.some((e) => e.event === "terminal_output" && e.terminalId === "term-trap" && e.data.text.includes("must_not_run")));
-	const interrupted = service.execute("client-a", nodeId, "term-trap", "still_not_run");
-	await new Promise((r) => setTimeout(r, 30));
 	await call("interrupt", nodeId, {}, "term-trap", conversationId);
-	await assert.rejects(interrupted, /命令已中断/);
+	await assert.rejects(service.execute("client-a", nodeId, "term-trap", "/home/test", "still_not_run", 5), /手动终端正忙/);
 	assert.equal((await call("read", nodeId, { path: "/home/test/a.txt" })).data.text, "hello ssh\n第二行\n");
 	assert.equal((await call("write", nodeId, { path: "/home/test/new.txt", text: "node write" })).event, "result");
 	assert.equal((await call("read", nodeId, { path: "/home/test/new.txt" })).data.text, "node write");

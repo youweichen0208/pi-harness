@@ -56,15 +56,17 @@ try {
 		});
 	});
 	await page.goto(`http://localhost:${port}`);
-	await page.locator('.bash-group.historical-step .bash-group-head').waitFor();
-	await page.locator('.bash-group-head').click();
-	await page.locator('.bash-group-head', { hasText: 'Ran 10 commands' }).waitFor();
-	assert.equal(await page.locator('.bash-group').count(), 1);
+	// Tool group: cmd-8 failed but later commands succeeded, so the failure is recovered and the group stays folded.
+	await page.locator('.process-group.recovered:not(.open) .process-group-head', { hasText: 'Ran 10 commands' }).waitFor();
+	assert.match(await page.locator('.process-group-status').textContent(), /1 failed · recovered/);
+	await page.locator('.process-group-head').click();
+	assert.equal(await page.locator('.process-group').count(), 1);
+	assert.equal(await page.locator('.bash-group-head').count(), 0);
 	assert.equal(await page.locator('.bash-row').count(), 8);
-	assert.equal(await page.locator('.bash-row.err .bash-row-head').getAttribute('aria-expanded'), 'true');
+	assert.equal(await page.locator('.bash-row.err .bash-row-head').getAttribute('aria-expanded'), 'false');
+	assert.match(await page.locator('.bash-row.err .bash-row-stats').textContent(), /exit 128/);
+	await page.locator('.bash-row.err .bash-row-head').click();
 	assert.equal(await page.locator('.bash-row.ok .bash-numbered-output').count(), 0);
-	assert.match(await page.locator('.bash-group-head').textContent(), /1 failed/);
-	assert.match(await page.locator('.bash-row.err .bash-row-stats').textContent(), /退出码 128/);
 	assert.equal(await page.locator('.bash-numbered-line.error').count(), 1);
 	assert.equal(await page.locator('.bash-readable-title').first().textContent(), 'git show …/file-2.ts');
 	const last = page.locator('[data-tool-call-id="cmd-9"]');
@@ -79,12 +81,13 @@ try {
 	const truncated = page.locator('[data-tool-call-id="cmd-7"]');
 	await truncated.locator('.bash-row-head').click();
 	assert.equal(await truncated.getByRole('button', { name: '下载完整输出', exact: true }).count(), 1);
-	await page.locator('.bash-group-head').click();
-	assert.equal(await page.locator('.bash-row').count(), 0);
+	await page.locator('.process-group-head').click();
+	assert.equal(await page.locator('.bash-row:visible').count(), 0);
 	await page.evaluate(() => window.dispatchEvent(new CustomEvent('pi:reveal-tool', { detail: { toolCallId: 'cmd-0' } })));
 	await page.locator('[data-tool-call-id="cmd-0"] .bash-numbered-output').waitFor();
 	assert.equal(await page.locator('.bash-row').count(), 10);
-	assert.equal(await page.locator('.task-plan-list').count(), 0);
+	// Without a native plan the right panel shows the step log, labelled as such.
+	assert.match(await page.locator('.task-section-heading').first().innerText(), /^步骤\s*\d+ 步$/);
 	assert.equal(await page.locator('.task-progress-meta').count(), 0);
 	assert.equal(await page.locator('.task-artifact-row').count(), 0);
 	const colors = await page.evaluate(() => { const s = getComputedStyle(document.documentElement); return ['--green', '--red', '--yellow-fg', '--accent'].map(key => s.getPropertyValue(key).trim()); });
@@ -111,8 +114,8 @@ try {
 	await page.setViewportSize({ width: 1440, height: 1000 });
 	socket.send(JSON.stringify({ type: 'tool_status', conversationId: snapshot.state.conversationId, toolCallId: 'cmd-9', toolName: 'bash', isError: false, durationMs: 321, running: false }));
 	snapshot.state.rev += 1; socket.send(JSON.stringify(snapshot));
-	assert.equal(await page.locator('.bash-row-stats', { hasText: '0.3s' }).count(), 0);
-	await page.locator('.bash-group-head').click();
+	await page.locator('[data-tool-call-id="cmd-9"] .bash-row-stats', { hasText: '0.3s' }).waitFor({ state: 'attached' });
+	await page.locator('.process-group-head').click();
 	await page.keyboard.press('ControlOrMeta+f');
 	await page.locator('.search-input').fill('file-4.ts');
 	await page.locator('[data-tool-call-id="cmd-4"] .bash-numbered-output').waitFor();
@@ -120,15 +123,14 @@ try {
 	snapshot.state.isStreaming = true;
 	snapshot.state.streamingMessage = { id: 'a-live', role: 'assistant', content: [{ type: 'toolCall', id: 'live-call', name: 'bash', argumentsText: '{"command":"sleep 1"}' }] };
 	snapshot.state.rev += 1; socket.send(JSON.stringify(snapshot));
-	await page.locator('.bash-group-head', { hasText: 'Running 11 commands' }).waitFor();
+	await page.locator('.process-group.run .process-group-head', { hasText: 'Ran 11 commands' }).waitFor();
 	assert.equal(await page.locator('.bash-group').count(), 1);
 	assert.equal(await page.locator('.bash-row.run').count(), 1);
 	// A previous interrupted tool must not become running again on a new turn.
 	snapshot.state.messages.push(snapshot.state.streamingMessage, { id: 'user-next', role: 'user', content: [{ type: 'text', text: 'Next task' }] });
 	snapshot.state.streamingMessage = null;
 	snapshot.state.rev += 1; socket.send(JSON.stringify(snapshot));
-	await page.locator('.bash-group.historical-step .bash-group-head').click();
-	await page.locator('[data-tool-call-id="live-call"].err').waitFor();
+	await page.locator('[data-tool-call-id="live-call"].err').waitFor({ state: 'attached' });
 	assert.equal(await page.locator('.bash-row.run').count(), 0);
 	// Completed tools remain part of a running turn until the model settles.
 	const reads = ['progress.json', 'ARCHITECTURE.md'].map((name, i) => ({ type: 'toolCall', id: `read-${i}`, name: 'bash', argumentsText: JSON.stringify({ command: `git show feat/hermes-design-package:docs/architecture/decisions/${name} 2>/dev/null` }) }));
@@ -147,15 +149,16 @@ try {
 	assert.equal(await page.locator('.task-artifact-row').count(), 0);
 	for (let i = 0; i < reads.length; i++) socket.send(JSON.stringify({ type: 'tool_status', conversationId: snapshot.state.conversationId, toolCallId: reads[i].id, toolName: 'bash', isError: false, durationMs: i * 80, running: false }));
 	assert.equal(await page.locator('.bash-group-duration').count(), 0);
+	// Compact rows show measured durations from 0.1s; shorter runs show their line count instead.
 	assert.equal(await page.locator('.bash-row-stats', { hasText: '<0.1s' }).count(), 0);
 	assert.equal(await page.locator('.bash-readable-title').first().innerText(), 'progress.json');
 	await page.locator('[data-tool-call-id="read-0"] .bash-row-head').click();
 	assert.equal(await page.locator('[data-tool-call-id="read-0"] .bash-full-command').textContent(), JSON.parse(reads[0].argumentsText).command);
 	await page.locator('[data-tool-call-id="read-0"]').getByRole('button', { name: '复制命令', exact: true }).click();
 	assert.equal(await page.evaluate(() => navigator.clipboard.readText()), JSON.parse(reads[0].argumentsText).command);
-	assert.match(await page.locator('.usage-cache-short').innerText(), /缓存 94%/);
 	await page.locator('.usage-trigger').click();
 	await page.locator('.usage-popover').waitFor();
+	assert.match(await page.locator('.usage-popover').innerText(), /94%/);
 	await page.keyboard.press('Escape');
 
 	await page.locator('.inputbox textarea').first().blur();
@@ -228,8 +231,9 @@ try {
 	await input.fill('draft'); const beforeEscape = submitted.length;
 	await input.press('Escape'); assert.equal(await input.inputValue(), ''); assert.equal(submitted.length, beforeEscape);
 	await input.press('Escape'); await page.waitForTimeout(100); assert.equal(submitted.at(-1).type, 'abort');
-	assert.equal(await page.locator('.composer-action.stop').evaluate(el => el.getBoundingClientRect().width), 28);
-	assert.equal(await page.locator('.composer-action.send').evaluate(el => el.getBoundingClientRect().width), 28);
+	// 3a: Stop is the labelled primary action while running; Send hides until there is input.
+	assert.match(await page.locator('.composer-action.stop').innerText(), /停止/);
+	assert.equal(await page.locator('.composer-action.send').isVisible(), false);
 	assert.equal(await page.locator('.messages .waiting-indicator').count(), 1);
 	await page.screenshot({ path: '/tmp/pi-design16-running.png' });
 	snapshot.state.isStreaming = false; snapshot.state.queue = { steering: [], followUp: [] };

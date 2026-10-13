@@ -33,3 +33,9 @@ test("identical user messages without a reply between them render once", () => {
 	expect([...hidden]).toEqual([["b", "a"]]);
 	expect(repeatedUserMessages([user("a", "one"), user("b", "two")]).hidden.size).toBe(0);
 });
+
+test("an empty retry between identical questions does not count as a reply", () => {
+	const ask = (id: string): UiMessage => ({ id, role: "user", content: [{ type: "text", text: 'skill text\n\n<file path="/u/Hermes.docx" />' }] });
+	const { hidden } = repeatedUserMessages([ask("a"), { id: "empty", role: "assistant", content: [] }, ask("b")]);
+	expect([...hidden]).toEqual([["b", "a"]]);
+});

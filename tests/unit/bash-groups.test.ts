@@ -57,3 +57,8 @@ it("keeps the filename and omits only an unquoted trailing stderr redirect", () 
 	expect(commandDuration(99)).toBe("<0.1s");
 	expect(commandDuration(100)).toBe("0.1s");
 });
+
+it("formats long thinking as minutes", async () => {
+	const { elapsedLabel } = await import("../../web/src/bash-presentation.js");
+	expect([elapsedLabel(3), elapsedLabel(59.6), elapsedLabel(77), elapsedLabel(3725)]).toEqual(["3s", "1m 0s", "1m 17s", "1h 2m"]);
+});

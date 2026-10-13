@@ -1,5 +1,8 @@
 /** Built-in SSH node workbench. All remote operations are scoped by node and client. */
-import { runNodeCommand } from "./node-command.js";
+import { nodeCommand } from "./node-command.js";
+import { NodeTerminalOutput } from "./node-terminal-output.js";
+import { stripVTControlCharacters } from "node:util";
+import { StringDecoder } from "node:string_decoder";
 import { NodeAgent } from "./node-agent.js";
 import { execFile } from "node:child_process";
 import { randomUUID, createHash } from "node:crypto";
@@ -18,8 +21,8 @@ type Node = NodeProfile;
 function unsupportedOptions(node: Node): string[] {
 	return (node.unsupported ?? []).filter((reason) => reason !== "key" || ((node.localAuth ?? node.auth) === "key" && !node.localKeyPath));
 }
-type Terminal = { id: string; conversationId: string; stream: ClientChannel; busy: boolean; buffer: string; pending?: { marker: string; output: string; resolve: (value: string) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> } };
-type Connection = { client: Client; nodeId: string; clientId: string; terminals: Map<string, Terminal>; agent?: NodeAgent; agentStarting?: boolean; sftp?: SFTPWrapper; ready: boolean; startedAt: number; connectedAt?: number };
+type Terminal = { id: string; conversationId: string; stream: ClientChannel; busy: boolean; buffer: string; promptMarker: string; promptReady: boolean; welcome: string; initializing: boolean; initScript: string; scan: string; cancelledCapture?: NodeTerminalOutput; pending?: { marker: string; capture: NodeTerminalOutput; resolve: (value: { output: string; code: number }) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> } };
+type Connection = { client: Client; nodeId: string; clientId: string; terminals: Map<string, Terminal>; agent?: NodeAgent; agentStarting?: boolean; selectedTerminalId?: string; sftp?: SFTPWrapper; ready: boolean; startedAt: number; connectedAt?: number };
 
 const MAX_OUTPUT = 64 * 1024;
 const MAX_FILE = 512 * 1024;
@@ -79,7 +82,7 @@ export class NodeWorkbench {
 	}
 	activeAgents(): number { return [...this.connections.values()].filter(connection => connection.agentStarting || connection.agent?.busy).length; }
 	private state(clientId: string): Record<string, unknown> {
-		return { sources: this.sources,   nodes: this.nodes.map((node) => ({ ...node, auth: node.localAuth ?? node.auth, unsupported: unsupportedOptions(node), hasSecret: this.secrets.has(`node:${node.id}:secret`) || this.transientSecrets.has(identity(clientId, node.id)), fingerprint: node.fingerprint })), connections: [...this.connections.values()].filter((c) => c.clientId === clientId).map((c) => ({ nodeId: c.nodeId, connectedAt: c.connectedAt, latencyMs: c.connectedAt ? c.connectedAt - c.startedAt : undefined, status: c.ready ? "connected" : "connecting", agent: c.agent?.snapshot(), terminals: [...c.terminals.values()].map((t) => ({ id: t.id, conversationId: t.conversationId, busy: t.busy, output: t.buffer })) })) };
+		return { sources: this.sources,   nodes: this.nodes.map((node) => ({ ...node, auth: node.localAuth ?? node.auth, unsupported: unsupportedOptions(node), hasSecret: this.secrets.has(`node:${node.id}:secret`) || this.transientSecrets.has(identity(clientId, node.id)), fingerprint: node.fingerprint })), connections: [...this.connections.values()].filter((c) => c.clientId === clientId).map((c) => ({ nodeId: c.nodeId, connectedAt: c.connectedAt, latencyMs: c.connectedAt ? c.connectedAt - c.startedAt : undefined, status: c.ready ? "connected" : "connecting", agent: c.agent?.snapshot(), terminals: [...c.terminals.values()].map((t) => ({ id: t.id, conversationId: t.conversationId, busy: t.busy || t.initializing, output: t.buffer, welcome: t.welcome })) })) };
 	}
 	attach(clientId: string, sink: Sink): () => void {
 		let set = this.sinks.get(clientId);
@@ -114,7 +117,15 @@ export class NodeWorkbench {
 			const sessionDir = join(this.dataDir, "node-sessions", createHash("sha256").update(clientId).digest("hex"), connection.nodeId);
 			const check = (signal?: AbortSignal) => { signal?.throwIfAborted(); this.ensureCurrent(connection); };
 			const agent = new NodeAgent(sessionDir, cwd, {
-				command: async (command, timeout, signal) => { check(signal); const output = await runNodeCommand(connection.client, cwd, command, timeout, signal); check(signal); return output; },
+				command: async (command, timeout, signal, toolCallId) => {
+					check(signal);
+					let terminal = connection.terminals.get(connection.selectedTerminalId ?? "") ?? connection.terminals.values().next().value;
+					if (!terminal) {
+						const opened = await this.openTerminal(clientId, { ...req, terminalId: randomUUID() });
+						check(signal); terminal = connection.terminals.get(String(opened.terminalId))!;
+					}
+					return this.execute(clientId, connection.nodeId, terminal.id, cwd, command, timeout, signal, toolCallId);
+				},
 				read: async (path, signal) => { check(signal); const text = await this.read(connection, safePath(path), signal); check(signal); return text; },
 				write: async (path, text, signal) => { check(signal); await this.write(connection, safePath(path), text, signal); check(signal); },
 			}, state => {
@@ -262,20 +273,22 @@ export class NodeWorkbench {
 				case "agent_new": await this.agent(clientId, req).newSession(); break;
 				case "agent_model": await this.agent(clientId, req).model(field(p.provider, "服务商"), field(p.modelId, "模型")); break;
 				case "agent_close": this.agent(clientId, req).close(); break;
-				case "agent_dialog": this.agent(clientId, req).dialog(field(p.id, "对话框"), { cancelled: p.cancelled === true, confirmed: p.confirmed === true, value: typeof p.value === "string" ? p.value : undefined }); break;
+				case "agent_dialog": this.agent(clientId, req).dialog(field(p.id, "对话框"), { cancelled: p.cancelled === true, confirmed: p.confirmed === true, remember: p.remember === true, value: typeof p.value === "string" ? p.value : undefined }); break;
 				case "terminal_open": result = await this.openTerminal(clientId, req); break;
 
 				case "terminal_input": {
 					const t = this.terminal(clientId, req);
-					if (t.busy) throw new Error("Agent 正在使用该终端");
+					if (t.busy || t.initializing) throw new Error("Agent 正在使用该终端或终端正在初始化");
+					t.promptReady = false;
 					t.stream.write(String(p.data ?? "").slice(0, 8192)); break;
 				}
+				case "terminal_select": { const terminal = this.terminal(clientId, req); this.connection(clientId, req.nodeId).selectedTerminalId = terminal.id; break; }
 				case "terminal_resize": this.terminal(clientId, req).stream.setWindow(Math.max(1, Number(p.rows) || 24), Math.max(1, Number(p.cols) || 80), 0, 0); break;
 				case "terminal_close": this.terminal(clientId, req).stream.end(); break;
 				case "interrupt": {
 					const t = this.terminal(clientId, req);
 					t.stream.write("\x03");
-					if (t.pending) { const pending = t.pending; t.pending = undefined; pending.reject(new Error("命令已中断")); }
+					if (t.pending) { const pending = t.pending; t.cancelledCapture = pending.capture; t.pending = undefined; pending.reject(new Error("命令已中断")); }
 					break;
 				}
 				case "list": {
@@ -429,44 +442,105 @@ export class NodeWorkbench {
 		const p = req.payload ?? {};
 		const stream = await new Promise<ClientChannel>((ok, reject) => c.client.shell({ cols: Number(p.cols) || 80, rows: Number(p.rows) || 24, term: "xterm-256color" }, (e, s) => e ? reject(e) : ok(s)));
 		try { this.ensureCurrent(c); } catch (error) { stream.end(); throw error; }
-		const t: Terminal = { id, conversationId, stream, busy: false, buffer: "" };
+		const promptMarker = `\x1b]133;A;${randomUUID()}\x07`;
+		// A shell prompt marker lets us refuse to steal a manually busy terminal.
+		// Bash/zsh wrappers keep the invisible marker out of readline width counts.
+		const encoded = promptMarker.replace("\x1b", "\\033").replace("\x07", "\\007");
+		const directory = this.node(c.nodeId).defaultDir;
+		const initScript = ` __pi_prompt=$(printf '${encoded}'); if [ -n "\${BASH_VERSION-}" ]; then PS1="\${PS1}\\[\${__pi_prompt}\\]"; elif [ -n "\${ZSH_VERSION-}" ]; then PS1="\${PS1}%{\${__pi_prompt}%}"; else PS1="\${PS1}\${__pi_prompt}"; fi; cd '${directory.replaceAll("'", "'\\''")}'\n`;
+		const t: Terminal = { id, conversationId, stream, busy: false, buffer: "", promptMarker, promptReady: false, welcome: "", initializing: true, initScript, scan: "" };
 		c.terminals.set(id, t);
+		c.selectedTerminalId ??= id;
+		const decoder = new StringDecoder("utf8");
 		stream.on("data", (chunk: Buffer) => {
-			const data = chunk.toString("utf8");
+			let data = decoder.write(chunk);
+			t.scan = (t.scan + data).slice(-MAX_OUTPUT);
+			const atPrompt = t.scan.includes(t.promptMarker);
+			if (atPrompt) { t.promptReady = true; t.scan = ""; }
+			if (t.initializing) {
+				t.welcome += data;
+				const end = t.welcome.indexOf(t.promptMarker);
+				if (end < 0) { t.welcome = t.welcome.slice(-MAX_OUTPUT); return; }
+				const before = t.welcome.slice(0, end).replaceAll("\r", "");
+				const setup = before.indexOf("__pi_prompt=");
+				data = (setup >= 0 ? before.slice(before.lastIndexOf("\n") + 1) : "") + t.welcome.slice(end + t.promptMarker.length);
+				t.welcome = (setup >= 0 ? before.slice(0, setup).replace(/[^\n]*$/, "") : before).trim();
+				t.initializing = false;
+				this.emit(clientId, "terminal_busy", { busy: false }, { nodeId: c.nodeId, terminalId: id, conversationId });
+				this.emit(clientId, "terminal_welcome", { text: t.welcome }, { nodeId: c.nodeId, terminalId: id, conversationId });
+			}
+			data = data.replaceAll(t.promptMarker, "");
+			if (!t.pending && t.cancelledCapture) {
+				const parsed = t.cancelledCapture.push(data);
+				data = parsed.display;
+				if (parsed.result || atPrompt) { t.cancelledCapture = undefined; if (!parsed.result) data += "\r\n"; }
+			}
+			if (t.pending) {
+				const pending = t.pending, parsed = pending.capture.push(data);
+				data = parsed.display;
+				if (parsed.result) { t.pending = undefined; clearTimeout(pending.timer); pending.resolve(parsed.result); }
+			}
 			t.buffer = (t.buffer + data).slice(-MAX_OUTPUT);
-			if (t.pending) { t.pending.output = tail(t.pending.output + data); if (new RegExp(`(?:^|\\r?\\n)${t.pending.marker}(?::\\d+)?\\r?\\n`).test(t.pending.output)) { const pending = t.pending; t.pending = undefined; clearTimeout(pending.timer); pending.resolve(pending.output); } }
-			this.emit(clientId, "terminal_output", { text: tail(data) }, { nodeId: c.nodeId, terminalId: id, conversationId });
+			if (data) this.emit(clientId, "terminal_output", { text: tail(data) }, { nodeId: c.nodeId, terminalId: id, conversationId });
 		});
 		stream.on("close", () => {  t.pending?.reject(new Error("终端已断开")); c.terminals.delete(id); this.emit(clientId, "terminal_exit", {}, { nodeId: c.nodeId, terminalId: id, conversationId }); this.broadcastState(); });
-		const directory = this.node(c.nodeId).defaultDir;
-		if (directory !== "/") stream.write(`cd '${directory.replaceAll("'", "'\\''")}'\n`);
+		stream.write(initScript);
+		const initTimer = setTimeout(() => {
+			if (!t.initializing || !c.terminals.has(id)) return;
+			t.initializing = false; t.buffer = t.welcome; t.welcome = "";
+			this.emit(clientId, "terminal_busy", { busy: false }, { nodeId: c.nodeId, terminalId: id, conversationId });
+			this.emit(clientId, "terminal_output", { text: t.buffer }, { nodeId: c.nodeId, terminalId: id, conversationId });
+		}, 5000);
+		initTimer.unref(); stream.once("close", () => clearTimeout(initTimer));
 		this.broadcastState(); return { terminalId: id, conversationId };
 	}
-	private async execute(clientId: string, nodeId: string, terminalId: string, command: string, signal?: AbortSignal): Promise<string> {
-		if (signal?.aborted) throw new Error("命令已中断");
+	private async execute(clientId: string, nodeId: string, terminalId: string, cwd: string, command: string, timeout: number, signal?: AbortSignal, toolCallId?: string) {
+		signal?.throwIfAborted();
+		const script = nodeCommand(cwd, command);
+		if (!Number.isFinite(timeout) || timeout < 1 || timeout > 600) throw new Error("Invalid command timeout");
 		const c = this.connection(clientId, nodeId), t = c.terminals.get(terminalId);
-		if (!t) throw new Error("请选择已连接的手动终端");
-		if (t.busy) throw new Error("终端正忙");
-		t.busy = true; this.emit(clientId, "terminal_busy", { busy: true }, { nodeId, terminalId, conversationId: t.conversationId });
+		if (!t || t.busy) throw new Error("终端正忙或已关闭");
+		if (t.initializing) await waitNodeIO(new Promise<void>((resolve, reject) => {
+			const deadline = Date.now() + 5000;
+			const check = () => {
+				if (signal?.aborted || !c.terminals.has(t.id)) reject(new Error("终端已取消或关闭"));
+				else if (!t.initializing) resolve();
+				else if (Date.now() > deadline) reject(new Error("无法确认 shell 提示符"));
+				else setTimeout(check, 25);
+			}; check();
+		}), signal);
+		this.ensureCurrent(c); signal?.throwIfAborted();
+		if (!t.promptReady || t.busy) throw new Error("手动终端正忙；请先完成命令或按 Ctrl+C 后重试");
+		t.busy = true; t.promptReady = false;
+		const commandId = toolCallId ?? randomUUID(), started = Date.now();
+		let commandStatus: "done" | "error" = "error", lines = 0;
+		c.agent?.terminalCommand({ commandId, terminalId, status: "running" });
+		this.emit(clientId, "terminal_busy", { busy: true }, { nodeId, terminalId, conversationId: t.conversationId });
+		this.emit(clientId, "terminal_command", { commandId, command }, { nodeId, terminalId, conversationId: t.conversationId });
+		const anchor = `\x1b]133;C;${commandId}\x07${command.replaceAll("\n", "\r\n")}\r\n`;
+		t.buffer = (t.buffer + anchor).slice(-MAX_OUTPUT);
+		this.emit(clientId, "terminal_output", { text: anchor }, { nodeId, terminalId, conversationId: t.conversationId });
 		try {
-			const marker = `__PI_READY_${randomUUID().replaceAll("-", "")}__`;
-			// Interrupt any foreground process, then wait for a shell-executed marker.
-			t.stream.write("\x03\n");
-			await this.waitMarker(t, marker, `printf '%s\\n' '${marker}'\n`, 5000, signal);
 			const end = `__PI_DONE_${randomUUID().replaceAll("-", "")}__`;
-			const output = await this.waitMarker(t, end, `${command}\nprintf '%s:%s\\n' '${end}' "$?"\n`, 120000, signal);
-			const code = Number(output.match(new RegExp(`${end}:(\\d+)`))?.[1] ?? 0);
-			return tail(output.replace(new RegExp(`${end}:\\d+`), "") + (code ? `\n[退出码 ${code}]` : ""));
-		} finally { t.busy = false; this.emit(clientId, "terminal_busy", { busy: false }, { nodeId, terminalId, conversationId: t.conversationId }); }
+			const begin = `__PI_BEGIN_${randomUUID().replaceAll("-", "")}__`;
+			const input = `printf '\\n%s\\n' '${begin}'; ${script}; printf '\\n%s:%s\\n' '${end}' "$?"\n`;
+			const result = await this.waitMarker(t, begin, end, input, timeout * 1000, signal);
+			const code = result.code;
+			const output = stripVTControlCharacters(result.output).replaceAll("\r", "").trim();
+			lines = output ? output.split("\n").length : 0;
+			if (code !== 0) throw new Error(`SSH command exit: ${code}\n${output}`);
+			commandStatus = "done";
+			return { output, terminalId, commandId, lines, durationMs: Date.now() - started };
+		} finally { c.agent?.terminalCommand({ commandId, terminalId, status: commandStatus, lines, durationMs: Date.now() - started }); t.busy = false; this.emit(clientId, "terminal_busy", { busy: false }, { nodeId, terminalId, conversationId: t.conversationId }); }
 	}
-	private waitMarker(t: Terminal, marker: string, input: string, ms: number, signal?: AbortSignal): Promise<string> {
+	private waitMarker(t: Terminal, start: string, marker: string, input: string, ms: number, signal?: AbortSignal): Promise<{ output: string; code: number }> {
 		if (signal?.aborted) return Promise.reject(new Error("命令已中断"));
 		return new Promise((resolve, reject) => {
 			const cleanup = () => { clearTimeout(timer); signal?.removeEventListener("abort", abort); if (t.pending?.marker === marker) t.pending = undefined; };
-			const abort = () => { t.stream.write("\x03"); cleanup(); reject(new Error("命令已中断")); };
-			const timer = setTimeout(() => { t.stream.write("\x03"); cleanup(); reject(new Error("无法确认 shell 提示符或命令超时")); }, ms);
+			const abort = () => { t.cancelledCapture = t.pending?.capture; t.stream.write("\x03"); cleanup(); reject(new Error("命令已中断")); };
+			const timer = setTimeout(() => { t.cancelledCapture = t.pending?.capture; t.stream.write("\x03"); cleanup(); reject(new Error("无法确认 shell 提示符或命令超时")); }, ms);
 			signal?.addEventListener("abort", abort, { once: true });
-			t.pending = { marker, output: "", timer, resolve: (text) => { cleanup(); resolve(text); }, reject: (error) => { cleanup(); reject(error); } };
+			t.pending = { marker, capture: new NodeTerminalOutput(start, marker), timer, resolve: (text) => { cleanup(); resolve(text); }, reject: (error) => { cleanup(); reject(error); } };
 			t.stream.write(input);
 		});
 	}

@@ -66,11 +66,24 @@ try {
 	await page.locator(".search-input").fill("question-2-unique");
 	await page.waitForFunction(() => document.querySelector(".search-count")?.textContent?.replace(/\s/g, "").includes("1/1"));
 	await page.locator(`.msg[data-msg-id="${state.messages[2].id}"]`).waitFor();
+	const debuggerSession = await page.context().newCDPSession(page);
+	console.log("[history-listeners]", (await debuggerSession.send("Runtime.evaluate", { expression: "getEventListeners(window).keydown.map(x => x.listener.toString()).filter(x => x.includes('Escape'))", includeCommandLineAPI: true, returnByValue: true })).result.value);
 	await page.keyboard.press("Escape");
+	await page.locator(".search-input").waitFor({ state: "detached", timeout: 5000 });
 	await page.locator(".messages").evaluate(el => { el.scrollTop = el.scrollHeight; });
-	await page.waitForFunction(count => document.querySelectorAll(".msg-lazy-ph").length > count - 200, count);
+	await page.waitForFunction(count => document.querySelectorAll(".msg-lazy-ph").length > count - 200, count); // Final virtualization budget.
+
 	assert.deepEqual(errors, []);
 	console.log(`PASS ${count} history rows: bounded summaries, scroll, expand, message jump and search`);
+} catch (error) {
+	if (browser) console.error("[history-diagnostic]", await browser.contexts()[0]?.pages()[0]?.evaluate(() => ({
+		placeholders: document.querySelectorAll(".msg-lazy-ph").length,
+		collapsed: document.querySelectorAll(".msg-collapsed").length,
+		search: !!document.querySelector(".search-input"),
+		scroll: [...document.querySelectorAll(".messages")].map(el => ({ top: el.scrollTop, height: el.scrollHeight, client: el.clientHeight })),
+		zeroRows: [...document.querySelectorAll("[data-lazy-id]")].filter(el => !el.getBoundingClientRect().height).length,
+	})));
+	throw error;
 } finally {
 	await browser?.close(); ws?.terminate(); child.kill("SIGTERM");
 	await Promise.race([once(child, "exit"), sleep(5000)]); if (child.exitCode === null) child.kill("SIGKILL");

@@ -72,7 +72,7 @@ try {
 	await page.locator(".node-sidebar section", { hasText: "开发" }).waitFor();
 	await page.locator(".node-item", { hasText: "alpha" }).locator("button").first().click();
 	await page.getByRole("button", { name: "打开工作台", exact: true }).click();
-	await page.locator(".node-main-head em", { hasText: "已连接" }).waitFor({ timeout: 10000 });
+	await page.locator(".node-connection-tabs button", { hasText: "断开" }).waitFor({ timeout: 10000 });
 
 	await page.locator(".node-tabs .active").waitFor({ state: "attached" });
 	assert(await page.locator(".node-agent").count() === 1, "remote agent workbench missing");
@@ -100,7 +100,7 @@ try {
 	await page.locator(".node-item", { hasText: "beta" }).locator("button").first().click();
 	assert(await page.locator(".node-file-editor:visible").count() === 0, "file draft leaked to another node");
 	await page.getByRole("button", { name: "打开工作台", exact: true }).click();
-	await page.locator(".node-main-head em", { hasText: "已连接" }).waitFor({ timeout: 10000 });
+	await page.locator(".node-connection-tabs button", { hasText: "断开" }).waitFor({ timeout: 10000 });
 
 	await page.locator(".node-xterm:visible").click();
 	await page.keyboard.type("beta-command"); await page.keyboard.press("Enter");
@@ -129,7 +129,7 @@ try {
 	const importedKeyPath = join(dataDir, "imported_id_rsa"); writeFileSync(importedKeyPath, privateKey, { mode: 0o600 });
 	await page.locator(".node-modal").getByLabel("本机私钥路径").fill(importedKeyPath);
 	await page.locator(".node-modal").getByRole("button", { name: "测试并保存" }).click();
-	await page.locator(".node-main-head em", { hasText: "已连接" }).waitFor({ timeout: 10000 });
+	await page.locator(".node-connection-tabs button", { hasText: "断开" }).waitFor({ timeout: 10000 });
 	assert(await page.locator(".node-modal").count() === 0, "credential modal stayed open");
 	await page.getByRole("button", { name: "‹ 节点", exact: true }).click();
 	writeFileSync(join(sourceDir, "added.xsh"), sourceText);
@@ -141,7 +141,7 @@ try {
 	await page.locator(".node-modal").getByLabel("本机私钥路径").fill(keyPath);
 	assert(!(await page.locator(".node-modal input[type=password]").evaluate((input) => input.required)), "key passphrase must be optional");
 	await page.locator(".node-modal").getByRole("button", { name: "测试并保存" }).click();
-	await page.locator(".node-main-head em", { hasText: "已连接" }).waitFor({ timeout: 10000 });
+	await page.locator(".node-connection-tabs button", { hasText: "断开" }).waitFor({ timeout: 10000 });
 	await page.getByRole("button", { name: "‹ 节点", exact: true }).click();
 	await page.getByRole("button", { name: "节点来源", exact: true }).click();
 	await page.screenshot({ path: join(root, "tests/scratch/node-sources.png") });

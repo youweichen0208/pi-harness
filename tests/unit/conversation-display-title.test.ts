@@ -13,3 +13,8 @@ describe("conversation display title", () => {
 		] as Parameters<typeof conversationDisplayTitle>[5])).toBe("审查最近的代码改动");
 	});
 });
+
+it("skill invocations are titled by the skill name without the skill: prefix", () => {
+	expect(conversationDisplayTitle("skill:grill-with-docs · 可以参照这个设计帮我写一下架构吗", undefined, undefined, 3, "zh")).toBe("grill-with-docs · 可以参照这个设计帮我写一下架构吗");
+	expect(conversationDisplayTitle("skill:grill-with-docs · x", undefined, "我的命名", 3, "zh")).toBe("我的命名");
+});

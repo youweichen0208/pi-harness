@@ -28,7 +28,7 @@ import { retriedEditIds as findRetriedEditIds } from "../edit-write-presentation
 import { planPresentation } from "../plan-presentation";
 
 import { parseSkillBlock } from "../skill-block";
-import { buildCollapsedGroups } from "../collapsed-groups";
+import { buildCollapsedGroups, isEmptyReply } from "../collapsed-groups";
 import { messageTimeGaps } from "../time-gaps";
 import { CollapsedGroup } from "./CollapsedGroup";
 import { LazyMount } from "./LazyMount";
@@ -232,6 +232,8 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 	const goalEvents = useMemo(() => groupGoalEvents(state.messages), [state.messages]);
 	const timeGaps = useMemo(() => messageTimeGaps(state.messages), [state.messages]);
 	const repeatedUsers = useMemo(() => repeatedUserMessages(state.messages), [state.messages]);
+	/** Empty retries render nothing; repeated questions fold into the copy that is shown. */
+	const emptyReplies = useMemo(() => new Set(state.messages.filter(isEmptyReply).map(message => message.id)), [state.messages]);
 	const predecessors = assistantPredecessors(messages);
 	const streamingHasContent = state.streamingMessage?.content.some((block) => block.type === "text" ? (typeof block.text === "string" && !!block.text.trim()) || !!block.truncated : block.type === "thinking" ? typeof block.thinking === "string" && !!block.thinking.trim() : true) ?? false;
 	const changeSummaries = useMemo(() => turnChangeSummaries(state.messages, state.taskProgress, state.cwd, state.isStreaming), [state.messages, state.taskProgress, state.cwd, state.isStreaming]);
@@ -246,12 +248,25 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 			: 0;
 	const settledGroups = useMemo(() => groupBashMessages(state.messages, recentStart, new Set(timeGaps.keys())), [state.messages, recentStart, timeGaps]);
 	const bashGroups = useMemo(() => withStreamingMessage(settledGroups, state.messages, state.streamingMessage), [settledGroups, state.messages, state.streamingMessage]);
+	/** Replies after which the agent kept going in the same turn — their failed steps count as recovered. */
+	const turnContinues = useMemo(() => {
+		const continues = new Set<string>();
+		let later = !!state.streamingMessage;
+		for (let i = state.messages.length - 1; i >= 0; i--) {
+			const message = state.messages[i];
+			if (message.role === "user") { later = false; continue; }
+			if (message.role !== "assistant" || bashGroups.owners.has(message.id) || emptyReplies.has(message.id)) continue;
+			if (later) continues.add(message.id);
+			later = true;
+		}
+		return continues;
+	}, [state.messages, state.streamingMessage, bashGroups, emptyReplies]);
 	// 相邻的同角色折叠消息并成一条摘要：一次「想一下 → 调几个工具 → 回话」在
 	// transcript 里是 8 条 assistant 消息，一条一行会把历史区堆成 8 条长得一模
 	// 一样的条带。纯逻辑在 collapsed-groups.ts（有单测）。
 	const collapsed = useMemo(
-		() => buildCollapsedGroups(state.messages, recentStart, expanded, new Set(timeGaps.keys())),
-		[state.messages, recentStart, expanded, timeGaps],
+		() => buildCollapsedGroups(state.messages, recentStart, expanded, new Set(timeGaps.keys()), new Set([...emptyReplies, ...repeatedUsers.hidden.keys()])),
+		[state.messages, recentStart, expanded, timeGaps, emptyReplies, repeatedUsers],
 	);
 
 	// ---- 惰性窗口化（lazy windowing，纯函数见 lazy-window.ts）----------------
@@ -781,12 +796,13 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 								<CollapsedGroup
 									messages={group}
 									onExpand={expandGroup}
+									repeatCount={repeatedUsers.counts.get(group[0].id)}
 								/>
 							</LazyMount>
 						);
 					}
 					// Repeats keep an anchor so search and question jumps still land on the shown copy.
-					if (repeatedUsers.hidden.has(m.id)) return <span key={m.id} data-msg-id={m.id} hidden />;
+					if (repeatedUsers.hidden.has(m.id) || emptyReplies.has(m.id) && m.id !== state.streamingMessage?.id) return <span key={m.id} data-msg-id={m.id} hidden />;
 					if (bashGroups.owners.has(m.id)) return changeSummaries.has(m.id) ? <ChangeSummaryCard key={m.id} files={changeSummaries.get(m.id)!} /> : null;
 					const qIdx = m.role === "user" ? qnIndex.get(m.id) : undefined;
 					const show =
@@ -811,7 +827,8 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 							key={m.id}
 							message={bashGroups.projected.get(m.id) ?? m}
 							toolMessageIds={bashGroups.sources}
-							continuation={!!predecessors.get(m.id) && !hidden.has(predecessors.get(m.id)!) && !(i < recentStart && !expanded.has(predecessors.get(m.id)!))}
+							// A folded or lazily hidden predecessor still shows the pi header for this turn.
+							continuation={!!predecessors.get(m.id) && !emptyReplies.has(predecessors.get(m.id)!) && !(i < recentStart && !expanded.has(predecessors.get(m.id)!))}
 							qnIndex={qIdx}
 							qnActive={qIdx !== undefined ? qIdx === activeIdx : undefined}
 							onJump={jumpTo}
@@ -832,6 +849,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 							questionAttachments={questionAttachments.get(m.id)}
 							repeatCount={repeatedUsers.counts.get(m.id)}
 							questionsActive={!state.isStreaming && m.id === lastAssistantId}
+							turnContinues={turnContinues.has(m.id)}
 							onCollapse={isExpandedOld ? collapse : undefined}
 						/>
 						{changeSummaries.has(m.id) && <ChangeSummaryCard files={changeSummaries.get(m.id)!} />}
@@ -889,7 +907,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 
 			</div>
 			{!stickBottom && farFromBottom && scrollingUp && (() => {
-				const button = <button type="button" className="scroll-bottom" onClick={scrollToBottom}><FiArrowDown /> {t("backToBottom")}</button>;
+				const button = <button type="button" className="scroll-bottom" title={t("backToBottom")} aria-label={t("backToBottom")} onClick={scrollToBottom}><FiArrowDown aria-hidden="true" /></button>;
 				const composer = document.querySelector<HTMLElement>(".design-workspace .view-pane:not(.hidden) .main > .inputbar");
 				return composer ? createPortal(button, composer) : button;
 			})()}

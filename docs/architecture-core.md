@@ -120,7 +120,7 @@ bash 工具执行前后各拍一次监听快照（`snapshotListeningPorts`，Win
 
 ### 原生工具结果与下载
 
-serialize.ts 投影 edit 的 diff/firstChangedLine、bash 的退出码和截断摘要，以及工具结果的完整输出路径；diff 遵守 100,000 字符上限并标记截断。plan/codemode 保留白名单专用投影，任意扩展字段和 structuredContent 中的完整输出正文不会透传。缓存按实际投影变化失效，消息数组按对象引用复用。
+serialize.ts 投影 edit 的 diff/firstChangedLine、bash 的退出码和截断摘要，以及工具结果的完整输出路径；diff 遵守 100,000 字符上限并标记截断。节点 remote_command 仅额外投影 terminalId/commandId/lines/durationMs，以支持终端定位。plan/codemode 保留白名单专用投影，任意扩展字段和 structuredContent 中的完整输出正文不会透传。缓存按实际投影变化失效，消息数组按对象引用复用。
 
 `/api/tool-output` 与按需清单 `/api/tool-output-list` 受通用口令鉴权，参数为 clientId/conversationId/toolCallId，下载可再带 outputId；浏览器不提供文件路径。服务端从原生全部条目查找，覆盖压缩前与分支历史；清单保留 fullOutputPath；仅 codemode、mcp__…__… 和 read_mcp_resource 收集 MCP binary resource 及 Codemode image saved 标记。完整输出按 64 KiB 分块异步扫描，最多前 8 MiB，跨块 UTF-8 和完整标记保留，截止处不完整标记忽略。Bash、PowerShell 及其他工具的正文和日志不做标记扫描。扫描范围外、且未在原生结果正文出现的额外文件不进入清单，但完整文本始终可以全部下载。路径去重后生成稳定 ID，清单只返回 ID/文件名。
 
@@ -196,3 +196,7 @@ Wiki 复用当前工作区，使用原生内存会话，离开后释放，不写
 
 
 33a 展示由 `tool-text-incidents.ts` 重放原生消息统一推导：同一次用户请求共用 incidentId，工具文本和提醒后无工具的普通回复关联为同一次异常；真实工具调用恢复状态。原问题与附件用于手动重发，提醒不参与问题导航、编辑、折叠摘要。重连及历史会话按同一规则恢复。
+
+### 工作区代码搜索（协议 v43）
+
+`search_content` 以请求 ID 关联 `search_content_result` 批次，后者带 cwd、done、截断和错误状态。每个 ClientSession 只保留一个 rg 子进程；空查询取消，新查询替换，dispose 终止。浏览器在输入变化时立即取消，300ms 后发新查询，按跨弹窗唯一 ID 与当前 cwd 接收批次；旧批次不进入新搜索。文件名搜索优先使用包内 `rg --files`，不可用时保留有预算的遍历回退。

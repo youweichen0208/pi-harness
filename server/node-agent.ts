@@ -1,4 +1,5 @@
 /** Local native Pi session whose only tools operate on one captured SSH connection. */
+import { NodeCommandApprovals } from "./node-command-policy.js";
 import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { Type } from "typebox";
@@ -7,7 +8,7 @@ import { serializeMessage } from "./serialize.js";
 import type { NodeAgentState, UiMessage } from "./protocol.js";
 
 export interface NodeAgentOperations {
-	command(command: string, timeout: number, signal?: AbortSignal): Promise<string>;
+	command(command: string, timeout: number, signal?: AbortSignal, toolCallId?: string): Promise<{ output: string; terminalId: string; commandId: string; lines: number; durationMs: number }>;
 	read(path: string, signal?: AbortSignal): Promise<string>;
 	write(path: string, text: string, signal?: AbortSignal): Promise<void>;
 }
@@ -15,6 +16,7 @@ export interface NodeAgentOperations {
 export class NodeAgent {
 	readonly id = randomUUID();
 	private state: NodeAgentState;
+	private readonly approvals = new NodeCommandApprovals(pending => this.set({ dialogs: pending.map(item => ({ id: item.id, method: "confirm", title: "请求执行 · 写入或未识别的操作", message: item.command, commandFamily: item.family })) }, true));
 	private session?: AgentSession;
 	private unsubscribe?: () => void;
 	private timer?: ReturnType<typeof setTimeout>;
@@ -27,6 +29,9 @@ export class NodeAgent {
 	}
 	get busy(): boolean { return this.state.phase !== "closed" && (this.state.phase === "starting" || this.state.running || this.changing); }
 	snapshot(): NodeAgentState { return this.state; }
+	terminalCommand(command: NonNullable<NodeAgentState["terminalCommands"]>[number]) {
+		this.set({ terminalCommands: [...(this.state.terminalCommands ?? []).filter(item => item.commandId !== command.commandId), command].slice(-200) }, true);
+	}
 	private set(patch: Partial<NodeAgentState>, immediate = false) {
 		this.state = { ...this.state, ...patch };
 		if (this.timer) { if (!immediate) return; clearTimeout(this.timer); this.timer = undefined; }
@@ -40,9 +45,14 @@ export class NodeAgent {
 		const writeParams = Type.Object({ path: Type.String(), text: Type.String() });
 		const command: ToolDefinition<typeof commandParams> = {
 			name: "remote_command", label: "SSH command",
-			description: `Execute a shell command on this SSH node. Each command starts in ${JSON.stringify(this.state.cwd)}; use cd explicitly within a command to change directories. This is an independent exec channel, not the user's interactive terminal. Output is limited to 64 KiB.`,
+			description: `Execute a shell command on this SSH node. Each command starts in ${JSON.stringify(this.state.cwd)}; use cd explicitly within a command to change directories. Commands run visibly in the shared interactive terminal; manual input is locked until completion. Writes and unclassified commands require user confirmation. Output is limited to 64 KiB.`,
 			parameters: commandParams,
-			execute: async (_id, p, signal) => ({ content: [{ type: "text", text: await this.operations.command(p.command, p.timeout ?? 120, signalFor(signal)) }], details: undefined }),
+			execute: async (_id, p, signal) => {
+				const cancel = signalFor(signal);
+				await this.approvals.request(p.command, cancel);
+				const result = await this.operations.command(p.command, p.timeout ?? 120, cancel, _id);
+				return { content: [{ type: "text", text: result.output }], details: { terminalId: result.terminalId, commandId: result.commandId, lines: result.lines, durationMs: result.durationMs } };
+			},
 		};
 		const read: ToolDefinition<typeof readParams> = {
 			name: "remote_read", label: "SSH read", description: "Read a UTF-8 file on this SSH node via SFTP (up to 512 KiB). Path must be absolute.", parameters: readParams,
@@ -50,7 +60,7 @@ export class NodeAgent {
 		};
 		const write: ToolDefinition<typeof writeParams> = {
 			name: "remote_write", label: "SSH write", description: "Write a UTF-8 file on this SSH node via SFTP (up to 512 KiB). Path must be absolute. Existing content is replaced.", parameters: writeParams,
-			execute: async (_id, p, signal) => { await this.operations.write(p.path, p.text, signalFor(signal)); return { content: [{ type: "text", text: "文件已写入节点" }], details: undefined }; },
+			execute: async (_id, p, signal) => { await this.approvals.request(`Write ${p.path}\n${p.text}`, signalFor(signal), true); await this.operations.write(p.path, p.text, signalFor(signal)); return { content: [{ type: "text", text: "文件已写入节点" }], details: undefined }; },
 		};
 		return [command, read, write];
 	}
@@ -78,7 +88,7 @@ export class NodeAgent {
 	}
 	close() {
 		if (this.state.phase === "closed") return;
-		this.generation++; this.lifetime.abort();
+		this.generation++; this.lifetime.abort(); this.approvals.reset();
 		this.unsubscribe?.(); this.unsubscribe = undefined;
 		const session = this.session; this.session = undefined;
 		if (session) void session.abort().catch(() => {}).finally(() => session.dispose());
@@ -139,7 +149,7 @@ export class NodeAgent {
 	async newSession() {
 		this.ready(); if (this.busy) throw new Error("请先停止当前任务");
 		this.changing = true;
-		try { await this.create(true); } finally { this.changing = false; }
+		try { this.approvals.reset(); this.set({ terminalCommands: [] }); await this.create(true); } finally { this.changing = false; }
 	}
 	async model(provider: string, modelId: string) {
 		const session = this.ready(); if (this.busy) throw new Error("请先停止当前任务");
@@ -148,7 +158,7 @@ export class NodeAgent {
 		this.changing = true;
 		try { await session.setModel(model, { persist: false }); if (this.session === session) this.refresh(); } finally { this.changing = false; }
 	}
-	dialog(_id: string, _response: { cancelled?: boolean; value?: string; confirmed?: boolean }) { throw new Error("节点对话框已过期"); }
+	dialog(id: string, response: { cancelled?: boolean; value?: string; confirmed?: boolean; remember?: boolean }) { this.approvals.respond(id, response.confirmed === true && !response.cancelled, response.remember); }
 	private event(event: AgentSessionEvent) {
 		if (["agent_start", "compaction_start", "auto_retry_start"].includes(event.type)) this.set({ running: true });
 		if (event.type === "message_start" && event.message.role === "assistant") this.set({ streamingMessage: serializeMessage(event.message, this.session!.messages.length) ?? undefined });
