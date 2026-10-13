@@ -182,4 +182,4 @@ Extensions 包管理的 `extensions-worker` 与服务端一起编译打包，在
 
 会话文件校验的 `session-record-worker` 随服务端编译打包，使用 Node worker_threads 处理超长 JSON 记录；不启动额外 Electron 窗口。开发态使用源文件 URL，生产与桌面态使用 dist 中的 JavaScript。
 
-三平台发布上传前还验证实际安装产物：macOS 从 DMG 复制应用、Windows 静默安装 NSIS、Linux 安装 deb。`packaged-upgrade-test.mjs` 使用 v0.99.16 已发布运行时生成隔离配置、凭据、会话与附件，再由新安装运行时读取；不调用真实模型或使用用户数据。
+三平台发布上传前还验证实际安装产物：macOS 从 DMG 复制应用、Windows 静默安装 NSIS、Linux 安装 deb。`packaged-upgrade-test.mjs` 使用最近一个已公开 Release 的运行时（首次发布没有旧版本时跳过）生成隔离配置、凭据、会话与附件，再由新安装运行时读取；不调用真实模型或使用用户数据。
