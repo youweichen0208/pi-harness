@@ -13,6 +13,7 @@ import type { Root, RootContent } from "mdast";
 import { renderWikiLinks, wikiMetadata } from "./wiki-document";
 
 import { wikiProperties } from "./wiki-properties";
+import { findToc, TOC_END, TOC_START, tocItems, updateToc } from "./markdown-toc";
 
 interface SourceBlock {
 	raw: string;
@@ -20,7 +21,10 @@ interface SourceBlock {
 	html: string;
 	protected: boolean;
 	hidden?: boolean;
+	/** Generated table of contents; its list is rebuilt from headings, never edited. */
+	toc?: boolean;
 }
+export interface RichLabels { source: string; toc: string; tocEmpty: string; tocRemove: string }
 export interface RichDocument {
 	source: string;
 	blocks: SourceBlock[];
@@ -136,6 +140,7 @@ export function prepareRichDocument(source: string, wiki = false): RichDocument 
 	const properties = wiki ? wikiProperties(source).ranges : [];
 	let firstHeading = true;
 	let end = 0;
+	const toc = findToc(source);
 	if (frontMatter) {
 		blocks.push({ raw: frontMatter.trimEnd(), prefix: "", html: "", protected: true, hidden: wiki });
 		end = frontMatter.trimEnd().length;
@@ -144,6 +149,11 @@ export function prepareRichDocument(source: string, wiki = false): RichDocument 
 		const start = node.position?.start.offset;
 		const stop = node.position?.end.offset;
 		if (start === undefined || stop === undefined || start < end) continue;
+		if (toc && start === toc.start) {
+			blocks.push({ raw: source.slice(toc.start, toc.end), prefix: source.slice(end, start), html: "", protected: true, toc: true });
+			end = toc.end;
+			continue;
+		}
 		const raw = source.slice(start, stop);
 		const protectedBlock = needsSource(node);
 		const hidden = properties.some(range => range.start === start && range.end === stop) || (!!metadata && firstHeading && node.type === "heading" && node.depth === 1 && metadata.readingBody !== metadata.body);
@@ -157,8 +167,45 @@ export function prepareRichDocument(source: string, wiki = false): RichDocument 
 	return { source, blocks, suffix: source.slice(end) };
 }
 
+/** Clickable, non-editable rendering of the generated list; editor-only controls are stripped on save. */
+export function renderToc(wrapper: HTMLElement, source: string, labels: RichLabels): void {
+	const doc = wrapper.ownerDocument;
+	wrapper.contentEditable = "false";
+	wrapper.dataset.richToc = "";
+	wrapper.classList.add("rich-toc");
+	const head = doc.createElement("div");
+	head.className = "rich-toc-head";
+	head.dataset.richUi = "";
+	const title = doc.createElement("strong");
+	title.textContent = labels.toc;
+	const remove = doc.createElement("button");
+	remove.type = "button";
+	remove.dataset.richTocRemove = "";
+	remove.textContent = labels.tocRemove;
+	head.append(title, remove);
+	const items = tocItems(source);
+	const list = doc.createElement("ul");
+	const top = Math.min(...items.map(item => item.depth));
+	items.forEach((item, index) => {
+		const entry = doc.createElement("li");
+		entry.style.setProperty("--toc-level", String(item.depth - top));
+		const link = doc.createElement("a");
+		link.href = `#${item.slug}`;
+		link.dataset.richTocIndex = String(index);
+		link.textContent = item.text;
+		entry.append(link);
+		list.append(entry);
+	});
+	if (!items.length) {
+		const empty = doc.createElement("p");
+		empty.textContent = labels.tocEmpty;
+		wrapper.replaceChildren(head, empty);
+	} else wrapper.replaceChildren(head, list);
+}
+
 /** Initialize only on open or an external source replacement, never on a keystroke. */
-export function mountRichDocument(root: HTMLElement, document: RichDocument, sourceLabel: string): void {
+export function mountRichDocument(root: HTMLElement, document: RichDocument, labels: RichLabels): void {
+	const sourceLabel = labels.source;
 	root.replaceChildren();
 	let sourceLine = 1;
 	document.blocks.forEach((block, index) => {
@@ -170,7 +217,10 @@ export function mountRichDocument(root: HTMLElement, document: RichDocument, sou
 		wrapper.dataset.sourceEnd = String(startLine + block.raw.split("\n").length - 1);
 		wrapper.className = "rich-block";
 		wrapper.hidden = !!block.hidden;
-		if (block.protected) {
+		if (block.toc) {
+			wrapper.dataset.richSource = block.raw;
+			renderToc(wrapper, document.source, labels);
+		} else if (block.protected) {
 			wrapper.contentEditable = "false";
 			wrapper.dataset.richSource = block.raw;
 			wrapper.classList.add("rich-source-block");
@@ -233,10 +283,13 @@ export function readRichDocument(root: HTMLElement, document: RichDocument): str
 			const unchanged = child instanceof HTMLElement && child.tagName === "DIV" && child.innerHTML === block.html;
 			const text = unchanged || block.protected ? block.raw : serializeElement(child, root);
 			parts.push((parts.length ? block.prefix || "\n\n" : block.prefix) + text);
+		} else if (child instanceof HTMLElement && child.hasAttribute("data-rich-toc")) {
+			// Newly inserted block: markers only, the list is generated below.
+			parts.push((parts.length ? "\n\n" : "") + `${TOC_START}\n${TOC_END}`);
 		} else {
 			const text = serializeElement(child, root);
 			if (text) parts.push((parts.length ? "\n\n" : "") + text);
 		}
 	}
-	return parts.join("") + (parts.length ? document.suffix : "");
+	return updateToc(parts.join("") + (parts.length ? document.suffix : ""));
 }

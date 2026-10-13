@@ -15,8 +15,9 @@ import { richCodeText } from "../rich-code-text";
 import { highlightLine } from "../hljs-lite";
 import { createRichCodeHighlighter } from "../rich-code-highlight";
 import { useT } from "../i18n";
-import { mountRichDocument, prepareRichDocument, readRichDocument } from "../rich-markdown";
-import type { RichDocument } from "../rich-markdown";
+import { LuTableOfContents } from "react-icons/lu";
+import { mountRichDocument, prepareRichDocument, readRichDocument, renderToc } from "../rich-markdown";
+import type { RichDocument, RichLabels } from "../rich-markdown";
 
 const CODE_LANGUAGES = ["javascript", "typescript", "python", "bash", "json", "yaml", "html", "css", "sql", "go", "rust", "java", "c", "cpp", "csharp", "ruby", "php", "swift", "kotlin", "markdown", "xml", "toml", "diff", "mermaid"];
 
@@ -108,12 +109,13 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 	const slashRange = useRef<Range | null>(null);
 	const closeMenu = () => { slashRange.current = null; setMenu(null); };
 	const emitted = useRef<string | null>(null);
+	const labels: RichLabels = { source: t("richSourceBlock"), toc: t("richToc"), tocEmpty: t("richTocEmpty"), tocRemove: t("richTocRemove") };
 	useLayoutEffect(() => {
 		if (!root.current || value === emitted.current) return;
 		closeMenu();
 		setTableCell(null);
 		const prepared = prepareRichDocument(value, !!wiki);
-		mountRichDocument(root.current, prepared, t("richSourceBlock"));
+		mountRichDocument(root.current, prepared, labels);
 		if (wiki) {
 			root.current.querySelectorAll<HTMLElement>("pre:has(> code)").forEach(pre => pre.classList.add("codeblock"));
 			root.current.querySelectorAll<HTMLElement>("h2").forEach((heading, index) => { heading.id = `wiki-heading-${index}`; });
@@ -342,9 +344,29 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 	const update = () => {
 		if (readOnly || !root.current || !documentState.current) return;
 		const next = readRichDocument(root.current, documentState.current);
+		// The generated list follows heading edits without touching the caret.
+		root.current.querySelectorAll<HTMLElement>("[data-rich-toc]").forEach(toc => renderToc(toc, next, labels));
 		emitted.current = next;
 		onChange(next);
 	};
+	/** Adds the maintained block below the title once; an existing one is only scrolled to. */
+	const insertToc = () => {
+		if (readOnly || !root.current) return;
+		const existing = root.current.querySelector<HTMLElement>("[data-rich-toc]");
+		if (existing) { existing.scrollIntoView({ block: "nearest" }); return; }
+		const children = [...root.current.children] as HTMLElement[];
+		let index = children.findIndex(child => !child.hidden);
+		if (index >= 0 && children[index].firstElementChild?.tagName === "H1") index++;
+		const toc = document.createElement("div");
+		toc.className = "rich-block";
+		toc.dataset.richToc = "";
+		root.current.insertBefore(toc, children[index] ?? null);
+		update();
+		toc.scrollIntoView({ block: "nearest" });
+	};
+	/** Headings listed by the block, in the same order as the generated links. */
+	const tocTarget = (toc: HTMLElement, index: number) => [...(root.current?.querySelectorAll<HTMLElement>("h1, h2, h3") ?? [])]
+		.filter(heading => !heading.closest("li, blockquote, table, [data-rich-toc], [hidden]") && heading.textContent?.trim() && toc.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING)[index];
 	const command = (name: string, argument?: string) => {
 		if (readOnly || !root.current) return;
 		const selection = window.getSelection();
@@ -362,18 +384,19 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		{ label: "richOrderedList", alias: "bh", keywords: "number ordered bh bianhao yxlb youxuliebiao 编号 有序列表", action: "insertOrderedList" },
 		{ label: "richTaskList", alias: "rw", keywords: "task todo checkbox rw rwlb renwu renwuliebiao 任务", action: "insertHTML", argument: '<ul><li><input type="checkbox"><span data-slash-insert> </span></li></ul><p><br></p>' },
 		{ label: "richQuote", alias: "yy", keywords: "quote yy yinyong 引用", action: "formatBlock", argument: "blockquote" },
+		{ label: "richTocInsert", alias: "ml", keywords: "toc table of contents outline ml mulu 目录 大纲", action: "toc" },
 		{ label: "richDivider", alias: "fgx", keywords: "divider horizontal rule fgx fengexian 分隔线", action: "insertHTML", argument: "<hr><p><br></p>" },
 			{ label: "richImage", alias: "tp", keywords: "image photo upload tp tupian 图片", action: "image" },
 		{ label: "richWikiLink", alias: "sl", keywords: "wiki link document sl shuanglian 链接 双链 文档", action: "wikiLink" },
 			{ label: "wikiMentionDate", alias: "date", keywords: "date mention riqi 日期", action: "insertText", get argument() { return new Date().toLocaleDateString("sv-SE"); } }, // read at insert time, not render time
 	] as const;
-	const wikiOrder = ["zw", "bt2", "bt3", "lb", "bg", "tp", "rw", "yy", "dmk", "sl", "date"];
+	const wikiOrder = ["zw", "bt2", "bt3", "lb", "bg", "tp", "rw", "yy", "dmk", "sl", "date", "ml"];
 	const items = wiki ? allItems.filter(item => wikiOrder.includes(item.alias)).sort((a, b) => wikiOrder.indexOf(a.alias) - wikiOrder.indexOf(b.alias)) : allItems.filter(item => item.alias !== "date");
-	const icons = { wikiMentionDate: <FiCalendar />, richImage: <FiImage />, richWikiLink: <FiLink />, richHighlightBlock: <FiSquare />, richHeading: <FiType />, richParagraph: <FiType />, richCodeBlock: <FiCode />, richTable: <WikiTableIcon />, richList: <FiList />, richOrderedList: <FiList />, richTaskList: <FiCheckSquare />, richQuote: <WikiQuoteIcon />, richDivider: <FiMinus /> };
+	const icons = { wikiMentionDate: <FiCalendar />, richImage: <FiImage />, richWikiLink: <FiLink />, richHighlightBlock: <FiSquare />, richHeading: <FiType />, richParagraph: <FiType />, richCodeBlock: <FiCode />, richTable: <WikiTableIcon />, richList: <FiList />, richOrderedList: <FiList />, richTaskList: <FiCheckSquare />, richQuote: <WikiQuoteIcon />, richDivider: <FiMinus />, richTocInsert: <LuTableOfContents /> };
 	const itemLabel = (item: typeof items[number]) => item.label === "richHeading" ? `${t(item.label)} ${"argument" in item ? item.argument.slice(1) : ""}` : t(item.label);
-	const isBlock = (item: typeof items[number]) => item.action === "insertHTML";
-	const hints: Record<string, string> = { date: "@", zw: "", bt1: "#", bt2: "##", bt3: "###", lb: "-", bh: "1.", rw: "[]", yy: ">", dmk: "```", glk: ":::", bg: "3 × 3", fgx: "---", tp: "![]", sl: "[[" };
-	const help: Record<string, Parameters<typeof t>[0]> = { date: "wikiInsertDate", zw: "wikiInsertParagraph", bt1: "wikiInsertH1", bt2: "wikiInsertH2", bt3: "wikiInsertH3", lb: "wikiInsertList", bh: "wikiInsertOrdered", rw: "wikiInsertTask", yy: "wikiInsertQuote", dmk: "wikiInsertCode", glk: "wikiInsertCallout", bg: "wikiInsertTable", fgx: "wikiInsertDivider", tp: "wikiInsertImage", sl: "wikiInsertLink" };
+	const isBlock = (item: typeof items[number]) => item.action === "insertHTML" || item.action === "toc";
+	const hints: Record<string, string> = { date: "@", zw: "", bt1: "#", bt2: "##", bt3: "###", lb: "-", bh: "1.", rw: "[]", yy: ">", dmk: "```", glk: ":::", bg: "3 × 3", fgx: "---", tp: "![]", sl: "[[", ml: "" };
+	const help: Record<string, Parameters<typeof t>[0]> = { date: "wikiInsertDate", zw: "wikiInsertParagraph", bt1: "wikiInsertH1", bt2: "wikiInsertH2", bt3: "wikiInsertH3", lb: "wikiInsertList", bh: "wikiInsertOrdered", rw: "wikiInsertTask", yy: "wikiInsertQuote", dmk: "wikiInsertCode", glk: "wikiInsertCallout", bg: "wikiInsertTable", fgx: "wikiInsertDivider", tp: "wikiInsertImage", sl: "wikiInsertLink", ml: "wikiInsertToc" };
 	const matches = items.filter(item => wiki || !["image", "wikiLink"].includes(item.action)).filter((item) => `${itemLabel(item)} ${item.keywords}`.toLowerCase().includes(menu?.query.toLowerCase() ?? "")).sort((a, b) => wiki ? wikiOrder.indexOf(a.alias) - wikiOrder.indexOf(b.alias) : Number(isBlock(a)) - Number(isBlock(b)));
 	const prepareInsert = () => {
 		const selection = window.getSelection();
@@ -404,6 +427,7 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		else {
 			const item = items.find(item => item.alias === id); if (!item) return;
 			if (item.action === "image") { imageRange.current = window.getSelection()?.getRangeAt(0).cloneRange() ?? null; imageInput.current?.click(); return; }
+			if (item.action === "toc") { insertToc(); return; }
 			if (item.action === "wikiLink") { command("insertText", "[["); const range = window.getSelection()?.getRangeAt(0).cloneRange(); if (range && range.startOffset >= 2) range.setStart(range.startContainer, range.startOffset - 2); linkRange.current = range ?? null; setLinkInput("[["); return; }
 			if (item.action === "formatBlock") formattedTag = item.argument;
 			command(item.action, "argument" in item ? item.argument : undefined);
@@ -479,6 +503,7 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		if (wiki) { prepareInsert(); insertToolbar(item.alias, undefined, undefined, popupAnchor); return; }
 		if (item.action === "image") { imageRange.current = selection?.getRangeAt(0).cloneRange() ?? null; imageInput.current?.click(); update(); return; }
 		if (item.action === "wikiLink") { linkRange.current = selection?.getRangeAt(0).cloneRange() ?? null; setLinkInput("[["); update(); return; }
+		if (item.action === "toc") { insertToc(); return; }
 		if (wiki && item.alias === "bg") command("insertHTML", `<table><thead><tr>${[1, 2, 3].map(n => `<th ${n === 1 ? "data-slash-insert" : ""}>${t("richColumn")} ${n}</th>`).join("")}</tr></thead><tbody>${[1, 2].map(() => "<tr><td>…</td><td>…</td><td>…</td></tr>").join("")}</tbody></table><p><br></p>`);
 		else command(item.action, "argument" in item ? item.argument : undefined);
 		// Chromium can leave an empty formatted heading's caret in the preceding block.
@@ -652,7 +677,12 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 							}
 						}
 					}}
-					onClick={(event) => { setTableCell(selectedCell()); closeMenu(); const link = (event.target as HTMLElement).closest("a"); if (link) { event.preventDefault(); const href = link.getAttribute("href"); if (wiki && href) { if (/^(https?:|mailto:)/i.test(href)) window.open(href, "_blank", "noopener,noreferrer"); else wiki.followLink(href); } } }}
+					onClick={(event) => {
+						const target = event.target as HTMLElement, toc = target.closest<HTMLElement>("[data-rich-toc]");
+						if (toc && target.closest("[data-rich-toc-remove]")) { event.preventDefault(); if (!readOnly) { toc.remove(); update(); } return; }
+						const entry = target.closest<HTMLElement>("[data-rich-toc-index]");
+						if (toc && entry) { event.preventDefault(); tocTarget(toc, Number(entry.dataset.richTocIndex))?.scrollIntoView({ block: "start", behavior: "smooth" }); return; }
+						setTableCell(selectedCell()); closeMenu(); const link = (event.target as HTMLElement).closest("a"); if (link) { event.preventDefault(); const href = link.getAttribute("href"); if (wiki && href) { if (/^(https?:|mailto:)/i.test(href)) window.open(href, "_blank", "noopener,noreferrer"); else wiki.followLink(href); } } }}
 					onChange={(event) => {
 						const input = event.target as HTMLInputElement;
 						if (input.type === "checkbox") { input.toggleAttribute("checked", input.checked); update(); }
