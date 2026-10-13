@@ -67,6 +67,7 @@ pi-harness/
 │   ├── webui-context.ts        # 扩展 UI 桥（WebUIContext：widgets/statuses/dialog → 浏览器）
 │   ├── plugins.ts              # 可选界面组件插件（扫描 <dataDir>/plugins/<id>/）
 │   ├── files-service.ts        # 文件服务（readDirForUI/readFile/searchFiles/watcher）
+│   ├── code-search.ts          # ripgrep 代码搜索（search_content 分批推送、取消、限额）与 rg --files 文件名搜索
 │   ├── sqlite-preview.ts       # SQLite 只读预览调度（sqlite-worker/query：隔离进程与分页查询）
 │   ├── scm.ts                  # SCM 只读 git 查询（execFile git status/branches/history/filediff/commit）
 │   ├── patch-node-pty.ts       # node-pty × Node --watch 兼容自愈补丁
@@ -74,7 +75,7 @@ pi-harness/
 │   ├── control-socket.ts       # 本地控制 socket（status / quiesce / unquiesce）
 │   ├── terminals.ts            # TerminalManager（PTY 管理 + 增量输出/按键工具）
 │   ├── node-agent.ts           # 本机隔离 pi 会话，仅通过 SSH 工具操作节点
-│   ├── node-command.ts         # 独立 SSH exec、目录引用、输出限制、超时和取消
+│   ├── node-command.ts         # SSH 命令目录引用；共享 PTY、确认及输出解析见 architecture-nodes.md
 │   ├── node-sources.ts         # Xshell / SSH config 元数据解析
 │   └── node-workbench.ts       # 内置 SSH 节点：来源同步/凭据/确认/PTY/SFTP/手动终端和文件操作
 ├── web/                        # 前端（React + Vite，编译到 web/dist/）
@@ -149,6 +150,7 @@ pi-harness/
 | `BgTasksModal.tsx` | 后台任务弹窗：AI 启动的监听端口进程列表 |
 | `ModelThinking.tsx` | 模型 + 思考强度下拉（模型下拉顶部有搜索过滤框；输入工具栏思考档位为带说明的三级菜单） |
 | `GlobalSearchModal.tsx` | 全局搜索弹窗（Ctrl+K）：搜历史对话/最近项目/工作区文件名 |
+| `CodeSearchModal.tsx` | 代码搜索弹窗（⌘P）：代码 / 文件名两种模式、按文件分组、右侧预览、Enter 打开到行；见 `docs/ui-design.md`「代码搜索」 |
 | `PluginView.tsx` | 插件视图宿主：薄 React 壳 + 动态 import client bundle |
 | `NativeMcpPanel.tsx` | 原生 MCP 与 Codemode 设置；修改作用域或信任时读 `docs/architecture-plugins.md` |
 | `NodeWorkbench.tsx` / `node-terminal.tsx` | SSH 节点工作台：来源同步、详情/凭据、节点 Agent Chat 与手动终端；修改时阅读 `docs/architecture-nodes.md` |

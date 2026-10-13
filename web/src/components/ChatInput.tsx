@@ -17,7 +17,7 @@ import { isRasterImage } from "../image-paste";
 import { ModelThinking } from "./ModelThinking";
 import { UsagePopover } from "./UsagePopover";
 import { acceptRecommended, useQuestionAnswers } from "../question-answers";
-import { composeAnswers } from "../question-cards";
+import { composeAnswers, isAnswered } from "../question-cards";
 
 /** Props are deliberately NARROW (no whole-ChatState object): every field is
  *  stable while tokens stream in (the messages ARRAY reference is kept stable
@@ -353,8 +353,9 @@ export const ChatInput = memo(function ChatInput({
 	// 4a: the newest reply's question cards are answered from here.
 	const questionState = useQuestionAnswers();
 	const answering = !streaming && questionState.active?.conversationId === activeConversationId ? questionState.active : null;
-	const answeredCount = answering ? answering.questions.filter(question => question.options[questionState.answers[question.id]]).length : 0;
-	const unanswered = answering ? answering.questions.filter(question => !question.options[questionState.answers[question.id]]).map(question => question.id) : [];
+	const choices = answering?.questions ?? [];
+	const answeredCount = choices.filter(question => isAnswered(question, questionState.answers, questionState.custom)).length;
+	const unanswered = choices.filter(question => !isAnswered(question, questionState.answers, questionState.custom)).map(question => question.id);
 	const submit = (queue = false, override?: string) => {
 		if (verifying) { onNotice("info", t("treeVerifying")); return; }
 		const trimmed = (override ?? text).trim();
@@ -600,10 +601,10 @@ export const ChatInput = memo(function ChatInput({
 				{queueOpen && pendingCount > 1 && <div className="composer-queue-list">{queued.map((item, i) => <div className="composer-queue-item" key={i}><span className="queue-badge">{t(item.steer ? "queueSteerTag" : "queueFollowTag")}</span><span className="queued-text" title={queuedMessagePreview(item.text)}>{queuedMessagePreview(item.text)}</span><span className="queue-when">{t(item.steer ? "deliverySteerHint" : "deliveryFollowHint")}</span></div>)}</div>}
 			</div>}
 			{answering && <div className="question-answer-bar" role="group" aria-label={t("questionSend")}>
-				<strong>{t("questionSelected", { n: answeredCount, total: answering.questions.length })}</strong>
+				<strong>{t("questionSelected", { n: answeredCount, total: choices.length })}</strong>
 				{unanswered.length > 0 && <span>{t("questionPending", { ids: unanswered.slice(0, 3).join("、") + (unanswered.length > 3 ? "…" : "") })}</span>}
 				<button type="button" className="question-accept" onClick={() => acceptRecommended(answering.key)}>{t("questionAcceptAll")}</button>
-				<button type="button" className="question-send" disabled={!connected || answeredCount === 0} onClick={() => submit(false, composeAnswers(answering.questions, questionState.answers, text))}>{t("questionSend")}</button>
+				<button type="button" className="question-send" disabled={!connected || answeredCount === 0} onClick={() => submit(false, composeAnswers(answering.questions, questionState.answers, text, questionState.custom))}>{t("questionSend")}</button>
 			</div>}
 			<div className={`inputbox${text.length > 0 ? " has-draft" : ""}`}>
 			{promptResult?.commandExecuted && promptResult.conversationId === activeConversationId && attachments.length > 0 && <div role="status">{t("commandAttachmentsRetained")}</div>}

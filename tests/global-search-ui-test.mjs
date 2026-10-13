@@ -1,7 +1,7 @@
 /**
  * 全局搜索 UI 冒烟（真实 Chrome headless，零 token）：
- * 顶栏「搜索」按钮打开弹窗 → 输入关键词 → 文件分区出现命中；
- * Ctrl+K 可开关弹窗；模型下拉出现搜索框并可过滤。
+ * Ctrl+K 打开弹窗 → 输入关键词 → 文件分区出现命中；
+ * Ctrl+K 打开、Escape 关闭弹窗；模型下拉出现搜索框并可过滤。
  */
 import { chromium } from "playwright-core";
 import { CHROME_PATH } from "./lib/chrome.mjs";
@@ -30,8 +30,10 @@ writeFileSync(join(workDir, "README.md"), "hi");
 
 const dataDir = mkdtempSync(join(tmpdir(), "pi-web-gsui-data-"));
 let server = null;
+let browser = null;
 
 async function run() {
+	if (await portUp(PORT)) throw new Error(`Port ${PORT} busy`);
 	server = spawn("node", ["dist/server/index.js"], {
 		cwd: REPO_ROOT,
 		env: {
@@ -47,18 +49,25 @@ async function run() {
 		if (await portUp(PORT)) break;
 	}
 
-	const browser = await chromium.launch({ executablePath: CHROME_PATH });
+	browser = await chromium.launch({ executablePath: CHROME_PATH });
 	const page = await browser.newPage();
 	page.on("pageerror", (e) => console.log("pageerror:", e.message));
+	await page.routeWebSocket("**/ws", route => {
+		const upstream = route.connectToServer();
+		upstream.onMessage(wire => {
+			const message = JSON.parse(String(wire));
+			// Search does not need a provider; avoid the unrelated first-run setup dialog.
+			if (message.type === "snapshot") message.state.piConfigured = true;
+			route.send(JSON.stringify(message));
+		});
+	});
 	await page.goto(BASE);
 	await page.waitForSelector(".topbar", { timeout: 15000 });
 
-	// 1) 顶栏搜索按钮存在且点击打开弹窗
-	const searchBtn = page.locator(".topbar .chip", { hasText: "搜索" }).first();
-	check("顶栏有搜索按钮", (await searchBtn.count()) > 0);
-	await searchBtn.click();
+	// 1) Global search keeps its keyboard entry after the topbar redesign.
+	await page.keyboard.press("Control+k");
 	await page.waitForSelector(".gs-modal", { timeout: 5000 });
-	check("点击按钮打开全局搜索弹窗", true);
+	check("Ctrl+K 打开全局搜索弹窗", true);
 
 	// 2) 输入关键词 → 文件分区命中
 	await page.fill(".gs-input-row input", "util");
@@ -76,16 +85,16 @@ async function run() {
 	await page.keyboard.press("Escape");
 	await sleep(300);
 
-	// 4) Ctrl+K 开关
+	// 4) Ctrl+K 打开、Escape 关闭
 	await page.keyboard.press("Control+k");
 	await page.waitForSelector(".gs-modal", { timeout: 3000 }).catch(() => {});
 	check("Ctrl+K 打开弹窗", (await page.locator(".gs-modal").count()) > 0);
-	await page.keyboard.press("Control+k");
-	await sleep(300);
-	check("再次 Ctrl+K 关闭弹窗", (await page.locator(".gs-modal").count()) === 0);
+	await page.keyboard.press("Escape");
+	await page.locator(".gs-modal").waitFor({state: "detached"});
+	check("Escape 关闭弹窗", (await page.locator(".gs-modal").count()) === 0);
 
 	// 5) 模型下拉搜索框
-	await page.locator(".topbar .dropdown .chip").first().click();
+	await page.locator(".inputbar .dropdown .chip").first().click();
 	await page.waitForSelector(".dd-search", { timeout: 3000 }).catch(() => {});
 	check("模型下拉出现搜索框", (await page.locator(".dd-search").count()) > 0);
 
@@ -98,6 +107,7 @@ try {
 	console.error("FATAL:", err?.message ?? err);
 	failures++;
 } finally {
+	await browser?.close();
 	if (server?.pid) process.kill(server.pid, "SIGTERM");
 	await sleep(500);
 }

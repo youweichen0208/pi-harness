@@ -1,7 +1,7 @@
 import { useChangeLinks } from "../changes-context";
 import { remarkChangeLinks } from "../remark-change-links";
 import { remarkTextHighlight } from "../remark-text-highlight";
-import { memo } from "react";
+import { memo, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
 import type { PluggableList } from "unified";
@@ -45,6 +45,20 @@ const sourceLineComponents: Components = {
 	h6: ({ node, ...props }) => <h6 {...props} data-source-start={node?.position?.start.line} data-source-end={node?.position?.end.line} />,
 };
 
+/** Chat headings: a trailing "(不用你回答)" reads as a quiet subtitle, not part of the title. */
+function withHeadingNote(children: ReactNode): ReactNode {
+	const parts = Array.isArray(children) ? [...children] : [children];
+	const last = parts.at(-1);
+	if (typeof last !== "string") return children;
+	const match = /^([\s\S]*?\S)\s*[(（]([^()（）]{1,40})[)）]\s*$/.exec(last);
+	if (!match && !(parts.length > 1 && /^\s*[(（]([^()（）]{1,40})[)）]\s*$/.test(last))) return children;
+	const note = match ? match[2] : last.replace(/^\s*[(（]|[)）]\s*$/g, "");
+	parts[parts.length - 1] = match ? match[1] : "";
+	return <>{parts}<small className="md-heading-note">{note}</small></>;
+}
+
+const headingNotes: Components = Object.fromEntries((["h1", "h2", "h3", "h4"] as const).map(Tag => [Tag, ({ node: _node, children, ...props }: JSX.IntrinsicElements["h2"] & { node?: unknown }) => <Tag {...props}>{withHeadingNote(children)}</Tag>]));
+
 export function MarkdownBody({ text, imageSrc, sourceLines, fileLinks }: MarkdownProps) {
 	const changes = useChangeLinks();
 	const links = changes && !sourceLines ? [...remarkPlugins, remarkChangeLinks(changes.files.map(file => file.path))] : remarkPlugins;
@@ -56,7 +70,7 @@ export function MarkdownBody({ text, imageSrc, sourceLines, fileLinks }: Markdow
 				else if (fileLinks && href?.startsWith("#pi-file=")) { event.preventDefault(); openLocalFile(href.slice(9)); }
 				else if (changes && href && !/^(?:[a-z]+:|#|\/\/)/i.test(href) && /\.[a-z0-9]+(?:#L\d+)?$/i.test(href)) { event.preventDefault(); const [path, line] = href.split("#L"); const file = changes.files.find(file => file.path === path); if (file) changes.show(changes.files, file.path); else window.dispatchEvent(new CustomEvent("pi-harness:open-tool-file", { detail: { path: decodeURIComponent(path), line: Number(line) || 1 } })); }
 			}}>{pr ? `#${pr[1]}` : children}</a>;
-		}, ...(sourceLines ? sourceLineComponents : {}), ...(imageSrc ? { img: ({ node: _node, src, ...props }) => <img {...props} src={imageSrc(src ?? "")} /> } : {}) }}>
+		}, ...(sourceLines ? sourceLineComponents : headingNotes), ...(imageSrc ? { img: ({ node: _node, src, ...props }) => <img {...props} src={imageSrc(src ?? "")} /> } : {}) }}>
 			{text}
 		</ReactMarkdown>
 	);

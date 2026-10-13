@@ -68,6 +68,8 @@ Windows 打包使用 `win.signExecutable: false` 跳过签名，保留 EXE 图�
 
 ## 桌面版（Electron）
 
+代码搜索使用 `@vscode/ripgrep` 的平台包（`@vscode/ripgrep-<platform>-<arch>`，npm 可选依赖）提供的 `rg` 二进制；各平台在自己的 runner 上 `npm ci` 时只安装本平台的包。`asar: false`，二进制可直接执行。找不到时回退到 PATH 中的 `rg`，文件名搜索再回退到 Node 遍历。
+
 不进 npm 发布包（`package.json` `files` 不含 `electron/`/`build/`）——桌面版走自己的发布渠道：
 push 一个 `v*` tag，`.github/workflows/release-desktop.yml` 会在 mac/win/linux 真机 runner 上
 各自构建并 `--publish always` 传到 [GitHub Releases](https://github.com/youweichen0208/pi-harness/releases)

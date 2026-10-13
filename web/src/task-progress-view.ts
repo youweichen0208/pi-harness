@@ -1,4 +1,5 @@
 import type { TaskProgress, TaskStep, UiMessage } from "../../server/protocol.js";
+import { compactCommandLabel } from "./bash-presentation.js";
 
 export interface ProgressPhase {
 	id: string;
@@ -84,6 +85,13 @@ export function progressPhases(task: TaskProgress): ProgressPhase[] {
 			else if (["bash", "terminal"].includes(item.kind)) phase.counts.command++;
 		}
 	}
+	// A failure the agent moved past (a later step succeeded) is part of exploring, not a failed phase.
+	const lastDone = task.steps.findLastIndex(step => step.status === "done");
+	for (const phase of phases) {
+		const running = phase.steps.some(step => step.status === "running");
+		const stuck = phase.steps.some(step => step.status === "failed" && task.steps.indexOf(step) > lastDone);
+		phase.status = running ? "running" : stuck ? "failed" : "done";
+	}
 	return phases;
 }
 
@@ -120,4 +128,51 @@ export function planStepArtifacts(task: TaskProgress, item: NonNullable<TaskProg
 	const ids = item.toolCallIds ? new Set(item.toolCallIds) : null;
 	const nextStart = task.plan?.items.filter((other) => other.startedAt && other.startedAt > (item.startedAt ?? Infinity)).map((other) => other.startedAt!).sort((a, b) => a - b)[0];
 	return task.steps.flatMap((step) => step.artifacts.filter((artifact) => ids ? ids.has(artifact.toolCallId) : !!item.startedAt && step.startedAt >= item.startedAt && step.startedAt < (item.endedAt ?? nextStart ?? Infinity)).map((artifact) => ({ messageId: step.messageId, artifact })));
+}
+
+/** One line under a step-log phase: a file to preview or a command to jump to. */
+export interface PhaseItem { key: string; label: string; path?: string; toolCallId: string; messageId: string }
+
+/** Workspace files read relative; short home paths keep `~/`; anything else shows its file name. */
+export function displayPhasePath(path: string, cwd: string): string {
+	if (cwd && path.startsWith(`${cwd.replace(/\/$/, "")}/`)) return path.slice(cwd.replace(/\/$/, "").length + 1);
+	const home = /^(?:\/Users|\/home)\/[^/]+(\/.*)$/.exec(path)?.[1];
+	if (home && home.split("/").filter(Boolean).length <= 2) return `~${home}`;
+	return path.split(/[\\/]/).filter(Boolean).at(-1) ?? path;
+}
+
+/** Distinct files and commands a phase touched, in order. */
+export function phaseItems(phase: ProgressPhase, cwd: string): PhaseItem[] {
+	const items: PhaseItem[] = [];
+	const seen = new Set<string>();
+	for (const step of phase.steps) for (const artifact of step.artifacts) {
+		const label = artifact.path ? displayPhasePath(artifact.path, cwd) : compactCommandLabel(artifact.label.split("\n")[0]);
+		const key = artifact.path ?? `cmd:${artifact.label}`;
+		if (!label || seen.has(key)) continue;
+		seen.add(key);
+		items.push({ key, label, path: artifact.path, toolCallId: artifact.toolCallId, messageId: step.messageId });
+	}
+	// Two SKILL.md from different folders must not read as a duplicate.
+	const repeated = new Set(items.filter(item => item.path && items.some(other => other !== item && other.label === item.label)));
+	for (const item of repeated) {
+		if (!item.path) continue;
+		const parts = item.path.split(/[\\/]/).filter(Boolean);
+		item.label = parts.slice(-2).join("/");
+	}
+	return items;
+}
+
+const GENERIC_TITLE = /^(?:读取与确认|实现主体|运行测试|运行并修复|执行操作|读取文件|修改文件|运行工具|(?:读取|运行|修改|写入|执行)\s*\d*\s*(?:项|个文件|条命令)?(?:完成)?)$/;
+
+/** Generic step titles ("读取 2 项") are rebuilt from what the phase did; narrated titles stay. */
+export function phaseHeadline(phase: ProgressPhase, locale: "zh" | "en" = "zh"): string {
+	if (!GENERIC_TITLE.test(phase.title.trim())) return phase.title;
+	const artifacts = phase.steps.flatMap(step => step.artifacts);
+	const reads = new Set(artifacts.filter(item => ["read", "grep", "find", "ls"].includes(item.kind)).map(item => item.path ?? item.label)).size;
+	const changes = new Set(artifacts.filter(item => ["write", "edit"].includes(item.kind)).map(item => item.path ?? item.label)).size;
+	const commands = artifacts.filter(item => ["bash", "terminal"].includes(item.kind)).length;
+	const parts = locale === "en"
+		? [reads && `Read ${reads} file${reads === 1 ? "" : "s"}`, changes && `Changed ${changes} file${changes === 1 ? "" : "s"}`, commands && `Ran ${commands} command${commands === 1 ? "" : "s"}`]
+		: [reads && `读取 ${reads} 个文件`, changes && `修改 ${changes} 个文件`, commands && `运行 ${commands} 条命令`];
+	return parts.filter(Boolean).join(" · ") || phase.title;
 }

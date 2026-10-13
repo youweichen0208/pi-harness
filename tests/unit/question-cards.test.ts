@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { composeAnswers, parseReplySegments, recommendedAnswers } from "../../web/src/question-cards.js";
+import { composeAnswers, isAnswered, OTHER_ANSWER, parseReplySegments, recommendedAnswers } from "../../web/src/question-cards.js";
 
 const reply = `## 第一轮
 
@@ -34,8 +34,27 @@ test("grilling questions become cards between the surrounding prose", () => {
 	const answers = recommendedAnswers(questions);
 	expect(answers).toEqual({ Q1: 2, Q3: 0, Q5: 0 });
 	expect(composeAnswers(questions, { ...answers, Q3: 1 }, "域名还没定")).toBe("Q1 交付物形态：(c) 文档 + deploy/ 部署骨架\nQ3 部署位置：(b) 国内 ECS\nQ5 Hermes 运行形态：Docker\n\n域名还没定");
+	// "其他" answers count once written, and go back as the user's own words.
+	const picked = { ...answers, Q5: OTHER_ANSWER };
+	expect(isAnswered(questions[2], picked, {})).toBe(false);
+	expect(isAnswered(questions[2], picked, { Q5: "  " })).toBe(false);
+	expect(isAnswered(questions[2], picked, { Q5: "裸进程，\n运维更熟" })).toBe(true);
+	expect(composeAnswers(questions, picked, "", { Q5: "裸进程，\n运维更熟" })).toBe("Q1 交付物形态：(c) 文档 + deploy/ 部署骨架\nQ3 部署位置：(a) 单台海外 VPS\nQ5 Hermes 运行形态：其他 · 裸进程， 运维更熟");
 });
 
 test("a reply with one question mark stays ordinary markdown", () => {
 	expect(parseReplySegments("❓ 你确定吗？\n(a) 是;(b) 否")).toEqual([{ kind: "markdown", text: "❓ 你确定吗？\n(a) 是;(b) 否" }]);
+});
+
+
+test("question examples in fenced code remain source text", () => {
+	const text = "```markdown\n" + reply + "\n```";
+	expect(parseReplySegments(text)).toEqual([{ kind: "markdown", text }]);
+});
+
+test("warning notes stay with their question instead of becoming recommendation prose", () => {
+	const segments = parseReplySegments(reply.replace("骨架能跑通 P0。", "骨架能跑通 P0。\n\n⚠️ 注意共享记忆的代价。"));
+	const questions = segments.flatMap(segment => segment.kind === "questions" ? segment.questions : []);
+	expect(questions[0].note).toBe("注意共享记忆的代价。");
+	expect(questions[0].options[2].reason).toBe("文档定边界，骨架能跑通 P0。");
 });

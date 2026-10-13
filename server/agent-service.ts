@@ -95,6 +95,7 @@ import { SettingsService } from "./settings-service.js";
 import { SlashCommandsService, parseSlash } from "./slash-commands.js";
 import { ModelAdminService } from "./model-admin.js";
 import { FilesService, existingConversationFiles, workspacePath } from "./files-service.js";
+import { CodeSearch } from "./code-search.js";
 import {
 
 	ClientStateStore,
@@ -258,6 +259,8 @@ export class ClientSession {
 		getCwd: () => this.cwd,
 		getActiveCwd: () => this.conv?.cwd ?? this.cwd,
 	});
+	/** One ripgrep search at a time per client; a newer request replaces it. */
+	private readonly codeSearch = new CodeSearch((msg) => { if (!this.disposed) this.emit(msg); });
 	private readonly bg = new BgServerTracker({
 		emit: (msg) => this.emit(msg),
 		flushSnapshot: () => this.flushSnapshot(),
@@ -2708,6 +2711,13 @@ export class ClientSession {
 		return this.files.searchFiles(query, reqId);
 	}
 
+	/** 代码搜索：ripgrep 分批回推 search_content_result，新请求会终止旧进程。 */
+	searchContent(msg: Extract<ClientMessage, { type: "search_content" }>): void {
+		const query = typeof msg.query === "string" ? msg.query.slice(0, 500) : "";
+		const include = Array.isArray(msg.include) ? msg.include.filter((glob): glob is string => typeof glob === "string").slice(0, 20) : [];
+		this.codeSearch.search(this.conv?.cwd ?? this.cwd, msg.reqId, { query, caseSensitive: !!msg.caseSensitive, wholeWord: !!msg.wholeWord, regex: !!msg.regex, include });
+	}
+
 	/** SCM 只读查询（结构化 JSON，reqId 匹配）。 */
 	async gitBranch(): Promise<void> { return this.files.gitBranch(); }
 
@@ -3006,6 +3016,7 @@ export class ClientSession {
 
 		ClientSession.liveClients.delete(this.clientId);
 		this.disposed = true;
+		this.codeSearch.cancel();
 		for (const conv of this.convs.values()) {
 
 			conv.terminals.killAll();

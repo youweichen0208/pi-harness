@@ -42,6 +42,10 @@ export function nativeToolDetails(name: string, result: unknown): Record<string,
 	const r = result as { details?: Record<string, unknown>; structuredContent?: Record<string, unknown>; isError?: boolean };
 	const d = r.details;
 	const out: Record<string, unknown> = {};
+	if (name === "remote_command") {
+		for (const key of ["terminalId", "commandId"]) if (typeof d?.[key] === "string" && d[key].length <= 256) out[key] = d[key];
+		for (const key of ["lines", "durationMs"]) if (typeof d?.[key] === "number" && Number.isFinite(d[key]) && d[key] >= 0) out[key] = d[key];
+	}
 	if (name === "edit") {
 		if (typeof d?.diff === "string") { const bounded = truncate(d.diff, TOOL_OUTPUT_CAP); out.diff = bounded.text; out.diffTruncated = bounded.truncated; }
 		if (typeof d?.firstChangedLine === "number" && Number.isSafeInteger(d.firstChangedLine) && d.firstChangedLine > 0) out.firstChangedLine = d.firstChangedLine;

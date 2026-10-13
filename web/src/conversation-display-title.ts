@@ -12,5 +12,6 @@ export function conversationDisplayTitle(title: string, firstMessage: string | u
 		if (request) return Array.from(request).slice(0, 24).join("") + (Array.from(request).length > 24 ? "…" : "");
 		if (locale === "zh") return "打招呼";
 	}
-	return title;
+	// Skill runs read as "grill-with-docs · question"; the prefix only costs title width.
+	return title.replace(/^skill:(?=\S)/, "");
 }

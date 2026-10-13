@@ -56,7 +56,7 @@ try {
 		});
 	});
 	await page.goto(`http://localhost:${port}`);
-	await page.locator(".bash-group-head").waitFor();
+	await page.locator(".process-group-head").waitFor();
 	messages = [
 		{ id: 'request', role: 'user', timestamp: Date.now(), content: [{ type: 'text', text: 'Check the source' }] },
 		{ id: 'intro', role: 'assistant', content: [{type:'text', text:'我先检查用户映射。'}, {type:'toolCall',id:'attempt-1',name:'bash',argumentsText:JSON.stringify({command:'echo "=== 用户映射 ===" && cat src/openai.py'})}] },
@@ -84,7 +84,7 @@ try {
 	for (const id of ['attempt-2','read-3']) socket.send(JSON.stringify({type:'tool_status',conversationId:snapshot.state.conversationId,toolCallId:id,toolName:'bash',isError:false,running:false,durationMs:50}));
 	assert(!(await page.locator('.bash-row-stats').allTextContents()).some(text=>text.includes('0.0s') || text.includes('<0.1s')));
 	await page.locator('.trailing-working .waiting-indicator', { hasText: 'Reading command results' }).waitFor();
-	const spacing = await page.evaluate(() => { const card = document.querySelector('.bash-group').getBoundingClientRect(); const status = document.querySelector('.trailing-working .waiting-indicator').getBoundingClientRect(); return { gap: status.top - card.bottom, offset: status.left - card.left }; });
+	const spacing = await page.evaluate(() => { const card = document.querySelector('.process-group').getBoundingClientRect(); const status = document.querySelector('.trailing-working .waiting-indicator').getBoundingClientRect(); return { gap: status.top - card.bottom, offset: status.left - card.left }; });
 	assert(spacing.gap >= 0 && spacing.gap < 18 && Math.abs(spacing.offset) <= 2, JSON.stringify(spacing));
 	await page.screenshot({path:'/tmp/pi-reading-hierarchy.png'});
 	await page.setViewportSize({width:390,height:900}); await page.waitForTimeout(300);
@@ -102,8 +102,8 @@ try {
 	snapshot.state.messages = [messages[0],messages[4],messages[5],{id:'conclusion',role:'assistant',content:[{type:'text',text:'检查通过，权限映射正确。'}]}];
 	snapshot.state.isStreaming = false; snapshot.state.rev += 1; socket.send(JSON.stringify(snapshot));
 	await page.locator('.trailing-working .waiting-indicator').waitFor({state:'detached'});
-	assert.equal(await page.locator('.bash-group.historical-step .bash-group-head').count(),1);
-	assert.equal(await page.locator('.bash-row').count(),0);
+	assert.equal(await page.locator('.process-group:not(.open) .process-group-head').count(),1);
+	assert.equal(await page.locator('.bash-row:visible').count(),0);
 	assert.equal(await page.locator('.process-narration').count(),0);
 	// 31a: deterministic phase clocks, instant content handoff, reduced motion and native stop.
 	await page.clock.install();

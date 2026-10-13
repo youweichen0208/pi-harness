@@ -1,6 +1,6 @@
 {
   "name": "@youweichen/pi-harness",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "Web chat interface for the pi coding agent, powered by the pi SDK (@earendil-works/pi-coding-agent) — one-command run, Docker/systemd/launchd deployable",
   "license": "MIT",
   "author": {
@@ -73,6 +73,7 @@
   "dependencies": {
     "@earendil-works/pi-ai": "1.0.4",
     "@earendil-works/pi-coding-agent": "1.0.4",
+    "@vscode/ripgrep": "1.18.0",
     "compression": "^1.8.1",
     "electron-updater": "^6.0.0",
     "express": "^4.21.2",

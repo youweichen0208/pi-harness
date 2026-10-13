@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { FiChevronDown, FiChevronRight } from "react-icons/fi";
 import { useT } from "../i18n";
+import { elapsedLabel } from "../bash-presentation";
 
 interface ThinkingBlockProps {
 	thinking: string;
@@ -41,7 +42,7 @@ export function ThinkingBlock({ thinking, durationMs, streaming, wrap = true }: 
 		return <div className={`thinking live${expanded ? " open" : ""}`}>
 			<button type="button" className="thinking-toggle" aria-expanded={expanded} onClick={() => setOpen(!expanded)}>
 				<span className="thinking-spinner" aria-hidden="true" />
-				<span className="thinking-label">{t("thinkingLive", { n: seconds })}</span>
+				<span className="thinking-label">{t("thinkingLive", { d: elapsedLabel(seconds) })}</span>
 				{!expanded && <span className="thinking-live-label">{thinking.trim().split("\n").at(-1)}</span>}
 			</button>
 			{expanded && <div className="thinking-body">{thinking}</div>}
@@ -50,7 +51,7 @@ export function ThinkingBlock({ thinking, durationMs, streaming, wrap = true }: 
 	return <div className={`thinking ${expanded ? "open" : ""}`}>
 		<button type="button" className="thinking-toggle" aria-expanded={expanded} onClick={() => setOpen(!expanded)}>
 			{expanded ? <FiChevronDown /> : <FiChevronRight />}
-			<span className="thinking-label" title={durationMs === undefined ? t("thinkingUnrecorded") : undefined}>{durationMs !== undefined ? t("thinkingFor", { n: Math.max(1, Math.round(durationMs / 1000)) }) : t("thinkingDone")}</span>
+			<span className="thinking-label" title={durationMs === undefined ? t("thinkingUnrecorded") : undefined}>{durationMs !== undefined ? t("thinkingFor", { d: elapsedLabel(Math.max(1, durationMs / 1000)) }) : t("thinkingDone")}</span>
 		</button>
 		{expanded && <div className="thinking-body">{thinking}</div>}
 	</div>;

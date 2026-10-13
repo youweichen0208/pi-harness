@@ -9,6 +9,7 @@ import { createHash } from "node:crypto";
 import { readFileSync, realpathSync, statSync, writeFileSync, watch } from "node:fs";
 import { isAbsolute, resolve, relative, sep } from "node:path";
 import type { ServerMessage, FileEntry, FileSearchResult } from "./protocol.js";
+import { ripgrepFileNames } from "./code-search.js";
 import {
 	previewKind,
 	looksLikeText,
@@ -294,6 +295,19 @@ export class FilesService {
 			return;
 		}
 		const root = resolve(cwd);
+		// Bundled ripgrep lists files in milliseconds and skips gitignored trees (worktrees, build output);
+		// the bounded walk below remains the fallback when it cannot run.
+		// Same always-skipped folders as the walk (node_modules, build output…), even without a .gitignore.
+		const listed = await ripgrepFileNames(root, q, 50, 4000, ignoredEntries());
+		if (listed) {
+			const byDepth = (a: string, b: string) => a.split("/").length - b.split("/").length || a.localeCompare(b);
+			const results: FileSearchResult[] = [
+				...listed.dirs.sort(byDepth).map(path => ({ path, name: path.split("/").at(-1) ?? path, type: "dir" as const })),
+				...listed.paths.sort(byDepth).map(path => ({ path, name: path.split("/").at(-1) ?? path, type: "file" as const })),
+			].slice(0, 50);
+			this.host.emit({ type: "search_files_result", cwd, reqId, ok: true, results, ...(listed.truncated ? { truncated: true } : {}) });
+			return;
+		}
 		const ignored = ignoredEntries();
 		const MAX_RESULTS = 50;
 		const MAX_VISITED = 20000;

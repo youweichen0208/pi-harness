@@ -1,19 +1,20 @@
 import type { UiMessage } from "../../server/protocol.js";
+import { isEmptyReply } from "./collapsed-groups.js";
 
 /** Text that identifies a user question, ignoring surrounding whitespace. */
 function userText(message: UiMessage): string {
-	return (message.questionText ?? message.content.map(block => block.type === "text" && typeof block.text === "string" ? block.text : "").join("\n")).trim();
+	return (message.content.map(block => block.type === "text" && typeof block.text === "string" ? block.text : "").join("\n")).trim();
 }
 
 /** Identical user messages with no visible reply between them render once (3a).
- * Images and attachments make a message distinct, so only plain text repeats merge. */
+ * Same text means the same attachment wrappers too; image messages always stay distinct. */
 export function repeatedUserMessages(messages: readonly UiMessage[]) {
 	const counts = new Map<string, number>();
 	const hidden = new Map<string, string>();
 	let kept: UiMessage | undefined;
 	for (const message of messages) {
 		if (message.role === "user") {
-			const plain = message.content.every(block => block.type === "text") && !message.userAttachments?.length;
+			const plain = message.content.every(block => block.type === "text");
 			const text = plain ? userText(message) : "";
 			if (kept && text && text === userText(kept)) {
 				counts.set(kept.id, (counts.get(kept.id) ?? 1) + 1);
@@ -23,7 +24,8 @@ export function repeatedUserMessages(messages: readonly UiMessage[]) {
 			kept = plain && text ? message : undefined;
 			continue;
 		}
-		const reply = message.role === "assistant" || message.role === "custom" || message.role === "bashExecution";
+		// An empty retry is not an answer, so the question it re-asked still repeats.
+		const reply = message.role === "assistant" ? !isEmptyReply(message) : message.role === "custom" || message.role === "bashExecution";
 		if (reply) kept = undefined;
 	}
 	return { counts, hidden };

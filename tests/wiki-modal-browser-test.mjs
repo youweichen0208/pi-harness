@@ -21,10 +21,12 @@ writeFileSync(join(cwd, "knowledge/manifest.json"), JSON.stringify({ kind: "pi-h
 const rawPath = join(cwd, "knowledge/evidence/source/original.md"), raw = "# Archived evidence\n\n原始文件内容应保持不变。\n";
 writeFileSync(rawPath, raw);
 writeFileSync(join(cwd, "other.md"), "# Other document\n\nOther text.\n");
+let releaseReply;
+let responseGate = new Promise(resolve => { releaseReply = resolve; });
 const mock = createServer(async (req, res) => {
 	for await (const chunk of req) {}
 	res.writeHead(200, { "content-type": "text/event-stream" });
-	await new Promise(r => setTimeout(r, 1800));
+	await responseGate;
 	for (const [delta, finish_reason] of [[{role: "assistant", content: Array.from({length: 50}, (_, i) => `Reply paragraph ${i}.\n\n`).join("")}, null], [{}, "stop"]]) res.write(`data: ${JSON.stringify({id: "local", object: "chat.completion.chunk", choices: [{index: 0, delta, finish_reason}]})}\n\n`);
 	res.end("data: [DONE]\n\n");
 });
@@ -71,6 +73,7 @@ try {
 	await input.fill("local background reply"); await input.press("Enter");
 	await open();
 	assert.equal(await editor.getAttribute("contenteditable"), "false");
+	releaseReply();
 	await page.waitForFunction(() => document.querySelector(".wiki-prose [contenteditable=true]"));
 	assert((await page.locator(".messages").innerText()).includes("Reply paragraph 49"));
 	await close(); await modal.waitFor({state: "detached"});
@@ -149,9 +152,11 @@ try {
 	assert.equal(await input.inputValue(), "Panel prompt");
 	assert.equal(await editor.getAttribute("contenteditable"), "true");
 	failWrites = false;
+	responseGate = new Promise(resolve => { releaseReply = resolve; });
 	await input.press("Enter");
 	await page.waitForFunction(() => document.querySelector(".wiki-prose [contenteditable=false]"));
 	assert(readFileSync(join(cwd, "README.md"), "utf8").includes("Saved before panel prompt."));
+	releaseReply();
 	await page.waitForFunction(() => document.querySelector(".wiki-prose [contenteditable=true]"));
 	assert.equal(conversation, original);
 	await input.fill("Draft written in panel");
@@ -184,7 +189,10 @@ try {
 	await page.keyboard.press("Meta+p"); await page.locator(".wiki-search-modal").waitFor();
 	await page.keyboard.press("Escape"); await close();
 	await page.keyboard.press("Meta+p");
-	assert.equal(await page.locator(".gs-input-row input").getAttribute("placeholder"), "搜索文件");
+	await page.locator(".cs-modal").waitFor();
+	assert.equal(await page.getByRole("tab", {name: "代码", exact: true}).getAttribute("aria-selected"), "true");
+	await page.locator(".cs-head input").press("Tab");
+	assert.equal(await page.locator(".cs-head input").getAttribute("placeholder"), "搜索文件");
 	await page.keyboard.press("Escape");
 	// Chat file-link events and global filename search use the same modal.
 	await page.evaluate(() => window.dispatchEvent(new CustomEvent("pi-harness:open-tool-file", {detail: {path: "README.md"}})));

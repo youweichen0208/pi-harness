@@ -58,7 +58,28 @@ const ssh = new ssh2.Server({ hostKeys: [key] }, client => {
 	client.on("ready", () => client.on("session", accept => {
 		const session = accept(); let execStream, child;
 		session.on("pty", acceptPty => acceptPty());
-		session.on("shell", acceptShell => { const stream = acceptShell(); stream.write("SSH fixture (no pi installed)\r\n"); stream.on("data", data => stream.write(data)); });
+		session.on("shell", acceptShell => {
+			const stream = acceptShell(); let marker = "", waiting = false;
+			stream.write("SSH fixture (no pi installed)\r\n77 updates can be applied\r\n");
+			stream.on("data", data => {
+				const input = data.toString();
+				if (input.includes("__pi_prompt=")) { marker = "\x1b]133;A;" + input.match(/133;A;([a-f0-9-]+)/)[1] + "\x07"; stream.write(`tester$ ${marker}`); return; }
+				if (input === "\x03") { stopped.push("INT"); waiting = false; stream.write(`^C\r\ntester$ ${marker}`); return; }
+				if (waiting) return;
+				const end = input.match(/(__PI_DONE_[a-f0-9]+__)/)?.[1];
+				if (!end) { stream.write(input + marker); return; }
+				commands.push(input);
+				stream.write(`\r\n${input.match(/__PI_BEGIN_[a-f0-9]+__/)[0]}\r\n`);
+				if (input.includes("wait-until-aborted")) { waiting = true; return; }
+				if (input.includes("create-proof")) {
+					child = spawn(process.execPath, ["-e", 'require("fs").writeFileSync("remote-command-proof.txt", "SSH process executed"); console.log("SSH process executed")'], { cwd: remoteDir, stdio: ["ignore", "pipe", "pipe"] });
+					children.add(child); child.stdout.pipe(stream, { end: false }); child.stderr.pipe(stream, { end: false });
+					child.on("exit", code => { children.delete(child); stream.write(`\r\n${end}:${code ?? 1}\r\ntester$ ${marker}`); });
+					stream.on("close", () => child?.kill()); return;
+				}
+				stream.write(`read-only output\r\n${end}:0\r\ntester$ ${marker}`);
+			});
+		});
 		session.on("signal", (acceptSignal, _reject, info) => { stopped.push(info.name); child?.kill(); execStream?.exit(143); execStream?.end(); acceptSignal?.(); });
 		session.on("exec", (acceptExec, _reject, info) => {
 			commands.push(info.command); const stream = acceptExec(); execStream = stream;
@@ -126,7 +147,12 @@ try {
 	await waitFor(() => !agent.snapshot().running);
 	assert(agent.snapshot().messages.some(m => m.role === "assistant"));
 	for (const text of ["remote diagnostics", "remote write", "remote read"]) {
-		assert.equal((await call("agent_prompt", nodeId, { text }, agentId)).event, "result"); await waitFor(() => !agent.snapshot().running);
+		assert.equal((await call("agent_prompt", nodeId, { text }, agentId)).event, "result");
+		if (text !== "remote read") {
+			await waitFor(() => agent.snapshot().dialogs.length > 0);
+			assert.equal((await call("agent_dialog", nodeId, { id: agent.snapshot().dialogs[0].id, confirmed: true }, agentId)).event, "result");
+		}
+		await waitFor(() => !agent.snapshot().running);
 	}
 	assert.equal(readFileSync(join(remoteDir, "remote-command-proof.txt"), "utf8"), "SSH process executed");
 	assert.equal(remoteFiles.get("/srv/ops/proof.txt").toString(), "written on SSH node");
@@ -157,10 +183,17 @@ try {
 	await waitFor(() => !agent.snapshot().running);
 	assert(agent.snapshot().messages.some(m => m.role === "user" && JSON.stringify(m.content).includes("queued request")));
 	assert.equal((await call("agent_prompt", nodeId, { text: "long command" }, agentId)).event, "result");
-	await waitFor(() => commands.some(c => c === nodeCommand("/srv/ops", "wait-until-aborted")));
+	await waitFor(() => agent.snapshot().dialogs.length > 0);
+	await call("agent_dialog", nodeId, { id: agent.snapshot().dialogs[0].id, confirmed: true }, agentId);
+	await waitFor(() => commands.some(c => c.includes("wait-until-aborted")));
+	const sharedTerminal = connection.terminals.values().next().value;
+	assert(sharedTerminal.busy);
+	const lockedRequest = crypto.randomUUID();
+	await service.handle("a", { type: "node_request", action: "terminal_input", requestId: lockedRequest, nodeId, terminalId: sharedTerminal.id, conversationId: sharedTerminal.conversationId, payload: { data: "must-not-execute\n" } });
+	assert.equal(wire.findLast(m => m.requestId === lockedRequest).event, "failure");
 	assert.equal((await call("agent_abort", nodeId, {}, agentId)).event, "result");
 	await waitFor(() => !agent.snapshot().running);
-	await waitFor(() => stopped.includes("TERM"));
+	await waitFor(() => stopped.includes("INT"));
 	assert.equal((await call("agent_prompt", nodeId, { text: "blocked read" }, agentId)).event, "result");
 	await waitFor(() => blockedStat);
 	assert.equal((await call("agent_abort", nodeId, {}, agentId)).event, "result");
@@ -190,15 +223,20 @@ try {
 		await page.locator(".node-item", { hasText: "Remote" }).locator("button").first().click();
 		const before = requests;
 		await page.getByRole("button", { name: "打开工作台", exact: true }).click();
-		await page.locator(".node-main-head em", { hasText: "已连接" }).waitFor();
+		await page.locator(".node-connection-tabs button", { hasText: "断开" }).waitFor();
 		const input = page.getByRole("textbox", { name: "让 Agent 在此节点执行任务…", exact: true });
 		await input.waitFor();
-		await page.locator(".node-agent-input select option", { hasText: "Local fixture" }).waitFor({ state: "attached" });
+		await page.locator(".node-agent-input .dropdown", { hasText: "Local fixture" }).waitFor();
 		assert.equal(requests, before, "connecting must not make a model request");
 		assert.equal(await page.getByText("npm install -g @earendil-works/pi-coding-agent@1.0.4", { exact: true }).count(), 0);
 		await input.fill("remote diagnostics"); await input.press("Enter");
+		await page.locator(".node-agent-dialog pre", { hasText: "create-proof" }).waitFor();
+		await page.locator('.node-agent-dialog button[type="submit"]').click();
 		await page.locator(".node-agent-message.assistant", { hasText: "agent reply" }).waitFor();
 		assert.equal(await input.inputValue(), "");
+		await page.getByRole("button", { name: "在终端中查看" }).click();
+		assert.equal(await page.locator(".node-terminal-welcome[open]").count(), 0);
+		assert(await page.locator(".node-login-alerts").innerText().then(text => text.includes("77 updates")));
 		await input.fill("draft for this node");
 		await page.locator(".node-xterm:visible").waitFor();
 		const terminalBox = await page.locator(".node-manual-workbench").boundingBox(), agentBox = await page.locator(".node-agent-container").boundingBox();

@@ -725,6 +725,9 @@ wss.on("connection", (ws) => {
 			case "search_files":
 				void cs.searchFiles(msg.query, msg.reqId);
 				break;
+			case "search_content":
+				cs.searchContent(msg);
+				break;
 			case "get_git_branch":
 				void cs.gitBranch();
 				break;

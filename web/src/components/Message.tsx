@@ -3,8 +3,9 @@ import { useChangesAvailable } from "../changes-context";
 import { ToolRecoveryCard, type ToolRecoveryActions } from "./ToolRecoveryCard";
 import { isProcessNarration } from "../command-reading";
 import { navigateSibling } from "../tree-events";
-import { isValidElement, memo, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { isValidElement, memo, useContext, useLayoutEffect, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { parseReplySegments } from "../question-cards";
+import { registerQuestions } from "../question-answers";
 import { QuestionCards } from "./QuestionCards";
 import {
 	FiChevronDown,
@@ -41,7 +42,9 @@ import { splitFrontmatter } from "../read-presentation";
 import { questionPreviewText } from "../question-markers";
 import { preserveUserTree } from "../user-message-presentation";
 import type { PlanPresentation } from "../plan-presentation";
-import { BashGroup } from "./BashGroup";
+import { BashGroup, latestAttemptStates } from "./BashGroup";
+import { emptyProcessStats, ProcessGroup, type ProcessStats } from "./ProcessGroup";
+import { WorkspacePathContext } from "../workspace-context";
 import { PlanChecklist } from "./PlanChecklist";
 
 /** 编辑重问编辑器里直接拖入/粘贴文件的上限（与服务端 MAX_UPLOAD_BYTES 一致）。 */
@@ -167,6 +170,8 @@ interface MessageProps {
 	repeatCount?: number;
 	/** Newest settled reply: question cards are answerable from the composer. */
 	questionsActive?: boolean;
+	/** The agent kept going after this reply in the same turn. */
+	turnContinues?: boolean;
 }
 
 export const Message = memo(function Message({
@@ -197,9 +202,16 @@ export const Message = memo(function Message({
 	toolsWrap,
 	repeatCount = 1,
 	questionsActive,
+	turnContinues,
 }: MessageProps) {
 	const t = useT();
+	const cwd = useContext(WorkspacePathContext);
 	const changesPanel = useChangesAvailable();
+	const replyQuestions = useMemo(() => message.role === "assistant" ? message.content.flatMap(block => block.type === "text" && typeof block.text === "string" ? parseReplySegments(block.text).flatMap(segment => segment.kind === "questions" ? segment.questions : []) : []) : [], [message.content, message.role]);
+	const answerKey = `${conversationId}:${message.id}`;
+	useEffect(() => {
+		if (questionsActive && conversationId && replyQuestions.length) return registerQuestions(answerKey, conversationId, replyQuestions);
+	}, [questionsActive, conversationId, answerKey, replyQuestions]);
 	// Inline edit-and-re-ask editor (user messages only).
 	const [editing, setEditing] = useState(false);
 	const [draft, setDraft] = useState("");
@@ -363,8 +375,17 @@ export const Message = memo(function Message({
 	const renderContentBlocks = (skipText: boolean): ReactNode[] => {
 
 		// 3a: consecutive thinking/command/read/search rows share one list.
-		const elements: { node: ReactNode; process: boolean }[] = [];
-		const push = (node: ReactNode, process = false) => elements.push({ node, process });
+		const elements: { node: ReactNode; process: boolean; tally?: (stats: ProcessStats) => void }[] = [];
+		const push = (node: ReactNode, process = false, tally?: (stats: ProcessStats) => void) => elements.push({ node, process, tally });
+		const tallyTool = (stats: ProcessStats, view: ToolView, id: string) => {
+			stats.toolIds.push(id);
+			const failed = view.result?.isError || view.status?.isError;
+			const running = !failed && view.streaming && !view.result && !view.status && !view.abandoned;
+			if (failed) stats.failed++;
+			else if (running) stats.running = true;
+			stats.outcomes.push(failed ? "err" : running ? "run" : view.result || view.status ? "ok" : "skip");
+			if (view.result || view.status || !view.abandoned) stats.skipped = false;
+		};
 		// Tools in a message that ended aborted/error and never received a
 		// result were never executed (issue #66) — mark them for the cards.
 		const abandoned = message.role === "assistant" && (message.stopReason === "aborted" || message.stopReason === "error");
@@ -398,7 +419,18 @@ export const Message = memo(function Message({
 					if (next?.name !== "bash") break;
 					calls.push(next); i++;
 				}
-				push(<BashGroup active={bashActive ?? toolsRunning ?? streaming} key={first.id} items={calls.map((item) => ({ block: item, view: { ...viewFor(item), streaming: toolsRunning ?? streaming }, messageId: toolMessageIds?.get(item.id) ?? message.id }))} onKill={onKillBash} />, true);
+				const items = calls.map((item) => ({ block: item, view: { ...viewFor(item), streaming: toolsRunning ?? streaming }, messageId: toolMessageIds?.get(item.id) ?? message.id }));
+				push(<BashGroup flat active={bashActive ?? toolsRunning ?? streaming} key={first.id} items={items} onKill={onKillBash} />, true, stats => {
+					stats.commands += calls.length;
+					if (bashActive ?? toolsRunning ?? streaming) stats.live = true;
+					stats.toolIds.push(...calls.map(call => call.id));
+					for (const { state, view } of latestAttemptStates(items, cwd)) {
+						if (state === "err") stats.failed++;
+						if (state === "run") stats.running = true;
+						stats.outcomes.push(state === "empty" ? "skip" : state);
+						if (state !== "empty" || view.result || view.status) stats.skipped = false;
+					}
+				});
 				continue;
 			}
 			if (first?.name === "read") {
@@ -409,27 +441,42 @@ export const Message = memo(function Message({
 					reads.push(next);
 					i++;
 				}
-				push(<ReadGroup key={`${message.id}-${first.id}`} items={reads.map((item) => ({ block: item, view: viewFor(item) }))} wrap={toolsWrap} />, true);
+				push(<ReadGroup key={`${message.id}-${first.id}`} items={reads.map((item) => ({ block: item, view: viewFor(item) }))} wrap={toolsWrap} />, true, stats => {
+					stats.reads += reads.length;
+					for (const item of reads) tallyTool(stats, viewFor(item), item.id);
+				});
 				continue;
 			}
 
 			if (first?.name === "grep") {
-				push(<GrepSummary key={`${message.id}-${first.id}`} block={first} view={viewFor(first)} wrap={toolsWrap} />, true);
+				push(<GrepSummary key={`${message.id}-${first.id}`} block={first} view={viewFor(first)} wrap={toolsWrap} />, true, stats => {
+					stats.searches++;
+					tallyTool(stats, viewFor(first), first.id);
+				});
 				continue;
 			}
 			const thinking = message.role === "assistant" ? asThinking(block) : null;
 			if (thinking && !thinking.thinking.trim()) continue;
-			push(<Block key={`${message.id}-${i}`} suppressLeak={!!incident} block={block} user={message.role === "user"} toolResults={toolResults} liveOutputs={liveOutputs} toolStatuses={toolStatuses} streaming={streaming} abandoned={abandoned} isLast={isLast && i === message.content.length - 1} onKillBash={onKillBash} toolsWrap={toolsWrap} thinkingWrap={thinkingWrap} answerKey={questionsActive ? `${message.id}-${i}` : undefined} conversationId={conversationId} />, !!thinking);
+			push(<Block key={`${message.id}-${i}`} suppressLeak={!!incident} block={block} user={message.role === "user"} toolResults={toolResults} liveOutputs={liveOutputs} toolStatuses={toolStatuses} streaming={streaming} abandoned={abandoned} isLast={isLast && i === message.content.length - 1} onKillBash={onKillBash} toolsWrap={toolsWrap} thinkingWrap={thinkingWrap} answerKey={answerKey} conversationId={conversationId} />, !!thinking, thinking ? stats => {
+				stats.thinking++;
+				stats.thoughtMs += thinking.durationMs ?? 0;
+				if (streaming && isLast && i === message.content.length - 1) stats.running = true;
+			} : undefined);
 		}
 		const grouped: ReactNode[] = [];
 		for (let i = 0; i < elements.length; i++) {
 			if (!elements[i].process) { grouped.push(elements[i].node); continue; }
 			const run: ReactNode[] = [];
 			const start = i;
-			while (i < elements.length && elements[i].process) run.push(elements[i++].node);
+			const stats = emptyProcessStats();
+			while (i < elements.length && elements[i].process) { elements[i].tally?.(stats); run.push(elements[i++].node); }
+			// Prose after the list, or later messages in the turn, mean the agent moved on.
+			stats.continued = i < elements.length || !!turnContinues;
 			i--;
 			// Key by the first row so appending rows during streaming never remounts the list.
-			grouped.push(<div className="process-list" key={`process-${isValidElement(run[0]) ? run[0].key : start}`}>{run}</div>);
+			const key = `process-${isValidElement(run[0]) ? run[0].key : start}`;
+			// Thinking alone needs no summary header; any tool turns the run into a collapsible group.
+			grouped.push(stats.commands + stats.reads + stats.searches > 0 ? <ProcessGroup key={key} stats={stats}>{run}</ProcessGroup> : <div className="process-list" key={key}>{run}</div>);
 		}
 		return grouped;
 	};
@@ -631,7 +678,7 @@ export const Message = memo(function Message({
 				)}
 			</div>
 			{message.role === "user" && !editing && (message.timestamp || repeatCount > 1) && <div className="msg-user-foot">
-				{repeatCount > 1 && <span className="msg-repeat">{t("repeatedMessage", { n: repeatCount })}</span>}
+				{repeatCount > 1 && <span className="msg-repeat">{t("repeatedMessage", { n: repeatCount - 1 })}</span>}
 				{message.timestamp && <span className="msg-time" title={new Date(message.timestamp).toLocaleString()}>{formatTime(message.timestamp)}</span>}
 			</div>}
 			{canEdit && !editing && (
