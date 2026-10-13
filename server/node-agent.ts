@@ -1,7 +1,8 @@
 /** Local native Pi session whose only tools operate on one captured SSH connection. */
 import { NodeCommandApprovals } from "./node-command-policy.js";
 import { randomUUID } from "node:crypto";
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { Type } from "typebox";
 import { createAgentSession, DefaultResourceLoader, getAgentDir, SettingsManager, SessionManager, type AgentSession, type AgentSessionEvent, type ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { serializeMessage } from "./serialize.js";
@@ -64,7 +65,8 @@ export class NodeAgent {
 		};
 		return [command, read, write];
 	}
-	private async create(fresh: boolean) {
+	/** `fresh` starts a new conversation; a string reopens a pending new conversation's file. */
+	private async create(fresh: boolean | string) {
 		const generation = ++this.generation;
 		mkdirSync(this.sessionDir, { recursive: true, mode: 0o700 });
 		const agentDir = getAgentDir();
@@ -73,17 +75,31 @@ export class NodeAgent {
 			systemPrompt: `You are the assistant for one connected SSH node. All provided tools operate only on that node. Remote working directory: ${JSON.stringify(this.state.cwd)}. Use remote_command, remote_read and remote_write for node tasks. Commands run with the SSH user's permissions. You have no local filesystem or local shell tools. Ask before destructive operations when the user has not authorized them. Never assume a previous command's cd persists.`, appendSystemPrompt: [] });
 		await loader.reload();
 		const { session } = await createAgentSession({ cwd: this.sessionDir, agentDir, resourceLoader: loader, settingsManager: settings,
-			sessionManager: fresh ? SessionManager.create(this.sessionDir, this.sessionDir) : SessionManager.continueRecent(this.sessionDir, this.sessionDir),
+			sessionManager: typeof fresh === "string" ? SessionManager.open(fresh, this.sessionDir, this.sessionDir) : fresh ? SessionManager.create(this.sessionDir, this.sessionDir) : SessionManager.continueRecent(this.sessionDir, this.sessionDir),
 			model: this.session?.model, noTools: "all", tools: ["remote_command", "remote_read", "remote_write"], excludeTools: ["mcp__*"], customTools: this.tools() });
 		if (this.state.phase === "closed" || generation !== this.generation) { session.dispose(); throw new Error("节点 Agent 已关闭"); }
 		this.unsubscribe?.(); this.session?.dispose();
 		this.session = session;
+		// The SDK writes a new session file only after the first reply, so remember
+		// an explicit "new conversation" until then; otherwise a reconnect would
+		// continueRecent() straight back into the previous history.
+		const file = session.sessionManager.getSessionFile();
+		if (fresh && file) writeFileSync(this.freshMarker, JSON.stringify({ file }), { mode: 0o600 });
+		else rmSync(this.freshMarker, { force: true });
 		this.unsubscribe = session.subscribe(event => { if (this.session === session && this.state.phase !== "closed") this.event(event); });
 		this.refresh();
 		this.set({ phase: "ready", running: false, error: undefined, tools: [], streamingMessage: undefined }, true);
 	}
+	private get freshMarker() { return join(this.sessionDir, "fresh-session.json"); }
+	/** The last explicit new conversation's file while it has not been written yet. */
+	private pendingFresh(): string | false {
+		try {
+			const { file } = JSON.parse(readFileSync(this.freshMarker, "utf8")) as { file?: unknown };
+			return typeof file === "string" && file.startsWith(this.sessionDir) && !existsSync(file) ? file : false;
+		} catch { return false; }
+	}
 	async start() {
-		try { await this.create(false); }
+		try { await this.create(this.pendingFresh()); }
 		catch (error) { if (this.state.phase !== "closed") { this.set({ error: (error as Error).message }); this.close(); } throw error; }
 	}
 	close() {

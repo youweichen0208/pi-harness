@@ -235,6 +235,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 	/** Empty retries render nothing; repeated questions fold into the copy that is shown. */
 	const emptyReplies = useMemo(() => new Set(state.messages.filter(isEmptyReply).map(message => message.id)), [state.messages]);
 	const predecessors = assistantPredecessors(messages);
+	const messageIndex = useMemo(() => new Map(state.messages.map((message, index) => [message.id, index])), [state.messages]);
 	const streamingHasContent = state.streamingMessage?.content.some((block) => block.type === "text" ? (typeof block.text === "string" && !!block.text.trim()) || !!block.truncated : block.type === "thinking" ? typeof block.thinking === "string" && !!block.thinking.trim() : true) ?? false;
 	const changeSummaries = useMemo(() => turnChangeSummaries(state.messages, state.taskProgress, state.cwd, state.isStreaming), [state.messages, state.taskProgress, state.cwd, state.isStreaming]);
 	const lastUserIndex = state.messages.findLastIndex((message) => message.role === "user");
@@ -828,7 +829,12 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 							message={bashGroups.projected.get(m.id) ?? m}
 							toolMessageIds={bashGroups.sources}
 							// A folded or lazily hidden predecessor still shows the pi header for this turn.
-							continuation={!!predecessors.get(m.id) && !emptyReplies.has(predecessors.get(m.id)!) && !(i < recentStart && !expanded.has(predecessors.get(m.id)!))}
+							continuation={(() => {
+								const previous = predecessors.get(m.id);
+								if (!previous || emptyReplies.has(previous)) return false;
+								// The predecessor folded into a summary row no longer shows a pi header above this turn.
+								return !((messageIndex.get(previous) ?? -1) < recentStart && !expanded.has(previous));
+							})()}
 							qnIndex={qIdx}
 							qnActive={qIdx !== undefined ? qIdx === activeIdx : undefined}
 							onJump={jumpTo}

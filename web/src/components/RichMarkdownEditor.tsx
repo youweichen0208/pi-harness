@@ -31,6 +31,7 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 	const [insertPopup, setInsertPopup] = useState<WikiInsertPopup | null>(null);
 	const savedRange = useRef<Range | null>(null);
 	const [diagrams, setDiagrams] = useState<{ host: HTMLElement; code: string }[]>([]);
+	const openMermaidSource = useRef(new WeakSet<HTMLElement>());
 	const didFocus = useRef(false);
 	const [uploading, setUploading] = useState(false);
 	const [imageError, setImageError] = useState("");
@@ -187,15 +188,45 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 	useLayoutEffect(() => {
 		if (!wiki || !root.current) return;
 		const next: { host: HTMLElement; code: string }[] = [];
+		const caret = window.getSelection()?.anchorNode ?? null;
 		root.current.querySelectorAll<HTMLElement>('pre > code.language-mermaid').forEach(code => {
 			const pre = code.parentElement!;
 			let host = pre.querySelector<HTMLElement>('.wiki-mermaid-preview');
 			if (!host) { host = document.createElement('div'); host.dataset.richUi = ''; host.contentEditable = 'false'; host.className = 'wiki-mermaid-preview'; pre.prepend(host); }
+			// The diagram is the reading view; the source stays folded until the
+			// user asks for it or the caret is already inside (fresh insert).
+			if (caret && code.contains(caret)) openMermaidSource.current.add(pre);
+			const open = openMermaidSource.current.has(pre);
+			pre.classList.add('wiki-mermaid');
+			pre.classList.toggle('wiki-mermaid-source-hidden', !open);
+			const chrome = pre.querySelector<HTMLElement>('.fp-code-language');
+			let toggle = chrome?.querySelector<HTMLButtonElement>('button[data-mermaid-source]') ?? null;
+			if (chrome && !toggle) {
+				toggle = document.createElement('button'); toggle.type = 'button'; toggle.dataset.mermaidSource = '';
+				toggle.onmousedown = event => event.preventDefault();
+				chrome.prepend(toggle);
+			}
+			if (toggle) {
+				toggle.textContent = t(open ? 'wikiMermaidHideCode' : 'wikiMermaidShowCode');
+				toggle.setAttribute('aria-expanded', String(open));
+				toggle.onclick = () => {
+					if (openMermaidSource.current.has(pre)) openMermaidSource.current.delete(pre); else openMermaidSource.current.add(pre);
+					const nowOpen = openMermaidSource.current.has(pre);
+					pre.classList.toggle('wiki-mermaid-source-hidden', !nowOpen);
+					toggle!.textContent = t(nowOpen ? 'wikiMermaidHideCode' : 'wikiMermaidShowCode');
+					toggle!.setAttribute('aria-expanded', String(nowOpen));
+				};
+			}
 			next.push({ host, code: richCodeText(code) });
 		});
 		root.current.querySelectorAll<HTMLElement>('.wiki-mermaid-preview').forEach(host => { if (!next.some(item => item.host === host)) host.remove(); });
+		root.current.querySelectorAll<HTMLElement>('pre.wiki-mermaid').forEach(pre => {
+			if (pre.querySelector('code.language-mermaid')) return;
+			pre.classList.remove('wiki-mermaid', 'wiki-mermaid-source-hidden');
+			pre.querySelector('button[data-mermaid-source]')?.remove();
+		});
 		setDiagrams(next);
-	}, [value]);
+	}, [value, t]);
 	const selectedCell = () => {
 		const node = window.getSelection()?.anchorNode;
 		const element = node instanceof Element ? node : node?.parentElement;

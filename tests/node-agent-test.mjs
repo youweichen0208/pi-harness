@@ -17,6 +17,7 @@ mkdirSync(agentDir); mkdirSync(remoteDir);
 process.env.PI_CODING_AGENT_DIR = agentDir;
 const { NodeWorkbench } = await import("../dist/server/node-workbench.js");
 const { nodeCommand, runNodeCommand } = await import("../dist/server/node-command.js");
+const { NodeAgent } = await import("../dist/server/node-agent.js");
 writeFileSync(join(agentDir, "models.json"), JSON.stringify({ providers: { local: { api: "openai-completions", baseUrl: `http://127.0.0.1:${modelPort}/v1`, apiKey: "local-only-secret", models: [{ id: "test", name: "Local fixture", input: ["text"], contextWindow: 32000, maxTokens: 4096 }, { id: "other", name: "Other fixture", input: ["text"], contextWindow: 32000, maxTokens: 4096 }] } } }));
 writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ defaultProvider: "local", defaultModel: "test", defaultTools: ["bash", "read", "codemode", "tool_search"] }));
 mkdirSync(join(agentDir, "extensions"));
@@ -175,6 +176,11 @@ try {
 	assert.equal(restored[0].data.connections[0].agent.id, agentId); detach();
 	assert.equal((await call("agent_new", nodeId, {}, agentId)).event, "result");
 	assert.equal(agent.snapshot().messages.length, 0);
+	// #74: a reopened agent must stay in the new conversation until its first reply is written.
+	const reopened = new NodeAgent(agent.sessionDir, "/srv/ops", { command: async () => { throw new Error("unused"); }, read: async () => "", write: async () => {} }, () => {});
+	await reopened.start();
+	assert.equal(reopened.snapshot().messages.length, 0);
+	reopened.close();
 	assert.equal(agent.snapshot().model.id, "other");
 	assert.equal((await call("agent_prompt", nodeId, { text: "slow request" }, agentId)).event, "result");
 	await waitFor(() => agent.session.isStreaming);

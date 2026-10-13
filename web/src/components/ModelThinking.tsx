@@ -83,7 +83,8 @@ export const ModelThinking = memo(function ModelThinking({ state, models, models
 		supported: supportedThinking ? supportedThinking.has(v) : true,
 	}));
 	const modes = [
-		{ label: t("thinking.minimal"), description: t("thinkingMinimalDescription"), values: ["minimal", "low", "off"] },
+		{ label: t("thinking.off"), description: t("thinkingOffDescription"), values: ["off"] },
+		{ label: t("thinking.minimal"), description: t("thinkingMinimalDescription"), values: ["minimal", "low"] },
 		{ label: t("thinkingStandard"), description: t("thinkingStandardDescription"), values: ["medium"] },
 		{ label: t("thinkingDeep"), description: t("thinkingDeepDescription"), values: ["high", "xhigh", "max"] },
 	];
