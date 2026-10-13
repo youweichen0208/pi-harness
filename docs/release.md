@@ -2,7 +2,7 @@
 
 ## 1.6.0 对话流、结构化回答与共享节点终端
 
-基于最新 develop 发布 3a 对话流、4a 结构化提问和 5a 节点工作台；同时包含会话恢复、计划与扩展重载修复，以及问题卡片的「其他回答」、右栏步骤记录与打包 ripgrep 的代码／文件名搜索。版本同步为 1.6.0；SDK 保持 1.0.4，代码搜索新增流式协议消息，协议升至 v43。本次发布 GitHub 三平台桌面 Release，不包含 npm 发布。发布前修复 node-terminal-pty-test 在 Linux CI 的偶发失败：手动命令与 Ctrl+C 同瞬到达时 SIGINT 先于 fork 只命中交互 shell，sleep 跑满 20s 后 marker 才返回，测试补 100ms 等待对齐 execute-abort 路径（产品行为正确，属终端固有的 fork 竞争）。说明见 `.github/release-notes/v1.6.0.md`；同一提交 CI、三平台打包回归及附件核对通过后公开。
+基于最新 develop 发布 3a 对话流、4a 结构化提问和 5a 节点工作台；同时包含会话恢复、计划与扩展重载修复，以及问题卡片的「其他回答」、右栏步骤记录与打包 ripgrep 的代码／文件名搜索。版本同步为 1.6.0；SDK 保持 1.0.4，代码搜索新增流式协议消息，协议升至 v43。本次发布 GitHub 三平台桌面 Release，不包含 npm 发布。发布前修复 node-terminal-pty-test 在 Linux CI 的偶发失败：手动命令与 Ctrl+C 同瞬到达时 SIGINT 先于 fork 只命中交互 shell，sleep 跑满 20s 后 marker 才返回，测试补 100ms 等待对齐 execute-abort 路径（产品行为正确，属终端固有的 fork 竞争）。发布前另修复窄屏（≤1100px）桌面 overlay 抽屉塌缩：#67 清理时去掉 overlay 规则的 `:root` 前缀使特异性 (0,3,0) 低于 `html.pi-desktop .drawer-right.panel-drawer` 的 (0,3,1)，抽屉变 display:block、`.panel-lower` 塌到 1px 边框，点击顶栏任务进度后右栏任务面板不可见；恢复 `:root` 前缀（desktop-toolbar-test 在 Windows 打包回归中拦截）。说明见 `.github/release-notes/v1.6.0.md`；同一提交 CI、三平台打包回归及附件核对通过后公开。
 
 ## 1.5.0 安静工作台与数据库分析
 

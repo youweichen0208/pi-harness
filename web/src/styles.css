@@ -11839,12 +11839,15 @@ html.pi-desktop-linux .design-workspace.wiki-mode .topbar { padding-right: 148px
 .design-workspace :is(.project-item, .session-item):active { background: var(--row-active); }
 .design-workspace .resize-handle { touch-action: none; }
 .design-workspace .resize-handle:focus-visible::after { background: var(--accent); }
-.design-workspace .panel-drawer[data-fluid-drawer="overlay"] {
+/* Keep :root — it outranks html.pi-desktop .drawer-right.panel-drawer (0,3,1)
+   so the overlay drawer stays a flex column; without it the desktop rule's
+   display:block wins and .panel-lower collapses (task progress invisible). */
+:root .design-workspace .panel-drawer[data-fluid-drawer="overlay"] {
 	display: flex; flex-direction: column; transition: none; overflow: hidden;
 	background: var(--surface-navigation); backdrop-filter: blur(24px) saturate(125%);
 	box-shadow: var(--shadow-floating);
 }
-.design-workspace .panel-drawer[data-fluid-drawer="overlay"] > :is(.panel, .file-list-host) { flex: 1; min-height: 0; height: auto; background: transparent; }
+:root .design-workspace .panel-drawer[data-fluid-drawer="overlay"] > :is(.panel, .file-list-host) { flex: 1; min-height: 0; height: auto; background: transparent; }
 .fluid-drawer-grip { display: flex; align-items: center; justify-content: space-between; flex: none; min-height: 44px; padding: 4px 12px; gap: 12px; touch-action: none; cursor: grab; user-select: none; border-bottom: 1px solid var(--border-soft); color: var(--text-dim); font-size: 12px; }
 .fluid-drawer-grip:active { cursor: grabbing; }
 .fluid-drawer-handle { width: 24px; height: 3px; background: var(--border); border-radius: var(--r-sm); }
