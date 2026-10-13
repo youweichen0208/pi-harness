@@ -4,14 +4,15 @@ import { SystemPromptPanel } from "./SystemPromptPanel";
 import { BuiltinExtensionsPanel } from "./BuiltinExtensionsPanel";
 import { ExtensionsPanel } from "./ExtensionsPanel";
 import { useState, useEffect } from "react";
-import { FiX, FiSettings, FiCpu, FiPackage, FiBox, FiRefreshCw } from "react-icons/fi";
+import { FiX, FiDroplet, FiSettings, FiCpu, FiPackage, FiBox, FiRefreshCw } from "react-icons/fi";
 import { useT } from "../i18n";
 import type { ClientMessage, ServerMessage, UiSettingsState } from "../types";
+import { AppearancePanel } from "./AppearancePanel";
 import { NativeMcpPanel } from "./NativeMcpPanel";
 import { SkillsPanel } from "./SkillsPanel";
 import { randomUuid } from "../uuid";
 
-type Tab = "prompt" | "skills" | "extensions" | "native-mcp" | "updates";
+type Tab = "prompt" | "appearance" | "skills" | "extensions" | "native-mcp" | "updates";
 interface SettingsModalProps {
 	initialTab?: Tab;
 	chat: {
@@ -38,6 +39,7 @@ export function SettingsModal({ chat, send, onClose, initialTab = "prompt" }: Se
 	useEffect(() => { if (tab === "updates" && chat.ready) send({ type: "check_component_updates", requestId: randomUuid() }); }, [tab, chat.ready, chat.state?.cwd, send]);
 	const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
 		{ id: "prompt", label: t("settingsSystemPrompt"), icon: <FiSettings /> },
+		{ id: "appearance", label: t("settingsAppearance"), icon: <FiDroplet /> },
 		{ id: "skills", label: t("settingsSkills"), icon: <FiCpu /> },
 		{ id: "extensions", label: t("settingsExtensions"), icon: <FiPackage /> },
 		{ id: "native-mcp", label: t("nativeMcp"), icon: <FiBox /> },
@@ -51,8 +53,9 @@ export function SettingsModal({ chat, send, onClose, initialTab = "prompt" }: Se
 				<nav className="settings-rail" aria-label={t("settingsTitle")}><h2>{t("settingsTitle")}</h2>{tabs.map(item => <button key={item.id} title={item.label} aria-current={tab === item.id ? "page" : undefined} className={`settings-tab${tab === item.id ? " active" : ""}`} onClick={() => { if(canLeave())setTab(item.id); }}><span className="settings-tab-icon">{item.icon}</span><span className="settings-tab-label">{item.label}{item.id === "updates" && extensionUpdates > 0 && <span className="ext-rail-badge">{extensionUpdates}</span>}</span></button>)}</nav>
 				<div className="modal-body"><div className="set-section">
 					{!settings ? <p>{t("loading")}</p> : <>
-						<label className="tree-edit-preference"><input type="checkbox" checked={settings.editResendNewSession ?? false} onChange={event => send({ type: "set_settings", editResendNewSession: event.target.checked })} />{t("treeEditNewSession")}</label>
+						{tab !== "appearance" && <label className="tree-edit-preference"><input type="checkbox" checked={settings.editResendNewSession ?? false} onChange={event => send({ type: "set_settings", editResendNewSession: event.target.checked })} />{t("treeEditNewSession")}</label>}
 						{tab === "prompt" && chat.state && <SystemPromptPanel key={`${chat.state.cwd}:${chat.state.conversationId}`} cwd={chat.state.cwd} conversationId={chat.state.conversationId} />}
+						{tab === "appearance" && <AppearancePanel />}
 						{tab === "skills" && chat.state && <SkillsPanel key={chat.state.cwd} cwd={chat.state.cwd} reload={() => send({ type: "extensions_reload" })} />}
 						{tab === "extensions" && chat.state?.cwd && <ExtensionsPanel
 							key={chat.state.cwd} cwd={chat.state.cwd} onUpdateCount={setExtensionUpdates}
