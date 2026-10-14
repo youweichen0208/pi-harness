@@ -31,13 +31,15 @@ contextBridge.exposeInMainWorld("electronAPI", {
 		}
 	},
 	onWindowState: (callback) => {
-		const listener = (_event, state) => callback({
+		const normalize = (state) => ({
 			maximized: !!state.maximized,
 			fullscreen: !!state.fullscreen,
+			fullscreenSettling: !!state.fullscreenSettling,
 		});
+		const listener = (_event, state) => callback(normalize(state));
 		ipcRenderer.on("pi-window-state", listener);
 		ipcRenderer.invoke("pi-window-state-read").then((state) => {
-			if (state) callback({ maximized: !!state.maximized, fullscreen: !!state.fullscreen });
+			if (state) callback(normalize(state));
 		});
 		return () => ipcRenderer.removeListener("pi-window-state", listener);
 	},

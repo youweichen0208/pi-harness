@@ -47,6 +47,8 @@ const isDev = !app.isPackaged || !!process.env.DEV;
 // ── 状态 ──
 /** @type {BrowserWindow | null} */
 let mainWindow = null;
+// macOS animates into page fullscreen; leaving before enter-full-screen strands the page in fullscreen (#89).
+let fullscreenSettling = false;
 /** @type {Tray | null} */
 let tray = null;
 /** @type {import("node:child_process").ChildProcess | null} */
@@ -241,12 +243,12 @@ function createWindow() {
 
 	const publishWindowState = () => {
 		if (mainWindow && !mainWindow.isDestroyed()) {
-			mainWindow.webContents.send("pi-window-state", {
-				maximized: mainWindow.isMaximized(),
-				fullscreen: mainWindow.isFullScreen(),
-			});
+			mainWindow.webContents.send("pi-window-state", windowState(mainWindow));
 		}
 	};
+	// An already fullscreen window has no transition to wait for.
+	mainWindow.on("enter-html-full-screen", () => { fullscreenSettling = !mainWindow.isFullScreen(); });
+	for (const event of ["enter-full-screen", "leave-full-screen"]) mainWindow.on(event, () => { fullscreenSettling = false; });
 	for (const event of ["maximize", "unmaximize", "enter-full-screen", "leave-full-screen", "enter-html-full-screen", "leave-html-full-screen", "restore"]) {
 		mainWindow.on(event, publishWindowState);
 	}
@@ -382,8 +384,11 @@ ipcMain.handle("pi-extension-open-path", async (event, request) => {
 ipcMain.handle("pi-window-state-read", (event) => {
 	const win = mainWindow;
 	if (!win || win.isDestroyed() || event.sender !== win.webContents) return null;
-	return { maximized: win.isMaximized(), fullscreen: win.isFullScreen() };
+	return windowState(win);
 });
+function windowState(win) {
+	return { maximized: win.isMaximized(), fullscreen: win.isFullScreen(), fullscreenSettling };
+}
 
 // ── 托盘 ──
 

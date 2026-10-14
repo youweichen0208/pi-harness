@@ -8,6 +8,8 @@ export interface AppUpdateState {
 export interface DesktopWindowState {
 	maximized: boolean;
 	fullscreen: boolean;
+	/** Page fullscreen requested while macOS still animates the window into fullscreen. */
+	fullscreenSettling?: boolean;
 }
 
 export interface DesktopAPI {
@@ -38,4 +40,15 @@ export function registerWindowSave(save: () => Promise<boolean>) {
 export async function flushWindowSaves() {
 	const results = await Promise.allSettled([...windowSaves].map(save => save()));
 	return results.every(result => result.status === "fulfilled" && result.value);
+}
+
+/** Resolves once the desktop window has finished entering fullscreen; leaving mid-animation never settles on macOS. */
+export function fullscreenSettled(timeout = 3000): Promise<void> {
+	if (!desktopAPI) return Promise.resolve();
+	return new Promise(resolve => {
+		let stop = () => {};
+		const done = () => { clearTimeout(timer); stop(); resolve(); };
+		const timer = setTimeout(done, timeout);
+		stop = desktopAPI!.onWindowState(state => { if (!state.fullscreenSettling) done(); });
+	});
 }
