@@ -16,7 +16,8 @@ export function ChatDock({ target, children }: { target: HTMLElement | null; chi
 		if (target && !docked.current) homeScroll.current = scroll?.scrollTop ?? 0;
 		const top = target ? scroll?.scrollTop ?? 0 : homeScroll.current;
 		(target ?? home.current)?.appendChild(container);
-		if (scroll) scroll.scrollTop = top;
+		// Report the restored position now; a render before the native scroll event would follow a stale stick-to-bottom.
+		if (scroll) { scroll.scrollTop = top; scroll.dispatchEvent(new Event("scroll")); }
 		docked.current = !!target;
 	}, [container, target]);
 	useLayoutEffect(() => () => { container.remove(); }, [container]);
