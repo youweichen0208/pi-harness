@@ -332,7 +332,9 @@ jobs:
             gh release download "$prev" --pattern '*.deb' --dir "$previous"
             dpkg-deb -x "$previous/"*.deb "$previous/app"
             oldroot=$(dirname "$(find "$previous/app" -path '*/resources/app/package.json' -print -quit)")
-            node tests/packaged-upgrade-test.mjs seed "$oldroot/../../pi" "$oldroot" "$RUNNER_TEMP/pi-upgrade-state"
+            # Linux builds name the executable pi-harness (3c7ddcc); older packages may still ship pi.
+            oldexe="$oldroot/../../pi-harness"; [ -x "$oldexe" ] || oldexe="$oldroot/../../pi"
+            node tests/packaged-upgrade-test.mjs seed "$oldexe" "$oldroot" "$RUNNER_TEMP/pi-upgrade-state"
           fi
           sudo apt-get update
           sudo apt-get install -y ./release/*.deb
