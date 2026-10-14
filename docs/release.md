@@ -312,3 +312,8 @@ curl -s https://registry.npmjs.org/@youweichen/pi-harness/latest | jq .version
 5. 验证 `git rev-list --all | while read c; do git grep -l '<IP>' $c -- . 2>/dev/null; done` 为空后 `git push --force` main + tag。
 
 **残留提醒**：已发布 npm 包的 tarball 无法追回（只能靠新版本替换）；GitHub 上被 force push 覆盖的旧对象对访问者不可见但服务器会留存（需联系 GitHub 支持彻底删）。
+
+## 桌面版发布流程
+
+桌面版发布是独立的一条线（跟 npm 发布不绑在一起）：打一个 `v*` tag push 上去，`.github/workflows/release-desktop.yml` 先创建草稿，在 mac/win/linux 真机 runner 上构建、执行打包产物回归，再上传附件；三个平台全部成功且附件齐全后才公开。使用 GitHub 自带的 `GITHUB_TOKEN`，带 `-` 的 beta tag 标记 prerelease。mac 只有 ad-hoc 签名、未公证：macOS 14 及更早右键「打开」，macOS 15 及以后需在「系统设置 → 隐私与安全性」点「仍要打开」；Windows 未签名，SmartScreen 点「更多信息 → 仍要运行」。正式签名需要修改 `electron-builder.yml`，仅加 Secrets 不会生效。手动单平台重建只更新附件，不单独公开草稿。
+Windows job 的终端冒烟测试必须通过才能上传安装包；`AttachConsole failed` 清理竞态由 `server/patch-node-pty.ts` 处理，不能以 `continue-on-error` 跳过终端读写失败。

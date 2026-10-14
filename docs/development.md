@@ -47,7 +47,7 @@ SSH 节点另有 macOS/Windows CI job：两平台分别构建服务端并运行 
 
 1. `npm run typecheck` 零错误
 2. 涉及 UI → `npm run dev` 手动过一遍交互
-3. 涉及 ws 协议 → `tests/` 下有现成脚本可参照：先跑 `npm run test:smoke`（自包含协议测试全量），单个用 `node tests/xxx-test.mjs`（需先 `npm run build`；浏览器 E2E 需要本机 Playwright 的 chrome-headless-shell，路径写在各脚本的 `HEADLESS` 常量里，换机时按需修改）
+3. 涉及 ws 协议 → `tests/` 下有现成脚本可参照：先跑 `npm run test:smoke`（自包含协议测试全量），单个用 `node tests/xxx-test.mjs`（需先 `npm run build`；浏览器 E2E 的 Chrome 由 `tests/lib/chrome.mjs` 自动探测，可用 `PI_WEB_CHROME` 指定）
 
 ## 测试规范
 
