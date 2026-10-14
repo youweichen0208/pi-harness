@@ -81,7 +81,8 @@ try {
 	await input.fill("Existing draft");
 	await page.locator('.inputbar input[type=file]').first().setInputFiles({name: "attachment.txt", mimeType: "text/plain", buffer: Buffer.from("keep attachment")});
 	await page.locator(".attach-chip.file").waitFor();
-	await page.locator(".messages").evaluate(el => el.scrollTop = 100);
+	// Like a user scroll, the list sees the new position before the next render.
+	await page.locator(".messages").evaluate(el => { el.scrollTop = 100; el.dispatchEvent(new Event("scroll")); });
 	const chatScroll = await page.locator(".messages").evaluate(el => el.scrollTop);
 	await open();
 	assert.equal(conversation, original); assert.equal(await page.locator(".wiki-chat-panel, .wiki-composer-area").count(), 0);
