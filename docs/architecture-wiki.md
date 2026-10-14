@@ -12,7 +12,7 @@
 
 右栏发送通过 `ChatInput.beforeSend` 排空 Wiki 保存队列；冲突或失败时不发送且保留聊天草稿。保存完成后再次检查打开请求 token、cwd 与 conversationId，关闭或导航后的迟到操作不发送。模型设置入口先经过文档关闭保护再打开设置。
 
-`WikiDocumentModal` 使用原生模态 dialog，让后台界面 inert 并约束焦点，关闭恢复原焦点且不滚动背景。编辑器的浮动工具条与嵌套弹窗 portal 挂入文档 dialog，Escape 优先关闭内部菜单、搜索及确认框。全屏按钮对 `document.documentElement` 调用 Fullscreen API（规范不允许 dialog 自身全屏），弹窗同时铺满视口；Esc 或系统控件退出全屏时监听 `fullscreenchange` 恢复原尺寸，关闭弹窗时退出由它进入的全屏。请求被拒绝时只做窗口内铺满。全程只改变尺寸，保留编辑器实例、草稿与光标。Electron 主进程同步 `enter/leave-html-full-screen` 窗口状态。同项目同文档的滚动位置保存在最多 100 项的内存缓存中，重新打开时恢复。
+`WikiDocumentModal` 使用原生模态 dialog，让后台界面 inert 并约束焦点，关闭恢复原焦点且不滚动背景。编辑器的浮动工具条与嵌套弹窗 portal 挂入文档 dialog，Escape 优先关闭内部菜单、搜索及确认框。全屏按钮对 `document.documentElement` 调用 Fullscreen API（规范不允许 dialog 自身全屏），弹窗同时铺满视口；进入全屏后 `fullscreenchange` 会关闭并重新 `showModal()` 弹窗，让它回到顶层最上方（Electron 会把全屏页面画在已打开的 dialog 之上，#89），同时保留滚动、焦点与选区；Esc 或系统控件退出全屏时监听 `fullscreenchange` 恢复原尺寸，关闭弹窗时退出由它进入的全屏。退出前先等待进入请求完成；桌面版还要等 macOS 全屏动画结束（主进程在 `enter-html-full-screen` 到 `enter-full-screen` 之间发布 `fullscreenSettling`），动画中途退出会让页面停在全屏且退出请求永不返回。请求被拒绝时只做窗口内铺满。全程只改变尺寸，保留编辑器实例、草稿与光标。Electron 主进程同步 `enter/leave-html-full-screen` 窗口状态。回归：`tests/wiki-fullscreen-electron-test.mjs`。同项目同文档的滚动位置保存在最多 100 项的内存缓存中，重新打开时恢复。
 
 ## 阅读交互
 

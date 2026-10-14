@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { FiMaximize2, FiMinimize2, FiMessageSquare, FiX } from "react-icons/fi";
+import { fullscreenSettled } from "../desktop";
 import { useT } from "../i18n";
 import { WikiResizeHandle, useWikiPanelWidth } from "./WikiResizeHandle";
 
@@ -15,31 +16,51 @@ export function WikiDocumentModal({ children, onClose, chatHost, chatOpen, onCha
 	const [chatWidth, resizeChat] = useWikiPanelWidth("chat");
 	// Screen fullscreen entered by this modal; a dialog cannot be the fullscreen element, so the page is.
 	const ownsFullscreen = useRef(false);
+	const fullscreenRequest = useRef<Promise<void>>(Promise.resolve());
 	useEffect(() => {
 		const sync = () => {
-			if (!ownsFullscreen.current || document.fullscreenElement) return;
+			if (document.fullscreenElement) return restack();
+			if (!ownsFullscreen.current) return;
 			ownsFullscreen.current = false;
 			setMaximized(false);
 		};
 		document.addEventListener("fullscreenchange", sync);
 		return () => {
 			document.removeEventListener("fullscreenchange", sync);
-			if (ownsFullscreen.current && document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+			void exitOwnedFullscreen();
 		};
 	}, []);
+	/** Leaving waits for the request and the desktop window animation; leaving mid-animation strands the page in fullscreen. */
+	async function exitOwnedFullscreen() {
+		if (!ownsFullscreen.current) return;
+		ownsFullscreen.current = false;
+		await fullscreenRequest.current;
+		await fullscreenSettled();
+		if (document.fullscreenElement) await document.exitFullscreen().catch(() => {});
+	}
 	async function toggleMaximized() {
 		if (maximized) {
 			setMaximized(false);
-			if (ownsFullscreen.current && document.fullscreenElement) {
-				ownsFullscreen.current = false;
-				await document.exitFullscreen().catch(() => {});
-			}
-			return;
+			return exitOwnedFullscreen();
 		}
 		setMaximized(true);
 		if (document.fullscreenElement || !document.fullscreenEnabled) return;
-		// Denied fullscreen keeps the in-window maximize.
-		try { await document.documentElement.requestFullscreen(); ownsFullscreen.current = true; } catch { /* in-window only */ }
+		// Owned before it settles so an early restore still leaves; denied keeps the in-window maximize.
+		ownsFullscreen.current = true;
+		fullscreenRequest.current = document.documentElement.requestFullscreen().catch(() => { ownsFullscreen.current = false; });
+		await fullscreenRequest.current;
+	}
+	/** The fullscreen page joins the top layer above the dialog (Electron paints it over, #89); reopening puts the dialog back on top. */
+	function restack() {
+		const element = dialog.current;
+		if (!element?.open) return;
+		const focused = document.activeElement, selection = getSelection(), ranges = selection && element.contains(selection.anchorNode) ? Array.from({ length: selection.rangeCount }, (_, i) => selection.getRangeAt(i)) : [];
+		const scrolled = [...element.querySelectorAll<HTMLElement>("*")].filter(item => item.scrollTop || item.scrollLeft).map(item => [item, item.scrollTop, item.scrollLeft] as const);
+		element.close();
+		element.showModal();
+		for (const [item, top, left] of scrolled) { item.scrollTop = top; item.scrollLeft = left; }
+		if (focused instanceof HTMLElement && element.contains(focused)) focused.focus({ preventScroll: true });
+		if (ranges.length) { selection!.removeAllRanges(); for (const range of ranges) selection!.addRange(range); }
 	}
 	useLayoutEffect(() => {
 		const previous = document.activeElement;

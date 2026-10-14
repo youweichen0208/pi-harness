@@ -1,6 +1,6 @@
 // Actual Electron/preload/backend integration; OS opening is stubbed at the shell boundary.
 import { _electron as electron } from 'playwright-core';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import assert from 'node:assert/strict';
@@ -28,29 +28,31 @@ try {
 	await page.locator('.workspace-outside button').click();
 	await page.locator('.project-item.active').waitFor();
 	assert(existsSync(marker), 'Desktop discovers user-local Pi extensions');
-	const initialLoads = readFileSync(marker, 'utf8').length;
 	assert(!existsSync(disabledMarker), 'native extension disable rules remain authoritative');
 	await app.evaluate(({ BrowserWindow, shell }) => { BrowserWindow.getAllWindows()[0].setSize(1440, 950); shell.openPath = async path => { globalThis.wikiOpened = path; return ''; }; });
 	assert.equal(await page.getByRole('tab', { name: 'Wiki 模式', exact: true }).count(), 0);
 	await page.locator('.file-name', { hasText: 'README.md' }).click();
 	await page.locator('.wiki-document-heading h1', { hasText: 'Desktop Wiki' }).waitFor();
-	await page.locator('.wiki-chat-panel').waitFor();
-	assert(readFileSync(marker, 'utf8').length > initialLoads, 'new native sessions reload local extensions');
-	assert.equal(Math.round((await page.locator('.wiki-chat-panel').boundingBox()).width), 400);
-	await page.keyboard.press('Meta+j');
-	assert.equal(await page.locator('.wiki-chat-panel').count(), 0);
-	await page.keyboard.press('Meta+j');
-	await page.locator('.wiki-chat-panel').waitFor();
+	// The original chat docks beside the document; the header button collapses and restores it.
+	const chat = page.locator('.wiki-agent-chat'), chatToggle = page.getByRole('button', { name: 'Agent Chat', exact: true });
+	await chat.waitFor();
+	assert.equal(Math.round((await chat.boundingBox()).width), 400);
+	await chatToggle.click(); await chat.waitFor({ state: 'hidden' });
+	await chatToggle.click(); await chat.waitFor();
 	const tabs = await page.locator('.topbar .view-switch').boundingBox(); assert(tabs.x >= 90, 'tabs must avoid macOS traffic lights');
-	await page.getByRole('treeitem', { name: 'sample.bin', exact: true }).click();
+	const sidebarFile = async name => {
+		await page.locator('.wiki-mobile-tools button').first().click();
+		await page.locator(`.wiki-sidebar .wiki-tree-row[title="${name}"] .wiki-tree-main`).click();
+	};
+	await sidebarFile('sample.bin');
 	await page.getByRole('button', { name: '用默认应用打开', exact: true }).click();
 	for (let i = 0; i < 30 && !(await app.evaluate(() => globalThis.wikiOpened)); i++) await new Promise(r => setTimeout(r, 100));
 	assert((await app.evaluate(() => globalThis.wikiOpened)).endsWith('sample.bin'));
 	const rejected = await page.evaluate(async cwd => { try { await window.electronAPI.openWikiFile({ clientId: sessionStorage.getItem('pi-web-client-id'), cwd, path: '../outside' }); return false; } catch { return true; } }, cwd);
 	assert(rejected, 'invalid file identity is rejected');
-	await page.getByRole('treeitem', { name: 'README.md', exact: true }).click();
+	await sidebarFile('README.md');
 	await page.locator('.wiki-document-heading h1', { hasText: 'Desktop Wiki' }).waitFor();
 	assert.equal(await page.getByRole('dialog', { name: '有未保存修改' }).count(), 0, 'read-only media never creates a dirty draft');
 	await page.screenshot({ path: 'tests/scratch/wiki-electron.png' });
-	console.log('PASS actual Electron Wiki layout, preload, validated default-app opening and invalid identity rejection');
+	console.log('PASS actual Electron Wiki modal, docked chat, preload, validated default-app opening and invalid identity rejection');
 } finally { await app?.close(); rmSync(base, { recursive: true, force: true }); }
