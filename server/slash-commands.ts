@@ -1,3 +1,4 @@
+import { isSelectableProvider } from "./provider-catalog.js";
 /**
  * slash-commands — 斜杠命令目录与内置命令执行，从 agent-service.ts 抽出。
  *
@@ -172,7 +173,7 @@ export class SlashCommandsService {
 					return true;
 				}
 				const query = args.toLowerCase();
-				const available = await this.host.getSession().modelRuntime.getAvailable();
+				const available = (await this.host.getSession().modelRuntime.getAvailable()).filter(m => isSelectableProvider(m.provider));
 				// Prefer an exact "provider/id" match, else id/name substring.
 				const exact = available.find(
 					(m) => m.provider + "/" + m.id === args.trim(),

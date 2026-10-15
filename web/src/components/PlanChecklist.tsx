@@ -21,7 +21,7 @@ export function PlanChecklist({ view, toolCallId }: { view: PlanPresentation; to
 			const status = plan.completedStepIds.includes(step.id) ? "completed" : plan.currentStepId === step.id ? "in_progress" : "pending";
 			return <li key={step.id} className={`todo-checklist-item ${status}`} data-todo-item-id={step.id} tabIndex={-1}><span className="todo-checklist-mark" aria-hidden="true">{status === "completed" ? "✓" : ""}</span><div>{step.detail ? <details><summary>{step.title}</summary><p>{step.detail}</p></details> : step.title}</div></li>;
 		})}</ol>
-		<p className="task-outline-criteria">{t("taskCompletionCriteria")}：{plan.completionCriteria}</p>
+		{plan.completionCriteria && <p className="task-outline-criteria">{t("taskCompletionCriteria")}：{plan.completionCriteria}</p>}
 		{changes && <p className="todo-update">{changes}</p>}
 	</section>;
 }

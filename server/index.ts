@@ -3,6 +3,8 @@ import { installSystemPromptRoutes } from "./system-prompt-routes.js";
 import { installExtensionsRoutes } from "./extensions-routes.js";
 import { installCodemodeImageRoutes } from "./codemode-image-routes.js";
 import { installWikiRoutes } from "./wiki-routes.js";
+import { OpenAIProxySettings } from "./openai-proxy.js";
+import { installOpenAIProxyRoutes } from "./openai-proxy-routes.js";
 
 /**
  * pi-harness server entry.
@@ -61,6 +63,8 @@ import type { ClientMessage, ServerMessage } from "./protocol.js";
 const PORT = Number(process.env.PORT ?? 8787);
 const CWD = resolve(process.env.PI_WEB_CWD ?? process.cwd());
 const DATA_DIR = resolve(process.env.PI_WEB_DATA_DIR ?? join(homedir(), ".pi-web"));
+const openAIProxy = new OpenAIProxySettings(DATA_DIR);
+openAIProxy.install();
 
 /** Bind address. Default is loopback ONLY — the service is a local personal
  *  tool and should not be reachable from the network unless explicitly asked
@@ -150,6 +154,7 @@ if (AUTH_TOKEN) {
 }
 
 installCodemodeImageRoutes(app, () => service, originAllowed);
+installOpenAIProxyRoutes(app, openAIProxy, originAllowed);
 installExtensionsRoutes(app, () => service, originAllowed);
 installDatabaseRoutes(app, () => service, originAllowed);
 installSystemPromptRoutes(app, () => service, originAllowed);

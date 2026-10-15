@@ -37,6 +37,8 @@ Desktop.ini
 *.pem
 *.key
 *.p12
+!tests/fixtures/openai-proxy/cert.pem
+!tests/fixtures/openai-proxy/key.pem
 *.swp
 *~
 

@@ -12,7 +12,9 @@ function text(v: unknown, name: string, max: number): string {
 }
 export function editableState(value: unknown): PlanState {
 	if (!object(value)) throw new Error("Submit a complete plan object");
-	const title = text(value.title, "title", 80), completionCriteria = text(value.completionCriteria, "completionCriteria", 240);
+	const title = text(value.title, "title", 80);
+	if (typeof value.completionCriteria !== "string" || value.completionCriteria.length > 240) throw new Error("completionCriteria must be a string of at most 240 characters");
+	const completionCriteria = value.completionCriteria.trim() ? value.completionCriteria : "";
 	if (!["active", "completed", "cancelled", "failed"].includes(String(value.status))) throw new Error("Invalid plan status");
 	if (!Array.isArray(value.steps) || value.steps.length < 1 || value.steps.length > 16) throw new Error("steps must contain 1–16 items");
 	const steps = value.steps.map(step => {
@@ -61,7 +63,10 @@ export function transition(value: unknown, current?: PlanSnapshot, newId: () => 
 		const reason = !current ? "No plan exists on this branch" : current.status !== "active" ? "The latest plan has ended" : value.planId !== current.planId ? "planId does not match this branch's latest plan" : value.expectedRevision !== current.revision ? "expectedRevision is stale" : undefined;
 		if (reason) throw new Error(`${reason}. ${!current || current.status !== "active" ? "Use create for a new plan." : "Use update with the current planId and expectedRevision and submit the full corrected plan."}\nCurrent editable state: ${current ? JSON.stringify({ action: current.status === "active" ? "update" : "create", planId: current.planId, expectedRevision: current.revision, ...editableState(current) }) : "none; use create"}`);
 	}
-	const state = commandState(value);
+	// Only inherit after verifying the active branch identity and revision above.
+	const state = commandState(value.completionCriteria === undefined
+		? { ...value, completionCriteria: value.action === "update" ? current!.completionCriteria : "" }
+		: value);
 	const changes = changesBetween(value.action === "update" ? current : undefined, state);
 	if (value.action === "create" && current?.status === "active") changes.unshift({ kind: "replaced", planId: current.planId, revision: current.revision, reason: "Replaced by a newly created plan" });
 	return { schemaVersion: 3, planId: value.action === "create" ? newId() : current!.planId, revision: value.action === "create" ? 1 : current!.revision + 1, ...state, changes };

@@ -1,4 +1,5 @@
 import { useDialogFocus } from "../use-dialog-focus";
+import { OpenAIProxySettings } from "./OpenAIProxySettings";
 import { useEffect, useRef, useState } from "react";
 import {
 	FiCopy,
@@ -126,6 +127,11 @@ export function ModelConfigModal({
 }: ModelConfigModalProps) {
 	const t = useT();
 	const dialogRef = useDialogFocus();
+	const [search, setSearch] = useState("");
+	const [expanded, setExpanded] = useState<string | null>(null);
+	const matches = (id: string, name = "") => (id + " " + name).toLowerCase().includes(search.trim().toLowerCase());
+	const custom = providers.filter(p => matches(p.providerId, p.name));
+	const builtin = providerStatus.filter(p => !providers.some(custom => custom.providerId === p.id) && matches(p.id, p.name));
 	const [editing, setEditing] = useState<Draft | null>(null);
 	/** Built-in provider rows: providerId → inline key being typed. */
 	const [keys, setKeys] = useState<Record<string, string>>({});
@@ -357,108 +363,29 @@ export function ModelConfigModal({
 					<h2>{editing ? t("editProvider") : t("manageModelsTitle")}</h2>
 				</div>
 
+				{!editing && <div className="model-catalog-toolbar">
+					<label className="field"><span className="field-label">{t("providerSearch")}</span>
+						<input type="search" value={search} onChange={e => setSearch(e.target.value)} />
+					</label>
+					<button type="button" className="btn primary" onClick={() => setEditing(emptyDraft())}><FiPlus /> {t("addProvider")}</button>
+					<span role="status">{t("providerResults", { n: custom.length + builtin.length })}</span>
+				</div>}
+				<div className="model-modal-body">
 				{!editing ? (
 					<>
-						<div className="form-section-title">
-							{t("builtinProviders")}{" "}
-							<em className="section-hint">{t("hintKeyOnly")}</em>
-						</div>
-						<div className="provider-list">
-							{providerStatus.length === 0 && (
-								<div className="dd-loading">{t("loading")}</div>
-							)}
-							{providerStatus.map((p) => (
-								<div className="provider-row" key={p.id}>
-									<div className="provider-info">
-										<span className="provider-name">{p.name}</span>
-										<span className="provider-sub">
-											{p.id}
-											{p.configured && (
-												<span className="auth-badge">
-													{t("configuredBadge")}
-												</span>
-											)}
-											{p.source && !p.configured && (
-												<span className="auth-badge dim">{p.source}</span>
-											)}
-										</span>
-									</div>
-									<div className="provider-actions">
-										{p.oauth && <><button className="btn sm" type="button" onClick={() => send({ type: "login_provider", provider: p.id })}>{p.id === "openai" ? t("providerChatGPTLogin") : t("providerLogin")}</button>{p.configured && p.source === "stored" && <button className="btn sm" type="button" onClick={() => send({ type: "logout_provider", provider: p.id })}>{t("providerLogout")}</button>}</>}
-										{p.configured && !replacing[p.id] ? (
-											<>
-												<span className="auth-badge">{t("keyReady")}</span>
-												<button
-													type="button"
-													className="btn sm"
-													title={t("replaceKeyTitle")}
-													onClick={() =>
-														setReplacing((r) => ({ ...r, [p.id]: true }))
-													}
-												>
-													<FiEdit2 /> {t("replaceKey")}
-												</button>
-												{p.source === "stored" && (
-													<button
-														type="button"
-														className="btn sm danger"
-														title={t("clearKeyTitle")}
-														onClick={() => clearBuiltinKey(p.id)}
-													>
-														<FiTrash2 /> {t("clearKey")}
-													</button>
-												)}
-											</>
-										) : (
-											<>
-												<input
-													type="password"
-													className="key-input"
-													placeholder={t("pasteKey")}
-													value={keys[p.id] ?? ""}
-													onChange={(e) =>
-														setKeys((k) => ({ ...k, [p.id]: e.target.value }))
-													}
-												/>
-												<button
-													type="button"
-													className="btn primary sm"
-													disabled={
-														!(keys[p.id] ?? "").trim() || savingKey === p.id
-													}
-													onClick={() => saveBuiltinKey(p)}
-												>
-													<FiKey />{" "}
-													{savingKey === p.id ? t("savingKey") : t("saveKey")}
-												</button>
-											</>
-										)}
-										<button
-											type="button"
-											className="btn sm"
-											disabled={cloning !== null}
-											title={t("cloneProviderTitle")}
-											onClick={() => cloneBuiltin(p)}
-										>
-											<FiCopy /> {cloning === p.id ? t("cloning") : t("cloneProvider")}
-										</button>
-									</div>
-								</div>
-							))}
-						</div>
-
+						{custom.length + builtin.length === 0 && <p className="modal-desc">{t("providerNoResults")}</p>}
 						<div className="form-section-title">{t("customProviders")}</div>
 						<p className="modal-desc">{t("customDesc")}</p>
-						{providers.length === 0 && (
+						{custom.length === 0 && (
 							<div className="dd-loading">{t("noCustomProviders")}</div>
 						)}
 						<div className="provider-list">
-							{providers.map((p) => (
+							{custom.map((p) => (
 								<div className="provider-row" key={p.providerId}>
 									<div className="provider-info">
-										<span className="provider-name">{p.providerId}</span>
+										<span className="provider-name">{p.name || p.providerId}</span>
 										<span className="provider-sub">
-											{p.api ?? "—"}
+											{p.providerId} · {p.api ?? "—"}
 											{p.baseUrl ? ` · ${p.baseUrl}` : ""}
 											{p.models.length > 0 &&
 												` · ${t("modelsCount", { n: p.models.length })}`}
@@ -485,15 +412,49 @@ export function ModelConfigModal({
 								</div>
 							))}
 						</div>
-						<div className="modal-actions">
-							<button
-								type="button"
-								className="btn primary"
-								onClick={() => setEditing(emptyDraft())}
-							>
-								<FiPlus /> {t("addProvider")}
-							</button>
+						<div className="form-section-title">{t("builtinProviders")}</div>
+						<div className="provider-list">
+							{builtin.map(p => (
+								<section className="provider-card" key={p.id}>
+									<div className="provider-row">
+										<div className="provider-info">
+											<span className="provider-name">{p.name}</span>
+											<span className="provider-sub">{p.id}</span>
+											<span className={p.configured ? "auth-badge" : "provider-sub"}>{t(p.configured ? "configuredBadge" : "providerUnconfigured")}</span>
+										</div>
+										<button type="button" className="btn sm" aria-expanded={expanded === p.id} aria-controls={`provider-config-${p.id}`} onClick={() => setExpanded(expanded === p.id ? null : p.id)}>{t(expanded === p.id ? "providerCollapse" : "providerConfigure")}</button>
+									</div>
+									{expanded === p.id && <div className="provider-config" id={`provider-config-${p.id}`}>
+										{p.oauth && <div className="provider-config-section">
+											<h3>{t("providerAccount")}</h3>
+											<button className="btn sm" type="button" onClick={() => send({ type: "login_provider", provider: p.id })}>{t(p.id === "openai" ? "providerChatGPTLogin" : "providerLogin")}</button>
+										</div>}
+										<div className="provider-config-section">
+											<h3>{t("apiKey")}</h3>
+											{p.configured && !replacing[p.id] ?
+												<button type="button" className="btn sm" onClick={() => setReplacing(r => ({ ...r, [p.id]: true }))}><FiEdit2 /> {t("replaceKey")}</button>
+												: <div className="provider-key-form">
+													<label className="field"><span className="field-label">{t("apiKey")}</span>
+														<input type="password" className="key-input" placeholder={t("pasteKey")} value={keys[p.id] ?? ""} onChange={e => setKeys(k => ({ ...k, [p.id]: e.target.value }))} />
+													</label>
+													<button type="button" className="btn primary sm" disabled={!(keys[p.id] ?? "").trim() || savingKey !== null} onClick={() => saveBuiltinKey(p)}><FiKey /> {t(savingKey === p.id ? "savingKey" : "saveKey")}</button>
+												</div>}
+										</div>
+										<div className="provider-config-section">
+											<h3>{t("providerOtherActions")}</h3>
+											<div className="provider-actions">
+												<button type="button" className="btn sm" disabled={cloning !== null} onClick={() => cloneBuiltin(p)}><FiCopy /> {t(cloning === p.id ? "cloning" : "cloneProvider")}</button>
+												{p.configured && p.source === "stored" && <>
+													<button type="button" className="btn sm danger" onClick={() => clearBuiltinKey(p.id)}><FiTrash2 /> {t("clearKey")}</button>
+													{p.oauth && <button type="button" className="btn sm danger" onClick={() => send({ type: "logout_provider", provider: p.id })}>{t("providerLogout")}</button>}
+												</>}
+											</div>
+										</div>
+									</div>}
+								</section>
+							))}
 						</div>
+						<OpenAIProxySettings />
 					</>
 				) : (
 					<div className="provider-form">
@@ -701,6 +662,7 @@ export function ModelConfigModal({
 						</div>
 					</div>
 				)}
+				</div>
 			</div>
 		</div>
 	);

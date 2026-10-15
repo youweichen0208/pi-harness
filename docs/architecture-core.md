@@ -14,6 +14,10 @@ Pi 1.0 工具结果的 `nestedCalls` 投影为独立子调用记录（参数、�
 
 账号登录由 `server/provider-auth.ts` 桥接公开 `ModelRuntime.login/logout`。浏览器仅收到授权 URL、设备码或请求提示，凭据由 SDK 保存；响应同时匹配 requestId/promptId，取消和 dispose 中断待处理请求。OpenAI ChatGPT 登录的稳定设备 ID 来自 SDK SettingsManager。模拟 OAuth 回归不证明真实账号授权成功；浏览器回归验证授权码提交、取消及中英文展示。
 
+模型选择目录共用 `server/provider-catalog.ts` 的精确 provider ID 策略，仅过滤 `openai-codex`：`ModelAdminService` 的内置状态（管理与首次引导共用）及自定义目录、`ClientSession.listModels`、节点 Agent 的 models 投影、`/model` 枚举。策略不作用于 SDK 注册、配置读写、认证存储或当前／历史模型投影，不自动迁移或切换模型。普通 `openai` 的 ChatGPT OAuth 继续使用原生认证桥。回归：`tests/provider-catalog-test.mjs`；弹窗搜索、草稿与响应式布局见 `tests/model-config-ui-test.mjs`。
+
+OpenAI 代理由 `server/openai-proxy.ts` 在服务启动时安装，默认关闭。配置经同源、共享口令保护的 `/api/openai-proxy` 读写，按版本拒绝过期保存，原子写入 `<dataDir>/openai-proxy.json`；不属于项目或对话，代理地址不进入模型上下文。仅接受不含凭据的 HTTP/HTTPS 代理 URL，用户自行填写端口。分流 Dispatcher 仅代理默认 TLS 端口上的 `api.openai.com`、`auth.openai.com`、`chatgpt.com`，其他地址交还原 Dispatcher；失败不自动回退直连。启用时使用同一 Undici 版本的 fetch、WebSocket 和 Dispatcher，覆盖 OAuth 交换/刷新、Responses SSE 与旧 Codex WebSocket，不修改 SDK 或进程代理环境变量。保存后需重启服务以清除 SDK 缓存的长连接，`/reload` 不生效；浏览器授权页仍使用浏览器自身网络。`tests/openai-proxy-test.mjs` 用隔离 CONNECT/TLS/WebSocket 夹具验证真实 SDK OAuth 刷新、网络分流、鉴权和重启持久化，`--browser` 验证表单；不验证真实账号登录或地区可用性。
+
 - **服务端是唯一事实源**：每次 SDK 事件后节流 60ms 推快照（`UiState`），浏览器只按快照渲染。重连只需重发 `get_state`。
 - **增量快照（协议 v2）**：持久化消息内容不可变 + 对象引用稳定，`emitSnapshotNow` 用 O(n) 指针等同性遍历检测追加式增长——能追加则发 `snapshot_delta`（轻字段 + `appended` 尾部，baseRev 链），中途变更/截断/切会话/强制 resync 回落全量 `snapshot`。前端 reducer 按 rev 链合并，缺口触发防抖 `get_state`；背压下 delta 与 snapshot 同样可丢弃，丢包靠 rev 链断裂自愈。`get_state` 恒返全量。回归：`snapshot-delta-test`。**测试适配**：等「动作后快照」的测试必须同时接受 snapshot_delta（参照 conv-cwd/vision-bridge 的 rev 链合并写法）；连接后的首个快照恒为全量。
 - **WS permessage-deflate**：WebSocketServer 开启压缩（threshold 16KB），大会话多 MB snapshot 线上传输降数倍；小消息（notice/心跳）不压省 CPU。

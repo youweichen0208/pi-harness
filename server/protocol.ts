@@ -72,6 +72,9 @@ export interface PlanSnapshot extends PlanState {
 	revision: number;
 	changes: PlanChange[];
 }
+export interface OpenAIProxyConfig { enabled: boolean; url: string }
+export interface OpenAIProxyState extends OpenAIProxyConfig { version: string; restartRequired: boolean }
+
 export interface PlanSettingsState {
 	enabled: boolean;
 	available: boolean;

@@ -1,3 +1,4 @@
+import { isSelectableProvider } from "./provider-catalog.js";
 /** Local native Pi session whose only tools operate on one captured SSH connection. */
 import { NodeCommandApprovals } from "./node-command-policy.js";
 import { randomUUID } from "node:crypto";
@@ -128,7 +129,7 @@ export class NodeAgent {
 		if (!session) return;
 		this.set({ messages: this.retain(session.messages.slice(-200).map((message, index) => serializeMessage(message, Math.max(0, session.messages.length - 200) + index)).filter((message): message is UiMessage => !!message)),
 			model: session.model ? { id: session.model.id, provider: session.model.provider, name: session.model.name } : undefined,
-			models: session.modelRuntime.getAvailableSnapshot().map(model => ({ id: model.id, provider: model.provider, name: model.name })) });
+			models: session.modelRuntime.getAvailableSnapshot().filter(model => isSelectableProvider(model.provider)).map(model => ({ id: model.id, provider: model.provider, name: model.name })) });
 	}
 	async prompt(text: string, queue?: "steer" | "followUp") {
 		const session = this.ready();

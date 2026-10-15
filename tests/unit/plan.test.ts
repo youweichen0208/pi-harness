@@ -19,6 +19,27 @@ const call = (id: string, name = "plan") => ({ type: "toolCall" as const, id, na
 const assistant = (...ids: string[]): UiMessage => ({ id: `a-${ids.join()}`, role: "assistant", content: ids.map(id => call(id, id.startsWith("p") ? "plan" : "read")), timestamp: 2 });
 const result = (id: string, plan: PlanSnapshot, isError = false): UiMessage => ({ id: `r-${id}`, role: "toolResult", toolName: "plan", toolCallId: id, content: [], planSnapshot: plan, isError, timestamp: 3 });
 
+test("updates inherit omitted completion criteria only from the matching active revision", () => {
+	const before = create(), original = structuredClone(before);
+	const command = update(before, { completionCriteria: undefined, currentStepId: "b", completedStepIds: ["a"] });
+	const next = transition(command, before);
+	expect(next).toMatchObject({ revision: 2, completionCriteria: input.completionCriteria, currentStepId: "b", completedStepIds: ["a"] });
+	expect(planSnapshot(next)).toEqual(next);
+	expect(transition(update(next, { completionCriteria: "New criteria" }), next).completionCriteria).toBe("New criteria");
+	expect(transition(update(next, { completionCriteria: undefined, status: "completed" }), next)).toMatchObject({ completionCriteria: input.completionCriteria, status: "completed" });
+	for (const completionCriteria of [null, 42, "x".repeat(241)]) expect(() => transition({ ...command, completionCriteria }, before)).toThrow();
+	for (const patch of [{ planId: "other" }, { expectedRevision: 2 }, { steps: undefined }]) expect(() => transition({ ...command, ...patch }, before)).toThrow();
+	const withoutCriteria = transition({ ...input, completionCriteria: undefined }, before);
+	expect(withoutCriteria.completionCriteria).toBe("");
+	expect(planSnapshot(withoutCriteria)).toEqual(withoutCriteria);
+	for (const completionCriteria of ["", " "]) expect(transition({ ...command, completionCriteria }, before).completionCriteria).toBe("");
+	expect(() => transition(command)).toThrow(/No plan/);
+	const done = transition(update(before, { status: "completed" }), before);
+	expect(() => transition(update(done, { completionCriteria: undefined }), done)).toThrow(/ended/);
+	expect(planSnapshot({ ...next, completionCriteria: undefined })).toBeUndefined();
+	expect(before).toEqual(original);
+});
+
 test("explicit completion closes the current step and completes the checklist (#37)", () => {
 	const before = transition(update(create(), { currentStepId: "b", completedStepIds: ["a"] }), create());
 	const command = update(before, { status: "completed" });
@@ -108,6 +129,14 @@ test("branch reconstruction and context restoration use latest successful paired
 	const assistantMessage: AgentMessage = { api: "openai-completions", provider: "test", model: "test", stopReason: "toolUse", usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } }, role: "assistant", content: [{ type: "toolCall", name: "plan", id: "p", arguments: input }], timestamp: 2 };
 	const visible = [assistantMessage, tool];
 	expect(restorePlanContext(visible, manager.getBranch())).toBe(visible);
+	const omitted = update(snapshot, { completionCriteria: undefined, currentStepId: "b", completedStepIds: ["a"] });
+	const inherited = transition(omitted, snapshot);
+	const inheritedTool = { ...tool, toolCallId: "inherited", details: JSON.parse(JSON.stringify({ planSnapshot: inherited })) };
+	const inheritedManager = SessionManager.inMemory("/tmp");
+	inheritedManager.appendMessage(tool);
+	inheritedManager.appendMessage(inheritedTool);
+	const inheritedVisible = [{ ...assistantMessage, content: [{ type: "toolCall" as const, name: "plan", id: "inherited", arguments: omitted }] }, inheritedTool];
+	expect(restorePlanContext(inheritedVisible, inheritedManager.getBranch())).toBe(inheritedVisible);
 	const summary: AgentMessage = { role: "compactionSummary", summary: "compressed", tokensBefore: 100, timestamp: 4 };
 	expect(restorePlanContext([summary, { role: "user", content: "Other question", timestamp: 5 }], manager.getBranch())[1].role).toBe("custom");
 	expect(manager.getBranch()).toHaveLength(1);

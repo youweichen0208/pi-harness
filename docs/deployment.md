@@ -1,5 +1,11 @@
 # 部署
 
+## OpenAI 代理
+
+在模型下拉的「管理模型 → OpenAI 代理」中启用并填写代理软件的 HTTP／混合监听 URL，例如 `http://127.0.0.1:<你的端口>`。默认关闭，没有预设端口；支持 HTTP/HTTPS 代理，暂不支持 SOCKS 或带账号密码的 URL。地址属于运行 pi-harness 后端的机器，远程部署时不是浏览器所在机器。
+
+保存后完全退出并重启桌面应用（仅关闭到托盘不够）；CLI 服务重启后生效。配置保存在各自数据目录的 `openai-proxy.json`，不修改其他用户的设置。只影响 OpenAI 官方认证与模型服务；浏览器登录页仍需浏览器网络可达。代理可达不保证 OpenAI 接受账号或地区。
+
 ## 内置 Pi 与用户配置
 
 Desktop 使用安装包内精确锁定的 Pi SDK。桌面包不包含应用自己的 `extensions/`，包元数据不声明应用扩展；CLI 的 `/webui` 扩展只随 npm 包提供。用户扩展由原生资源加载器读取 `~/.pi/agent/extensions`、Pi settings.json 声明的本地/已安装扩展包和受信任项目 `.pi/extensions`；`PI_CODING_AGENT_DIR` 可指定其他用户配置目录。沿用原生启停、过滤和项目信任，不复制或删除用户文件。Codemode、tool_search、MCP 属于 Pi 原生能力，继续按原生配置启用。终端执行 `pi update` 更新的是外部 CLI，不会替换桌面内置依赖；内置版本随应用构建升级。用户安装的原生扩展和凭据则由 Desktop 使用的 agent 目录加载，重启或 `/reload` 可加载其变化；不要把“内置版本固定”理解为“用户扩展配置永远无效”。

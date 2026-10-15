@@ -48,12 +48,16 @@ try {
 			assert(request.tools.some(t => t.function.name === 'plan'));
 			assert(session.getToolDefinition('plan').executionMode === 'sequential');
 			assert.equal(session.getCallableToolNames().includes('plan'), false);
-			return round++ === 0 ? [['create', input]] : [];
+			return round++ === 0 ? [['create', { ...input, ...(mode === 'only' ? { completionCriteria: undefined } : {}) }]] : [];
 		});
 		const first = latest(); assert.equal(first.revision, 1);
+		assert.equal(first.completionCriteria, mode === 'only' ? '' : input.completionCriteria);
 		const firstLeaf = session.sessionManager.getLeafId();
 		round = 0;
-		await prompt('Continue implementation', () => round++ === 0 ? [['update-1', update(first, { currentStepId: 'b', completedStepIds: ['a'] })], ['update-2', update({ ...first, revision: 2 }, { currentStepId: 'b', completedStepIds: ['a'] })]] : []);
+		await prompt('Continue implementation', () => round++ === 0 ? [['update-1', update(first, { currentStepId: 'b', completedStepIds: ['a'], completionCriteria: undefined })], ['update-2', update({ ...first, revision: 2 }, { currentStepId: 'b', completedStepIds: ['a'] })]] : []);
+		const inherited = session.sessionManager.getBranch().find(entry => entry.type === 'message' && entry.message.role === 'toolResult' && entry.message.toolCallId === 'update-1')?.message;
+		assert.equal(inherited?.isError, false, JSON.stringify(inherited?.content));
+		assert.equal(inherited.details.planSnapshot.completionCriteria, first.completionCriteria);
 		assert.equal(latest().revision, 3);
 		const success = latest();
 		round = 0;

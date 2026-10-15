@@ -61,6 +61,7 @@ pi-harness/
 │   ├── model-config-merge.ts   # 聊天模型表单合并；保留 typed models 和未知字段
 │   ├── native-mcp-config.ts    # 原生 MCP 配置版本校验与敏感值；修改时读 docs/architecture-plugins.md
 │   ├── provider-auth.ts        # 官方 OAuth 登录桥；凭据由 SDK 保存，不下发浏览器
+│   ├── openai-proxy.ts / openai-proxy-routes.ts # 本机可配置 OpenAI 代理；修改分流、持久化或网络初始化时读 docs/architecture-core.md
 │   ├── native-tools.ts         # 原生 MCP/codemode/tool_search factories；见 docs/architecture-plugins.md
 │   ├── attachments.ts          # 附件构建（inline/reference/lines/imageData/fileData）
 │   ├── webui-context.ts        # 扩展 UI 桥（WebUIContext：widgets/statuses/dialog → 浏览器）

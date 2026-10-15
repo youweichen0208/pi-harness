@@ -1,0 +1,1 @@
+This self-signed certificate and private key are public test fixtures, never production credentials. The proxy test trusts this certificate only in its isolated child process and routes the named hosts to its local TLS fixture. No external OpenAI requests are made.

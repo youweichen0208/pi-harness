@@ -1,3 +1,4 @@
+import { isSelectableProvider } from "./provider-catalog.js";
 import { databaseScope } from "./database/service.js";
 import { planSettings } from "./plan/settings.js";
 import { reloadSession } from "./session-reload.js";
@@ -2913,7 +2914,7 @@ export class ClientSession {
 		try {
 			const mr = this.runtime.services.modelRuntime;
 			const available = await mr.getAvailable();
-			const models = available.map((m) => ({
+			const models = available.filter(m => isSelectableProvider(m.provider)).map((m) => ({
 				id: `${m.provider}/${m.id}`,
 				name: m.name,
 				provider: m.provider,

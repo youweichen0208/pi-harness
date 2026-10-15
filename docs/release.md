@@ -1,5 +1,9 @@
 # 发布流程
 
+## 1.0.3 OpenAI 代理与模型目录优化
+
+发布可配置的本机 OpenAI 代理（`server/openai-proxy.ts`，同源鉴权 + 原子持久化，保存后需重启）、模型选择目录统一过滤 `openai-codex`（`server/provider-catalog.ts`）、「管理模型」弹窗搜索与布局重构，以及原生 plan 完成标准改为可选。版本同步为 1.0.3；SDK 1.2.0、协议不变。本次仅发布 GitHub 三平台桌面 Release，不包含 npm 发布。说明见 `.github/release-notes/v1.0.3.md`；同一提交 CI、三平台打包回归及附件核对通过后公开。
+
 ## 1.0.2 Wiki 当前文档上下文修复
 
 修复 Wiki 右侧 Agent Chat 未自动引用当前文档（#95）：输入框显示当前文档 chip，切换文档时替换，发送前保存并携带最新正文；关闭 Wiki 后恢复后台文件预览上下文。版本同步为 1.0.2；SDK 1.2.0、协议不变。本次仅发布 GitHub 三平台桌面 Release，不包含 npm 发布。说明见 `.github/release-notes/v1.0.2.md`；同一提交 CI、三平台打包回归及附件核对通过后公开。

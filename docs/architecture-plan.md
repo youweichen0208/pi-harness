@@ -6,7 +6,7 @@
 
 `plan` 使用 `model-only`、`sequential`、`defaultActive: false`。启用后提供简短 promptSnippet 和规则，尊重用户、skill 的等待与授权要求。`annotations` 声明 `readOnlyHint: true`、`openWorldHint: false`：只返回用于会话记录的计划快照，不修改外部资源。未声明幂等；权限扩展仍自行决定确认策略。
 
-create/update 都提交完整状态：title、status、steps、currentStepId（无当前项时明确 null）、completedStepIds、completionCriteria，可选 changeSummary。标题最多 80 字符，步骤 1–16 个，步骤 ID 最多 64 字符且唯一，详情最多 500 字符，完成标准和变更说明最多 240 字符。完成 ID 必须唯一且属于步骤；当前项不能已完成。步骤合并或不再需要时，模型应更新或移除被替代步骤并说明原因，不留下过期待办，不把未做工作标为完成。completed/cancelled/failed 不保留当前项。工具调用显式声明 completed 时，原子完成提交的全部步骤并清除当前项；cancelled/failed 只清除当前项，保留已完成列表。步骤身份、列表唯一性和版本仍严格校验；持久快照仍要求 completed 的全部步骤已完成，不修正损坏的历史状态。
+create/update 都提交完整步骤状态：title、status、steps、currentStepId（无当前项时明确 null）、completedStepIds，可选 changeSummary。completionCriteria 可选：create 省略时保存为空字符串；update 可省略该字段，在通过当前分支 planId、expectedRevision 和 active 状态校验后保留已保存的完成标准，显式提供时校验字符串类型和长度，空字符串可清除完成标准。新建计划不继承旧计划的完成标准，持久快照仍必须包含此字段（允许空字符串）；无完成标准时界面不显示对应行。标题最多 80 字符，步骤 1–16 个，步骤 ID 最多 64 字符且唯一，详情最多 500 字符，完成标准和变更说明最多 240 字符。完成 ID 必须唯一且属于步骤；当前项不能已完成。步骤合并或不再需要时，模型应更新或移除被替代步骤并说明原因，不留下过期待办，不把未做工作标为完成。completed/cancelled/failed 不保留当前项。工具调用显式声明 completed 时，原子完成提交的全部步骤并清除当前项；cancelled/failed 只清除当前项，保留已完成列表。步骤身份、列表唯一性和版本仍严格校验；持久快照仍要求 completed 的全部步骤已完成，不修正损坏的历史状态。
 
 create 生成新 planId，revision=1。update 另传 planId 和 expectedRevision，只能更新当前分支最新且 active 的计划。冲突抛错并返回原因、正确操作和完整可编辑状态；没有计划或计划结束时提示 create。错误不会写入有效状态。工具描述和 steps 字段明确要求 update（包括完成）也提交完整步骤，不能当成部分更新。
 
@@ -14,7 +14,7 @@ create 生成新 planId，revision=1。update 另传 planId 和 expectedRevision
 
 ## 压缩背景
 
-仅工具已激活且最新计划 active 时考虑恢复。最新成功结果及其配对完整参数都在模型上下文中可见时不重复补入，旧版本或错误结果不能抑制恢复。本轮最近一次 plan 结果失败时，即使成功调用仍在上下文中，也补入当前有效计划和纠错说明，覆盖 SDK 参数校验在 execute 前拒绝调用的情况；不自动重试、不自动补字段、不授权继续执行。`context` 钩子临时插入完整可编辑状态，放在最近压缩摘要后；没有摘要时放在最新用户请求前。
+仅工具已激活且最新计划 active 时考虑恢复。最新成功结果及其配对完整参数都在模型上下文中可见时不重复补入，旧版本或错误结果不能抑制恢复。本轮最近一次 plan 结果失败时，即使成功调用仍在上下文中，也补入当前有效计划和纠错说明，覆盖 SDK 参数校验在 execute 前拒绝调用的情况；不自动重试、不自动补全其他必填字段、不授权继续执行。`context` 钩子临时插入完整可编辑状态，放在最近压缩摘要后；没有摘要时放在最新用户请求前。
 
 背景要求模型判断与当前请求的相关性：已授权的相关实施先 update 后直接继续，不请求额外的计划确认；无关多步骤任务 create，普通问答无需计划。历史计划不授权继续执行。背景不写入 JSONL；增删背景可能改变提示词缓存。
 

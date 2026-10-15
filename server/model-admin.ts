@@ -1,3 +1,4 @@
+import { isSelectableProvider } from "./provider-catalog.js";
 import { updateAuthFile } from "./auth-file.js";
 import { isChatModelConfig, mergeChatProvider } from "./model-config-merge.js";
 /**
@@ -343,7 +344,7 @@ export class ModelAdminService {
 		const mr = this.host.modelRuntime();
 		let providers;
 		try {
-			providers = mr.getProviders().map((p) => {
+			providers = mr.getProviders().filter(p => isSelectableProvider(p.id)).map((p) => {
 				try {
 					const st = mr.getProviderAuthStatus(p.id);
 					return {
@@ -447,7 +448,7 @@ export class ModelAdminService {
 	/** Send the current models.json custom providers to the client. */
 	async listModelsConfig(): Promise<void> {
 		const { providers } = this.readModelsConfig();
-		const list: UiProviderConfig[] = Object.entries(providers).map(
+		const list: UiProviderConfig[] = Object.entries(providers).filter(([id]) => isSelectableProvider(id)).map(
 			([providerId, p]) => {
 				const models = Array.isArray(p.models)
 					? (p.models as Record<string, unknown>[]).filter(isChatModelConfig).map((m) => ({
