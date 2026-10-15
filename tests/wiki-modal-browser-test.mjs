@@ -20,6 +20,7 @@ writeFileSync(join(cwd, "README.md"), "# Knowledge entry\n\nSelected exact passa
 writeFileSync(join(cwd, "knowledge/manifest.json"), JSON.stringify({ kind: "pi-harness-knowledge", version: 1, evidenceDirectory: "evidence" }));
 const rawPath = join(cwd, "knowledge/evidence/source/original.md"), raw = "# Archived evidence\n\n原始文件内容应保持不变。\n";
 writeFileSync(rawPath, raw);
+writeFileSync(join(cwd, "background.ts"), "export const background = true;\n");
 writeFileSync(join(cwd, "other.md"), "# Other document\n\nOther text.\n");
 let releaseReply;
 let responseGate = new Promise(resolve => { releaseReply = resolve; });
@@ -49,10 +50,10 @@ try {
 	page.setDefaultTimeout(15000);
 	const errors = []; page.on("pageerror", error => errors.push(error.message));
 	let conversation, failWrites = false, delayWrites = false;
-	const actions = [], navigation = [];
+	const actions = [], navigation = [], prompts = [];
 	page.on("websocket", ws => {
 		ws.on("framereceived", ({payload}) => { const message = JSON.parse(String(payload)); if (message.type === "snapshot") conversation = message.state.conversationId; });
-		ws.on("framesent", ({payload}) => { const message = JSON.parse(String(payload)); if (["new_chat", "switch_conversation", "switch_session"].includes(message.type)) navigation.push(message); });
+		ws.on("framesent", ({payload}) => { const message = JSON.parse(String(payload)); if (["new_chat", "switch_conversation", "switch_session"].includes(message.type)) navigation.push(message); if (message.type === "prompt") prompts.push(message); });
 	});
 	await page.route("**/api/wiki", async route => {
 		const body = route.request().postDataJSON(); actions.push(body.action);
@@ -85,6 +86,8 @@ try {
 	await page.locator(".messages").evaluate(el => { el.scrollTop = 100; el.dispatchEvent(new Event("scroll")); });
 	const chatScroll = await page.locator(".messages").evaluate(el => el.scrollTop);
 	await open();
+	assert.equal(await page.locator(".wiki-agent-chat .attach-chip.current-file").count(), 1, "Wiki chat must attach the open document");
+	assert((await page.locator(".attach-chip.current-file").innerText()).includes("@README.md"));
 	assert.equal(conversation, original); assert.equal(await page.locator(".wiki-chat-panel, .wiki-composer-area").count(), 0);
 	assert(await page.locator(".wiki-agent-chat").isVisible());
 	assert.equal(await page.locator(".inputbar").count(), 1);
@@ -108,6 +111,7 @@ try {
 	await page.getByRole("button", {name: "全屏显示文档", exact: true}).waitFor();
 	assert(Math.abs((await modal.boundingBox()).width - 1440 * .92) < 2);
 	await close(); await modal.waitFor({state: "detached"});
+	assert.equal(await page.locator(".attach-chip.current-file").count(), 0, "Closing Wiki clears its automatic context");
 	assert.equal(await input.inputValue(), "Existing draft"); assert.equal(await page.locator(".attach-chip.file").count(), 1);
 	assert.equal(await page.locator(".messages").evaluate(el => el.scrollTop), chatScroll);
 	await open(); assert.equal(await page.locator(".wiki-scroll").evaluate(el => el.scrollTop), 500);
@@ -169,6 +173,10 @@ try {
 	await input.press("Enter");
 	await page.waitForFunction(() => document.querySelector(".wiki-prose [contenteditable=false]"));
 	assert(readFileSync(join(cwd, "README.md"), "utf8").includes("Saved before panel prompt."));
+	const attachment = prompts.at(-1).attachments.find(a => a.path === "README.md");
+	assert.equal(attachment.editorSnapshot.text, readFileSync(join(cwd, "README.md"), "utf8"));
+	assert.equal(attachment.editorSnapshot.dirty, false);
+	assert(attachment.editorSnapshot.version);
 	releaseReply();
 	await page.waitForFunction(() => document.querySelector(".wiki-prose [contenteditable=true]"));
 	assert.equal(conversation, original);
@@ -185,7 +193,11 @@ try {
 	assert.equal(await input.inputValue(), "Draft written in panel");
 	// File links and document switching keep the same conversation.
 	await open(); await editor.locator("a", {hasText: "Other"}).click(); await page.locator(".wiki-document-heading h1", {hasText: "Other document"}).waitFor();
-	assert.equal(conversation, original); await close();
+	assert.equal(conversation, original);
+	assert((await page.locator(".attach-chip.current-file").innerText()).includes("@other.md"));
+	await page.locator(".attach-chip.current-file .attach-remove").click();
+	assert.equal(await page.locator(".attach-chip.current-file").count(), 0);
+	await close();
 	// The file explorer matches the shared layout and references paths without navigating.
 	await open();
 	await page.locator(".wiki-mobile-tools button").first().click();
@@ -213,6 +225,13 @@ try {
 	await page.keyboard.press("Meta+k"); await page.locator(".gs-input-row input").fill("README.md");
 	await page.locator(".gs-modal button", {hasText: "README.md"}).first().click();
 	await editor.waitFor(); assert.equal(conversation, original); await close();
+	// A background preview must neither replace Wiki context nor lose its own context on close.
+	await page.evaluate(() => window.dispatchEvent(new CustomEvent("pi-harness:open-tool-file", {detail: {path: "background.ts"}})));
+	await page.locator(".attach-chip.current-file", {hasText: "@background.ts"}).waitFor();
+	await open();
+	await page.locator(".attach-chip.current-file", {hasText: "@README.md"}).waitFor();
+	await close();
+	await page.locator(".attach-chip.current-file", {hasText: "@background.ts"}).waitFor();
 	await page.setViewportSize({width: 390, height: 844}); await open();
 	assert.equal(Math.round((await modal.boundingBox()).width), 390); assert.equal(Math.round((await modal.boundingBox()).height), 844);
 	assert.equal(await page.locator(".wiki-agent-chat").isVisible(), false);
@@ -226,6 +245,7 @@ try {
 	console.log("PASS document modal: session, background reply, draft/attachment/scroll, save/conflict/quote, focus, resize and mobile");
 } catch (error) { console.error(log.slice(-6000)); throw error; }
 finally {
+	releaseReply();
 	await browser?.close();
 	await new Promise(r => mock.close(r));
 	if (server.exitCode === null && server.signalCode === null) { const stopped = once(server, "exit"); server.kill(); await stopped; }

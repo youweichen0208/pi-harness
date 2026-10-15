@@ -10,6 +10,7 @@ import { wikiRequest, wikiMedia } from "../wiki-api";
 import { wikiMetadata, resolveWikiLink, explicitWikiFilePath } from "../wiki-document";
 import { WikiResizeHandle, useWikiPanelWidth } from "./WikiResizeHandle";
 import { CreateFileForm } from "./CreateFileForm";
+import type { CurrentFileContext, ReadCurrentFile, SaveCurrentFile } from "../current-file";
 import type { ChatReferenceRequest } from "../chat-reference";
 import { RichMarkdownEditor } from "./RichMarkdownEditor";
 import { CodeFileEditor } from "./CodeFileEditor";
@@ -23,7 +24,7 @@ type Guard = (next: () => void) => void;
 const EMPTY: WikiState = { entries: [], tags: [], revisions: [], running: false, limited: false };
 const NO_ADDED_LINES = new Set<string>();
 const readingPositions = new Map<string, number>();
-export function WikiWorkbench({ cwd, conversationId, streaming, active, ready, guard, fileRequest, openDocument, connected, writingBlocked, onReference, saveBeforePrompt, onAttach }: {
+export function WikiWorkbench({ cwd, conversationId, streaming, active, ready, guard, fileRequest, openDocument, connected, writingBlocked, onReference, saveBeforePrompt, onAttach, contextReader, contextSaver, onContextChange }: {
 	cwd: string; conversationId: string; streaming: boolean; active: boolean; ready: boolean;
 	fileRequest: {path:string;token:string}; writingBlocked: boolean; connected: boolean;
 	openDocument: (path: string) => Promise<void>;
@@ -31,6 +32,9 @@ export function WikiWorkbench({ cwd, conversationId, streaming, active, ready, g
 	onReference: (request: ChatReferenceRequest) => void;
 	guard: MutableRefObject<Guard | null>;
 	saveBeforePrompt: MutableRefObject<(() => Promise<boolean>) | null>;
+	contextReader: MutableRefObject<ReadCurrentFile | null>;
+	contextSaver: MutableRefObject<SaveCurrentFile | null>;
+	onContextChange: (context: CurrentFileContext | null) => void;
 }) {
 	const t = useT(), { locale } = useI18n();
 	const [state, setState] = useState<WikiState>(EMPTY);
@@ -111,10 +115,32 @@ export function WikiWorkbench({ cwd, conversationId, streaming, active, ready, g
 		try { const result = await wikiRequest<WikiState>(cwd, fresh ? "refresh" : "state"); if (alive.current && seq === stateSequence.current) setState(result); }
 		catch (e) { if (alive.current && seq === stateSequence.current) setError((e as Error).message); }
 	}, [cwd]);
-	const autosave = useWikiAutosave(cwd, doc, draft, loading || restoring || state.running || writingBlocked || doc?.entry.path !== path, setDoc, () => void refresh(true));
+	const autosave = useWikiAutosave(cwd, doc, draft, loading || restoring || state.running || writingBlocked || doc?.entry.path !== path, document => { docRef.current = document; setDoc(document); }, () => void refresh(true));
 	const { save, saving } = autosave;
 	useLayoutEffect(() => { saveBeforePrompt.current = save; return () => { saveBeforePrompt.current = null; }; }, [save, saveBeforePrompt]);
 	useEffect(() => registerWindowSave(save), [save]);
+	// Keep Wiki context separate from the background file preview; the composer selects the visible editor.
+	const draftRef = useRef(draft);
+	draftRef.current = draft;
+	const contextEligible = active && !loading && !restoring && doc?.entry.path === fileRequest.path && doc?.entry.path === path && doc?.text !== undefined;
+	useLayoutEffect(() => {
+		onContextChange(contextEligible && doc ? { id: fileRequest.token, cwd, path: doc.entry.path, name: doc.entry.name, dirty } : null);
+	}, [contextEligible, doc?.entry.path, doc?.entry.name, fileRequest.token, cwd, dirty, onContextChange]);
+	useLayoutEffect(() => () => onContextChange(null), [onContextChange]);
+	useLayoutEffect(() => {
+		contextReader.current = id => contextEligible && id === fileRequest.token && docRef.current ? {
+			path: fileRequest.path, mode: "inline",
+			editorSnapshot: { cwd, text: draftRef.current, dirty: draftRef.current !== docRef.current.text, version: docRef.current.version },
+		} : null;
+		// Join an in-flight autosave; beforeSend rechecks the modal token before delivery.
+		contextSaver.current = (id, next) => {
+			if (!contextEligible || id !== fileRequest.token) return false;
+			void save().then(ok => { if (ok && alive.current) next(); });
+			return true;
+		};
+		return () => { contextReader.current = null; contextSaver.current = null; };
+	}, [contextEligible, fileRequest.token, fileRequest.path, cwd, contextReader, contextSaver, save]);
+
 	useEffect(() => {
 		if (!active) return;
 		void refresh();

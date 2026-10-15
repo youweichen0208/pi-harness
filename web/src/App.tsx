@@ -304,6 +304,9 @@ export function App() {
 	// 发送即保存：脏草稿先经编辑器落盘，再发送携带快照的消息。
 	const contextSaver = useRef<SaveCurrentFile | null>(null);
 	const [currentFile, setCurrentFile] = useState<CurrentFileContext | null>(null);
+	const wikiContextReader = useRef<ReadCurrentFile | null>(null);
+	const wikiContextSaver = useRef<SaveCurrentFile | null>(null);
+	const [wikiCurrentFile, setWikiCurrentFile] = useState<CurrentFileContext | null>(null);
 	useEffect(() => {
 		if (!switching && chat.state?.cwd && previewFile && previewFile.cwd !== chat.state.cwd) setPreviewFile(null);
 	}, [switching, chat.state?.cwd, previewFile]);
@@ -1097,9 +1100,9 @@ export function App() {
 								onRemoveDatabase={id => void revokeDatabase(id).catch(error => pushNotice("error", error.message))}
 								cwd={chat.state?.cwd ?? ""}
 								referenceRequest={chatReference}
-								currentFile={!switching && currentFile?.cwd === chat.state?.cwd ? currentFile : null}
-								contextReader={contextReader}
-								contextSaver={contextSaver}
+								currentFile={switching ? null : wikiFileRequest ? (wikiCurrentFile?.id === wikiFileRequest.token ? wikiCurrentFile : null) : currentFile?.cwd === chat.state?.cwd ? currentFile : null}
+								contextReader={wikiFileRequest ? wikiContextReader : contextReader}
+								contextSaver={wikiFileRequest ? wikiContextSaver : contextSaver}
 								stats={conversationState?.stats}
 								promptResult={chat.promptResult}
 								verifying={conversationState?.tree?.verifying}
@@ -1214,7 +1217,7 @@ export function App() {
 				<DatabaseWorkbench cwd={chat.state.cwd} conversationId={chat.activeConversationId} onReference={receiveWikiReference} onRevoke={revokeDatabase} />
 			</WikiDocumentModal>}
 			{wikiFileRequest && wikiFileRequest.cwd === chat.state?.cwd && wikiFileRequest.conversationId === chat.activeConversationId && <WikiDocumentModal onClose={closeWiki} chatHost={setWikiChatHost} chatOpen={wikiChatOpen} onChatOpen={setWikiChatOpen}>
-				<WikiWorkbench key={wikiFileRequest.cwd} cwd={wikiFileRequest.cwd} conversationId={wikiFileRequest.conversationId} fileRequest={wikiFileRequest} streaming={!!conversationState?.isStreaming} active ready={chat.ready && !switching} writingBlocked={!!switching || !!conversationState?.isStreaming} openDocument={openWikiDocument} connected={chat.ready} guard={wikiGuard} saveBeforePrompt={wikiSave} onAttach={(path, name, isDir) => { attach(path, name, "reference", isDir); setWikiChatOpen(true); }} onReference={receiveWikiReference} />
+				<WikiWorkbench key={wikiFileRequest.cwd} cwd={wikiFileRequest.cwd} conversationId={wikiFileRequest.conversationId} fileRequest={wikiFileRequest} streaming={!!conversationState?.isStreaming} active ready={chat.ready && !switching} writingBlocked={!!switching || !!conversationState?.isStreaming} openDocument={openWikiDocument} connected={chat.ready} guard={wikiGuard} saveBeforePrompt={wikiSave} contextReader={wikiContextReader} contextSaver={wikiContextSaver} onContextChange={setWikiCurrentFile} onAttach={(path, name, isDir) => { attach(path, name, "reference", isDir); setWikiChatOpen(true); }} onReference={receiveWikiReference} />
 			</WikiDocumentModal>}
 
 			{chat.ready &&
