@@ -1,5 +1,9 @@
 # 发布流程
 
+## 1.0.4 界面与工具修复
+
+基于合入 #101–#103 的 develop 发布：Markdown 表格右侧空白、节点手动终端忙误报（#96）及其回归、Wiki 空行提示（#98）、H2/H3 图标与正文按钮（#99）、「全部采纳推荐」反馈与题号后缀（#100），以及原生 plan 工具对字面量字符串 `"null"` 的归一化。版本同步为 1.0.4；SDK 1.2.0、协议不变。本次仅发布 GitHub 三平台桌面 Release，不包含 npm 发布。说明见 `.github/release-notes/v1.0.4.md`；同一提交 CI、三平台打包回归及附件核对通过后公开。
+
 ## 1.0.3 OpenAI 代理与模型目录优化
 
 发布可配置的本机 OpenAI 代理（`server/openai-proxy.ts`，同源鉴权 + 原子持久化，保存后需重启）、模型选择目录统一过滤 `openai-codex`（`server/provider-catalog.ts`）、「管理模型」弹窗搜索与布局重构，以及原生 plan 完成标准改为可选。版本同步为 1.0.3；SDK 1.2.0、协议不变。本次仅发布 GitHub 三平台桌面 Release，不包含 npm 发布。说明见 `.github/release-notes/v1.0.3.md`；同一提交 CI、三平台打包回归及附件核对通过后公开。
