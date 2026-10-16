@@ -10,6 +10,9 @@ function text(v: unknown, name: string, max: number): string {
 	if (typeof v !== "string" || !v.trim() || v.length > max) throw new Error(`${name} must be non-empty and at most ${max} characters`);
 	return v;
 }
+/** Some schema pipelines hand the model the literal string "null" for nullable fields
+ *  (seen with plan currentStepId): normalize it so a valid intent is not rejected. */
+const currentStep = (v: unknown): string | null => v === null || v === "null" ? null : v as string | null;
 export function editableState(value: unknown): PlanState {
 	if (!object(value)) throw new Error("Submit a complete plan object");
 	const title = text(value.title, "title", 80);
@@ -25,10 +28,11 @@ export function editableState(value: unknown): PlanState {
 	if (ids.size !== steps.length) throw new Error("Step IDs must be unique");
 	if (!Array.isArray(value.completedStepIds) || value.completedStepIds.some(id => typeof id !== "string" || !ids.has(id)) || new Set(value.completedStepIds).size !== value.completedStepIds.length) throw new Error("completedStepIds must be unique existing step IDs");
 	const completedStepIds = value.completedStepIds as string[];
-	if (value.currentStepId !== null && (typeof value.currentStepId !== "string" || !ids.has(value.currentStepId) || completedStepIds.includes(value.currentStepId))) throw new Error("currentStepId must be null or an incomplete existing step ID");
-	if (value.status !== "active" && value.currentStepId !== null) throw new Error("Terminal plans must have currentStepId: null");
+	const currentStepId = currentStep(value.currentStepId);
+	if (currentStepId !== null && (!ids.has(currentStepId) || completedStepIds.includes(currentStepId))) throw new Error("currentStepId must be null or an incomplete existing step ID");
+	if (value.status !== "active" && currentStepId !== null) throw new Error("Terminal plans must have currentStepId: null");
 	if (value.status === "completed" && completedStepIds.length !== steps.length) throw new Error("Completed plans must complete every step");
-	return { title, completionCriteria, status: value.status as PlanState["status"], steps, completedStepIds: [...completedStepIds], currentStepId: value.currentStepId as string | null,
+	return { title, completionCriteria, status: value.status as PlanState["status"], steps, completedStepIds: [...completedStepIds], currentStepId,
 		...(value.changeSummary !== undefined ? { changeSummary: text(value.changeSummary, "changeSummary", 240) } : {}) };
 }
 
@@ -52,7 +56,8 @@ export function changesBetween(before: PlanSnapshot | undefined, after: PlanStat
 function commandState(value: Record<string, unknown>): PlanState {
 	if (!["completed", "cancelled", "failed"].includes(String(value.status))) return editableState(value);
 	const state = editableState({ ...value, status: "active", currentStepId: null });
-	if (value.currentStepId !== null && (typeof value.currentStepId !== "string" || !state.steps.some(step => step.id === value.currentStepId))) throw new Error("currentStepId must be null or an existing step ID");
+	const currentStepId = currentStep(value.currentStepId);
+	if (currentStepId !== null && !state.steps.some(step => step.id === currentStepId)) throw new Error("currentStepId must be null or an existing step ID");
 	return { ...state, status: value.status as PlanState["status"],
 		completedStepIds: value.status === "completed" ? state.steps.map(step => step.id) : state.completedStepIds };
 }
