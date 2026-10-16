@@ -62,6 +62,13 @@ test("validation rejects invalid full states without changing previous state", (
 	for (const status of ["cancelled", "failed"]) expect(transition(update(before, { status, currentStepId: null }), before).status).toBe(status);
 });
 
+test("currentStepId accepts the literal string \"null\" some providers hand the model", () => {
+	const created = transition({ ...input, currentStepId: "null" }, undefined, () => "p1");
+	expect(created.currentStepId).toBeNull();
+	const done = transition(update(created, { status: "completed", completedStepIds: ["a", "b"], currentStepId: "null" }), created);
+	expect(done).toMatchObject({ status: "completed", currentStepId: null });
+});
+
 test("conflicts supply complete branch-local editable correction; ended plans require create", () => {
 	const first = create(), second = transition(update(first, { currentStepId: "b", completedStepIds: ["a"] }), first);
 	for (const patch of [{ planId: "other" }, { expectedRevision: 1 }]) {

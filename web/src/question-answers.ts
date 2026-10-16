@@ -7,6 +7,8 @@ export interface QuestionAnswerState {
 	answers: Record<string, number>;
 	/** Text typed into each card's "其他" row. */
 	custom: Record<string, string>;
+	/** Epoch ms of the latest 全部采纳推荐 click, so the button always gives visible feedback. */
+	acceptedAt?: number;
 }
 
 let state: QuestionAnswerState = { active: null, answers: {}, custom: {} };
@@ -49,7 +51,7 @@ export function acceptRecommended(key: string) {
 	if (state.active?.key !== key) return;
 	const next = { ...picks.get(key), ...recommendedAnswers(state.active.questions) };
 	picks.set(key, next);
-	emit({ ...state, answers: next });
+	emit({ ...state, answers: next, acceptedAt: Date.now() });
 }
 
 export function useQuestionAnswers() {

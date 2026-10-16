@@ -353,6 +353,13 @@ export const ChatInput = memo(function ChatInput({
 	// 4a: the newest reply's question cards are answered from here.
 	const questionState = useQuestionAnswers();
 	const answering = !streaming && questionState.active?.conversationId === activeConversationId ? questionState.active : null;
+	const [accepted, setAccepted] = useState(false);
+	useEffect(() => {
+		if (!questionState.acceptedAt) { setAccepted(false); return; }
+		setAccepted(true);
+		const timer = setTimeout(() => setAccepted(false), 1400);
+		return () => clearTimeout(timer);
+	}, [questionState.acceptedAt]);
 	const choices = answering?.questions ?? [];
 	const answeredCount = choices.filter(question => isAnswered(question, questionState.answers, questionState.custom)).length;
 	const unanswered = choices.filter(question => !isAnswered(question, questionState.answers, questionState.custom)).map(question => question.id);
@@ -603,7 +610,7 @@ export const ChatInput = memo(function ChatInput({
 			{answering && <div className="question-answer-bar" role="group" aria-label={t("questionSend")}>
 				<strong>{t("questionSelected", { n: answeredCount, total: choices.length })}</strong>
 				{unanswered.length > 0 && <span>{t("questionPending", { ids: unanswered.slice(0, 3).join("、") + (unanswered.length > 3 ? "…" : "") })}</span>}
-				<button type="button" className="question-accept" onClick={() => acceptRecommended(answering.key)}>{t("questionAcceptAll")}</button>
+				<button type="button" className={`question-accept${accepted ? " accepted" : ""}`} onClick={() => acceptRecommended(answering.key)}>{t(accepted ? "questionAcceptedAll" : "questionAcceptAll")}</button>
 				<button type="button" className="question-send" disabled={!connected || answeredCount === 0} onClick={() => submit(false, composeAnswers(answering.questions, questionState.answers, text, questionState.custom))}>{t("questionSend")}</button>
 			</div>}
 			<div className={`inputbox${text.length > 0 ? " has-draft" : ""}`}>

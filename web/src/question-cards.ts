@@ -30,7 +30,7 @@ const plain = (text: string) => text.replace(/\*\*([^*]+)\*\*/g, "$1").replace(/
 
 function parseHead(line: string, index: number) {
 	const body = line.replace(QUESTION, "");
-	const id = /\*{0,2}(Q\d+)\*{0,2}/.exec(body)?.[1] ?? `Q${index + 1}`;
+	const id = /\*{0,2}(Q\d+[a-z]?)\*{0,2}/.exec(body)?.[1] ?? `Q${index + 1}`;
 	const rest = body.replace(/^\*{0,2}Q\d+\*{0,2}\s*[-–—:：.]?\s*/, "");
 	const titled = /^\*\*([^*]+)\*\*\s*[:：]?\s*(.*)$/.exec(rest);
 	return titled ? { id, title: plain(titled[1]), prompt: titled[2] } : { id, title: "", prompt: rest };
