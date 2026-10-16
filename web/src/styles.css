@@ -7723,7 +7723,8 @@ span.msg-editor-hint svg {
 }
 .fp-markdown table {
 	display: block;
-	width: 100%;
+	/* Shrink the scroll box to the grid; 100% leaves blank space after short rows. */
+	width: fit-content;
 	max-width: 100%;
 	overflow-x: auto;
 	margin: 1.15em 0;
