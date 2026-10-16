@@ -510,6 +510,7 @@ export class NodeWorkbench {
 			}; check();
 		}), signal);
 		this.ensureCurrent(c); signal?.throwIfAborted();
+		if (!t.promptReady) await this.waitPromptReady(c, t, signal);
 		if (!t.promptReady || t.busy) throw new Error("手动终端正忙；请先完成命令或按 Ctrl+C 后重试");
 		t.busy = true; t.promptReady = false;
 		const commandId = toolCallId ?? randomUUID(), started = Date.now();
@@ -532,6 +533,17 @@ export class NodeWorkbench {
 			commandStatus = "done";
 			return { output, terminalId, commandId, lines, durationMs: Date.now() - started };
 		} finally { c.agent?.terminalCommand({ commandId, terminalId, status: commandStatus, lines, durationMs: Date.now() - started }); t.busy = false; this.emit(clientId, "terminal_busy", { busy: false }, { nodeId, terminalId, conversationId: t.conversationId }); }
+	}
+	private async waitPromptReady(c: Connection, t: Terminal, signal?: AbortSignal): Promise<void> {
+		await waitNodeIO(new Promise<void>((resolve, reject) => {
+			const deadline = Date.now() + 2000;
+			const check = () => {
+				if (signal?.aborted || !c.terminals.has(t.id)) reject(new Error("终端已取消或关闭"));
+				else if (t.promptReady || t.busy) resolve();
+				else if (Date.now() > deadline) resolve(); // 短暂等待后仍未就绪，交由调用方报错
+				else setTimeout(check, 25);
+			}; check();
+		}), signal);
 	}
 	private waitMarker(t: Terminal, start: string, marker: string, input: string, ms: number, signal?: AbortSignal): Promise<{ output: string; code: number }> {
 		if (signal?.aborted) return Promise.reject(new Error("命令已中断"));
