@@ -47,6 +47,13 @@ test("a reply with one question mark stays ordinary markdown", () => {
 });
 
 
+test("lettered suffixes keep distinct question ids", () => {
+	const segments = parseReplySegments("❓ **Q1a** - **部署**: (a) Docker;(b) systemd\n\n➡️ 推荐 (a)。隔离\n\n---\n\n❓ **Q1b** - **数据库**: (a) SQLite;(b) PostgreSQL\n\n➡️ 推荐 (b)。并发");
+	const questions = segments.flatMap(segment => segment.kind === "questions" ? segment.questions : []);
+	expect(questions.map(question => question.id)).toEqual(["Q1a", "Q1b"]);
+	expect(recommendedAnswers(questions)).toEqual({ Q1a: 0, Q1b: 1 });
+});
+
 test("question examples in fenced code remain source text", () => {
 	const text = "```markdown\n" + reply + "\n```";
 	expect(parseReplySegments(text)).toEqual([{ kind: "markdown", text }]);
