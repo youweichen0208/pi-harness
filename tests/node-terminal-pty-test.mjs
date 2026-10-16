@@ -29,6 +29,14 @@ await assert.rejects(service.execute('fixture',nodeId,'term',root,'exit 7',5),/e
 const terminal=conn.terminals.get('term');
 const ready=async()=>{for(let i=0;i<200;i++){if(terminal.promptReady)return;await new Promise(r=>setTimeout(r,10));}throw new Error('prompt not restored');};
 await ready();
+// #96: hand off immediately after manual input, before Bash emits its next prompt.
+// Do not call ready() here: execute must wait for the manual command to finish itself.
+await service.handle('fixture',{type:'node_request',action:'terminal_input',requestId:'manual-short',nodeId,terminalId:'term',conversationId:opened.conversationId,payload:{data:'sleep 0.2; printf "manual-finished\\n"\n'}});
+assert.equal(terminal.promptReady,false);
+const afterManual=await service.execute('fixture',nodeId,'term',root,'printf "agent-after-manual\\n"',5);
+assert.equal(afterManual.output,'agent-after-manual');
+assert(terminal.buffer.includes('manual-finished'));
+await ready();
 const cancellation=new AbortController();
 const cancelled=service.execute('fixture',nodeId,'term',root,'sleep 20',5,cancellation.signal);
 setTimeout(()=>cancellation.abort(),100);
@@ -47,5 +55,5 @@ await ready();
 assert(!terminal.buffer.includes('__PI_DONE_'));
 assert(!terminal.buffer.includes('__PI_BEGIN_'));
 assert(!terminal.welcome.includes('__pi_prompt='));
-console.log('PASS actual Bash PTY: UTF-8, output framing, exit code, abort, timeout, manual ownership');
+console.log('PASS actual Bash PTY: UTF-8, output framing, exit code, abort, timeout, manual-to-agent handoff (#96), manual ownership');
 }finally{service.dispose();client.end();for(const c of peers)c.end();for(const t of terms)t.kill();await new Promise(r=>ssh.close(r));rmSync(root,{recursive:true,force:true});}
