@@ -15,7 +15,7 @@ import { richCodeText } from "../rich-code-text";
 import { highlightLine } from "../hljs-lite";
 import { createRichCodeHighlighter } from "../rich-code-highlight";
 import { useT } from "../i18n";
-import { LuTableOfContents } from "react-icons/lu";
+import { LuHeading2, LuHeading3, LuTableOfContents } from "react-icons/lu";
 import { mountRichDocument, prepareRichDocument, readRichDocument, renderToc } from "../rich-markdown";
 import type { RichDocument, RichLabels } from "../rich-markdown";
 
@@ -64,6 +64,43 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		window.addEventListener("keydown", escape);
 		return () => window.removeEventListener("keydown", escape);
 	}, [wiki, floating]);
+	// Selection may survive blur, and IME/input need not move it. Track those events too.
+	const wikiPlaceholder = wiki ? t("wikiEmptyParagraph") : null;
+	useEffect(() => {
+		const editor = root.current;
+		if (!editor) return;
+		let composing = false;
+		const clear = () => editor.querySelectorAll("[data-wiki-placeholder]").forEach(el => el.removeAttribute("data-wiki-placeholder"));
+		const refresh = () => {
+			clear();
+			const selection = window.getSelection();
+			if (!wikiPlaceholder || readOnly || composing || document.activeElement !== editor || !selection?.isCollapsed) return;
+			const anchor = selection.anchorNode;
+			const paragraph = (anchor instanceof Element ? anchor : anchor?.parentElement)?.closest("p, div");
+			if (!paragraph || paragraph === editor || !editor.contains(paragraph) || paragraph.textContent
+				|| paragraph.closest("table, li, pre, [contenteditable=false], [data-rich-ui]")
+				|| paragraph.querySelector("p, div, table, ul, ol, pre, img, code, hr, input")) return;
+			paragraph.setAttribute("data-wiki-placeholder", wikiPlaceholder);
+		};
+		const compositionStart = () => { composing = true; clear(); };
+		const compositionEnd = () => { composing = false; refresh(); };
+		document.addEventListener("selectionchange", refresh);
+		editor.addEventListener("input", refresh);
+		editor.addEventListener("focus", refresh);
+		editor.addEventListener("blur", clear);
+		editor.addEventListener("compositionstart", compositionStart);
+		editor.addEventListener("compositionend", compositionEnd);
+		refresh();
+		return () => {
+			clear();
+			document.removeEventListener("selectionchange", refresh);
+			editor.removeEventListener("input", refresh);
+			editor.removeEventListener("focus", refresh);
+			editor.removeEventListener("blur", clear);
+			editor.removeEventListener("compositionstart", compositionStart);
+			editor.removeEventListener("compositionend", compositionEnd);
+		};
+	}, [wikiPlaceholder, readOnly]);
 	const [linkInput, setLinkInput] = useState<string | null>(null);
 	const linkRange = useRef<Range | null>(null), imageRange = useRef<Range | null>(null);
 	const imageInput = useRef<HTMLInputElement>(null);
@@ -80,10 +117,6 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		const changed = () => {
 			const selection = window.getSelection();
 			if (selection?.rangeCount && root.current?.contains(selection.anchorNode) && root.current.contains(selection.focusNode)) savedRange.current = selection.getRangeAt(0).cloneRange();
-			root.current?.querySelectorAll("[data-wiki-placeholder]").forEach(el => el.removeAttribute("data-wiki-placeholder"));
-			const anchor = selection?.anchorNode;
-			const paragraph = (anchor instanceof Element ? anchor : anchor?.parentElement)?.closest("p, div");
-			if (wiki && paragraph && paragraph !== root.current && root.current?.contains(paragraph) && !paragraph.textContent?.trim() && !paragraph.querySelector("img, code")) paragraph.setAttribute("data-wiki-placeholder", t("wikiEmptyParagraph"));
 			const range = highlightSelection(); setCanHighlight(!!range);
 			if (!range) { setFloating(null); return; }
 			const rect = range.getBoundingClientRect();
@@ -609,7 +642,7 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		{uploading && <div className="fp-notice" role="status">{t("richImageUploading")}</div>}
 		{imageError && <div className="fp-notice" role="alert">{imageError}</div>}
 		{wiki && floating && linkInput === null && createPortal(<div ref={floatingToolbar} className="wiki-format-popover" role="toolbar" aria-label={t("richFormatToolbar")} style={{ left: floating.x, top: floating.y }} onMouseDown={e => e.preventDefault()}>
-			{[{ label: t("richBold"), action: "bold", icon: <FiBold /> }, { label: t("richItalic"), action: "italic", icon: <FiItalic /> }, { label: `${t("richHeading")} 2`, action: "formatBlock", argument: "h2", icon: <FiType /> }, { label: `${t("richHeading")} 3`, action: "formatBlock", argument: "h3", icon: <FiType /> }].map(tool => <button key={tool.label} aria-label={tool.label} title={tool.label} disabled={readOnly} onClick={() => command(tool.action, tool.argument)}>{tool.icon}</button>)}
+			{[{ label: t("richBold"), action: "bold", icon: <FiBold /> }, { label: t("richItalic"), action: "italic", icon: <FiItalic /> }, { label: t("richParagraph"), action: "formatBlock", argument: "p", icon: <FiType /> }, { label: `${t("richHeading")} 2`, action: "formatBlock", argument: "h2", icon: <LuHeading2 /> }, { label: `${t("richHeading")} 3`, action: "formatBlock", argument: "h3", icon: <LuHeading3 /> }].map(tool => <button key={tool.label} aria-label={tool.label} title={tool.label} disabled={readOnly} onClick={() => command(tool.action, tool.argument)}>{tool.icon}</button>)}
 			<button aria-label={t("wikiAddLink")} title={t("wikiAddLink")} disabled={readOnly} onClick={() => { linkRange.current = highlightSelection()?.cloneRange() ?? null; setLinkInput(""); }}><FiLink /></button><i />
 			{TEXT_HIGHLIGHT_COLORS.slice(0, 2).map(color => <button className={`fp-highlight-swatch fp-highlight-${color.name}`} key={color.name} aria-label={t(`richHighlight_${color.name}`)} title={t(`richHighlight_${color.name}`)} disabled={readOnly} onClick={() => toggleHighlight(color)}><span /></button>)}<i />
 			<button className="wiki-ask-selection" onClick={() => { wiki.ask(window.getSelection()?.toString() ?? ""); setFloating(null); }}>{t("wikiAskPi")}</button>
