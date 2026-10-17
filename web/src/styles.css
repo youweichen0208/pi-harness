@@ -7721,7 +7721,8 @@ span.msg-editor-hint svg {
 	border: 0;
 	border-top: 1px solid var(--border);
 }
-.fp-markdown table {
+/* Document tables can live inside .msg-text; keep chat sizing from overriding them. */
+.fp-markdown .md table {
 	display: block;
 	/* Shrink the scroll box to the grid; 100% leaves blank space after short rows. */
 	width: fit-content;
@@ -11530,6 +11531,15 @@ pre.wiki-mermaid-source-hidden > .wiki-mermaid-preview { border-bottom: 0; margi
 .wiki-prose .fp-markdown .md a { color: var(--accent); text-underline-offset: 3px; text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent); }
 
 .wiki-prose .fp-markdown .md tbody tr { background: transparent; }
+/* Empty template tables (fresh /table inserts, no cell content yet) fill the
+   prose width with evenly distributed columns instead of leaving a large blank
+   area on the right; any content restores the shrink-to-fit scroll box (77ad670). */
+.fp-markdown .md table.rich-table-empty,
+.wiki-prose .fp-markdown .md table.rich-table-empty,
+.design-workspace .fp-markdown table.rich-table-empty { display: table; width: 100%; max-width: 100%; }
+.fp-markdown .md table.rich-table-empty th, .fp-markdown .md table.rich-table-empty td,
+.wiki-prose .fp-markdown .md table.rich-table-empty th, .wiki-prose .fp-markdown .md table.rich-table-empty td,
+.design-workspace .fp-markdown table.rich-table-empty th, .design-workspace .fp-markdown table.rich-table-empty td { min-width: 0; }
 @media (max-width: 850px) {
 	.wiki-breadcrumb { display: flex; min-width: 0; }
 	.wiki-breadcrumb .wiki-path-parent, .wiki-breadcrumb > b { display: none; }

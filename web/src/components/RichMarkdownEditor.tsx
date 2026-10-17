@@ -169,6 +169,15 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		root.current.querySelectorAll<HTMLElement>("p").forEach(p => p.classList.toggle("wiki-added", [...wiki.added].some(line => line.trim() && p.textContent?.includes(line))));
 	}, [wiki?.added, value]);
 	useLayoutEffect(() => {
+		root.current?.querySelectorAll<HTMLTableElement>("table").forEach(table => {
+			// A table with no data-cell content is an empty template (fresh /table insert
+			// or fully cleared): stretch it across the prose width instead of leaving a
+			// large blank area to its right. Any content shrinks it back.
+			const empty = [...table.querySelectorAll("td")].every(cell => !cell.textContent?.trim() && !cell.querySelector("img, video, audio"));
+			table.classList.toggle("rich-table-empty", empty);
+		});
+	}, [value]);
+	useLayoutEffect(() => {
 		if (readOnly) closeMenu();
 		root.current?.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach((input) => { input.disabled = readOnly; });
 	}, [readOnly, value]);

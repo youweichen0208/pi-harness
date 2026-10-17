@@ -8,7 +8,7 @@ const browser = await chromium.launch({ executablePath: CHROME_PATH || chromium.
 try {
 	const page = await browser.newPage();
 	const table = columns => `<table><thead><tr>${Array.from({ length: columns }, (_, i) => `<th>列 ${i + 1}</th>`).join('')}</tr></thead><tbody>${'<tr>' + '<td><br></td>'.repeat(columns) + '</tr>'}</tbody></table>`;
-	await page.setContent(`<div class="design-workspace"><div class="wiki-prose"><div class="fp-markdown"><div class="md fp-rich-document" contenteditable="true"><div class="rich-block">${table(3)}</div><div class="rich-block">${table(12)}</div></div></div></div></div>`);
+	await page.setContent(`<div class="design-workspace msg-text"><div class="wiki-prose"><div class="fp-markdown"><div class="md fp-rich-document" contenteditable="true"><div class="rich-block">${table(3)}</div><div class="rich-block">${table(12)}</div></div></div></div></div>`);
 	await page.addStyleTag({ content: readFileSync(new URL('../web/src/styles.css', import.meta.url), 'utf8') });
 	await page.addStyleTag({ content: '.design-workspace { display: block; width: 760px; }' });
 	for (const wiki of [true, false]) {
