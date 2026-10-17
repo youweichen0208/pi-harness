@@ -1,15 +1,15 @@
 import { Type } from "typebox";
 import type { ExtensionFactory, ContextEvent, SessionEntry, AgentBeforeSettleEvent } from "@earendil-works/pi-coding-agent";
-import { PLAN_REMINDER_TYPE, editableState, latestPlan, snapshotFromDetails, transition } from "./state.js";
+import { PLAN_REMINDER_TYPE, editableState, latestPlan, snapshotFromDetails, transition, withPlanDefaults } from "./state.js";
 import { TOOL_TEXT_CONTINUE_PROMPT } from "../tool-text.js";
 
 const string = (maxLength: number) => Type.String({ minLength: 1, maxLength });
 export const planParameters = Type.Object({
 	action: Type.Union([Type.Literal("create"), Type.Literal("update")]),
 	planId: Type.Optional(string(128)), expectedRevision: Type.Optional(Type.Integer({ minimum: 1 })),
-	title: string(80), status: Type.Union([Type.Literal("active"), Type.Literal("completed"), Type.Literal("cancelled"), Type.Literal("failed")]),
+	title: string(80), status: Type.Optional(Type.Union([Type.Literal("active"), Type.Literal("completed"), Type.Literal("cancelled"), Type.Literal("failed")], { description: "Defaults to active on create; omitted on update inherits the saved status." })),
 	steps: Type.Array(Type.Object({ id: string(64), title: string(80), detail: Type.Optional(string(500)) }), { minItems: 1, maxItems: 16, description: "Required for BOTH create and update, including completion. Send every step with its id, title and detail; never omit unchanged steps." }),
-	currentStepId: Type.Union([string(64), Type.Null()], { description: "Current step for active plans; terminal statuses clear it automatically." }), completedStepIds: Type.Array(string(64), { maxItems: 16, uniqueItems: true, description: "Completed step IDs. Explicit status completed completes all submitted steps; cancelled/failed preserve this list." }),
+	currentStepId: Type.Optional(Type.Union([string(64), Type.Null()], { description: "Current step for active plans; terminal statuses clear it automatically. Optional: defaults to null on create and inherits the saved value on update." })), completedStepIds: Type.Optional(Type.Array(string(64), { maxItems: 16, uniqueItems: true, description: "Completed step IDs. Explicit status completed completes all submitted steps; cancelled/failed preserve this list. Optional: defaults to empty on create and inherits the saved list on update." })),
 	completionCriteria: Type.Optional(Type.String({ maxLength: 240, description: "Optional completion criteria. Omit on create for no criteria; omit on update to preserve saved criteria. An empty string clears them." })), changeSummary: Type.Optional(string(240)),
 });
 
@@ -21,7 +21,7 @@ export function restorePlanContext(messages: ContextEvent["messages"], branch: r
 	const visibleCall = messages.some(message => message.role === "assistant" && message.content.some(block => {
 		if (block.type !== "toolCall" || block.name !== "plan" || block.id !== toolCallId) return false;
 		try {
-			const args = block.arguments;
+			const args = withPlanDefaults(block.arguments, block.arguments?.action === "update" ? snapshot : undefined) as Record<string, unknown>;
 			const identity = args.action === "create" ? snapshot.revision === 1 : args.action === "update" && args.planId === snapshot.planId && args.expectedRevision === snapshot.revision - 1;
 			const state = args.completionCriteria === undefined ? { ...args, completionCriteria: args.action === "update" ? snapshot.completionCriteria : "" } : args;
 			return identity && JSON.stringify(editableState(state)) === JSON.stringify(editableState(snapshot));
@@ -83,7 +83,7 @@ const userText = (content: string | readonly { type: string; text?: string }[]):
 
 export const createPlanExtension = (): ExtensionFactory => pi => {
 	pi.registerTool({
-		name: "plan", label: "Plan", description: "Create or update a complete, versioned implementation plan on this session branch. Every call requires title, status, steps, currentStepId and completedStepIds, even when completing or only changing status. completionCriteria is optional: omit on create for no criteria, omit on update to preserve saved criteria, or send an empty string to clear them. Updates require the latest planId and expectedRevision. All other state fields are fully replaced, not partially patched. Explicit completed status completes all submitted steps and clears currentStepId; cancelled/failed only clear currentStepId. Ended plans require create.",
+		name: "plan", label: "Plan", description: "Create or update a complete, versioned implementation plan on this session branch. Every call requires title and steps, even when completing or only changing status. status, currentStepId and completedStepIds may be omitted: create defaults to active/null/none, update inherits the saved values. completionCriteria is optional: omit on create for no criteria, omit on update to preserve saved criteria, or send an empty string to clear them. Updates require the latest planId and expectedRevision. All other state fields are fully replaced, not partially patched. Explicit completed status completes all submitted steps and clears currentStepId; cancelled/failed only clear currentStepId. Ended plans require create.",
 		exposure: "model-only", executionMode: "sequential", defaultActive: false,
 		annotations: { readOnlyHint: true, openWorldHint: false },
 		promptSnippet: "Record and update a multi-step implementation plan.",

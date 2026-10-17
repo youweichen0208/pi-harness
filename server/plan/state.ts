@@ -62,19 +62,33 @@ function commandState(value: Record<string, unknown>): PlanState {
 		completedStepIds: value.status === "completed" ? state.steps.map(step => step.id) : state.completedStepIds };
 }
 
+/** Default-fill state fields a model may omit: create starts active with nothing
+ *  done, update inherits the matching active snapshot. Applied before validation so
+ *  an otherwise well-formed intent is not rejected by the SDK schema check. */
+export function withPlanDefaults(value: unknown, current?: PlanSnapshot): unknown {
+	if (!object(value) || !("action" in value) || !Array.isArray((value as { steps?: unknown }).steps)) return value;
+	const inherit = value.action === "update" && current?.status === "active" ? current : undefined;
+	const patch: Record<string, unknown> = {};
+	if (value.status === undefined) patch.status = inherit?.status ?? "active";
+	if (value.completedStepIds === undefined) patch.completedStepIds = inherit?.completedStepIds ?? [];
+	if (value.currentStepId === undefined) patch.currentStepId = inherit ? inherit.currentStepId : null;
+	return Object.keys(patch).length ? { ...value, ...patch } : value;
+}
+
 export function transition(value: unknown, current?: PlanSnapshot, newId: () => string = randomUUID): PlanSnapshot {
 	if (!object(value) || !["create", "update"].includes(String(value.action))) throw new Error("action must be create or update");
-	if (value.action === "update") {
-		const reason = !current ? "No plan exists on this branch" : current.status !== "active" ? "The latest plan has ended" : value.planId !== current.planId ? "planId does not match this branch's latest plan" : value.expectedRevision !== current.revision ? "expectedRevision is stale" : undefined;
+	const plan = withPlanDefaults(value, current) as Record<string, unknown>;
+	if (plan.action === "update") {
+		const reason = !current ? "No plan exists on this branch" : current.status !== "active" ? "The latest plan has ended" : plan.planId !== current.planId ? "planId does not match this branch's latest plan" : plan.expectedRevision !== current.revision ? "expectedRevision is stale" : undefined;
 		if (reason) throw new Error(`${reason}. ${!current || current.status !== "active" ? "Use create for a new plan." : "Use update with the current planId and expectedRevision and submit the full corrected plan."}\nCurrent editable state: ${current ? JSON.stringify({ action: current.status === "active" ? "update" : "create", planId: current.planId, expectedRevision: current.revision, ...editableState(current) }) : "none; use create"}`);
 	}
 	// Only inherit after verifying the active branch identity and revision above.
-	const state = commandState(value.completionCriteria === undefined
-		? { ...value, completionCriteria: value.action === "update" ? current!.completionCriteria : "" }
-		: value);
-	const changes = changesBetween(value.action === "update" ? current : undefined, state);
-	if (value.action === "create" && current?.status === "active") changes.unshift({ kind: "replaced", planId: current.planId, revision: current.revision, reason: "Replaced by a newly created plan" });
-	return { schemaVersion: 3, planId: value.action === "create" ? newId() : current!.planId, revision: value.action === "create" ? 1 : current!.revision + 1, ...state, changes };
+	const state = commandState(plan.completionCriteria === undefined
+		? { ...plan, completionCriteria: plan.action === "update" ? current!.completionCriteria : "" }
+		: plan);
+	const changes = changesBetween(plan.action === "update" ? current : undefined, state);
+	if (plan.action === "create" && current?.status === "active") changes.unshift({ kind: "replaced", planId: current.planId, revision: current.revision, reason: "Replaced by a newly created plan" });
+	return { schemaVersion: 3, planId: plan.action === "create" ? newId() : current!.planId, revision: plan.action === "create" ? 1 : current!.revision + 1, ...state, changes };
 }
 
 /** Validate and copy only known fields. Never forward arbitrary extension details. */

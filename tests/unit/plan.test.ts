@@ -57,7 +57,7 @@ test("explicit completion closes the current step and completes the checklist (#
 
 test("validation rejects invalid full states without changing previous state", () => {
 	const before = create(), unchanged = structuredClone(before);
-	for (const patch of [ { title: " " }, { title: "x".repeat(81) }, { completionCriteria: "x".repeat(241) }, { steps: [] }, { steps: Array(17).fill(input.steps[0]) }, { steps: [input.steps[0], input.steps[0]] }, { steps: [{ id: "x".repeat(65), title: "x" }] }, { steps: [{ id: "a", title: "x", detail: "x".repeat(501) }] }, { completedStepIds: ["missing"] }, { completedStepIds: ["b", "b"] }, { completedStepIds: ["a"] }, { currentStepId: "missing" }, { currentStepId: undefined }, { changeSummary: "x".repeat(241) } ]) expect(() => transition(update(before, patch), before)).toThrow();
+	for (const patch of [ { title: " " }, { title: "x".repeat(81) }, { completionCriteria: "x".repeat(241) }, { steps: [] }, { steps: Array(17).fill(input.steps[0]) }, { steps: [input.steps[0], input.steps[0]] }, { steps: [{ id: "x".repeat(65), title: "x" }] }, { steps: [{ id: "a", title: "x", detail: "x".repeat(501) }] }, { completedStepIds: ["missing"] }, { completedStepIds: ["b", "b"] }, { completedStepIds: ["a"] }, { currentStepId: "missing" }, { changeSummary: "x".repeat(241) } ]) expect(() => transition(update(before, patch), before)).toThrow();
 	expect(before).toEqual(unchanged);
 	for (const status of ["cancelled", "failed"]) expect(transition(update(before, { status, currentStepId: null }), before).status).toBe(status);
 });
@@ -67,6 +67,26 @@ test("currentStepId accepts the literal string \"null\" some providers hand the 
 	expect(created.currentStepId).toBeNull();
 	const done = transition(update(created, { status: "completed", completedStepIds: ["a", "b"], currentStepId: "null" }), created);
 	expect(done).toMatchObject({ status: "completed", currentStepId: null });
+});
+
+test("omitted status/currentStepId/completedStepIds default instead of failing", () => {
+	const created = transition({ action: "create", title: input.title, steps: input.steps }, undefined, () => "p1");
+	expect(created).toMatchObject({ status: "active", currentStepId: null, completedStepIds: [], revision: 1 });
+	expect(planSnapshot(created)).toEqual(created);
+	const started = transition(update(created, { currentStepId: "a" }), created);
+	expect(started).toMatchObject({ status: "active", currentStepId: "a", completedStepIds: [] });
+	const progressed = transition(update(started, { currentStepId: "b", completedStepIds: ["a"] }), started);
+	const bare = { action: "update" as const, planId: progressed.planId, expectedRevision: progressed.revision, title: progressed.title, steps: progressed.steps };
+	// Update with all three omitted inherits the saved active state unchanged.
+	const inherited = transition(bare, progressed);
+	expect(inherited).toMatchObject({ status: "active", currentStepId: "b", completedStepIds: ["a"] });
+	// Explicit completion with omitted currentStepId/completedStepIds still closes atomically.
+	const done = transition({ ...bare, status: "completed" }, progressed);
+	expect(done).toMatchObject({ status: "completed", currentStepId: null, completedStepIds: ["a", "b"] });
+	expect(planSnapshot(inherited)).toEqual(inherited);
+	expect(planSnapshot(done)).toEqual(done);
+	// Without steps there is nothing to default; validation still rejects.
+	expect(() => transition({ action: "create", title: input.title }, undefined)).toThrow(/Invalid plan status|steps/);
 });
 
 test("conflicts supply complete branch-local editable correction; ended plans require create", () => {
