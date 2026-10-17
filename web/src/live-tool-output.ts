@@ -10,3 +10,15 @@ export function mergeLiveToolOutput(previous: string, update: OutputUpdate): str
 		? `…[前 ${text.length - MAX_LIVE_OUTPUT} 字符已省略]…\n${text.slice(-MAX_LIVE_OUTPUT)}`
 		: text;
 }
+
+const MAX_LIVE_LINE = 300;
+
+/** Last non-empty line of (partial) tool output — the running command's progress ticker. */
+export function latestOutputLine(text: string): string {
+	const lines = text.replace(/\r\n/g, "\n").split("\n");
+	for (let i = lines.length - 1; i >= 0; i--) {
+		const line = lines[i].trim();
+		if (line) return line.length > MAX_LIVE_LINE ? `…${line.slice(-MAX_LIVE_LINE)}` : line;
+	}
+	return "";
+}

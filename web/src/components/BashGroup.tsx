@@ -4,13 +4,28 @@ import { commandReading, consecutiveAttempts } from "../command-reading";
 import { useT, useI18n } from "../i18n";
 import { WorkspacePathContext } from "../workspace-context";
 import { bashCommand } from "../bash-steps";
-import { commandPresentation, isLikelyErrorLine, compactCommandLabel, commandDuration } from "../bash-presentation";
+import { commandPresentation, isLikelyErrorLine, compactCommandLabel, commandDuration, elapsedLabel } from "../bash-presentation";
+import { latestOutputLine } from "../live-tool-output";
 import type { UiToolCallBlock } from "../types";
 import { toolDuration, type ToolView } from "./ToolCallBlock";
 import { ToolOutputDownload } from "./ToolOutputDownload";
 
 type Item = { messageId?: string; block: UiToolCallBlock; view: ToolView };
 const seconds = (ms: number) => ms < 1000 ? "" : commandDuration(ms);
+
+/** Seconds since mount while `active` — live elapsed timer for running rows. */
+function useLiveSeconds(active: boolean) {
+	const started = useRef(Date.now());
+	const [elapsed, setElapsed] = useState(0);
+	useEffect(() => {
+		if (!active) return;
+		const update = () => setElapsed(Math.floor((Date.now() - started.current) / 1000));
+		update();
+		const timer = window.setInterval(update, 1000);
+		return () => window.clearInterval(timer);
+	}, [active]);
+	return elapsed;
+}
 /** Run state of one call; shared with the process group header. */
 export function stateOf(view: ToolView): "ok" | "err" | "run" | "empty" {
 	if (view.result) return view.result.isError ? "err" : "ok";
@@ -90,6 +105,13 @@ function BashRow({ block, view, onKill, revealed, messageId, attempts, historica
 	const commandLines = display.command.trimEnd().split(/\r?\n/);
 	const output = view.result?.content.map((part) => part.type === "text" && typeof part.text === "string" ? part.text : "").join("") ?? view.liveOutput ?? "";
 	const lines = output ? output.replace(/\r\n/g, "\n").replace(/\n$/, "").split("\n") : [];
+	// issue #106: a running command shows its elapsed time and latest output
+	// line right on the row, and tails (not heads) the output when expanded.
+	const liveSeconds = useLiveSeconds(state === "run");
+	const runningStats = liveSeconds > 0 ? `${t("running")} ${elapsedLabel(liveSeconds)}` : t("running");
+	const liveLine = state === "run" && !open ? latestOutputLine(view.liveOutput ?? "") : "";
+	const shownLines = all ? lines : state === "run" ? lines.slice(-6) : lines.slice(0, 6);
+	const lineOffset = !all && state === "run" ? lines.length - shownLines.length : 0;
 	const details = view.result?.details as { exitCode?: number; fullOutputPath?: string; truncation?: { truncated?: boolean } } | undefined;
 	const exitCode = details?.exitCode ?? view.status?.exitCode;
 	const truncated = details?.fullOutputPath || details?.truncation?.truncated || view.result?.content.some((part) => part.type === "text" && part.truncated);
@@ -101,13 +123,14 @@ function BashRow({ block, view, onKill, revealed, messageId, attempts, historica
 			<span className={`bash-state ${state}`} aria-label={t(state === "run" ? "running" : state === "err" ? "error" : state === "empty" && view.abandoned ? "toolNotExecuted" : "done")}>{state === "run" ? <i className="thinking-spinner" /> : state === "err" ? "✗" : state === "empty" ? "−" : "✓"}</span>
 			<span className="bash-readable-title">{reading.title}</span>{attempts && <span className="bash-attempt-count">{t("commandAttempts", { n: attempts })}</span>}{reading.title !== compactCommandLabel(reading.command) && <code className="bash-command-secondary">{reading.command}</code>}
 			{commandLines.length > 1 && <span className="bash-extra-lines">{t("bashExtraLines", { n: commandLines.length - 1 })}</span>}
-			{compact ? <span className="bash-row-stats">{state === "run" ? t("running") : state === "empty" && view.abandoned ? t("toolNotExecuted") : state === "err" && exitCode !== undefined ? `exit ${exitCode}` : (toolDuration(view) ?? 0) >= 100 ? commandDuration(toolDuration(view)!) : t("toolLineCount", { n: lines.length })}</span> : <span className="bash-row-stats">{state === "run" ? t("running") : state === "empty" && view.abandoned ? t("toolNotExecuted") : exitCode !== undefined && state === "err" ? t("bashExitCode", { n: exitCode }) : t("toolLineCount", { n: lines.length })}{toolDuration(view) !== undefined && seconds(toolDuration(view)!) ? ` · ${seconds(toolDuration(view)!)}` : ""}</span>}
+			{liveLine && <span className="bash-live-line" title={liveLine}>{liveLine}</span>}
+			{compact ? <span className="bash-row-stats">{state === "run" ? runningStats : state === "empty" && view.abandoned ? t("toolNotExecuted") : state === "err" && exitCode !== undefined ? `exit ${exitCode}` : (toolDuration(view) ?? 0) >= 100 ? commandDuration(toolDuration(view)!) : t("toolLineCount", { n: lines.length })}</span> : <span className="bash-row-stats">{state === "run" ? runningStats : state === "empty" && view.abandoned ? t("toolNotExecuted") : exitCode !== undefined && state === "err" ? t("bashExitCode", { n: exitCode }) : t("toolLineCount", { n: lines.length })}{toolDuration(view) !== undefined && seconds(toolDuration(view)!) ? ` · ${seconds(toolDuration(view)!)}` : ""}</span>}
 			{open ? <FiChevronDown /> : <FiChevronRight />}
 		</button>
 		{open && <div className="bash-row-body">
 			{display.directory && <div className="bash-row-directory">{t("bashGroupCwd", { path: display.directory })}</div>}
 			<pre className="bash-full-command">{command}</pre>
-			{lines.length > 0 && <div className="bash-numbered-output" data-msg-id={view.result?.id}>{(all ? lines : lines.slice(0, 6)).map((line, i) => <div key={i} className={`bash-numbered-line${isLikelyErrorLine(line) ? " error" : /(?:\bPASS\b|\bpassed\b|\bsummary\b)/i.test(line) ? " important" : ""}`}><span aria-hidden="true">{i + 1}</span><code>{line || " "}</code></div>)}</div>}
+			{lines.length > 0 && <div className="bash-numbered-output" data-msg-id={view.result?.id}>{shownLines.map((line, i) => <div key={lineOffset + i} className={`bash-numbered-line${isLikelyErrorLine(line) ? " error" : /(?:\bPASS\b|\bpassed\b|\bsummary\b)/i.test(line) ? " important" : ""}`}><span aria-hidden="true">{lineOffset + i + 1}</span><code>{line || " "}</code></div>)}</div>}
 			{lines.length > 6 && <button type="button" className="bash-group-more" onClick={() => setAll(!all)}>{all ? t("collapseCode") : t("bashRemainingLines", { n: lines.length - 6 })}</button>}
 			<div className="bash-row-actions">
 				<button type="button" onClick={() => void copy("command")}>{t(copied === "command" ? "copied" : "bashCopyCommand")}</button>
