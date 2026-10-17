@@ -24,8 +24,10 @@ export function installWikiRoutes(app: Express, service: () => AgentService, dat
 					if (conversationId !== cs.conversationId || service().quiesceInfo().quiesced) throw new Error("Conversation unavailable");
 					// Interrupting a running request is an explicit user decision made in
 					// the browser (confirm → abort → wait for settle); the route itself
-					// refuses to silently strand a streaming conversation as a zombie.
-					if (session.isStreaming) throw new Error("Wait for the current request to finish");
+					// refuses to silently strand a streaming Wiki conversation as a
+					// zombie. Entering Wiki mode from a streaming NORMAL conversation
+					// stays allowed — it keeps running in the background.
+					if (cs.activeIsWiki && session.isStreaming) throw new Error("Wait for the current request to finish");
 					// The path is optional: entering Wiki mode from the top bar without a
 					// document creates a blank conversation; opening a document validates it.
 					if (path !== undefined && path !== null) {

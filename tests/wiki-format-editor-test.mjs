@@ -12,7 +12,7 @@ writeFileSync(join(base, 'note.md'), '# Code\n\n```java\npublic class Original {
 let server, browser;
 try {
 	assert.equal(await portUp(port), false);
-	server = spawn(process.execPath, ['dist/server/index.js'], { env: { ...process.env, PORT: String(port), PI_WEB_TOKEN: '', PI_WEB_CWD: base, PI_WEB_DATA_DIR: join(base, 'data'), PI_CODING_AGENT_DIR: join(base, 'agent') }, stdio: 'ignore' });
+	server = spawn(process.execPath, ['dist/server/index.js'], { env: { ...process.env, PORT: String(port), PI_WEB_TOKEN: '', PI_WEB_PKG_ROOT: process.cwd(), PI_WEB_CWD: base, PI_WEB_DATA_DIR: join(base, 'data'), PI_CODING_AGENT_DIR: join(base, 'agent') }, stdio: 'ignore' });
 	for (let i = 0; i < 100 && !await portUp(port); i++) await new Promise(r => setTimeout(r, 100));
 	browser = await chromium.launch({ executablePath: CHROME_PATH || chromium.executablePath() });
 	const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
@@ -67,7 +67,9 @@ try {
 	check(source.includes('Before <mark style="background-color: #fff3a3">marked words</mark> after'), 'selected background persists to disk as mark HTML');
 	await page.reload();
 	await page.locator('.setup-modal .modal-close').click();
-	await page.locator('.file-name', { hasText: 'note.md' }).click();
+	// Wiki mode restores after reload (ADR-0002) — the main file tree is
+	// unmounted there; the same document reopens in the restored view.
+	await page.locator('.wiki-view:not(.hidden)').waitFor();
 	await editor.locator('p').last().waitFor();
 	check(await editor.locator('p').last().locator('span').evaluateAll(spans => spans.some(span => span.style.backgroundColor === 'rgb(255, 243, 163)')), 'highlight survives reload');
 	await selectWords(); await page.getByRole('button', { name: '绿色背景', exact: true }).click();

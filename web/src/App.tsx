@@ -397,17 +397,32 @@ export function App() {
 	 * 携带当前文档的当前文件 chip。调用方已处理运行中任务的确认。 */
 	const enterWiki = useCallback(async (path: string | null) => {
 		const current = wikiCurrent.current;
-		if (!current.cwd || !current.conversationId || switching) return;
+		// Destructured locals keep the non-undefined narrowing inside the closure below.
+		const wikiCwd = current.cwd, activeId = current.conversationId;
+		if (!wikiCwd || !activeId || switching) return;
+		const create = (conversationId: string) => wikiRequest<{ conversationId: string }>(wikiCwd, "new-conversation", { path: path ?? undefined, conversationId });
 		try {
-			const result = await wikiRequest<{ conversationId: string }>(current.cwd, "new-conversation", { path: path ?? undefined, conversationId: current.conversationId });
-			if (wikiCurrent.current.cwd !== current.cwd) return; // 期间切换了工作区
-			const anchor = view === "wiki" && wikiFileRequest ? wikiNormalAnchor.current : { cwd: current.cwd, conversationId: current.conversationId };
+			// The exit/switch snapshot can lag behind a fast re-entry: the cached
+			// conversation id may already be gone server-side. One retry with the
+			// (by then settled) current id covers that race.
+			let result: { conversationId: string };
+			try {
+				result = await create(current.conversationId);
+			} catch (error) {
+				if (!(error instanceof Error) || !/Conversation unavailable/.test(error.message)) throw error;
+				const refreshed = wikiCurrent.current;
+				if (refreshed.cwd !== wikiCwd || !refreshed.conversationId || refreshed.conversationId === activeId) throw error;
+				result = await create(refreshed.conversationId);
+			}
+			if (wikiCurrent.current.cwd !== wikiCwd) return; // 期间切换了工作区
+			const anchor = view === "wiki" && wikiFileRequest ? wikiNormalAnchor.current : { cwd: wikiCwd, conversationId: activeId };
 			wikiNormalAnchor.current = anchor;
-			if (path) { try { localStorage.setItem(WIKI_WORKSPACE_KEY, JSON.stringify({ cwd: current.cwd, path })); } catch { /* best effort */ } }
+			if (path) { try { localStorage.setItem(WIKI_WORKSPACE_KEY, JSON.stringify({ cwd: wikiCwd, path })); } catch { /* best effort */ } }
 			setDatabaseOpen(false);
+			setDrawer(null);
 			setWikiChatOpen(!window.matchMedia("(max-width: 900px)").matches);
-			setWikiFileRequest({ cwd: current.cwd, conversationId: result.conversationId, path: path ?? "", token: randomUuid() });
-			wikiPersist({ cwd: current.cwd, conversationId: result.conversationId, path, anchor });
+			setWikiFileRequest({ cwd: wikiCwd, conversationId: result.conversationId, path: path ?? "", token: randomUuid() });
+			wikiPersist({ cwd: wikiCwd, conversationId: result.conversationId, path, anchor });
 			setView("wiki");
 		} catch (e) { pushNotice("error", (e as Error).message); }
 	}, [switching, view, wikiFileRequest, pushNotice, wikiPersist]);

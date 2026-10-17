@@ -1750,6 +1750,9 @@ body.panel-resizing {
 	flex: 1;
 	width: 100%;
 }
+/* 桌面端也提供目录侧栏开关（旧弹窗靠 .wiki-document-dialog 覆盖，视图模式下由此处提供）。 */
+.view-pane.wiki-view .wiki-mobile-tools { display: flex; align-items: center; flex: none; padding: 0; gap: 8px; border: 0; }
+.view-pane.wiki-view .wiki-mobile-tools button { padding: 3px; border: 0; background: transparent; }
 
 /* 插件视图：容器只给布局，内容完全由插件自己的 mount() 填充。
    .broken = 服务端激活失败，tab 置灰提示。 */

@@ -290,6 +290,14 @@ export class ClientSession {
 		return conv;
 	}
 	/** Runtime of the active conversation. */
+	/** The ACTIVE conversation is an ephemeral Wiki conversation? The
+	 * new-conversation route uses this to reject only document switches away
+	 * from a still-streaming Wiki chat — entering Wiki mode from a running
+	 * normal conversation stays allowed (it keeps running in the background). */
+	get activeIsWiki(): boolean {
+		return this.conv.wiki ?? false;
+	}
+
 	get runtime(): AgentSessionRuntime {
 		return this.conv.runtime;
 	}
