@@ -1737,6 +1737,20 @@ body.panel-resizing {
 	display: none;
 }
 
+/* Wiki mode 全屏视图（ADR-0002）：工具栏头 + 「文档工作台 | 临时会话」两列。 */
+.view-pane.wiki-view {
+	flex-direction: column;
+}
+.view-pane.wiki-view .wiki-view-header {
+	width: 100%;
+	border-bottom: 1px solid var(--border);
+	background: var(--bg-elev);
+}
+.view-pane.wiki-view .wiki-modal-body {
+	flex: 1;
+	width: 100%;
+}
+
 /* 插件视图：容器只给布局，内容完全由插件自己的 mount() 填充。
    .broken = 服务端激活失败，tab 置灰提示。 */
 .plugin-view {

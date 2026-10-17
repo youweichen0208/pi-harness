@@ -2102,8 +2102,10 @@ export class ClientSession {
 			}
 		}
 		// Wiki opens a fresh session for each document. Retire the outgoing idle
-		// runtime after success; temporary Wiki history is discarded with it.
-		const replaceActive = fresh && active && !active.session.isStreaming && active.terminals.list().length === 0 ? active : null;
+		// WIKI runtime after success; temporary Wiki history is discarded with it.
+		// A normal conversation must survive: exiting Wiki mode switches back to
+		// the conversation that was active when the user entered.
+		const replaceActive = fresh && active && active.wiki && !active.session.isStreaming && active.terminals.list().length === 0 ? active : null;
 		// Cap is per project — conversations of other projects keep their own
 		// lists and don't consume this project's slots.
 		const openInProject = [...this.convs.values()].filter(

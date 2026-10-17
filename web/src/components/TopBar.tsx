@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import { useEffect, useState } from "react";
 import {
 	FiSidebar,
+	FiBookOpen,
 	FiDatabase,
 	FiGitBranch,
 	FiGlobe,
@@ -55,8 +56,8 @@ interface TopBarProps {
 		}) => void;
 		restart: (id: string) => void;
 	};
-	view: "chat" | "terminal" | "git" | "nodes" | `plugin:${string}`;
-	onViewChange: (view: "chat" | "terminal" | "git" | "nodes" | `plugin:${string}`) => void;
+	view: "chat" | "wiki" | "terminal" | "git" | "nodes" | `plugin:${string}`;
+	onViewChange: (view: "chat" | "wiki" | "terminal" | "git" | "nodes" | `plugin:${string}`) => void;
 	/** Installed optional plugins (<dataDir>/plugins) — one view tab each. */
 	plugins: { id: string; name: string; icon?: string; description?: string; error?: string }[];
 	/** Open a side panel as a mobile drawer ("left" = history, "right" = files). */
@@ -240,6 +241,18 @@ export function TopBar({
 					>
 						<FiMessageSquare />
 						<span>{t("chat")}</span>
+					</button>
+					<button
+						type="button"
+						role="tab"
+						aria-label={t("wikiMode")}
+						title={t("wikiMode")}
+						aria-selected={view === "wiki"}
+						className={`wiki-view-tab ${view === "wiki" ? "active" : ""}`}
+						onClick={() => onViewChange(view === "wiki" ? "chat" : "wiki")}
+					>
+						<FiBookOpen />
+						<span>{t("wikiMode")}</span>
 					</button>
 					<button
 						type="button"

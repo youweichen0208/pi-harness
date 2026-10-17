@@ -22,9 +22,16 @@ export function installWikiRoutes(app: Express, service: () => AgentService, dat
 			switch (action) {
 				case "new-conversation": {
 					if (conversationId !== cs.conversationId || service().quiesceInfo().quiesced) throw new Error("Conversation unavailable");
-					// Validate the target before leaving the current native session.
-					if (typeof path !== "string") throw new Error("Invalid path");
-					if (!statSync(wikiPath(cwd, path)).isFile()) throw new Error("Not a file");
+					// Interrupting a running request is an explicit user decision made in
+					// the browser (confirm → abort → wait for settle); the route itself
+					// refuses to silently strand a streaming conversation as a zombie.
+					if (session.isStreaming) throw new Error("Wait for the current request to finish");
+					// The path is optional: entering Wiki mode from the top bar without a
+					// document creates a blank conversation; opening a document validates it.
+					if (path !== undefined && path !== null) {
+						if (typeof path !== "string") throw new Error("Invalid path");
+						if (!statSync(wikiPath(cwd, path)).isFile()) throw new Error("Not a file");
+					}
 					if (!valid()) throw new Error("Conversation changed");
 					if (!await cs.newChat(true, true)) throw new Error("Could not create conversation");
 					if (cs.cwd !== cwd || cs.switchingWorkspace || cs.conversationId === conversationId) throw new Error("Could not create conversation");

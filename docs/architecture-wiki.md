@@ -1,36 +1,40 @@
-# Wiki 文档弹窗
+# Wiki 文档模式（Wiki mode）
 
-点击文件树、全局搜索或聊天文件链接中的 `.md` / `.markdown`，在当前界面上方打开同一个可编辑文档弹窗。桌面宽 92vw（最大 1440px）、高 90dvh，小屏全屏；顶栏提供文件名、保存状态、最近改动、全屏／退出全屏和关闭。文件栏默认收起，按需展开。格式工具栏、源码切换、搜索、双链、证据只读与改动记录继续复用。
+Wiki 是替换主视图的全屏视图（`ViewName = "wiki"`），顶栏 normal/wiki 切换；点击文件树、全局搜索或聊天文件链接中的 `.md` / `.markdown` 直接进入（ADR-0002）。`.app` 根节点加 `wiki-mode` class，顶栏只保留品牌、normal/wiki 视图切换与窗口控件；左侧项目栏和右侧文件栏卸载。视图内为一条工具栏头（`#wiki-modal-toolbar`，WikiWorkbench 的面包屑与操作 portal 进来）+ 「文档工作台 | 临时会话」两列布局，复用弹窗时代的 `.wiki-modal-header` / `.wiki-modal-body` / `.wiki-agent-chat` 样式。
 
-`App.tsx` 独立维护 cwd、原 conversationId、路径及导航 token，不切换主视图，不创建临时会话。弹窗右侧默认显示 400px Agent Chat，可拖动调宽、收起，小屏使用可展开的覆盖式面板。`ChatDock` 通过固定 portal 容器移动原有 MessageList 和 ChatInput，始终只挂载一份消息、草稿和附件状态，回复正常更新；关闭弹窗将原实例移回并恢复进入前的聊天滚动位置。服务端原有 Wiki prompt/new-conversation 接口保留兼容，但文档弹窗不调用它们。
+**临时 Wiki 会话（ephemeral wiki conversation，见 GLOSSARY.md）**：进入 Wiki mode 或切换文档时，前端经 `POST /api/wiki`（action `new-conversation`）调用 `cs.newChat(true, true)` 创建一个新会话并置为 active——服务端用 `SessionManager.inMemory`（不落盘、无 transcript 文件），`conv.wiki` 标记，不进入左侧会话列表与会话树（运行中的 Wiki 任务除外，便于停止后台运行）。发送沿用当前文件 chip 机制：发送前排空保存、版本校验、同路径去重、512 KiB 上限；选区「问 pi」与文件栏引用均回填该临时会话的输入框。切换文档或退出 Wiki mode 时会话被无条件删除（草稿纸语义，问答历史不保留），运行中任务须先经确认框中断（「取消 / 中断并继续」，abort 后等快照 settle，30 秒兜底）。`new-conversation` 路由在 streaming 时直接拒绝，防止产生僵尸后台会话；`createChat` 的 `replaceActive` 只回收 wiki 会话，普通对话进入 Wiki 后保留在运行列表，作为退出时的回切锚点。
 
-## 保存、关闭与原聊天引用
+**退出与恢复**：退出（顶栏切回 normal 或视图头关闭按钮）先经脏草稿守卫，再 `switch_conversation` 回进入前的普通对话锚点（锚点已被清理时 `set_cwd` 回其工作区），闲置的临时会话随即被服务端移除。顶栏重进 Wiki mode 回到上次 Wiki 的工作区与文档（localStorage `pi-wiki-workspace`），会话永远是新建的。normal 视图切项目不影响 Wiki 的工作区记忆；Wiki 任务与 normal 对话互不阻塞（多对话并发）。页面刷新经 sessionStorage `pi-wiki-view`（视图、文档、会话 ID、锚点）恢复：快照的 active 会话仍匹配时重进 Wiki mode 并挂回同一临时会话，否则清除记录回到 normal 视图。
 
-`WikiWorkbench` 继续通过 `useWikiAutosave` 在停止输入 800ms 后保存；写入以字节 SHA-256 比较版本，保存确认只更新基线，不覆盖新输入。加载、原聊天运行及恢复操作期间保持编辑保护，证据快照继续只读。关闭按钮、遮罩与 Escape 都经过同一导航守卫：先排空保存，失败则保留弹窗，可继续编辑、重试或明确放弃。冲突必须先重载或保留自己的版本。切换文档也经过守卫。
+`App.tsx` 维护进入前锚点（`wikiNormalAnchor`）、中断确认（`wikiInterrupt`）、settle 等待（`settleWaiters`）与恢复记录；`ChatDock` 继续负责把唯一的聊天实例（MessageList + ChatInput）搬进 Wiki 视图右侧或数据库弹窗。`WikiDocumentModal` 仅剩数据库弹窗使用。
 
-选区「问 pi」捕获点击时的文字与文件路径，保存成功后回调 App，展开右侧 Agent Chat 并追加到原聊天输入末尾，保留已有草稿和附件、聚焦但不发送，文档弹窗保持打开；引用操作本身不额外附加整篇文档。保存失败不转移引用。请求带唯一 ID、cwd 和原 conversationId，App 与 ChatInput 都检查归属，ChatInput 消费 ID 去重；卸载或文档读取序号变化后丢弃迟到结果。工作区或会话变化清除待传引用。
+## 保存、关闭与会话引用
 
-右栏输入框自动显示当前 Wiki 文档的 `@文件名` chip，切换文档时替换，关闭弹窗后恢复普通文件预览上下文。Wiki 独立注册当前文件读取器，避免后台预览覆盖；发送时沿用完整编辑器快照、512 KiB 上限与同路径附件去重，保存成功后读取最新正文和版本。可手动移除 chip，重新打开文档恢复；无文本的媒体不产生 chip。选区「问 pi」仍只追加选中文字，整篇文档是否携带由当前文件 chip 决定。
+`WikiWorkbench` 继续通过 `useWikiAutosave` 在停止输入 800ms 后保存；写入以字节 SHA-256 比较版本，保存确认只更新基线，不覆盖新输入。加载、会话运行及恢复操作期间保持编辑保护，证据快照继续只读。退出与切换文档经过导航守卫：先排空保存，失败则保留现场，可继续编辑、重试或明确放弃。冲突必须先重载或保留自己的版本。
+
+选区「问 pi」捕获点击时的文字与文件路径，保存成功后回调 App，展开右侧 Agent Chat 并追加到临时 Wiki 会话的输入末尾，保留已有草稿和附件、聚焦但不发送，Wiki 视图保持打开；引用操作本身不额外附加整篇文档。保存失败不转移引用。请求带唯一 ID、cwd 和会话 conversationId，App 与 ChatInput 都检查归属，ChatInput 消费 ID 去重；卸载或文档读取序号变化后丢弃迟到结果。工作区或会话变化清除待传引用。
+
+右栏输入框自动显示当前 Wiki 文档的 `@文件名` chip，切换文档时替换，退出 Wiki mode 后恢复普通文件预览上下文。Wiki 独立注册当前文件读取器，避免后台预览覆盖；发送时沿用完整编辑器快照、512 KiB 上限与同路径附件去重，保存成功后读取最新正文和版本。可手动移除 chip，重新打开文档恢复；无文本的媒体不产生 chip。选区「问 pi」仍只追加选中文字，整篇文档是否携带由当前文件 chip 决定。
 
 右栏发送通过 `ChatInput.beforeSend` 排空 Wiki 保存队列；冲突或失败时不发送且保留聊天草稿。保存完成后再次检查打开请求 token、cwd 与 conversationId，关闭或导航后的迟到操作不发送。模型设置入口先经过文档关闭保护再打开设置。
 
-`WikiDocumentModal` 使用原生模态 dialog，让后台界面 inert 并约束焦点，关闭恢复原焦点且不滚动背景。编辑器的浮动工具条与嵌套弹窗 portal 挂入文档 dialog，Escape 优先关闭内部菜单、搜索及确认框。全屏按钮对 `document.documentElement` 调用 Fullscreen API（规范不允许 dialog 自身全屏），弹窗同时铺满视口；进入全屏后 `fullscreenchange` 会关闭并重新 `showModal()` 弹窗，让它回到顶层最上方（Electron 会把全屏页面画在已打开的 dialog 之上，#89），同时保留滚动、焦点与选区；Esc 或系统控件退出全屏时监听 `fullscreenchange` 恢复原尺寸，关闭弹窗时退出由它进入的全屏。退出前先等待进入请求完成；桌面版还要等 macOS 全屏动画结束（主进程在 `enter-html-full-screen` 到 `enter-full-screen` 之间发布 `fullscreenSettling`），动画中途退出会让页面停在全屏且退出请求永不返回。请求被拒绝时只做窗口内铺满。全程只改变尺寸，保留编辑器实例、草稿与光标。Electron 主进程同步 `enter/leave-html-full-screen` 窗口状态。回归：`tests/wiki-fullscreen-electron-test.mjs`。同项目同文档的滚动位置保存在最多 100 项的内存缓存中，重新打开时恢复。
+`WikiDocumentModal`（现仅数据库弹窗使用）使用原生模态 dialog，让后台界面 inert 并约束焦点，关闭恢复原焦点且不滚动背景。编辑器的浮动工具条与嵌套弹窗 portal 挂入文档 dialog，Escape 优先关闭内部菜单、搜索及确认框。Wiki 全屏对 `document.documentElement` 调用 Fullscreen API，视图同时铺满视口；Electron 会把全屏页面画在已打开的 dialog 之上（#89），全屏时保留滚动、焦点与选区；退出全屏监听 `fullscreenchange` 恢复原尺寸，退出 Wiki mode 时退出由它进入的全屏。退出前先等待进入请求完成；桌面版还要等 macOS 全屏动画结束（主进程在 `enter-html-full-screen` 到 `enter-full-screen` 之间发布 `fullscreenSettling`），动画中途退出会让页面停在全屏且退出请求永不返回。请求被拒绝时只做窗口内铺满。全程只改变尺寸，保留编辑器实例、草稿与光标。Electron 主进程同步 `enter/leave-html-full-screen` 窗口状态。回归：`tests/wiki-fullscreen-electron-test.mjs`。同项目同文档的滚动位置保存在最多 100 项的内存缓存中，重新打开时恢复。
 
 ## 阅读交互
 
 正文默认直接编辑，独立 44px 插入工具栏、选区浮动格式栏和源码切换。标准正文 760px、宽版 1000px；标题使用本地 Source Serif 4 / Noto Serif SC，正文 IBM Plex Sans，代码 JetBrains Mono。元信息保留更新时间、阅读时间和标签，frontmatter、重复 H1 及开头属性表隐藏于正文但保存时保留原文。
 
-隐藏根目录分组、文件栏拖动宽度、目录树按需加载、双链和索引详情沿用已有行为。搜索支持 Cmd/Ctrl+P（兼容 Cmd/Ctrl+K），Cmd/Ctrl+Enter 把命中路径与片段按保存后的引用流程送回聊天。右栏使用原聊天完整能力，不创建文档专用会话，不显示底部输入胶囊或「对话 | Wiki」切换。
+隐藏根目录分组、文件栏拖动宽度、目录树按需加载、双链和索引详情沿用已有行为。搜索支持 Cmd/Ctrl+P（兼容 Cmd/Ctrl+K），Cmd/Ctrl+Enter 把命中路径与片段按保存后的引用流程送回聊天。右栏是当前临时 Wiki 会话的完整聊天能力（附件、斜杠命令、模型选择），不显示底部输入胶囊或「对话 | Wiki」切换。
 
 ## 文件与索引
 
 OKF 扩展已移除；此前导出的知识目录中，带有效知识 manifest 的 evidence 副本仍排除后台索引与撤销快照并保持只读，显式打开保留；明确相对文件链接不依赖索引命中。
 
-文件栏使用与普通文件树一致的顶部搜索、32px 行高、18px 缩进与线框图标；悬停／聚焦的浅黄色链接按钮把文件或目录以 reference 附加到右侧原聊天，不自动发送或打开目录。文件栏提供新建文件，默认填入当前文档的父目录；与普通文件树共用创建表单和独占创建接口，详见 [附件与文件处理](architecture-attachments.md#手动新建文件)。创建成功后经过自动保存导航保护打开新文件。
+文件栏使用与普通文件树一致的顶部搜索、32px 行高、18px 缩进与线框图标；悬停／聚焦的浅黄色链接按钮把文件或目录以 reference 附加到右侧临时 Wiki 会话，不自动发送或打开目录。文件栏提供新建文件，默认填入当前文档的父目录；与普通文件树共用创建表单和独占创建接口，详见 [附件与文件处理](architecture-attachments.md#手动新建文件)。创建成功后经过自动保存导航保护打开新文件。
 
 `wiki-service.ts` 负责工作区索引、文档读取、搜索和文件历史；`wiki-links.ts` 定义标签与链接解析。HTTP 类型只在 `server/protocol.ts` 声明，经现有 type-only shim 供浏览器使用。
 
-正文使用 `document-content`：仅校验目标真实路径，读取文件和元数据、SHA-256 版本，返回 `WikiDocumentContent`，不等待索引。引用使用独立 `document-references`（`WikiDocumentReferences`）；索引缓存各文件已解析链接及反向引用表，后台引用只更新链接，不覆盖编辑草稿。引用尚未返回时显示加载状态，不显示 0 篇。原 `document` 完整接口保持兼容。只读 HTTP 查询允许同项目原生会话切换；项目变化拒绝旧结果，写入/发送仍校验原会话。正文响应由组件存活状态和读取序号丢弃迟到结果。
+正文使用 `document-content`：仅校验目标真实路径，读取文件和元数据、SHA-256 版本，返回 `WikiDocumentContent`，不等待索引。引用使用独立 `document-references`（`WikiDocumentReferences`）；索引缓存各文件已解析链接及反向引用表，后台引用只更新链接，不覆盖编辑草稿。引用尚未返回时显示加载状态，不显示 0 篇。原 `document` 完整接口保持兼容。只读 HTTP 查询允许同项目原生会话切换；项目变化拒绝旧结果，写入/发送仍校验当前会话。正文响应由组件存活状态和读取序号丢弃迟到结果。
 
 - Markdown / txt 默认在渲染预览中直接编辑，复用 `RichMarkdownEditor` 的格式栏、斜杠插入、截图粘贴及段落原文保真。frontmatter、重复 H1 与已识别的开头连续字段/值属性在正文中隐藏但保存时保留；属性在元信息下以可折叠表格展示，由 `wiki-properties.ts` 返回源文范围，正文其他位置不提取；双链、目录及代码配色继续可用。Markdown 提供源码/富文本切换；代码编辑共用保存机制，保存、冲突、发送前保存及导航保护沿用同一路径；运行和加载期间只读，自动保存期间仍可编辑。源码模式使用现有 `CodeFileEditor`。代码默认只读，可显式点击「编辑源码」手工编辑。保存只接受未截断的 UTF-8 文本，并比较原始字节 SHA-256。write 返回轻量 WikiDocumentContent，不等待引用索引；保存后后台刷新索引，点击发送立即显示「发送中」，失败保留输入。
 - 目录：插入工具栏和斜杠菜单的「插入目录」（`/ml`）在标题下方插入一次 `<!-- toc -->` … `<!-- /toc -->` 块，已有则只滚动到它。块内列表由 `markdown-toc.ts` 根据块之后的顶层 H1–H3 生成，锚点与 GitHub 一致（重复标题按全文编号）。富文本编辑器把标记区间作为一个只读块渲染为可点击目录（点击滚动到编辑器内对应标题，「移除目录」删除整块）；每次编辑序列化时只重写标记之间的内容，其余字节不变。仅打开文件不会写入：过期目录在界面上按当前标题显示，下一次编辑时才写回。源码模式与 pi 直接改文件时不自动更新，回到富文本编辑后再生成。
@@ -54,7 +58,7 @@ OKF 扩展已移除；此前导出的知识目录中，带有效知识 manifest 
 
 ## 维护和验证
 
-弹窗交互运行 `tests/wiki-modal-browser-test.mjs`（原会话与草稿／附件保留、保存失败与冲突、引用、尺寸、焦点及小屏），证据只读运行 `tests/document-evidence-browser-test.mjs`，目录运行 `tests/wiki-toc-browser-test.mjs`（插入、去重、随标题更新、跳转、移除与字节保持）及 `tests/unit/markdown-toc.test.ts`。旧 Wiki 对话面板测试为历史流程，不再作为弹窗验收。修改保存或撤销时运行 `tests/unit/wiki-service.test.ts`（版本、跨文件预检、二进制、路径边界、重启历史）；修改 API、PDF 或鉴权时运行 `tests/wiki-protocol-test.mjs`（已纳入 smoke）。`tests/unit/chat-reference.test.ts` 检查引用内容、重复 ID 和迟到归属拒绝。旧 `wiki-navigation`、`wiki-send-latency`、`wiki-ui` 与 `wiki-panels-browser` 脚本依赖临时会话／独立对话面板，保留作历史参考，弹窗交互由新回归替代。
+Wiki 视图交互运行 `tests/wiki-modal-browser-test.mjs`（会话与草稿／附件保留、保存失败与冲突、引用、焦点及小屏；全屏视图改造后沿用同一回归），证据只读运行 `tests/document-evidence-browser-test.mjs`，目录运行 `tests/wiki-toc-browser-test.mjs`（插入、去重、随标题更新、跳转、移除与字节保持）及 `tests/unit/markdown-toc.test.ts`。旧 Wiki 对话面板测试为历史流程，不再作为弹窗验收。修改保存或撤销时运行 `tests/unit/wiki-service.test.ts`（版本、跨文件预检、二进制、路径边界、重启历史）；修改 API、PDF 或鉴权时运行 `tests/wiki-protocol-test.mjs`（已纳入 smoke）。`tests/unit/chat-reference.test.ts` 检查引用内容、重复 ID 和迟到归属拒绝。旧 `wiki-navigation`、`wiki-send-latency`、`wiki-ui` 与 `wiki-panels-browser` 脚本依赖临时会话／独立对话面板，保留作历史参考，弹窗交互由新回归替代。
 
 Wiki 草稿保护与聊天文件预览分别注册导航守卫；只有脏草稿或保存中才拦截导航，先立即排空保存队列，成功后继续最新导航，失败才显示原有放弃/重试保护，避免 Wiki 隐藏后绕过聊天编辑器自己的保存保护。异步读取按文件序号与组件存活状态归属，工作区/文档切换时旧结果不得写入新页面，同项目读取不依赖会话初始化。
 
@@ -89,17 +93,17 @@ Wiki 的 `/` 菜单在文本块开头或空格后触发，排除代码、链接�
 
 选区浮条位于选区上方，空间不足时放下方，提供粗体、斜体、H2、H3、链接、黄/绿背景和问 pi。再次点击同色清除标记；继续使用已有固定色值 mark 序列化和原生撤销栈，已有五色标记可正常读取。撤销/重做只用快捷键，普通文件预览仍保留其格式栏。完整索引成功后隐藏底栏索引项，有未完成/跳过项仍保留详情；状态栏不显示消息计数。
 
-历史 Wiki 提问记录携带 `conversationId`、`requestId` 和 `assistantTimestamp`，弹窗的最近改动继续读取这些记录与手工保存记录，展开时读取完整 diff；撤销仍按整个请求做版本预检。
+历史 Wiki 提问记录携带 `conversationId`、`requestId` 和 `assistantTimestamp`，Wiki 的最近改动继续读取这些记录与手工保存记录，展开时读取完整 diff；撤销仍按整个请求做版本预检。
 
-回归：`tests/wiki-editing-test.mjs` 覆盖延迟确认期间继续编辑、立即导航保存、失败重试、冲突处理、紧凑菜单、Markdown 简写、选区格式和窄屏；`tests/wiki-desktop-save-test.mjs` 在真实 Electron 验证关闭、退出及失败保留窗口；`tests/wiki-modal-browser-test.mjs` 验证弹窗、保存保护及选区回填。设计稿待定的 AI 续写/总结命令、最近使用分组及问 pi 结果替换流程未加入。
+回归：`tests/wiki-editing-test.mjs` 覆盖延迟确认期间继续编辑、立即导航保存、失败重试、冲突处理、紧凑菜单、Markdown 简写、选区格式和窄屏；`tests/wiki-desktop-save-test.mjs` 在真实 Electron 验证关闭、退出及失败保留窗口；`tests/wiki-modal-browser-test.mjs` 验证 Wiki 视图、保存保护及选区回填。设计稿待定的 AI 续写/总结命令、最近使用分组及问 pi 结果替换流程未加入。
 
 ## 扩展 UI 与恢复状态
 
-文档弹窗不注册独立扩展输入框或文档会话。右栏沿用原聊天输入框、扩展请求及恢复状态，直接显示 SDK 回复；可在右栏处理原聊天扩展交互。原生协议不变。
+Wiki 视图不注册独立扩展输入框。右栏是临时 Wiki 会话的输入框、扩展请求及恢复状态，直接显示 SDK 回复；可在右栏处理扩展交互。原生协议不变。
 
 ## 文档画布视觉更新（2026-10-08）
 
-34a 规范见 `wiki-doc-v2-design.md`。顶栏显示目录路径、文件名、保存状态、最近改动和弹窗尺寸／关闭操作。`WikiToolbar` 提供分组 SVG 插入按钮；`TableSizePicker` 支持 8×6 鼠标/键盘选择；`CodeLanguagePicker` 支持搜索和 Mermaid。工具栏直接展示斜杠菜单的全部 11 个插入项，正文、H2、H3 独立设置格式，日期可直接插入；不再使用更多菜单，窄栏横向滚动。编辑块使用 `display: block`：原生 `formatBlock` 在 `display: contents` 中会丢失段落；`flow-root` 会阻止相邻块外边距合并，使段距翻倍。Mermaid 图和代码并存，图形装饰标记 `data-rich-ui`，保存时剔除。
+34a 规范见 `wiki-doc-v2-design.md`。视图头显示目录路径、文件名、保存状态、最近改动和聊天面板开关／退出 Wiki mode。`WikiToolbar` 提供分组 SVG 插入按钮；`TableSizePicker` 支持 8×6 鼠标/键盘选择；`CodeLanguagePicker` 支持搜索和 Mermaid。工具栏直接展示斜杠菜单的全部 11 个插入项，正文、H2、H3 独立设置格式，日期可直接插入；不再使用更多菜单，窄栏横向滚动。编辑块使用 `display: block`：原生 `formatBlock` 在 `display: contents` 中会丢失段落；`flow-root` 会阻止相邻块外边距合并，使段距翻倍。Mermaid 图和代码并存，图形装饰标记 `data-rich-ui`，保存时剔除。
 
 宽版隐藏两侧并使用 1000px 正文；打开新文档或最近改动退出。宽版不持久化。正文维持 800ms 自动保存、Cmd+S 和导航保存，未编辑块保留原文。默认焦点位于文末；空段落提示不写入 Markdown。本地字体仅用于标题，以 unicode-range 按需加载，并随文件附带 OFL 许可证。
 
