@@ -42,6 +42,26 @@ test("grilling questions become cards between the surrounding prose", () => {
 	expect(composeAnswers(questions, picked, "", { Q5: "裸进程，\n运维更熟" })).toBe("Q1 交付物形态：(c) 文档 + deploy/ 部署骨架\nQ3 部署位置：(a) 单台海外 VPS\nQ5 Hermes 运行形态：其他 · 裸进程， 运维更熟");
 });
 
+test("dash-list uppercase options with a paren-free recommendation become real options", () => {
+	const segments = parseReplySegments(
+		"❓ **Q1** - **会话去留**：临时会话关闭后怎么处理？\n" +
+			"- A. 关闭时若任务在跑，会话保留到 settle 再弃；重开同一文档时接管旧会话\n" +
+			"- B. 会话立即弃，任务也被中断\n" +
+			"- C. 会话永远持久化到会话树\n\n" +
+			"➡️ 推荐 A：保留后台语义，又不需要持久化。\n\n" +
+			"❓ **Q2** - **进度展示**：重开时进度给谁看？\n\n➡️ 推荐 复用接管会话的 transcript。"
+	);
+	const questions = segments.flatMap(segment => segment.kind === "questions" ? segment.questions : []);
+	expect(questions[0].options.map(option => [option.key, option.text])).toEqual([
+		["a", "关闭时若任务在跑，会话保留到 settle 再弃；重开同一文档时接管旧会话"],
+		["b", "会话立即弃，任务也被中断"],
+		["c", "会话永远持久化到会话树"],
+	]);
+	expect(questions[0].prompt).toBe("临时会话关闭后怎么处理？");
+	expect(questions[0].options[0]).toMatchObject({ recommended: true, reason: "保留后台语义，又不需要持久化。" });
+	expect(recommendedAnswers(questions)).toEqual({ Q1: 0, Q2: 0 });
+});
+
 test("a reply with one question mark stays ordinary markdown", () => {
 	expect(parseReplySegments("❓ 你确定吗？\n(a) 是;(b) 否")).toEqual([{ kind: "markdown", text: "❓ 你确定吗？\n(a) 是;(b) 否" }]);
 });

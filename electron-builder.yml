@@ -140,6 +140,8 @@ win:
 portable:
   unpackDirName: true
 
+# 安装/卸载前检测运行中的 pi.exe：build/installer.nsh（electron-builder 默认路径，
+# 自动插入安装器与卸载器，见该文件头部说明）。
 nsis:
   installerIcon: build/icon.ico
   uninstallerIcon: build/icon.ico

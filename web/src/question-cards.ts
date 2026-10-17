@@ -36,9 +36,12 @@ function parseHead(line: string, index: number) {
 	return titled ? { id, title: plain(titled[1]), prompt: titled[2] } : { id, title: "", prompt: rest };
 }
 
+/** A list-style option line: `- A. text`, `A、 text` or `(a) text`. */
+const LIST_OPTION = /^\s*(?:[-–—*]\s*)?(?:[(（]([A-Ha-h])[)）]|([A-Ha-h])[.、．])\s+(.+)$/;
+
 /** Split `(a) x;(b) y;(c) z。trailing` into options; text before (a) and after the last option's sentence stays prompt. */
 function parseOptions(text: string) {
-	const parts = text.split(/[(（]([a-h])[)）]\s*/);
+	const parts = text.split(/[(（]([A-Ha-h])[)）]\s*/);
 	if (parts.length < 5) return { prompt: text, options: [] as QuestionOption[] };
 	const options: QuestionOption[] = [];
 	let trailing = "";
@@ -48,16 +51,16 @@ function parseOptions(text: string) {
 			const end = option.search(/[。？?](?=.)/);
 			if (end >= 0) { trailing = option.slice(end + 1).trim(); option = option.slice(0, end); }
 		}
-		options.push({ key: parts[i], text: plain(option.replace(/[。;；]\s*$/, "")) });
+		options.push({ key: parts[i].toLowerCase(), text: plain(option.replace(/[。;；]\s*$/, "")) });
 	}
 	return { prompt: [parts[0].trim(), trailing].filter(Boolean).join(" "), options };
 }
 
 function applyRecommendation(options: QuestionOption[], text: string): QuestionOption[] {
 	const body = plain(text).replace(/^推荐\s*[:：]?\s*/, "").replace(/^Recommend(?:ed|ation)?\s*[:：]?\s*/i, "");
-	const keyed = /^[(（]([a-h])[)）]\s*(.*)$/.exec(body);
+	const keyed = /^[(（]?([A-Ha-h])[)）.、．：:]?\s*(.*)$/.exec(body);
 	const reason = (keyed ? keyed[2] : "").replace(/^[。.,，:：;；\s]+/, "");
-	const picked = keyed && options.find(option => option.key === keyed[1]);
+	const picked = keyed && options.find(option => option.key === keyed[1].toLowerCase());
 	if (picked) { picked.recommended = true; if (reason) picked.reason = reason; return options; }
 	if (options.length) return options;
 	// Open question: the recommendation is the preselected option; the card's "其他" row covers everything else.
@@ -106,7 +109,16 @@ export function parseReplySegments(text: string): ReplySegment[] {
 			else if (recommendation.length) { if (!next.trim()) { if (NOTE.test(lines[i + 1] ?? "")) continue; break; } recommendation.push(next); }
 			else body.push(next);
 		}
-		const { prompt, options } = parseOptions(body.join(" ").replace(/\s+/g, " ").trim());
+		const listOptions: QuestionOption[] = [];
+		const promptLines: string[] = [];
+		for (const line of body) {
+			const listed = LIST_OPTION.exec(line);
+			if (listed) listOptions.push({ key: (listed[1] ?? listed[2]!).toLowerCase(), text: plain(listed[3].trim()) });
+			else promptLines.push(line);
+		}
+		const { prompt, options } = listOptions.length >= 2
+			? { prompt: promptLines.join(" ").replace(/\s+/g, " ").trim(), options: listOptions }
+			: parseOptions(body.join(" ").replace(/\s+/g, " ").trim());
 		questions.push({ id: head.id, title: head.title, prompt: plain(prompt), ...(notes.length ? { note: plain(notes.join(" ")) } : {}), options: applyRecommendation(options, recommendation.join(" ")) });
 	}
 	flushQuestions();

@@ -113,7 +113,7 @@ pi-harness/
 ├── extensions/                 # npm CLI 扩展：webui.ts（/webui 启动浏览器；Desktop 不打包）
 ├── electron/                   # Electron 桌面版壳子（main.mjs 主进程 + 沙箱兼容的 preload.cjs），本地构建，不进 npm 包
 ├── electron-builder.yml        # Electron 打包配置（mac dmg/zip、win nsis/portable、linux AppImage/deb）
-├── build/                      # electron-builder 用的图标源文件（icon.png 1024x1024 + icon.ico）
+├── build/                      # electron-builder 用的图标源文件（icon.png 1024x1024 + icon.ico）；installer.nsh 为 NSIS 安装/卸载前运行中实例检测
 ├── dev/                        # 本地开发辅助（不入 npm 包）
 ├── Dockerfile / docker-compose.yml
 ├── docs/                       # 详细文档（本文件的分拆）
