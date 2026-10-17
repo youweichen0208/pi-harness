@@ -18,7 +18,7 @@ const server = createServer(async (req, res) => {
 	let calls = [];
 	try { const request = JSON.parse(raw); requests.push(request); calls = handler(request) ?? []; } catch (error) { failure = error; }
 	res.writeHead(200, { 'content-type': 'text/event-stream' });
-	const deltas = calls.length ? [{ tool_calls: calls.map(([id, args], index) => ({ index, id, type: 'function', function: { name: 'plan', arguments: JSON.stringify(args) } })) }] : [{ content: 'fixture done' }];
+	const deltas = calls.length ? [{ tool_calls: calls.map(([id, args, name = 'plan'], index) => ({ index, id, type: 'function', function: { name, arguments: JSON.stringify(args) } })) }] : [{ content: 'fixture done' }];
 	for (const delta of deltas) res.write(`data: ${JSON.stringify({ id: 'fixture', object: 'chat.completion.chunk', model: 'fixture', choices: [{ index: 0, delta, finish_reason: null }] })}\n\n`);
 	res.write(`data: ${JSON.stringify({ id: 'fixture', object: 'chat.completion.chunk', model: 'fixture', choices: [{ index: 0, delta: {}, finish_reason: calls.length ? 'tool_calls' : 'stop' }] })}\n\n`);
 	res.end('data: [DONE]\n\n');
@@ -54,9 +54,10 @@ try {
 		assert.equal(first.completionCriteria, mode === 'only' ? '' : input.completionCriteria);
 		const firstLeaf = session.sessionManager.getLeafId();
 		round = 0;
-		await prompt('Continue implementation', () => round++ === 0 ? [['update-1', update(first, { currentStepId: 'b', completedStepIds: ['a'], completionCriteria: undefined })], ['update-2', update({ ...first, revision: 2 }, { currentStepId: 'b', completedStepIds: ['a'] })]] : []);
+		await prompt('Continue implementation', () => round++ === 0 ? [['update-1', update(first, { title: undefined, currentStepId: 'b', completedStepIds: ['a'], completionCriteria: undefined })], ['update-2', update({ ...first, revision: 2 }, { currentStepId: 'b', completedStepIds: ['a'] })]] : []);
 		const inherited = session.sessionManager.getBranch().find(entry => entry.type === 'message' && entry.message.role === 'toolResult' && entry.message.toolCallId === 'update-1')?.message;
 		assert.equal(inherited?.isError, false, JSON.stringify(inherited?.content));
+		assert.equal(inherited.details.planSnapshot.title, first.title);
 		assert.equal(inherited.details.planSnapshot.completionCriteria, first.completionCriteria);
 		assert.equal(latest().revision, 3);
 		const success = latest();
@@ -140,6 +141,30 @@ try {
 		session.dispose(); session = undefined;
 		console.log(`PASS plan SDK ${mode}: direct result persistence, sequential revisions, errors, branch correction, disable/reload, extension-free reopen`);
 	}
+	// #108: work completed before the last active plan update still triggers the settle reminder.
+	session = await make('on');
+	preference.set(true); preference.coordinate(session, true);
+	const settleInput = { ...input, title: 'Settle regression', steps: [{ id: 'a', title: 'Verify' }], currentStepId: 'a', completedStepIds: [], completionCriteria: '' };
+	let settleRound = 0;
+	await prompt('Reproduce issue 108', request => {
+		const round = settleRound++;
+		if (round === 0) return [['settle-create', settleInput]];
+		if (round === 1) return [['settle-read', { path: join(agentDir, 'models.json') }, 'read']];
+		if (round === 2) return [['settle-active', update(latest(), { steps: [{ id: 'a', title: 'Verify', detail: '已完成：读取验证文件' }] })]];
+		if (round === 3) return [];
+		if (round === 4) {
+			assert.match(JSON.stringify(request.messages), /Plan status reminder/);
+			return [['settle-complete', update(latest(), { status: 'completed' })]];
+		}
+		return [];
+	});
+	assert.equal(latest().status, 'completed');
+	assert.equal(latest().currentStepId, null);
+	assert.deepEqual(latest().completedStepIds, ['a']);
+	assert.equal(settleRound, 6);
+	assert.equal(session.messages.filter(message => message.role === 'custom' && message.customType === 'pi-harness:plan-remind-completion').length, 1);
+	session.dispose(); session = undefined;
+	console.log('PASS plan SDK issue #108: pre-update work triggers one settle reminder and explicit completion');
 	// A third-party name wins; the service must never activate/deactivate it.
 	const { Type } = await import('typebox');
 	const thirdParty = { name: 'third-party', factory: pi => pi.registerTool({ name: 'plan', label: 'Third party', description: 'Third party', parameters: Type.Object({}), execute: async () => ({ content: [{ type: 'text', text: 'third party' }], details: {} }) }) };

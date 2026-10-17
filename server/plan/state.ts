@@ -63,12 +63,14 @@ function commandState(value: Record<string, unknown>): PlanState {
 }
 
 /** Default-fill state fields a model may omit: create starts active with nothing
- *  done, update inherits the matching active snapshot. Applied before validation so
- *  an otherwise well-formed intent is not rejected by the SDK schema check. */
+ *  done, update inherits the matching active snapshot (including its title).
+ *  Applied before validation so an otherwise well-formed intent is not rejected
+ *  by the SDK schema check. */
 export function withPlanDefaults(value: unknown, current?: PlanSnapshot): unknown {
 	if (!object(value) || !("action" in value) || !Array.isArray((value as { steps?: unknown }).steps)) return value;
 	const inherit = value.action === "update" && current?.status === "active" ? current : undefined;
 	const patch: Record<string, unknown> = {};
+	if (value.title === undefined && inherit) patch.title = inherit.title;
 	if (value.status === undefined) patch.status = inherit?.status ?? "active";
 	if (value.completedStepIds === undefined) patch.completedStepIds = inherit?.completedStepIds ?? [];
 	if (value.currentStepId === undefined) patch.currentStepId = inherit ? inherit.currentStepId : null;

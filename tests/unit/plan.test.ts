@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { transition, planSnapshot, latestPlan } from "../../server/plan/state.js";
-import { restorePlanContext } from "../../server/plan/extension.js";
+import { planLooksConcluded, restorePlanContext } from "../../server/plan/extension.js";
 import { PlanSettings } from "../../server/plan/settings.js";
 import { deriveTaskProgress } from "../../server/task-progress.js";
 import { serializeMessage, type AgentMessage } from "../../server/serialize.js";
@@ -89,6 +89,16 @@ test("omitted status/currentStepId/completedStepIds default instead of failing",
 	expect(() => transition({ action: "create", title: input.title }, undefined)).toThrow(/Invalid plan status|steps/);
 });
 
+test("issue #107: update inherits an omitted title but create still requires one", () => {
+	const before = create();
+	const withoutTitle: Record<string, unknown> = { ...update(before) };
+	delete withoutTitle.title;
+	const next = transition(withoutTitle, before);
+	expect(next).toMatchObject({ title: before.title, status: "active", revision: 2 });
+	expect(planSnapshot(next)).toEqual(next);
+	expect(() => transition({ action: "create", steps: input.steps }, undefined)).toThrow(/title/);
+});
+
 test("conflicts supply complete branch-local editable correction; ended plans require create", () => {
 	const first = create(), second = transition(update(first, { currentStepId: "b", completedStepIds: ["a"] }), first);
 	for (const patch of [{ planId: "other" }, { expectedRevision: 1 }]) {
@@ -156,7 +166,7 @@ test("branch reconstruction and context restoration use latest successful paired
 	const assistantMessage: AgentMessage = { api: "openai-completions", provider: "test", model: "test", stopReason: "toolUse", usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } }, role: "assistant", content: [{ type: "toolCall", name: "plan", id: "p", arguments: input }], timestamp: 2 };
 	const visible = [assistantMessage, tool];
 	expect(restorePlanContext(visible, manager.getBranch())).toBe(visible);
-	const omitted = update(snapshot, { completionCriteria: undefined, currentStepId: "b", completedStepIds: ["a"] });
+	const omitted = update(snapshot, { title: undefined, completionCriteria: undefined, currentStepId: "b", completedStepIds: ["a"] });
 	const inherited = transition(omitted, snapshot);
 	const inheritedTool = { ...tool, toolCallId: "inherited", details: JSON.parse(JSON.stringify({ planSnapshot: inherited })) };
 	const inheritedManager = SessionManager.inMemory("/tmp");
@@ -278,4 +288,56 @@ test("recovery cannot confirm an unrelated historical plan or swallow ordinary u
 		expect(ordinary.sourceMessageId).toBe("recovery");
 		expect(ordinary.plan?.awaitingConfirmation).toBe(true);
 	}
+});
+
+type SettleMessage = Parameters<typeof planLooksConcluded>[0][number];
+const settleUser = (): SettleMessage => ({ role: "user", content: "Implement", timestamp: 1 } as SettleMessage);
+const settleAssistant = (...ids: string[]): SettleMessage => ({
+	role: "assistant",
+	content: ids.map(id => ({ type: "toolCall", id, name: id.startsWith("p") ? "plan" : "read", arguments: {} })),
+	timestamp: 2,
+} as SettleMessage);
+const settleResult = (id: string, plan?: PlanSnapshot): SettleMessage => ({
+	role: "toolResult", toolName: plan ? "plan" : "read", toolCallId: id, content: [], isError: false, timestamp: 3,
+	...(plan ? { details: { planSnapshot: plan } } : {}),
+} as SettleMessage);
+const settleLatest = (snapshot: PlanSnapshot, toolCallId: string) => ({ snapshot, toolCallId, entryId: toolCallId });
+
+test("issue #108: settle detection includes current-step work before the final plan update", () => {
+	const first = create();
+	const second = transition(update(first, { currentStepId: "b", completedStepIds: ["a"] }), first);
+	const final = transition(update(second, { steps: second.steps.map(step => step.id === "b" ? { ...step, detail: "已完成：测试通过" } : step) }), second);
+	const messages = [
+		settleUser(),
+		settleAssistant("p1"), settleResult("p1", first),
+		settleAssistant("p2"), settleResult("p2", second),
+		settleAssistant("work"), settleResult("work"),
+		settleAssistant("p3"), settleResult("p3", final),
+	];
+	expect(planLooksConcluded(messages, settleLatest(final, "p3"))).toBe(true);
+});
+
+test("settle detection keeps plan adoption, step ownership and result guards", () => {
+	const first = create();
+	const second = transition(update(first, { currentStepId: "b", completedStepIds: ["a"] }), first);
+	const final = transition(update(second), second);
+	const latest = settleLatest(final, "p3");
+	const wrongStep = [
+		settleUser(),
+		settleAssistant("p1"), settleResult("p1", first),
+		settleAssistant("work"), settleResult("work"),
+		settleAssistant("p2"), settleResult("p2", second),
+		settleAssistant("p3"), settleResult("p3", final),
+	];
+	expect(planLooksConcluded(wrongStep, latest)).toBe(false);
+	const unresolved = [
+		settleUser(),
+		settleAssistant("p1"), settleResult("p1", first),
+		settleAssistant("p2"), settleResult("p2", second),
+		settleAssistant("work"),
+		settleAssistant("p3"), settleResult("p3", final),
+	];
+	expect(planLooksConcluded(unresolved, latest)).toBe(false);
+	const unadopted = [settleAssistant("p3"), settleResult("p3", final), settleUser(), settleAssistant("work"), settleResult("work")];
+	expect(planLooksConcluded(unadopted, latest)).toBe(false);
 });

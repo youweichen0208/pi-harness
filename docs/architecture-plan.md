@@ -6,7 +6,7 @@
 
 `plan` 使用 `model-only`、`sequential`、`defaultActive: false`。启用后提供简短 promptSnippet 和规则，尊重用户、skill 的等待与授权要求。`annotations` 声明 `readOnlyHint: true`、`openWorldHint: false`：只返回用于会话记录的计划快照，不修改外部资源。未声明幂等；权限扩展仍自行决定确认策略。
 
-create/update 都提交完整步骤状态：title、steps（必填，含完成时），可选 changeSummary。status、currentStepId、completedStepIds 可省略：create 默认 active/null/空，update 在通过身份校验后继承当前 active 快照的对应值（清空当前项仍需显式 null）；默认值在 `withPlanDefaults` 统一填充，避免模型漏字段被 SDK 参数校验直接拒绝（回归：tests/unit/plan.test.ts）。completionCriteria 可选：create 省略时保存为空字符串；update 可省略该字段，在通过当前分支 planId、expectedRevision 和 active 状态校验后保留已保存的完成标准，显式提供时校验字符串类型和长度，空字符串可清除完成标准。新建计划不继承旧计划的完成标准，持久快照仍必须包含此字段（允许空字符串）；无完成标准时界面不显示对应行。标题最多 80 字符，步骤 1–16 个，步骤 ID 最多 64 字符且唯一，详情最多 500 字符，完成标准和变更说明最多 240 字符。完成 ID 必须唯一且属于步骤；当前项不能已完成。步骤合并或不再需要时，模型应更新或移除被替代步骤并说明原因，不留下过期待办，不把未做工作标为完成。completed/cancelled/failed 不保留当前项。部分供应商会把可空字段渲染成字面量字符串 "null"，状态校验入口将其归一为真 null（回归：tests/unit/plan.test.ts），避免合法的清空意图被拒。工具调用显式声明 completed 时，原子完成提交的全部步骤并清除当前项；cancelled/failed 只清除当前项，保留已完成列表。步骤身份、列表唯一性和版本仍严格校验；持久快照仍要求 completed 的全部步骤已完成，不修正损坏的历史状态。
+create/update 都提交完整步骤状态：steps（必填，含完成时），可选 changeSummary。title 在 create 必填，update 可省略并继承当前 active 快照的标题；status、currentStepId、completedStepIds 可省略：create 默认 active/null/空，update 在通过身份校验后继承当前 active 快照的对应值（清空当前项仍需显式 null）；默认值在 `withPlanDefaults` 统一填充，避免模型漏字段被 SDK 参数校验直接拒绝（回归：tests/unit/plan.test.ts）。completionCriteria 可选：create 省略时保存为空字符串；update 可省略该字段，在通过当前分支 planId、expectedRevision 和 active 状态校验后保留已保存的完成标准，显式提供时校验字符串类型和长度，空字符串可清除完成标准。新建计划不继承旧计划的完成标准，持久快照仍必须包含此字段（允许空字符串）；无完成标准时界面不显示对应行。标题最多 80 字符，步骤 1–16 个，步骤 ID 最多 64 字符且唯一，详情最多 500 字符，完成标准和变更说明最多 240 字符。完成 ID 必须唯一且属于步骤；当前项不能已完成。步骤合并或不再需要时，模型应更新或移除被替代步骤并说明原因，不留下过期待办，不把未做工作标为完成。completed/cancelled/failed 不保留当前项。部分供应商会把可空字段渲染成字面量字符串 "null"，状态校验入口将其归一为真 null（回归：tests/unit/plan.test.ts），避免合法的清空意图被拒。工具调用显式声明 completed 时，原子完成提交的全部步骤并清除当前项；cancelled/failed 只清除当前项，保留已完成列表。步骤身份、列表唯一性和版本仍严格校验；持久快照仍要求 completed 的全部步骤已完成，不修正损坏的历史状态。
 
 create 生成新 planId，revision=1。update 另传 planId 和 expectedRevision，只能更新当前分支最新且 active 的计划。冲突抛错并返回原因、正确操作和完整可编辑状态；没有计划或计划结束时提示 create。错误不会写入有效状态。工具描述和 steps 字段明确要求 update（包括完成）也提交完整步骤，不能当成部分更新。
 
@@ -30,14 +30,14 @@ create 生成新 planId，revision=1。update 另传 planId 和 expectedRevision
 
 序列化仅按工具名 plan 和 schema 白名单投影；失败、无效和未知版本按普通工具卡展示。第三方 todo 专用投影已移除，历史 task_plan 继续只读兼容。
 
-右栏以 assistant 内调用顺序配对成功结果重放。工具文本纠正消息（紧跟未执行调用文本的固定纠正提示）属于原任务，重放历史记录时也保留原任务来源、本轮计划采用状态与工具归属；它不能确认此前未确认的计划。协议中的 awaitingConfirmation 仅表示历史计划尚未被本轮采用，不是用户审批状态。真正的新用户请求使 active 计划区块进入“此前未完成计划”；本轮采用前已完成步骤保持完成，其余步骤投影为 pending，不高亮或滚动到历史当前项；成功更新后按保存的 currentStepId 恢复。本轮采用前任务整体使用当前请求的标题，运行时保持 running，结束后未完成计划进入 waiting。本轮成功 create/update 后才把之后的工具 ID 归给 currentStepId。此前工具仍在本轮执行记录中，右栏仅将成功创建或修改的文件列入输出，不追溯归入旧计划。历史轮次已确认的工具归属保持不变。失败更新不移动步骤。本轮最近一次计划调用失败且尚未被成功调用修正时，运行中保持 running，任务结束后显示 failed，不能因其他命令成功而显示完成；之后成功更新清除该错误。settled 不主动完成步骤；取消与执行失败保留状态。issue #63 的收尾只由模型完成：settle 前扩展在正常完成的轮次发现 active 计划“除当前项外全部完成、当前项在本条用户请求内（本轮 plan 调用之后）归属的工具调用均已有结果”时，提醒模型补一次终态调用。每个计划每条用户请求最多一次，不授权新工作；更早请求的调用不计入，未收尾的计划不会在之后每条消息都触发提醒。`pi-harness:plan-remind-completion` 自定义消息可见，传输层标记 `origin: "auto-reminder"`，界面显示为自动提醒事件。投影不推断完成：模型有意暂停等待用户时可保持 active，界面显示“本轮已结束 · 计划待继续”。终态保留至下一条用户请求，已知新计划不会回退复活历史 task_plan。
+右栏以 assistant 内调用顺序配对成功结果重放。工具文本纠正消息（紧跟未执行调用文本的固定纠正提示）属于原任务，重放历史记录时也保留原任务来源、本轮计划采用状态与工具归属；它不能确认此前未确认的计划。协议中的 awaitingConfirmation 仅表示历史计划尚未被本轮采用，不是用户审批状态。真正的新用户请求使 active 计划区块进入“此前未完成计划”；本轮采用前已完成步骤保持完成，其余步骤投影为 pending，不高亮或滚动到历史当前项；成功更新后按保存的 currentStepId 恢复。本轮采用前任务整体使用当前请求的标题，运行时保持 running，结束后未完成计划进入 waiting。本轮成功 create/update 后才把之后的工具 ID 归给 currentStepId。此前工具仍在本轮执行记录中，右栏仅将成功创建或修改的文件列入输出，不追溯归入旧计划。历史轮次已确认的工具归属保持不变。失败更新不移动步骤。本轮最近一次计划调用失败且尚未被成功调用修正时，运行中保持 running，任务结束后显示 failed，不能因其他命令成功而显示完成；之后成功更新清除该错误。settled 不主动完成步骤；取消与执行失败保留状态。issue #63 的收尾只由模型完成：settle 前扩展在正常完成的轮次发现 active 计划“除当前项外全部完成、当前项在本条用户请求内归属的工具调用均已有结果”时（工具发生在最后一次 plan 更新之前也算，按调用时的当前步骤归属，见 issue #108），提醒模型补一次终态调用。每个计划每条用户请求最多一次，不授权新工作；更早请求的调用不计入，未收尾的计划不会在之后每条消息都触发提醒。`pi-harness:plan-remind-completion` 自定义消息可见，传输层标记 `origin: "auto-reminder"`，界面显示为自动提醒事件。投影不推断完成：模型有意暂停等待用户时可保持 active，界面显示“本轮已结束 · 计划待继续”。终态保留至下一条用户请求，已知新计划不会回退复活历史 task_plan。
 
 聊天按当前 conversationId 内的 planId 合并卡片；成功更新保留变化行和键盘可操作的查看入口，错误保持普通卡。替换取消记录保留在新卡，旧卡显示取消；历史分支仍从其自身 transcript 还原。右栏保留当前步骤、详情和完成标准。
 
 ## 回归
 
-- `tests/unit/plan.test.ts`：校验、冲突纠错、变化与替换、白名单、分支恢复、上下文可见性、工具归属、等待与终态、卡片身份。
-- `tests/plan-sdk-test.mjs`：真实 SDK + 本地模拟模型，Codemode on/only、连续更新独立落盘、失败纠正、原生压缩条目恢复、关闭/reload/双向分支导航、无扩展读取历史、第三方同名工具。
+- `tests/unit/plan.test.ts`：校验、冲突纠错、变化与替换、白名单、分支恢复、上下文可见性、工具归属、等待与终态、卡片身份、省略 title 继承（#107）、settle 工作归因（#108）。
+- `tests/plan-sdk-test.mjs`：真实 SDK + 本地模拟模型，Codemode on/only、连续更新独立落盘、失败纠正、原生压缩条目恢复、关闭/reload/双向分支导航、无扩展读取历史、第三方同名工具、省略 title 继承（#107）、settle 收尾提醒（#108）。
 - `tests/plan-settings-test.mjs`：隔离服务，多客户端全局开关、后台 settled 延迟、reload/导航、只读延后应用、发送前协调与只读快照、重连和服务重启。
 - `tests/plan-chat-browser-test.mjs`：Web/macOS/Windows 壳、中文/英文、窄窗口、变化跳转与折叠历史、错误卡、替换隔离和等待确认。
 

@@ -1,5 +1,5 @@
 import { Type } from "typebox";
-import type { ExtensionFactory, ContextEvent, SessionEntry, AgentBeforeSettleEvent } from "@earendil-works/pi-coding-agent";
+import type { ExtensionFactory, ContextEvent, SessionEntry } from "@earendil-works/pi-coding-agent";
 import { PLAN_REMINDER_TYPE, editableState, latestPlan, snapshotFromDetails, transition, withPlanDefaults } from "./state.js";
 import { TOOL_TEXT_CONTINUE_PROMPT } from "../tool-text.js";
 
@@ -7,7 +7,7 @@ const string = (maxLength: number) => Type.String({ minLength: 1, maxLength });
 export const planParameters = Type.Object({
 	action: Type.Union([Type.Literal("create"), Type.Literal("update")]),
 	planId: Type.Optional(string(128)), expectedRevision: Type.Optional(Type.Integer({ minimum: 1 })),
-	title: string(80), status: Type.Optional(Type.Union([Type.Literal("active"), Type.Literal("completed"), Type.Literal("cancelled"), Type.Literal("failed")], { description: "Defaults to active on create; omitted on update inherits the saved status." })),
+	title: Type.Optional(Type.String({ minLength: 1, maxLength: 80, description: "Required on create; omitted on update inherits the saved title." })), status: Type.Optional(Type.Union([Type.Literal("active"), Type.Literal("completed"), Type.Literal("cancelled"), Type.Literal("failed")], { description: "Defaults to active on create; omitted on update inherits the saved status." })),
 	steps: Type.Array(Type.Object({ id: string(64), title: string(80), detail: Type.Optional(string(500)) }), { minItems: 1, maxItems: 16, description: "Required for BOTH create and update, including completion. Send every step with its id, title and detail; never omit unchanged steps." }),
 	currentStepId: Type.Optional(Type.Union([string(64), Type.Null()], { description: "Current step for active plans; terminal statuses clear it automatically. Optional: defaults to null on create and inherits the saved value on update." })), completedStepIds: Type.Optional(Type.Array(string(64), { maxItems: 16, uniqueItems: true, description: "Completed step IDs. Explicit status completed completes all submitted steps; cancelled/failed preserve this list. Optional: defaults to empty on create and inherits the saved list on update." })),
 	completionCriteria: Type.Optional(Type.String({ maxLength: 240, description: "Optional completion criteria. Omit on create for no criteria; omit on update to preserve saved criteria. An empty string clears them." })), changeSummary: Type.Optional(string(240)),
@@ -54,36 +54,51 @@ const reminded = new WeakMap<object, Map<string, string>>();
 
 /** The plan looks finished but the model never closed it: every step except
  *  the current one is completed, and the current one has calls attributed in
- *  this user request — after this request's plan call — that all have
- *  results (issue #63). Earlier requests never count, so an unfinished plan
- *  does not trigger a reminder on every later message. */
-function planLooksConcluded(event: AgentBeforeSettleEvent, latest: NonNullable<ReturnType<typeof latestPlan>>): boolean {
+ *  this user request that all have results (issue #63). Calls made before a
+ *  later plan update still belong to the step that was current when they ran
+ *  (issue #108). Earlier requests never count, so an unfinished plan does not
+ *  trigger a reminder on every later message. */
+export function planLooksConcluded(messages: ContextEvent["messages"], latest: NonNullable<ReturnType<typeof latestPlan>>): boolean {
 	const { snapshot } = latest;
 	const pending = snapshot.steps.filter(step => !snapshot.completedStepIds.includes(step.id) && step.id !== snapshot.currentStepId);
 	if (pending.length) return false;
-	const messages = event.context.contextMessages;
 	const start = messages.findLastIndex(message => message.role === "user" && userText(message.content) !== TOOL_TEXT_CONTINUE_PROMPT);
 	const turn = messages.slice(start + 1);
-	const results = new Set(turn.filter(message => message.role === "toolResult").map(message => message.toolCallId));
-	let attributed = 0, seen = false;
+	const results = new Map(turn.filter(message => message.role === "toolResult").map(message => [message.toolCallId, message]));
+	const calls = new Map<string, string[]>();
+	let currentPlanId: string | undefined;
+	let currentStepId: string | null = null;
+	let confirmed = false;
+	let latestSeen = false;
 	for (const message of turn) {
 		if (message.role !== "assistant") continue;
 		for (const block of message.content) {
 			if (block.type !== "toolCall") continue;
-			if (block.name === "plan") { seen = block.id === latest.toolCallId; continue; }
-			if (!seen) continue;
-			attributed++;
-			if (!results.has(block.id)) return false; // step work still in flight
+			if (block.name === "plan") {
+				const result = results.get(block.id);
+				const next = !result?.isError ? snapshotFromDetails(result?.details) : undefined;
+				if (!next) continue;
+				if (next.planId !== currentPlanId) calls.clear();
+				currentPlanId = next.planId;
+				currentStepId = next.currentStepId;
+				confirmed = next.planId === snapshot.planId;
+				if (block.id === latest.toolCallId) latestSeen = true;
+				continue;
+			}
+			if (!confirmed || !currentStepId) continue;
+			calls.set(currentStepId, [...(calls.get(currentStepId) ?? []), block.id]);
 		}
 	}
-	return attributed > 0 || (seen && !snapshot.currentStepId); // all steps completed, only the status was left active
+	const attributed = snapshot.currentStepId ? calls.get(snapshot.currentStepId) ?? [] : [];
+	if (attributed.some(id => !results.has(id))) return false; // step work still in flight
+	return attributed.length > 0 || (latestSeen && !snapshot.currentStepId); // all steps completed, only the status was left active
 }
 
 const userText = (content: string | readonly { type: string; text?: string }[]): string => typeof content === "string" ? content : content.map(block => block.type === "text" ? block.text ?? "" : "").join("");
 
 export const createPlanExtension = (): ExtensionFactory => pi => {
 	pi.registerTool({
-		name: "plan", label: "Plan", description: "Create or update a complete, versioned implementation plan on this session branch. Every call requires title and steps, even when completing or only changing status. status, currentStepId and completedStepIds may be omitted: create defaults to active/null/none, update inherits the saved values. completionCriteria is optional: omit on create for no criteria, omit on update to preserve saved criteria, or send an empty string to clear them. Updates require the latest planId and expectedRevision. All other state fields are fully replaced, not partially patched. Explicit completed status completes all submitted steps and clears currentStepId; cancelled/failed only clear currentStepId. Ended plans require create.",
+		name: "plan", label: "Plan", description: "Create or update a complete, versioned implementation plan on this session branch. Every call requires steps, even when completing or only changing status. Title is required on create; omitted on update inherits the saved title. status, currentStepId and completedStepIds may be omitted: create defaults to active/null/none, update inherits the saved values. completionCriteria is optional: omit on create for no criteria, omit on update to preserve saved criteria, or send an empty string to clear them. Updates require the latest planId and expectedRevision. All other state fields are fully replaced, not partially patched. Explicit completed status completes all submitted steps and clears currentStepId; cancelled/failed only clear currentStepId. Ended plans require create.",
 		exposure: "model-only", executionMode: "sequential", defaultActive: false,
 		annotations: { readOnlyHint: true, openWorldHint: false },
 		promptSnippet: "Record and update a multi-step implementation plan.",
@@ -108,7 +123,7 @@ export const createPlanExtension = (): ExtensionFactory => pi => {
 		if (event.outcome !== "completed" || !pi.getActiveTools().includes("plan")) return;
 		const branch = ctx.sessionManager.getBranch();
 		const latest = latestPlan(branch);
-		if (!latest || latest.snapshot.status !== "active" || !planLooksConcluded(event, latest)) return;
+		if (!latest || latest.snapshot.status !== "active" || !planLooksConcluded(event.context.contextMessages, latest)) return;
 		const user = [...branch].reverse().find(entry => entry.type === "message" && entry.message.role === "user" && userText(entry.message.content) !== TOOL_TEXT_CONTINUE_PROMPT)?.id ?? "";
 		const state = reminded.get(ctx.sessionManager) ?? new Map();
 		if (state.get(latest.snapshot.planId) === user) return;
