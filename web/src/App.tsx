@@ -17,7 +17,7 @@ import { ChatDock } from "./components/ChatDock";
 import { WikiDocumentModal } from "./components/WikiDocumentModal";
 import { WikiResizeHandle, useWikiPanelWidth } from "./components/WikiResizeHandle";
 import { wikiRequest } from "./wiki-api";
-import { isWikiWindow, openWikiWindow, wikiWindowClient, wikiWindowParams } from "./wiki-window";
+import { isWikiWindow, openWikiWindow, wikiWindowCarry, wikiWindowClient, wikiWindowParams } from "./wiki-window";
 import type { ChatReferenceRequest } from "./chat-reference";
 
 import { ProviderAuthModal } from "./components/ProviderAuthModal";
@@ -499,17 +499,34 @@ export function App() {
 			: null;
 		const targetCwd = memory?.cwd ?? cwd;
 		if (!targetCwd) return;
-		openWikiWindow(targetCwd, memory?.path ?? null);
-	}, [view, chat.state?.cwd]);
+		openWikiWindow(targetCwd, memory?.path ?? null, { model: chat.state?.model?.id ?? null, thinking: chat.state?.thinkingLevel ?? null });
+	}, [view, chat.state?.cwd, chat.state?.model?.id, chat.state?.thinkingLevel]);
 	// Wiki 独立窗口自举（ADR-0003）：URL 指定工作区与文档；工作区不符先 set_cwd，
 	// 切换完成后 effect 重跑再进入。刷新恢复（同工作区、同文档的 pi-wiki-view 记录）
 	// 优先于自举；窗口被复用导航到新文档（URL 与记录不符）时按 URL 全新进入。
 	const wikiBoot = useRef(isWikiWindow);
+	// 携带应用的重试计数：模型 ID 失效等原因导致快照始终不匹配时放弃携带，避免自举死循环。
+	const wikiCarryAttempts = useRef(0);
 	useEffect(() => {
 		if (!wikiBoot.current || !chat.ready || switching) return;
 		const params = wikiWindowParams();
 		const cwd = chat.state?.cwd;
 		if (!cwd) return;
+		// 先应用打开方携带的模型与思考档位（独立客户端不共享主窗口会话；
+		// 应用后 createChat 的会话内携带会把它们带进临时 Wiki 会话）。
+		const carry = wikiWindowCarry();
+		if (wikiCarryAttempts.current < 30) {
+			if (carry.model && chat.state?.model?.id !== carry.model) {
+				wikiCarryAttempts.current++;
+				rawSend({ type: "set_model", modelId: carry.model });
+				return;
+			}
+			if (carry.thinking && chat.state?.thinkingLevel !== carry.thinking) {
+				wikiCarryAttempts.current++;
+				rawSend({ type: "set_thinking", level: carry.thinking });
+				return;
+			}
+		}
 		if (params.cwd && params.cwd !== cwd) {
 			// 发送失败（未知工作区等）时放弃自举，窗口停在 normal 视图。
 			if (!rawSend({ type: "set_cwd", path: params.cwd, source: "ui" })) wikiBoot.current = false;
@@ -523,7 +540,7 @@ export function App() {
 		if (stored && stored.client === wikiWindowClient() && stored.cwd === cwd && (params.doc === null || params.doc === stored.path)) return; // 交由下方恢复 effect
 		wikiPersist(null);
 		void enterWiki(params.doc);
-	}, [chat.ready, switching, chat.state?.cwd, wikiFileRequest, enterWiki, rawSend, readWikiPersist, wikiPersist]);
+	}, [chat.ready, switching, chat.state?.cwd, chat.state?.model?.id, chat.state?.thinkingLevel, wikiFileRequest, enterWiki, rawSend, readWikiPersist, wikiPersist]);
 	// 页面刷新恢复（Q15）：会话还在服务端运行时重进 wiki mode 并挂回同一临时会话；
 	// 服务端重启导致会话丢失时清除记录，回到 normal 视图。
 	useEffect(() => {
@@ -680,7 +697,7 @@ export function App() {
 			if (/\.(md|markdown)$/i.test(path)) {
 				// Wiki 窗口内点击文档链接 = 切换文档；normal 视图 = 打开独立 Wiki 窗口。
 				if (view === "wiki") void openWikiDocument(path);
-				else openWikiWindow(cwd, path);
+				else openWikiWindow(cwd, path, { model: chat.state?.model?.id ?? null, thinking: chat.state?.thinkingLevel ?? null });
 			} else {
 				setView("chat");
 				setDrawer("right");

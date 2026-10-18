@@ -17,7 +17,7 @@ import { randomUuid } from "./uuid.js";
 const WIKI_WINDOW_NAME = "pi-wiki";
 
 /** 解析 URL 查询串中的 wiki 窗口参数（纯函数，供启动判断与单测）。 */
-export function parseWikiWindowParams(search: string): { wikiWindow: boolean; cwd: string | null; doc: string | null; client: string | null } {
+export function parseWikiWindowParams(search: string): { wikiWindow: boolean; cwd: string | null; doc: string | null; client: string | null; model: string | null; thinking: string | null } {
 	try {
 		const params = new URLSearchParams(search);
 		return {
@@ -25,9 +25,11 @@ export function parseWikiWindowParams(search: string): { wikiWindow: boolean; cw
 			cwd: params.get("cwd"),
 			doc: params.get("doc"),
 			client: params.get("client"),
+			model: params.get("model"),
+			thinking: params.get("thinking"),
 		};
 	} catch {
-		return { wikiWindow: false, cwd: null, doc: null, client: null };
+		return { wikiWindow: false, cwd: null, doc: null, client: null, model: null, thinking: null };
 	}
 }
 
@@ -54,16 +56,27 @@ export function wikiWindowClient(): string | null {
 	return parseWikiWindowParams(currentSearch()).client;
 }
 
+/** 打开方携带的模型与思考档位（URL 参数）：独立客户端不共享主窗口会话，
+ * 常开思考的模型（如 GLM）会拒绝默认 off，Wiki 窗口自举时需先应用再建会话。 */
+export function wikiWindowCarry(): { model: string | null; thinking: string | null } {
+	if (!isWikiWindow) return { model: null, thinking: null };
+	const { model, thinking } = parseWikiWindowParams(currentSearch());
+	return { model, thinking };
+}
+
 /** 构建 Wiki 窗口 URL（同源根路径 + 查询参数；client 是窗口级客户端 ID）。 */
-export function buildWikiWindowUrl(cwd: string, doc: string | null, client: string): string {
+export function buildWikiWindowUrl(cwd: string, doc: string | null, client: string, carry?: { model?: string | null; thinking?: string | null }): string {
 	const params = new URLSearchParams({ "wiki-window": "1", cwd, client });
 	if (doc) params.set("doc", doc);
+	if (carry?.model) params.set("model", carry.model);
+	if (carry?.thinking) params.set("thinking", carry.thinking);
 	return `/?${params.toString()}`;
 }
 
 /** 打开（或聚焦已打开的）Wiki 独立窗口。每次打开生成新的窗口级客户端 ID：
- * 复用窗口导航到新文档时 URL 变化，客户端随之更换，临时会话全新开始。 */
-export function openWikiWindow(cwd: string, doc: string | null): void {
+ * 复用窗口导航到新文档时 URL 变化，客户端随之更换，临时会话全新开始。
+ * carry 传入主窗口当前的模型与思考档位，由新窗口自举时应用（跨客户端不共享会话）。 */
+export function openWikiWindow(cwd: string, doc: string | null, carry?: { model?: string | null; thinking?: string | null }): void {
 	const open = (globalThis as { open?: (url: string, target: string, features: string) => void }).open;
-	open?.(buildWikiWindowUrl(cwd, doc, randomUuid()), WIKI_WINDOW_NAME, "width=1100,height=800");
+	open?.(buildWikiWindowUrl(cwd, doc, randomUuid(), carry), WIKI_WINDOW_NAME, "width=1100,height=800");
 }

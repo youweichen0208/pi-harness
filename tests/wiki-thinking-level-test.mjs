@@ -43,7 +43,7 @@ try {
 	assert.equal(await portUp(port), false);
 	assert.equal(await portUp(mockPort), false);
 	await new Promise(r => mock.listen(mockPort, '127.0.0.1', r));
-	server = spawn(process.execPath, ['dist/server/index.js'], { env: { ...process.env, PORT: String(port), PI_WEB_TOKEN: '', PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(base, 'data'), PI_CODING_AGENT_DIR: join(base, 'agent') }, stdio: 'ignore' });
+	server = spawn(process.execPath, ['dist/server/index.js'], { env: { ...process.env, PORT: String(port), PI_WEB_TOKEN: '', PI_WEB_PKG_ROOT: process.cwd(), PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(base, 'data'), PI_CODING_AGENT_DIR: join(base, 'agent') }, stdio: 'ignore' });
 	for (let i = 0; i < 100 && !await portUp(port); i++) await new Promise(r => setTimeout(r, 100));
 	browser = await chromium.launch({ executablePath: CHROME_PATH || chromium.executablePath() });
 	const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
@@ -57,11 +57,16 @@ try {
 		await page.locator('.thinking-control .chip', { hasText: '标准' }).waitFor({ timeout: 3000 }).catch(() => {});
 	}
 	await page.locator('.thinking-control .chip', { hasText: '标准' }).waitFor({ timeout: 1000 });
+	// ADR-0003: the Wiki chat runs in a detached window; the main window's
+	// chosen thinking level travels in the window URL and is applied on boot.
+	const popupPromise = page.context().waitForEvent('page');
 	await page.locator('.file-name', { hasText: 'note.md' }).click();
-	await page.locator('.wiki-prose .fp-rich-document').waitFor();
-	await page.locator('.wiki-agent-chat .inputbar textarea').fill('可以帮我读一下吗');
-	await page.locator('.wiki-agent-chat .inputbar button.send').click();
-	await page.locator('.wiki-agent-chat .messages', { hasText: 'Hello.' }).waitFor({ timeout: 15000 });
+	const wiki = await popupPromise;
+	wiki.setDefaultTimeout(15000);
+	await wiki.locator('.wiki-prose .fp-rich-document').waitFor();
+	await wiki.locator('.wiki-agent-chat .inputbar textarea').fill('可以帮我读一下吗');
+	await wiki.locator('.wiki-agent-chat .inputbar button.send').click();
+	await wiki.locator('.wiki-agent-chat .messages', { hasText: 'Hello.' }).waitFor({ timeout: 15000 });
 	assert.deepEqual(thinking, ['enabled'], 'the Wiki request keeps thinking enabled');
 	console.log('PASS Wiki chat keeps the main chat thinking level');
 } finally {

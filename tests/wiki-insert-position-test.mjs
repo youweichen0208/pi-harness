@@ -12,17 +12,22 @@ writeFileSync(join(base, 'note.md'), '# Code\n\n```java\npublic class Original {
 let server, browser;
 try {
 	assert.equal(await portUp(port), false);
-	server = spawn(process.execPath, ['dist/server/index.js'], { env: { ...process.env, PORT: String(port), PI_WEB_TOKEN: '', PI_WEB_CWD: base, PI_WEB_DATA_DIR: join(base, 'data'), PI_CODING_AGENT_DIR: join(base, 'agent') }, stdio: 'ignore' });
+	server = spawn(process.execPath, ['dist/server/index.js'], { env: { ...process.env, PORT: String(port), PI_WEB_TOKEN: '', PI_WEB_PKG_ROOT: process.cwd(), PI_WEB_CWD: base, PI_WEB_DATA_DIR: join(base, 'data'), PI_CODING_AGENT_DIR: join(base, 'agent') }, stdio: 'ignore' });
 	for (let i = 0; i < 100 && !await portUp(port); i++) await new Promise(r => setTimeout(r, 100));
 	browser = await chromium.launch({ executablePath: CHROME_PATH || chromium.executablePath() });
 	const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
 	await page.goto(`http://127.0.0.1:${port}`);
 	await page.locator('.setup-modal .modal-close').click();
+	// ADR-0003: the editor lives in the detached Wiki window.
+	const popupPromise = page.context().waitForEvent('page');
 	await page.locator('.file-name', { hasText: 'note.md' }).click();
-	const editor = page.locator('.wiki-prose .fp-rich-document');
+	const wiki = await popupPromise;
+	wiki.setDefaultTimeout(15000);
+	await wiki.locator('.setup-modal .modal-close').click().catch(() => {});
+	const editor = wiki.locator('.wiki-prose .fp-rich-document');
 	await editor.locator('pre > code').first().waitFor();
-	await page.waitForFunction(() => [...(CSS.highlights.get('rich-code-keyword') ?? [])].some(range => range.toString() === 'public'));
-	const toolbar = page.locator('.wiki-insert-toolbar');
+	await wiki.waitForFunction(() => [...(CSS.highlights.get('rich-code-keyword') ?? [])].some(range => range.toString() === 'public'));
+	const toolbar = wiki.locator('.wiki-insert-toolbar');
 	assert.deepEqual(await toolbar.locator('button').evaluateAll(buttons => buttons.slice(0, -1).map(button => button.getAttribute('aria-label'))), ['正文', '标题 2', '标题 3', '列表', '插入表格', '图片', '任务列表', '引用', '代码块', '文档链接', '提及日期', '插入目录']);
 	await editor.locator('p').last().fill('Insert here.');
 	for (const [label, tag] of [['标题 2', 'h2'], ['标题 2', 'h2'], ['标题 3', 'h3'], ['正文', 'p']]) {
@@ -35,48 +40,48 @@ try {
 	for (const [alias, label, kind] of [['dmk', '代码块', 'code'], ['bg', '插入表格', 'table']]) {
 		for (const input of ['mouse', 'keyboard']) {
 			await editor.locator('p').last().fill('');
-			await page.keyboard.type(`/${alias}`);
+			await wiki.keyboard.type(`/${alias}`);
 			const trigger = await editor.locator('p').last().boundingBox();
-			if (input === 'mouse') await page.getByRole('option', { name: label, exact: true }).click();
-			else await page.keyboard.press('Enter');
-			const popup = await page.locator(`.wiki-${kind}-popover`).boundingBox();
+			if (input === 'mouse') await wiki.getByRole('option', { name: label, exact: true }).click();
+			else await wiki.keyboard.press('Enter');
+			const popup = await wiki.locator(`.wiki-${kind}-popover`).boundingBox();
 			assert.ok(Math.abs(popup.x - trigger.x) < 20 && popup.y >= trigger.y && popup.y <= trigger.y + trigger.height + 10, `/${alias} (${input}) picker stays at the insertion point: ${JSON.stringify({ trigger, popup })}`);
-			await page.keyboard.press('Escape');
+			await wiki.keyboard.press('Escape');
 			console.log(`PASS /${alias} ${input} positioning`);
 		}
 	}
 	await editor.locator('p').last().fill('');
-	await page.keyboard.type('/dmk');
-	await page.getByRole('option', { name: '代码块', exact: true }).click();
-	await page.locator('.wiki-code-popover').getByRole('option', { name: 'python', exact: false }).click();
-	await page.keyboard.type('print("slash")');
-	await page.keyboard.press('Meta+s');
-	await page.locator('.wiki-save-status.saved').waitFor();
+	await wiki.keyboard.type('/dmk');
+	await wiki.getByRole('option', { name: '代码块', exact: true }).click();
+	await wiki.locator('.wiki-code-popover').getByRole('option', { name: 'python', exact: false }).click();
+	await wiki.keyboard.type('print("slash")');
+	await wiki.keyboard.press('Meta+s');
+	await wiki.locator('.wiki-save-status.saved').waitFor();
 	assert.ok(readFileSync(join(base, 'note.md'), 'utf8').includes('```python\nprint("slash")'));
 	console.log('PASS slash insertion/save');
 	await editor.locator('p').last().click();
 	// Toolbar entry points still use the initiating button, independently of the caret.
-	const button = page.locator('.wiki-insert-toolbar').getByRole('button', { name: '代码块', exact: true });
+	const button = wiki.locator('.wiki-insert-toolbar').getByRole('button', { name: '代码块', exact: true });
 	const trigger = await button.boundingBox();
 	await button.click();
-	const popup = await page.locator('.wiki-code-popover').boundingBox();
+	const popup = await wiki.locator('.wiki-code-popover').boundingBox();
 	assert.ok(Math.abs(popup.x - trigger.x) < 2 && Math.abs(popup.y - trigger.y - trigger.height - 6) < 2);
-	await page.locator('.wiki-code-popover').getByRole('option', { name: 'python', exact: false }).click();
-	await page.keyboard.type('print("anchored")');
-	await page.keyboard.press('Meta+s');
-	await page.locator('.wiki-save-status.saved').waitFor();
+	await wiki.locator('.wiki-code-popover').getByRole('option', { name: 'python', exact: false }).click();
+	await wiki.keyboard.type('print("anchored")');
+	await wiki.keyboard.press('Meta+s');
+	await wiki.locator('.wiki-save-status.saved').waitFor();
 	assert.ok(readFileSync(join(base, 'note.md'), 'utf8').includes('```python\nprint("anchored")'));
 	console.log('PASS toolbar positioning and insertion/save');
-	await page.screenshot({ path: '/tmp/pi-wiki-toolbar-full.png' });
-	await page.setViewportSize({ width: 800, height: 900 });
-	await page.locator('.wiki-agent-header button[aria-label]').click();
+	await wiki.screenshot({ path: "/tmp/pi-wiki-toolbar-full.png" });
+	await wiki.setViewportSize({ width: 800, height: 900 });
+	await wiki.locator('.wiki-agent-header button[aria-label]').click();
 	await toolbar.getByRole('button', { name: '提及日期', exact: true }).click();
-	assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'toolbar does not widen the page');
+	assert.ok(await wiki.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'toolbar does not widen the page');
 	await toolbar.getByRole('button', { name: '代码块', exact: true }).click();
-	const narrowPopup = await page.locator('.wiki-code-popover').boundingBox();
+	const narrowPopup = await wiki.locator('.wiki-code-popover').boundingBox();
 	assert.ok(narrowPopup.x >= 0 && narrowPopup.x + narrowPopup.width <= 800, 'scrolled toolbar picker remains inside viewport');
-	await page.keyboard.press('Escape');
-	await page.screenshot({ path: '/tmp/pi-wiki-toolbar-narrow.png' });
+	await wiki.keyboard.press('Escape');
+	await wiki.screenshot({ path: "/tmp/pi-wiki-toolbar-narrow.png" });
 	console.log('PASS narrow toolbar scrolling and popup bounds');
 
 } finally {

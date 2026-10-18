@@ -5,12 +5,12 @@ describe("wiki window url", () => {
 	it("round-trips cwd, doc and the window client id", () => {
 		const url = buildWikiWindowUrl("/Users/me/project", "docs/guide.md", "c-1");
 		const parsed = parseWikiWindowParams(url.slice(url.indexOf("?")));
-		expect(parsed).toEqual({ wikiWindow: true, cwd: "/Users/me/project", doc: "docs/guide.md", client: "c-1" });
+		expect(parsed).toEqual({ wikiWindow: true, cwd: "/Users/me/project", doc: "docs/guide.md", client: "c-1", model: null, thinking: null });
 	});
 
 	it("omits doc when null", () => {
 		const parsed = parseWikiWindowParams(buildWikiWindowUrl("/tmp/ws", null, "c-2").slice(1));
-		expect(parsed).toEqual({ wikiWindow: true, cwd: "/tmp/ws", doc: null, client: "c-2" });
+		expect(parsed).toEqual({ wikiWindow: true, cwd: "/tmp/ws", doc: null, client: "c-2", model: null, thinking: null });
 	});
 
 	it("client stays optional for manually opened URLs", () => {
