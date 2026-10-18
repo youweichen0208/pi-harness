@@ -13,6 +13,12 @@ describe("wiki window url", () => {
 		expect(parsed).toEqual({ wikiWindow: true, cwd: "/tmp/ws", doc: null, client: "c-2", model: null, thinking: null });
 	});
 
+	it("round-trips the opener model and thinking level", () => {
+		const url = buildWikiWindowUrl("/tmp/ws", "note.md", "c-4", { model: "glm", thinking: "high" });
+		const parsed = parseWikiWindowParams(url.slice(url.indexOf("?")));
+		expect(parsed).toEqual({ wikiWindow: true, cwd: "/tmp/ws", doc: "note.md", client: "c-4", model: "glm", thinking: "high" });
+	});
+
 	it("client stays optional for manually opened URLs", () => {
 		const parsed = parseWikiWindowParams("?wiki-window=1&cwd=/tmp/ws");
 		expect(parsed.client).toBeNull();

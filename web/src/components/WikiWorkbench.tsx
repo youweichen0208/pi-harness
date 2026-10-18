@@ -283,7 +283,7 @@ export function WikiWorkbench({ cwd, conversationId, streaming, active, ready, g
 		return () => { element.removeEventListener("scroll", remember); };
 	}, [cwd, path, loading, doc?.entry.path]);
 	const saveStatus = doc?.editable && <button className={`wiki-save-status ${autosave.failure ? "failed" : saving || dirty ? "saving" : "saved"}`} onClick={() => void save()} title={autosave.failure || undefined} disabled={!autosave.failure || autosave.conflict} aria-live="polite"><i />{t(autosave.failure ? "wikiSaveFailedRetry" : saving || dirty ? "wikiSaving" : "wikiSaved")}</button>;
-	const sourceButton = <button disabled={!doc?.editable || loading || doc.entry.path !== path} aria-pressed={source} onClick={() => setSource(s => !s)}><FiCode />{t(source ? "wikiPreview" : "wikiSource")}</button>;
+	const sourceButton = <button className="wiki-source-toggle" disabled={!doc?.editable || loading || doc.entry.path !== path} aria-pressed={source} onClick={() => setSource(s => !s)}><FiCode />{t(source ? "wikiPreview" : "wikiSource")}</button>;
 	const toolbar = <>
 		<div className="wiki-breadcrumb" title={`${cwd}/${path}`}><span className="wiki-path-parent">{path.includes("/") && <><span className="wiki-path-segment">{path.split("/").slice(0, -2).map(part => `${part} / `).join("")}</span><span className="wiki-path-tail">{path.split("/").at(-2)} / </span></>}</span><b>{path.split("/").at(-1) || t("wikiMode")}</b>{saveStatus}</div>
 		<div className="wiki-toolbar-actions">

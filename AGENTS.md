@@ -185,7 +185,7 @@ pi SDK 和 pi-ai 精确锁定 1.2.0，使用原版 SDK，不应用本项目的 S
 | **后台任务列表** | `docs/architecture-core.md` | bash 前后端口快照 diff；按客户端持久；单停/全部关闭 |
 | **扩展 UI 桥** | `docs/architecture-core.md` | setWidget/setStatus/notify/select/confirm/input → 浏览器消息；dialog_response 回传 |
 
-Wiki：点击 `.md` / `.markdown` 在**独立窗口**打开 Wiki mode（Web 弹窗 / 桌面第二 BrowserWindow，URL 契约 `?wiki-window=1&cwd=&doc=`，见 ADR-0003），主窗口留在 normal 对话并行工作；每篇文档一个临时 Wiki 会话（不落盘、不进会话树，切换文档或退出即删，运行中任务先确认中断）；退出即关窗，临时会话由闲置客户端逐出清理。修改视图布局、临时会话生命周期、中断确认、刷新恢复、发送前保存、选区「问 pi」回填、保存与关闭保护、正文读取、索引／双链／搜索、改动记录或桌面默认应用打开时，读取 `docs/architecture-wiki.md`。34a 工具栏为 `WikiToolbar.tsx`，正文排版见 `docs/wiki-doc-v2-design.md`。入口为 `App.tsx`（wiki view）+ `WikiWorkbench.tsx`、`wiki-window.ts`、`wiki-routes.ts` 与 `wiki-service.ts`；`WikiDocumentModal.tsx` 仅数据库弹窗使用。
+Wiki：点击 `.md` / `.markdown` 在**独立窗口**打开 Wiki mode（Web 弹窗 / 桌面第二 BrowserWindow，URL 契约 `?wiki-window=1&cwd=&doc=&client=&model=&thinking=`（后两项可选），见 ADR-0003），主窗口留在 normal 对话并行工作；新窗口先通过现有 `set_model`／`set_thinking` 继承打开方的模型与思考档位，再创建会话；每篇文档一个临时 Wiki 会话（不落盘、不进会话树，切换文档或退出即删，运行中任务先确认中断）；退出即关窗，临时会话由闲置客户端逐出清理。修改视图布局、临时会话生命周期、中断确认、刷新恢复、发送前保存、选区「问 pi」回填、保存与关闭保护、正文读取、索引／双链／搜索、改动记录或桌面默认应用打开时，读取 `docs/architecture-wiki.md`。34a 工具栏为 `WikiToolbar.tsx`，正文排版见 `docs/wiki-doc-v2-design.md`。入口为 `App.tsx`（wiki view）+ `WikiWorkbench.tsx`、`wiki-window.ts`、`wiki-routes.ts` 与 `wiki-service.ts`；`WikiDocumentModal.tsx` 仅数据库弹窗使用。
 
 会话树：修改树过滤/搜索、分支切换/摘要/label、编辑重问、派生会话、外部修改检测或返回文本的草稿保护时，读取 `docs/architecture-session-tree.md`。树状态由原生 SDK 管理，协议 v40，默认编辑重问留在同一会话文件。修改附件卡片、原生条目冻结恢复或模板附件时，读取 `docs/architecture-attachments.md`。
 

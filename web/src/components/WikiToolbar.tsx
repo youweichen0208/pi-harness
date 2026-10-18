@@ -23,7 +23,10 @@ export function WikiInsertPopover({ popup, onClose, children }: { popup: WikiIns
 }
 export function WikiToolbar({ readOnly, focused, onWidth, items, popup, onPrepare, onSelect, onPopup }: { readOnly: boolean; focused: boolean; onWidth: () => void; items: WikiInsertItem[]; popup: WikiInsertPopup | null; onPrepare: () => void; onSelect: (id: string) => void; onPopup: (popup: WikiInsertPopup) => void }) {
 	const t = useT();
-	const groups = [items.slice(0, 3), items.slice(3, 9), items.slice(9)];
+	// 分组顺序：导航（目录 / 文档链接）· 标题（正文 / H2 / H3）· 列表与插入 · 代码。
+	const GROUP_ORDER = [["ml", "sl"], ["zw", "bt2", "bt3"], ["lb", "rw", "bg", "tp", "yy", "date"], ["dmk"]];
+	const byId = new Map(items.map(item => [item.id, item]));
+	const groups = GROUP_ORDER.map(ids => ids.map(id => byId.get(id)).filter((item): item is WikiInsertItem => !!item));
 	const pick = (kind: WikiInsertPopup["kind"], button: HTMLElement) => { const r = button.getBoundingClientRect(); onPopup({ kind, x: r.left, y: r.bottom + 6 }); };
 	return <div className="wiki-insert-toolbar" role="toolbar" aria-label={t("richInsertMenu")}>
 		{groups.map((group, index) => <div className="wiki-tool-group" key={index}>{group.map(item => {

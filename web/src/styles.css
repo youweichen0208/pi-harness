@@ -1429,8 +1429,10 @@ body.panel-resizing {
 	max-width: 320px;
 }
 .attach-chip.reference {
-	border-color: color-mix(in srgb, var(--yellow) 40%, transparent);
-	background: color-mix(in srgb, var(--yellow) 10%, transparent);
+	border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+	background: var(--accent-soft);
+	color: var(--accent);
+	border-radius: var(--r-switch);
 }
 .attach-chip.lines {
 	border-color: color-mix(in srgb, var(--green) 40%, transparent);
@@ -5243,6 +5245,7 @@ span.msg-editor-hint svg {
 .empty-example-icon {
 	font-size: 17px;
 	flex-shrink: 0;
+	color: var(--accent);
 }
 
 .empty-example-text {
@@ -5853,7 +5856,7 @@ span.msg-editor-hint svg {
 
 .inputbar {
 	flex-shrink: 0;
-	padding: 12px 20px 14px;
+	padding: 12px 20px 10px;
 	position: relative;
 }
 
@@ -8655,7 +8658,7 @@ html.pi-desktop .topbar { height: 48px; }
 .empty-logo-wrap::before { display: none; }
 .empty-title { font-size: 20px; font-weight: 600; letter-spacing: 0; }
 .empty-cwd { max-width: 100%; border-radius: var(--r-sm); }
-.empty-examples { width: 100%; max-width: 520px; grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr)); margin-top: 24px; }
+.empty-examples { width: 100%; max-width: 560px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 24px; }
 .empty-example { border-radius: var(--r-sm); padding: 10px 12px; min-width: 0; }
 .empty-example:hover { box-shadow: none; transform: none; }
 .status-dot.ok { box-shadow: none; }
@@ -9100,9 +9103,11 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { position: fix
 .design-workspace .input-tools .btn.supplement:not(:disabled) { border-color: var(--text-dim); }
 .design-workspace .input-tools .btn:disabled { opacity: .4; }
 .design-workspace .panel-right > .panel-title { gap: 7px; padding-inline: 12px; }
-.tree-filter, .tree-hidden-toggle { border: 0; border-radius: var(--r-sm); background: transparent; padding: 3px 5px; color: var(--text-faint); font: 11px var(--sans); white-space: nowrap; cursor: pointer; }
-.tree-filter:hover, .tree-hidden-toggle:hover { color: var(--text); background: var(--bg-elev2); }
-.tree-filter[aria-pressed="true"], .tree-hidden-toggle[aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); }
+.tree-filter { flex: none; display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border: 0; border-radius: 50%; background: var(--yellow-bg); color: var(--yellow-fg); font: 500 11px var(--sans); white-space: nowrap; cursor: pointer; }
+.tree-filter:hover { color: var(--yellow-fg); background: color-mix(in srgb, var(--yellow-fg) 12%, var(--yellow-bg)); }
+.tree-filter[aria-pressed="true"] { color: var(--yellow-fg); background: var(--yellow-bg); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--yellow-fg) 45%, transparent); }
+.tree-hidden-toggle { border: 0; border-radius: var(--r-sm); background: transparent; padding: 3px 5px; color: var(--text-faint); font: 11px var(--sans); white-space: nowrap; cursor: pointer; }
+.tree-hidden-toggle:hover { color: var(--text); background: var(--bg-elev2); }
 .tree-controls { position: relative; margin-left: auto; }
 .tree-menu-trigger { display: grid; place-items: center; width: 27px; height: 27px; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--text-dim); cursor: pointer; }
 .tree-menu-trigger:hover, .tree-menu-trigger[aria-expanded="true"] { background: var(--bg-elev2); color: var(--text); }
@@ -9112,11 +9117,11 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { position: fix
 .tree-switch-track::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--accent-fg); box-shadow: 0 1px 2px color-mix(in srgb, var(--shadow-color) 13.33%, transparent); transition: transform .15s; }
 .tree-hidden-toggle[aria-checked="true"] .tree-switch-track { background: var(--accent); }
 .tree-hidden-toggle[aria-checked="true"] .tree-switch-track::after { transform: translateX(10px); }
-.tree-modified-count { flex: none; font: 11px var(--mono); color: var(--text-faint); min-width: 14px; text-align: right; }
-.tree-change-badge { flex: none; min-width: 14px; text-align: center; font: 600 11px var(--mono); }
-.tree-change-badge.m { color: var(--yellow-fg); }
-.tree-change-badge.a { color: var(--green); }
-.tree-change-badge.d { color: var(--red); }
+.tree-modified-count { flex: none; display: inline-grid; place-items: center; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 50%; background: var(--yellow-bg); color: var(--yellow-fg); font: 500 10.5px var(--sans); font-variant-numeric: tabular-nums; text-align: center; }
+.tree-change-badge { flex: none; display: inline-grid; place-items: center; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 50%; font: 600 10px var(--mono); }
+.tree-change-badge.m { background: var(--yellow-bg); color: var(--yellow-fg); }
+.tree-change-badge.a { background: var(--green-soft); color: var(--green); }
+.tree-change-badge.d { background: var(--red-soft); color: var(--red); }
 .status-item.working .working-dots i { width: 3px; height: 3px; }
 @media (max-width: 600px) { .design-workspace .input-tools:has(.btn.stop) { flex-wrap: wrap; } .design-workspace .input-tools:has(.btn.stop) .input-tools-right { margin-left: auto; } }
 
@@ -9845,8 +9850,8 @@ html.pi-desktop .design-workspace .topbar-actions > .panel-toggle { position: re
 .header-task-progress:hover { text-decoration: underline; text-underline-offset: 3px; }
 .task-progress:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .design-workspace .panel-right > .panel-title { height: 40px; min-height: 40px; max-height: 40px; }
-.design-workspace .panel-right .tree-filter { padding: 2px 4px; border-color: transparent; background: transparent; font-size: 11px; }
-.design-workspace .panel-right .tree-filter[aria-pressed="true"] { background: var(--accent-soft); }
+.design-workspace .panel-right .tree-filter { padding: 0 7px; border-color: transparent; font-size: 11px; }
+.design-workspace .panel-right .tree-filter[aria-pressed="true"] { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--yellow-fg) 45%, transparent); }
 .design-workspace .qn-rail { right: 8px; width: 16px; opacity: 0; }
 .design-workspace .qn-rail:hover,
 .design-workspace .qn-rail:focus-within { opacity: 1; }
@@ -11047,13 +11052,9 @@ html.pi-desktop .wiki-breadcrumb { -webkit-app-region: drag; app-region: drag; }
 .design-workspace .view-switch button.active { color: var(--accent); }
 .design-workspace .inputbox .btn.send { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
 .design-workspace .session-item.active .session-dot { background: var(--accent); }
-.design-workspace .view-switch .tab-change-count,
-.tree-modified-count {
-	background: var(--yellow-bg); color: var(--yellow-fg); border-radius: var(--r-sm);
-	padding: 2px 5px; font-style: normal; font-variant-numeric: tabular-nums;
-}
-.design-workspace .panel-right .tree-filter { background: transparent; color: var(--text-dim); }
-.design-workspace .panel-right .tree-filter[aria-pressed="true"] { background: var(--bg-elev2); box-shadow: inset 0 0 0 1px var(--border); }
+.design-workspace .view-switch .tab-change-count { background: var(--yellow-bg); color: var(--yellow-fg); border-radius: 50%; padding: 2px 5px; font-style: normal; font-variant-numeric: tabular-nums; }
+.design-workspace .panel-right .tree-filter { color: var(--yellow-fg); background: var(--yellow-bg); }
+.design-workspace .panel-right .tree-filter[aria-pressed="true"] { background: var(--yellow-bg); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--yellow-fg) 45%, transparent); }
 .change-state.done, .task-progress-status.done, .task-step.done .task-step-mark,
 .task-plan-step.done .task-plan-mark, .todo-checklist-item.completed .todo-checklist-mark,
 .bash-step.done .bash-step-icon, .wiki-chat-tool.done summary > span { color: var(--green); border-color: var(--green); }
@@ -11198,10 +11199,11 @@ html.pi-desktop .wiki-breadcrumb { -webkit-app-region: drag; app-region: drag; }
 .wiki-meta-chip svg { width: 13px; height: 13px; }
 .wiki-document-meta .wiki-save-status { margin-left: 2px; font-size: 11px; }
 .wiki-prose .fp-markdown .md h3 { font-family: var(--wiki-heading-font); font-size: 23px; font-weight: 500; margin: 30px 0 12px; }
-.wiki-prose .fp-markdown .md :not(pre) > code { background: var(--bg-elev2); color: inherit; border: 0; border-radius: var(--r-sm); padding: 2px 5px; }
+.wiki-prose .fp-markdown .md :not(pre) > code { font-family: var(--mono); background: var(--bg-elev2); color: inherit; border: 0; border-radius: var(--r-wiki-code); padding: 2px 5px; }
 .wiki-prose .fp-markdown .md table { font-size: 14px; border-collapse: collapse; }
 .wiki-prose .fp-markdown .md th { background: var(--bg-elev2); color: var(--text-dim); font-weight: 500; }
-.wiki-prose .fp-markdown .md :is(th, td) { border: 1px solid var(--border-soft); padding: 10px 14px; }
+.wiki-prose .fp-markdown .md :is(th, td) { border: 0; border-top: 1px solid var(--border-soft); padding: 10px 14px; }
+.wiki-prose .fp-markdown .md thead th { border-top: 0; }
 .wiki-prose .fp-markdown .md blockquote { border-left: 2px solid var(--border); background: transparent; padding: 2px 20px; color: var(--text-dim); }
 .wiki-prose .fp-markdown .fp-code-language select { border: 1px solid var(--border-soft); border-radius: var(--r-sm); padding: 3px 6px; }
 @media (max-width: 760px) {
@@ -11236,7 +11238,7 @@ html.pi-desktop .wiki-breadcrumb { -webkit-app-region: drag; app-region: drag; }
 .design-workspace .input-tools .inputbox-actions { display: flex; gap: 10px; flex: none; }
 :root .design-workspace .inputbox .btn.composer-action { display: inline-flex; align-items: center; justify-content: center; width: 28px; min-width: 28px; max-width: 28px; height: 28px; min-height: 28px; flex: 0 0 28px; padding: 0; border: 1px solid var(--border); border-radius: var(--r-sm); cursor: pointer; }
 :root .design-workspace .inputbox .btn.composer-action svg { width: 16px; height: 16px; }
-:root .design-workspace .inputbox .btn.composer-action.send { background: var(--accent); border-color: transparent; color: var(--accent-fg); }
+:root .design-workspace .inputbox .btn.composer-action.send { background: var(--accent); border-color: transparent; color: var(--accent-fg); border-radius: 50%; }
 :root .design-workspace .inputbox .btn.composer-action.send:disabled { background: var(--send-disabled-bg); color: var(--text-faint); cursor: default; }
 :root .design-workspace .inputbox .btn.composer-action.stop { background: var(--bg-elev); color: var(--text); }
 :root .design-workspace .inputbox .btn.composer-action.stop svg { width: 9px; height: 9px; fill: currentColor; }
@@ -11477,7 +11479,7 @@ html.pi-desktop .wiki-breadcrumb { -webkit-app-region: drag; app-region: drag; }
 	--scrollbar-thumb: oklch(0.84 0.022 78);
 }
 .wiki-workbench { --wiki-title: 34px; --wiki-h2: 22px; --wiki-h3: 15px; --wiki-body: 14.5px; --wiki-heading-font: "Source Serif 4", "Noto Serif SC", "Songti SC", serif; }
-.wiki-tree-row.selected { background: var(--wiki-tree-selected); box-shadow: none; }
+.wiki-tree-row.selected { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
 .wiki-mode .topbar { min-height: 44px; }
 .wiki-breadcrumb { gap: 6px; }
 .wiki-path-parent { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -11686,7 +11688,8 @@ pre.wiki-mermaid-source-hidden > .wiki-mermaid-preview { border-bottom: 0; margi
 .pr-reference { display: inline-block; padding: 0 5px; border: 1px solid var(--border); border-radius: var(--r-sm); font: 12px var(--mono); }
 .design-workspace .change-summary, .design-workspace .reply-actions { width: calc(100% - 2 * var(--composer-gutter)); max-width: var(--chat-max); margin-inline: auto; }
 .design-workspace .msg-assistant .msg-text:not(.process-narration) .md { font-size: 13.5px; line-height: 1.75; }
-.changes-current-branch { max-width: 110px; padding: 3px 6px; border-radius: var(--r-sm); background: var(--bg-elev2); font: 12px var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.changes-current-branch { display: inline-flex; align-items: center; gap: 5px; max-width: 130px; padding: 3px 6px; border-radius: var(--r-sm); background: var(--bg-elev2); font: 12px var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.branch-change-count { flex: none; display: inline-grid; place-items: center; min-width: 15px; height: 15px; padding: 0 4px; border-radius: 50%; background: var(--yellow-bg); color: var(--yellow-fg); font: 600 10px var(--mono); font-variant-numeric: tabular-nums; }
 @media (min-width: 1200px) {
 	html.pi-desktop-win32 .changes-toolbar, html.pi-desktop-linux .changes-toolbar { padding-right: 140px; }
 	html.pi-desktop-win32 .design-workspace.changes-open .topbar, html.pi-desktop-linux .design-workspace.changes-open .topbar { padding-right: 16px; }
@@ -12031,7 +12034,7 @@ html.pi-desktop-linux .design-workspace.wiki-mode .topbar { padding-right: 148px
 .design-workspace .panel-right .tree-caret { display: grid; place-items: center; width: 12px; height: 16px; color: var(--text-faint); }
 .design-workspace .panel-right .tree-caret svg { width: 12px; height: 14px; }
 .design-workspace .panel-right .tree-root .tree-caret { color: var(--text); }
-.design-workspace .panel-right .tree-modified-count { min-width: 20px; padding: 3px 5px; border-radius: var(--r-md); background: var(--yellow-bg); color: var(--yellow-fg); font: 11px/1.3 var(--sans); text-align: center; }
+.design-workspace .panel-right .tree-modified-count { min-width: 16px; height: 16px; padding: 0 4px; border-radius: 50%; background: var(--yellow-bg); color: var(--yellow-fg); font: 500 10.5px/1 var(--sans); text-align: center; }
 .design-workspace .panel-right .tree-root:hover { background: var(--row-hover); }
 .design-workspace .panel-right :is(.tree-search, .tree-root):active { background: var(--row-active); }
 
@@ -12202,7 +12205,8 @@ html.pi-desktop-linux .design-workspace.wiki-mode .topbar { padding-right: 148px
 .design-workspace .file-item .tree-caret, .wiki-tree-main .tree-caret { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; flex: none; color: var(--text-dim); }
 .wiki-tree-main { display: flex; align-items: center; gap: 7px; flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; background: transparent; text-align: left; }
 .wiki-tree-main .file-name-text { color: inherit; }
-.design-workspace .file-item:hover, .design-workspace .file-item:focus-within, .wiki-workbench .wiki-tree-row:hover, .wiki-workbench .wiki-tree-row:focus-within, .wiki-workbench .wiki-tree-row.selected { background: var(--wiki-tree-selected); box-shadow: none; }
+.design-workspace .file-item:hover, .design-workspace .file-item:focus-within, .wiki-workbench .wiki-tree-row:hover, .wiki-workbench .wiki-tree-row:focus-within { background: var(--wiki-tree-selected); box-shadow: none; }
+.wiki-workbench .wiki-tree-row.selected { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
 .wiki-workbench .file-reference-action, .design-workspace .file-attach.ref { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; flex: none; border: 0; border-radius: var(--r-sm); background: var(--yellow-bg); color: var(--yellow-fg); cursor: pointer; opacity: 0; }
 .file-reference-action svg { width: 14px; height: 14px; }
 .wiki-tree-row:hover .file-reference-action, .wiki-tree-row:focus-within .file-reference-action, .design-workspace .file-item:hover .file-attach.ref, .design-workspace .file-item:focus-within .file-attach.ref { opacity: 1; }
@@ -12280,8 +12284,14 @@ html.pi-desktop-linux .design-workspace.wiki-mode .topbar { padding-right: 148px
 :root .design-workspace .process-list .thinking-toggle { color: var(--text-faint); }
 :root .design-workspace .process-list .thinking-toggle .thinking-label { flex: none; }
 :root .design-workspace .process-list .thinking-body { max-height: 320px; overflow-y: auto; padding: 2px 12px 10px 34px; border-top: 0; font-size: 12.5px; line-height: 1.6; }
-:root .design-workspace .process-list .thinking.live { background: color-mix(in srgb, var(--accent-soft) 55%, transparent); }
+/* Long thinking rows recede behind a light gray band so tool rows stay scannable. */
+:root .design-workspace .process-list > .thinking, :root .design-workspace .process-list .thinking { background: var(--output-bg); }
 :root .design-workspace .process-list .thinking.live .thinking-label { color: var(--accent); font-weight: 600; }
+/* Read rows: file icon on the left, measured completion time in green on the right. */
+:root .design-workspace .process-list .read-group-head > svg, :root .design-workspace .process-list .read-group-head .ui-icon { flex: none; color: var(--text-faint); }
+:root .design-workspace .process-list .read-group-status { color: var(--green); font-variant-numeric: tabular-nums; }
+:root .design-workspace .process-list .read-group.run .read-group-status { color: var(--accent); }
+:root .design-workspace .process-list .read-group.err .read-group-status { color: var(--red); }
 .thinking.live .thinking-live-label { display: block; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-faint); font-style: italic; }
 /* Message rhythm: one header per reply, no negative margins pulling rows into it. */
 .design-workspace .msg-continuation { margin-top: -12px; padding-top: 0; }
@@ -12328,7 +12338,7 @@ html.pi-desktop-linux .design-workspace.wiki-mode .topbar { padding-right: 148px
 :root .design-workspace .inputbox .btn.composer-action.stop + .send:disabled { display: none; }
 /* Context usage: a small meter; cache hit rate moves to the popover. */
 .usage-meter { position: relative; width: 36px; height: 4px; overflow: hidden; border-radius: var(--r-sm); background: var(--bg-elev2); }
-.usage-meter i { position: absolute; inset: 0 auto 0 0; background: var(--accent); }
+.usage-meter i { position: absolute; inset: 0 auto 0 0; min-width: 2px; background: var(--accent); transition: width 0.3s ease; }
 .usage-meter i.warn { background: var(--yellow-fg); }
 .design-workspace .usage-meter ~ .usage-cache-short { display: none; }
 .process-list .bash-group-count { margin-left: auto; }
@@ -12651,7 +12661,7 @@ html.pi-desktop-linux .design-workspace.wiki-mode .topbar { padding-right: 148px
 .method-tag { width: 44px; padding: 1px 0; border-radius: var(--r-sm); background: var(--accent-soft); color: var(--accent); font: 500 11px var(--mono); text-align: center; }
 .method-tag:is(.post, .put, .patch) { background: var(--yellow-bg); color: var(--yellow-fg); }
 .method-tag.delete { background: var(--red-soft); color: var(--red); }
-.header-changes-chip + .changes-current-branch { display: none; }
+.header-changes-chip + .changes-current-branch { margin-left: 2px; }
 .design-workspace .inputbox { box-shadow: var(--card-shadow); }
 /* Underline tabs stay transparent in dark; older dark rules paint the segmented pill. */
 :root[data-appearance="dark"] .design-workspace .topbar-actions > .view-switch { background: transparent; }
@@ -12722,3 +12732,62 @@ html.pi-desktop-linux .design-workspace.wiki-mode .topbar { padding-right: 148px
 .model-modal .btn:not(.primary):hover:not(:disabled) { background: var(--bg-elev2); border-color: var(--accent); }
 .model-modal .btn.danger { color: var(--red); }
 .model-modal .model-modal-body > .form-section-title { margin-top: 16px; margin-bottom: 8px; }
+
+/* Wiki window: 「对话 / Wiki 模式」 capsule segmented control.
+   Appended last so it also wins over the dark-mode underline-tab rules that
+   clear the segmented-pill background. */
+:root .design-workspace.wiki-mode .topbar .view-switch {
+	background: var(--bg-elev2);
+	border: 1px solid var(--border-soft);
+	border-radius: var(--r-switch);
+	padding: 3px;
+	height: 30px;
+	align-items: center;
+	gap: 2px;
+}
+:root .design-workspace.wiki-mode .topbar .view-switch button {
+	height: 24px;
+	min-height: 24px;
+	padding: 0 12px;
+	border: 0;
+	border-radius: var(--r-switch);
+	background: transparent;
+	color: var(--text-dim);
+	box-shadow: none;
+	font-weight: 400;
+}
+:root .design-workspace.wiki-mode .topbar .view-switch button:hover {
+	background: transparent;
+	color: var(--heading);
+}
+:root .design-workspace.wiki-mode .topbar .view-switch button.active {
+	background: var(--bg-elev);
+	color: var(--accent);
+	font-weight: 600;
+	box-shadow: 0 1px 3px color-mix(in srgb, var(--shadow-color) 8%, transparent);
+}
+:root .design-workspace.wiki-mode .topbar .view-switch button.active::after { display: none; }
+:root .design-workspace.wiki-mode .topbar .view-switch button > svg { display: none; }
+:root .design-workspace.wiki-mode .topbar .view-switch button > span { display: inline; }
+
+/* 「编辑源码」 pill button in the document toolbar. */
+.wiki-toolbar-actions .wiki-source-toggle {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	border: 1px solid var(--border-soft);
+	border-radius: var(--r-switch);
+	padding: 4px 12px;
+	background: var(--bg-elev);
+	color: var(--text-dim);
+	font-size: 12px;
+}
+.wiki-toolbar-actions .wiki-source-toggle:hover {
+	border-color: var(--accent);
+	color: var(--accent);
+}
+.wiki-toolbar-actions .wiki-source-toggle[aria-pressed="true"] {
+	background: var(--accent-soft);
+	border-color: var(--accent);
+	color: var(--accent);
+}
