@@ -172,11 +172,12 @@ try {
 	assert.equal(await page.locator('.agent-silence button', { hasText: '重试' }).isEnabled(), true);
 	await page.locator('.agent-silence button', { hasText: '重试' }).click();
 	assert(sent.some((msg) => msg.type === 'retry_silent_prompt' && msg.conversationId === state.conversationId));
+	socket.send(JSON.stringify({ type: 'agent_silence', conversationId: state.conversationId, phase: 'active', since: Date.now(), activity: 'model' }));
+	await page.locator('.agent-silence.model').waitFor({ state: 'hidden' });
 	socket.send(JSON.stringify({ type: 'agent_silence', conversationId: state.conversationId, phase: 'silent', since, activity: 'tool' }));
-	await page.locator('.agent-silence', { hasText: '命令或工具已运行' }).waitFor();
-	assert.equal(await page.locator('.agent-silence button', { hasText: '重试' }).isDisabled(), true);
-	await page.locator('.agent-silence button', { hasText: '停止' }).click();
-	assert(sent.some((msg) => msg.type === 'abort'));
+	await sleep(100);
+	assert.equal(await page.locator('.agent-silence.tool').count(), 0, 'tool silence does not show a composer notice');
+	assert(!(await page.locator('.inputbox textarea').getAttribute('placeholder')).includes('命令或工具仍在运行'));
 	const longCommand = Array.from({ length: 24 }, (_, i) => `echo section_${i} very_long_argument_for_command_preview`).join('; ');
 	state = { ...state, rev: state.rev + 1, messages: [messages[0], { id: 'long-bash', role: 'assistant', content: [{ type: 'toolCall', id: 'long-command', name: 'bash', argumentsText: JSON.stringify({ command: longCommand }) }] }], taskProgress: null, isStreaming: false };
 	socket.send(JSON.stringify({ type: 'snapshot', state }));

@@ -17,6 +17,9 @@ export function AgentSilenceStatus({ chat, send }: { chat: ChatState; send: (mes
 	}, [silence]);
 	if (chat.state?.recovery && Object.values(chat.state.recovery).some(Boolean)) return null;
 	if (!chat.ready || !silence || silence.conversationId !== chat.activeConversationId || !chat.state?.isStreaming) return null;
+	// 工具静默不显示状态行：长命令属于正常执行，停止/重试按钮只会误导；
+	// 进度由命令行的实时计时与最新输出呈现（#106），底栏也不占用。
+	if (silence.activity === "tool") return null;
 	const seconds = Math.max(0, Math.floor((now - silence.since) / 1000));
 	const duration = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 	const messages = chat.state.messages;
@@ -24,6 +27,6 @@ export function AgentSilenceStatus({ chat, send }: { chat: ChatState; send: (mes
 	const lastUser = messages[lastUserIndex] as UiMessage | undefined;
 	const prompt = lastUser?.content.map((part) => part.type === "text" && typeof (part as { text?: unknown }).text === "string" ? (part as { text: string }).text : "").filter(Boolean).join("\n").trim() ?? "";
 	const toolsSincePrompt = messages.slice(lastUserIndex + 1).some((message) => message.content.some((part) => part.type === "toolCall"));
-	const canRetry = silence.activity === "model" && !!prompt && !toolsSincePrompt && lastUser?.content.every((part) => part.type === "text");
-	return <div className={`agent-silence ${silence.activity}`} role="status"><span className="agent-silence-label"><UiIcon name="warning" /> {silence.activity === "tool" ? t("toolSilent", { duration }) : t("modelSilent", { duration })}</span>{acknowledged ? <button type="button" onClick={() => setAcknowledged(false)}>{t("actions")}</button> : <span className="agent-silence-actions"><button type="button" onClick={() => send({ type: "abort" })}>{t("stop")}</button><button type="button" disabled={!canRetry} title={!canRetry ? t("retrySilentUnavailable") : undefined} onClick={() => { if (canRetry) send({ type: "retry_silent_prompt", conversationId: silence.conversationId, text: prompt }); }}>{t("retry")}</button><button type="button" onClick={() => setAcknowledged(true)}>{t("continueWaiting")}</button></span>}</div>;
+	const canRetry = !!prompt && !toolsSincePrompt && lastUser?.content.every((part) => part.type === "text");
+	return <div className={`agent-silence ${silence.activity}`} role="status"><span className="agent-silence-label"><UiIcon name="warning" /> {t("modelSilent", { duration })}</span>{acknowledged ? <button type="button" onClick={() => setAcknowledged(false)}>{t("actions")}</button> : <span className="agent-silence-actions"><button type="button" onClick={() => send({ type: "abort" })}>{t("stop")}</button><button type="button" disabled={!canRetry} title={!canRetry ? t("retrySilentUnavailable") : undefined} onClick={() => { if (canRetry) send({ type: "retry_silent_prompt", conversationId: silence.conversationId, text: prompt }); }}>{t("retry")}</button><button type="button" onClick={() => setAcknowledged(true)}>{t("continueWaiting")}</button></span>}</div>;
 }

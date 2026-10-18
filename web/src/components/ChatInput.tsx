@@ -702,7 +702,7 @@ export const ChatInput = memo(function ChatInput({
 														placeholder={
 															connected
 																? streaming
-																	? silentActivity ? t(silentActivity === "model" ? "placeholderModelSilent" : "placeholderToolSilent") : t("placeholderStreamingModes", { primary: t(delivery === "steer" ? "queueSteerTag" : "queueFollowTag"), alternate: t(delivery === "steer" ? "queueFollowTag" : "queueSteerTag") })
+																	? silentActivity ? t("placeholderModelSilent") : t("placeholderStreamingModes", { primary: t(delivery === "steer" ? "queueSteerTag" : "queueFollowTag"), alternate: t(delivery === "steer" ? "queueFollowTag" : "queueSteerTag") })
 																	: t(answering ? "questionPlaceholder" : "composerPlaceholder")
 																: t("placeholderConnecting")
 														}

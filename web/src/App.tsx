@@ -1282,7 +1282,7 @@ export function App() {
 								send={send}
 								ready={chat.ready && !!conversationState}
 								streaming={conversationState?.isStreaming ?? false}
-								silentActivity={chat.agentSilence?.conversationId === chat.activeConversationId ? chat.agentSilence.activity : null}
+								silentActivity={chat.agentSilence?.conversationId === chat.activeConversationId && chat.agentSilence.activity === "model" ? chat.agentSilence.activity : null}
 										messages={conversationState?.messages ?? EMPTY_MESSAGES}
 								slashCommands={chat.slashCommands}
 								modelState={modelState}
