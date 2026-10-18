@@ -28,7 +28,7 @@ try {
 	await editor.locator('pre > code').first().waitFor();
 	await wiki.waitForFunction(() => [...(CSS.highlights.get('rich-code-keyword') ?? [])].some(range => range.toString() === 'public'));
 	const toolbar = wiki.locator('.wiki-insert-toolbar');
-	assert.deepEqual(await toolbar.locator('button').evaluateAll(buttons => buttons.slice(0, -1).map(button => button.getAttribute('aria-label'))), ['正文', '标题 2', '标题 3', '列表', '插入表格', '图片', '任务列表', '引用', '代码块', '文档链接', '提及日期', '插入目录']);
+	assert.deepEqual(await toolbar.locator('button').evaluateAll(buttons => buttons.slice(0, -1).map(button => button.getAttribute('aria-label'))), ['插入目录', '文档链接', '正文', '标题 2', '标题 3', '列表', '任务列表', '插入表格', '图片', '引用', '提及日期', '代码块']);
 	await editor.locator('p').last().fill('Insert here.');
 	for (const [label, tag] of [['标题 2', 'h2'], ['标题 2', 'h2'], ['标题 3', 'h3'], ['正文', 'p']]) {
 		await toolbar.getByRole('button', { name: label, exact: true }).click();
