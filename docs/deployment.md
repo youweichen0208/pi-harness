@@ -119,11 +119,14 @@ npm run publish:electron       # 同 build，但 --publish always——本地跑
   启动时若 `~/.pi-web-desktop/project-workspaces.json` 仍存在，会并入共享文件（同名合并项目），
   原文件改名为 `.merged`，只合并一次。服务端每秒检查文件，另一边的修改会推给已打开的窗口；
   过期 revision 的写入被拒绝，不会覆盖另一边的改动。
-- 桌面单窗口客户端 ID 保存到 `<PI_WEB_DATA_DIR>/desktop-client-id`，由主进程通过沙箱 preload
+- 桌面客户端 ID 保存到 `<PI_WEB_DATA_DIR>/desktop-client-id`，由主进程通过沙箱 preload
   传给前端，不依赖随机端口的浏览器存储；完整退出再启动仍恢复服务端保存的最近项目和最后工作目录。
   浏览器版继续为每个标签页分配独立 ID。旧版各临时 ID 下的记录保留，不自动合并。
+  Wiki 独立窗口（ADR-0003）忽略该固定 ID 改用窗口级 sessionStorage，避免与主窗口互为镜像（issue #10）。
 - HTTP/HTTPS 新窗口链接和离开应用的页面跳转由系统默认浏览器打开；应用内锚点保留，
-  非网页协议不交给系统执行。文件的默认应用打开仍走已验证的专用 IPC。
+  非网页协议不交给系统执行。例外：同源 `?wiki-window=1` 的 `window.open` 由主进程
+  创建/复用 Wiki 独立窗口（同一时刻一个，重复进入导航到新文档并聚焦），Wiki 窗口
+  关闭时真正关闭（不隐藏到托盘），关闭守卫按窗口独立跟踪。文件的默认应用打开仍走已验证的专用 IPC。
   回归：`node tests/desktop-state-links-test.mjs` 与 `--links`（真实 Electron，临时数据目录，浏览器打开仅在系统调用边界替换）。
 - 关闭窗口 → 最小化到托盘（不退出）；托盘菜单可重新打开 / 退出。
 - 桌面窗口共用一条内容顶栏：macOS 隐藏系统标题栏、保留左侧原生红黄绿按钮；
@@ -146,7 +149,7 @@ npm run publish:electron       # 同 build，但 --publish always——本地跑
   在「设置 → 组件更新」点击「自动更新」下载，显示进度后点击「重启并安装」。
   安装前系统对话框提示保存文件并确认，不在普通退出时自动安装。检查/下载错误在设置页显示，
   开发模式禁用安装。`electron/app-updater.mjs` 管理状态及重复请求，preload 仅暴露固定操作，
-  主进程校验请求来自主窗口主 frame；内置 Pi 跟随应用版本升级。
+  主进程校验请求来自 app 窗口的主 frame；内置 Pi 跟随应用版本升级。
 - 浏览器版的应用更新在可见终端运行固定的 `npm install -g @youweichen/pi-harness@<版本>`；
   registry 版本不高于当前版本时禁用，避免旧 npm 标签导致降级。成功后手动执行
   `pi-harness server restart`。原生扩展更新继续使用 Pi 包管理器。
@@ -164,7 +167,7 @@ npm run publish:electron       # 同 build，但 --publish always——本地跑
 
 桌面测试可设置 `PI_WEB_DATA_DIR` 指向临时数据目录；未设置时继续使用 `~/.pi-web-desktop`。Chromium 配置可用 `--user-data-dir` 隔离。
 
-桌面文件编辑与 Web 共用右栏组件。Wiki 关闭到托盘或退出前，主进程通过固定 `pi-window-before-close` 请求等待自动保存，校验主 frame 与请求 ID 后才接受 `pi-window-close-result`；失败或 30 秒超时取消关闭、保留窗口，服务保持运行。普通文件预览关闭到托盘仍保留草稿；退出或刷新遇到未保存内容时，主进程通过 `will-prevent-unload` 显示原生放弃确认，取消后服务继续运行。回归：`tests/wiki-desktop-save-test.mjs`。
+桌面文件编辑与 Web 共用右栏组件。窗口关闭（主窗口隐藏到托盘、Wiki 窗口真正关闭）或退出前，主进程通过固定 `pi-window-before-close` 请求等待自动保存，校验窗口归属、主 frame 与请求 ID 后才接受 `pi-window-close-result`；失败或 30 秒超时取消关闭、保留窗口，服务保持运行。普通文件预览关闭到托盘仍保留草稿；退出或刷新遇到未保存内容时，主进程通过 `will-prevent-unload` 显示原生放弃确认，取消后服务继续运行。回归：`tests/wiki-desktop-save-test.mjs`。
 
 ### Windows 便携版临时目录
 

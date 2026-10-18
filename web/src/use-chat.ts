@@ -39,6 +39,7 @@ import { applyMessageDelta, type MessageDeltaMsg } from "./message-delta";
 import { emitPluginData } from "./plugin-loader";
 import { appendNotice, type Notice } from "./notices";
 import { PROTOCOL_VERSION } from "./protocol-version";
+import { isWikiWindow, wikiWindowClient } from "./wiki-window";
 
 /** Window event carrying each search_content_result batch to the code-search dialog. */
 export const SEARCH_CONTENT_EVENT = "pi:search-content";
@@ -529,6 +530,7 @@ function reducer(state: ChatState, action: Action): ChatState {
 		case "notice":
 			return { ...state, notices: appendNotice(state.notices, action.notice) };
 		case "agent_silence": {
+			if (action.event.phase === "silent" && action.event.activity === "tool") return state;
 			const byConversation = { ...state.agentSilenceByConversation };
 			if (action.event.phase === "active") delete byConversation[action.event.conversationId];
 			else byConversation[action.event.conversationId] = action.event;
@@ -695,6 +697,14 @@ let cachedClientId: string | null = null;
  */
 export function getClientId(): string {
 	if (cachedClientId) return cachedClientId;
+	// Wiki 独立窗口必须是独立客户端，且不能读 sessionStorage：桌面版 preload 注入
+	// 的 clientId 全 app 固定，浏览器 window.open 又会克隆 opener 的 sessionStorage
+	// （issue #10）——两者都会让 Wiki 窗口镜像主窗口的 ClientSession。窗口级身份
+	// 只认 URL 的 client 参数；缺失时退化为本次页面生命周期的一次性 id。
+	if (isWikiWindow) {
+		cachedClientId = wikiWindowClient() ?? randomUuid();
+		return cachedClientId;
+	}
 	let id: string | null = desktopAPI?.clientId ?? null;
 	try {
 		// Mirror the desktop identity for existing integrations; browser tabs stay isolated.

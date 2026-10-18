@@ -47,14 +47,23 @@ const isDev = !app.isPackaged || !!process.env.DEV;
 // ── 状态 ──
 /** @type {BrowserWindow | null} */
 let mainWindow = null;
+/** Wiki 独立窗口（ADR-0003）：同一时刻只保留一个，重复进入导航到它。 */
+/** @type {BrowserWindow | null} */
+let wikiWindow = null;
+/** 全部 app 窗口（主窗口 + wiki 窗口），IPC 归属校验用。 */
+/** @type {Set<BrowserWindow>} */
+const windows = new Set();
 // macOS animates into page fullscreen; leaving before enter-full-screen strands the page in fullscreen (#89).
-let fullscreenSettling = false;
+/** @type {Map<BrowserWindow, boolean>} */
+const fullscreenSettling = new Map();
+/** 每窗口的关闭守卫握手状态（pi-window-close-ready / -result）。 */
+/** @type {Map<BrowserWindow, { ready: boolean; approved: boolean; pending: { id: string; timer: NodeJS.Timeout } | null }>} */
+const closeGuards = new Map();
 /** @type {Tray | null} */
 let tray = null;
 /** @type {import("node:child_process").ChildProcess | null} */
 let serverProcess = null;
 let isQuitting = false;
-let closeGuardReady = false, closeApproved = false, pendingClose = null;
 let serverPort = 0;
 // One secret per launch, kept across server restarts so the open window stays authorized.
 const serverToken = desktopServerToken();
@@ -220,8 +229,30 @@ async function recoverServer() {
 
 // ── 窗口 ──
 
-function createWindow() {
-	mainWindow = new BrowserWindow({
+const serverOrigin = () => `http://127.0.0.1:${serverPort}`;
+
+/** 同源且带 ?wiki-window=1 的 URL = Wiki 独立窗口请求（ADR-0003）。 */
+function isWikiWindowUrl(target) {
+	try {
+		const parsed = new URL(target);
+		return parsed.origin === serverOrigin() && parsed.searchParams.get("wiki-window") === "1";
+	} catch {
+		return false;
+	}
+}
+
+// Web links belong in the system browser, never a new privileged app window.
+function openExternal(target) {
+	try {
+		const parsed = new URL(target);
+		if (!["http:", "https:"].includes(parsed.protocol)) return;
+		void shell.openExternal(parsed.href).catch(error => console.error("Unable to open browser:", error.message));
+	} catch { /* Invalid navigation targets are blocked. */ }
+}
+
+/** 窗口外壳选项：主窗口与 Wiki 窗口共用（无边框 + 沙箱 preload）。 */
+function windowShellOptions(overrides = {}) {
+	return {
 		width: 1200,
 		height: 800,
 		minWidth: 800,
@@ -239,23 +270,31 @@ function createWindow() {
 			additionalArguments: [`--pi-desktop-client-id=${clientId}`],
 		},
 		icon: join(ROOT, "web", "dist", "apple-touch-icon.png"),
-	});
+		...overrides,
+	};
+}
+
+/**
+ * 每个 app 窗口的公共接线：窗口状态发布、外链拦截、导航守卫、未保存离开确认、
+ * 关闭守卫。hideOnClose=true（主窗口）关闭时隐藏到托盘；false（Wiki 窗口）真正关闭。
+ */
+function wireAppWindow(win, { hideOnClose }) {
+	windows.add(win);
+	closeGuards.set(win, { ready: false, approved: false, pending: null });
 
 	const publishWindowState = () => {
-		if (mainWindow && !mainWindow.isDestroyed()) {
-			mainWindow.webContents.send("pi-window-state", windowState(mainWindow));
-		}
+		if (!win.isDestroyed()) win.webContents.send("pi-window-state", windowState(win));
 	};
 	// An already fullscreen window has no transition to wait for.
-	mainWindow.on("enter-html-full-screen", () => { fullscreenSettling = !mainWindow.isFullScreen(); });
-	for (const event of ["enter-full-screen", "leave-full-screen"]) mainWindow.on(event, () => { fullscreenSettling = false; });
+	win.on("enter-html-full-screen", () => { fullscreenSettling.set(win, !win.isFullScreen()); });
+	for (const event of ["enter-full-screen", "leave-full-screen"]) win.on(event, () => { fullscreenSettling.set(win, false); });
 	for (const event of ["maximize", "unmaximize", "enter-full-screen", "leave-full-screen", "enter-html-full-screen", "leave-html-full-screen", "restore"]) {
-		mainWindow.on(event, publishWindowState);
+		win.on(event, publishWindowState);
 	}
-	mainWindow.webContents.on("did-finish-load", publishWindowState);
-	mainWindow.webContents.on("will-prevent-unload", (event) => {
+	win.webContents.on("did-finish-load", publishWindowState);
+	win.webContents.on("will-prevent-unload", (event) => {
 		const zh = app.getLocale().startsWith("zh");
-		const choice = dialog.showMessageBoxSync(mainWindow, {
+		const choice = dialog.showMessageBoxSync(win, {
 			type: "warning",
 			message: zh ? "文件有未保存的修改，确定放弃并离开？" : "Discard unsaved file changes and leave?",
 			buttons: zh ? ["取消", "放弃修改"] : ["Cancel", "Discard changes"],
@@ -267,58 +306,61 @@ function createWindow() {
 		else isQuitting = false;
 	});
 
-	// 加载 localhost 上的 server
-	const url = `http://127.0.0.1:${serverPort}`;
-	// Web links belong in the system browser, never a new privileged app window.
-	const openExternal = (target) => {
-		try {
-			const parsed = new URL(target);
-			if (!["http:", "https:"].includes(parsed.protocol)) return;
-			void shell.openExternal(parsed.href).catch(error => console.error("Unable to open browser:", error.message));
-		} catch { /* Invalid navigation targets are blocked. */ }
-	};
-	mainWindow.webContents.setWindowOpenHandler(({ url: target }) => {
+	win.webContents.setWindowOpenHandler(({ url: target }) => {
+		if (isWikiWindowUrl(target)) {
+			openWikiAppWindow(target);
+			return { action: "deny" };
+		}
 		openExternal(target);
 		return { action: "deny" };
 	});
 	const guardNavigation = (event, target) => {
-		try { if (new URL(target).origin === new URL(url).origin) return; } catch {}
+		try { if (new URL(target).origin === serverOrigin()) return; } catch { /* fall through */ }
 		event.preventDefault();
 		openExternal(target);
 	};
-	mainWindow.webContents.on("will-navigate", guardNavigation);
-	mainWindow.webContents.on("will-redirect", guardNavigation);
+	win.webContents.on("will-navigate", guardNavigation);
+	win.webContents.on("will-redirect", guardNavigation);
+
+	// Give the editor a chance to flush before hiding or quitting. Keep the server
+	// alive until the matching main-frame acknowledgement; failure cancels closing.
+	win.on("close", (event) => {
+		const guard = closeGuards.get(win);
+		if (guard?.ready && !guard.approved) {
+			event.preventDefault();
+			if (!guard.pending) {
+				const id = randomUUID();
+				guard.pending = { id, timer: setTimeout(() => { guard.pending = null; isQuitting = false; win.show(); }, 30000) };
+				win.webContents.send("pi-window-before-close", id);
+			}
+			return;
+		}
+		if (guard) guard.approved = false;
+		if (hideOnClose && !isQuitting) {
+			event.preventDefault();
+			win.hide();
+		}
+	});
+
+	win.on("closed", () => {
+		windows.delete(win);
+		const guard = closeGuards.get(win);
+		if (guard?.pending) clearTimeout(guard.pending.timer);
+		closeGuards.delete(win);
+		fullscreenSettling.delete(win);
+		if (win === mainWindow) mainWindow = null;
+		if (win === wikiWindow) wikiWindow = null;
+	});
+}
+
+function createWindow() {
+	mainWindow = new BrowserWindow(windowShellOptions());
+	wireAppWindow(mainWindow, { hideOnClose: true });
+	// 加载 localhost 上的 server
 	mainWindow.loadURL(desktopWindowUrl(serverPort, serverToken));
 
 	mainWindow.once("ready-to-show", () => {
 		mainWindow.show();
-	});
-
-	// Give the editor a chance to flush before hiding or quitting. Keep the server
-	// alive until the matching main-frame acknowledgement; failure cancels closing.
-	mainWindow.on("close", (event) => {
-		if (closeGuardReady && !closeApproved) {
-			event.preventDefault();
-			if (!pendingClose) {
-				const id = randomUUID();
-				pendingClose = { id, timer: setTimeout(() => { pendingClose = null; isQuitting = false; mainWindow?.show(); }, 30000) };
-				mainWindow.webContents.send("pi-window-before-close", id);
-			}
-			return;
-		}
-		closeApproved = false;
-		if (!isQuitting) {
-			event.preventDefault();
-			mainWindow.hide();
-			return false;
-		}
-	});
-
-	mainWindow.on("closed", () => {
-		closeGuardReady = false;
-		if (pendingClose) clearTimeout(pendingClose.timer);
-		pendingClose = null;
-		mainWindow = null;
 	});
 
 	// 开发模式打开 DevTools
@@ -327,23 +369,58 @@ function createWindow() {
 	}
 }
 
+/**
+ * Wiki 独立窗口（ADR-0003）：渲染进程 window.open 一个 ?wiki-window=1 的同源
+ * URL 时由这里创建/复用。同一时刻只有一个 Wiki 窗口，重复进入导航到新文档并聚焦。
+ */
+function openWikiAppWindow(url) {
+	if (wikiWindow && !wikiWindow.isDestroyed()) {
+		void wikiWindow.loadURL(url);
+		wikiWindow.show();
+		wikiWindow.focus();
+		return;
+	}
+	wikiWindow = new BrowserWindow(windowShellOptions({
+		width: 1100,
+		height: 800,
+		minWidth: 720,
+		minHeight: 480,
+		title: "pi wiki",
+	}));
+	wireAppWindow(wikiWindow, { hideOnClose: false });
+	void wikiWindow.loadURL(url);
+	wikiWindow.once("ready-to-show", () => {
+		wikiWindow?.show();
+	});
+}
+
+/** Resolve the app window that sent an IPC event; foreign webContents get nothing. */
+function windowOf(event) {
+	const win = BrowserWindow.fromWebContents(event.sender);
+	return win && windows.has(win) ? win : null;
+}
+
 ipcMain.on("pi-window-close-ready", (event, ready) => {
-	if (mainWindow && event.sender === mainWindow.webContents && event.senderFrame === mainWindow.webContents.mainFrame) closeGuardReady = ready === true;
+	const win = windowOf(event);
+	const guard = win && closeGuards.get(win);
+	if (guard && event.senderFrame === win.webContents.mainFrame) guard.ready = ready === true;
 });
 ipcMain.on("pi-window-close-result", (event, result) => {
-	const win = mainWindow;
-	if (!win || event.sender !== win.webContents || event.senderFrame !== win.webContents.mainFrame || !pendingClose || result?.id !== pendingClose.id) return;
-	clearTimeout(pendingClose.timer); pendingClose = null;
+	const win = windowOf(event);
+	if (!win || event.senderFrame !== win.webContents.mainFrame) return;
+	const guard = closeGuards.get(win);
+	if (!guard?.pending || result?.id !== guard.pending.id) return;
+	clearTimeout(guard.pending.timer); guard.pending = null;
 	if (result.allow !== true) { isQuitting = false; win.show(); win.focus(); return; }
-	closeApproved = true;
+	guard.approved = true;
 	if (isQuitting) app.quit(); else win.close();
 });
 
-// Only the app's main webContents may control its own window. The renderer
-// receives fixed operations, never an arbitrary Electron method or channel.
+// Only the app's own windows may control themselves. The renderer receives
+// fixed operations, never an arbitrary Electron method or channel.
 ipcMain.handle("pi-window-action", (event, action) => {
-	const win = mainWindow;
-	if (!win || win.isDestroyed() || event.sender !== win.webContents) return;
+	const win = windowOf(event);
+	if (!win || win.isDestroyed()) return;
 	switch (action) {
 		case "minimize": win.minimize(); break;
 		case "toggle-maximize":
@@ -357,8 +434,8 @@ ipcMain.handle("pi-window-action", (event, action) => {
 // The renderer supplies workspace identity, never an arbitrary executable path.
 // Ask our authenticated server to resolve the active workspace's file first.
 ipcMain.handle("pi-wiki-open-file", async (event, request) => {
-	const win = mainWindow;
-	if (!win || win.isDestroyed() || event.sender !== win.webContents || event.senderFrame !== win.webContents.mainFrame) throw new Error("Forbidden");
+	const win = windowOf(event);
+	if (!win || win.isDestroyed() || event.senderFrame !== win.webContents.mainFrame) throw new Error("Forbidden");
 	if (!request || ![request.clientId, request.cwd, request.path].every(value => typeof value === "string")) throw new Error("Invalid file request");
 	const response = await fetch(`http://127.0.0.1:${serverPort}/api/wiki`, {
 		method: "POST", headers: { "Content-Type": "application/json", ...bearerHeaders(serverToken) },
@@ -370,8 +447,8 @@ ipcMain.handle("pi-wiki-open-file", async (event, request) => {
 	if (error) throw new Error(error);
 });
 ipcMain.handle("pi-extension-open-path", async (event, request) => {
-	const win = mainWindow;
-	if (!win || win.isDestroyed() || event.sender !== win.webContents || event.senderFrame !== win.webContents.mainFrame) throw new Error("Forbidden");
+	const win = windowOf(event);
+	if (!win || win.isDestroyed() || event.senderFrame !== win.webContents.mainFrame) throw new Error("Forbidden");
 	if (!request || ![request.clientId, request.cwd, request.id].every(value => typeof value === "string")) throw new Error("Invalid package request");
 	const response = await fetch(`http://127.0.0.1:${serverPort}/api/extensions`, {
 		method: "POST", headers: { "Content-Type": "application/json", ...bearerHeaders(serverToken) },
@@ -382,12 +459,12 @@ ipcMain.handle("pi-extension-open-path", async (event, request) => {
 	shell.showItemInFolder(result.absolute);
 });
 ipcMain.handle("pi-window-state-read", (event) => {
-	const win = mainWindow;
-	if (!win || win.isDestroyed() || event.sender !== win.webContents) return null;
+	const win = windowOf(event);
+	if (!win || win.isDestroyed()) return null;
 	return windowState(win);
 });
 function windowState(win) {
-	return { maximized: win.isMaximized(), fullscreen: win.isFullScreen(), fullscreenSettling };
+	return { maximized: win.isMaximized(), fullscreen: win.isFullScreen(), fullscreenSettling: fullscreenSettling.get(win) ?? false };
 }
 
 // ── 托盘 ──
@@ -535,7 +612,8 @@ function setupAutoUpdater() {
 		},
 	});
 	ipcMain.handle("pi-app-update", (event, action) => {
-		if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents || event.senderFrame !== mainWindow.webContents.mainFrame) throw Error("Forbidden");
+		const win = windowOf(event);
+		if (!win || win.isDestroyed() || event.senderFrame !== win.webContents.mainFrame) throw Error("Forbidden");
 		return appUpdater.run(action);
 	});
 	if (!isDev) setTimeout(() => void appUpdater.run("check"), 5000);

@@ -17,6 +17,7 @@ import { ChatDock } from "./components/ChatDock";
 import { WikiDocumentModal } from "./components/WikiDocumentModal";
 import { WikiResizeHandle, useWikiPanelWidth } from "./components/WikiResizeHandle";
 import { wikiRequest } from "./wiki-api";
+import { isWikiWindow, openWikiWindow, wikiWindowClient, wikiWindowParams } from "./wiki-window";
 import type { ChatReferenceRequest } from "./chat-reference";
 
 import { ProviderAuthModal } from "./components/ProviderAuthModal";
@@ -386,13 +387,12 @@ export function App() {
 		if (waiters.length) { settleWaiters.current = []; waiters.forEach(item => item()); }
 	}, [conversationState?.isStreaming, conversationState?.conversationId]);
 	// 刷新恢复（Q15）：view + 文档 + 临时会话 ID，随标签页（clientId）存 sessionStorage。
-	const wikiPersist = useCallback((entry: { cwd: string; conversationId: string; path: string | null; anchor: { cwd: string; conversationId: string } | null } | null) => {
+	const wikiPersist = useCallback((entry: { client: string | null; cwd: string; conversationId: string; path: string | null; anchor: { cwd: string; conversationId: string } | null } | null) => {
 		try { if (entry) sessionStorage.setItem(WIKI_VIEW_KEY, JSON.stringify(entry)); else sessionStorage.removeItem(WIKI_VIEW_KEY); } catch { /* best effort */ }
 	}, []);
 	const readWikiPersist = useCallback(() => {
-		try { return JSON.parse(sessionStorage.getItem(WIKI_VIEW_KEY) ?? "null") as { cwd: string; conversationId: string; path: string | null; anchor: { cwd: string; conversationId: string } | null } | null; } catch { return null; }
+		try { return JSON.parse(sessionStorage.getItem(WIKI_VIEW_KEY) ?? "null") as { client?: string | null; cwd: string; conversationId: string; path: string | null; anchor: { cwd: string; conversationId: string } | null } | null; } catch { return null; }
 	}, []);
-	const pendingWikiEntry = useRef<string | null>(null);
 	/** 进入 / 切换文档：创建一个新的临时 Wiki 会话（不复用，切换即删），
 	 * 携带当前文档的当前文件 chip。调用方已处理运行中任务的确认。 */
 	const enterWiki = useCallback(async (path: string | null) => {
@@ -415,14 +415,24 @@ export function App() {
 				result = await create(refreshed.conversationId);
 			}
 			if (wikiCurrent.current.cwd !== wikiCwd) return; // 期间切换了工作区
-			const anchor = view === "wiki" && wikiFileRequest ? wikiNormalAnchor.current : { cwd: wikiCwd, conversationId: activeId };
+			// Wiki 独立窗口没有可回切的普通对话锚点——退出即关窗。
+			const anchor = isWikiWindow ? null : view === "wiki" && wikiFileRequest ? wikiNormalAnchor.current : { cwd: wikiCwd, conversationId: activeId };
 			wikiNormalAnchor.current = anchor;
 			if (path) { try { localStorage.setItem(WIKI_WORKSPACE_KEY, JSON.stringify({ cwd: wikiCwd, path })); } catch { /* best effort */ } }
 			setDatabaseOpen(false);
 			setDrawer(null);
 			setWikiChatOpen(!window.matchMedia("(max-width: 900px)").matches);
+			// URL 即窗口契约（ADR-0003）：Wiki 独立窗口内切换文档时同步 doc 参数，
+			// 刷新的自举与恢复据此判断是否同一文档，复用窗口导航也以它为准。
+			if (isWikiWindow) {
+				try {
+					const url = new URL(window.location.href);
+					if (path) url.searchParams.set("doc", path); else url.searchParams.delete("doc");
+					window.history.replaceState(null, "", url);
+				} catch { /* replaceState 不可用（异常 origin 等）时跳过，仅影响刷新恢复 */ }
+			}
 			setWikiFileRequest({ cwd: wikiCwd, conversationId: result.conversationId, path: path ?? "", token: randomUuid() });
-			wikiPersist({ cwd: wikiCwd, conversationId: result.conversationId, path, anchor });
+			wikiPersist({ client: wikiWindowClient(), cwd: wikiCwd, conversationId: result.conversationId, path, anchor });
 			setView("wiki");
 		} catch (e) { pushNotice("error", (e as Error).message); }
 	}, [switching, view, wikiFileRequest, pushNotice, wikiPersist]);
@@ -440,6 +450,15 @@ export function App() {
 	 * 服务端同时移除该临时 Wiki 会话（in-memory transcript 一并丢弃）。 */
 	const exitWiki = useCallback(() => {
 		const leave = () => {
+			// Wiki 独立窗口：退出即关窗，客户端断开后由服务端逐出清理临时会话。
+			if (isWikiWindow) {
+				wikiPersist(null);
+				wikiNormalAnchor.current = null;
+				setWikiFileRequest(null);
+				setView("chat");
+				window.close(); // 脚本打开的窗口可关闭；被浏览器拒绝时停在 normal 视图兜底
+				return;
+			}
 			const anchor = wikiNormalAnchor.current;
 			const finish = () => {
 				wikiPersist(null);
@@ -468,8 +487,8 @@ export function App() {
 		await waitSettle();
 		pending.run();
 	}, [wikiInterrupt, rawSend, waitSettle]);
-	/** 顶栏进入 Wiki mode：回到上次 Wiki 的工作区（Q16：normal 视图切项目不影响它），
-	 * 打开上次的文档，会话永远是新建的临时会话。 */
+	/** 顶栏进入 Wiki mode：打开独立 Wiki 窗口（ADR-0003），主窗口留在 normal 对话。
+	 * 窗口记住上次 Wiki 的工作区与文档，由新窗口自己切工作区并打开文档。 */
 	const enterWikiMode = useCallback(() => {
 		if (view === "wiki") return;
 		const cwd = chat.state?.cwd;
@@ -478,26 +497,39 @@ export function App() {
 		const memory = parsed && typeof parsed === "object" && typeof (parsed as { cwd?: unknown }).cwd === "string"
 			? { cwd: (parsed as { cwd: string }).cwd, path: typeof (parsed as { path?: unknown }).path === "string" ? (parsed as { path: string }).path : null }
 			: null;
-		if (memory && cwd && memory.cwd !== cwd) {
-			// 先切工作区，切换完成后再进入（见下方的 pendingWikiEntry effect）。
-			pendingWikiEntry.current = memory.path;
-			rawSend({ type: "set_cwd", path: memory.cwd, source: "ui" });
+		const targetCwd = memory?.cwd ?? cwd;
+		if (!targetCwd) return;
+		openWikiWindow(targetCwd, memory?.path ?? null);
+	}, [view, chat.state?.cwd]);
+	// Wiki 独立窗口自举（ADR-0003）：URL 指定工作区与文档；工作区不符先 set_cwd，
+	// 切换完成后 effect 重跑再进入。刷新恢复（同工作区、同文档的 pi-wiki-view 记录）
+	// 优先于自举；窗口被复用导航到新文档（URL 与记录不符）时按 URL 全新进入。
+	const wikiBoot = useRef(isWikiWindow);
+	useEffect(() => {
+		if (!wikiBoot.current || !chat.ready || switching) return;
+		const params = wikiWindowParams();
+		const cwd = chat.state?.cwd;
+		if (!cwd) return;
+		if (params.cwd && params.cwd !== cwd) {
+			// 发送失败（未知工作区等）时放弃自举，窗口停在 normal 视图。
+			if (!rawSend({ type: "set_cwd", path: params.cwd, source: "ui" })) wikiBoot.current = false;
 			return;
 		}
-		void enterWiki(memory && memory.cwd === cwd ? memory.path : null);
-	}, [view, chat.state?.cwd, rawSend, enterWiki]);
-	useEffect(() => {
-		if (!pendingWikiEntry.current || switching || !chat.ready || view === "wiki") return;
-		const path = pendingWikiEntry.current;
-		pendingWikiEntry.current = null;
-		void enterWiki(path);
-	}, [switching, chat.ready, view, enterWiki]);
+		wikiBoot.current = false;
+		if (wikiFileRequest) return; // 刷新恢复已挂回原会话
+		// 只有同一客户端（同一次窗口打开，URL client 参数未变）的记录才可恢复；
+		// 复用窗口导航到新文档换用了新客户端，必须全新进入。
+		const stored = readWikiPersist();
+		if (stored && stored.client === wikiWindowClient() && stored.cwd === cwd && (params.doc === null || params.doc === stored.path)) return; // 交由下方恢复 effect
+		wikiPersist(null);
+		void enterWiki(params.doc);
+	}, [chat.ready, switching, chat.state?.cwd, wikiFileRequest, enterWiki, rawSend, readWikiPersist, wikiPersist]);
 	// 页面刷新恢复（Q15）：会话还在服务端运行时重进 wiki mode 并挂回同一临时会话；
 	// 服务端重启导致会话丢失时清除记录，回到 normal 视图。
 	useEffect(() => {
 		if (wikiFileRequest || !chat.ready || !chat.state || switching) return;
 		const stored = readWikiPersist();
-		if (stored && chat.state.conversationId === stored.conversationId && chat.state.cwd === stored.cwd) {
+		if (stored && (isWikiWindow ? stored.client === wikiWindowClient() : true) && chat.state.conversationId === stored.conversationId && chat.state.cwd === stored.cwd) {
 			wikiNormalAnchor.current = stored.anchor ?? null;
 			setWikiChatOpen(!window.matchMedia("(max-width: 900px)").matches);
 			setWikiFileRequest({ cwd: stored.cwd, conversationId: stored.conversationId, path: stored.path ?? "", token: randomUuid() });
@@ -646,7 +678,9 @@ export function App() {
 		const cwd = chat.state.cwd;
 		const open = () => {
 			if (/\.(md|markdown)$/i.test(path)) {
-				void openWikiDocument(path);
+				// Wiki 窗口内点击文档链接 = 切换文档；normal 视图 = 打开独立 Wiki 窗口。
+				if (view === "wiki") void openWikiDocument(path);
+				else openWikiWindow(cwd, path);
 			} else {
 				setView("chat");
 				setDrawer("right");
@@ -660,7 +694,7 @@ export function App() {
 			setDrawer("right");
 			fileGuard.current(open);
 		} else open();
-	}, [switching, chat.state?.cwd, openWikiDocument]);
+	}, [switching, chat.state?.cwd, view, openWikiDocument]);
 	useEffect(() => {
 		const onToolFile = (event: Event) => {
 			const detail = (event as CustomEvent<{ path?: string; line?: number }>).detail;
