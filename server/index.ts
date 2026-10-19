@@ -938,6 +938,7 @@ wss.on("connection", (ws) => {
 		}
 
 		if (msg.type === "hello") {
+			if (msg.wikiCwd !== undefined && (typeof msg.wikiCwd !== "string" || !msg.wikiCwd.trim())) { ws.close(4400, "invalid Wiki workspace"); return; }
 			if (msg.clientId !== undefined && msg.clientId !== "" && !isValidClientId(msg.clientId)) {
 				ws.close(4400, "invalid clientId");
 				return;
@@ -945,7 +946,7 @@ wss.on("connection", (ws) => {
 			const cid = msg.clientId || randomUUID();
 			clientId = cid;
 			service
-				.attach(cid, send)
+				.attach(cid, send, msg.wikiCwd)
 				.then((cs) => {
 					if (closed) return;
 					detachNodes?.();

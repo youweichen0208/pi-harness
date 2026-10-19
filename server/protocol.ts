@@ -273,6 +273,8 @@ export interface UiState {
 	/** Server-derived current task; null before the first user prompt. */
 	taskProgress?: TaskProgress | null;
 	isStreaming: boolean;
+	/** Initial detached Wiki session; never restores ordinary conversation history. */
+	wiki?: boolean;
 	model: UiModelInfo | null;
 	routedModel?: UiModelInfo & { thinkingLevel?: string };
 	thinkingLevel: string;
@@ -420,7 +422,7 @@ export type ClientMessage =
 	| TreeRequest
 	| { type: "native_mcp_request"; requestId: string; cwd: string; scope: "global" | "project"; action: "get" | "save" | "trust" | "command" | "radius" | "codemode" | "log"; codemode?: { mode: "on" | "only"; inlineBudget: number }; version?: string; document?: Record<string, unknown>; command?: "status" | "login" | "logout" | "reconnect"; name?: string }
 	| { type: "node_request"; requestId: string; action: string; nodeId?: string; terminalId?: string; conversationId?: string; payload?: Record<string, unknown> }
-	| { type: "hello"; clientId: string; protocolVersion?: number }
+	| { type: "hello"; clientId: string; protocolVersion?: number; wikiCwd?: string }
 	/** Re-request the slash-command catalog (also pushed on attach / cwd change). */
 	| { type: "get_commands" }
 	| {

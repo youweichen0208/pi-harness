@@ -573,6 +573,7 @@ export class ClientSession {
 		cwd: string,
 		stateStore: ClientStateStore,
 		thinkingDurationStore: ThinkingDurationStore,
+		wiki = false,
 	): Promise<ClientSession> {
 		const agentDir = process.env.PI_CODING_AGENT_DIR ?? getAgentDir();
 
@@ -582,15 +583,17 @@ export class ClientSession {
 		const runtime = await createAgentSessionRuntime(cs.makeRuntimeFactory(), {
 			cwd,
 			agentDir,
-			// Resume the most recent session for this project — the SDK default
+			// Ordinary clients resume the most recent session. Detached Wiki
+			// clients start in memory without loading ordinary history. The SDK default
 			// per-project dir (<agentDir>/sessions/--<cwd>--/, shared with the
 			// pi CLI/TUI) — or start a fresh one on first visit.
-			sessionManager: SessionManager.continueRecent(cwd),
+			sessionManager: wiki ? SessionManager.inMemory(cwd) : SessionManager.continueRecent(cwd),
 		});
-		// First conversation = the resumed session; it also seeds the shared
+		// The first conversation also seeds the shared
 		// ModelRuntime that every later conversation reuses.
 		cs.sharedModelRuntime = runtime.services.modelRuntime;
 		const conv = cs.makeConversation(runtime, conversationId, terminals);
+		conv.wiki = wiki;
 		cs.convs.set(conv.id, conv);
 		cs.activeId = conv.id;
 		for (const d of runtime.diagnostics) {
@@ -1241,6 +1244,7 @@ export class ClientSession {
 			streamingMessage,
 			taskProgress: deriveTaskProgress(conv.id, taskHistoryFromSession(conv.session.sessionManager, (message, entryId) => this.serializeCached(message, entryId)) ?? messages, streamingMessage, conv.session.isStreaming, conv.lastTaskEndedAt),
 			isStreaming: this.session.isStreaming,
+			wiki: !!conv.wiki,
 			recovery: recoverySnapshot(conv.recovery),
 			runSettings: { autoCompaction: conv.session.autoCompactionEnabled, autoRetry: conv.session.autoRetryEnabled },
 			model: model
@@ -3202,6 +3206,7 @@ export class AgentService {
 	async attach(
 		clientId: string,
 		send: (msg: ServerMessage) => void,
+		wikiCwd?: string,
 	): Promise<ClientSession> {
 		let cs = this.clients.get(clientId);
 		if (!cs) {
@@ -3218,9 +3223,10 @@ export class AgentService {
 					throw new QuiesceRejectedError("新连接被拒绝，请等服务器恢复后重试");
 				}
 				// otherwise fall back to the server's configured default cwd.
-				let cwd = this.cwd;
+				let cwd = wikiCwd ? resolve(wikiCwd) : this.cwd;
+				if (wikiCwd && !statSync(cwd).isDirectory()) throw new Error("Invalid Wiki workspace");
 				const saved = this.stateStore.get(clientId);
-				if (saved.lastCwd && saved.lastCwd !== this.cwd) {
+				if (!wikiCwd && saved.lastCwd && saved.lastCwd !== this.cwd) {
 					try {
 						if (statSync(saved.lastCwd).isDirectory()) cwd = saved.lastCwd;
 					} catch {
@@ -3233,6 +3239,7 @@ export class AgentService {
 					cwd,
 					this.stateStore,
 					this.thinkingDurationStore,
+					!!wikiCwd,
 				).finally(() => {
 					this.pending.delete(clientId);
 				});

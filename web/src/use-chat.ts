@@ -39,7 +39,7 @@ import { applyMessageDelta, type MessageDeltaMsg } from "./message-delta";
 import { emitPluginData } from "./plugin-loader";
 import { appendNotice, type Notice } from "./notices";
 import { PROTOCOL_VERSION } from "./protocol-version";
-import { isWikiWindow, wikiWindowClient } from "./wiki-window";
+import { isWikiWindow, wikiWindowClient, wikiWindowParams } from "./wiki-window";
 
 /** Window event carrying each search_content_result batch to the code-search dialog. */
 export const SEARCH_CONTENT_EVENT = "pi:search-content";
@@ -923,6 +923,7 @@ export function useChat() {
 				JSON.stringify({
 					type: "hello",
 					clientId: getClientId(),
+					...(isWikiWindow && wikiWindowParams().cwd ? { wikiCwd: wikiWindowParams().cwd! } : {}),
 				} satisfies ClientMessage),
 			);
 		};

@@ -5,8 +5,9 @@ import { useT } from "../i18n";
 import { DesktopWindowControls } from "./DesktopWindowControls";
 import { WikiResizeHandle } from "./WikiResizeHandle";
 
-export function WikiWindowShell({ documentPath, chatOpen, chatWidth, onChatOpen, onChatResize, onClose, chatHost, children }: {
+export function WikiWindowShell({ documentPath, loading = false, chatOpen, chatWidth, onChatOpen, onChatResize, onClose, chatHost, children }: {
 	documentPath: string;
+	loading?: boolean;
 	chatOpen: boolean;
 	chatWidth: number;
 	onChatOpen: (open: boolean) => void;
@@ -20,8 +21,8 @@ export function WikiWindowShell({ documentPath, chatOpen, chatWidth, onChatOpen,
 	return <div className="wiki-window-shell">
 		<header className="wiki-window-header wiki-view-header">
 			<span className="wiki-window-mark" aria-hidden="true"><FiBookOpen /></span>
-			<div id="wiki-modal-toolbar" />
-			<button className="wiki-agent-toggle" aria-label={t("wikiAskPi")} title={t("wikiAskPi")} aria-expanded={chatOpen} onClick={() => onChatOpen(!chatOpen)}><FiMessageSquare /><span>{t("wikiAskPi")}</span></button>
+			<div id="wiki-modal-toolbar">{loading && <span className="wiki-breadcrumb">{documentName}</span>}</div>
+			<button className="wiki-agent-toggle" aria-label={t("wikiAskPi")} title={t("wikiAskPi")} aria-expanded={chatOpen} disabled={loading} onClick={() => onChatOpen(!chatOpen)}><FiMessageSquare /><span>{t("wikiAskPi")}</span></button>
 			{!desktopAPI && <button className="wiki-window-close" aria-label={t("wikiExitMode")} title={t("wikiExitMode")} onClick={onClose}><FiX /></button>}
 			<DesktopWindowControls />
 		</header>

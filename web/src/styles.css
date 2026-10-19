@@ -12736,7 +12736,7 @@ pre.wiki-mermaid-source-hidden > .wiki-mermaid-preview { border-bottom: 0; margi
 .wiki-window-header > .wiki-agent-toggle[aria-expanded="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
 .wiki-window-header > .wiki-window-close { width: 32px; padding: 0; border-color: transparent; background: transparent; }
 .wiki-window-header button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.wiki-window-header .desktop-window-controls { align-self: stretch; }
+html.pi-desktop .design-workspace .wiki-window-header .desktop-window-controls { position: static; align-self: stretch; height: auto; min-width: 132px; }
 html.pi-desktop-darwin .wiki-window-header { padding-left: 92px; }
 html.pi-desktop .wiki-window-header,
 html.pi-desktop .wiki-window-mark,

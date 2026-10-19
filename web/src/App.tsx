@@ -360,7 +360,7 @@ export function App() {
 		window.addEventListener("pi-configure-radius", configure);
 		return () => window.removeEventListener("pi-configure-radius", configure);
 	}, [chat.state?.cwd, send]);
-	const [view, setView] = useState<ViewName>("chat");
+	const [view, setView] = useState<ViewName>(isWikiWindow ? "wiki" : "chat");
 	const [wikiFileRequest, setWikiFileRequest] = useState<{cwd:string;conversationId:string;path:string;token:string} | null>(null);
 	const [databaseOpen, setDatabaseOpen] = useState(false);
 	const [databaseReferences, setDatabaseReferences] = useState<{ id: string; name: string; version: string }[]>([]);
@@ -408,7 +408,7 @@ export function App() {
 	}, []);
 	/** 进入 / 切换文档：创建一个新的临时 Wiki 会话（不复用，切换即删），
 	 * 携带当前文档的当前文件 chip。调用方已处理运行中任务的确认。 */
-	const enterWiki = useCallback(async (path: string | null) => {
+	const enterWiki = useCallback(async (path: string | null, reuseInitial = false) => {
 		const current = wikiCurrent.current;
 		// Destructured locals keep the non-undefined narrowing inside the closure below.
 		const wikiCwd = current.cwd, activeId = current.conversationId;
@@ -420,7 +420,7 @@ export function App() {
 			// (by then settled) current id covers that race.
 			let result: { conversationId: string };
 			try {
-				result = await create(current.conversationId);
+				result = reuseInitial ? { conversationId: activeId } : await create(current.conversationId);
 			} catch (error) {
 				if (!(error instanceof Error) || !/Conversation unavailable/.test(error.message)) throw error;
 				const refreshed = wikiCurrent.current;
@@ -602,8 +602,8 @@ export function App() {
 		const stored = readWikiPersist();
 		if (stored && stored.client === wikiWindowClient() && stored.cwd === cwd && (params.doc === null || params.doc === stored.path)) return; // 交由下方恢复 effect
 		wikiPersist(null);
-		void enterWiki(params.doc);
-	}, [chat.ready, switching, chat.state?.cwd, chat.state?.model?.provider, chat.state?.model?.id, chat.state?.thinkingLevel, chat.state?.availableThinkingLevels, chat.models, wikiCarryExpired, wikiFileRequest, enterWiki, rawSend, readWikiPersist, wikiPersist]);
+		void enterWiki(params.doc, chat.state?.wiki === true);
+	}, [chat.ready, switching, chat.state?.cwd, chat.state?.model?.provider, chat.state?.model?.id, chat.state?.thinkingLevel, chat.state?.availableThinkingLevels, chat.state?.wiki, chat.models, wikiCarryExpired, wikiFileRequest, enterWiki, rawSend, readWikiPersist, wikiPersist]);
 	// 页面刷新恢复（Q15）：会话还在服务端运行时重进 wiki mode 并挂回同一临时会话；
 	// 服务端重启导致会话丢失时清除记录，回到 normal 视图。
 	useEffect(() => {
@@ -1444,7 +1444,7 @@ export function App() {
 							chatHost={setWikiChatHost}
 						>
 							{wikiFileRequest.cwd === chat.state?.cwd && wikiFileRequest.conversationId === chat.activeConversationId ? <WikiWorkbench key={wikiFileRequest.cwd} cwd={wikiFileRequest.cwd} conversationId={wikiFileRequest.conversationId} fileRequest={wikiFileRequest} streaming={!!conversationState?.isStreaming} active={view === "wiki"} ready={chat.ready && !switching} writingBlocked={!!switching || !!conversationState?.isStreaming} openDocument={openWikiDocument} onOpenFolder={() => { setWikiFolderError(undefined); setWikiFolderPicker(true); }} folderBusy={!chat.ready || !!switching || !!wikiFolderPending} connected={chat.ready} guard={wikiGuard} saveBeforePrompt={wikiSave} contextReader={wikiContextReader} contextSaver={wikiContextSaver} onContextChange={setWikiCurrentFile} onAttach={(path, name, isDir) => { attach(path, name, "reference", isDir); setWikiChatOpen(true); }} onReference={receiveWikiReference} /> : <div className="boot-wait">{chat.ready ? t("loadingSession") : t("connectingServer")}</div>}
-						</WikiWindowShell> : <div className="boot-wait">{chat.ready ? t("loadingSession") : t("connectingServer")}</div>)}
+						</WikiWindowShell> : <WikiWindowShell documentPath={wikiWindowParams().doc ?? ""} loading chatOpen={false} chatWidth={wikiChatWidth} onChatOpen={setWikiChatOpen} onChatResize={resizeWikiChat} onClose={exitWiki} chatHost={setWikiChatHost}><div className="boot-wait" role="status">{chat.ready ? t("loadingSession") : t("connectingServer")}</div></WikiWindowShell>)}
 					</div>
 					<div className={`view-pane ${view === "terminal" ? "" : "hidden"}`}>
 						<Suspense fallback={null}>

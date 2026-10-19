@@ -47,6 +47,44 @@ try {
 	const health = await (await fetch(`http://127.0.0.1:${port}/api/health`)).json();
 	assert.equal(health.pid, server.pid);
 	browser = await chromium.launch({ executablePath: CHROME_PATH || chromium.executablePath() });
+	// #113: native controls must occupy space beside, not over, Wiki tools.
+	for (const platform of ["win32", "linux"]) {
+		const page = await browser.newPage({ viewport: { width: 1100, height: 800 } });
+		await page.addInitScript(platform => { window.windowActions = []; window.electronAPI = { platform, windowAction(action) { window.windowActions.push(action); }, onWindowState() { return () => {}; } }; }, platform);
+		await page.goto(`http://127.0.0.1:${port}/?${new URLSearchParams({ "wiki-window": "1", cwd, doc: "README.md", client: `controls-${platform}` })}`);
+		await page.locator(".wiki-prose .fp-rich-document").waitFor();
+		for (const width of [1100, 900, 720]) {
+			await page.setViewportSize({ width, height: 800 });
+			const controls = await page.locator(".wiki-window-header .desktop-window-controls").boundingBox();
+			const ask = await page.locator(".wiki-agent-toggle").boundingBox();
+			assert(controls.x + controls.width <= width, "window controls stay inside the viewport");
+			assert(controls.x >= ask.x + ask.width, `${platform}/${width}: native controls overlap Wiki tools`);
+			for (const button of await page.locator(".wiki-window-header .desktop-window-controls button").all()) {
+				assert(await button.evaluate(el => { const r = el.getBoundingClientRect(); return el.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)); }), "window control is reachable");
+				await button.click();
+			}
+			mkdirSync("tests/scratch", { recursive: true });
+			await page.locator(".wiki-window-header").screenshot({ path: `tests/scratch/wiki-controls-${platform}-${width}.png` });
+		}
+		assert.deepEqual(await page.evaluate(() => window.windowActions), Array(3).fill(["minimize", "toggle-maximize", "close"]).flat());
+		await page.close();
+	}
+	// #114: while the SDK is starting, never render ordinary chat.
+	{
+		const page = await browser.newPage();
+		let releaseHello;
+		await page.routeWebSocket("**/ws", route => {
+			const upstream = route.connectToServer();
+			route.onMessage(wire => { if (JSON.parse(String(wire)).type === "hello") releaseHello = () => upstream.send(wire); else upstream.send(wire); });
+			upstream.onMessage(wire => route.send(wire));
+		});
+		await page.goto(`http://127.0.0.1:${port}/?${new URLSearchParams({ "wiki-window": "1", cwd, doc: "README.md", client: "slow-start" })}`);
+		await page.locator(".wiki-window-shell").waitFor({ timeout: 1500 });
+		assert.equal(await page.locator(".topbar").count(), 0);
+		releaseHello();
+		await page.locator(".wiki-prose .fp-rich-document").waitFor();
+		await page.close();
+	}
 	for (const [model, stalled] of [["glm-5.3", false], ["fixture/alternate", false], ["missing/model", false], ["fixture/alternate", true]]) {
 		console.log("Checking carry", model);
 		const page = await browser.newPage();
@@ -57,12 +95,14 @@ try {
 				if (JSON.parse(String(wire)).type === "set_model") { modelRequests++; if (stalled) return; }
 				upstream.send(wire);
 			});
-			upstream.onMessage(wire => { const message = JSON.parse(String(wire)); if (message.type === "snapshot") latest = message.state; route.send(wire); });
+			upstream.onMessage(wire => { const message = JSON.parse(String(wire)); if (message.type === "snapshot" || message.type === "snapshot_delta") latest = message.state; route.send(wire); });
 		});
 		const params = new URLSearchParams({ "wiki-window": "1", cwd, doc: "README.md", client: `carry-${model.replaceAll("/", "-")}-${stalled}`, model, thinking: "off" });
 		await page.goto(`http://127.0.0.1:${port}/?${params}`);
 		try { await page.locator(".wiki-prose .fp-rich-document").waitFor({ timeout: 10000 }); } catch (error) { console.log((await page.locator("body").innerText()).slice(0, 2500)); throw error; }
 		assert.equal(await page.locator(".topbar").count(), 0, "Wiki must not remain in ordinary chat");
+		assert.equal(latest.wiki, true);
+		assert.equal(latest.conversationId, "c1", "initial Wiki reuses its first runtime");
 		assert(modelRequests <= 1, "inheritance must not retry indefinitely");
 		if (model === "fixture/alternate" && !stalled) assert.equal(latest.model.id, "alternate");
 		await page.close();
