@@ -99,14 +99,21 @@ try {
 		if (!reuse) wireWiki(await popupPromise);
 		await wiki.view.waitFor(); await wiki.editor.waitFor();
 	};
-	/** 退出 Wiki mode = 关闭 Wiki 窗口。 */
-	const close = async () => {
-		// Subscribe BEFORE clicking: window.close() can fire while the click
-		// promise is still resolving, which would lose the close event.
-		const closed = wiki.page.waitForEvent("close");
-		await wiki.page.locator(".wiki-view-header > button").last().click();
-		await closed;
+	/** The close event is authoritative: Chromium can close before click resolves. */
+	const clickToClose = async button => {
+		const target = wiki.page;
+		await Promise.all([
+			target.waitForEvent("close"),
+			button.click({noWaitAfter: true}).catch(error => {
+				// Only tolerate the expected closed-target race, never a timeout,
+				// missing control, failed save, or an unrelated browser error.
+				if (!target.isClosed() || !error.message.includes("Target page, context or browser has been closed")) throw error;
+			}),
+		]);
+		assert(target.isClosed(), "Wiki exit must actually close its window");
 	};
+	const close = () => clickToClose(wiki.page.getByRole("button", {name: "退出 Wiki 模式", exact: true}));
+
 	const select = async () => { await wiki.editor.locator("p").first().evaluate(el => { el.closest("[contenteditable]").focus(); const r = document.createRange(); r.selectNodeContents(el); const s = getSelection(); s.removeAllRanges(); s.addRange(r); }); await wiki.page.locator(".wiki-ask-selection").waitFor(); };
 	const append = async text => { await wiki.editor.locator("p").first().evaluate(el => { el.closest("[contenteditable]").focus(); const r = document.createRange(); r.selectNodeContents(el); r.collapse(false); const s = getSelection(); s.removeAllRanges(); s.addRange(r); }); await wiki.page.keyboard.type(text); };
 	const saved = () => wiki.page.locator(".wiki-save-status.saved").waitFor();
@@ -216,9 +223,8 @@ try {
 	await wiki.page.keyboard.press("Escape"); await wiki.page.locator(".wiki-confirm").waitFor({state: "detached"});
 	assert(await wiki.view.isVisible(), "Escape cancels the leave guard");
 	await wiki.page.locator(".wiki-view-header > button").last().click();
-	const discardClosed = wiki.page.waitForEvent("close");
-	await wiki.page.getByRole("button", {name: "放弃修改", exact: true}).click();
-	await discardClosed; failWrites = false;
+	await clickToClose(wiki.page.getByRole("button", {name: "放弃修改", exact: true}));
+	failWrites = false;
 	assert(!readFileSync(join(cwd, "README.md"), "utf8").includes("Unsaved text."));
 
 	// CAS conflict retains the editor until resolved.

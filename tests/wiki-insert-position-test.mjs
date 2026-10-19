@@ -74,7 +74,11 @@ try {
 	console.log('PASS toolbar positioning and insertion/save');
 	await wiki.screenshot({ path: "/tmp/pi-wiki-toolbar-full.png" });
 	await wiki.setViewportSize({ width: 800, height: 900 });
-	await wiki.locator('.wiki-agent-header button[aria-label]').click();
+	assert.equal(await wiki.locator('.wiki-agent-chat').isVisible(), false, 'Wiki chat starts collapsed');
+	await wiki.getByRole('button', { name: '问 pi', exact: true }).click();
+	await wiki.locator('.wiki-agent-chat').waitFor({ state: 'visible' });
+	await wiki.locator('.wiki-agent-header').getByRole('button', { name: '收起对话面板', exact: true }).click();
+	await wiki.locator('.wiki-agent-chat').waitFor({ state: 'hidden' });
 	await toolbar.getByRole('button', { name: '提及日期', exact: true }).click();
 	assert.ok(await wiki.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'toolbar does not widen the page');
 	await toolbar.getByRole('button', { name: '代码块', exact: true }).click();
