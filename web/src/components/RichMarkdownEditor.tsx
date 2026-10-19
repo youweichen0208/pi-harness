@@ -285,12 +285,19 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		selection?.removeAllRanges(); selection?.addRange(range);
 		setTableCell(cell);
 	};
-	const editTable = (action: "row" | "column" | "removeRow" | "removeColumn", target = tableCell) => {
+	const editTable = (action: "row" | "column" | "removeRow" | "removeColumn" | "removeTable", target = tableCell) => {
 		if (readOnly || !target || !root.current?.contains(target)) return;
 		const table = target.closest("table")!;
 		const row = target.parentElement as HTMLTableRowElement;
 		const column = target.cellIndex;
 		let next = target;
+		if (action === "removeTable") {
+			const range = document.createRange();
+			range.selectNode(table);
+			const selection = window.getSelection();
+			root.current.focus(); selection?.removeAllRanges(); selection?.addRange(range);
+			command("delete"); setTableCell(null); return;
+		}
 		if (action === "row") {
 			const added = document.createElement("tr");
 			for (const header of Array.from(table.rows[0].cells)) {
@@ -647,6 +654,7 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 				onMouseDown={(event) => event.preventDefault()} onClick={() => editTable("removeRow")}>{t("richRemoveRow")}</button>
 			<button type="button" disabled={(tableCell.parentElement as HTMLTableRowElement).cells.length <= 1}
 				onMouseDown={(event) => event.preventDefault()} onClick={() => editTable("removeColumn")}>{t("richRemoveColumn")}</button>
+			<button type="button" onMouseDown={event => event.preventDefault()} onClick={() => editTable("removeTable")}>{t("richRemoveTable")}</button>
 		</div>}
 		{uploading && <div className="fp-notice" role="status">{t("richImageUploading")}</div>}
 		{imageError && <div className="fp-notice" role="alert">{imageError}</div>}
@@ -679,6 +687,18 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 					onKeyDown={(event) => {
 						if (event.key === " " && !event.nativeEvent.isComposing && markdownShortcut()) { event.preventDefault(); return; }
 						if (event.key === "Enter" && !readOnly && !event.nativeEvent.isComposing) {
+							const selection = window.getSelection();
+							const node = selection?.anchorNode;
+							const heading = (node instanceof Element ? node : node?.parentElement)?.closest("h1,h2,h3,h4,h5,h6");
+							if (!menu && !event.shiftKey && selection?.isCollapsed && heading && root.current?.contains(heading)) {
+								const tail = selection.getRangeAt(0).cloneRange();
+								tail.setEnd(heading, heading.childNodes.length);
+								if (!tail.toString()) {
+									event.preventDefault();
+									document.execCommand("insertParagraph");
+									command("formatBlock", "p"); return;
+								}
+							}
 							const code = selectedCode();
 							if (code) { event.preventDefault(); command("insertLineBreak"); return; }
 						}

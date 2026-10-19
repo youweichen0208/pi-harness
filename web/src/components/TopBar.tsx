@@ -18,17 +18,14 @@ import {
 	FiTarget,
 	FiLayers,
 	FiTerminal,
-	FiMinus,
-	FiSquare,
-	FiCopy,
-	FiX,
 } from "react-icons/fi";
-import { desktopAPI, type DesktopWindowState } from "../desktop";
+import { desktopAPI } from "../desktop";
 import type { ChatState } from "../use-chat";
 import type { ClientMessage, CommandDef } from "../types";
 import { Dropdown, DropdownItem } from "./Dropdown";
 import { ModelThinking } from "./ModelThinking";
 import { SoundSettingsPanel } from "./SoundSettings";
+import { DesktopWindowControls } from "./DesktopWindowControls";
 import type { SoundKind, SoundSettings } from "../sounds";
 import { useI18n, type Locale } from "../i18n";
 import { skillAwarePreview } from "../skill-block";
@@ -105,8 +102,6 @@ export function TopBar({
 		setMenuHost(!leftCollapsed ? document.getElementById("sidebar-settings-slot") : null);
 		if (view === "nodes") setMoreOpen(false);
 	}, [view, leftCollapsed]);
-	const [windowState, setWindowState] = useState<DesktopWindowState>({ maximized: false, fullscreen: false });
-	useEffect(() => desktopAPI?.onWindowState(setWindowState), []);
 	const projectName = chat.state?.cwd?.split(/[\\/]/).filter(Boolean).at(-1);
 	const notGitRepo = chat.gitBranch?.cwd === chat.state?.cwd && !!chat.gitBranch?.notRepo;
 	const incident = chat.state?.conversationId === chat.activeConversationId ? toolTextIncidents(chat.state.streamingMessage ? [...chat.state.messages, chat.state.streamingMessage] : chat.state.messages, chat.state.isStreaming).current : undefined;
@@ -405,13 +400,7 @@ export function TopBar({
 					<FiSidebar />
 				</button>
 			</div>
-			{desktopAPI && desktopAPI.platform !== "darwin" && (
-				<div className="desktop-window-controls" aria-label={t("windowControls")}>
-					<button type="button" title={t("minimizeWindow")} aria-label={t("minimizeWindow")} onClick={() => desktopAPI?.windowAction("minimize")}><FiMinus /></button>
-					<button type="button" title={windowState.maximized || windowState.fullscreen ? t("restoreWindow") : t("maximizeWindow")} aria-label={windowState.maximized || windowState.fullscreen ? t("restoreWindow") : t("maximizeWindow")} onClick={() => desktopAPI?.windowAction("toggle-maximize")}>{windowState.maximized || windowState.fullscreen ? <FiCopy /> : <FiSquare />}</button>
-					<button type="button" className="desktop-window-close" title={t("closeWindow")} aria-label={t("closeWindow")} onClick={() => desktopAPI?.windowAction("close")}><FiX /></button>
-				</div>
-			)}
+			<DesktopWindowControls />
 		</header>
 	);
 }

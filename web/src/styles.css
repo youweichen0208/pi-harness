@@ -1739,14 +1739,12 @@ body.panel-resizing {
 	display: none;
 }
 
-/* Wiki mode 全屏视图（ADR-0002）：工具栏头 + 「文档工作台 | 临时会话」两列。 */
+/* Wiki 独立窗口（ADR-0003）：文档标题栏 + 工作台与按需对话。 */
 .view-pane.wiki-view {
 	flex-direction: column;
 }
 .view-pane.wiki-view .wiki-view-header {
 	width: 100%;
-	border-bottom: 1px solid var(--border);
-	background: var(--bg-elev);
 }
 .view-pane.wiki-view .wiki-modal-body {
 	flex: 1;
@@ -9932,17 +9930,6 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { height: 44px;
 .set-prompt-preview { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.6; }
 
 /* ---- Wiki workspace: 12a document canvas ---- */
-#wiki-toolbar-slot { display: none; }
-.wiki-mode .topbar { gap: 14px; }
-.wiki-mode .topbar .brand { display: flex; flex: none; }
-.wiki-mode .topbar .brand-name, .wiki-mode .topbar .conn-label, .wiki-mode .topbar .desktop-window-title, .wiki-mode .header-location, .wiki-mode .project-panel-toggle { display: none; }
-.wiki-mode #wiki-toolbar-slot { display: flex; flex: 1; min-width: 0; align-items: center; gap: 16px; order: 2; }
-.wiki-mode .topbar-actions { flex: none; margin-left: 0; order: 1; }
-.wiki-mode .topbar-actions > :not(.view-switch), .wiki-mode .view-switch > :not(:first-child):not(.wiki-view-tab) { display: none; }
-.wiki-mode .topbar .view-switch { padding: 3px; background: var(--bg-elev2); border-radius: var(--r-sm); }
-.wiki-mode .topbar .view-switch button { padding: 3px 12px; }
-.wiki-mode .topbar .view-switch button.active { background: var(--bg-elev); box-shadow: 0 1px 3px color-mix(in srgb, var(--shadow-color) 7.06%, transparent); }
-.wiki-mode .desktop-window-controls { order: 3; }
 .wiki-breadcrumb { display: flex; align-items: center; flex: 1; min-width: 0; gap: 8px; overflow: hidden; white-space: nowrap; color: var(--text-dim); font-size: 12px; }
 .wiki-breadcrumb > span { display: flex; gap: 8px; flex: none; }
 .wiki-breadcrumb > span:last-child { min-width: 0; flex-shrink: 1; overflow: hidden; color: var(--text); }
@@ -10089,11 +10076,6 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { height: 44px;
 	.wiki-workbench.with-drawer .wiki-composer-controls { flex-wrap: wrap; gap: 6px; }
 }
 @media (max-width: 850px) {
-	.wiki-mode .topbar .brand { display: none; }
-	.wiki-mode .topbar .view-switch button span { display: inline; }
-	.wiki-mode .topbar { padding-left: 10px; }
-	.wiki-breadcrumb { display: none; }
-	.wiki-mode #wiki-toolbar-slot { justify-content: flex-end; }
 	.wiki-sidebar { position: absolute; inset: 0 auto 0 0; z-index: 6; transform: translateX(-100%); width: 264px !important; }
 	.wiki-sidebar.open { transform: translateX(0); }
 	.wiki-sidebar-scrim { display: block; position: absolute; inset: 0; border: 0; background: color-mix(in srgb, var(--shadow-color) 20%, transparent); z-index: 5; }
@@ -10117,21 +10099,6 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { height: 44px;
 }
 @media (prefers-reduced-motion: reduce) {
 	.wiki-workbench *, .wiki-selection-menu { scroll-behavior: auto !important; transition: none !important; }
-}
-/* Wiki owns the compact segmented navigation inside the existing desktop shell. */
-.design-workspace.wiki-mode .topbar > .brand { display: flex; }
-.design-workspace.wiki-mode .topbar .brand > .brand-logo { display: block; width: 18px; height: 18px; }
-.design-workspace.wiki-mode .topbar .brand > .panel-toggle { display: none; }
-.design-workspace.wiki-mode .topbar .view-switch { height: 30px; align-items: center; padding: 3px; }
-.design-workspace.wiki-mode .topbar .view-switch button { height: 24px; min-height: 24px; border-radius: var(--r-sm); }
-.design-workspace.wiki-mode .topbar .view-switch button.active::after { display: none; }
-.design-workspace.wiki-mode .topbar .view-switch button > svg { display: none; }
-.design-workspace.wiki-mode .topbar .view-switch button > span { display: inline; }
-html.pi-desktop-darwin .design-workspace.wiki-mode .topbar { padding-left: 92px; }
-html.pi-desktop .wiki-breadcrumb { -webkit-app-region: drag; app-region: drag; }
-@media (max-width: 600px) {
-	.design-workspace.wiki-mode .topbar { gap: 6px; }
-	.design-workspace.wiki-mode .topbar > .brand { display: none; }
 }
 .wiki-mentions button.selected { background: var(--wiki-soft); color: var(--wiki-accent); }
 .wiki-load-more { display: block; width: 100%; padding: 8px; border: none; background: transparent; color: var(--wiki-accent) !important; font-size: 11px !important; text-align: left; overflow: hidden; text-overflow: ellipsis; }
@@ -11094,7 +11061,7 @@ html.pi-desktop .wiki-breadcrumb { -webkit-app-region: drag; app-region: drag; }
 	content: ""; width: 18px; height: 18px; background: url("/icon/1a-mark.svg") center / contain no-repeat; border-radius: var(--r-sm);
 }
 .wiki-chat-brand { width: 18px; height: 18px; background: transparent; border-radius: var(--r-sm); }
-.brand-logo, .design-workspace.wiki-mode .topbar .brand > .brand-logo { width: 18px; height: 18px; border-radius: var(--r-sm); background: transparent; }
+.brand-logo { width: 18px; height: 18px; border-radius: var(--r-sm); background: transparent; }
 .wiki-tree-row.selected { box-shadow: inset 2px 0 0 var(--accent); }
 .wiki-tree-label button { color: var(--text-faint); }
 .wiki-tree-label button:hover { color: var(--accent); }
@@ -11480,7 +11447,6 @@ html.pi-desktop .wiki-breadcrumb { -webkit-app-region: drag; app-region: drag; }
 }
 .wiki-workbench { --wiki-title: 34px; --wiki-h2: 22px; --wiki-h3: 15px; --wiki-body: 14.5px; --wiki-heading-font: "Source Serif 4", "Noto Serif SC", "Songti SC", serif; }
 .wiki-tree-row.selected { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
-.wiki-mode .topbar { min-height: 44px; }
 .wiki-breadcrumb { gap: 6px; }
 .wiki-path-parent { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wiki-breadcrumb > b { flex: none; font-weight: 600; }
@@ -11542,8 +11508,6 @@ pre.wiki-mermaid-source-hidden > .wiki-mermaid-preview { border-bottom: 0; margi
 	.wiki-document-heading h1 { font-size: 30px; }
 }
 
-.design-workspace.wiki-mode .topbar .brand > .brand-logo { width: 15px; height: 15px; border-radius: 0; }
-
 .wiki-prose .fp-markdown .md :not(pre) > code { padding: 1px 5px; }
 .wiki-prose .fp-markdown .md ul, .wiki-prose .fp-markdown .md ol { padding-left: 24px; }
 .wiki-prose .fp-markdown .md li { margin: 4px 0; }
@@ -11564,13 +11528,11 @@ pre.wiki-mermaid-source-hidden > .wiki-mermaid-preview { border-bottom: 0; margi
 @media (max-width: 850px) {
 	.wiki-breadcrumb { display: flex; min-width: 0; }
 	.wiki-breadcrumb .wiki-path-parent, .wiki-breadcrumb > b { display: none; }
-	.wiki-mode #wiki-toolbar-slot { gap: 4px; }
 }
 
 .wiki-index-summary { flex: none; margin: 0 0 12px; padding-left: 20px; font-size: 12px; line-height: 1.8; color: var(--text-dim); }
 
 /* 34a reading refinements: spacing belongs to the content, not each source wrapper. */
-.design-workspace.wiki-mode .topbar { padding-right: 16px; }
 .wiki-breadcrumb > .wiki-path-parent { flex: 0 1 auto; min-width: 0; gap: 0; }
 .wiki-path-segment { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .wiki-path-tail { flex: none; }
@@ -11709,15 +11671,13 @@ pre.wiki-mermaid-source-hidden > .wiki-mermaid-preview { border-bottom: 0; margi
 .tree-directory-error { display: grid; gap: 6px; padding: 8px 12px; color: var(--text-dim); font-size: 12px; overflow-wrap: anywhere; }
 .tree-directory-error button { justify-self: start; color: var(--accent); background: transparent; border: 0; padding: 2px 0; cursor: pointer; }
 
-/* Wiki adjustable panels and desktop titlebar clearance (#35). */
+/* Wiki adjustable panels. */
 .wiki-workbench .wiki-sidebar { width: var(--wiki-sidebar-width, 250px); flex-basis: var(--wiki-sidebar-width, 250px); }
 .wiki-workbench .wiki-chat-panel { width: var(--wiki-chat-width, 400px); flex-basis: var(--wiki-chat-width, 400px); }
 .wiki-resize-handle { position: absolute; top: 0; bottom: 0; width: 6px; z-index: 8; cursor: col-resize; touch-action: none; user-select: none; -webkit-app-region: no-drag; }
 .wiki-resize-sidebar { right: -3px; }
 .wiki-resize-chat { left: -3px; }
 .wiki-resize-handle:hover, .wiki-resize-handle:focus-visible { background: var(--accent-soft); outline: 1px solid var(--accent); }
-html.pi-desktop-win32 .design-workspace.wiki-mode .topbar,
-html.pi-desktop-linux .design-workspace.wiki-mode .topbar { padding-right: 148px; }
 @media (max-width: 1099px) {
 	.wiki-workbench .wiki-chat-panel { width: min(var(--wiki-chat-width, 400px), calc(100% - 24px)); }
 }
@@ -12733,43 +12693,6 @@ html.pi-desktop-linux .design-workspace.wiki-mode .topbar { padding-right: 148px
 .model-modal .btn.danger { color: var(--red); }
 .model-modal .model-modal-body > .form-section-title { margin-top: 16px; margin-bottom: 8px; }
 
-/* Wiki window: 「对话 / Wiki 模式」 capsule segmented control.
-   Appended last so it also wins over the dark-mode underline-tab rules that
-   clear the segmented-pill background. */
-:root .design-workspace.wiki-mode .topbar .view-switch {
-	background: var(--bg-elev2);
-	border: 1px solid var(--border-soft);
-	border-radius: var(--r-switch);
-	padding: 3px;
-	height: 30px;
-	align-items: center;
-	gap: 2px;
-}
-:root .design-workspace.wiki-mode .topbar .view-switch button {
-	height: 24px;
-	min-height: 24px;
-	padding: 0 12px;
-	border: 0;
-	border-radius: var(--r-switch);
-	background: transparent;
-	color: var(--text-dim);
-	box-shadow: none;
-	font-weight: 400;
-}
-:root .design-workspace.wiki-mode .topbar .view-switch button:hover {
-	background: transparent;
-	color: var(--heading);
-}
-:root .design-workspace.wiki-mode .topbar .view-switch button.active {
-	background: var(--bg-elev);
-	color: var(--accent);
-	font-weight: 600;
-	box-shadow: 0 1px 3px color-mix(in srgb, var(--shadow-color) 8%, transparent);
-}
-:root .design-workspace.wiki-mode .topbar .view-switch button.active::after { display: none; }
-:root .design-workspace.wiki-mode .topbar .view-switch button > svg { display: none; }
-:root .design-workspace.wiki-mode .topbar .view-switch button > span { display: inline; }
-
 /* 「编辑源码」 pill button in the document toolbar. */
 .wiki-toolbar-actions .wiki-source-toggle {
 	display: inline-flex;
@@ -12790,4 +12713,80 @@ html.pi-desktop-linux .design-workspace.wiki-mode .topbar { padding-right: 148px
 	background: var(--accent-soft);
 	border-color: var(--accent);
 	color: var(--accent);
+}
+
+/* Wiki editing regressions #109–112: readable hierarchy and unobstructed controls. */
+.wiki-prose .fp-markdown .md :is(th, td) { text-align: center; }
+.wiki-prose .fp-markdown .md :is(th, td) + :is(th, td) { border-left: 1px solid var(--border); }
+.wiki-prose .fp-table-tools { position: relative; top: auto; bottom: auto; left: auto; transform: none; margin-bottom: 12px; }
+.wiki-prose .fp-markdown .md h1 { font-family: var(--wiki-heading-font); font-size: 28px; line-height: 1.4; }
+.wiki-prose .fp-markdown .md p { font-size: var(--wiki-body); font-weight: 400; }
+.wiki-document > .wiki-toc { display: block; width: auto; padding: 12px 0; margin-bottom: 24px; border-bottom: 1px solid var(--border-soft); }
+.wiki-document > .wiki-toc summary { cursor: pointer; color: var(--text-dim); font-size: 13px; margin-bottom: 8px; }
+.wiki-document > .wiki-toc button[data-level="2"] { padding-left: 20px; }
+.wiki-document > .wiki-toc button[data-level="3"] { padding-left: 32px; }
+
+/* Detached Wiki window: a document titlebar and an on-demand reading companion. */
+.wiki-window-shell { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; background: var(--bg); }
+.wiki-window-header { display: flex; align-items: center; flex: none; gap: 8px; height: 56px; min-height: 56px; box-sizing: border-box; padding: 0 12px; border-bottom: 1px solid var(--border-soft); background: var(--bg); color: var(--text); }
+.wiki-window-mark { display: grid; place-items: center; flex: none; width: 30px; height: 30px; color: var(--accent); }
+.wiki-window-mark svg { width: 19px; height: 19px; stroke-width: 1.7; }
+.wiki-window-header #wiki-modal-toolbar { display: flex; align-items: center; flex: 1; gap: 12px; min-width: 0; height: 100%; }
+.wiki-window-header .wiki-breadcrumb { height: 100%; font-size: 12.5px; }
+.wiki-window-header .wiki-breadcrumb > b { display: block; }
+.wiki-window-header .wiki-toolbar-actions { flex: none; gap: 2px; }
+.wiki-window-header .wiki-toolbar-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 32px; padding: 0 8px; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--text-dim); font-size: 12px; cursor: pointer; }
+.wiki-window-header .wiki-toolbar-actions button:hover, .wiki-window-header .wiki-toolbar-actions button.active { background: var(--bg-elev2); color: var(--text); }
+.wiki-window-header .wiki-toolbar-actions svg, .wiki-window-header > button svg { display: block; flex: none; width: 15px; height: 15px; }
+.wiki-window-header > button { display: inline-flex; align-items: center; justify-content: center; flex: none; gap: 6px; width: auto; height: 32px; padding: 0 10px; border: 1px solid var(--border-soft); border-radius: var(--r-sm); background: var(--bg-elev); color: var(--text-dim); font: 12px var(--sans); cursor: pointer; }
+.wiki-window-header > button:hover { border-color: var(--accent); color: var(--accent); }
+.wiki-window-header > .wiki-agent-toggle[aria-expanded="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.wiki-window-header > .wiki-window-close { width: 32px; padding: 0; border-color: transparent; background: transparent; }
+.wiki-window-header button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.wiki-window-header .desktop-window-controls { align-self: stretch; }
+html.pi-desktop-darwin .wiki-window-header { padding-left: 92px; }
+html.pi-desktop .wiki-window-header,
+html.pi-desktop .wiki-window-mark,
+html.pi-desktop .wiki-window-header #wiki-modal-toolbar,
+html.pi-desktop .wiki-window-header .wiki-breadcrumb,
+html.pi-desktop .wiki-window-header .wiki-breadcrumb span,
+html.pi-desktop .wiki-window-header .wiki-breadcrumb b { -webkit-app-region: drag; app-region: drag; }
+html.pi-desktop .wiki-window-header button,
+html.pi-desktop .wiki-window-header button *,
+html.pi-desktop .wiki-window-header .wiki-toolbar-actions,
+html.pi-desktop .wiki-window-header .desktop-window-controls { -webkit-app-region: no-drag; app-region: no-drag; }
+.wiki-window-body { background: var(--bg-elev); }
+.wiki-window-body .wiki-workbench { position: relative; background: var(--bg-elev); }
+.wiki-workbench .wiki-sidebar[hidden] { display: none; }
+.wiki-window-body .wiki-main, .wiki-window-body .wiki-scroll { background: var(--bg-elev); }
+.wiki-window-body .wiki-document-toolbar { flex: none; background: var(--bg-elev); }
+.wiki-window-body .wiki-agent-chat { border-left-color: var(--border-soft); background: var(--bg); }
+.wiki-window-body .wiki-agent-header { gap: 12px; padding: 0 10px 0 16px; background: var(--bg); }
+.wiki-agent-heading { display: flex; flex: 1; flex-direction: column; justify-content: center; gap: 1px; min-width: 0; }
+.wiki-window-body .wiki-agent-header .wiki-agent-heading strong { display: flex; align-items: baseline; gap: 8px; min-width: 0; font-size: 12.5px; }
+.wiki-window-body .wiki-agent-header .wiki-agent-heading strong span { flex: 1; min-width: 0; margin-left: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-dim); font-size: 11px; font-weight: 400; }
+.wiki-window-body .wiki-agent-header .wiki-agent-heading small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-faint); font-size: 10px; }
+.wiki-window-body .wiki-agent-header > button { flex: none; }
+.wiki-window-body .wiki-changes { position: absolute; z-index: 12; inset: 0 0 0 auto; width: 400px; max-width: calc(100% - 24px); border-left-color: var(--border-soft); box-shadow: -16px 0 40px color-mix(in srgb, var(--shadow-color) 12%, transparent); }
+@media (max-width: 1200px) {
+	.wiki-window-header .wiki-toolbar-actions button span, .wiki-window-header > .wiki-agent-toggle span { display: none; }
+	.wiki-window-header .wiki-toolbar-actions button, .wiki-window-header > .wiki-agent-toggle { width: 32px; padding: 0; }
+	.wiki-window-header #wiki-modal-toolbar { gap: 6px; }
+}
+@media (max-width: 760px) {
+	.wiki-window-header { height: 52px; min-height: 52px; gap: 4px; padding: 0 8px; }
+	.wiki-window-mark { display: none; }
+	.wiki-window-header .wiki-breadcrumb { gap: 4px; }
+	.wiki-window-header .wiki-breadcrumb > b { max-width: 150px; }
+	.wiki-window-header .wiki-toolbar-actions { gap: 0; }
+	.wiki-window-body .wiki-changes { width: 360px; }
+}
+@media (max-width: 480px) {
+	.wiki-window-header .wiki-breadcrumb > b { max-width: 96px; }
+	.wiki-window-header .wiki-save-status { gap: 0; padding-inline: 2px; font-size: 0; }
+	.wiki-window-header .wiki-save-status i { width: 6px; height: 6px; }
+	.wiki-window-header .wiki-toolbar-actions button, .wiki-window-header > button { width: 30px; height: 30px; min-height: 30px; }
+}
+@media (prefers-reduced-motion: reduce) {
+	.wiki-window-shell *, .wiki-window-shell *::before, .wiki-window-shell *::after { scroll-behavior: auto !important; transition: none !important; }
 }

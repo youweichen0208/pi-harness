@@ -64,6 +64,7 @@ try {
 	const wiki = await popupPromise;
 	wiki.setDefaultTimeout(15000);
 	await wiki.locator('.wiki-prose .fp-rich-document').waitFor();
+	await wiki.getByRole('button', { name: '问 pi', exact: true }).click();
 	await wiki.locator('.wiki-agent-chat .inputbar textarea').fill('可以帮我读一下吗');
 	await wiki.locator('.wiki-agent-chat .inputbar button.send').click();
 	await wiki.locator('.wiki-agent-chat .messages', { hasText: 'Hello.' }).waitFor({ timeout: 15000 });

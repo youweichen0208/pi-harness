@@ -110,6 +110,10 @@ try {
 	const select = async () => { await wiki.editor.locator("p").first().evaluate(el => { el.closest("[contenteditable]").focus(); const r = document.createRange(); r.selectNodeContents(el); const s = getSelection(); s.removeAllRanges(); s.addRange(r); }); await wiki.page.locator(".wiki-ask-selection").waitFor(); };
 	const append = async text => { await wiki.editor.locator("p").first().evaluate(el => { el.closest("[contenteditable]").focus(); const r = document.createRange(); r.selectNodeContents(el); r.collapse(false); const s = getSelection(); s.removeAllRanges(); s.addRange(r); }); await wiki.page.keyboard.type(text); };
 	const saved = () => wiki.page.locator(".wiki-save-status.saved").waitFor();
+	const showChat = async () => {
+		if (!await wiki.page.locator(".wiki-agent-chat").isVisible()) await wiki.page.getByRole("button", {name: "问 pi", exact: true}).click();
+		await wiki.page.locator(".wiki-agent-chat").waitFor();
+	};
 
 	await input.fill("local background reply"); await input.press("Enter");
 	const original = main.conversation;
@@ -122,11 +126,23 @@ try {
 	assert.notEqual(wiki.state.conversation, original, "the Wiki window runs a fresh ephemeral conversation");
 	const ephemeral = wiki.state.conversation;
 	assert.equal(await wiki.editor.getAttribute("contenteditable"), "true");
-	assert.equal(await wiki.page.locator(".wiki-agent-chat").isVisible(), true);
+	assert.equal(await wiki.page.locator(".wiki-agent-chat").isVisible(), false, "document reading is the default; Ask pi opens on demand");
+	assert.equal(await wiki.page.locator(".workspace-column > .topbar").count(), 0, "the detached Wiki no longer renders the main app topbar");
+	assert.equal(await wiki.page.locator(".statusbar").count(), 0, "the detached Wiki no longer renders the main Git statusbar");
+	assert(await wiki.page.locator(".wiki-window-header").isVisible());
 	assert.equal(await wiki.page.locator(".wiki-chat-panel, .wiki-composer-area").count(), 0);
 	assert.equal(await wiki.page.locator(".inputbar").count(), 1);
-	// The docked chat shows the EMPTY ephemeral conversation, not the main window's.
+	await wiki.page.getByRole("button", {name: "目录", exact: true}).click();
+	await wiki.page.locator(".wiki-sidebar .file-search-trigger").waitFor();
+	await wiki.page.getByRole("button", {name: "目录", exact: true}).click();
+	await wiki.page.locator(".wiki-sidebar").waitFor({state: "hidden"});
+	await wiki.page.setViewportSize({width: 1440, height: 900});
+	await wiki.page.screenshot({path: "tests/scratch/wiki-window-1440.png"});
+	// The on-demand chat shows the EMPTY ephemeral conversation, not the main window's.
+	await wiki.page.setViewportSize({width: 1100, height: 800});
+	await showChat();
 	assert(!(await wiki.page.locator(".messages").innerText()).includes("Reply paragraph"));
+	await wiki.page.screenshot({path: "tests/scratch/wiki-window-ask-1100.png"});
 	// The Wiki window's own chrome has no visible project tree; the main window keeps its own.
 	assert.equal(await wiki.page.locator(".file-list-host").isVisible(), false);
 	assert.equal(await page.locator(".file-list-host").isVisible(), true, "main window keeps its normal layout");
@@ -137,9 +153,17 @@ try {
 	assert.equal(await wiki.page.locator(".wiki-agent-chat .attach-chip.current-file").count(), 1, "Wiki chat must attach the open document");
 	assert((await wiki.page.locator(".attach-chip.current-file").innerText()).includes("@README.md"));
 	// Nested search consumes Escape; the workbench stays open.
-	await wiki.page.keyboard.press("Meta+k"); await wiki.page.locator(".wiki-search-modal").waitFor();
+	await wiki.page.getByRole("button", {name: "搜索全部文件", exact: true}).click(); await wiki.page.locator(".wiki-search-modal").waitFor();
 	await wiki.page.keyboard.press("Escape"); await wiki.page.locator(".wiki-search-modal").waitFor({state: "detached"});
 	assert(await wiki.view.isVisible());
+	const documentWidth = await wiki.page.locator(".wiki-main").evaluate(el => Math.round(el.getBoundingClientRect().width));
+	await wiki.page.getByRole("button", {name: "最近改动", exact: true}).click();
+	await wiki.page.locator(".wiki-changes").waitFor();
+	assert.equal(await wiki.page.locator(".wiki-changes").evaluate(el => getComputedStyle(el).position), "absolute");
+	assert.equal(await wiki.page.locator(".wiki-main").evaluate(el => Math.round(el.getBoundingClientRect().width)), documentWidth, "recent changes overlay instead of squeezing the document");
+	await wiki.page.screenshot({path: "tests/scratch/wiki-window-changes-1100.png"});
+	await wiki.page.locator(".wiki-changes > header > button").click();
+	await wiki.page.locator(".wiki-changes").waitFor({state: "detached"});
 	await wiki.page.getByRole("button", {name: "编辑源码", exact: true}).click();
 	await wiki.page.locator(".wiki-document .fp-editor").waitFor();
 	await wiki.page.getByRole("button", {name: "渲染预览", exact: true}).click(); await wiki.editor.waitFor();
@@ -240,12 +264,14 @@ try {
 	await wiki.page.getByRole("button", {name: "中断并继续", exact: true}).click();
 	await wiki.page.locator(".wiki-document-heading h1", {hasText: "Other document"}).waitFor();
 	assert.notEqual(wiki.state.conversation, wikiConversation, "switching documents replaces the ephemeral conversation");
+	assert.equal(await wiki.page.locator(".wiki-agent-chat").isVisible(), false, "a new document returns to the reading-first layout");
+	await showChat();
 	assert((await wiki.page.locator(".attach-chip.current-file").innerText()).includes("@other.md"));
 	await wiki.page.locator(".attach-chip.current-file .attach-remove").click();
 	assert.equal(await wiki.page.locator(".attach-chip.current-file").count(), 0);
 
 	// The file explorer references paths without navigating.
-	await wiki.page.locator(".wiki-mobile-tools button").first().click();
+	await wiki.page.getByRole("button", {name: "目录", exact: true}).click();
 	await wiki.page.locator(".wiki-sidebar .file-search-trigger").waitFor();
 	const folder = wiki.page.locator('.wiki-tree-row[title="knowledge"]');
 	await folder.waitFor();
@@ -263,7 +289,7 @@ try {
 	await wiki.page.locator(".messages", {hasText: "Wiki only question"}).waitFor();
 	const beforeReload = wiki.state.conversation;
 	await wiki.page.reload();
-	await wiki.page.locator(".conn-dot.ok").first().waitFor({state: "attached"});
+	await wiki.page.locator(".wiki-window-header").waitFor();
 	await wiki.view.waitFor(); await wiki.editor.waitFor();
 	try { await wiki.page.locator(".messages", {hasText: "Wiki only question"}).waitFor({timeout: 8000}); } catch (e) {
 		console.error("[dbg-reload] url:", wiki.page.url());
@@ -301,18 +327,24 @@ try {
 	await page.locator(".attach-chip.current-file", {hasText: "@background.ts"}).waitFor();
 	await page.locator(".fp-editor, .fp-code-editor, .fp-markdown").first().waitFor();
 	await open();
+	await showChat();
 	await wiki.page.locator(".attach-chip.current-file", {hasText: "@README.md"}).waitFor();
 	await close();
 	await page.locator(".attach-chip.current-file", {hasText: "@background.ts"}).waitFor();
 
 	// Mobile: the Wiki window's chat panel is an overlay toggled from the view header.
 	await open();
-	await wiki.page.setViewportSize({width: 390, height: 844});
+	await wiki.page.setViewportSize({width: 720, height: 800});
 	await wiki.page.reload();
-	await wiki.page.locator(".conn-dot.ok").first().waitFor({state: "attached"});
+	await wiki.page.locator(".wiki-window-header").waitFor();
 	await wiki.view.waitFor(); await wiki.editor.waitFor();
 	assert.equal(await wiki.page.locator(".wiki-agent-chat").isVisible(), false);
-	await wiki.page.getByRole("button", {name: "Agent Chat", exact: true}).click();
+	assert(await wiki.page.locator(".wiki-window-header").evaluate(el => el.scrollWidth <= el.clientWidth), "720px titlebar stays inside the window");
+	await wiki.page.screenshot({path: "tests/scratch/wiki-window-720.png"});
+	await wiki.page.setViewportSize({width: 390, height: 844});
+	assert(await wiki.page.locator(".wiki-window-header").evaluate(el => el.scrollWidth <= el.clientWidth), "390px titlebar stays inside the window");
+	await wiki.page.screenshot({path: "tests/scratch/wiki-window-390.png"});
+	await wiki.page.getByRole("button", {name: "问 pi", exact: true}).click();
 	assert(await wiki.page.locator(".wiki-agent-chat").isVisible());
 	await wiki.page.locator(".wiki-agent-header button").click();
 	assert.equal(await wiki.page.locator(".wiki-agent-chat").isVisible(), false);

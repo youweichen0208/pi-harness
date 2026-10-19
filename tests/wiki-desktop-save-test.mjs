@@ -36,6 +36,22 @@ try {
 	const wikiClient = new URL(wiki.url()).searchParams.get('client');
 	assert(mainClient && wikiClient && mainClient !== wikiClient, 'each window gets its own client id');
 	const editor = wiki.locator('.wiki-prose .fp-rich-document'); await editor.waitFor();
+	const dragSurface = await wiki.locator('.wiki-view-header').evaluate(header => {
+		const toolbar = header.querySelector('#wiki-modal-toolbar');
+		const rect = header.getBoundingClientRect();
+		const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+		const region = element => element ? getComputedStyle(element).getPropertyValue('-webkit-app-region') : 'missing';
+		return {
+			header: region(header), toolbar: region(toolbar), width: rect.width, height: rect.height,
+			hitIsControl: !!hit?.closest('button, input, a, .desktop-window-controls'),
+			controls: [...header.querySelectorAll('button, .desktop-window-controls')].map(region),
+		};
+	});
+	assert(dragSurface.width > 600 && dragSurface.height >= 44, 'Wiki has a full-width window header');
+	assert.equal(dragSurface.header, 'drag', 'the Wiki window header is a continuous native drag surface');
+	assert.equal(dragSurface.toolbar, 'drag', 'the document breadcrumb area also drags the window');
+	assert.equal(dragSurface.hitIsControl, false, 'the center of the Wiki header is not covered by an interactive control');
+	assert(dragSurface.controls.length > 0 && dragSurface.controls.every(region => region === 'no-drag'), 'Wiki header controls opt out of native dragging');
 	await wiki.waitForFunction(() => !document.querySelector('.wiki-send')?.textContent?.includes('会话准备中'));
 	// Re-entering reuses the same window instead of spawning more.
 	await page.locator('.file-name', { hasText: 'README.md' }).click();

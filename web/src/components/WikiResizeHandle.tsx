@@ -36,10 +36,10 @@ export function WikiResizeHandle({ side, width, onResize }: { side: Side; width:
 		onPointerDown={event => {
 			if (event.button !== 0) return;
 			event.preventDefault(); event.currentTarget.focus(); event.currentTarget.setPointerCapture(event.pointerId);
-			const workbench = event.currentTarget.closest(".wiki-workbench, .wiki-modal-body")!;
+			const workbench = event.currentTarget.closest(".wiki-window-body, .wiki-modal-body") ?? event.currentTarget.closest(".wiki-workbench")!;
 			const available = workbench.getBoundingClientRect().width;
-			const overlay = window.matchMedia("(max-width: 1099px)").matches;
-			const other = workbench.querySelector(side === "sidebar" ? ".wiki-chat-panel" : ".wiki-sidebar")?.getBoundingClientRect().width ?? 0;
+			const overlay = window.matchMedia("(max-width: 900px)").matches;
+			const other = workbench.querySelector(side === "sidebar" ? ".wiki-agent-chat" : ".wiki-sidebar")?.getBoundingClientRect().width ?? 0;
 			const max = Math.max(minimums[side], Math.min(maximums[side], available - (overlay ? side === "chat" ? 24 : 280 : other + 280)));
 			drag.current = { x: event.clientX, width: event.currentTarget.parentElement!.getBoundingClientRect().width, max };
 		}}

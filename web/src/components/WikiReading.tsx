@@ -44,25 +44,24 @@ export function WikiIndexIndicator({ status }: { status: WikiIndexStatus }) {
 
 export function WikiTableOfContents({ scroll, contentKey }: { scroll: RefObject<HTMLDivElement>; contentKey: string }) {
 	const t = useT();
-	const [items, setItems] = useState<{ id: string; text: string }[]>([]), [current, setCurrent] = useState("");
+	const [items, setItems] = useState<{ id: string; text: string; level: number; element: HTMLElement }[]>([]), [current, setCurrent] = useState("");
 	useEffect(() => {
 		const root = scroll.current;
 		if (!root) return;
-		const headings = [...root.querySelectorAll<HTMLElement>(".wiki-prose h2")];
-		headings.forEach((heading, index) => { if (!heading.id) heading.id = `wiki-heading-new-${index}`; });
-		setItems(headings.map(h => ({ id: h.id, text: h.textContent ?? "" })));
+		const headings = [...root.querySelectorAll<HTMLElement>(".wiki-prose :is(h1,h2,h3)")].filter(h => !h.closest("[hidden], [data-rich-toc], table, blockquote, li") && h.textContent?.trim());
+		setItems(headings.map((h, index) => ({ id: String(index), text: h.textContent ?? "", level: Number(h.tagName.slice(1)), element: h })));
 		const update = () => {
 			const top = root.getBoundingClientRect().top + 90;
-			let active = headings[0]?.id ?? "";
-			for (const heading of root.querySelectorAll<HTMLElement>(".wiki-prose h2[id]")) { if (heading.getBoundingClientRect().top > top) break; active = heading.id; }
+			let active = headings.length ? "0" : "";
+			for (const [index, heading] of headings.entries()) { if (heading.getBoundingClientRect().top > top) break; active = String(index); }
 			setCurrent(active);
 		};
 		update(); root.addEventListener("scroll", update, { passive: true });
 		const observer = new ResizeObserver(update); observer.observe(root);
 		return () => { root.removeEventListener("scroll", update); observer.disconnect(); };
 	}, [scroll, contentKey]);
-	return items.length ? <nav className="wiki-toc" aria-label={t("wikiOnThisPage")}>
-		<h2>{t("wikiOnThisPage")}</h2>
-		{items.map(item => <button key={item.id} aria-current={current === item.id ? "location" : undefined} onClick={() => { setCurrent(item.id); [...(scroll.current?.querySelectorAll<HTMLElement>(".wiki-prose h2[id]") ?? [])].find(h => h.id === item.id)?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>{item.text}</button>)}
-	</nav> : null;
+	return items.length ? <details className="wiki-toc" open aria-label={t("wikiOnThisPage")}>
+		<summary>{t("wikiOnThisPage")}</summary>
+		{items.map(item => <button key={item.id} data-level={item.level} aria-current={current === item.id ? "location" : undefined} onClick={() => { setCurrent(item.id); item.element.scrollIntoView({ behavior: "smooth", block: "start" }); }}>{item.text}</button>)}
+	</details> : null;
 }

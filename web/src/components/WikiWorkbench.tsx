@@ -16,7 +16,7 @@ import { RichMarkdownEditor } from "./RichMarkdownEditor";
 import { CodeFileEditor } from "./CodeFileEditor";
 import { desktopAPI, registerWindowSave } from "../desktop";
 import { getClientId } from "../use-chat";
-import { WikiIndexIndicator } from "./WikiReading";
+import { WikiIndexIndicator, WikiTableOfContents } from "./WikiReading";
 import { useWikiAutosave } from "../use-wiki-autosave";
 import { randomUuid } from "../uuid";
 
@@ -287,8 +287,9 @@ export function WikiWorkbench({ cwd, conversationId, streaming, active, ready, g
 	const toolbar = <>
 		<div className="wiki-breadcrumb" title={`${cwd}/${path}`}><span className="wiki-path-parent">{path.includes("/") && <><span className="wiki-path-segment">{path.split("/").slice(0, -2).map(part => `${part} / `).join("")}</span><span className="wiki-path-tail">{path.split("/").at(-2)} / </span></>}</span><b>{path.split("/").at(-1) || t("wikiMode")}</b>{saveStatus}</div>
 		<div className="wiki-toolbar-actions">
-			<button onClick={() => { setFocused(false); setDrawer(drawer === "recent" ? null : "recent"); }} className={drawer === "recent" ? "active" : ""}><FiClock />{t("wikiRecent")}</button>
-
+			<button aria-label={t("wikiFiles")} title={t("wikiFiles")} aria-expanded={sidebar} onClick={() => { setFocused(false); setDrawer(null); setSidebar(value => !value); }}><FiMenu /><span>{t("wikiFiles")}</span></button>
+			<button aria-label={t("wikiSearchAll")} title={t("wikiSearchAll")} onClick={() => setSearch(true)}><FiSearch /><span>{t("wikiSearchAll")}</span></button>
+			<button aria-label={t("wikiRecent")} title={t("wikiRecent")} onClick={() => { setFocused(false); setDrawer(drawer === "recent" ? null : "recent"); }} className={drawer === "recent" ? "active" : ""}><FiClock /><span>{t("wikiRecent")}</span></button>
 		</div>
 	</>;
 	return <section className={`wiki-workbench ${focused ? "is-focused" : ""} ${drawer ? "with-drawer" : ""} `} aria-label={t("wikiMode")} style={{ "--wiki-sidebar-width": `${sidebarWidth}px` } as CSSProperties}>
@@ -319,7 +320,6 @@ export function WikiWorkbench({ cwd, conversationId, streaming, active, ready, g
 		{sidebar && <button className="wiki-sidebar-scrim" aria-label={t("close")} onClick={() => setSidebar(false)} />}
 		<div className="wiki-main">
 			<div className="wiki-document-toolbar">
-				<div className="wiki-mobile-tools"><button aria-label={t("wikiFiles")} onClick={() => { setFocused(false); setSidebar(s => !s); }}><FiMenu /></button><button aria-label={t("wikiSearchAll")} onClick={() => setSearch(true)}><FiSearch /></button></div>
 				<div className="wiki-editor-toolbar-slot" ref={setEditorToolbarHost} />
 				{doc?.text !== undefined && <div className="wiki-toolbar-actions">{sourceButton}</div>}
 			</div>
@@ -329,6 +329,7 @@ export function WikiWorkbench({ cwd, conversationId, streaming, active, ready, g
 			<div className="wiki-scroll" ref={scrollRef} onScroll={() => setSelectionMenu(null)}>
 				{loading ? <div className="wiki-empty">{t("loading")}</div> : doc ? <article className={`wiki-document ${source || doc.entry.kind === "code" ? "is-source" : ""}`} ref={article} onMouseUp={source ? selectText : undefined} onKeyUp={source ? selectText : undefined}>
 					<header className="wiki-document-heading"><h1>{metadata.title || doc.entry.name.replace(/\.(md|txt)$/i, "")}</h1><div className="wiki-document-meta"><span className="wiki-meta-chip"><FiCalendar />{updatedLabel}</span>{doc.text !== undefined && <span className="wiki-meta-chip"><FiClock />{t("wikiReadingTime", { minutes: metadata.minutes })}</span>}{metadata.tags.map(tag => <span className="wiki-meta-chip wiki-meta-tag" key={tag}>#{tag}</span>)}{(!referencesReady || backlinkCount > 0) && <button onClick={() => article.current?.querySelector(".wiki-backlinks")?.scrollIntoView({ behavior: "smooth" })}>{referencesReady ? t("wikiCitations", { count: backlinkCount }) : t("wikiReferencesLoading")}</button>}</div>{doc?.entry.kind === "document" && properties.length > 0 && <details className="wiki-properties" open><summary>{t("wikiProperties")}</summary><dl>{properties.map((property, index) => <div key={index}><dt>{property.key}</dt><dd><ReactMarkdown>{property.value}</ReactMarkdown></dd></div>)}</dl></details>}</header>
+					{!source && doc.entry.kind === "document" && <WikiTableOfContents scroll={scrollRef} contentKey={path + draft} />}
 					{doc.text !== undefined ? (source || doc.entry.kind === "code" ? <><div className="wiki-code-hint">{doc.entry.kind === "code" && !source ? t("wikiCodeReadOnly") : t("wikiEditingSource")}</div><CodeFileEditor value={draft} name={path} readOnly={editorBusy || !doc.editable || (!source && doc.entry.kind === "code")} wrap={false} onChange={setDraft} /></> : <div className="wiki-prose md"><RichMarkdownEditor key={`${cwd}:${path}`} file={{ cwd, path }} value={draft} readOnly={editorBusy || !doc.editable} onChange={setDraft} wiki={{ toolbarHost: editorToolbarHost, focused, onWidth: () => { setFocused(!focused); setDrawer(null); setSidebar(false); }, paths, ask: text => { void ask(text); }, followLink, resolveCode: value => resolveWikiLink(path, value, paths), added: NO_ADDED_LINES }} /></div>) : doc.entry.kind === "image" ? <img className="wiki-image" src={wikiMedia(cwd, path)} alt={doc.entry.name} /> : doc.entry.kind === "pdf" ? <iframe className="wiki-pdf" title={doc.entry.name} src={wikiMedia(cwd, path)} /> : <div className="wiki-empty"><FiFile /><p>{doc.entry.name} · {Math.ceil(doc.entry.size / 1024)} KB</p>{desktopAPI?.openWikiFile ? <button onClick={() => void desktopAPI!.openWikiFile!({ clientId: getClientId(), cwd, path }).catch(e => setError(e.message))}>{t("wikiOpenDefault")}</button> : <a href={wikiMedia(cwd, path, true)} download>{t("wikiDownloadOpen")}</a>}</div>}
 					{(!referencesReady || doc.backlinks.length > 0) && <section className="wiki-backlinks"><h2><FiLink />{t("wikiBacklinks")} <span>{referencesReady ? doc.backlinks.length : t("loading")}</span></h2>{doc.backlinks.slice(0, backlinkLimit).map((link, index) => <button key={`${link.path}:${index}`} onClick={() => open(link.path)}><strong>{link.path}</strong><span>{link.snippet}</span></button>)}{doc.backlinks.length > backlinkLimit && <button onClick={() => setBacklinkLimit(n => n + 100)}>{t("wikiLoadMore")}</button>}{!referencesReady && <p>{t("wikiReferencesLoading")}</p>}{referencesReady && !doc.backlinks.length && <p>{t("wikiNoBacklinks")}</p>}</section>}
 				</article> : <div className="wiki-empty"><FiBookOpen /><h1>{t("wikiWelcome")}</h1><p>{t("wikiWelcomeHint")}</p><button onClick={() => setSearch(true)}>{t("wikiSearchAll")}</button></div>}
