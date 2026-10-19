@@ -70,6 +70,7 @@ const ALL = [
 	"file-editor-protocol-test",
 	"wiki-protocol-test",
 	"wiki-thinking-level-test",
+	"wiki-bootstrap-model-test",
 	"wiki-modal-browser-test",
 	"wiki-format-editor-test",
 	"wiki-insert-position-test",

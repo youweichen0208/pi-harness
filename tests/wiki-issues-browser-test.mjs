@@ -1,4 +1,4 @@
-// #109–112: detached Wiki headings, automatic outline and table editing. No model calls.
+// #109–112: detached Wiki headings, automatic outline removal and table editing. No model calls.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
@@ -34,9 +34,8 @@ try {
 		await page.keyboard.press('Enter'); await page.keyboard.type('Body after heading');
 		assert.equal(await editor.locator('p', { hasText: 'Body after heading' }).count(), 1);
 	});
-	await check('automatic document outline and type hierarchy', async () => {
-		assert.equal(await page.locator('.wiki-toc').count(), 1);
-		assert.deepEqual(await page.locator('.wiki-toc button').allTextContents(), ['Second level', 'Third level']);
+	await check('no automatic document outline and preserved type hierarchy', async () => {
+		assert.equal(await page.locator('.wiki-toc').count(), 0);
 		const size = locator => locator.evaluate(el => parseFloat(getComputedStyle(el).fontSize));
 		assert(await size(editor.locator('h2')) > await size(editor.locator('p').first()));
 	});
@@ -73,12 +72,12 @@ try {
 		await page.keyboard.press('ControlOrMeta+s'); await page.locator('.wiki-save-status.saved').waitFor();
 		assert(!readFileSync(join(base, 'note.md'), 'utf8').includes('Fresh cell'));
 	});
-	await check('outline follows edits and remains visible on small screens', async () => {
+	await check('heading edits do not add an automatic outline on small screens', async () => {
 		await editor.locator('h3').evaluate(el => { el.closest('[contenteditable]').focus(); const r = document.createRange(); r.selectNodeContents(el); r.collapse(false); getSelection().removeAllRanges(); getSelection().addRange(r); });
 		await page.keyboard.type(' updated');
-		await page.locator('.wiki-toc button', { hasText: 'Third level updated' }).waitFor();
+		await editor.locator('h3', { hasText: 'Third level updated' }).waitFor();
 		await page.setViewportSize({ width: 600, height: 800 });
-		assert(await page.locator('.wiki-toc').isVisible());
+		assert.equal(await page.locator('.wiki-toc').count(), 0);
 	});
 	assert.deepEqual(failures, []);
 } finally {

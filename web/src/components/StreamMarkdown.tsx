@@ -1,12 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
 import { segmentStream } from "../stream-markdown";
-import {
-	MarkdownBody,
-	PreWithCopy,
-	rehypePlugins,
-	remarkPlugins,
-} from "./Markdown";
+import { MarkdownBody } from "./Markdown";
 
 /**
  * Prefix-cached streaming markdown renderer (see stream-markdown.ts for the
@@ -16,8 +10,9 @@ import {
  *
  * Structure:
  *  - frozen[] segments: append-only complete blocks. Each is its own memoized
- *    <ReactMarkdown> keyed by stable index → parsed exactly ONCE ever; React
- *    reuses their DOM subtrees across frames (copy buttons don't remount).
+ *    <MarkdownBody> keyed by stable index → unchanged text skips delta-driven
+ *    renders; shared link context can still update. DOM subtrees are reused
+ *    across frames (copy buttons don't remount).
  *  - active tail inside an unclosed fence: rendered as PLAIN code — no
  *    highlighting a growing block (that would be O(n²) within the block).
  *  - active tail otherwise: full markdown, throttled to ~200ms with a
@@ -28,13 +23,9 @@ import {
  * reference definitions) in the final render.
  */
 
-/** One frozen segment: immutable input → parses exactly once thanks to memo. */
+/** Keep frozen text memoized while sharing the active/final reply's link handling. */
 const FrozenSegment = memo(function FrozenSegment({ text }: { text: string }) {
-	return (
-		<ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={{ pre: PreWithCopy }}>
-			{text}
-		</ReactMarkdown>
-	);
+	return <MarkdownBody text={text} />;
 });
 
 const TAIL_INTERVAL_MS = 200;

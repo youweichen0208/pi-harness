@@ -29,6 +29,7 @@ export function FolderPickerModal({
 	busy = false,
 	error,
 	pickLabel,
+	initialPath,
 }: {
 	dirBrowse: DirBrowse | null;
 	onBrowse: (path?: string) => void;
@@ -37,14 +38,15 @@ export function FolderPickerModal({
 	busy?: boolean;
 	error?: string;
 	pickLabel?: string;
+	initialPath?: string;
 }) {
 	const t = useT();
 	const dialogRef = useDialogFocus();
 	const [manual, setManual] = useState("");
 
-	// Open on the home directory (server decides what that is).
+	// Start in the caller’s directory, or the server’s home directory.
 	useEffect(() => {
-		onBrowse(undefined);
+		onBrowse(initialPath);
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
 
@@ -74,6 +76,7 @@ export function FolderPickerModal({
 				className="fpk-modal" ref={dialogRef} tabIndex={-1}
 				role="dialog"
 				aria-modal="true"
+				aria-label={pickLabel ?? t("openFolder")}
 				onClick={(e) => e.stopPropagation()}
 			>
 				<div className="fpk-modal-head">

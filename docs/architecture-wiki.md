@@ -1,12 +1,24 @@
 # Wiki 文档模式（Wiki mode）
 
-Wiki 运行在**独立顶层窗口**（ADR-0003，取代 ADR-0002 的同窗口全屏视图）：进入 Wiki mode（点击文件树、全局搜索或聊天文件链接中的 `.md` / `.markdown`，或顶栏 Wiki 切换）时，Web 端 `window.open` 弹出式窗口（命名目标 `pi-wiki`，重复进入复用并导航到新文档），桌面版由主进程创建/复用第二个 `BrowserWindow`；主窗口停留在 normal 对话，两边并行工作互不阻塞。窗口契约是 URL 参数 `?wiki-window=1&cwd=<工作区>&doc=<文档>&client=<窗口客户端>&model=<模型>&thinking=<思考档位>`（`web/src/wiki-window.ts`，后两项可选）：新窗口启动后先通过现有 `set_model`／`set_thinking` 应用打开方携带的模型与思考档位，工作区不符再 `set_cwd`，随后创建临时会话进入 Wiki 视图；鉴权 token 经 localStorage 同源继承，URL 不携带。每个窗口是独立客户端（桌面版 preload 注入的固定 clientId 在 Wiki 窗口被忽略，改用窗口级 sessionStorage，避免两个窗口镜像同一 ClientSession，issue #10）。视图由 `WikiWindowShell` 提供专用文档标题栏与「文档工作台 | 按需问 pi」布局，不再渲染主应用的 `TopBar` / `FooterBar`。标题栏 portal（`#wiki-modal-toolbar`）承接面包屑、保存状态及目录／搜索／改动操作；桌面端整条标题栏和面包屑是连续拖动区，按钮、保存状态与窗口控制显式 `no-drag`，macOS 保留红绿灯安全距离。默认只显示文档，点击「问 pi」、文件引用或选区提问时展开右侧原聊天；最近改动为覆盖抽屉，不再压缩正文。退出 Wiki mode = 关闭窗口（脏草稿守卫与运行中断确认照旧）；窗口关闭后客户端断开，闲置客户端逐出（`evictIdleClients`）清理临时会话。
+Wiki 运行在**独立顶层窗口**（ADR-0003，取代 ADR-0002 的同窗口全屏视图）：进入 Wiki mode（点击文件树、全局搜索或聊天文件链接中的 `.md` / `.markdown`，或顶栏 Wiki 切换）时，Web 端 `window.open` 弹出式窗口（命名目标 `pi-wiki`，重复进入复用并导航到新文档），桌面版由主进程创建/复用第二个 `BrowserWindow`；主窗口停留在 normal 对话，两边并行工作互不阻塞。窗口契约是 URL 参数 `?wiki-window=1&cwd=<工作区>&doc=<文档>&client=<窗口客户端>&model=<模型>&thinking=<思考档位>`（`web/src/wiki-window.ts`，后两项可选）：模型参数使用完整 `provider/model`，旧裸 ID 仅在模型列表中唯一匹配时继承；继承命令每项最多发送一次，失效模型或 5 秒内未确认时继续以当前模型打开文档，避免卡在普通会话。回归：`tests/wiki-bootstrap-model-test.mjs`。新窗口启动后先通过现有 `set_model`／`set_thinking` 应用打开方携带的模型与思考档位，工作区不符再 `set_cwd`，随后创建临时会话进入 Wiki 视图；鉴权 token 经 localStorage 同源继承，URL 不携带。每个窗口是独立客户端（桌面版 preload 注入的固定 clientId 在 Wiki 窗口被忽略，改用窗口级 sessionStorage，避免两个窗口镜像同一 ClientSession，issue #10）。视图由 `WikiWindowShell` 提供专用文档标题栏与「文档工作台 | 按需问 pi」布局，不再渲染主应用的 `TopBar` / `FooterBar`。标题栏 portal（`#wiki-modal-toolbar`）承接面包屑、保存状态及目录／搜索／改动操作；桌面端整条标题栏和面包屑是连续拖动区，按钮、保存状态与窗口控制显式 `no-drag`，macOS 保留红绿灯安全距离。默认只显示文档，点击「问 pi」、文件引用或选区提问时展开右侧原聊天；最近改动为覆盖抽屉，不再压缩正文。退出 Wiki mode = 关闭窗口（脏草稿守卫与运行中断确认照旧）；窗口关闭后客户端断开，闲置客户端逐出（`evictIdleClients`）清理临时会话。
 
 **临时 Wiki 会话（ephemeral wiki conversation，见 GLOSSARY.md）**：进入 Wiki mode 或切换文档时，前端经 `POST /api/wiki`（action `new-conversation`）调用 `cs.newChat(true, true)` 创建一个新会话并置为 active——服务端用 `SessionManager.inMemory`（不落盘、无 transcript 文件），`conv.wiki` 标记，不进入左侧会话列表与会话树（运行中的 Wiki 任务除外，便于停止后台运行）。发送沿用当前文件 chip 机制：发送前排空保存、版本校验、同路径去重、512 KiB 上限；选区「问 pi」与文件栏引用均回填该临时会话的输入框。切换文档或退出 Wiki mode 时会话被无条件删除（草稿纸语义，问答历史不保留），运行中任务须先经确认框中断（「取消 / 中断并继续」，abort 后等快照 settle，30 秒兜底）。`new-conversation` 路由仅在当前 active 会话本身是运行中的 Wiki 会话时拒绝（防止切换文档产生僵尸后台会话）；从正在运行的普通对话进入 Wiki 不受影响，该对话按多对话并发规则转为后台运行。前端在退出/切换快照未到达就快速重进时对 `Conversation unavailable` 用最新会话 ID 重试一次。`createChat` 的 `replaceActive` 只回收 wiki 会话，普通对话进入 Wiki 后保留在运行列表，作为退出时的回切锚点。
+
+聊天回复的流式冻结段、当前生成段与最终正文共用 `MarkdownBody` 的文件链接处理。打开 Markdown 文档走当前 Wiki 窗口内的保存保护和中断确认，不通过浏览器导航到 `/文件.md`；冻结段保留 memo 与稳定 key。回归：`tests/wiki-chat-links-desktop-test.mjs` 使用真实 Electron 和本地模拟流式回复，覆盖三种渲染状态、取消／确认中断、保存失败／重试及窗口和客户端归属。
 
 **退出与恢复**：退出（浏览器标题栏关闭按钮或桌面系统窗口控制）先经脏草稿守卫与运行中断确认；Wiki 独立窗口随后真正关闭，无锚点回切（窗口内没有普通对话），临时会话由服务端闲置逐出清理。主窗口重进 Wiki mode 打开回到上次 Wiki 工作区与文档的窗口（localStorage `pi-wiki-workspace`），会话永远是新建的。页面刷新经 sessionStorage `pi-wiki-view`（视图、文档、会话 ID）恢复：快照的 active 会话仍匹配时重进 Wiki mode 并挂回同一临时会话，否则清除记录；`pi-wiki-chat-open` 同时保留「问 pi」是否展开。
 
 `WikiWindowShell` 负责专用标题栏、按需聊天栏与桌面窗口控制；`App.tsx` 维护进入前锚点（`wikiNormalAnchor`）、中断确认（`wikiInterrupt`）、settle 等待（`settleWaiters`）与恢复记录；`ChatDock` 继续负责把唯一的聊天实例（MessageList + ChatInput）搬进 Wiki 视图右侧或数据库弹窗。`WikiDocumentModal` 仅剩数据库弹窗使用。
+
+## 切换文件夹
+
+左侧目录栏默认常驻，切换文档或文件夹后保持展开；标题栏不再显示目录开关。窄窗口缩小目录栏宽度，与正文并排显示，宽版阅读模式仍可临时隐藏侧栏。
+
+Wiki 左侧目录栏顶部的「打开文件夹」复用 `FolderPickerModal` 与 `browse_dirs`，从当前工作目录开始浏览，也支持手动输入服务器本地路径（桌面版为本机目录）。选择后先走自动保存导航守卫；运行中的任务先确认中断，等待 settle 后再保存和切换。取消或保存失败保留原文档，目录校验失败显示可重试错误。
+
+切换沿用 `set_cwd`，等待 `useChat` 收到请求确认及目标权威快照后创建新的临时 Wiki 会话；主窗口客户端不变。旧临时会话由既有项目切换生命周期回收。成功后同步 URL 的 cwd/doc、窗口恢复记录和最近 Wiki 工作区，保持同一个窗口及 client。新目录优先打开根 README/index.md，否则打开索引中的首篇文档；自动选中文档同样走 `openDocument`，保证 URL、会话和当前文件 chip 一致。没有文档时展开目录树，支持搜索与新建文件。
+
+回归：`tests/wiki-chat-links-desktop-test.mjs` 覆盖跨目录、无效路径、保存失败／重试、中断取消／确认、主窗口隔离、刷新恢复及空目录。
 
 ## 保存、关闭与会话引用
 
@@ -30,7 +42,7 @@ Wiki 运行在**独立顶层窗口**（ADR-0003，取代 ADR-0002 的同窗口�
 
 标题末尾按 Enter 回到普通段落；Shift+Enter 保留标题内换行。正文与 H1/H2/H3 使用各自字号。表格操作栏占据文档流空间，不覆盖单元格；提供删除整表，保存走原有自动保存路径。表头和内容默认居中，Markdown 显式列对齐优先，列之间显示分隔线。
 
-文档标题下方自动显示可折叠的 H1–H3 阅读目录，随编辑更新并支持点击跳转，窄窗口同样可用。它不修改 Markdown，也不添加编辑器 DOM 属性；与可写入文件的「插入目录」独立。隐藏标题、引用、列表、表格和生成目录中的标题不参与。回归：`tests/wiki-issues-browser-test.mjs`，使用独立 Wiki 窗口、隔离端口和临时工作区，不调用模型。
+文档标题下方不再额外显示「本页」自动阅读目录，避免与正文目录重复。用户手动插入的「目录」继续保留，支持标题更新、点击跳转与移除；关闭自动目录不会修改 Markdown 文件。回归：`tests/wiki-issues-browser-test.mjs`，使用独立 Wiki 窗口、隔离端口和临时工作区，不调用模型。
 
 ## 文件与索引
 

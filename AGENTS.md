@@ -1,5 +1,18 @@
 # AGENTS.md — pi-harness 项目指南
 
+<!-- toc -->
+- [1. 项目是什么](#1-项目是什么)
+- [2. 技术栈](#2-技术栈)
+- [3. 目录结构](#3-目录结构)
+- [原生代理边界](#原生代理边界)
+- [4. 核心架构（摘要）](#4-核心架构摘要)
+- [5. 开发工作流](#5-开发工作流)
+- [6. 发布流程](#6-发布流程)
+- [7. 环境变量](#7-环境变量)
+- [8. 部署](#8-部署)
+- [9. 常见坑](#9-常见坑)
+<!-- /toc -->
+
 > 本文件是给 AI 编码助手（pi / Claude Code / Cursor 等）看的高层项目说明书。
 > 详细文档按主题分拆在 `docs/` 目录下。
 > 修改本文件后，在 pi 中运行 `/reload` 生效。
@@ -185,7 +198,7 @@ pi SDK 和 pi-ai 精确锁定 1.2.0，使用原版 SDK，不应用本项目的 S
 | **后台任务列表** | `docs/architecture-core.md` | bash 前后端口快照 diff；按客户端持久；单停/全部关闭 |
 | **扩展 UI 桥** | `docs/architecture-core.md` | setWidget/setStatus/notify/select/confirm/input → 浏览器消息；dialog_response 回传 |
 
-Wiki：点击 `.md` / `.markdown` 在**独立窗口**打开 Wiki mode（Web 弹窗 / 桌面第二 BrowserWindow，URL 契约 `?wiki-window=1&cwd=&doc=&client=&model=&thinking=`（后两项可选），见 ADR-0003），主窗口留在 normal 对话并行工作；新窗口先通过现有 `set_model`／`set_thinking` 继承打开方的模型与思考档位，再创建会话；每篇文档一个临时 Wiki 会话（不落盘、不进会话树，切换文档或退出即删，运行中任务先确认中断）；退出即关窗，临时会话由闲置客户端逐出清理。修改视图布局、临时会话生命周期、中断确认、刷新恢复、发送前保存、选区「问 pi」回填、保存与关闭保护、正文读取、索引／双链／搜索、改动记录或桌面默认应用打开时，读取 `docs/architecture-wiki.md`。专用窗口壳为 `WikiWindowShell.tsx`：不再渲染主 TopBar／FooterBar，文档标题栏与面包屑是桌面连续拖动区（控件 `no-drag`），「问 pi」默认收起并按需展开，最近改动为覆盖抽屉；34a 工具栏为 `WikiToolbar.tsx`，正文排版见 `docs/wiki-doc-v2-design.md`。入口为 `App.tsx`（wiki view）+ `WikiWindowShell.tsx`、`WikiWorkbench.tsx`、`wiki-window.ts`、`wiki-routes.ts` 与 `wiki-service.ts`；`WikiDocumentModal.tsx` 仅数据库弹窗使用。
+Wiki：点击 `.md` / `.markdown` 在**独立窗口**打开 Wiki mode（Web 弹窗 / 桌面第二 BrowserWindow，URL 契约 `?wiki-window=1&cwd=&doc=&client=&model=&thinking=`（后两项可选），见 ADR-0003），主窗口留在 normal 对话并行工作；新窗口先通过现有 `set_model`／`set_thinking` 继承打开方的模型与思考档位，再创建会话；每篇文档一个临时 Wiki 会话（不落盘、不进会话树，切换文档或退出即删，运行中任务先确认中断）；退出即关窗，临时会话由闲置客户端逐出清理。修改视图布局、左侧目录栏「打开文件夹」跨目录切换、临时会话生命周期、中断确认、刷新恢复、发送前保存、选区「问 pi」回填、保存与关闭保护、正文读取、索引／双链／搜索、改动记录或桌面默认应用打开时，读取 `docs/architecture-wiki.md`。专用窗口壳为 `WikiWindowShell.tsx`：不再渲染主 TopBar／FooterBar，文档标题栏与面包屑是桌面连续拖动区（控件 `no-drag`），「问 pi」默认收起并按需展开，最近改动为覆盖抽屉；34a 工具栏为 `WikiToolbar.tsx`，正文排版见 `docs/wiki-doc-v2-design.md`。入口为 `App.tsx`（wiki view）+ `WikiWindowShell.tsx`、`WikiWorkbench.tsx`、`wiki-window.ts`、`wiki-routes.ts` 与 `wiki-service.ts`；`WikiDocumentModal.tsx` 仅数据库弹窗使用。
 
 会话树：修改树过滤/搜索、分支切换/摘要/label、编辑重问、派生会话、外部修改检测或返回文本的草稿保护时，读取 `docs/architecture-session-tree.md`。树状态由原生 SDK 管理，协议 v40，默认编辑重问留在同一会话文件。修改附件卡片、原生条目冻结恢复或模板附件时，读取 `docs/architecture-attachments.md`。
 
@@ -204,7 +217,7 @@ npm run test:smoke   # 零 token 协议冒烟聚合跑器
 
 依赖安装前先运行 `npm run check:lockfile`，确保下载地址全部使用 HTTPS npm 官方源且与声明版本一致；安装验证流程见 `docs/development.md`。
 
-**界面规则**：修改界面前读取 `docs/ui-design.md`，以其为准；主界面沿用 v1.3.1 的暖白／蓝色、IBM Plex Sans 和贴边三栏布局，数据库、文档弹窗及内置扩展管理保留最新交互；颜色和圆角只能用 CSS 变量，例外见该文档。
+**界面规则**：修改界面前读取 `docs/ui-design.md`，以其为准；主界面按「pi-harness 界面重设计 (1)」使用暖灰／石墨双主题、蓝色强调、MiSans 优先字体和贴边三栏布局，数据库、文档弹窗及内置扩展管理保留最新交互；颜色和圆角只能用 CSS 变量，例外见该文档。
 
 **关键约定**：缩进用 Tab；i18n 走 `useT()`（zh/en 同时加）；样式全部在 `styles.css`；新增协议消息只改 `protocol.ts` 再两端 switch 加分支。
 

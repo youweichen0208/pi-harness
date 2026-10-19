@@ -56,6 +56,22 @@ try {
 	await page.locator('.process-group-head').click();
 	await page.locator('.bash-row').waitFor({state:'visible'});
 	assert.match(await page.locator('.bash-row').textContent(), /git status/);
+	// Reference redesign: both appearances and compact layouts keep real content reachable.
+	mkdirSync('tests/scratch', { recursive: true });
+	await page.emulateMedia({ reducedMotion: 'reduce' });
+	for (const appearance of ['light', 'dark']) {
+		await page.evaluate(value => document.documentElement.dataset.appearance = value, appearance);
+		for (const width of [1440, 1000, 390]) {
+			await page.setViewportSize({ width, height: 1000 });
+			assert(await page.locator('.change-summary-file').isVisible());
+			assert(await page.locator('.inputbox textarea').isVisible());
+			assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'no horizontal page overflow');
+			await sleep(350);
+			await page.screenshot({ path: `tests/scratch/redesign-${appearance}-${width}.png` });
+		}
+	}
+	await page.evaluate(() => document.documentElement.dataset.appearance = 'light');
+	await page.setViewportSize({ width: 1440, height: 1000 });
 	await page.locator('.change-summary-file').click();
 	await page.locator('.changes-line mark').first().waitFor();
 	assert.equal(await page.locator('.change-summary-file.selected').count(),1);

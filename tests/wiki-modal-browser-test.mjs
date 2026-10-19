@@ -98,6 +98,7 @@ try {
 		await page.locator(".file-name", {hasText: "README.md"}).first().evaluate(el => el.click());
 		if (!reuse) wireWiki(await popupPromise);
 		await wiki.view.waitFor(); await wiki.editor.waitFor();
+		assert.equal(new URL(wiki.page.url()).searchParams.get("model"), "fixture/unused");
 	};
 	/** The close event is authoritative: Chromium can close before click resolves. */
 	const clickToClose = async button => {
@@ -139,10 +140,9 @@ try {
 	assert(await wiki.page.locator(".wiki-window-header").isVisible());
 	assert.equal(await wiki.page.locator(".wiki-chat-panel, .wiki-composer-area").count(), 0);
 	assert.equal(await wiki.page.locator(".inputbar").count(), 1);
-	await wiki.page.getByRole("button", {name: "目录", exact: true}).click();
-	await wiki.page.locator(".wiki-sidebar .file-search-trigger").waitFor();
-	await wiki.page.getByRole("button", {name: "目录", exact: true}).click();
-	await wiki.page.locator(".wiki-sidebar").waitFor({state: "hidden"});
+	await wiki.page.locator(".wiki-sidebar .file-search-trigger").first().waitFor();
+	assert(await wiki.page.locator(".wiki-sidebar").isVisible(), "directory stays open by default");
+	assert.equal(await wiki.page.locator(".wiki-toolbar-actions").getByRole("button", { name: "目录", exact: true }).count(), 0);
 	await wiki.page.setViewportSize({width: 1440, height: 900});
 	await wiki.page.screenshot({path: "tests/scratch/wiki-window-1440.png"});
 	// The on-demand chat shows the EMPTY ephemeral conversation, not the main window's.
@@ -277,8 +277,7 @@ try {
 	assert.equal(await wiki.page.locator(".attach-chip.current-file").count(), 0);
 
 	// The file explorer references paths without navigating.
-	await wiki.page.getByRole("button", {name: "目录", exact: true}).click();
-	await wiki.page.locator(".wiki-sidebar .file-search-trigger").waitFor();
+	await wiki.page.locator(".wiki-sidebar .file-search-trigger").first().waitFor();
 	const folder = wiki.page.locator('.wiki-tree-row[title="knowledge"]');
 	await folder.waitFor();
 	await folder.locator(".file-reference-action").focus();

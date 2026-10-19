@@ -500,6 +500,8 @@ export const Message = memo(function Message({
 						: roleLabel(message.role, t)}
 				</span>
 
+				{message.role === "assistant" && message.model && <span className="msg-model" title={message.model}>· {message.model}</span>}
+
 				{message.timestamp && (
 					<span className="msg-time" title={[message.model, new Date(message.timestamp).toLocaleString()].filter(Boolean).join(" · ")}>{formatTime(message.timestamp)}</span>
 				)}
