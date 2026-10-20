@@ -6,6 +6,7 @@ import {
 	FiCheck,
 	FiSave,
 	FiMoreHorizontal,
+	FiPlay,
 	FiZoomIn,
 	FiZoomOut,
 } from "react-icons/fi";
@@ -23,6 +24,9 @@ import { downloadFile } from "../download";
 import { withToken } from "../auth-token";
 import { CODE_THEME_EVENT, getCodeTheme } from "../code-appearance";
 import { fileDiffMarkers } from "../file-diff-markers";
+import { usePlaygroundHost } from "../playground-context";
+import { runKey, startRun } from "../playground-run-store";
+import { PlaygroundResult } from "./PlaygroundRun";
 
 /** Cap rendered lines so a pathological file can't freeze the panel. */
 const MAX_PREVIEW_LINES = 5000;
@@ -444,6 +448,19 @@ export const FilePreviewContent = memo(function FilePreviewContent({
 	// Preview category from the server ("text" while loading). Media kinds are
 	// streamed over the /api/file HTTP endpoint; "none" is never previewable.
 	const kind = loaded?.kind ?? "text";
+	// A Run from the file preview uses the editor buffer, not the file on disk: what
+	// you see is what runs, and running never saves. Keyed by path and source, and
+	// reset on file change, so switching files cannot show a stale result.
+	const { status: playground } = usePlaygroundHost();
+	const [lastRun, setLastRun] = useState<{ code: string; key: string } | null>(null);
+	useEffect(() => { setLastRun(null); }, [file.cwd, file.path]);
+	const canRunFile = kind === "text" && /\.java$/i.test(file.path) && !!playground?.enabled && !!playground.jdk.available;
+	const runEditorBuffer = () => {
+		const code = draft;
+		const key = runKey(`file:${file.cwd}:${file.path}`, code);
+		setLastRun({ code, key });
+		void startRun(key, code);
+	};
 	const isMarkdown = isMarkdownFile(file.name);
 	const showMarkdown =
 		isMarkdown && markdownPreview && kind === "text" && !isBinary;
@@ -480,6 +497,7 @@ export const FilePreviewContent = memo(function FilePreviewContent({
 						{isMarkdown && kind === "text" && <div className="fp-view-switch" role="group" aria-label={t("fileViewMode")}><button type="button" aria-pressed={!diffMode && markdownPreview} onClick={() => { setDiffMode(null); setMarkdownPreview(true); setEditing(true); setSel(null); }}>{t("fileViewPreview")}</button><button type="button" aria-pressed={!diffMode && !markdownPreview} disabled={!canEdit} onClick={() => { setDiffMode(null); setMarkdownPreview(false); setEditing(true); setSel(null); }}>{t("fileViewSource")}</button></div>}
 						{!isMarkdown && canEdit && <div className="fp-view-switch" role="group" aria-label={t("fileEditMode")}><button type="button" aria-pressed={!editing} onClick={() => { setDiffMode(null); setEditing(false); }}>{t("fileReadOnly")}</button><button type="button" aria-pressed={editing} onClick={() => { setDiffMode(null); setEditing(true); }}>{t("fileEditShort")}</button></div>}
 						{gitChanged && <button type="button" className="fp-header-action" aria-pressed={diffMode === "git"} onClick={() => diffMode === "git" ? setDiffMode(null) : requestGitDiff()}>{t("fileChangesCount", { n: 1 })}</button>}
+						{canRunFile && <button type="button" className="fp-header-action" title={t("playgroundRunEditorBuffer")} aria-label={t("playgroundRunEditorBuffer")} onClick={runEditorBuffer}><FiPlay /> {t("playgroundRun")}</button>}
 						<button type="button" className="fp-header-action fp-reference" disabled={disabled} onClick={() => onAttach(file.path, file.name, "reference")}>@{t("fileReference")}</button>
 						<details className="fp-more"><summary aria-label={t("fileMoreActions")}><FiMoreHorizontal /></summary><div className="fp-more-actions" onClick={(event) => { if (event.target instanceof Element && event.target.closest("button")) event.currentTarget.closest("details")?.removeAttribute("open"); }}>
 							<button className="btn" disabled={disabled} onClick={() => { void downloadFile(file.path, file.name).then((r) => { if (!r.ok && !r.cancelled) setError(r.error); }); }}>{t("downloadFile")}</button>
@@ -493,6 +511,7 @@ export const FilePreviewContent = memo(function FilePreviewContent({
 						{canEdit && dirty && status !== "saving" && <button className="btn primary fp-header-save" disabled={disabled} onClick={() => saveEditing()}><FiSave /> {t("saveFile")}</button>}
 					</div>
 				</div>
+				{lastRun && <PlaygroundResult runKey={lastRun.key} stale={!draft.includes(lastRun.code)} />}
 				{externalChanged && dirty && <div className="fp-external-banner" role="alert">{t("fileExternalChanged")}<button type="button" onClick={() => guard.current?.(requestContent)}>{t("fileReload")}</button><button type="button" disabled={remoteText === null} onClick={() => setDiffMode("external")}>{t("fileCompare")}</button></div>}
 				{truncated && kind === "text" && !isBinary && (
 					<div className="fp-notice"><UiIcon name="warning" /> {t("previewTruncated")}</div>

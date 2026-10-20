@@ -35,6 +35,7 @@ export function PlaygroundResult({ runKey: key, onSendToPi, stale = false }: { r
 		</button>
 		{expanded && <>
 			{run.error && <div className="playground-notice" role="alert">{run.error}</div>}
+			{run.needsProject && <div className="playground-hint" role="note">{t("playgroundSingleFileOnly")}</div>}
 			{run.stdout && <section className="playground-stream"><h4>{t("playgroundStdout")}</h4><pre>{run.stdout}</pre></section>}
 			{run.stderr && <section className="playground-stream stderr"><h4>{t("playgroundStderr")}</h4><pre>{run.stderr}</pre></section>}
 			{!running && !run.error && (

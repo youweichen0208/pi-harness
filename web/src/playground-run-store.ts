@@ -22,13 +22,15 @@ export interface PlaygroundRunState {
 	exitCode: number | null;
 	durationMs: number;
 	compileError: boolean;
+	/** The compiler failure looks like it needs the rest of the project. */
+	needsProject: boolean;
 	timedOut: boolean;
 	truncated: boolean;
 	stopped: boolean;
 	error?: string;
 }
 
-const IDLE: PlaygroundRunState = Object.freeze({ phase: "done", stdout: "", stderr: "", exitCode: null, durationMs: 0, compileError: false, timedOut: false, truncated: false, stopped: false });
+const IDLE: PlaygroundRunState = Object.freeze({ phase: "done", stdout: "", stderr: "", exitCode: null, durationMs: 0, compileError: false, needsProject: false, timedOut: false, truncated: false, stopped: false });
 
 interface Entry {
 	state: PlaygroundRunState;
@@ -127,7 +129,7 @@ export async function startRun(key: string, code: string): Promise<void> {
 					continue;
 				}
 				if (event.type === "out") patch(event.stream === "stdout" ? { stdout: entry.state.stdout + event.text } : { stderr: entry.state.stderr + event.text });
-				else if (event.type === "end") patch({ phase: "done", exitCode: event.exitCode, durationMs: event.durationMs, compileError: event.compileError, timedOut: event.timedOut, truncated: event.truncated });
+				else if (event.type === "end") patch({ phase: "done", exitCode: event.exitCode, durationMs: event.durationMs, compileError: event.compileError, needsProject: event.needsProject, timedOut: event.timedOut, truncated: event.truncated });
 				else if (event.type === "error") patch({ phase: "done", error: event.message });
 			}
 		}

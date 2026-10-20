@@ -207,7 +207,7 @@ try {
 		assert.equal(hello.status, 200);
 		assert.equal(hello.events[0].type, "start");
 		assert.equal(text(hello.events, "stdout"), "hello\n");
-		assert.deepEqual(end(hello.events), { type: "end", exitCode: 0, durationMs: end(hello.events).durationMs, truncated: false, timedOut: false, compileError: false });
+		assert.deepEqual(end(hello.events), { type: "end", exitCode: 0, durationMs: end(hello.events).durationMs, truncated: false, timedOut: false, compileError: false, needsProject: false });
 
 		// stderr stays separate from stdout.
 		const mixed = await run('public class Main { public static void main(String[] a) { System.out.println("out"); System.err.println("err"); } }');
@@ -234,6 +234,7 @@ try {
 		// lets the file-preview entry explain the single-file limitation.
 		const needsProject = await run("import com.acme.Helper;\npublic class Main { public static void main(String[] a) { System.out.println(new Helper()); } }");
 		assert.equal(end(needsProject.events).compileError, true);
+		assert.equal(end(needsProject.events).needsProject, true, "the server classifies a project-dependency failure for the UI");
 		assert.equal(looksLikeMissingProjectDependency(text(needsProject.events, "stderr")), true);
 
 		// A runtime failure is not a compile failure.
@@ -377,6 +378,37 @@ try {
 			await page.getByRole("button", { name: "对话", exact: true }).click();
 
 			console.log("PASS playground browser: Notes run, no body write, stale after edit and cleared on switch");
+
+			// --- the file-preview entry ---
+			const onDisk = 'public class Demo { public static void main(String[] a) { System.out.println("from disk"); } }';
+			writeFileSync(join(root, "Demo.java"), onDisk);
+			const openFile = path => page.evaluate(p => window.dispatchEvent(new CustomEvent("pi-harness:open-tool-file", { detail: { path: p } })), path);
+			await openFile("Demo.java");
+			const fileRun = page.getByRole("button", { name: "运行编辑器中的内容（含未保存改动）" });
+			await fileRun.waitFor({ timeout: 30000 });
+
+			// The editor buffer runs, not the file on disk - and running never saves.
+			await page.locator(".fp-editor").fill('public class Demo { public static void main(String[] a) { System.out.println("from buffer"); } }');
+			await fileRun.click();
+			const fileOut = page.locator(".fp .playground-result .playground-stream pre").first();
+			await fileOut.waitFor({ timeout: 60000 });
+			assert.match(await fileOut.innerText(), /from buffer/, "the editor buffer runs, not the file on disk");
+			assert.equal(readFileSync(join(root, "Demo.java"), "utf8"), onDisk, "running must not save the file");
+
+			// A failure that needs the rest of the project gets a plain explanation.
+			await page.locator(".fp-editor").fill('import com.acme.Helper;\npublic class Demo { }');
+			await fileRun.click();
+			await page.locator(".fp .playground-result .playground-hint").waitFor({ timeout: 60000 });
+			assert.match(await page.locator(".fp .playground-result .playground-hint").innerText(), /自包含单文件/);
+
+			// Switching files clears the result. The buffer is reverted first because
+			// running deliberately does not save, so the file is still dirty and the
+			// existing unsaved-changes guard correctly refuses to leave it.
+			await page.locator(".fp-editor").fill(onDisk);
+			writeFileSync(join(root, "Other.java"), "public class Other { }");
+			await openFile("Other.java");
+			await page.locator(".fp .playground-result").waitFor({ state: "detached", timeout: 15000 });
+			console.log("PASS playground browser: file preview runs the editor buffer without saving, explains a project dependency and clears on switch");
 
 			console.log("PASS playground browser: Run control on a reply, none on tool cards, streaming output, send-to-pi and the settings tab");
 		} finally {

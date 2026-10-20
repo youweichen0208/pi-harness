@@ -1560,7 +1560,7 @@ export interface PlaygroundErrorResponse { error: string }
 export type PlaygroundEvent =
 	| { type: "start"; runId: string }
 	| { type: "out"; stream: "stdout" | "stderr"; text: string }
-	| { type: "end"; exitCode: number | null; durationMs: number; truncated: boolean; timedOut: boolean; compileError: boolean }
+	| { type: "end"; exitCode: number | null; durationMs: number; truncated: boolean; timedOut: boolean; compileError: boolean; needsProject: boolean }
 	| { type: "error"; message: string };
 
 /** Shared HTTP document resources; independent of agent sessions. */

@@ -19,7 +19,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { PlaygroundEvent, PlaygroundLimits } from "./protocol.js";
 import { killPidTree } from "./process-utils.js";
-import { OutputBudget, introspectJavaSource } from "./playground-source.js";
+import { OutputBudget, introspectJavaSource, looksLikeMissingProjectDependency } from "./playground-source.js";
 import type { JdkCommands } from "./playground-jdk.js";
 
 /**
@@ -67,10 +67,15 @@ export interface RunSummary {
 	durationMs: number;
 	exitCode: number | null;
 	compileError: boolean;
+	/** The failure looks like it needs the rest of the project (see `looksLikeMissingProjectDependency`). */
+	needsProject: boolean;
 	timedOut: boolean;
 	truncated: boolean;
 	aborted: boolean;
 }
+
+/** Enough of the tail of stderr to classify a compiler failure, not to keep it. */
+const STDERR_TAIL_BYTES = 16_384;
 
 function spawnPhase(
 	command: string,
@@ -121,10 +126,15 @@ export async function runJava(options: RunJavaOptions): Promise<RunSummary> {
 	let compileError = false;
 	let exitCode: number | null = null;
 	let current: ChildProcess | undefined;
+	// javac puts its summary last, so the tail is what identifies a failure that
+	// needs the rest of the project rather than a mistake in the snippet.
+	let stderrTail = "";
 
 	const forward = (stream: "stdout" | "stderr", chunk: string) => {
 		const text = budget.push(chunk);
-		if (text) options.onEvent({ type: "out", stream, text });
+		if (!text) return;
+		if (stream === "stderr") stderrTail = `${stderrTail}${text}`.slice(-STDERR_TAIL_BYTES);
+		options.onEvent({ type: "out", stream, text });
 	};
 	const shouldStop = () => timedOut || aborted || budget.exceeded;
 	const stop = () => {
@@ -167,7 +177,7 @@ export async function runJava(options: RunJavaOptions): Promise<RunSummary> {
 		rmSync(directory, { recursive: true, force: true });
 	}
 
-	const summary: RunSummary = { runId, durationMs: Date.now() - startedAt, exitCode, compileError, timedOut, truncated: budget.exceeded, aborted };
-	options.onEvent({ type: "end", exitCode: summary.exitCode, durationMs: summary.durationMs, truncated: summary.truncated, timedOut: summary.timedOut, compileError: summary.compileError });
+	const summary: RunSummary = { runId, durationMs: Date.now() - startedAt, exitCode, compileError, needsProject: compileError && looksLikeMissingProjectDependency(stderrTail), timedOut, truncated: budget.exceeded, aborted };
+	options.onEvent({ type: "end", exitCode: summary.exitCode, durationMs: summary.durationMs, truncated: summary.truncated, timedOut: summary.timedOut, compileError: summary.compileError, needsProject: summary.needsProject });
 	return summary;
 }
