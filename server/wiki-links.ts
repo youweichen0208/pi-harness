@@ -1,6 +1,10 @@
 import { unified } from "unified";
 import remarkParse from "remark-parse";
 
+/** Only Markdown/plain-text documents bind a per-document Wiki conversation;
+ * media, code and other files open as read-only previews on the current one. */
+export const isWikiDocumentPath = (path: string): boolean => /\.(md|markdown|txt)$/i.test(path);
+
 const parser = unified().use(remarkParse);
 type TextNode = { type: string; value?: string; depth?: number; children?: TextNode[]; position?: { start: { offset?: number }; end: { offset?: number } } };
 function plain(node: TextNode): string {

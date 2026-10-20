@@ -66,7 +66,9 @@ try {
 	await page.waitForTimeout(1200);
 	assert.equal(readFileSync(join(base, 'doc.md'), 'utf8'), original);
 
-	// 5. Wide screens keep the document and outline next to each other.
+	// 5. Wide screens keep the document and outline next to each other, and the
+	// cluster stays near the file tree: the left gutter caps at 240px instead of
+	// growing with the viewport; extra space collects past the outline.
 	await page.setViewportSize({ width: 2560, height: 1000 });
 	await page.locator('.wiki-outline-aside').waitFor();
 	await page.waitForTimeout(300);
@@ -79,7 +81,8 @@ try {
 	const gap = boxes.aside.left - boxes.doc.right;
 	assert(gap >= 0 && gap < 200, `document/outline gap ${gap}`);
 	const leftSlack = boxes.doc.left - boxes.layout.left, rightSlack = boxes.layout.right - boxes.aside.left - 240;
-	assert(Math.abs(leftSlack - rightSlack) < 260, `cluster not centered: ${JSON.stringify(boxes)}`);
+	assert(leftSlack <= 260, `left gutter not capped: ${JSON.stringify(boxes)}`);
+	assert(rightSlack > leftSlack, `extra space should collect past the outline: ${JSON.stringify(boxes)}`);
 
 	assert.deepEqual(errors, []);
 } finally {

@@ -4,6 +4,7 @@ import { join, relative, sep } from "node:path";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { writeFileAtomic } from "./private-file.js";
 import { wikiPath } from "./wiki-service.js";
+import { isWikiDocumentPath } from "./wiki-links.js";
 import type { WikiChatSummary } from "./protocol.js";
 
 /** Native transcripts live outside the ordinary SDK session directory. */
@@ -26,7 +27,7 @@ export class WikiChatStore {
 		writeFileAtomic(this.metadata(cwd, id), JSON.stringify({ ...this.settings(cwd, id), ...patch }));
 	}
 	validateReferences(cwd: string, paths: unknown): string[] {
-		if (!Array.isArray(paths) || paths.length > 100 || paths.some(path => typeof path !== "string" || !/\.(md|markdown|txt)$/i.test(path))) throw new Error("Invalid document selection (maximum 100)");
+		if (!Array.isArray(paths) || paths.length > 100 || paths.some(path => typeof path !== "string" || !isWikiDocumentPath(path))) throw new Error("Invalid document selection (maximum 100)");
 		return [...new Set(paths.map(path => {
 			const absolute = wikiPath(cwd, path);
 			if (!statSync(absolute).isFile()) throw new Error(`Document unavailable: ${path}`);

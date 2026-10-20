@@ -21,6 +21,7 @@ import { ChatDock } from "./components/ChatDock";
 import { WikiDocumentModal } from "./components/WikiDocumentModal";
 import { useWikiPanelWidth } from "./components/WikiResizeHandle";
 import { wikiRequest } from "./wiki-api";
+import { isWikiDocumentPath } from "./wiki-document";
 import { isWikiWindow, openWikiWindow, wikiWindowCarry, wikiWindowClient, wikiWindowParams } from "./wiki-window";
 import type { ChatReferenceRequest } from "./chat-reference";
 
@@ -369,6 +370,8 @@ export function App() {
 	const notes = useNotes(notesOpen, chat.status === "open");
 	const [view, setView] = useState<ViewName>(isWikiWindow ? "wiki" : "chat");
 	const [wikiFileRequest, setWikiFileRequest] = useState<{cwd:string;conversationId:string;path:string;token:string} | null>(null);
+	// 媒体/代码预览（issue #119）：无文本上下文、不产生当前文件 chip，但不禁用聊天输入。
+	const wikiMediaPreview = !!wikiFileRequest?.path && !isWikiDocumentPath(wikiFileRequest.path);
 	const [databaseOpen, setDatabaseOpen] = useState(false);
 	const [databaseReferences, setDatabaseReferences] = useState<{ id: string; name: string; version: string }[]>([]);
 	const [wikiCurrentIncluded, setWikiCurrentIncluded] = useState(false);
@@ -425,20 +428,25 @@ export function App() {
 		// Destructured locals keep the non-undefined narrowing inside the closure below.
 		const wikiCwd = current.cwd, activeId = current.conversationId;
 		if (!wikiCwd || !activeId || switching) return false;
-		const create = (conversationId: string) => wikiRequest<{ conversationId: string }>(wikiCwd, path ? "chat-document" : "new-conversation", { path: path ?? undefined, conversationId });
+		// 媒体/代码等只读预览不绑定文档会话（issue #119）：沿用当前 Wiki 会话，
+		// 仅切换正文预览；当前不是 Wiki 会话时（如刷新后直接打开媒体）先建空白会话。
+		const media = path !== null && !isWikiDocumentPath(path);
+		const create = (conversationId: string) => wikiRequest<{ conversationId: string }>(wikiCwd, path && !media ? "chat-document" : "new-conversation", { path: media ? undefined : (path ?? undefined), conversationId });
 		try {
 			// The exit/switch snapshot can lag behind a fast re-entry: the cached
 			// conversation id may already be gone server-side. One retry with the
 			// (by then settled) current id covers that race.
 			let result: { conversationId: string; sessionId?: string };
 			try {
-				result = wikiFileRequest?.cwd === wikiCwd && wikiFileRequest.conversationId === activeId && wikiFileRequest.path === (path ?? "")
+				result = (wikiFileRequest?.cwd === wikiCwd && wikiFileRequest.conversationId === activeId && wikiFileRequest.path === (path ?? "")) || (media && chat.state?.wiki === true)
 					? { conversationId: activeId, sessionId: chat.state?.sessionId }
-					: await wikiRequest<{ conversationId: string; sessionId: string }>(wikiCwd, path ? "chat-document" : "chat-resume", { conversationId: activeId, path: path ?? undefined }).catch(error => {
-						if (!reuseInitial || path) throw error;
-						pushNotice("warning", (error as Error).message);
-						return { conversationId: activeId, sessionId: chat.state?.sessionId };
-					});
+					: media
+						? await create(activeId)
+						: await wikiRequest<{ conversationId: string; sessionId: string }>(wikiCwd, path ? "chat-document" : "chat-resume", { conversationId: activeId, path: path ?? undefined }).catch(error => {
+							if (!reuseInitial || path) throw error;
+							pushNotice("warning", (error as Error).message);
+							return { conversationId: activeId, sessionId: chat.state?.sessionId };
+						});
 			} catch (error) {
 				if (!(error instanceof Error) || !/Conversation unavailable/.test(error.message)) throw error;
 				const refreshed = wikiCurrent.current;
@@ -451,7 +459,7 @@ export function App() {
 			wikiNormalAnchor.current = anchor;
 			try { localStorage.setItem(WIKI_WORKSPACE_KEY, JSON.stringify({ cwd: wikiCwd, path })); } catch { /* best effort */ }
 			setDatabaseOpen(false);
-			if (wikiFileRequest?.path !== (path ?? "") || wikiFileRequest?.cwd !== wikiCwd) setWikiProject(null);
+			if (!media && (wikiFileRequest?.path !== (path ?? "") || wikiFileRequest?.cwd !== wikiCwd)) setWikiProject(null);
 			setDrawer(null);
 			// URL 即窗口契约（ADR-0003）：Wiki 独立窗口内切换文档时同步 doc 参数，
 			// 刷新的自举与恢复据此判断是否同一文档，复用窗口导航也以它为准。
@@ -505,6 +513,8 @@ export function App() {
 	};
 	const openWikiDocument = useCallback(async (path: string) => {
 		if (switching) return;
+		// 只读媒体预览不切换会话（issue #119），运行中的任务无需中断确认。
+		if (!isWikiDocumentPath(path)) { void enterWiki(path); return; }
 		// 每篇文档恢复自己的 Wiki 会话，切换清除附加项目。
 		// 运行中的任务必须先经用户确认中断，等任务结束后才能切换。
 		if (view === "wiki" && wikiFileRequest && conversationState?.isStreaming && conversationState.conversationId === wikiFileRequest.conversationId) {
@@ -1296,7 +1306,7 @@ export function App() {
 					onNewChat={() => { setNotesOpen(false); setView("chat"); panelSend({ type: "new_chat" }); }}
 					send={panelSend}
 					active={!isMobile || drawer === "left"}
-					ready={chat.ready && !!conversationState && (!wikiFileRequest?.path || (wikiCurrentFile?.id === wikiFileRequest.token && wikiContextSession === chat.state?.sessionId))}
+					ready={chat.ready && !!conversationState && (!wikiFileRequest?.path || wikiMediaPreview || (wikiCurrentFile?.id === wikiFileRequest.token && wikiContextSession === chat.state?.sessionId))}
 					status={chat.status}
 					cwd={chat.state?.cwd ?? ""}
 					sessionFile={conversationState?.sessionFile ?? null}
@@ -1436,7 +1446,7 @@ export function App() {
 								queue={conversationState?.queue}
 								pendingCount={(conversationState?.queue.steering.length ?? 0) + (conversationState?.queue.followUp.length ?? 0)}
 								send={send}
-								ready={chat.ready && !!conversationState && (!wikiFileRequest?.path || (wikiCurrentFile?.id === wikiFileRequest.token && wikiContextSession === chat.state?.sessionId))}
+								ready={chat.ready && !!conversationState && (!wikiFileRequest?.path || wikiMediaPreview || (wikiCurrentFile?.id === wikiFileRequest.token && wikiContextSession === chat.state?.sessionId))}
 								streaming={conversationState?.isStreaming ?? false}
 								silentActivity={chat.agentSilence?.conversationId === chat.activeConversationId && chat.agentSilence.activity === "model" ? chat.agentSilence.activity : null}
 										messages={conversationState?.messages ?? EMPTY_MESSAGES}
