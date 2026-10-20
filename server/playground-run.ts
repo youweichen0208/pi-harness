@@ -151,7 +151,10 @@ export async function runJava(options: RunJavaOptions): Promise<RunSummary> {
 		const register = (child: ChildProcess) => {
 			current = child;
 		};
-		const compiled = await spawnPhase(options.jdk.javac, ["-d", directory, file], { cwd: directory, forward, shouldStop, register });
+		// javac's diagnostics are parsed (`looksLikeMissingProjectDependency`) and shown
+		// verbatim, so they must not change with the host locale: a Chinese macOS
+		// emits `错误: 需要<标识符>`, which would silently disable that detection.
+		const compiled = await spawnPhase(options.jdk.javac, ["-J-Duser.language=en", "-J-Duser.country=US", "-d", directory, file], { cwd: directory, forward, shouldStop, register });
 		if (!shouldStop()) {
 			if (compiled !== 0) compileError = true;
 			else exitCode = await spawnPhase(options.jdk.java, [`-Xmx${options.limits.maxHeapMb}m`, "-cp", directory, source.mainClass], { cwd: directory, forward, shouldStop, register });

@@ -117,9 +117,10 @@ export function installPlaygroundRoutes(app: Express, options: PlaygroundRouteOp
 		res.flushHeaders();
 
 		const controller = new AbortController();
-		const abort = () => controller.abort();
-		req.on("close", abort);
-		req.on("aborted", abort);
+		// The response, not the request: `express.json()` has already consumed the
+		// request stream by now, so its `close` fires before this handler runs. A
+		// premature response close is the actual "client went away" signal.
+		res.on("close", () => { if (!res.writableEnded) controller.abort(); });
 		const send = (event: PlaygroundEvent) => {
 			if (!res.writableEnded) res.write(`data: ${JSON.stringify(event)}\n\n`);
 		};
@@ -137,8 +138,6 @@ export function installPlaygroundRoutes(app: Express, options: PlaygroundRouteOp
 		} catch (error) {
 			send({ type: "error", message: error instanceof Error ? error.message : "Run failed" });
 		} finally {
-			req.off("close", abort);
-			req.off("aborted", abort);
 			release();
 			if (!res.writableEnded) res.end();
 		}

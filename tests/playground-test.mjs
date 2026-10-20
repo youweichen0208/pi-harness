@@ -67,6 +67,8 @@ async function run(code, { signal, client, origin } = {}) {
 }
 const text = (events, stream) => events.filter(event => event.type === "out" && event.stream === stream).map(event => event.text).join("");
 const end = events => events.find(event => event.type === "end");
+/** The same rule the server uses to explain a project-dependency failure. */
+const looksLikeMissingProjectDependency = output => /\bpackage\s+[\w.]+\s+does not exist\b/.test(output) || /cannot find symbol[\s\S]{0,400}?\bsymbol:\s*(?:class|interface|enum|record)\b/.test(output);
 /** Temp directories a Run owns, to prove cleanup on every exit path. */
 const runDirs = () => readdirSync(tmpdir()).filter(name => name.startsWith("pi-playground-")).length;
 const HELLO = 'public class Main { public static void main(String[] args) { System.out.println("hello"); } }';
@@ -141,7 +143,14 @@ try {
 		const compileFailure = await run("public class Main { this is not java }");
 		assert.equal(end(compileFailure.events).compileError, true);
 		assert.equal(end(compileFailure.events).exitCode === 0, false);
-		assert.match(text(compileFailure.events, "stderr"), /error/);
+		// English, whatever the host locale: the diagnostics are parsed, not just shown.
+		assert.match(text(compileFailure.events, "stderr"), /error:/);
+
+		// A snippet that needs the rest of the project is recognisable, which is what
+		// lets the file-preview entry explain the single-file limitation.
+		const needsProject = await run("import com.acme.Helper;\npublic class Main { public static void main(String[] a) { System.out.println(new Helper()); } }");
+		assert.equal(end(needsProject.events).compileError, true);
+		assert.equal(looksLikeMissingProjectDependency(text(needsProject.events, "stderr")), true);
 
 		// A runtime failure is not a compile failure.
 		const runtimeFailure = await run('public class Main { public static void main(String[] a) { throw new RuntimeException("boom"); } }');
