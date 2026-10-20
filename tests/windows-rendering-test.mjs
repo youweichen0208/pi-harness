@@ -40,7 +40,7 @@ try {
 		await app.evaluate(({ app, BrowserWindow }) => { app.focus({ steal: true }); const w = BrowserWindow.getAllWindows().find(w => w.webContents.getURL().startsWith('http://127.0.0.1:')); w.setContentSize(1440, 900); w.show(); w.focus(); });
 		const cdp = await page.context().newCDPSession(page);
 		const nativeWindow = await app.evaluate(({ app, BrowserWindow }) => { app.focus({ steal: true }); const w = BrowserWindow.getAllWindows().find(w => w.webContents.getURL().startsWith('http://127.0.0.1:')); return { size: w.getContentSize(), background: w.getBackgroundColor() }; });
-		assert.equal(nativeWindow.background.toUpperCase(), '#FBF9F6');
+		assert.equal(nativeWindow.background.toUpperCase(), '#FFFFFF');
 		// Hosted macOS can clamp native windows to its small virtual display. Keep
 		// the comparison canvas identical; still use this OS/Electron font renderer.
 		if (nativeWindow.size[0] !== 1440 || nativeWindow.size[1] !== 900) await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: scale, mobile: false });
@@ -48,16 +48,20 @@ try {
 		const fonts = [], failures = [];
 		page.on('response', response => { if (/\.woff2(?:\?|$)/.test(response.url())) { fonts.push({ url: new URL(response.url()).pathname, status: response.status() }); if (!response.ok()) failures.push(response.url()); } });
 		await page.reload(); await page.locator('.conn-dot.ok').first().waitFor({ state: 'attached' });
-		await page.locator('.workspace-group-manager input').fill('Rendering');
-		await page.locator('.workspace-group-actions button[type=submit]').click();
-		await page.locator('.workspace-outside button').click();
+		await page.locator('.compact-workspace-trigger').click();
+		await page.locator('.workspace-picker-create').click();
+		await page.getByLabel('Workspace 名称', { exact: true }).fill('Rendering');
+		await page.getByRole('button', { name: '创建 Workspace', exact: true }).click();
+		await page.locator('.lp-add-project').click();
+		await page.locator('.fpk-modal-foot input').fill(cwd);
+		await page.locator('.fpk-open-btn').click();
 		await page.locator('.project-item.active').waitFor();
-		await page.locator('.empty-example-icon svg').first().waitFor();
+		await page.locator('.welcome-motto').waitFor();
 		assert.equal(await page.evaluate(() => document.documentElement.dataset.platform), process.platform);
 		await page.evaluate(async () => { await Promise.all([400, 500, 600].map(weight => document.fonts.load(`${weight} 16px "UI SC"`, '本质检查'))); await document.fonts.load('400 12px "JetBrains Mono"', '.ruff_cache'); await document.fonts.ready; });
 		const prefix = `${process.platform}-${Math.round(scale * 100)}`;
 		await page.screenshot({ path: join(output, `${prefix}-empty.png`) });
-		assert.equal(await page.locator('.empty-example-icon svg').count(), 4);
+		assert(await page.locator('.welcome-motto').isVisible());
 		assert.equal(failures.length, 0, `font resources load successfully: ${JSON.stringify(fonts)}`);
 		assert.equal(new Set(fonts.filter(font => /ui-sc-/.test(font.url)).map(font => font.url)).size, 3);
 		assert(fonts.some(font => /jetbrains-mono/.test(font.url) && font.status === 200));
@@ -79,7 +83,8 @@ try {
 			assert.fail(`No stable rendered node for ${selector}`);
 		};
 		const rendered = await platformFonts('.msg-text h2');
-		assert(rendered.fonts.some(font => font.familyName === 'UI SC' && font.isCustomFont && font.glyphCount > 0), JSON.stringify(rendered));
+		assert(rendered.fonts.some(font => font.glyphCount > 0), JSON.stringify(rendered));
+		assert(await page.locator('.msg-text h2').evaluate(el => getComputedStyle(el).fontFamily.includes('PingFang SC')), 'prose uses the documented Chinese/system font fallback');
 		await page.locator('[data-tree-node=".ruff_cache"] .file-name').waitFor();
 		const monoFonts = await platformFonts('.msg-text pre code');
 		assert(monoFonts.fonts.some(font => font.familyName === 'JetBrains Mono' && font.isCustomFont), JSON.stringify(monoFonts));
