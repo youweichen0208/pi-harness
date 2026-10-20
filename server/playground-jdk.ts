@@ -68,6 +68,11 @@ function exists(path: string): boolean {
 	}
 }
 
+/** Resolve against the real machine (the injected form is `resolveJdkCommands`). */
+export function resolveHostJdk(env: Readonly<{ JAVA_HOME?: string; PATH?: string }> = process.env): JdkCommands | undefined {
+	return resolveJdkCommands(env, exists);
+}
+
 /** First non-empty line, trimmed and capped — the UI shows this verbatim. */
 function firstLine(text: string): string | undefined {
 	const line = text.split(/\r?\n/).map(part => part.trim()).find(Boolean);
@@ -101,7 +106,7 @@ export async function probeJdk(
 	env: Readonly<{ JAVA_HOME?: string; PATH?: string }>,
 	deps: JdkProbeDeps = {},
 ): Promise<JdkStatus> {
-	const resolve = deps.resolve ?? ((value: Readonly<{ JAVA_HOME?: string; PATH?: string }>) => resolveJdkCommands(value, exists));
+	const resolve = deps.resolve ?? ((value: Readonly<{ JAVA_HOME?: string; PATH?: string }>) => resolveHostJdk(value));
 	const version = deps.runVersion ?? runVersion;
 	const commands = resolve(env);
 	if (!commands) {
