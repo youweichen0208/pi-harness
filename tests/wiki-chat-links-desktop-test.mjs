@@ -63,6 +63,8 @@ try {
 	assert(main, "main window ready");
 	main.setDefaultTimeout(10000);
 	await main.locator(".conn-dot.ok").first().waitFor({ state: "attached" });
+	// This suite exercises docked chat; native floating coverage lives in wiki-assistant-window-test.
+	await main.evaluate(() => localStorage.setItem("pi-wiki-assistant-docked", "true"));
 	await main.locator(".file-name", { hasText: "README.md" }).click();
 	for (let i = 0; i < 100; i++) {
 		wiki = app.windows().find(page => page.url().includes("wiki-window=1"));
@@ -91,13 +93,16 @@ try {
 		assert.deepEqual(navigations, [], "file clicks never reload the document window");
 	};
 	const showChat = async () => {
-		await wiki.getByRole("button", { name: "问 pi", exact: true }).click();
-		await wiki.locator(".wiki-agent-chat").waitFor();
+		if (!await wiki.locator(".wiki-assistant").isVisible()) await wiki.getByRole("button", { name: "问 pi", exact: true }).click();
+		await wiki.locator(".wiki-assistant").waitFor();
 	};
 	const send = async () => {
+		const before = replies.length;
 		const input = wiki.locator(".inputbar textarea");
 		await input.fill("Show document link"); await input.press("Enter");
-		await wiki.locator(".wiki-agent-chat a", { hasText: "Open document" }).waitFor();
+		for (let i = 0; i < 200 && replies.length === before; i++) await sleep(50);
+		assert.equal(replies.length, before + 1);
+		await wiki.locator(".wiki-agent-chat a", { hasText: "Open document" }).last().waitFor();
 	};
 	const pickFolder = async target => {
 		await wiki.locator(".wiki-sidebar").getByRole("button", { name: "打开文件夹", exact: true }).click();
@@ -106,7 +111,7 @@ try {
 		await picker.getByRole("button", { name: "打开文件夹", exact: true }).click();
 	};
 
-	const link = wiki.locator(".wiki-agent-chat a", { hasText: "Open document" });
+	const link = wiki.locator(".wiki-agent-chat a", { hasText: "Open document" }).last();
 	const interrupt = wiki.getByRole("dialog", { name: "对话任务仍在运行", exact: true });
 	await showChat(); await send();
 	// Active tail: cancel must leave both the document and running reply intact.

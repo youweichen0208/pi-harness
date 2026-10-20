@@ -1,3 +1,5 @@
+import { installNoteAssets } from "./note-assets.js";
+import { installLinkPreview } from "./link-preview.js";
 import { installDatabaseRoutes } from "./database/routes.js";
 import { installSystemPromptRoutes } from "./system-prompt-routes.js";
 import { installExtensionsRoutes } from "./extensions-routes.js";
@@ -53,6 +55,7 @@ import { ensureWindowsBash, windowsBashDir } from "./ensure-bash.js";
 import { isValidClientId } from "./client-id.js";
 import { securityHeaders } from "./security-headers.js";
 import { needsTokenCookie, tokenCookie, tokenMatches } from "./token-auth.js";
+import { installNotesRoutes } from "./notes.js";
 import { createOriginPolicy } from "./origin-policy.js";
 import { PluginManager, resolvePluginClientFile } from "./plugins.js";
 
@@ -153,12 +156,15 @@ if (AUTH_TOKEN) {
 	});
 }
 
+installNoteAssets(app, join(DATA_DIR, "notes", "assets"), originAllowed);
+installLinkPreview(app, originAllowed);
+installNotesRoutes(app, join(DATA_DIR, "notes"), originAllowed);
 installCodemodeImageRoutes(app, () => service, originAllowed);
 installOpenAIProxyRoutes(app, openAIProxy, originAllowed);
 installExtensionsRoutes(app, () => service, originAllowed);
 installDatabaseRoutes(app, () => service, originAllowed);
 installSystemPromptRoutes(app, () => service, originAllowed);
-installWikiRoutes(app, () => service, join(DATA_DIR, "wiki"), originAllowed);
+installWikiRoutes(app, () => service, join(DATA_DIR, "wiki"), originAllowed, () => projectWorkspaces.read());
 
 app.get("/api/health", (_req, res) => {
 	res.json({ ok: true, piVersion: VERSION, pid: process.pid });

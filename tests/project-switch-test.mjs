@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "node:net";
@@ -28,6 +28,8 @@ await new Promise((r) => probe.listen(0, "127.0.0.1", r));
 const port = probe.address().port;
 await new Promise((r) => probe.close(r));
 assert(port >= 8900);
+mkdirSync(join(base, "data"), { recursive: true });
+writeFileSync(join(base, "data", "project-workspaces.json"), JSON.stringify({ revision: 1, workspaces: [{ id: "switch-fixture", name: "Projects", paths: projects }] }));
 const server = spawn(process.execPath, ["dist/server/index.js"], { env: { ...process.env, PORT: String(port), PI_WEB_CWD: projects[0], PI_WEB_DATA_DIR: join(base, "data"), PI_CODING_AGENT_DIR: agent }, stdio: ["ignore", "pipe", "pipe"] });
 let logs = ""; server.stderr.on("data", (d) => { logs += d; });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -150,4 +152,5 @@ try {
 	await browser?.close();
 	server.kill("SIGTERM");
 	await new Promise((r) => { if (server.exitCode !== null) r(); else server.once("exit", r); });
+	rmSync(base, { recursive: true, force: true });
 }

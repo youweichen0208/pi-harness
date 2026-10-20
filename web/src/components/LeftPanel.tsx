@@ -1,9 +1,14 @@
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState, type ReactNode } from "react";
 import {
+	FiSearch,
+	FiFeather,
+	FiChevronLeft,
+	FiMessageSquare,
 	FiCheck,
 	FiChevronDown,
 	FiChevronRight,
 	FiMoreHorizontal,
+	FiList,
 	FiPlus,
 	FiSettings,
 	FiX,
@@ -19,9 +24,9 @@ import type {
 	SessionSummary,
 } from "../types";
 import { workspaceProjects } from "../project-workspaces";
+import { useDialogFocus } from "../use-dialog-focus";
 import { randomUuid } from "../uuid";
 import { FolderPickerModal } from "./FolderPickerModal";
-import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 import type { ConnStatus } from "../use-chat";
 import { skillAwarePreview } from "../skill-block";
 import { conversationDisplayTitle } from "../conversation-display-title";
@@ -33,7 +38,11 @@ import { useI18n } from "../i18n";
  *  and conversation lists on every delta. Add a prop here when adding a chat
  *  field usage — TypeScript enforces it at the call site. */
 interface LeftPanelProps {
-	incidentState?: "stopped" | "reminding" | "recovered";
+	directoryCollapsed: boolean;
+	onToggleDirectory: () => void;
+	notesOpen: boolean;
+	onNavigate: (notes: boolean) => void;
+	notesList: ReactNode;
 	onOpenSettings: () => void;
 	onNewChat: () => void;
 	ready: boolean;
@@ -80,25 +89,39 @@ function formatModified(ts: number, yesterday: string): string {
 	return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
+function WorkspaceBook() {
+	return <svg className="workspace-book" viewBox="0 0 20 24" aria-hidden="true"><rect x="2" y="1.5" width="16" height="21" rx="1.5" /><path d="M6 2v20M11 6h4" /></svg>;
+}
+
 export const LeftPanel = memo(function LeftPanel({
-	incidentState, onOpenSettings, onNewChat, ready, status, cwd, sessionFile, conversations, sessions, projects, projectWorkspaces, projectWorkspaceResult, dirBrowse, activeConversationId, send, active }: LeftPanelProps) {
+	directoryCollapsed, onToggleDirectory, notesOpen, onNavigate, notesList, onOpenSettings, onNewChat, ready, status, cwd, sessionFile, conversations, sessions, projects, projectWorkspaces, projectWorkspaceResult, dirBrowse, activeConversationId, send, active }: LeftPanelProps) {
 	const { t, locale } = useI18n();
 	const [selectedWorkspace, setSelectedWorkspace] = useState(() => {
 		try { return localStorage.getItem("pi-harness:project-workspace") ?? ""; } catch { return ""; }
 	});
-	const [managingWorkspace, setManagingWorkspace] = useState(false);
+	const [workspaceForm, setWorkspaceForm] = useState<"create" | string | null>(null);
+	const [workspaceOpen, setWorkspaceOpen] = useState(false);
+	const [groupQuery, setGroupQuery] = useState("");
+	const switcherRef = useRef<HTMLDivElement>(null);
+	const switcherButton = useRef<HTMLButtonElement>(null);
+	useEffect(() => {
+		if (!workspaceOpen) return;
+		const outside = (event: PointerEvent) => { if (!switcherRef.current?.contains(event.target as Node)) setWorkspaceOpen(false); };
+		document.addEventListener("pointerdown", outside);
+		return () => document.removeEventListener("pointerdown", outside);
+	}, [workspaceOpen]);
+	const workspaceDialog = useDialogFocus<HTMLFormElement>(!!workspaceForm);
 	const [workspaceName, setWorkspaceName] = useState("");
 	const previousWorkspaceName = useRef({ id: "", name: "" });
 	const [workspaceQuery, setWorkspaceQuery] = useState("");
 	const [workspaceError, setWorkspaceError] = useState("");
-	const [deletingWorkspace, setDeletingWorkspace] = useState(false);
 	const [workspacePending, setWorkspacePending] = useState<{ requestId: string; kind: ProjectWorkspaceAction["kind"] } | null>(null);
 	const selectedGroup = projectWorkspaces?.workspaces.find((group) => group.id === selectedWorkspace);
 	const workspaceBusy = !ready || status !== "open" || !projectWorkspaces || !!workspacePending;
-	/** No Workspace yet: the 1a "get started" checklist shows under the switcher. */
-	const firstStart = projectWorkspaces?.workspaces.length === 0;
+	/** An empty catalog offers creation without inventing a default group. */
+
 	const chooseWorkspace = (id: string) => {
-		setSelectedWorkspace(id); setWorkspaceQuery(""); setDeletingWorkspace(false); setWorkspaceError("");
+		setSelectedWorkspace(id); setWorkspaceQuery(""); setWorkspaceError(""); setWorkspaceOpen(false);
 		try { localStorage.setItem("pi-harness:project-workspace", id); } catch { /* optional preference */ }
 	};
 	useEffect(() => {
@@ -113,13 +136,13 @@ export const LeftPanel = memo(function LeftPanel({
 		// A remote rename updates an untouched form, preserving a local draft.
 		setWorkspaceName((draft) => previous.id !== next.id || draft === previous.name ? next.name : draft);
 		previousWorkspaceName.current = next;
-		setDeletingWorkspace(false);
 	}, [selectedGroup?.id, selectedGroup?.name]);
 	useEffect(() => {
 		if (!workspacePending || projectWorkspaceResult?.requestId !== workspacePending.requestId) return;
 		if (projectWorkspaceResult.ok) {
-			if (workspacePending.kind === "create") chooseWorkspace(projectWorkspaceResult.workspaceId ?? "");
+			if (workspacePending.kind === "create") { chooseWorkspace(projectWorkspaceResult.workspaceId ?? ""); onNavigate(false); }
 			if (workspacePending.kind === "add") setPicking(false);
+			setWorkspaceForm(null);
 			setWorkspaceError("");
 		} else setWorkspaceError(projectWorkspaceResult.error ?? t("workspaceSaveFailed"));
 		setWorkspacePending(null);
@@ -240,7 +263,6 @@ export const LeftPanel = memo(function LeftPanel({
 
 	const history = (
 			<div className="panel-sessions">
-				<div className="panel-section-title">{t("historySessions")}</div>
 				<div className="sessions-scroll">
 					{sessions.length === 0 && pendingConvs.length === 0 && (
 						<div className="panel-empty">{t("noHistory")}</div>
@@ -260,8 +282,9 @@ export const LeftPanel = memo(function LeftPanel({
 								}}
 							>
 								<span
-									className={`session-dot${c.id === activeConversationId && incidentState === "stopped" ? " interrupted" : c.id === activeConversationId && incidentState === "reminding" || c.isStreaming ? " streaming" : ""}`}
-									title={c.isStreaming ? t("streaming") : undefined}
+									className="session-dot"
+									style={{ visibility: active && ready && status === "open" ? "visible" : "hidden" }}
+									title={active && ready && status === "open" ? t("connected") : undefined}
 								/>
 								<span className="session-info">
 									<span className="session-title">{conversationDisplayTitle(c.title, undefined, undefined, c.messageCount, locale)}</span>
@@ -343,8 +366,9 @@ export const LeftPanel = memo(function LeftPanel({
 									}}
 								>
 									<span
-										className={`session-dot${conv?.id === activeConversationId && incidentState === "stopped" ? " interrupted" : conv?.id === activeConversationId && incidentState === "reminding" || conv?.isStreaming ? " streaming" : ""}`}
-										title={conv?.isStreaming ? t("streaming") : undefined}
+										className="session-dot"
+									style={{ visibility: active && ready && status === "open" ? "visible" : "hidden" }}
+										title={active && ready && status === "open" ? t("connected") : undefined}
 									/>
 									<span className="session-info">
 										<span className="session-title">{displayName(s)}</span>
@@ -377,67 +401,54 @@ export const LeftPanel = memo(function LeftPanel({
 			</div>
 	);
 	return (
-		<aside className="panel panel-left">
-			<div className="sidebar-brand"><span className="sidebar-logo"><img src="/icon/1a-mark.svg" alt="" /></span><strong>pi-harness</strong></div>
-			<div className="workspace-groups">
-				<WorkspaceSwitcher
-					workspaces={projectWorkspaces?.workspaces ?? []}
-					selected={selectedGroup}
-					disabled={!projectWorkspaces || !!workspacePending}
-					busy={workspaceBusy}
-					name={workspaceName}
-					onName={setWorkspaceName}
-					onChoose={chooseWorkspace}
-					onCreate={(name) => changeWorkspace({ kind: "create", name })}
-					onManage={() => setManagingWorkspace((value) => !value)}
-				/>
-				{firstStart && <div className="workspace-onboarding">
-					<div className="workspace-onboarding-title">{t("workspaceGetStarted")}</div>
-					<ol className="workspace-steps">
-						<li className="workspace-step current workspace-group-manager">
-							<div className="workspace-step-head"><span className="workspace-step-index" aria-hidden="true">1</span><strong>{t("workspaceCreate")}</strong></div>
-							<form onSubmit={(event) => { event.preventDefault(); if (workspaceName.trim()) changeWorkspace({ kind: "create", name: workspaceName }); }}>
-								<input aria-label={t("workspaceName")} placeholder={t("workspaceNameExample")} value={workspaceName} maxLength={80} disabled={workspaceBusy} onChange={(event) => setWorkspaceName(event.target.value)} />
-								<div className="workspace-group-actions"><button type="submit" disabled={workspaceBusy || !workspaceName.trim()}>{t("workspaceCreateAction")}</button></div>
-							</form>
-						</li>
-						<li className="workspace-step"><span className="workspace-step-index" aria-hidden="true">2</span><div><strong>{t("workspaceStepAddProject")}</strong><span>{t("workspaceStepAddProjectHint")}</span></div></li>
-						<li className="workspace-step"><span className="workspace-step-index" aria-hidden="true">3</span><div><strong>{t("workspaceStepFirstChat")}</strong><span>{t("workspaceStepFirstChatHint")}</span></div></li>
-					</ol>
-				</div>}
-				{projectWorkspaces && managingWorkspace && !firstStart && <div className="workspace-group-manager">
-					<form onSubmit={(event) => { event.preventDefault(); if (workspaceName.trim()) changeWorkspace({ kind: "create", name: workspaceName }); }}>
-						<input aria-label={t("workspaceName")} placeholder={t("workspaceName")} value={workspaceName} maxLength={80} disabled={workspaceBusy} onChange={(event) => setWorkspaceName(event.target.value)} />
-						<div className="workspace-group-actions">
-							<button type="submit" disabled={workspaceBusy || !workspaceName.trim()}>{t("workspaceCreate")}</button>
-							{selectedGroup && <button type="button" disabled={workspaceBusy || !workspaceName.trim()} onClick={() => changeWorkspace({ kind: "rename", id: selectedGroup.id, name: workspaceName })}>{t("workspaceRename")}</button>}
+		<aside className={`panel panel-left workspace-navigation compact-navigation ${directoryCollapsed ? "directory-collapsed" : ""}`}>
+			<div className="global-navigation">
+				<div className="compact-workspace-switcher" ref={switcherRef} onKeyDown={event => {
+					if (event.key === "Escape") { setWorkspaceOpen(false); switcherButton.current?.focus(); }
+					if (workspaceOpen && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+						const buttons = Array.from(switcherRef.current?.querySelectorAll<HTMLButtonElement>(".workspace-picker button:not(:disabled)") ?? []);
+						if (buttons.length) { event.preventDefault(); const index = buttons.indexOf(document.activeElement as HTMLButtonElement); buttons[(index + (event.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length].focus(); }
+					}
+				}}>
+					<button ref={switcherButton} className="compact-workspace-trigger" title={selectedGroup?.name ?? t("workspaceSelect")} aria-label={t("workspaceSelect")} aria-expanded={workspaceOpen} aria-haspopup="dialog" onClick={() => { setGroupQuery(""); setWorkspaceOpen(value => !value); }}>
+						<img src="/icon/1a-mark.svg" alt="pi-harness" /><span>{selectedGroup?.name ?? t("workspaceNoneSelected")}</span><FiChevronDown />
+					</button>
+					<button className="directory-toggle" aria-label={t("notesDirectoryToggle")} aria-expanded={!directoryCollapsed} onClick={onToggleDirectory}>{directoryCollapsed ? <FiChevronRight /> : <FiChevronLeft />}</button>
+					{workspaceOpen && <div className="workspace-picker" role="dialog" aria-label={t("workspaceSelect")}>
+						<input autoFocus type="search" aria-label={t("workspaceFilter")} placeholder={t("workspaceFilter")} value={groupQuery} onChange={event => setGroupQuery(event.target.value)} />
+						<div className="workspace-list">
+					{projectWorkspaces?.workspaces.filter(group => group.name.toLocaleLowerCase().includes(groupQuery.toLocaleLowerCase())).map(group => <div className="workspace-list-row" key={group.id}>
+						<button className={selectedWorkspace === group.id ? "active" : ""} disabled={!!workspacePending} onClick={() => { chooseWorkspace(group.id); onNavigate(false); }}><WorkspaceBook /><span>{group.name}</span>{selectedWorkspace === group.id && <FiCheck className="workspace-selected-check" />}</button>
+						<div className="lp-menu-zone" data-menu-key={`ws:${group.id}`}><button className="lp-menu-trigger" aria-label={`${group.name} · ${t("more")}`} aria-haspopup="menu" aria-expanded={openMenu === `ws:${group.id}`} onClick={() => setOpenMenu(openMenu === `ws:${group.id}` ? null : `ws:${group.id}`)}><FiMoreHorizontal /></button>
+							{openMenu === `ws:${group.id}` && <div className="lp-menu-popover" role="menu">
+								<button role="menuitem" disabled={workspaceBusy} onClick={() => { setWorkspaceName(group.name); setWorkspaceForm(group.id); setOpenMenu(null); setWorkspaceOpen(false); }}>{t("workspaceRename")}</button>
+								<button role="menuitem" disabled={workspaceBusy} onClick={() => { if (window.confirm(t("workspaceDeleteHint"))) { changeWorkspace({ kind: "delete", id: group.id }); setOpenMenu(null); } }}>{t("workspaceDelete")}</button>
+							</div>}
 						</div>
-					</form>
-					{selectedGroup && <>
-						<button type="button" disabled={workspaceBusy || !cwd || selectedGroup.paths.includes(cwd)} onClick={() => changeWorkspace({ kind: "add", id: selectedGroup.id, path: cwd })}>{t("workspaceAddCurrent")}</button>
-						<button type="button" className="workspace-group-delete" disabled={workspaceBusy} onClick={() => deletingWorkspace ? changeWorkspace({ kind: "delete", id: selectedGroup.id }) : setDeletingWorkspace(true)}>{t(deletingWorkspace ? "workspaceDeleteConfirm" : "workspaceDelete")}</button>
-						{deletingWorkspace && <p>{t("workspaceDeleteHint")}</p>}
-					</>}
-				</div>}
+					</div>)}
+						{!projectWorkspaces?.workspaces.some(group => group.name.toLocaleLowerCase().includes(groupQuery.toLocaleLowerCase())) && <p className="panel-empty">{t("workspaceFilterEmpty")}</p>}
+						</div>
+						<button className="workspace-picker-create" disabled={workspaceBusy} onClick={() => { setWorkspaceName(""); setWorkspaceForm("create"); setWorkspaceOpen(false); }}><FiPlus />{t("workspaceNew")}</button>
+					</div>}
+				</div>
+				{!notesOpen && selectedGroup && <label className="navigation-search"><FiSearch aria-hidden="true" /><input className="workspace-project-search" type="search" aria-label={t("workspaceSearch")} placeholder={t("workspaceSearch")} value={workspaceQuery} onChange={event => setWorkspaceQuery(event.target.value)} /></label>}
+				<nav className="global-entries">
+					<button title={t("notesChat")} className={!notesOpen ? "active" : ""} onClick={() => onNavigate(false)}><FiMessageSquare /><span>{t("notesChat")}</span></button>
+					<button title={t("notesTitle")} className={notesOpen ? "active" : ""} onClick={() => { onNavigate(true); }}><FiFeather /><span>{t("notesTitle")}</span></button>
+				</nav>
 				{workspaceError && <p className="workspace-group-error" role="alert">{workspaceError}</p>}
-				{selectedGroup && <input className="workspace-project-search" type="search" aria-label={t("workspaceSearch")} placeholder={t("workspaceSearch")} value={workspaceQuery} onChange={(event) => setWorkspaceQuery(event.target.value)} />}
-				{selectedGroup && !selectedGroup.paths.includes(currentCwd) && <div className="workspace-outside"><span>{t("workspaceOutside")}</span><button type="button" disabled={workspaceBusy} onClick={() => changeWorkspace({ kind: "add", id: selectedGroup.id, path: currentCwd })}>{t("workspaceAddCurrent")}</button></div>}
-			</div>
+
+			<button className="compact-project-shortcut" title={t("workspaceProjects")} aria-label={t("workspaceProjects")} onClick={() => onNavigate(false)}><FiList /></button>
+			<div className="workspace-directory">
+			{notesOpen ? notesList : <>
+			{!selectedGroup && <button className="compact-empty-create" disabled={workspaceBusy} onClick={() => { setWorkspaceName(""); setWorkspaceForm("create"); }}>{t("workspaceNew")}</button>}
+
 			{selectedGroup && <div className="panel-projects">
 				{/* 加项目收进分组标题行：它是个偶尔用一次的动作，不值得在列表
 				    最上面常驻一整行。 */}
 				<div className="panel-section-title">
-					<span>{t("workspaceProjects")}</span>
-					<button
-						type="button"
-						className="lp-add-project"
-						title={t("workspaceAddProject")}
-						aria-label={t("workspaceAddProject")}
-						disabled={workspaceBusy}
-						onClick={() => setPicking(true)}
-					>
-						<FiPlus />
-					</button>
+					<span className="workspace-directory-label"><FiList aria-hidden="true" />{t("workspaceProjects")}</span>
+					<button className="lp-add-project" aria-label={t("workspaceAddProject")} title={t("workspaceAddProject")} disabled={workspaceBusy} onClick={() => setPicking(true)}><FiPlus /></button>
 				</div>
 				<div className="projects-scroll">
 					{sortedProjects.length === 0 && <div className="panel-empty">{t(workspaceQuery ? "workspaceNoMatches" : "workspaceEmpty")}</div>}
@@ -457,6 +468,7 @@ export const LeftPanel = memo(function LeftPanel({
 								<button
 									type="button"
 									className={`project-item ${active ? "active" : ""} ${pending ? "pending" : ""}`}
+									aria-expanded={expanded}
 									title={p.path}
 									onClick={() => {
 										if (active) setCollapsedActive((value) => !value);
@@ -481,6 +493,7 @@ export const LeftPanel = memo(function LeftPanel({
 									)}
 								</button>
 								<div className={`lp-menu-zone${openMenu === `proj:${p.path}` ? " is-open" : ""}`} data-menu-key={`proj:${p.path}`}>
+									{active && <button type="button" className="lp-project-new" title={t("newChat")} aria-label={`${projectName(p.path)} · ${t("newChat")}`} disabled={!ready} onClick={onNewChat}><FiPlus /></button>}
 									<button type="button" className="lp-menu-trigger" aria-label={`${projectName(p.path)} · ${t("more")}`} aria-haspopup="menu" aria-expanded={openMenu === `proj:${p.path}`} onClick={() => setOpenMenu((key) => key === `proj:${p.path}` ? null : `proj:${p.path}`)}><FiMoreHorizontal /></button>
 									{openMenu === `proj:${p.path}` && <div className="lp-menu-popover workspace-project-menu" role="menu">
 										{active && <button type="button" role="menuitem" disabled={!ready} onClick={() => { setOpenMenu(null); onNewChat(); }}>{t("newChat")}</button>}
@@ -496,10 +509,16 @@ export const LeftPanel = memo(function LeftPanel({
 					})}
 				</div>
 			</div>}
-			<div className="sidebar-footer">
-				<span className="sidebar-connection"><i className={ready ? "ok" : "busy"} />{t(ready ? "connected" : "connecting")}</span>
-				<span id="sidebar-settings-slot"><button type="button" onClick={onOpenSettings}><FiSettings aria-hidden="true" /> {t("settings")}</button></span>
+			</>}
 			</div>
+				<div className="sidebar-footer"><span className="sidebar-connection"><i className={ready ? "ok" : "busy"} />{t(ready ? "connected" : "connecting")}</span><span id="sidebar-settings-slot"><button type="button" title={t("settings")} onClick={onOpenSettings}><FiSettings /><span>{t("settings")}</span></button></span></div>
+			</div>
+			{workspaceForm && <div className="wiki-modal-backdrop"><form ref={workspaceDialog} onKeyDown={event => { if (event.key === "Escape") { event.stopPropagation(); setWorkspaceForm(null); } }} className="wiki-confirm workspace-name-dialog" role="dialog" aria-modal="true" aria-label={t(workspaceForm === "create" ? "workspaceNew" : "workspaceRename")} onSubmit={event => { event.preventDefault(); changeWorkspace(workspaceForm === "create" ? { kind: "create", name: workspaceName } : { kind: "rename", id: workspaceForm, name: workspaceName }); }}>
+				<h2>{t(workspaceForm === "create" ? "workspaceNew" : "workspaceRename")}</h2>
+				<label className="workspace-name-field"><span>{t("workspaceName")}</span><input autoFocus placeholder={t("workspaceName")} aria-label={t("workspaceName")} value={workspaceName} maxLength={80} onChange={event => setWorkspaceName(event.target.value)} /></label>
+				{workspaceError && <p role="alert">{workspaceError}</p>}
+				<div className="workspace-name-actions"><button type="button" onClick={() => setWorkspaceForm(null)}>{t("cancel")}</button><button disabled={workspaceBusy || !workspaceName.trim()}>{t(workspaceForm === "create" ? "workspaceCreate" : "workspaceRename")}</button></div>
+			</form></div>}
 
 			{picking && selectedGroup && (
 				<FolderPickerModal

@@ -49,7 +49,7 @@ macOS 服务的 launchd 标识为 `com.youweichen.pi-harness`（`--name` 自定�
 | 路径 | 环境变量 | 内容 |
 | --- | --- | --- |
 | `/data/pi-agent` | `PI_CODING_AGENT_DIR` | pi 配置、`auth.json`、模型、技能与对话会话（`sessions/`） |
-| `/data/pi-harness` | `PI_WEB_DATA_DIR` | 客户端状态、上传文件、插件、Wiki 改动记录 |
+| `/data/pi-harness` | `PI_WEB_DATA_DIR` | 客户端状态、上传文件、插件、Wiki 改动记录与独立聊天历史 |
 | `/workspace` | `PI_WEB_CWD` | 智能体工作的项目，按需绑定主机目录 |
 
 会话写在 `PI_CODING_AGENT_DIR` 下，所以配置目录必须可写，不要以只读方式挂载。要沿用主机已有的 pi 配置，可把主机的 `~/.pi/agent` 读写挂载到 `/data/pi-agent`；否则首次打开页面按引导配置。
@@ -136,8 +136,8 @@ npm run publish:electron       # 同 build，但 --publish always——本地跑
   仅暴露固定窗口操作和窗口状态通知，主窗口关闭按钮继续隐藏到托盘，Wiki 窗口真正关闭。
 - Electron 渲染页加 `pi-desktop` 类，次要操作位于设置菜单；窗口宽度
   ≤1100px 时右侧文件树变为抽屉。Web 和桌面共用工作区布局，模型设置位于输入框底部；
-  顶栏高 44px，项目栏全高显示；macOS 品牌区为原生窗口按钮留空，项目栏开关固定在红绿灯右侧，收起项目栏时标题仍避让这些控件。Windows/Linux 顶栏为右上角 132px 窗口按钮预留空间；顶栏横跨对话与文件栏，窗口按钮避让始终由顶栏承担。设置和文件按钮不压缩，视图标签在空间不足时横向滚动。`tests/desktop-toolbar-test.mjs` 在 Chromium 中模拟两平台外壳，验证顶栏边界、状态数字与任务定位（不替代真机窗口验证）。详见 [界面布局](ui-design.md)。
-- 初始窗口背景匹配 v1.3.1 暖白色；正文及代码字体随 web/dist 本地打包。顶栏直接提供对话、终端、节点、Git、数据库及后台任务入口；连接与路径位于底部状态栏。
+  顶栏高 44px，项目栏全高显示；macOS 品牌区为原生窗口按钮留空，项目栏开关固定在红绿灯右侧，收起项目栏时标题仍避让这些控件。Windows/Linux 顶栏为右上角 132px 窗口按钮预留空间；顶栏横跨对话与文件栏，窗口按钮避让始终由顶栏承担。设置和文件按钮不压缩，视图入口在空间不足时依次将 Git、终端移入更多菜单。`tests/desktop-toolbar-test.mjs` 在 Chromium 中模拟两平台外壳，验证顶栏边界、状态数字与任务定位（不替代真机窗口验证）。详见 [界面布局](ui-design.md)。
+- 初始窗口背景匹配默认简白主题；界面优先使用系统无衬线字体（macOS 苹方、Windows 微软雅黑），中文回退和代码字体随 web/dist 本地打包。视觉以 `ui-design.md` 的语雀桌面参考为准。顶栏直接提供对话、Wiki、终端、Git；数据库、节点、后台任务与插件位于更多菜单；连接与路径位于底部状态栏。
 - 流畅界面与 Web 共用：窄窗口抽屉使用可中断弹簧与独立拖动区；系统减少动态效果/透明度与提高对比度设置有对应降级。窗口控件、拖动区域与 IPC 不变。
 - SDK 原生提示词引用的 README、docs 与 examples 通过 extraResources 原样保留，防止 electron-builder 的生产依赖剪枝删除扩展示例。afterPack 检查文档和示例入口；native-tools-desktop-test 使用包内 SDK 的真实路径读取资源，缺失时阻断打包回归。
 - 原生模块（`node-pty`）：`electron-builder.yml` 里 `npmRebuild: true`，打包时自动
@@ -193,3 +193,5 @@ Extensions 包管理的 `extensions-worker` 与服务端一起编译打包，在
 会话文件校验的 `session-record-worker` 随服务端编译打包，使用 Node worker_threads 处理超长 JSON 记录；不启动额外 Electron 窗口。开发态使用源文件 URL，生产与桌面态使用 dist 中的 JavaScript。
 
 三平台发布上传前还验证实际安装产物：macOS 从 DMG 复制应用、Windows 静默安装 NSIS、Linux 安装 deb。`packaged-upgrade-test.mjs` 使用最近一个已公开 Release 的运行时（首次发布没有旧版本时跳过）生成隔离配置、凭据、会话与附件，再由新安装运行时读取；不调用真实模型或使用用户数据。
+
+Wiki 的「问 pi」浮动模式使用独立无边框助手窗口，可拖动到其他屏幕，固定按钮返回 Wiki 右栏。助手关闭仅收起；Wiki 关闭时一并销毁助手，继续使用原有保存保护。

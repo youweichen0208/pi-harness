@@ -1,3 +1,7 @@
+import { cleanStyle, editableDisclosures } from "../rich-content";
+import { RichFormattingToolbar } from "./RichFormattingToolbar";
+import { RichLinkCardDialog } from "./RichLinkCardDialog";
+import { decorateWikiTables } from "../wiki-table-presentation";
 import { WikiTableIcon, WikiQuoteIcon } from "./WikiIcons";
 import { WikiToolbar, WikiInsertPopover, type WikiInsertPopup } from "./WikiToolbar";
 import { TableSizePicker } from "./TableSizePicker";
@@ -7,7 +11,7 @@ import { createPortal } from "react-dom";
 import { WikiReadingDialog } from "./WikiReading";
 import { TEXT_HIGHLIGHT_COLORS } from "../remark-text-highlight";
 import { Fragment, memo, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { FiCalendar, FiBold, FiItalic, FiRotateCcw, FiRotateCw, FiSquare, FiType, FiCode, FiList, FiCheckSquare, FiMinus, FiLink, FiImage } from "react-icons/fi";
+import { FiCalendar, FiBold, FiItalic, FiSquare, FiType, FiCode, FiList, FiCheckSquare, FiMinus, FiLink, FiImage } from "react-icons/fi";
 import { markdownImageUrl } from "../markdown-image";
 import { withToken } from "../auth-token";
 import { getClientId } from "../use-chat";
@@ -15,20 +19,42 @@ import { richCodeText } from "../rich-code-text";
 import { highlightLine } from "../hljs-lite";
 import { createRichCodeHighlighter } from "../rich-code-highlight";
 import { useT } from "../i18n";
-import { LuHeading2, LuHeading3, LuTableOfContents } from "react-icons/lu";
+import { LuHeading2, LuHeading3, LuTableOfContents, LuPanelTop, LuInfo, LuLightbulb, LuTriangleAlert, LuChevronsUpDown, LuListOrdered } from "react-icons/lu";
 import { mountRichDocument, prepareRichDocument, readRichDocument, renderToc } from "../rich-markdown";
 import type { RichDocument, RichLabels } from "../rich-markdown";
 
+/** An editable landing line outside the final quote/list/code block; empty UI is not saved. */
+function ensureTrailingParagraph(root: HTMLElement): void {
+	for (const tail of root.querySelectorAll<HTMLElement>(":scope > [data-rich-tail]")) {
+		if (tail.textContent || tail.querySelector("img,table,pre,hr,input")) tail.removeAttribute("data-rich-tail");
+	}
+	const last = root.lastElementChild;
+	if (last?.matches("p[data-rich-tail]")) return;
+	const paragraph = root.ownerDocument.createElement("p");
+	paragraph.dataset.richTail = "";
+	paragraph.append(root.ownerDocument.createElement("br"));
+	root.append(paragraph);
+}
+
 const CODE_LANGUAGES = ["javascript", "typescript", "python", "bash", "json", "yaml", "html", "css", "sql", "go", "rust", "java", "c", "cpp", "csharp", "ruby", "php", "swift", "kotlin", "markdown", "xml", "toml", "diff", "mermaid"];
 
-export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, readOnly, onChange, file, wiki }: {
-	file: { cwd: string; path: string };
+export interface RichEditorHost {
+	uploadImage: (data: string, signal: AbortSignal) => Promise<string>;
+	resolveImage: (source: string) => string;
+}
+export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, readOnly, onChange, file = { cwd: "", path: "" }, wiki, host, compact = false }: {
+	file?: { cwd: string; path: string };
+	host?: RichEditorHost;
+	compact?: boolean;
 	wiki?: { paths: string[]; ask: (text: string) => void; followLink: (href: string) => void; resolveCode: (value: string) => string | undefined; added: Set<string>; toolbarHost?: HTMLElement | null; focused?: boolean; onWidth?: () => void };
 	value: string;
 	readOnly: boolean;
 	onChange: (value: string) => void;
 }) {
 	const t = useT();
+	const [cardOpen, setCardOpen] = useState(false);
+	const cardRange = useRef<Range | null>(null);
+	const [painter, setPainter] = useState<string | null>(null);
 	const [insertPopup, setInsertPopup] = useState<WikiInsertPopup | null>(null);
 	const savedRange = useRef<Range | null>(null);
 	const [diagrams, setDiagrams] = useState<{ host: HTMLElement; code: string }[]>([]);
@@ -105,7 +131,6 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 	const linkRange = useRef<Range | null>(null), imageRange = useRef<Range | null>(null);
 	const imageInput = useRef<HTMLInputElement>(null);
 	const popup = useRef<HTMLDivElement>(null), floatingToolbar = useRef<HTMLDivElement>(null);
-	const [canHighlight, setCanHighlight] = useState(false);
 	const highlightSelection = () => {
 		const selection = window.getSelection();
 		if (!selection?.rangeCount || selection.isCollapsed || !root.current?.contains(selection.anchorNode) || !root.current.contains(selection.focusNode)) return null;
@@ -117,7 +142,7 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		const changed = () => {
 			const selection = window.getSelection();
 			if (selection?.rangeCount && root.current?.contains(selection.anchorNode) && root.current.contains(selection.focusNode)) savedRange.current = selection.getRangeAt(0).cloneRange();
-			const range = highlightSelection(); setCanHighlight(!!range);
+			const range = highlightSelection();
 			if (!range) { setFloating(null); return; }
 			const rect = range.getBoundingClientRect();
 			if (rect.bottom < 0 || rect.top > window.innerHeight) { setFloating(null); return; }
@@ -138,7 +163,41 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 	const documentState = useRef<RichDocument | null>(null);
 	const [menu, setMenu] = useState<{ query: string; x: number; y: number } | null>(null);
 	const [active, setActive] = useState(0);
+	const [recentInsertions, setRecentInsertions] = useState<string[]>(() => {
+		try { const stored = JSON.parse(localStorage.getItem("pi-wiki-recent-insertions") ?? "[]"); return Array.isArray(stored) ? stored.filter((id): id is string => typeof id === "string").slice(0, 3) : []; } catch { return []; }
+	});
+	const rememberInsertion = (id: string) => {
+		const next = [id, ...recentInsertions.filter(item => item !== id)].slice(0, 3);
+		setRecentInsertions(next);
+		try { localStorage.setItem("pi-wiki-recent-insertions", JSON.stringify(next)); } catch { /* Storage may be unavailable. */ }
+	};
 	const [tableCell, setTableCell] = useState<HTMLTableCellElement | null>(null);
+	const [tableHandle, setTableHandle] = useState<{ left: number; top: number } | null>(null);
+	useEffect(() => {
+		const refresh = () => {
+			const selection = window.getSelection();
+			const range = selection?.rangeCount && !selection.isCollapsed ? selection.getRangeAt(0) : null;
+			root.current?.querySelectorAll<HTMLTableElement>("table").forEach(table => {
+				const contents = document.createRange();
+				contents.selectNodeContents(table);
+				const selected = !!range && range.compareBoundaryPoints(Range.START_TO_START, contents) <= 0 && range.compareBoundaryPoints(Range.END_TO_END, contents) >= 0;
+				table.toggleAttribute("data-table-selected", selected);
+			});
+			const table = tableCell?.isConnected ? tableCell.closest("table") : null;
+			const rect = table?.getBoundingClientRect();
+			setTableHandle(rect ? { left: Math.max(0, rect.left - 24), top: rect.top } : null);
+		};
+		refresh();
+		document.addEventListener("selectionchange", refresh);
+		window.addEventListener("scroll", refresh, true);
+		window.addEventListener("resize", refresh);
+		return () => {
+			document.removeEventListener("selectionchange", refresh);
+			window.removeEventListener("scroll", refresh, true);
+			window.removeEventListener("resize", refresh);
+		};
+	}, [tableCell, value]);
+
 	const slashRange = useRef<Range | null>(null);
 	const closeMenu = () => { slashRange.current = null; setMenu(null); };
 	const emitted = useRef<string | null>(null);
@@ -149,6 +208,8 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		setTableCell(null);
 		const prepared = prepareRichDocument(value, !!wiki);
 		mountRichDocument(root.current, prepared, labels);
+		editableDisclosures(root.current, t("richCollapse"));
+		if (wiki) decorateWikiTables(root.current);
 		if (wiki) {
 			root.current.querySelectorAll<HTMLElement>("pre:has(> code)").forEach(pre => pre.classList.add("codeblock"));
 			root.current.querySelectorAll<HTMLElement>("h2").forEach((heading, index) => { heading.id = `wiki-heading-${index}`; });
@@ -161,6 +222,7 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 			// Decoration belongs to the render baseline, not to a user's edit.
 			root.current.querySelectorAll<HTMLElement>("[data-rich-block]").forEach(block => { prepared.blocks[Number(block.dataset.richBlock)].html = block.innerHTML; });
 		}
+		if (!readOnly) ensureTrailingParagraph(root.current);
 		documentState.current = prepared;
 		emitted.current = value;
 	}, [value, t]);
@@ -202,6 +264,25 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 				}
 				pre.prepend(chrome);
 			}
+			if (wiki && !code.classList.contains("language-mermaid")) {
+				let gutter = pre.querySelector<HTMLElement>(".wiki-code-gutter");
+				if (!gutter) {
+					gutter = document.createElement("span"); gutter.className = "wiki-code-gutter"; gutter.dataset.richUi = ""; gutter.contentEditable = "false"; gutter.setAttribute("aria-hidden", "true"); pre.prepend(gutter);
+				}
+				const text = richCodeText(code), lines = Math.max(1, text.replace(/\n$/, "").split("\n").length);
+				gutter.textContent = Array.from({ length: lines }, (_, index) => String(index + 1)).join("\n");
+				const chrome = pre.querySelector<HTMLElement>(".fp-code-language")!;
+				let fold = chrome.querySelector<HTMLButtonElement>("[data-code-fold]");
+				if (!fold) { fold = document.createElement("button"); fold.type = "button"; fold.dataset.codeFold = ""; chrome.prepend(fold); }
+				const updateFold = () => { const closed = pre.hasAttribute("data-wiki-code-folded"); fold!.textContent = closed ? "▸" : "▾"; fold!.setAttribute("aria-expanded", String(!closed)); fold!.title = t(closed ? "wikiCodeExpand" : "wikiCodeCollapse"); fold!.setAttribute("aria-label", fold!.title); };
+				updateFold(); fold.onmousedown = event => event.preventDefault();
+				fold.onclick = () => { pre.toggleAttribute("data-wiki-code-folded"); fold!.focus({ preventScroll: true }); updateFold(); };
+				let width = chrome.querySelector<HTMLButtonElement>("[data-code-width]");
+				if (!width) { width = document.createElement("button"); width.type = "button"; width.dataset.codeWidth = ""; width.textContent = "↔"; chrome.append(width); }
+				width.title = t(wiki.focused ? "wikiStandardWidth" : "wikiWideWidth"); width.setAttribute("aria-label", width.title); width.onmousedown = event => event.preventDefault(); width.onclick = () => wiki.onWidth?.();
+			} else {
+				pre.querySelector(".wiki-code-gutter")?.remove(); pre.querySelector("[data-code-fold]")?.remove(); pre.querySelector("[data-code-width]")?.remove(); pre.removeAttribute("data-wiki-code-folded");
+			}
 			const detected = code.className.match(/language-([^\s]+)/)?.[1] ?? "";
 			const language = detected === "plaintext" ? "" : detected;
 			control.replaceChildren();
@@ -213,13 +294,13 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 			control.setAttribute("aria-label", t("richCodeLanguage"));
 			paintCode(code, true);
 		});
-	}, [value, readOnly, t]);
+	}, [value, readOnly, t, wiki?.focused]);
 	useLayoutEffect(() => {
 		root.current?.querySelectorAll<HTMLImageElement>("img").forEach((img) => {
 			const source = img.dataset.richImageSrc ?? img.getAttribute("src") ?? "";
 			if (!source || /^(?:[a-z]+:|\/\/|#)/i.test(source)) return;
 			img.dataset.richImageSrc = source;
-			img.src = markdownImageUrl(source, file);
+			img.src = host ? host.resolveImage(source) : markdownImageUrl(source, file);
 		});
 	}, [value, file.cwd, file.path]);
 	useEffect(() => {
@@ -285,20 +366,24 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		selection?.removeAllRanges(); selection?.addRange(range);
 		setTableCell(cell);
 	};
-	const editTable = (action: "row" | "column" | "removeRow" | "removeColumn" | "removeTable", target = tableCell) => {
+	const editTable = (action: "row" | "column" | "removeRow" | "removeColumn" | "removeTable" | "selectTable" | "left" | "center" | "right", target = tableCell) => {
 		if (readOnly || !target || !root.current?.contains(target)) return;
-		const table = target.closest("table")!;
-		const row = target.parentElement as HTMLTableRowElement;
+		const original = target.closest("table")!;
+		const table = original.cloneNode(true) as HTMLTableElement;
+		const row = table.rows[(target.parentElement as HTMLTableRowElement).rowIndex];
 		const column = target.cellIndex;
-		let next = target;
-		if (action === "removeTable") {
+		let next = row.cells[column];
+		if (action === "removeTable" || action === "selectTable") {
 			const range = document.createRange();
-			range.selectNode(table);
+			range.selectNode(original);
 			const selection = window.getSelection();
 			root.current.focus(); selection?.removeAllRanges(); selection?.addRange(range);
-			command("delete"); setTableCell(null); return;
+			if (action === "removeTable") { command("delete"); setTableCell(null); }
+			return;
 		}
-		if (action === "row") {
+		if (["left", "center", "right"].includes(action)) {
+			for (const current of Array.from(table.rows)) current.cells[column].style.textAlign = action;
+		} else if (action === "row") {
 			const added = document.createElement("tr");
 			for (const header of Array.from(table.rows[0].cells)) {
 				const cell = added.insertCell();
@@ -326,8 +411,20 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 			next = row.cells[column > 0 ? column - 1 : 1];
 			for (const current of Array.from(table.rows)) current.deleteCell(column);
 		}
-		focusCell(next);
+		const rowIndex = (next.parentElement as HTMLTableRowElement).rowIndex, cellIndex = next.cellIndex;
+		table.dataset.richTableChange = "";
+		const range = document.createRange(); range.selectNode(original);
+		root.current.focus(); const selection = window.getSelection(); selection?.removeAllRanges(); selection?.addRange(range);
+		command("insertHTML", table.outerHTML);
+		const inserted = root.current.querySelector<HTMLTableElement>("[data-rich-table-change]");
+		if (inserted) { inserted.removeAttribute("data-rich-table-change"); focusCell(inserted.rows[rowIndex].cells[cellIndex]); }
 		update();
+	};
+	const uploadImageData = async (data: string, signal: AbortSignal): Promise<string> => {
+		if (host) return host.uploadImage(data, signal);
+		const response = await fetch(withToken("/api/markdown-image"), { method: "POST", headers: { "Content-Type": "application/json" }, signal, body: JSON.stringify({ clientId: getClientId(), cwd: file.cwd, path: file.path, data }) });
+		if (!response.ok) throw Error(t("richImageFailed"));
+		const result = await response.json(); if (typeof result.path !== "string") throw Error(t("richImageFailed")); return result.path;
 	};
 	const pasteImage = async (image: File) => {
 		if (readOnlyRef.current || upload.current || !root.current) return;
@@ -347,25 +444,19 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 				reader.readAsDataURL(image);
 			});
 			if (controller.signal.aborted) return;
-			const response = await fetch(withToken("/api/markdown-image"), {
-				method: "POST", headers: { "Content-Type": "application/json" }, signal: controller.signal,
-				body: JSON.stringify({ clientId: getClientId(), cwd: file.cwd, path: file.path, data }),
-			});
-			if (!response.ok) throw new Error(t("richImageFailed"));
-			const result = await response.json();
-			if (typeof result.path !== "string") throw new Error(t("richImageFailed"));
+			const path = await uploadImageData(data, controller.signal);
 			if (controller.signal.aborted) return;
 			if (readOnlyRef.current || !root.current?.contains(range.startContainer)) throw new Error(t("richImageFailed"));
 			root.current.focus();
 			selection.removeAllRanges();
 			selection.addRange(range);
 			const img = document.createElement("img");
-			img.setAttribute("src", result.path);
+			img.setAttribute("src", path);
 			img.setAttribute("alt", image.name || "screenshot");
 			document.execCommand("insertHTML", false, img.outerHTML);
 			update();
 		} catch (error) {
-			if (!controller.signal.aborted) setImageError((error as Error).message);
+			if (!controller.signal.aborted) setImageError((error as Error).message === t("richImageTooLarge") ? t("richImageTooLarge") : t("richImageFailed"));
 		} finally {
 			if (!controller.signal.aborted) setUploading(false);
 			if (upload.current === controller) upload.current = null;
@@ -392,6 +483,12 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 	};
 	const update = () => {
 		if (readOnly || !root.current || !documentState.current) return;
+		editableDisclosures(root.current, t("richCollapse"));
+		if (wiki) decorateWikiTables(root.current);
+		root.current.querySelectorAll<HTMLElement>(".rich-table-boundary").forEach(paragraph => {
+			if (paragraph.textContent || paragraph.querySelector("img, table, pre")) paragraph.classList.remove("rich-table-boundary");
+		});
+		ensureTrailingParagraph(root.current);
 		const next = readRichDocument(root.current, documentState.current);
 		// The generated list follows heading edits without touching the caret.
 		root.current.querySelectorAll<HTMLElement>("[data-rich-toc]").forEach(toc => renderToc(toc, next, labels));
@@ -424,10 +521,15 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		update();
 	};
 	const allItems = [
-		...((wiki ? [1, 2, 3] : [1, 2, 3, 4, 5, 6]) as (1 | 2 | 3 | 4 | 5 | 6)[]).map(level => ({ label: "richHeading", keywords: `heading header title h${level} bt${level} biaoti${level} 标题${level}`, alias: `bt${level}`, action: "formatBlock", argument: `h${level}` } as const)),
+		...(([1, 2, 3, 4, 5, 6]) as (1 | 2 | 3 | 4 | 5 | 6)[]).map(level => ({ label: "richHeading", keywords: `heading header title h${level} bt${level} biaoti${level} 标题${level}`, alias: `bt${level}`, action: "formatBlock", argument: `h${level}` } as const)),
 		{ label: "richParagraph", alias: "zw", keywords: "paragraph text zw zhengwen 正文", action: "formatBlock", argument: "p" },
 		{ label: "richCodeBlock", alias: "dmk", keywords: "code fence dmk daimakuai 代码 代码块", action: "insertHTML", argument: "<pre><code data-slash-insert><br></code></pre><p><br></p>" },
 		{ label: "richHighlightBlock", alias: "glk", keywords: "highlight note callout glk gaoliangkuai ts tishi 高亮 提示", action: "insertHTML", argument: '<blockquote class="rich-highlight" data-rich-highlight="note"><p data-slash-insert><br></p></blockquote><p><br></p>' },
+		{ label: "richGreenBlock", alias: "tip", keywords: "green callout 绿色 高亮", action: "insertHTML", argument: '<blockquote data-rich-highlight="tip"><p data-slash-insert><br></p></blockquote><p><br></p>' },
+		{ label: "richYellowBlock", alias: "warning", keywords: "yellow callout 黄色 高亮", action: "insertHTML", argument: '<blockquote data-rich-highlight="warning"><p data-slash-insert><br></p></blockquote><p><br></p>' },
+		{ label: "richCollapse", alias: "collapse", keywords: "collapse details zhedie 折叠", action: "insertHTML", argument: `<p><br></p><div data-rich-collapse=""><p data-rich-summary data-slash-insert>${t("richCollapse")}</p><div data-rich-collapse-body><p><br></p></div></div><p><br></p>` },
+		{ label: "richLinkCard", alias: "card", keywords: "card link 卡片 链接", action: "card" },
+		{ label: "wikiAddLink", alias: "link", keywords: "url link 链接", action: "link" },
 		{ label: "richTable", alias: "bg", keywords: "table bg biaoge 表格", action: "insertHTML", argument: `<table><thead><tr><th data-slash-insert>${t("richColumn")} 1</th><th>${t("richColumn")} 2</th></tr></thead><tbody><tr><td>…</td><td>…</td></tr></tbody></table><p><br></p>` },
 		{ label: "richList", alias: "lb", keywords: "bullet list lb liebiao wxlb wuxuliebiao 列表 无序列表", action: "insertUnorderedList" },
 		{ label: "richOrderedList", alias: "bh", keywords: "number ordered bh bianhao yxlb youxuliebiao 编号 有序列表", action: "insertOrderedList" },
@@ -439,14 +541,14 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		{ label: "richWikiLink", alias: "sl", keywords: "wiki link document sl shuanglian 链接 双链 文档", action: "wikiLink" },
 			{ label: "wikiMentionDate", alias: "date", keywords: "date mention riqi 日期", action: "insertText", get argument() { return new Date().toLocaleDateString("sv-SE"); } }, // read at insert time, not render time
 	] as const;
-	const wikiOrder = ["zw", "bt2", "bt3", "lb", "bg", "tp", "rw", "yy", "dmk", "sl", "date", "ml"];
-	const items = wiki ? allItems.filter(item => wikiOrder.includes(item.alias)).sort((a, b) => wikiOrder.indexOf(a.alias) - wikiOrder.indexOf(b.alias)) : allItems.filter(item => item.alias !== "date");
-	const icons = { wikiMentionDate: <FiCalendar />, richImage: <FiImage />, richWikiLink: <FiLink />, richHighlightBlock: <FiSquare />, richHeading: <FiType />, richParagraph: <FiType />, richCodeBlock: <FiCode />, richTable: <WikiTableIcon />, richList: <FiList />, richOrderedList: <FiList />, richTaskList: <FiCheckSquare />, richQuote: <WikiQuoteIcon />, richDivider: <FiMinus />, richTocInsert: <LuTableOfContents /> };
+	const wikiOrder = ["zw", "bt1", "bt2", "bt3", "bt4", "bt5", "bt6", "lb", "bh", "rw", "link", "dmk", "tp", "bg", "yy", "fgx", "date", "sl", "ml", "glk", "tip", "warning", "collapse", "card"];
+	const items = wiki ? allItems.filter(item => wikiOrder.includes(item.alias)).sort((a, b) => wikiOrder.indexOf(a.alias) - wikiOrder.indexOf(b.alias)) : allItems.filter(item => !["date", "sl", "ml"].includes(item.alias));
+	const icons = { richGreenBlock: wiki ? <LuLightbulb /> : <FiSquare />, richYellowBlock: wiki ? <LuTriangleAlert /> : <FiSquare />, richCollapse: wiki ? <LuChevronsUpDown /> : <FiSquare />, richLinkCard: wiki ? <LuPanelTop /> : <FiLink />, wikiAddLink: <FiLink />, wikiMentionDate: <FiCalendar />, richImage: <FiImage />, richWikiLink: <FiLink />, richHighlightBlock: wiki ? <LuInfo /> : <FiSquare />, richHeading: <FiType />, richParagraph: <FiType />, richCodeBlock: <FiCode />, richTable: <WikiTableIcon />, richList: <FiList />, richOrderedList: wiki ? <LuListOrdered /> : <FiList />, richTaskList: <FiCheckSquare />, richQuote: <WikiQuoteIcon />, richDivider: <FiMinus />, richTocInsert: <LuTableOfContents /> };
 	const itemLabel = (item: typeof items[number]) => item.label === "richHeading" ? `${t(item.label)} ${"argument" in item ? item.argument.slice(1) : ""}` : t(item.label);
 	const isBlock = (item: typeof items[number]) => item.action === "insertHTML" || item.action === "toc";
 	const hints: Record<string, string> = { date: "@", zw: "", bt1: "#", bt2: "##", bt3: "###", lb: "-", bh: "1.", rw: "[]", yy: ">", dmk: "```", glk: ":::", bg: "3 × 3", fgx: "---", tp: "![]", sl: "[[", ml: "" };
-	const help: Record<string, Parameters<typeof t>[0]> = { date: "wikiInsertDate", zw: "wikiInsertParagraph", bt1: "wikiInsertH1", bt2: "wikiInsertH2", bt3: "wikiInsertH3", lb: "wikiInsertList", bh: "wikiInsertOrdered", rw: "wikiInsertTask", yy: "wikiInsertQuote", dmk: "wikiInsertCode", glk: "wikiInsertCallout", bg: "wikiInsertTable", fgx: "wikiInsertDivider", tp: "wikiInsertImage", sl: "wikiInsertLink", ml: "wikiInsertToc" };
-	const matches = items.filter(item => wiki || !["image", "wikiLink"].includes(item.action)).filter((item) => `${itemLabel(item)} ${item.keywords}`.toLowerCase().includes(menu?.query.toLowerCase() ?? "")).sort((a, b) => wiki ? wikiOrder.indexOf(a.alias) - wikiOrder.indexOf(b.alias) : Number(isBlock(a)) - Number(isBlock(b)));
+	const help: Record<string, Parameters<typeof t>[0]> = { tip: "wikiInsertTip", warning: "wikiInsertWarning", collapse: "wikiInsertCollapse", card: "wikiInsertCard", link: "wikiInsertLink", date: "wikiInsertDate", zw: "wikiInsertParagraph", bt1: "wikiInsertH1", bt2: "wikiInsertH2", bt3: "wikiInsertH3", bt4: "wikiInsertHeading", bt5: "wikiInsertHeading", bt6: "wikiInsertHeading", lb: "wikiInsertList", bh: "wikiInsertOrdered", rw: "wikiInsertTask", yy: "wikiInsertQuote", dmk: "wikiInsertCode", glk: "wikiInsertCallout", bg: "wikiInsertTable", fgx: "wikiInsertDivider", tp: "wikiInsertImage", sl: "wikiInsertLink", ml: "wikiInsertToc" };
+	const matches = items.filter((item) => `${itemLabel(item)} ${item.keywords}`.toLowerCase().includes(menu?.query.toLowerCase() ?? "")).sort((a, b) => wiki ? wikiOrder.indexOf(a.alias) - wikiOrder.indexOf(b.alias) : Number(isBlock(a)) - Number(isBlock(b)));
 	const prepareInsert = () => {
 		const selection = window.getSelection();
 		if (selection?.rangeCount && root.current?.contains(selection.anchorNode)) savedRange.current = selection.getRangeAt(0).cloneRange();
@@ -460,30 +562,93 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 	};
 	const insertToolbar = (id: string, dimensions?: { columns: number; rows: number }, language?: string, popupAnchor?: Pick<DOMRect, "left" | "bottom">) => {
 		if (!restoreInsert()) return;
-		const anchor = window.getSelection()?.anchorNode;
-		const originalBlock = (anchor instanceof Element ? anchor : anchor?.parentElement)?.closest("p,h1,h2,h3,h4,h5,h6");
-		const blockParent = originalBlock?.parentElement;
-		const emptyBlock = !originalBlock?.textContent?.trim();
-		let formattedTag: string | undefined;
 		if ((id === "bg" && !dimensions) || (id === "dmk" && language === undefined)) {
 			const rect = popupAnchor ?? savedRange.current?.getBoundingClientRect();
 			setInsertPopup({ kind: id === "bg" ? "table" : "code", x: insertPopup?.x ?? rect?.left ?? 16, y: insertPopup?.y ?? (rect?.bottom ?? 80) + 6 }); return;
 		}
 		setInsertPopup(null);
+		rememberInsertion(id);
+		if (["glk", "tip", "warning"].includes(id)) {
+			const node = window.getSelection()?.anchorNode;
+			const existing = (node instanceof Element ? node : node?.parentElement)?.closest<HTMLElement>("blockquote[data-rich-highlight]");
+			if (existing && root.current?.contains(existing)) {
+				const clone = existing.cloneNode(true) as HTMLElement; clone.dataset.richHighlight = id === "glk" ? "note" : id;
+				// Remove the quote context first: Chromium otherwise nests the replacement
+				// inside the old callout. Both edits remain in native undo history.
+				const range = document.createRange(); range.selectNodeContents(existing); const selection = window.getSelection(); selection?.removeAllRanges(); selection?.addRange(range);
+				document.execCommand("outdent");
+				command("insertHTML", clone.outerHTML); prepareInsert(); return;
+			}
+		}
+		if (id === "card") { cardRange.current = window.getSelection()?.getRangeAt(0).cloneRange() ?? null; setCardOpen(true); return; }
+		if (id === "link") { linkRange.current = window.getSelection()?.getRangeAt(0).cloneRange() ?? null; setLinkInput(""); return; }
 		if (id === "bg" && dimensions) {
 			command("insertHTML", `<table><thead><tr>${Array.from({ length: dimensions.columns }, (_, i) => `<th ${i === 0 ? 'data-slash-insert' : ''}>${t("richColumn")} ${i + 1}</th>`).join('')}</tr></thead><tbody>${Array.from({ length: dimensions.rows - 1 }, () => `<tr>${'<td><br></td>'.repeat(dimensions.columns)}</tr>`).join('')}</tbody></table><p><br></p>`);
 		} else if (id === "dmk") command("insertHTML", `<pre><code data-slash-insert class="language-${language || 'plaintext'}">${language === 'mermaid' ? 'flowchart LR\n  A --> B' : '<br>'}</code></pre><p><br></p>`);
 		else {
 			const item = items.find(item => item.alias === id); if (!item) return;
+			if (item.action === "card" || item.action === "link") return;
 			if (item.action === "image") { imageRange.current = window.getSelection()?.getRangeAt(0).cloneRange() ?? null; imageInput.current?.click(); return; }
 			if (item.action === "toc") { insertToc(); return; }
 			if (item.action === "wikiLink") { command("insertText", "[["); const range = window.getSelection()?.getRangeAt(0).cloneRange(); if (range && range.startOffset >= 2) range.setStart(range.startContainer, range.startOffset - 2); linkRange.current = range ?? null; setLinkInput("[["); return; }
-			if (item.action === "formatBlock") formattedTag = item.argument;
 			command(item.action, "argument" in item ? item.argument : undefined);
 		}
-		const target = root.current?.querySelector("[data-slash-insert]") ?? (emptyBlock && formattedTag ? blockParent?.querySelector(formattedTag) : null);
+		const target = root.current?.querySelector("[data-slash-insert]");
 		if (target) { target.removeAttribute("data-slash-insert"); const range = document.createRange(); range.selectNodeContents(target); range.collapse(true); window.getSelection()?.removeAllRanges(); window.getSelection()?.addRange(range); update(); }
 		prepareInsert();
+	};
+	const styledSelection = (styles: string, reset = false) => {
+		const selection = window.getSelection();
+		if (!selection?.rangeCount) return;
+		const collapsed = selection.isCollapsed;
+		const span = document.createElement("span"); span.style.cssText = styles; span.dataset.richSelection = "";
+		if (collapsed) { span.dataset.richTyping = ""; span.textContent = "\u200b"; } else span.append(selection.getRangeAt(0).cloneContents());
+		if (reset) { span.querySelectorAll("[style]").forEach(el => el.removeAttribute("style")); span.querySelectorAll("b,strong,i,em,u,s,del,sub,sup,mark").forEach(el => el.replaceWith(...el.childNodes)); }
+		command("insertHTML", span.outerHTML);
+		const inserted = root.current?.querySelector<HTMLElement>("[data-rich-selection]");
+		if (inserted) { inserted.removeAttribute("data-rich-selection"); const range = document.createRange(); range.selectNodeContents(inserted); if (collapsed) range.collapse(false); selection.removeAllRanges(); selection.addRange(range); prepareInsert(); update(); }
+	};
+	const format = (action: string, argument?: string) => {
+		if (!restoreInsert()) return;
+		const selection = window.getSelection(); const node = selection?.anchorNode;
+		const element = node instanceof HTMLElement ? node : node?.parentElement;
+		if (action === "text-align" && selectedCell() && ["left", "center", "right"].includes(argument ?? "")) { editTable(argument as "left" | "center" | "right", selectedCell()); return; }
+		if (action === "task") { insertToolbar("rw"); return; }
+		if (action === "paint") {
+			let sample = selection?.rangeCount ? selection.getRangeAt(0).startContainer : root.current;
+			if (sample instanceof Element) sample = sample.childNodes[selection?.getRangeAt(0).startOffset ?? 0] ?? sample;
+			while (sample?.firstChild) sample = sample.firstChild;
+			const styled = sample instanceof HTMLElement ? sample : sample?.parentElement;
+			setPainter(painter === null ? cleanStyle(getComputedStyle(styled ?? element ?? root.current!)) : null); return;
+		}
+		if (action === "highlight") { const color = TEXT_HIGHLIGHT_COLORS.find(c => c.name === argument); command("hiliteColor", color?.hex ?? "transparent"); return; }
+		if (["font-size", "color"].includes(action)) { styledSelection(`${action}: ${argument}`); return; }
+		if (action === "line-height" || action === "text-align" || action === "plainBlock" || action === "clear") {
+			const block = element?.closest<HTMLElement>(action === "plainBlock" ? "blockquote,details,div[data-rich-collapse],figure" : "p,h1,h2,h3,h4,h5,h6,li,td,th");
+			if (action === "clear") { command("removeFormat"); if (!block) return; }
+			if (!block || !root.current?.contains(block)) return;
+			const clone = block.cloneNode(true) as HTMLElement;
+			if (action === "plainBlock" && block.tagName === "BLOCKQUOTE") {
+				const range = document.createRange(); range.selectNodeContents(block); selection?.removeAllRanges(); selection?.addRange(range); command("outdent"); prepareInsert(); return;
+			}
+			if (action === "plainBlock") {
+				clone.querySelectorAll("[data-rich-ui]").forEach(el => el.remove());
+				clone.querySelectorAll("[data-rich-summary], [data-rich-collapse-body]").forEach(el => { el.removeAttribute("data-rich-summary"); el.removeAttribute("data-rich-collapse-body"); el.removeAttribute("hidden"); });
+				clone.querySelectorAll("summary").forEach(summary => { const p = document.createElement("p"); p.textContent = summary.textContent; summary.replaceWith(p); });
+			} else if (action === "clear") { clone.removeAttribute("style"); clone.querySelectorAll("[style]").forEach(el => el.removeAttribute("style")); }
+			else { clone.style.setProperty(action, argument!); clone.dataset.richFormat = ""; }
+			const range = document.createRange();
+			if (action === "plainBlock") {
+				// Start/end in neutral paragraphs. Chromium otherwise preserves the
+				// selected DIV's attributes when replacing its last editable content.
+				const before = document.createElement("p"), after = document.createElement("p");
+				before.append(document.createElement("br")); after.append(document.createElement("br"));
+				block.before(before); block.after(after); range.setStart(before, 0); range.setEnd(after, after.childNodes.length);
+			} else range.selectNode(block);
+			selection?.removeAllRanges(); selection?.addRange(range);
+			command("insertHTML", action === "plainBlock" ? clone.innerHTML : clone.outerHTML); prepareInsert(); return;
+		}
+		command(action, argument); prepareInsert();
 	};
 	const inspectSlash = (resetActive = true) => {
 		if (readOnly) return closeMenu();
@@ -526,6 +691,7 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 	useLayoutEffect(() => {
 		if (!menu || !popup.current || !slashRange.current) return;
 		const rect = slashRange.current.getBoundingClientRect(), height = popup.current.offsetHeight;
+		popup.current.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - popup.current.offsetWidth - 8))}px`;
 		popup.current.style.top = `${Math.max(8, rect.bottom + 6 + height <= window.innerHeight - 8 ? rect.bottom + 6 : rect.top - height - 6)}px`;
 	}, [menu]);
 	useLayoutEffect(() => {
@@ -540,7 +706,6 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		const range = slashRange.current;
 		const item = matches[index];
 		if (readOnly || !item || !range || !root.current?.contains(range.startContainer)) return closeMenu();
-		const blockParent = range.startContainer.parentElement?.closest("p, h1, h2, h3, h4, h5, h6, td, th")?.parentElement;
 		root.current.focus();
 		const selection = window.getSelection();
 		selection?.removeAllRanges();
@@ -549,14 +714,15 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		const popupAnchor = range.getBoundingClientRect();
 		closeMenu();
 		document.execCommand("delete");
-		if (wiki) { prepareInsert(); insertToolbar(item.alias, undefined, undefined, popupAnchor); return; }
+		if (wiki || host) { prepareInsert(); insertToolbar(item.alias, undefined, undefined, popupAnchor); return; }
+		if (item.action === "card" || item.action === "link") { prepareInsert(); insertToolbar(item.alias); update(); return; }
 		if (item.action === "image") { imageRange.current = selection?.getRangeAt(0).cloneRange() ?? null; imageInput.current?.click(); update(); return; }
 		if (item.action === "wikiLink") { linkRange.current = selection?.getRangeAt(0).cloneRange() ?? null; setLinkInput("[["); update(); return; }
 		if (item.action === "toc") { insertToc(); return; }
 		if (wiki && item.alias === "bg") command("insertHTML", `<table><thead><tr>${[1, 2, 3].map(n => `<th ${n === 1 ? "data-slash-insert" : ""}>${t("richColumn")} ${n}</th>`).join("")}</tr></thead><tbody>${[1, 2].map(() => "<tr><td>…</td><td>…</td><td>…</td></tr>").join("")}</tbody></table><p><br></p>`);
 		else command(item.action, "argument" in item ? item.argument : undefined);
-		// Chromium can leave an empty formatted heading's caret in the preceding block.
-		const target = root.current.querySelector("[data-slash-insert]") ?? (item.action === "formatBlock" ? blockParent?.querySelector(item.argument) : null);
+		// Inserted composite blocks carry an explicit caret target; formatBlock retains its native selection.
+		const target = root.current.querySelector("[data-slash-insert]");
 		if (target) {
 			target.removeAttribute("data-slash-insert");
 			const caret = document.createRange();
@@ -606,72 +772,64 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		if (!heading && !item) return false;
 		selection.removeAllRanges(); selection.addRange(range); document.execCommand("delete");
 		if (heading) {
-			const parent = block.parentElement, tag = `h${heading[1].length}`;
-			command("formatBlock", tag);
-			const headingNode = parent?.querySelector(tag);
-			if (headingNode && !headingNode.textContent) { range.selectNodeContents(headingNode); range.collapse(true); selection.removeAllRanges(); selection.addRange(range); }
+			// Chromium can leave the caret in a preceding code block after formatting
+			// an empty paragraph. Resolve only the originating block's replacement.
+			const parent = block.parentElement;
+			const index = parent ? Array.from(parent.childNodes).indexOf(block) : -1;
+			command("formatBlock", `h${heading[1].length}`);
+			const replacement = parent?.childNodes[index];
+			if (replacement instanceof HTMLElement && replacement.tagName === `H${heading[1].length}`) {
+				const caret = document.createRange(); caret.selectNodeContents(replacement); caret.collapse(true);
+				selection.removeAllRanges(); selection.addRange(caret);
+			}
 		}
 		else if (item) command(item.action, "argument" in item ? item.argument : undefined);
 		const target = root.current.querySelector("[data-slash-insert]");
 		if (target) { target.removeAttribute("data-slash-insert"); range.selectNodeContents(target); range.collapse(true); selection.removeAllRanges(); selection.addRange(range); }
 		closeMenu(); update(); return true;
 	};
-	const formatTools = [
-		{ label: t("richUndo"), icon: <FiRotateCcw />, action: "undo" },
-		{ label: t("richRedo"), icon: <FiRotateCw />, action: "redo" },
-		{ label: t("richParagraph"), icon: <FiType />, action: "formatBlock", argument: "p", separator: true },
-		{ label: `${t("richHeading")} 1`, icon: <span>H₁</span>, action: "formatBlock", argument: "h1" },
-		{ label: `${t("richHeading")} 2`, icon: <span>H₂</span>, action: "formatBlock", argument: "h2" },
-		{ label: t("richBold"), icon: <FiBold />, action: "bold", separator: true },
-		{ label: t("richItalic"), icon: <FiItalic />, action: "italic" },
-		{ label: t("richList"), icon: <FiList />, action: "insertUnorderedList", separator: true },
-		{ label: t("richOrderedList"), icon: <span>1.</span>, action: "insertOrderedList" },
-	];
+
 	return <div className="fp-rich-editor" onScrollCapture={(event) => { if (!(event.target as HTMLElement).closest(".fp-slash-menu")) { if (menu) inspectSlash(false); } }}>
-		{wiki?.toolbarHost && createPortal(<WikiToolbar readOnly={readOnly} focused={!!wiki.focused} onWidth={wiki.onWidth ?? (() => {})} items={items.map(item => ({ id: item.alias, label: itemLabel(item), hint: hints[item.alias] ?? "", help: t(help[item.alias]), icon: icons[item.label] }))} popup={insertPopup} onPrepare={prepareInsert} onSelect={id => insertToolbar(id)} onPopup={setInsertPopup} />, wiki.toolbarHost)}
+		{wiki?.toolbarHost && createPortal(<WikiToolbar readOnly={readOnly} focused={!!wiki.focused} onWidth={wiki.onWidth ?? (() => {})} items={items.map(item => ({ id: item.alias, label: itemLabel(item), hint: hints[item.alias] ?? "", help: t(help[item.alias] ?? item.label), icon: icons[item.label] }))} editor={root.current} run={format} painter={painter !== null} onPrepare={prepareInsert} onSelect={id => insertToolbar(id)} />, wiki.toolbarHost)}
 		{diagrams.map(({ host, code }, index) => createPortal(<MermaidDiagram code={code} />, host, String(index)))}
 		{insertPopup && !readOnly && <WikiInsertPopover popup={insertPopup} onClose={() => { setInsertPopup(null); restoreInsert(); }}>
 			{insertPopup.kind === "table" ? <TableSizePicker onInsert={(columns, rows) => insertToolbar("bg", { columns, rows })} /> : <CodeLanguagePicker onInsert={language => insertToolbar("dmk", undefined, language)} />}
 		</WikiInsertPopover>}
-		{!wiki && <div className="fp-rich-toolbar" role="toolbar" aria-label={t("richFormatToolbar")}>
-			{formatTools.map((tool) => <Fragment key={tool.label}>
-				{tool.separator && <span className="fp-rich-toolbar-separator" aria-hidden="true" />}
-				<button type="button" title={tool.label} aria-label={tool.label} disabled={readOnly}
-					onMouseDown={(event) => event.preventDefault()} onClick={() => command(tool.action, tool.argument)}>{tool.icon}</button>
-			</Fragment>)}
-			<span className="fp-rich-toolbar-separator" aria-hidden="true" />
-			<span className="fp-highlight-label">{t("richTextHighlight")}</span>
-			{TEXT_HIGHLIGHT_COLORS.map(color => <button key={color.name} type="button" className={`fp-highlight-swatch fp-highlight-${color.name}`}
-				title={t(`richHighlight_${color.name}`)} aria-label={t(`richHighlight_${color.name}`)} disabled={readOnly || !canHighlight}
-				onMouseDown={event => event.preventDefault()} onClick={() => { if (highlightSelection()) command("hiliteColor", color.hex); }}><span /></button>)}
-			<button type="button" title={t("richHighlightClear")} aria-label={t("richHighlightClear")} disabled={readOnly || !canHighlight}
-				onMouseDown={event => event.preventDefault()} onClick={() => { if (highlightSelection()) command("hiliteColor", "transparent"); }}><FiMinus /></button>
-		</div>}
-		{tableCell?.isConnected && !readOnly && <div className="fp-table-tools" role="toolbar" aria-label={t("richTableTools")}>
-			<button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => editTable("row")}>{t("richAddRow")}</button>
-			<button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => editTable("column")}>{t("richAddColumn")}</button>
-			<button type="button" disabled={(tableCell.parentElement as HTMLTableRowElement).rowIndex === 0 || tableCell.closest("table")!.rows.length <= 2}
-				onMouseDown={(event) => event.preventDefault()} onClick={() => editTable("removeRow")}>{t("richRemoveRow")}</button>
-			<button type="button" disabled={(tableCell.parentElement as HTMLTableRowElement).cells.length <= 1}
-				onMouseDown={(event) => event.preventDefault()} onClick={() => editTable("removeColumn")}>{t("richRemoveColumn")}</button>
-			<button type="button" onMouseDown={event => event.preventDefault()} onClick={() => editTable("removeTable")}>{t("richRemoveTable")}</button>
-		</div>}
+		{!wiki && !readOnly && <RichFormattingToolbar compact={compact} disabled={readOnly} prepare={prepareInsert} run={format} insert={id => insertToolbar(id)} painter={painter !== null} />}
+		{cardOpen && <RichLinkCardDialog onClose={() => setCardOpen(false)} onInsert={async (card, signal) => {
+			const range = cardRange.current, editor = root.current;
+			if (!range || !editor?.contains(range.startContainer) || readOnlyRef.current) throw Error();
+			let path: string | undefined;
+			if (card.imageData) path = await uploadImageData(card.imageData, signal);
+			signal.throwIfAborted();
+			if (!root.current?.contains(range.startContainer) || readOnlyRef.current) throw Error();
+			const figure = document.createElement("figure"); figure.dataset.richCard = "1";
+			if (path) { const image = document.createElement("img"); image.src = path; image.alt = ""; figure.append(image); }
+			const link = document.createElement("a"); link.setAttribute("href", card.url); link.textContent = card.title; const p = document.createElement("p"); p.textContent = card.description; figure.append(link, p);
+			root.current.focus(); const selection = window.getSelection(); selection?.removeAllRanges(); selection?.addRange(range); command("insertHTML", "<p><br></p>" + figure.outerHTML + "<p><br></p>");
+		}} />}
+
+		{tableHandle && !readOnly && createPortal(<button type="button" className="fp-table-select-handle"
+			style={tableHandle} aria-label={t("richSelectTable")} title={t("richSelectTable")}
+			onMouseDown={event => event.preventDefault()} onClick={() => editTable("selectTable")}>⠿</button>, document.body)}
 		{uploading && <div className="fp-notice" role="status">{t("richImageUploading")}</div>}
 		{imageError && <div className="fp-notice" role="alert">{imageError}</div>}
 		{wiki && floating && linkInput === null && createPortal(<div ref={floatingToolbar} className="wiki-format-popover" role="toolbar" aria-label={t("richFormatToolbar")} style={{ left: floating.x, top: floating.y }} onMouseDown={e => e.preventDefault()}>
-			{[{ label: t("richBold"), action: "bold", icon: <FiBold /> }, { label: t("richItalic"), action: "italic", icon: <FiItalic /> }, { label: t("richParagraph"), action: "formatBlock", argument: "p", icon: <FiType /> }, { label: `${t("richHeading")} 2`, action: "formatBlock", argument: "h2", icon: <LuHeading2 /> }, { label: `${t("richHeading")} 3`, action: "formatBlock", argument: "h3", icon: <LuHeading3 /> }].map(tool => <button key={tool.label} aria-label={tool.label} title={tool.label} disabled={readOnly} onClick={() => command(tool.action, tool.argument)}>{tool.icon}</button>)}
-			<button aria-label={t("wikiAddLink")} title={t("wikiAddLink")} disabled={readOnly} onClick={() => { linkRange.current = highlightSelection()?.cloneRange() ?? null; setLinkInput(""); }}><FiLink /></button><i />
-			{TEXT_HIGHLIGHT_COLORS.slice(0, 2).map(color => <button className={`fp-highlight-swatch fp-highlight-${color.name}`} key={color.name} aria-label={t(`richHighlight_${color.name}`)} title={t(`richHighlight_${color.name}`)} disabled={readOnly} onClick={() => toggleHighlight(color)}><span /></button>)}<i />
 			<button className="wiki-ask-selection" onClick={() => { wiki.ask(window.getSelection()?.toString() ?? ""); setFloating(null); }}>{t("wikiAskPi")}</button>
 		</div>, document.querySelector(".wiki-document-dialog") ?? document.body)}
 		<input ref={imageInput} type="file" accept="image/*" hidden onChange={event => { const image = event.target.files?.[0], range = imageRange.current; if (image && range && root.current?.contains(range.startContainer)) { root.current.focus(); const selection = window.getSelection(); selection?.removeAllRanges(); selection?.addRange(range); void pasteImage(image); } event.target.value = ""; }} />
 		{linkInput !== null && <WikiReadingDialog title={t("wikiAddLink")} onClose={() => setLinkInput(null)}><form className="wiki-link-form" onSubmit={event => { event.preventDefault(); insertLink(linkInput); }}><input aria-label={t("wikiLinkAddress")} placeholder={t("wikiLinkAddress")} value={linkInput} onChange={e => setLinkInput(e.target.value)} /><button type="submit" disabled={!linkInput.trim() || linkInput.startsWith("[[")}>{t("wikiInsertLinkAction")}</button></form>{linkInput.startsWith("[[") && <div className="wiki-link-results">{wiki?.paths.filter(path => /\.(md|markdown|mdown)$/i.test(path) && path.toLowerCase().includes(linkInput.slice(2).toLowerCase())).slice(0, 30).map(path => <button key={path} onClick={() => insertLink(path, true)}>{path}</button>)}</div>}</WikiReadingDialog>}
-		{menu && !readOnly && createPortal(<div ref={popup} className={`fp-slash-menu ${wiki ? "wiki-slash-menu" : ""}`} style={{ left: menu.x, top: menu.y }}>
+		{menu && !readOnly && createPortal(<div ref={popup} className={`fp-slash-menu ${wiki ? `wiki-slash-menu ${menu.query ? "" : "wiki-slash-grid"}` : ""}`} style={{ left: menu.x, top: menu.y }}>
+			{wiki && !menu.query && recentInsertions.some(id => items.some(item => item.alias === id)) && <div className="wiki-insert-recent"><span>{t("wikiRecentlyUsed")}</span><div>{recentInsertions.map(id => {
+				const index = matches.findIndex(item => item.alias === id), item = matches[index];
+				return item && <button type="button" key={id} onMouseDown={event => event.preventDefault()} onClick={() => insert(index)}>{itemLabel(item)}</button>;
+			})}</div></div>}
 			<div className="fp-slash-options" role="listbox" aria-label={t("richInsertMenu")}>
 			{matches.length ? matches.map((item, index) => <Fragment key={item.alias}>
+				{wiki && !menu.query && [12, 19].includes(index) && <div className="wiki-palette-section" role="presentation">{t(index === 12 ? "richBlocksGroup" : "wikiInsertContentBlocks")}</div>}
 				{!wiki && (index === 0 || isBlock(item) !== isBlock(matches[index - 1])) && <div className="fp-slash-group" role="presentation">{t(isBlock(item) ? "richBlocksGroup" : "richTextGroup")}</div>}
-				<button type="button" role="option" aria-label={itemLabel(item)} aria-selected={index === active} id={`fp-slash-option-${index}`} onMouseDown={event => event.preventDefault()} onMouseEnter={() => setActive(index)} onClick={() => insert(index)}>
-					<span className="fp-slash-icon" aria-hidden="true">{icons[item.label]}</span><span className="fp-slash-label">{itemLabel(item)}{wiki && <small>{t(help[item.alias])}</small>}</span><kbd aria-hidden="true">{wiki ? hints[item.alias] : `/${item.alias}`}</kbd>
+				<button className={wiki && !menu.query ? (index < 12 ? "wiki-palette-format" : `wiki-palette-card wiki-palette-${item.alias}`) : undefined} type="button" role="option" aria-label={itemLabel(item)} title={`${itemLabel(item)} · ${t(help[item.alias] ?? item.label)}`} aria-selected={index === active} id={`fp-slash-option-${index}`} onMouseDown={event => event.preventDefault()} onMouseEnter={() => setActive(index)} onClick={() => insert(index)}>
+					<span className="fp-slash-icon" aria-hidden="true">{wiki && item.label === "richHeading" ? <span className="wiki-heading-icon">H{"argument" in item ? item.argument.slice(1) : ""}</span> : icons[item.label]}</span><span className="fp-slash-label">{itemLabel(item)}{wiki && <small>{t(help[item.alias] ?? item.label)}</small>}</span><kbd aria-hidden="true">{wiki ? hints[item.alias] : `/${item.alias}`}</kbd>
 				</button></Fragment>) : <span className="wiki-slash-empty">{t(wiki ? "wikiNoInsertResults" : "richNoElements")}</span>}
 			</div>{wiki && <footer>{t("wikiInsertKeys")}</footer>}
 		</div>, document.querySelector(".wiki-document-dialog") ?? document.body)}
@@ -683,8 +841,19 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 					onBlur={closeMenu}
 					onCompositionStart={closeMenu}
 					onCompositionEnd={() => { const code = selectedCode(); if (code) paintCode(code); update(); inspectSlash(); }}
+					onMouseUp={() => { if (painter !== null && !window.getSelection()?.isCollapsed) { styledSelection(painter, true); setPainter(null); } }}
 					onKeyUp={() => setTableCell(selectedCell())}
 					onKeyDown={(event) => {
+						if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === "a" && !event.nativeEvent.isComposing) {
+							const cell = selectedCell();
+							if (cell) {
+								event.preventDefault();
+								const range = document.createRange(); range.selectNode(cell.closest("table")!);
+								const selection = window.getSelection(); selection?.removeAllRanges(); selection?.addRange(range);
+								setTableCell(cell); return;
+							}
+						}
+
 						if (event.key === " " && !event.nativeEvent.isComposing && markdownShortcut()) { event.preventDefault(); return; }
 						if (event.key === "Enter" && !readOnly && !event.nativeEvent.isComposing) {
 							const selection = window.getSelection();
@@ -704,6 +873,9 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 						}
 						if (event.key === "Tab" && !readOnly && !event.nativeEvent.isComposing) {
 							const cell = selectedCell();
+							const node = window.getSelection()?.anchorNode;
+							const listItem = (node instanceof Element ? node : node?.parentElement)?.closest("li");
+							if (!cell && listItem && root.current?.contains(listItem)) { event.preventDefault(); command(event.shiftKey ? "outdent" : "indent"); return; }
 							if (cell) {
 								const cells = Array.from(cell.closest("table")!.querySelectorAll<HTMLTableCellElement>("th, td"));
 								const index = cells.indexOf(cell);
@@ -717,9 +889,18 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 						}
 						if (!menu || event.nativeEvent.isComposing) return;
 						if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); closeMenu(); }
-						else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+						else if (event.key === "ArrowDown" || event.key === "ArrowUp" || (wiki && !menu.query && (event.key === "ArrowLeft" || event.key === "ArrowRight"))) {
 							event.preventDefault();
-							setActive((index) => matches.length ? (index + (event.key === "ArrowDown" ? 1 : -1) + matches.length) % matches.length : 0);
+							if (wiki && !menu.query && ["ArrowDown", "ArrowUp"].includes(event.key)) {
+								const buttons = [...(popup.current?.querySelectorAll<HTMLElement>('[role="option"]') ?? [])];
+								const current = buttons[active]?.getBoundingClientRect();
+								if (current) {
+									const down = event.key === "ArrowDown";
+									const rows = buttons.map((button, index) => ({ index, rect: button.getBoundingClientRect() })).filter(({rect}) => down ? rect.top > current.top + 1 : rect.top < current.top - 1);
+									rows.sort((a,b) => Math.abs(a.rect.top-current.top)-Math.abs(b.rect.top-current.top) || Math.abs(a.rect.left+a.rect.width/2-current.left-current.width/2)-Math.abs(b.rect.left+b.rect.width/2-current.left-current.width/2));
+									setActive(rows[0]?.index ?? (down ? 0 : matches.length - 1));
+								}
+							} else setActive(index => matches.length ? (index + (["ArrowDown", "ArrowRight"].includes(event.key) ? 1 : -1) + matches.length) % matches.length : 0);
 						} else if (event.key === "Enter" && matches.length) { event.preventDefault(); insert(active); }
 						else if (event.key === "ArrowLeft" || event.key === "ArrowRight" || event.key === "Home" || event.key === "End") closeMenu();
 					}}
@@ -739,12 +920,15 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 							}
 						}
 					}}
+					onDragStart={(event) => {
+						if ((event.target as HTMLElement).closest("table a")) event.preventDefault();
+					}}
 					onClick={(event) => {
 						const target = event.target as HTMLElement, toc = target.closest<HTMLElement>("[data-rich-toc]");
 						if (toc && target.closest("[data-rich-toc-remove]")) { event.preventDefault(); if (!readOnly) { toc.remove(); update(); } return; }
 						const entry = target.closest<HTMLElement>("[data-rich-toc-index]");
 						if (toc && entry) { event.preventDefault(); tocTarget(toc, Number(entry.dataset.richTocIndex))?.scrollIntoView({ block: "start", behavior: "smooth" }); return; }
-						setTableCell(selectedCell()); closeMenu(); const link = (event.target as HTMLElement).closest("a"); if (link) { event.preventDefault(); const href = link.getAttribute("href"); if (wiki && href) { if (/^(https?:|mailto:)/i.test(href)) window.open(href, "_blank", "noopener,noreferrer"); else wiki.followLink(href); } } }}
+						setTableCell(target.closest<HTMLTableCellElement>("th, td") ?? selectedCell()); closeMenu(); if (!window.getSelection()?.isCollapsed) { event.preventDefault(); return; } const link = (event.target as HTMLElement).closest("a"); if (link) { event.preventDefault(); const href = link.getAttribute("href"); if (href) { if (/^(https?:|mailto:)/i.test(href)) window.open(href, "_blank", "noopener,noreferrer"); else wiki?.followLink(href); } } }}
 					onChange={(event) => {
 						const input = event.target as HTMLInputElement;
 						if (input.type === "checkbox") { input.toggleAttribute("checked", input.checked); update(); }

@@ -1,3 +1,4 @@
+import { WikiChatStore } from "./wiki-chat-store.js";
 import { isSelectableProvider } from "./provider-catalog.js";
 import { databaseScope } from "./database/service.js";
 import { planSettings } from "./plan/settings.js";
@@ -221,6 +222,14 @@ export class ClientSession {
 	private readonly agentDir: string;
 	/** Persisted per-client UI state (last workspace + recent projects). */
 	private readonly stateStore: ClientStateStore;
+	get wikiChats(): WikiChatStore { return new WikiChatStore(join(this.stateStore.dataDir, "wiki")); }
+	get connected(): boolean { return this.sinks.size > 0; }
+	private wikiBlankDocuments = new Map<string, SessionManager>();
+	wikiDocumentSession(path: string): SessionManager | undefined {
+		return [...this.convs.values()].reverse().find(conv => conv.wiki && conv.cwd === this.cwd && this.wikiChats.settings(this.cwd, conv.session.sessionManager.getSessionId()).documentPath === path)?.session.sessionManager ?? this.wikiBlankDocuments.get(`${this.cwd}\0${path}`);
+	}
+	wikiSessionBusy(id: string): boolean { return [...this.convs.values()].some(conv => conv.wiki && conv.session.sessionManager.getSessionId() === id && (conv.session.isStreaming || conv.terminals.list().length > 0)); }
+	ownsWikiSession(id: string): boolean { return [...this.convs.values()].some(conv => conv.wiki && conv.session.sessionManager.getSessionId() === id); }
 	private readonly thinkingDurationStore: ThinkingDurationStore;
 	/** Open conversations — each owns its OWN runtime, so starting a new chat
 	 *  or switching chats never interrupts an in-flight run. `runtime` and
@@ -290,7 +299,7 @@ export class ClientSession {
 		return conv;
 	}
 	/** Runtime of the active conversation. */
-	/** The ACTIVE conversation is an ephemeral Wiki conversation? The
+	/** Is the active conversation a Wiki conversation? The
 	 * new-conversation route uses this to reject only document switches away
 	 * from a still-streaming Wiki chat — entering Wiki mode from a running
 	 * normal conversation stays allowed (it keeps running in the background). */
@@ -584,10 +593,10 @@ export class ClientSession {
 			cwd,
 			agentDir,
 			// Ordinary clients resume the most recent session. Detached Wiki
-			// clients start in memory without loading ordinary history. The SDK default
+			// clients start in their separate persistent directory without loading ordinary history. The SDK default
 			// per-project dir (<agentDir>/sessions/--<cwd>--/, shared with the
 			// pi CLI/TUI) — or start a fresh one on first visit.
-			sessionManager: wiki ? SessionManager.inMemory(cwd) : SessionManager.continueRecent(cwd),
+			sessionManager: wiki ? SessionManager.create(cwd, cs.wikiChats.directory(cwd)) : SessionManager.continueRecent(cwd),
 		});
 		// The first conversation also seeds the shared
 		// ModelRuntime that every later conversation reuses.
@@ -1665,6 +1674,7 @@ export class ClientSession {
 			onAccepted?.(ok);
 		};
 		try {
+			if (this.creatingConversation) throw new Error("Conversation is changing; retry when ready");
 			if (this.restartingSession) throw new Error("当前会话正在重启，请稍后重试。");
 			// Issue #65: a force-rebuilt conversation whose old runtime was
 			// disposed must not accept prompts — they would be delivered to a
@@ -1966,7 +1976,7 @@ export class ClientSession {
 
 			const manager = conv.session.sessionManager;
 			const header = manager.getHeader();
-			const wikiManager = conv.wiki ? SessionManager.inMemory(conv.cwd, undefined, [...(header ? [header] : []), ...manager.getEntries()]) : null;
+			const wikiManager = conv.wiki && !manager.getSessionFile() ? SessionManager.inMemory(conv.cwd, undefined, [...(header ? [header] : []), ...manager.getEntries()]) : null;
 			// Reopen THIS conversation's file. continueRecent() would pick the most
 			// recently written session of the project, which may be another open chat.
 			const sessionFile = conv.session.sessionFile;
@@ -2019,7 +2029,7 @@ export class ClientSession {
 			bumpExtensionModuleCache();
 			replacement = await createAgentSessionRuntime(this.makeRuntimeFactory(true, { model, thinkingLevel: thinking }), {
 				cwd: conv.cwd, agentDir: this.agentDir,
-				sessionManager: broken && !conv.wiki && conv.session.sessionFile ? SessionManager.open(conv.session.sessionFile) : conv.session.sessionManager,
+				sessionManager: broken && conv.session.sessionFile ? SessionManager.open(conv.session.sessionFile) : conv.session.sessionManager,
 			});
 			if (this.disposed || this.conv !== conv) throw new Error("对话已切换。");
 			// A failed force rebuild already disposed the previous runtime;
@@ -2074,17 +2084,24 @@ export class ClientSession {
 		void this.pushSlashCommands();
 	}
 
-	async newChat(fresh = false, wiki = false): Promise<boolean> {
+	async newChat(fresh = false, wiki = false, manager?: SessionManager): Promise<boolean> {
 		if (this.restartingSession) { this.emitNotice("warning", "当前会话正在重启，请稍后重试。"); return false; }
 		if (this.conv.tree?.busy) { this.emitNotice("warning", "等待当前切换完成。"); return false; }
 		if (this.creatingConversation) return false;
 		this.creatingConversation = true;
 		const previous = this.activeId;
-		try { await this.createChat(fresh, wiki); return this.activeId !== previous; }
+		try {
+			if (wiki && manager) {
+				const existing = [...this.convs.values()].find(conv => conv.wiki && conv.session.sessionManager.getSessionId() === manager.getSessionId());
+				if (existing) { await this.switchConversation(existing.id); return this.activeId === existing.id; }
+			}
+			await this.createChat(fresh, wiki, manager);
+			return this.activeId !== previous;
+		}
 		finally { this.creatingConversation = false; }
 	}
 
-	private async createChat(fresh: boolean, wiki = false): Promise<void> {
+	private async createChat(fresh: boolean, wiki = false, manager?: SessionManager): Promise<void> {
 		this.invalidateLists();
 		if (this.quiesceBlocked()) return;
 		// Reuse an already-open blank conversation instead of piling up new ones
@@ -2113,10 +2130,19 @@ export class ClientSession {
 				return;
 			}
 		}
-		// Wiki opens a fresh session for each document. Retire the outgoing idle
-		// WIKI runtime after success; temporary Wiki history is discarded with it.
+		// Explicit Wiki new/open retires the outgoing idle runtime after success;
+		// its native transcript survives in the independent Wiki history directory.
 		// A normal conversation must survive: exiting Wiki mode switches back to
 		// the conversation that was active when the user entered.
+		if (active?.wiki) {
+			const manager = active.session.sessionManager;
+			const path = this.wikiChats.settings(this.cwd, manager.getSessionId()).documentPath;
+			if (path && active.session.messages.length > 0) this.wikiBlankDocuments.delete(`${this.cwd}\0${path}`);
+			else if (path) {
+				this.wikiBlankDocuments.set(`${this.cwd}\0${path}`, manager);
+				if (this.wikiBlankDocuments.size > 32) this.wikiBlankDocuments.delete(this.wikiBlankDocuments.keys().next().value!);
+			}
+		}
 		const replaceActive = fresh && active && active.wiki && !active.session.isStreaming && active.terminals.list().length === 0 ? active : null;
 		// Cap is per project — conversations of other projects keep their own
 		// lists and don't consume this project's slots.
@@ -2148,7 +2174,7 @@ export class ClientSession {
 				{
 					cwd: this.cwd,
 					agentDir: this.agentDir,
-					sessionManager: wiki ? SessionManager.inMemory(this.cwd) : SessionManager.create(this.cwd),
+					sessionManager: manager ?? (wiki ? SessionManager.create(this.cwd, this.wikiChats.directory(this.cwd)) : SessionManager.create(this.cwd)),
 				},
 			);
 			const conv = this.makeConversation(runtime, conversationId, terminals);
@@ -2240,6 +2266,16 @@ export class ClientSession {
 	/** Remove a conversation from the running list and free its runtime. The
 	 *  session stays persisted on disk, so it remains recoverable from the
 	 *  history list. Never removes the active conversation. */
+	async retireWikiSession(id: string): Promise<void> {
+		if (this.wikiSessionBusy(id)) throw new Error("Wiki conversation has running tasks or terminals");
+		for (const conv of [...this.convs.values()]) {
+			if (conv.wiki && conv.session.sessionManager.getSessionId() === id) {
+				if (conv.id === this.activeId) throw new Error("Wiki conversation is active");
+				await this.removeConversation(conv.id);
+			}
+		}
+	}
+
 	private removeConversation(id: string): Promise<void> {
 		const conv = this.convs.get(id);
 		if (!conv || id === this.activeId) return Promise.resolve();
@@ -3129,6 +3165,15 @@ export class AgentService {
 		}
 		await Promise.all(evicted.map((cs) => cs.dispose().catch(() => {})));
 		return evicted.length;
+	}
+
+	async prepareWikiSession(cwd: string, id: string, requester: string): Promise<void> {
+		for (const [clientId, cs] of this.clients) {
+			if (clientId === requester || !cs.ownsWikiSession(id)) continue;
+			if (cs.connected || cs.wikiSessionBusy(id)) throw new Error("Wiki conversation is open in another window");
+			this.clients.delete(clientId);
+			await cs.dispose();
+		}
 	}
 
 	/** Get or create the session for a client, racing attach calls safely. */

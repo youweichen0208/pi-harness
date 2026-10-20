@@ -76,7 +76,7 @@ try {
 	await page.locator('.changes-line mark').first().waitFor();
 	assert.equal(await page.locator('.change-summary-file.selected').count(),1);
 	await page.locator('.app.left-collapsed').waitFor();
-	let box=await page.locator('.changes-panel').boundingBox(); assert.equal(box.x,600); assert.equal(box.width,840);
+	let box=await page.locator('.changes-panel').boundingBox(); assert.equal(box.x,656); assert.equal(box.width,784);
 	await page.locator('.changes-panel').getByRole('button',{name:'文件列表',exact:true}).click();
 	assert.equal(await page.locator('.changes-files .selected').count(),1);
 	await page.getByRole('button',{name:'整个分支',exact:true}).click();

@@ -9,8 +9,8 @@ import type { CurrentFileContext, ReadCurrentFile, SaveCurrentFile } from "../cu
 import { mergeCurrentFile } from "../current-file";
 import { randomUuid } from "../uuid";
 import { memo, useLayoutEffect, useEffect, useRef, useState } from "react";
-import { FiCornerUpLeft, FiPlus, FiSquare, FiPaperclip, FiArrowUp } from "react-icons/fi";
-import type { ClientMessage, PromptAttachment, ServerMessage, ModelInfo, SlashCommandInfo, UiMessage, UiState } from "../types";
+import { FiCornerUpLeft, FiPlus, FiPaperclip, FiArrowUp } from "react-icons/fi";
+import type { ClientMessage, WikiProjectReference, PromptAttachment, ServerMessage, ModelInfo, SlashCommandInfo, UiMessage, UiState } from "../types";
 import { useT, useI18n } from "../i18n";
 import { isRasterImage } from "../image-paste";
 
@@ -24,9 +24,15 @@ import { composeAnswers, isAnswered } from "../question-cards";
  *  by the server when the persisted set is unchanged), so the shallow-compared
  *  memo() below skips this input bar on every text delta. */
 interface ChatInputProps {
+	wikiReferences?: string[];
+	wikiProject?: WikiProjectReference | null;
+	onRemoveWikiProject?: () => void;
+	onCurrentFileIncluded?: (included: boolean) => void;
+	onRemoveWikiReference?: (path: string) => void;
+	draftStorageKey?: string;
 	databaseReferences?: { id: string; name: string; version: string }[];
 	onRemoveDatabase?: (id: string) => void;
-	beforeSend?: () => Promise<boolean>;
+	beforeSend?: (project?: WikiProjectReference | null) => Promise<boolean>;
 	cwd: string;
 	referenceRequest?: ChatReferenceRequest | null;
 	active?: boolean;
@@ -98,7 +104,7 @@ interface ChatInputProps {
 }
 
 export const ChatInput = memo(function ChatInput({
-	active = true, cwd, referenceRequest, beforeSend, databaseReferences = [], onRemoveDatabase,
+	active = true, cwd, referenceRequest, beforeSend, wikiReferences, wikiProject, onRemoveWikiProject, onCurrentFileIncluded, onRemoveWikiReference, draftStorageKey, databaseReferences = [], onRemoveDatabase,
 	currentFile, contextReader, contextSaver,
 	stats,
 	ready, promptResult, verifying, pendingCount = 0, queue, workingStatus,
@@ -124,7 +130,8 @@ export const ChatInput = memo(function ChatInput({
 	// Per-conversation chip dismissal: closing the chip hides it until the
 	// preview opens a (different) file — key is the open instance id.
 	const [dismissed, setDismissed] = useState<Record<string, string>>({});
-	const autoFile = currentFile && dismissed[activeConversationId] !== currentFile.id ? currentFile : null;
+	const autoFile = currentFile && (wikiReferences !== undefined || dismissed[activeConversationId] !== currentFile.id) ? currentFile : null;
+	useEffect(() => { onCurrentFileIncluded?.(!!autoFile); }, [!!autoFile, onCurrentFileIncluded]);
 	const preparing = useRef(false);
 	const owner = useRef({ cwd, activeConversationId });
 	owner.current = { cwd, activeConversationId };
@@ -137,7 +144,11 @@ export const ChatInput = memo(function ChatInput({
 		locale === "en" && c.argumentHintEn ? c.argumentHintEn : (c.argumentHint ?? "");
 	const drafts = useRef(new Map<string, string>());
 	const draftKey = useRef(activeConversationId);
-	const [text, setText] = useState("");
+	const [text, setText] = useState(() => { try { return draftStorageKey ? sessionStorage.getItem(draftStorageKey) ?? "" : ""; } catch { return ""; } });
+	useEffect(() => {
+		if (!draftStorageKey) return;
+		try { if (text) sessionStorage.setItem(draftStorageKey, text); else sessionStorage.removeItem(draftStorageKey); } catch { /* Optional draft persistence. */ }
+	}, [text, draftStorageKey]);
 	const [delivery, setDelivery] = useState<"steer" | "followUp">("steer");
 	const [deliveryOpen, setDeliveryOpen] = useState(false);
 	const [queueOpen, setQueueOpen] = useState(false);
@@ -150,6 +161,9 @@ export const ChatInput = memo(function ChatInput({
 	const queued = queue ? [...queue.steering.map(text => ({ text, steer: true })), ...queue.followUp.map(text => ({ text, steer: false }))] : [];
 
 	useLayoutEffect(() => {
+		// Wiki inputs are keyed by stable SDK session ID; runtime IDs may change
+		// while reopening that same session. Keep the persisted draft intact.
+		if (draftStorageKey) { draftKey.current = activeConversationId; return; }
 		if (draftKey.current !== activeConversationId) {
 			if (text) drafts.current.set(draftKey.current, text);
 			else drafts.current.delete(draftKey.current);
@@ -157,7 +171,7 @@ export const ChatInput = memo(function ChatInput({
 			setText(drafts.current.get(activeConversationId) ?? "");
 			drafts.current.delete(activeConversationId);
 		}
-	}, [activeConversationId, text]);
+	}, [activeConversationId, text, draftStorageKey]);
 	useExtensionEditor(activeConversationId, active, setText);
 	useEffect(() => {
 		const pending = pendingSubmit.current;
@@ -345,8 +359,8 @@ export const ChatInput = memo(function ChatInput({
 		const ta = taRef.current;
 		if (!ta) return;
 		ta.style.height = "auto"; // natural height first, then clamp
-		const capped = ta.scrollHeight > 220;
-		ta.style.height = `${Math.min(ta.scrollHeight, 220)}px`;
+		const capped = ta.scrollHeight > 180;
+		ta.style.height = `${Math.min(ta.scrollHeight, 180)}px`;
 		ta.style.overflowY = capped ? "auto" : "hidden";
 	}, [text]);
 
@@ -393,8 +407,11 @@ export const ChatInput = memo(function ChatInput({
 		// in agent-service.ts. Follow-up delivery passes queue=true,
 		// which the server delivers as followUp instead — the prompt is sent
 		// only after the WHOLE run finishes ("AI 生成结束才发送").
+		const selectedProject = wikiProject;
+		const selectedReferences = wikiReferences ? [...wikiReferences] : [];
 		const deliverPrompt = () => {
 			let outgoing: PromptAttachment[] = attachments.map(({ key, isDir, ...attachment }) => attachment);
+			for (const path of selectedReferences) if (!outgoing.some(item => item.path === path && item.mode !== "lines")) outgoing.push({ path, name: path.split("/").at(-1) || path, mode: "reference" });
 			// 当前文件 chip：发送时才取编辑器快照（含未保存修改），并取代同路径的
 			// 整文件附件 — chip 始终只指向当前打开的文件，不随历史累积。
 			if (autoFile && !extensionCommand) {
@@ -410,7 +427,9 @@ export const ChatInput = memo(function ChatInput({
 				outgoing = mergeCurrentFile(outgoing, snapshot);
 			}
 			const requestId = randomUuid();
-			if (send({ type: "prompt", text: trimmed, queue, requestId, attachments: outgoing })) {
+			if (send({ type: "prompt", text: selectedProject && !trimmed.startsWith("/") ? `${trimmed}
+
+${t("wikiProjectPrompt", { workspace: selectedProject.workspaceName, path: JSON.stringify(selectedProject.path) })}` : trimmed, queue, requestId, attachments: outgoing })) {
 				pendingSubmit.current = { id: requestId, conversation: activeConversationId, text, queued: streaming, attachments };
 			}
 		};
@@ -418,7 +437,7 @@ export const ChatInput = memo(function ChatInput({
 			if (!beforeSend) { deliverPrompt(); return; }
 			if (preparing.current) return;
 			preparing.current = true;
-			void beforeSend().then(ok => {
+			void beforeSend(selectedProject).then(ok => {
 				if (ok && owner.current.cwd === cwd && owner.current.activeConversationId === activeConversationId) deliverPrompt();
 			}).catch(error => onNotice("error", (error as Error).message)).finally(() => { preparing.current = false; });
 		};
@@ -491,10 +510,10 @@ export const ChatInput = memo(function ChatInput({
 	// Both states use the same compact controls in the bottom toolbar.
 	const renderActions = () => (
 		<div className="inputbox-actions">
-			{streaming && <button type="button" className="btn composer-action stop" title={`${t("stopTask")} · Esc`} aria-label={t("stopTask")} onClick={stop}><FiSquare aria-hidden="true" /><span>{t("stop")}</span></button>}
+			{streaming && <button type="button" className="btn composer-action stop" title={`${t("stopTask")} · Esc`} aria-label={t("stopTask")} onClick={stop}><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="3" /></svg></button>}
 			<button type="button" className="btn composer-action send" title={t("sendTip")} aria-label={t("sendTip")}
 				disabled={!connected || verifying || (!text.trim() && !attachments.some(a => a.imageData || a.fileData))}
-				onClick={() => submit(streaming && delivery === "followUp")}><FiArrowUp aria-hidden="true" /></button>
+				onClick={() => submit(streaming && delivery === "followUp")}><FiArrowUp strokeWidth={3} aria-hidden="true" /></button>
 		</div>
 	);
 
@@ -613,6 +632,8 @@ export const ChatInput = memo(function ChatInput({
 				<button type="button" className={`question-accept${accepted ? " accepted" : ""}`} onClick={() => acceptRecommended(answering.key)}>{t(accepted ? "questionAcceptedAll" : "questionAcceptAll")}</button>
 				<button type="button" className="question-send" disabled={!connected || answeredCount === 0} onClick={() => submit(false, composeAnswers(answering.questions, questionState.answers, text, questionState.custom))}>{t("questionSend")}</button>
 			</div>}
+			{wikiProject && <div className="wiki-reference-chips"><button title={wikiProject.path} onClick={onRemoveWikiProject}><span>{wikiProject.workspaceName} / {wikiProject.name}</span><span aria-hidden="true">×</span></button></div>}
+			{wikiReferences && wikiReferences.length > 0 && <div className="wiki-reference-chips">{wikiReferences.filter(path => path !== autoFile?.path).map(path => <button key={path} title={path} aria-label={`${t("removeAttachment")} ${path}`} onClick={() => onRemoveWikiReference?.(path)}><span>{path.split("/").at(-1)}</span><span aria-hidden="true">×</span></button>)}</div>}
 			<div className={`inputbox${text.length > 0 ? " has-draft" : ""}`}>
 			{promptResult?.commandExecuted && promptResult.conversationId === activeConversationId && attachments.length > 0 && <div role="status">{t("commandAttachmentsRetained")}</div>}
 			{(attachments.length > 0 || databaseReferences.length > 0 || autoFile) && (
@@ -620,8 +641,8 @@ export const ChatInput = memo(function ChatInput({
 					{databaseReferences.map(db => <span key={db.id} className="attach-chip reference" title={t("dbAttachmentHint")}>◫ {db.name}<button type="button" className="attach-remove" aria-label={`${t("dbRevoke")} ${db.name}`} onClick={() => onRemoveDatabase?.(db.id)}>×</button></span>)}
 					{autoFile && <span className="attach-chip current-file" title={`${autoFile.cwd}/${autoFile.path}`}>
 						@{autoFile.name}{autoFile.dirty ? ` · ${t("currentFileUnsaved")}` : ""}
-						<button type="button" className="attach-remove" title={t("removeAttachment")}
-							onClick={() => setDismissed((previous) => ({ ...previous, [activeConversationId]: autoFile.id }))}>×</button>
+						{wikiReferences === undefined && <button type="button" className="attach-remove" title={t("removeAttachment")}
+							onClick={() => setDismissed((previous) => ({ ...previous, [activeConversationId]: autoFile.id }))}>×</button>}
 					</span>}
 					{attachments.map((a) => (
 						<span
@@ -708,8 +729,8 @@ export const ChatInput = memo(function ChatInput({
 														}
 														disabled={!connected}
 														onChange={(e) => {
-																setText(e.target.value);
-																updateCompletions(e.target.value);
+																setText(e.currentTarget.value);
+																updateCompletions(e.currentTarget.value);
 															}}
 														onKeyDown={onKeyDown}
 														onPaste={onPaste}

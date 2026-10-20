@@ -28,6 +28,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const WIN32_KNOWN_ENV_FAIL = new Set(["terminal-smoke-test", "restart-handoff-test"]);
 
 const ALL = [
+	"notes-test",
 	"project-workspaces-test",
 	"shared-workspaces-test",
 	"builtin-extensions-test",
@@ -69,6 +70,7 @@ const ALL = [
 	"code-search-ui-test",
 	"file-editor-protocol-test",
 	"wiki-protocol-test",
+	"wiki-assistant-test",
 	"wiki-thinking-level-test",
 	"wiki-bootstrap-model-test",
 	"wiki-modal-browser-test",

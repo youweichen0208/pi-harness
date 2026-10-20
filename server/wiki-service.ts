@@ -33,7 +33,7 @@ function skipTraversalDirectory(parent: string, name: string) {
 const hash = (data: Buffer | string) => createHash("sha256").update(data).digest("hex");
 type Snapshot = { files: Map<string, Buffer>; skipped: string[]; limited?: boolean };
 export class WikiConflictError extends Error {}
-type RevisionAttribution = Pick<WikiRevision, "conversationId" | "requestId" | "assistantTimestamp">;
+type RevisionAttribution = Pick<WikiRevision, "conversationId" | "sessionId" | "requestId" | "assistantTimestamp">;
 type StoredRevision = WikiRevision & { blobs: Record<string, { before: string | null; after: string | null }> };
 
 /** Resolve real paths, including every existing parent of a new file. */

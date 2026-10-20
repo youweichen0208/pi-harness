@@ -50,6 +50,7 @@ let mainWindow = null;
 /** Wiki 独立窗口（ADR-0003）：同一时刻只保留一个，重复进入导航到它。 */
 /** @type {BrowserWindow | null} */
 let wikiWindow = null;
+const assistantWindows = new Map();
 /** 全部 app 窗口（主窗口 + wiki 窗口），IPC 归属校验用。 */
 /** @type {Set<BrowserWindow>} */
 const windows = new Set();
@@ -258,7 +259,7 @@ function windowShellOptions(overrides = {}) {
 		minWidth: 800,
 		minHeight: 600,
 		title: "pi-harness",
-		backgroundColor: "#FBF9F6",
+		backgroundColor: "#FFFFFF",
 		show: false,
 		...(process.platform === "darwin"
 			? { titleBarStyle: "hidden", trafficLightPosition: { x: 18, y: 17 } }
@@ -306,13 +307,39 @@ function wireAppWindow(win, { hideOnClose }) {
 		else isQuitting = false;
 	});
 
-	win.webContents.setWindowOpenHandler(({ url: target }) => {
+	win.webContents.setWindowOpenHandler(({ url: target, frameName }) => {
+		if (win === wikiWindow && target === "about:blank" && frameName === "pi-wiki-assistant") {
+			return { action: "allow", overrideBrowserWindowOptions: {
+				width: 375, height: 820, minWidth: 360, minHeight: 420,
+				frame: false, title: "问 pi", autoHideMenuBar: true,
+				webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true, backgroundThrottling: false },
+			} };
+		}
+
 		if (isWikiWindowUrl(target)) {
 			openWikiAppWindow(target);
 			return { action: "deny" };
 		}
 		openExternal(target);
 		return { action: "deny" };
+	});
+	win.webContents.on("did-start-navigation", (_event, _url, inPlace, mainFrame) => {
+		if (mainFrame && !inPlace) {
+			const child = assistantWindows.get(win);
+			if (child && !child.isDestroyed()) child.destroy();
+		}
+	});
+	win.webContents.on("did-create-window", child => {
+		// The blank assistant only hosts DOM owned by its Wiki opener.
+		assistantWindows.set(win, child);
+		child.on("close", event => {
+			if (!win.isDestroyed() && !isQuitting) { event.preventDefault(); child.hide(); win.webContents.send("pi-assistant-hidden"); }
+		});
+		child.webContents.setWindowOpenHandler(({ url }) => { openExternal(url); return { action: "deny" }; });
+		child.webContents.on("will-navigate", event => event.preventDefault());
+		const dispose = () => { if (!child.isDestroyed()) child.destroy(); };
+		win.once("closed", dispose);
+		child.once("closed", () => { assistantWindows.delete(win); win.removeListener("closed", dispose); });
 	});
 	const guardNavigation = (event, target) => {
 		try { if (new URL(target).origin === serverOrigin()) return; } catch { /* fall through */ }
@@ -399,6 +426,14 @@ function windowOf(event) {
 	const win = BrowserWindow.fromWebContents(event.sender);
 	return win && windows.has(win) ? win : null;
 }
+
+ipcMain.handle("pi-assistant-visibility", (event, visible) => {
+	const owner = windowOf(event);
+	if (!owner || event.senderFrame !== owner.webContents.mainFrame) return;
+	const child = assistantWindows.get(owner);
+	if (!child || child.isDestroyed()) return;
+	if (visible === true) { child.show(); child.focus(); } else child.hide();
+});
 
 ipcMain.on("pi-window-close-ready", (event, ready) => {
 	const win = windowOf(event);

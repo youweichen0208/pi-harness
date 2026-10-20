@@ -27,6 +27,8 @@ try {
 	assert(await portUp(port));
 	browser = await chromium.launch({ executablePath: CHROME_PATH });
 	const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+	const errors = [];
+	page.on('pageerror', error => errors.push(error.message));
 	const events = [];
 	const creates = [];
 	let activeConversationId;
@@ -48,8 +50,10 @@ try {
 			route.send(JSON.stringify(message));
 		});
 	});
+	if (process.argv.includes('--missing-chunk')) await page.route('**/assets/TerminalPanel-*.js', route => route.fulfill({status:404,body:'Missing previous build asset'}));
 	await page.goto(`http://127.0.0.1:${port}`);
-	await page.locator('.session-item.active').waitFor();
+	await page.locator('.conn-dot.ok').first().waitFor({state:'attached'});
+	if (!process.argv.includes('--fresh')) await page.locator('.session-item.active').waitFor();
 	if (!process.argv.includes('--fresh')) {
 		const previousConversationId = activeConversationId;
 		const target = (await page.locator('.session-item.active').textContent()).includes('TERMINAL_HISTORY_B') ? 'A' : 'B';
@@ -57,8 +61,22 @@ try {
 		await page.locator('.msg-user', { hasText: `TERMINAL_HISTORY_${target}` }).waitFor();
 		assert.notEqual(activeConversationId, previousConversationId, 'switch conversations within the same project before opening a terminal');
 	}
+	if (process.argv.includes('--missing-chunk')) await page.locator('.inputbox textarea').fill('Keep this unsent draft');
 	await page.getByRole('tab', { name: '终端', exact: true }).click();
-	await page.locator('.term-xterm:not(.hidden) .xterm').waitFor();
+	if (process.argv.includes('--missing-chunk')) {
+		await page.locator('.terminal-load-error').waitFor({timeout:5000});
+		assert(await page.getByRole('tab',{name:'终端',exact:true}).isVisible(), 'application shell survives a missing terminal chunk');
+		await page.getByRole('button',{name:'返回对话',exact:true}).click();
+		assert.equal(await page.locator('.inputbox textarea').inputValue(), 'Keep this unsent draft');
+		await page.getByRole('tab',{name:'终端',exact:true}).click();
+		await page.unroute('**/assets/TerminalPanel-*.js');
+		await page.getByRole('button',{name:'刷新页面',exact:true}).click();
+		await page.locator('.conn-dot.ok').first().waitFor({state:'attached'});
+		await page.getByRole('tab',{name:'终端',exact:true}).click();
+		console.log('PASS missing terminal chunk preserves shell/draft and offers recovery');
+	}
+	await page.locator('.term-xterm:not(.hidden) .xterm').waitFor({ timeout: 5000 }).catch(error => { throw new Error(`Terminal view failed to mount: ${errors.join('; ') || error.message}`); });
+	assert.deepEqual(errors, [], 'opening Terminal must not crash the application');
 	try {
 		await page.waitForFunction(() => document.querySelector('.term-xterm:not(.hidden)')?.textContent.includes('PI_TERMINAL_READY'), undefined, { timeout: 5000 });
 	} catch {

@@ -106,6 +106,7 @@ export class ClientStateStore {
 	private cache: Record<string, ClientState> | null = null;
 
 	constructor(private filePath: string) {}
+	get dataDir(): string { return dirname(this.filePath); }
 
 	private load(): Record<string, ClientState> {
 		if (this.cache) return this.cache;

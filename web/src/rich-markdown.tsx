@@ -1,3 +1,4 @@
+import { cleanRichHtml, cleanStyle, controlledBlock, canonicalDisclosures } from "./rich-content";
 import { remarkTextHighlight, textHighlightColor } from "./remark-text-highlight";
 import { richCodeText } from "./rich-code-text";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -42,7 +43,7 @@ function codeFenceMarkdown(node: HTMLElement): string {
 const converter = new TurndownService({
 	headingStyle: "atx", codeBlockStyle: "fenced", bulletListMarker: "-",
 	blankReplacement: (_content, node) => {
-		if (node.nodeName === "BLOCKQUOTE" && node.hasAttribute("data-rich-highlight")) return "\n\n> [!NOTE]\n> \n\n";
+		if (node.nodeName === "BLOCKQUOTE" && node.hasAttribute("data-rich-highlight")) return `\n\n> [!${(node.getAttribute("data-rich-highlight") || "note").toUpperCase()}]\n> \n\n`;
 		if (node.nodeName === "PRE") return codeFenceMarkdown(node);
 		const fences = Array.from(node.querySelectorAll("pre"));
 		if (fences.length) return fences.map(codeFenceMarkdown).join("\n\n");
@@ -59,7 +60,16 @@ converter.addRule("textHighlight", {
 });
 converter.addRule("highlightBlock", {
 	filter: (node) => node.nodeName === "BLOCKQUOTE" && node.hasAttribute("data-rich-highlight"),
-	replacement: (content) => "\n\n> [!NOTE]\n" + content.trim().split("\n").map((line) => "> " + line).join("\n") + "\n\n",
+	replacement: (content, node) => `\n\n> [!${(node.getAttribute("data-rich-highlight") || "note").toUpperCase()}]\n` + content.trim().split("\n").map((line) => "> " + line).join("\n") + "\n\n",
+});
+converter.addRule("controlledFormat", {
+	filter: node => ((["UL", "OL"].includes(node.nodeName) && !!node.querySelector("li[style]")) || (node.nodeName === "TABLE" && [...node.querySelectorAll<HTMLElement>("td,th")].some(cell => !!cell.style.lineHeight || !!cell.style.fontSize))) || ["DETAILS", "FIGURE", "U", "SUB", "SUP"].includes(node.nodeName) || (!!cleanStyle((node as HTMLElement).style) && !["TH", "TD"].includes(node.nodeName) && !(node.nodeName === "SPAN" && textHighlightColor((node as HTMLElement).style.backgroundColor) && (node as HTMLElement).style.length === 1)),
+	replacement: (_content, node) => {
+		const clone = node.cloneNode(true) as HTMLElement;
+		if (["P", "DIV", "UL", "OL", "TABLE", "H1", "H2", "H3", "H4", "H5", "H6"].includes(clone.tagName)) clone.dataset.richFormat = "";
+		const html = cleanRichHtml(clone.outerHTML) ?? "";
+		return ["DETAILS", "FIGURE", "P", "DIV", "UL", "OL", "TABLE", "H1", "H2", "H3", "H4", "H5", "H6"].includes(clone.tagName) ? `\n\n${html}\n\n` : html;
+	},
 });
 converter.addRule("taskCheckbox", {
 	filter: (node) => node.nodeName === "INPUT" && node.getAttribute("type") === "checkbox",
@@ -104,6 +114,60 @@ function needsSource(node: RootContent, nested = false): boolean {
 	if (node.type === "html") return !nested;
 	if (["definition", "footnoteDefinition", "footnoteReference"].includes(node.type)) return true;
 	return "children" in node && node.children.some((child) => needsSource(child as RootContent, true));
+}
+
+/** Controlled blocks can also occur inside a list, quote or disclosure body. */
+function controlledBlocks() {
+	return (tree: Root) => {
+		const visit = (node: Root | RootContent) => {
+			if (!("children" in node)) return;
+			for (let i = 0; i < node.children.length; i++) {
+				const child = node.children[i];
+				if (child.type === "html") {
+					const html = controlledBlock(child.value);
+					if (html !== null) {
+						const parsed = new DOMParser().parseFromString(html, "text/html");
+						const convert = (dom: Node): import("hast").ElementContent => {
+							if (!(dom instanceof Element)) return { type: "text", value: dom.textContent ?? "" };
+							return { type: "element", tagName: dom.tagName.toLowerCase(), properties: Object.fromEntries([...dom.attributes].map(a => [a.name, a.value])), children: [...dom.childNodes].map(convert) };
+						};
+						node.children[i] = { type: "paragraph", children: [], data: { hName: "div", hChildren: [...parsed.body.childNodes].map(convert) } };
+					}
+				} else visit(child as RootContent);
+			}
+		};
+		visit(tree);
+	};
+}
+
+interface InlineTree { type: string; value?: string; children?: InlineTree[]; }
+function controlledInline() {
+	return (tree: Root) => {
+		const visit = (node: InlineTree) => {
+			if (!node.children) return;
+			for (let i = 0; i < node.children.length; i++) {
+				const start = node.children[i];
+				// Styled spans serialize their nested emphasis as safe HTML, too.
+				const match = start.type === "html" && start.value?.match(/^<(span|u|sub|sup|b|strong|i|em|s|del|mark)\b[^>]*>$/i);
+				if (!match) continue;
+				let depth = 1, end = i + 1;
+				for (; end < node.children.length; end++) {
+					const item = node.children[end];
+					if (item.type !== "html") continue;
+					if (new RegExp(`^<${match[1]}\\b`, "i").test(item.value ?? "")) depth++;
+					if (item.value?.toLowerCase() === `</${match[1].toLowerCase()}>` && --depth === 0) break;
+				}
+				if (end === node.children.length) continue;
+				const safe = cleanRichHtml(start.value + `</${match[1]}>`);
+				if (safe === null) continue;
+				const element = new DOMParser().parseFromString(safe, "text/html").body.firstElementChild;
+				const replacement = { type: "emphasis", children: node.children.slice(i + 1, end), data: { hName: match[1].toLowerCase(), hProperties: { style: element?.getAttribute("style") ?? "" } } };
+				node.children.splice(i, end - i + 1, replacement);
+			}
+			node.children.forEach(visit);
+		};
+		visit(tree);
+	};
 }
 
 /** Keep inline HTML literal and inert without downgrading its containing table/list. */
@@ -155,12 +219,13 @@ export function prepareRichDocument(source: string, wiki = false): RichDocument 
 			continue;
 		}
 		const raw = source.slice(start, stop);
-		const protectedBlock = needsSource(node);
+		const controlled = node.type === "html" ? controlledBlock(raw) : null;
+		const protectedBlock = controlled === null && needsSource(node);
 		const hidden = properties.some(range => range.start === start && range.end === stop) || (!!metadata && firstHeading && node.type === "heading" && node.depth === 1 && metadata.readingBody !== metadata.body);
 		if (node.type === "heading" && node.depth === 1) firstHeading = false;
 		blocks.push({
 			raw, prefix: source.slice(end, start), protected: protectedBlock, hidden,
-			html: protectedBlock ? "" : renderToStaticMarkup(<ReactMarkdown remarkPlugins={[remarkGfm, remarkTextHighlight, preserveInlineHtml, remarkHighlightBlock]} rehypePlugins={wiki ? [] : [rehypeHighlight]}>{(wiki ? renderWikiLinks(raw) : raw) + "\n\n" + definitions}</ReactMarkdown>),
+			html: controlled ?? (protectedBlock ? "" : renderToStaticMarkup(<ReactMarkdown remarkPlugins={[remarkGfm, remarkTextHighlight, controlledBlocks, controlledInline, preserveInlineHtml, remarkHighlightBlock]} rehypePlugins={wiki ? [] : [rehypeHighlight]}>{(wiki ? renderWikiLinks(raw) : raw) + "\n\n" + definitions}</ReactMarkdown>)),
 		});
 		end = stop;
 	}
@@ -232,6 +297,13 @@ export function mountRichDocument(root: HTMLElement, document: RichDocument, lab
 		} else {
 			// HTML is produced by ReactMarkdown with its default URL/HTML safety policy.
 			wrapper.innerHTML = block.html;
+			// Browser table navigation needs editable landing blocks, including after reload.
+			if (wrapper.firstElementChild?.tagName === "TABLE") {
+				const before = root.ownerDocument.createElement("p"); before.className = "rich-table-boundary"; before.append(root.ownerDocument.createElement("br")); wrapper.prepend(before);
+			}
+			if (wrapper.lastElementChild?.tagName === "TABLE") {
+				const after = root.ownerDocument.createElement("p"); after.className = "rich-table-boundary"; after.append(root.ownerDocument.createElement("br")); wrapper.append(after);
+			}
 		}
 		wrapper.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach((input) => { input.disabled = false; });
 		root.append(wrapper);
@@ -244,6 +316,12 @@ export function mountRichDocument(root: HTMLElement, document: RichDocument, lab
 function serializeElement(node: Node, root: HTMLElement): string {
 	const holder = root.ownerDocument.createElement("div");
 	holder.append(node.cloneNode(true));
+	// Chromium indent produces a sibling UL inside UL. Normalize only the serialization
+	// clone, keeping the native editing DOM/undo history intact.
+	holder.querySelectorAll("ul > ul, ul > ol, ol > ul, ol > ol").forEach(list => {
+		const previous = list.previousElementSibling;
+		if (previous?.tagName === "LI") previous.append(list);
+	});
 	// ReactMarkdown emits CSS alignment; Turndown's GFM rules read HTML align.
 	holder.querySelectorAll<HTMLElement>("th, td").forEach((cell) => {
 		const alignment = cell.style.textAlign;
@@ -256,7 +334,23 @@ function serializeElement(node: Node, root: HTMLElement): string {
 export function readRichDocument(root: HTMLElement, document: RichDocument): string {
 	// Editor-only controls must never affect source preservation or saved Markdown.
 	root = root.cloneNode(true) as HTMLElement;
+	root.querySelectorAll("[data-table-selected]").forEach(table => table.removeAttribute("data-table-selected"));
+	root.querySelectorAll<HTMLElement>("[data-rich-tail]").forEach(paragraph => {
+		if (!paragraph.textContent && !paragraph.querySelector("img,table,pre,hr,input")) paragraph.remove();
+		else paragraph.removeAttribute("data-rich-tail");
+	});
+	root.querySelectorAll<HTMLElement>("pre:has(.wiki-code-gutter)").forEach(pre => {
+		pre.removeAttribute("data-wiki-code-folded");
+		pre.style.removeProperty("height");
+		if (!pre.getAttribute("style")) pre.removeAttribute("style");
+	});
 	root.querySelectorAll("[data-wiki-placeholder]").forEach(node => node.removeAttribute("data-wiki-placeholder"));
+	root.querySelectorAll<HTMLElement>("[data-rich-typing]").forEach(span => {
+		const walker = root.ownerDocument.createTreeWalker(span, NodeFilter.SHOW_TEXT);
+		let text: Node | null; while ((text = walker.nextNode())) text.textContent = text.textContent?.replace(/\u200b/g, "") ?? "";
+		span.removeAttribute("data-rich-typing"); if (!span.textContent && !span.querySelector("img,input,br")) span.remove();
+	});
+	canonicalDisclosures(root);
 	root.querySelectorAll("[data-rich-ui]").forEach((node) => node.remove());
 	root.querySelectorAll<HTMLImageElement>("img[data-rich-image-src]").forEach((img) => {
 		img.setAttribute("src", img.dataset.richImageSrc!);
@@ -280,7 +374,9 @@ export function readRichDocument(root: HTMLElement, document: RichDocument): str
 		const block = document.blocks[index];
 		if (block && !seen.has(index)) {
 			seen.add(index);
-			const unchanged = child instanceof HTMLElement && child.tagName === "DIV" && child.innerHTML === block.html;
+			let baseline = block.html;
+			if (baseline.includes("data-rich-collapse")) { const holder = root.ownerDocument.createElement("div"); holder.innerHTML = baseline; canonicalDisclosures(holder); holder.querySelectorAll("[data-rich-ui]").forEach(el => el.remove()); baseline = holder.innerHTML; }
+			const unchanged = child instanceof HTMLElement && child.tagName === "DIV" && child.innerHTML === baseline;
 			const text = unchanged || block.protected ? block.raw : serializeElement(child, root);
 			parts.push((parts.length ? block.prefix || "\n\n" : block.prefix) + text);
 		} else if (child instanceof HTMLElement && child.hasAttribute("data-rich-toc")) {

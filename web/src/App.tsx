@@ -1,3 +1,5 @@
+import type { WikiProjectReference } from "./types";
+import { ModelThinking } from "./components/ModelThinking";
 import { FluidDrawer } from "./components/FluidDrawer";
 import { UiIcon } from "./components/UiIcon";
 import { DatabaseWorkbench } from "./components/DatabaseWorkbench";
@@ -39,6 +41,8 @@ import {
 import { useWorkspaceScm } from "./use-workspace-scm";
 import { TopBar } from "./components/TopBar";
 import { desktopAPI, flushWindowSaves } from "./desktop";
+import { useNotes } from "./use-notes";
+import { NotesList, NotesEditor } from "./components/Notes";
 import { LeftPanel } from "./components/LeftPanel";
 import { RightPanel } from "./components/RightPanel";
 import { MessageList } from "./components/MessageList";
@@ -48,6 +52,7 @@ import { LongThinkingStatus } from "./components/LongThinkingStatus";
 import type { CurrentFileContext, ReadCurrentFile, SaveCurrentFile } from "./current-file";
 
 import { FooterBar } from "./components/FooterBar";
+import { TerminalViewBoundary } from "./components/TerminalViewBoundary";
 import { Dialog } from "./components/Dialog";
 // 终端视图懒加载：xterm.js 体积大且只在切到终端时才需要，拆出主包
 const TerminalPanel = lazy(() =>
@@ -175,7 +180,7 @@ type PanelSide = "left" | "right" | "editor";
 const panelWidthKey = (side: PanelSide) => `pi-harness:${side}-panel-width`;
 function readPanelWidth(side: PanelSide): number {
 	const v = Number(localStorage.getItem(panelWidthKey(side)));
-	return Number.isFinite(v) && v >= PANEL_MIN && v <= PANEL_MAX ? v : side === "editor" ? 480 : side === "right" ? 420 : PANEL_DEFAULT;
+	return Number.isFinite(v) && v >= PANEL_MIN && v <= PANEL_MAX ? v : side === "editor" ? 480 : side === "right" ? 300 : PANEL_DEFAULT;
 }
 
 /** 面板与主区之间的拖拽分隔条：拖动改宽度，双击复位。 */
@@ -249,7 +254,7 @@ function ResizeHandle({
 			onPointerDown={onPointerDown}
 			onDoubleClick={() => {
 				if (onReset) { onReset(); return; }
-				const value = side === "editor" ? 480 : side === "right" ? 420 : PANEL_DEFAULT;
+				const value = side === "editor" ? 480 : side === "right" ? 300 : PANEL_DEFAULT;
 				onResize(value);
 				localStorage.setItem(panelWidthKey(side), String(value));
 			}}
@@ -360,10 +365,17 @@ export function App() {
 		window.addEventListener("pi-configure-radius", configure);
 		return () => window.removeEventListener("pi-configure-radius", configure);
 	}, [chat.state?.cwd, send]);
+	const [notesOpen, setNotesOpen] = useState(false);
+	const notes = useNotes(notesOpen, chat.status === "open");
 	const [view, setView] = useState<ViewName>(isWikiWindow ? "wiki" : "chat");
 	const [wikiFileRequest, setWikiFileRequest] = useState<{cwd:string;conversationId:string;path:string;token:string} | null>(null);
 	const [databaseOpen, setDatabaseOpen] = useState(false);
 	const [databaseReferences, setDatabaseReferences] = useState<{ id: string; name: string; version: string }[]>([]);
+	const [wikiCurrentIncluded, setWikiCurrentIncluded] = useState(false);
+	const [wikiReferences, setWikiReferences] = useState<string[]>([]);
+	const [wikiContextSession, setWikiContextSession] = useState("");
+	const wikiActionPending = useRef(false);
+	const [wikiProject, setWikiProject] = useState<WikiProjectReference | null>(null);
 	const [wikiChatHost, setWikiChatHost] = useState<HTMLElement | null>(null);
 	const [wikiChatOpen, setWikiChatOpen] = useState(() => {
 		try { return sessionStorage.getItem(WIKI_CHAT_KEY) === "true"; } catch { return false; }
@@ -378,7 +390,7 @@ export function App() {
 	const [chatReference, setChatReference] = useState<ChatReferenceRequest | null>(null);
 	const wikiCurrent = useRef({ cwd: chat.state?.cwd, conversationId: chat.activeConversationId });
 	wikiCurrent.current = { cwd: chat.state?.cwd, conversationId: chat.activeConversationId };
-	// —— Wiki mode（独立窗口 + 临时会话，ADR-0003）——
+	// —— Wiki mode（独立窗口 + 持久化 Wiki 会话，ADR-0003）——
 	// 进入 Wiki mode 前的普通对话锚点：退出时切回它（Q16）。
 	const wikiNormalAnchor = useRef<{ cwd: string; conversationId: string } | null>(null);
 	// 运行中任务的中断确认（Q13：取消 / 中断并继续）。
@@ -399,28 +411,34 @@ export function App() {
 		const waiters = settleWaiters.current;
 		if (waiters.length) { settleWaiters.current = []; waiters.forEach(item => item()); }
 	}, [conversationState?.isStreaming, conversationState?.conversationId]);
-	// 刷新恢复（Q15）：view + 文档 + 临时会话 ID，随标签页（clientId）存 sessionStorage。
-	const wikiPersist = useCallback((entry: { client: string | null; cwd: string; conversationId: string; path: string | null; anchor: { cwd: string; conversationId: string } | null } | null) => {
+	// 刷新恢复（Q15）：view + 文档 + 运行时会话 ID，随标签页（clientId）存 sessionStorage。
+	const wikiPersist = useCallback((entry: { client: string | null; cwd: string; conversationId: string; sessionId?: string; path: string | null; anchor: { cwd: string; conversationId: string } | null } | null) => {
 		try { if (entry) sessionStorage.setItem(WIKI_VIEW_KEY, JSON.stringify(entry)); else sessionStorage.removeItem(WIKI_VIEW_KEY); } catch { /* best effort */ }
 	}, []);
 	const readWikiPersist = useCallback(() => {
-		try { return JSON.parse(sessionStorage.getItem(WIKI_VIEW_KEY) ?? "null") as { client?: string | null; cwd: string; conversationId: string; path: string | null; anchor: { cwd: string; conversationId: string } | null } | null; } catch { return null; }
+		try { return JSON.parse(sessionStorage.getItem(WIKI_VIEW_KEY) ?? "null") as { client?: string | null; cwd: string; conversationId: string; sessionId?: string; path: string | null; anchor: { cwd: string; conversationId: string } | null } | null; } catch { return null; }
 	}, []);
-	/** 进入 / 切换文档：创建一个新的临时 Wiki 会话（不复用，切换即删），
+	/** 进入时恢复当前文档的独立 Wiki 历史，
 	 * 携带当前文档的当前文件 chip。调用方已处理运行中任务的确认。 */
 	const enterWiki = useCallback(async (path: string | null, reuseInitial = false) => {
 		const current = wikiCurrent.current;
 		// Destructured locals keep the non-undefined narrowing inside the closure below.
 		const wikiCwd = current.cwd, activeId = current.conversationId;
 		if (!wikiCwd || !activeId || switching) return false;
-		const create = (conversationId: string) => wikiRequest<{ conversationId: string }>(wikiCwd, "new-conversation", { path: path ?? undefined, conversationId });
+		const create = (conversationId: string) => wikiRequest<{ conversationId: string }>(wikiCwd, path ? "chat-document" : "new-conversation", { path: path ?? undefined, conversationId });
 		try {
 			// The exit/switch snapshot can lag behind a fast re-entry: the cached
 			// conversation id may already be gone server-side. One retry with the
 			// (by then settled) current id covers that race.
-			let result: { conversationId: string };
+			let result: { conversationId: string; sessionId?: string };
 			try {
-				result = reuseInitial ? { conversationId: activeId } : await create(current.conversationId);
+				result = wikiFileRequest?.cwd === wikiCwd && wikiFileRequest.conversationId === activeId && wikiFileRequest.path === (path ?? "")
+					? { conversationId: activeId, sessionId: chat.state?.sessionId }
+					: await wikiRequest<{ conversationId: string; sessionId: string }>(wikiCwd, path ? "chat-document" : "chat-resume", { conversationId: activeId, path: path ?? undefined }).catch(error => {
+						if (!reuseInitial || path) throw error;
+						pushNotice("warning", (error as Error).message);
+						return { conversationId: activeId, sessionId: chat.state?.sessionId };
+					});
 			} catch (error) {
 				if (!(error instanceof Error) || !/Conversation unavailable/.test(error.message)) throw error;
 				const refreshed = wikiCurrent.current;
@@ -433,8 +451,8 @@ export function App() {
 			wikiNormalAnchor.current = anchor;
 			try { localStorage.setItem(WIKI_WORKSPACE_KEY, JSON.stringify({ cwd: wikiCwd, path })); } catch { /* best effort */ }
 			setDatabaseOpen(false);
+			if (wikiFileRequest?.path !== (path ?? "") || wikiFileRequest?.cwd !== wikiCwd) setWikiProject(null);
 			setDrawer(null);
-			setWikiChatOpen(false);
 			// URL 即窗口契约（ADR-0003）：Wiki 独立窗口内切换文档时同步 doc 参数，
 			// 刷新的自举与恢复据此判断是否同一文档，复用窗口导航也以它为准。
 			if (isWikiWindow) {
@@ -446,14 +464,48 @@ export function App() {
 				} catch { /* replaceState 不可用（异常 origin 等）时跳过，仅影响刷新恢复 */ }
 			}
 			setWikiFileRequest({ cwd: wikiCwd, conversationId: result.conversationId, path: path ?? "", token: randomUuid() });
-			wikiPersist({ client: wikiWindowClient(), cwd: wikiCwd, conversationId: result.conversationId, path, anchor });
+			wikiPersist({ client: wikiWindowClient(), cwd: wikiCwd, conversationId: result.conversationId, sessionId: result.sessionId, path, anchor });
 			setView("wiki");
 			return true;
 		} catch (e) { pushNotice("error", (e as Error).message); return false; }
-	}, [switching, view, wikiFileRequest, pushNotice, wikiPersist]);
+	}, [switching, view, wikiFileRequest, pushNotice, wikiPersist, chat.state?.sessionId]);
+	useEffect(() => {
+		if (!wikiFileRequest || !chat.state?.wiki || chat.activeConversationId !== wikiFileRequest.conversationId) return;
+		let alive = true;
+		setWikiContextSession(""); setWikiReferences([]);
+		void wikiRequest<{ sessionId: string; references: string[] }>(wikiFileRequest.cwd, "chat-context", { conversationId: wikiFileRequest.conversationId }).then(result => {
+			if (alive) { setWikiReferences(result.references); setWikiContextSession(result.sessionId); }
+		}).catch(error => { if (alive) pushNotice("error", error.message); });
+		return () => { alive = false; };
+	}, [wikiFileRequest?.cwd, wikiFileRequest?.conversationId, chat.state?.sessionId, chat.activeConversationId]);
+	const updateWikiReferences = async (references: string[]) => {
+		const current = wikiRequestRef.current;
+		if (!current) return;
+		const result = await wikiRequest<{ references: string[] }>(current.cwd, "chat-references", { conversationId: current.conversationId, references });
+		if (wikiRequestRef.current?.conversationId === current.conversationId && wikiCurrent.current.cwd === current.cwd) setWikiReferences(result.references);
+	};
+	const wikiChatAction = (action: string, id?: string) => {
+		const current = wikiRequestRef.current;
+		if (!current) return;
+		const run = async () => {
+			if (wikiActionPending.current) return;
+			wikiActionPending.current = true;
+			try {
+				if (wikiRequestRef.current?.token !== current.token || !await wikiSave.current?.()) return;
+				if (wikiRequestRef.current?.token !== current.token) return;
+				const result = await wikiRequest<{ conversationId: string; sessionId: string }>(current.cwd, action, { conversationId: current.conversationId, id, path: current.path });
+				if (wikiCurrent.current.cwd !== current.cwd) return;
+				setWikiFileRequest({ ...current, conversationId: result.conversationId, token: randomUuid() });
+				wikiPersist({ client: wikiWindowClient(), cwd: current.cwd, conversationId: result.conversationId, sessionId: result.sessionId, path: current.path, anchor: wikiNormalAnchor.current });
+			} catch (error) { pushNotice("error", (error as Error).message); }
+			finally { wikiActionPending.current = false; }
+		};
+		if (conversationState?.isStreaming) setWikiInterrupt({ run: () => { void run(); } });
+		else void run();
+	};
 	const openWikiDocument = useCallback(async (path: string) => {
 		if (switching) return;
-		// 切换文档 = 丢弃当前临时 Wiki 会话（无条件，草稿纸语义）。
+		// 每篇文档恢复自己的 Wiki 会话，切换清除附加项目。
 		// 运行中的任务必须先经用户确认中断，等任务结束后才能切换。
 		if (view === "wiki" && wikiFileRequest && conversationState?.isStreaming && conversationState.conversationId === wikiFileRequest.conversationId) {
 			setWikiInterrupt({ run: () => { void enterWiki(path); } });
@@ -495,10 +547,10 @@ export function App() {
 	}, [wikiFolderPending, switching, chat.ready, chat.state?.cwd, chat.activeConversationId, switchError, wikiFileRequest, enterWiki, t]);
 
 	/** 退出 Wiki mode：脏草稿先保存；运行中任务确认中断；切回进入前的普通对话，
-	 * 服务端同时移除该临时 Wiki 会话（in-memory transcript 一并丢弃）。 */
+	 * 运行实例可回收，独立 Wiki 历史继续保留。 */
 	const exitWiki = useCallback(() => {
 		const leave = () => {
-			// Wiki 独立窗口：退出即关窗，客户端断开后由服务端逐出清理临时会话。
+			// Wiki 独立窗口：退出即关窗，客户端断开后由服务端逐出清理运行实例。
 			if (isWikiWindow) {
 				wikiPersist(null);
 				wikiNormalAnchor.current = null;
@@ -600,21 +652,25 @@ export function App() {
 		// 只有同一客户端（同一次窗口打开，URL client 参数未变）的记录才可恢复；
 		// 复用窗口导航到新文档换用了新客户端，必须全新进入。
 		const stored = readWikiPersist();
-		if (stored && stored.client === wikiWindowClient() && stored.cwd === cwd && (params.doc === null || params.doc === stored.path)) return; // 交由下方恢复 effect
+		if (stored && stored.sessionId === chat.state?.sessionId && stored.conversationId === chat.activeConversationId && stored.client === wikiWindowClient() && stored.cwd === cwd && (params.doc === null || params.doc === stored.path)) return; // 交由下方恢复 effect
 		wikiPersist(null);
 		void enterWiki(params.doc, chat.state?.wiki === true);
 	}, [chat.ready, switching, chat.state?.cwd, chat.state?.model?.provider, chat.state?.model?.id, chat.state?.thinkingLevel, chat.state?.availableThinkingLevels, chat.state?.wiki, chat.models, wikiCarryExpired, wikiFileRequest, enterWiki, rawSend, readWikiPersist, wikiPersist]);
-	// 页面刷新恢复（Q15）：会话还在服务端运行时重进 wiki mode 并挂回同一临时会话；
-	// 服务端重启导致会话丢失时清除记录，回到 normal 视图。
+	// 页面刷新恢复（Q15）：会话还在服务端运行时重进 wiki mode 并挂回同一运行实例；
+	// 服务端重启后按稳定 sessionId 判断归属，并经 chat-resume 恢复历史。
 	useEffect(() => {
 		if (wikiFileRequest || !chat.ready || !chat.state || switching) return;
 		const stored = readWikiPersist();
-		if (stored && (isWikiWindow ? stored.client === wikiWindowClient() : true) && chat.state.conversationId === stored.conversationId && chat.state.cwd === stored.cwd) {
+		if (stored && stored.sessionId === chat.state.sessionId && (isWikiWindow ? stored.client === wikiWindowClient() : true) && chat.state.conversationId === stored.conversationId && chat.state.cwd === stored.cwd) {
 			wikiNormalAnchor.current = stored.anchor ?? null;
 			setWikiFileRequest({ cwd: stored.cwd, conversationId: stored.conversationId, path: stored.path ?? "", token: randomUuid() });
 			setView("wiki");
 		} else if (stored) wikiPersist(null);
 	}, [chat.ready, chat.state, switching, wikiFileRequest]);
+	useEffect(() => {
+		if (!wikiFileRequest || wikiFileRequest.conversationId !== chat.activeConversationId || wikiFileRequest.cwd !== chat.state?.cwd || !chat.state.sessionId) return;
+		wikiPersist({ client: wikiWindowClient(), cwd: wikiFileRequest.cwd, conversationId: wikiFileRequest.conversationId, sessionId: chat.state.sessionId, path: wikiFileRequest.path, anchor: wikiNormalAnchor.current });
+	}, [wikiFileRequest, chat.activeConversationId, chat.state?.cwd, chat.state?.sessionId, wikiPersist]);
 	const receiveWikiReference = useCallback((request: ChatReferenceRequest) => {
 		const current = wikiCurrent.current;
 		if (request.cwd !== current.cwd || request.conversationId !== current.conversationId) return;
@@ -647,11 +703,16 @@ export function App() {
 		await databaseRequest(current.cwd, current.conversationId, { action: "revoke", id });
 		if (wikiCurrent.current.cwd === current.cwd && wikiCurrent.current.conversationId === current.conversationId) setDatabaseReferences(items => items.filter(i => i.id !== id));
 	};
-	const prepareChatPrompt = async () => {
+	const prepareChatPrompt = async (project?: WikiProjectReference | null) => {
+		if (wikiActionPending.current) return false;
 		const current = wikiCurrent.current;
 		if (!(await saveWikiBeforePrompt())) return false;
+		if (wikiFileRequest) {
+			if (project) await wikiRequest(wikiFileRequest.cwd, "chat-validate-project", { conversationId: current.conversationId, workspaceId: project.workspaceId, path: project.path });
+			if (wikiContextSession !== chat.state?.sessionId) { pushNotice("warning", t("loadingSession")); return false; }
+		}
 		if (databaseReferences.length && current.cwd) await databaseRequest(current.cwd, current.conversationId, { action: "grant", ids: databaseReferences.map(c => c.id), versions: Object.fromEntries(databaseReferences.map(c => [c.id, c.version])) });
-		return current.cwd === wikiCurrent.current.cwd && current.conversationId === wikiCurrent.current.conversationId;
+		return current.cwd === wikiCurrent.current.cwd && current.conversationId === wikiCurrent.current.conversationId && (!wikiFileRequest || wikiRequestRef.current?.token === wikiFileRequest.token);
 	};
 	const [commitJump, setCommitJump] = useState<{ hash: string; token: number } | null>(null);
 	const visited = useRef(new Set<ViewName>(["chat"]));
@@ -992,6 +1053,7 @@ export function App() {
 			if (document.querySelector(".wiki-document-dialog[open]")) return;
 			if ((event.metaKey || event.ctrlKey) && !event.shiftKey && event.key.toLowerCase() === "n") {
 				event.preventDefault();
+				if (notesOpen) return;
 				if (wikiGuard.current) { wikiGuard.current(() => { setView("chat"); rawSend({ type: "new_chat" }); }); return; }
 				setView("chat");
 				panelSend({ type: "new_chat" });
@@ -999,7 +1061,7 @@ export function App() {
 		};
 		window.addEventListener("keydown", onNewChat);
 		return () => window.removeEventListener("keydown", onNewChat);
-	}, [panelSend, rawSend]);
+	}, [panelSend, rawSend, notesOpen]);
 
 	// -- pasted / dropped / uploaded images (no workspace path) ---------------
 	const pasteImageId = useRef(0);
@@ -1186,9 +1248,10 @@ export function App() {
 		// navigating away; children with their own handlers (input bar / edit
 		// composer) call stopPropagation and keep priority.
 		<ChangesProvider conversationId={conversationState?.conversationId ?? ""} files={changedFiles} active={view === "chat"} onOpenChange={onChangesOpen}><div
-			className={`app design-workspace ${view === "wiki" ? "wiki-mode" : ""} ${changesOpen && view === "chat" ? "changes-open" : ""} ${leftCollapsed ? "left-collapsed" : ""} ${previewFile && view === "chat" ? "document-open" : ""}`}
+			className={`app design-workspace dual-navigation ${notesOpen ? "notes-open" : ""} ${view === "wiki" ? "wiki-mode" : ""} ${changesOpen && view === "chat" ? "changes-open" : ""} ${leftCollapsed ? "left-collapsed" : ""} ${previewFile && view === "chat" ? "document-open" : ""}`}
 			style={{ "--left-w": `${leftWidth}px`, "--right-w": `${rightWidth}px` } as CSSProperties}
 			onDragOver={(e) => {
+				if (notesOpen) { e.preventDefault(); return; }
 				if (!Array.from(e.dataTransfer?.types ?? []).includes("Files")) return;
 				e.preventDefault();
 				setAppDragOver(true);
@@ -1198,6 +1261,7 @@ export function App() {
 					setAppDragOver(false);
 			}}
 			onDrop={(e) => {
+				if (notesOpen) { e.preventDefault(); return; }
 				setAppDragOver(false);
 				if (!Array.from(e.dataTransfer?.types ?? []).includes("Files")) return;
 				e.preventDefault();
@@ -1219,16 +1283,20 @@ export function App() {
 					<span><UiIcon name="paperclip" /> {t("dropHereToAttach")}</span>
 				</div>
 			)}
-			{view !== "nodes" && view !== "wiki" && <FluidDrawer side="left" onOpen={() => setDrawer("left")} open={drawer === "left"} overlay={isMobile} label={t("workspaceProjects")} onClose={() => setDrawer(null)}
+			{view !== "nodes" && view !== "wiki" && <FluidDrawer side="left" onOpen={() => setDrawer("left")} open={drawer === "left"} overlay={isNarrow} label={t("workspaceProjects")} onClose={() => setDrawer(null)}
 				className={`panel-drawer drawer-left ${drawer === "left" ? "open" : ""}`}
 			>
 				<LeftPanel
-					incidentState={conversationState ? toolTextIncidents(conversationState.streamingMessage ? [...conversationState.messages, conversationState.streamingMessage] : conversationState.messages, conversationState.isStreaming).current?.state : undefined}
+					directoryCollapsed={leftCollapsed}
+					onToggleDirectory={() => setLeftCollapsed(value => !value)}
+					notesOpen={notesOpen}
+					notesList={<NotesList notes={notes} />}
+					onNavigate={open => { setNotesOpen(open); setLeftCollapsed(false); if (!open) setView("chat"); }}
 					onOpenSettings={() => { setSettingsInitialTab("prompt"); setSettingsOpen(true); }}
-					onNewChat={() => { setView("chat"); panelSend({ type: "new_chat" }); }}
+					onNewChat={() => { setNotesOpen(false); setView("chat"); panelSend({ type: "new_chat" }); }}
 					send={panelSend}
 					active={!isMobile || drawer === "left"}
-					ready={chat.ready && !!conversationState}
+					ready={chat.ready && !!conversationState && (!wikiFileRequest?.path || (wikiCurrentFile?.id === wikiFileRequest.token && wikiContextSession === chat.state?.sessionId))}
 					status={chat.status}
 					cwd={chat.state?.cwd ?? ""}
 					sessionFile={conversationState?.sessionFile ?? null}
@@ -1257,6 +1325,7 @@ export function App() {
 					view={view}
 					plugins={enabledPlugins}
 					onViewChange={(v: ViewName) => {
+						setNotesOpen(false);
 						// The terminal panel stays mounted while hidden. Create the first
 						// shell on the user's terminal-view click, not on initial mount.
 						terminalOpenRequested.current =
@@ -1269,7 +1338,7 @@ export function App() {
 						changeView();
 					}}
 					onOpenPanel={(side) => {
-						if (side === "left" && !isMobile) {
+						if (side === "left" && !isNarrow) {
 							setDrawer(null);
 							changesLeftRestore.current = null;
 							setLeftCollapsed((value) => { localStorage.setItem("pi-left-collapsed", String(!value)); return !value; });
@@ -1301,11 +1370,13 @@ export function App() {
 						<UiIcon name="warning" /> {t("protocolMismatch")}
 					</div>
 				)}
-				{view !== "chat" && chat.notices.length > 0 && <div className="notices notices-overlay">
+				{view !== "chat" && view !== "wiki" && chat.notices.length > 0 && <div className="notices notices-overlay">
 					{chat.notices.map((n) => <NoticeToast key={n.id} notice={n} onDismiss={dismissNotice} onOpenExtensions={openExtensionSettings} />)}
 				</div>}
+				{notesOpen && drawer && isNarrow && <div className="drawer-backdrop" onClick={() => setDrawer(null)} />}
+				{notesOpen && <NotesEditor notes={notes} />}
 				<div
-					className="layout"
+					className={`layout ${notesOpen ? "notes-chat-hidden" : ""}`}
 					style={{ "--left-w": `${leftWidth}px`, "--right-w": `${rightWidth}px`, "--editor-share": editorShare } as CSSProperties}
 				>
 					{drawer && (isMobile || (isNarrow && !previewFile) || (drawer === "left" && !!previewFile)) && (
@@ -1315,7 +1386,7 @@ export function App() {
 						<ChatDock target={wikiFileRequest || databaseOpen ? wikiChatHost : null}>
 							{conversationState ? (
 								<WorkspacePathContext.Provider value={conversationState.cwd}><MessageList recovery={{ ...toolRecovery, models: chat.models, onLoadModels: () => { if (!chat.models.length && !chat.modelsLoading) send({ type: "list_models" }); } }}
-									active={view === "chat" || view === "wiki" || databaseOpen}
+									active={!notesOpen && (view === "chat" || view === "wiki" || databaseOpen)}
 									connected={chat.ready}
 									silenceNotified={chat.agentSilence?.conversationId === conversationState.conversationId && chat.agentSilence.phase === "silent"}
 									key={conversationState.conversationId}
@@ -1339,11 +1410,18 @@ export function App() {
 							<LongThinkingStatus chat={chat} send={send} />
 							{/* 扩展问卷：非模态内联面板，插在输入框上方，对话内容保持可见 */}
 							{chat.dialog && <Dialog dialog={chat.dialog} send={send} />}
-							{chat.notices.length > 0 && <div className="notices">
+							{view !== "wiki" && chat.notices.length > 0 && <div className="notices">
 								{chat.notices.map((n) => <NoticeToast key={n.id} notice={n} onDismiss={dismissNotice} onOpenExtensions={openExtensionSettings} />)}
 							</div>}
 							<ChatInput
-								active={view === "chat" || view === "wiki" || databaseOpen}
+								key={wikiFileRequest ? chat.state?.sessionId : "main"}
+								wikiReferences={wikiFileRequest ? [] : undefined}
+								wikiProject={wikiFileRequest ? wikiProject : null}
+								onRemoveWikiProject={() => setWikiProject(null)}
+								onCurrentFileIncluded={wikiFileRequest ? setWikiCurrentIncluded : undefined}
+								onRemoveWikiReference={path => void updateWikiReferences(wikiReferences.filter(item => item !== path)).catch(error => pushNotice("error", error.message))}
+								draftStorageKey={wikiFileRequest && chat.state?.sessionId ? `pi-wiki-draft:${wikiFileRequest.cwd}:${chat.state.sessionId}` : undefined}
+								active={!notesOpen && (view === "chat" || view === "wiki" || databaseOpen)}
 								beforeSend={prepareChatPrompt}
 								databaseReferences={databaseReferences}
 								onRemoveDatabase={id => void revokeDatabase(id).catch(error => pushNotice("error", error.message))}
@@ -1358,7 +1436,7 @@ export function App() {
 								queue={conversationState?.queue}
 								pendingCount={(conversationState?.queue.steering.length ?? 0) + (conversationState?.queue.followUp.length ?? 0)}
 								send={send}
-								ready={chat.ready && !!conversationState}
+								ready={chat.ready && !!conversationState && (!wikiFileRequest?.path || (wikiCurrentFile?.id === wikiFileRequest.token && wikiContextSession === chat.state?.sessionId))}
 								streaming={conversationState?.isStreaming ?? false}
 								silentActivity={chat.agentSilence?.conversationId === chat.activeConversationId && chat.agentSilence.activity === "model" ? chat.agentSilence.activity : null}
 										messages={conversationState?.messages ?? EMPTY_MESSAGES}
@@ -1406,7 +1484,6 @@ export function App() {
 										attach(path, name, mode, isDir);
 									}}
 									onPreview={openPreview}
-									onNotice={(level, text) => pushNotice(level, text)}
 								/>
 							</div>
 							{previewFile && (
@@ -1436,6 +1513,17 @@ export function App() {
 					<div className={`view-pane wiki-view ${view === "wiki" ? "" : "hidden"}`}>
 						{visited.current.has("wiki") && (wikiFileRequest ? <WikiWindowShell
 							documentPath={wikiFileRequest.path}
+							project={wikiProject}
+							onProject={setWikiProject}
+							cwd={wikiFileRequest.cwd}
+							conversationId={wikiFileRequest.conversationId}
+							references={wikiReferences}
+							currentIncluded={wikiCurrentIncluded}
+							onReferences={updateWikiReferences}
+							onChatAction={wikiChatAction}
+							empty={!conversationState?.messages.some(message => message.role === "user") && !conversationState?.isStreaming}
+							modelControls={<ModelThinking state={modelState} models={chat.models} modelsLoading={chat.modelsLoading} send={send} onManageModels={openManageModels} />}
+							notices={chat.notices.length > 0 && <div className="notices wiki-status-notices">{chat.notices.map(n => <NoticeToast key={n.id} notice={n} onDismiss={dismissNotice} onOpenExtensions={openExtensionSettings} />)}</div>}
 							chatOpen={wikiChatOpen}
 							chatWidth={wikiChatWidth}
 							onChatOpen={setWikiChatOpen}
@@ -1444,12 +1532,14 @@ export function App() {
 							chatHost={setWikiChatHost}
 						>
 							{wikiFileRequest.cwd === chat.state?.cwd && wikiFileRequest.conversationId === chat.activeConversationId ? <WikiWorkbench key={wikiFileRequest.cwd} cwd={wikiFileRequest.cwd} conversationId={wikiFileRequest.conversationId} fileRequest={wikiFileRequest} streaming={!!conversationState?.isStreaming} active={view === "wiki"} ready={chat.ready && !switching} writingBlocked={!!switching || !!conversationState?.isStreaming} openDocument={openWikiDocument} onOpenFolder={() => { setWikiFolderError(undefined); setWikiFolderPicker(true); }} folderBusy={!chat.ready || !!switching || !!wikiFolderPending} connected={chat.ready} guard={wikiGuard} saveBeforePrompt={wikiSave} contextReader={wikiContextReader} contextSaver={wikiContextSaver} onContextChange={setWikiCurrentFile} onAttach={(path, name, isDir) => { attach(path, name, "reference", isDir); setWikiChatOpen(true); }} onReference={receiveWikiReference} /> : <div className="boot-wait">{chat.ready ? t("loadingSession") : t("connectingServer")}</div>}
-						</WikiWindowShell> : <WikiWindowShell documentPath={wikiWindowParams().doc ?? ""} loading chatOpen={false} chatWidth={wikiChatWidth} onChatOpen={setWikiChatOpen} onChatResize={resizeWikiChat} onClose={exitWiki} chatHost={setWikiChatHost}><div className="boot-wait" role="status">{chat.ready ? t("loadingSession") : t("connectingServer")}</div></WikiWindowShell>)}
+						</WikiWindowShell> : <WikiWindowShell notices={chat.notices.length > 0 && <div className="notices wiki-status-notices">{chat.notices.map(n => <NoticeToast key={n.id} notice={n} onDismiss={dismissNotice} onOpenExtensions={openExtensionSettings} />)}</div>} documentPath={wikiWindowParams().doc ?? ""} loading chatOpen={false} chatWidth={wikiChatWidth} onChatOpen={setWikiChatOpen} onChatResize={resizeWikiChat} onClose={exitWiki} chatHost={setWikiChatHost}><div className="boot-wait" role="status">{chat.ready ? t("loadingSession") : t("connectingServer")}</div></WikiWindowShell>)}
 					</div>
 					<div className={`view-pane ${view === "terminal" ? "" : "hidden"}`}>
-						<Suspense fallback={null}>
+						<TerminalViewBoundary onBack={() => setView("chat")}>
+						<Suspense fallback={<div className="boot-wait" role="status">{t("loading")}</div>}>
 							{visited.current.has("terminal") && <TerminalPanel active={view === "terminal" && !switching} chat={chat} send={send} terminal={terminal} />}
 						</Suspense>
+						</TerminalViewBoundary>
 					</div>
 					<div className={`view-pane ${view === "nodes" ? "" : "hidden"}`}>
 						<Suspense fallback={null}>{visited.current.has("nodes") && <NodeWorkbench active={view === "nodes"} send={send} />}</Suspense>

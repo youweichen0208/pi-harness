@@ -52,6 +52,11 @@ try {
 	assert.equal(dragSurface.toolbar, 'drag', 'the document breadcrumb area also drags the window');
 	assert.equal(dragSurface.hitIsControl, false, 'the center of the Wiki header is not covered by an interactive control');
 	assert(dragSurface.controls.length > 0 && dragSurface.controls.every(region => region === 'no-drag'), 'Wiki header controls opt out of native dragging');
+	assert.match(await wiki.locator('body').evaluate(el => getComputedStyle(el).fontFamily), /PingFang SC/);
+	assert.equal(await wiki.locator('.wiki-prose .fp-rich-document p').first().evaluate(el => getComputedStyle(el).fontSize), '16px');
+	await wiki.screenshot({ path: '/tmp/pi-desktop-reference-wiki.png' });
+	await page.screenshot({ path: '/tmp/pi-desktop-reference-main.png' });
+
 	await wiki.waitForFunction(() => !document.querySelector('.wiki-send')?.textContent?.includes('会话准备中'));
 	// Re-entering reuses the same window instead of spawning more.
 	await page.locator('.file-name', { hasText: 'README.md' }).click();

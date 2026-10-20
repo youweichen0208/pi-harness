@@ -1,4 +1,5 @@
-import { UiIcon, type UiIconName } from "./UiIcon";
+import { WelcomeMotto } from "./WelcomeMotto";
+import { UiIcon } from "./UiIcon";
 import { ReplyActions } from "./ReplyActions";
 import { turnChangeSummaries } from "../changes";
 import { ChangeSummaryCard } from "./ChangeSummaryCard";
@@ -41,7 +42,7 @@ import {
 } from "../lazy-window";
 import { SearchBar } from "./SearchBar";
 import { clusterQuestionMarkers, questionPreviewText } from "../question-markers";
-import { useT, type Translate } from "../i18n";
+import { useT } from "../i18n";
 
 /** Stable shared empty map — passing this (instead of a fresh Map) lets
  *  React.memo skip messages that have no live tool output to show. */
@@ -63,27 +64,6 @@ const ALWAYS_BUDGET = 1600;
 
 function hasToolCall(m: UiMessage): boolean {
 	return m.content.some((b) => b.type === "toolCall");
-}
-
-/** Suggested prompts shown on the empty-state welcome page. */
-const EXAMPLE_DEFS: {
-	key: "ex.understand" | "ex.debug" | "ex.test" | "ex.review";
-	icon: UiIconName;
-}[] = [
-	{ key: "ex.understand", icon: "search" },
-	{ key: "ex.debug", icon: "bug" },
-	{ key: "ex.test", icon: "flask" },
-	{ key: "ex.review", icon: "brush" },
-];
-
-function examples(
-	t: Translate,
-): { icon: UiIconName; text: string; prompt: string }[] {
-	return EXAMPLE_DEFS.map(({ key, icon }) => ({
-		icon,
-		text: t(key),
-		prompt: t(`${key}.prompt`),
-	}));
 }
 
 interface MessageListProps {
@@ -735,33 +715,8 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 			<div className="messages" ref={scrollRef} onScroll={onScroll}>
 				{timeline.length === 0 && !state.streamingMessage && (
 					<div className="empty-state">
-						<div className="empty-logo-wrap">
-							<img className="empty-logo" src="/icon/1a-mark.svg" alt="" />
-						</div>
-						<h2 className="empty-title">{t("welcomeTitle")}</h2>
-						<p className="empty-sub">{t("welcomeSub")}</p>
-						<div className="empty-cwd">
-							<span className="empty-cwd-label">{t("directory")}</span>
-							<span className="empty-cwd-path">{state.cwd}</span>
-						</div>
-						<div className="empty-examples">
-							{examples(t).map((ex) => (
-								<button
-									type="button"
-									key={ex.prompt}
-									className="empty-example"
-									title={t("clickToFill")}
-									onClick={() =>
-										window.dispatchEvent(
-											new CustomEvent("pi-web:fill", { detail: ex.prompt }),
-										)
-									}
-								>
-									<span className="empty-example-icon"><UiIcon name={ex.icon} /></span>
-									<span className="empty-example-text">{ex.text}</span>
-								</button>
-							))}
-						</div>
+						<div className="empty-logo-wrap"><img className="empty-logo" src="/icon/1a-mark.svg" alt="pi-harness" /></div>
+						<WelcomeMotto plain />
 					</div>
 				)}
 				{timeline.map((item) => {

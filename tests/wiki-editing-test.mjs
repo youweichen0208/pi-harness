@@ -1,3 +1,4 @@
+import { wikiToolbar } from "./lib/wiki-toolbar.mjs";
 // Wiki editing 22a: real filesystem writes, delayed acknowledgements and conflicts.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
@@ -115,9 +116,9 @@ try {
 	// Floating selection formatting and ask Pi use the current selection.
 	const selectFirst = async () => editor.locator('p').first().evaluate(el => { el.closest('[contenteditable]').focus(); const r = document.createRange(), s = getSelection(); r.selectNodeContents(el); s.removeAllRanges(); s.addRange(r); });
 	await selectFirst(); await page.locator('.wiki-format-popover').waitFor();
-	await page.getByRole('button', { name: '黄色背景', exact: true }).click();
+	await wikiToolbar(page, '背景标记'); await page.getByRole('menuitem', { name: '黄色背景', exact: true }).click();
 	await page.keyboard.press('Meta+s'); await saved(); assert(disk().includes('<mark style="background-color: #fff3a3">'));
-	await page.getByRole('button', { name: '黄色背景', exact: true }).click();
+	await wikiToolbar(page, '背景标记'); await page.getByRole('menuitem', { name: '清除背景标记', exact: true }).click();
 	await page.keyboard.press('Meta+s'); await saved(); assert(!disk().includes('<mark style="background-color: #fff3a3">'));
 	await selectFirst(); await page.screenshot({ path: '/tmp/pi-wiki-edit-selection.png' });
 	await page.getByRole('button', { name: '问 pi', exact: true }).click();

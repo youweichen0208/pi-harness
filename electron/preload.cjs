@@ -6,6 +6,12 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("electronAPI", {
 	platform: process.platform,
+	assistantVisibility: visible => ipcRenderer.invoke("pi-assistant-visibility", visible === true),
+	onAssistantHidden: callback => {
+		const listener = () => callback();
+		ipcRenderer.on("pi-assistant-hidden", listener);
+		return () => ipcRenderer.removeListener("pi-assistant-hidden", listener);
+	},
 	onBeforeClose: callback => {
 		const listener = async (_event, id) => {
 			let allow = false;

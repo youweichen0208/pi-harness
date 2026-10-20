@@ -14,6 +14,8 @@ export interface DesktopWindowState {
 
 export interface DesktopAPI {
 	platform: string;
+	assistantVisibility?: (visible: boolean) => Promise<void>;
+	onAssistantHidden?: (callback: () => void) => () => void;
 	onBeforeClose?: (callback: () => Promise<boolean>) => () => void;
 	clientId?: string;
 	appUpdate?: (action: "read" | "check" | "update" | "install") => Promise<AppUpdateState>;

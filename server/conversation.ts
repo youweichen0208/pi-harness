@@ -30,7 +30,7 @@ export interface Conversation {
 	treeEntryIds?: Map<string, string[]>;
 	recovery: RecoveryState;
 	webUi: WebUIContext;
-	/** Wiki conversations are temporary native in-memory sessions. */
+	/** Wiki conversations use a separate native transcript directory. */
 	wiki?: boolean;
 	thinkingTimings: ThinkingTimings;
 	id: string;

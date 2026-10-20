@@ -1352,7 +1352,10 @@ export interface NodeSource {
 }
 
 /** Wiki HTTP API. Workspace and request identity are checked at the boundary. */
-export interface WikiConversationResult { conversationId: string }
+export interface WikiConversationResult { conversationId: string; sessionId?: string }
+export interface WikiChatSummary { id: string; title: string; updated: number; references: string[]; documentPath?: string }
+export interface WikiProjectReference { workspaceId: string; workspaceName: string; path: string; name: string }
+export interface WikiChatContext { sessionId: string; references: string[] }
 export interface WorkspaceFileCreated { path: string }
 export interface WikiEntry {
 	path: string;
@@ -1387,6 +1390,8 @@ export interface WikiChange {
 }
 export interface WikiApiError { error: string; code?: "version_conflict"; }
 export interface WikiRevision {
+	/** Stable native Wiki session identity; absent on legacy changes. */
+	sessionId?: string;
 	/** Attribution is absent on legacy records; never attach those to a new chat. */
 	conversationId?: string;
 	requestId?: string;
@@ -1529,3 +1534,19 @@ export interface DatabaseResponse {
 	requestId: string; error?: string; connections?: DatabaseConnection[]; grants?: string[];
 	sources?: { kind: "datagrip" | "dbeaver"; path: string }[]; preview?: DatabaseImportPreview; grid?: DatabaseGrid;
 }
+
+/** Global notes HTTP API; deliberately independent of agent sessions. */
+export interface NoteInput { title: string; body: string; pinned: boolean }
+export interface Note extends NoteInput { id: string; createdAt: number; updatedAt: number; version: number }
+export interface NoteUpdate extends NoteInput { version: number }
+export interface NoteDelete { version: number }
+export interface NotesResponse { notes: Note[] }
+export interface NoteResponse { note: Note }
+export interface NoteDeleteResponse { ok: true }
+export interface NoteErrorResponse { error: string }
+
+/** Shared HTTP document resources; independent of agent sessions. */
+export interface RichImageUpload { data: string }
+export interface RichImageResult { path: string }
+export interface LinkPreviewRequest { url: string }
+export interface LinkPreview { url: string; title: string; description: string; imageUrl?: string; imageData?: string }

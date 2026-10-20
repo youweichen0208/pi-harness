@@ -1,13 +1,12 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
-import { FiChevronRight, FiFolder, FiFile, FiSearch, FiDownload, FiLink, FiMaximize2, FiMoreHorizontal, FiPlus, FiRefreshCw, FiX } from "react-icons/fi";
+import { FiChevronRight, FiFolder, FiFile, FiSearch, FiMaximize2, FiMoreHorizontal, FiPlus, FiRefreshCw, FiX } from "react-icons/fi";
 import type { FileEntry, FileListing, ScmFileEntry, ServerMessage, TaskProgress, UiMessage } from "../types";
 import { useT } from "../i18n";
-import { downloadFile } from "../download";
 import { mentionedHiddenDirs } from "../conversation-files";
 import { CreateFileForm } from "./CreateFileForm";
 import { TaskProgressPanel } from "./TaskProgressPanel";
 
-type AttachMode = "inline" | "reference";
+type AttachMode = "inline";
 interface RightPanelProps {
 	active: boolean;
 	onSearchFiles: () => void;
@@ -26,10 +25,9 @@ interface RightPanelProps {
 	send: (msg: { type: "list_files"; path?: string }) => boolean;
 	onAttach: (path: string, name: string, mode: AttachMode, isDir?: boolean) => void;
 	onPreview: (path: string, name: string) => void;
-	onNotice: (level: "info" | "warning" | "error", text: string) => void;
 }
 
-export const RightPanel = memo(function RightPanel({ onSearchFiles, active, files, fileChanged, changed, notRepo, widgets, messages, streamingMessage, isStreaming, taskProgress, conversationId, agentSilence, cwd, send, onAttach, onPreview, onNotice }: RightPanelProps) {
+export const RightPanel = memo(function RightPanel({ onSearchFiles, active, files, fileChanged, changed, notRepo, widgets, messages, streamingMessage, isStreaming, taskProgress, conversationId, agentSilence, cwd, send, onAttach, onPreview }: RightPanelProps) {
 	const t = useT();
 	const [rootOpen, setRootOpen] = useState(true);
 	useEffect(() => setRootOpen(true), [cwd]);
@@ -145,9 +143,7 @@ export const RightPanel = memo(function RightPanel({ onSearchFiles, active, file
 					<span className={dir ? "file-name" : "file-name-text"}>{entry.name}</span>
 				</button>
 				{changeKind && <span className={`tree-change-badge ${changeKind.toLowerCase()}`} title={changeKind === "A" ? "Added" : changeKind === "D" ? "Deleted" : "Modified"}>{changeKind}</span>}
-				{!dir && !virtual && <button type="button" className="file-attach download" title={t("downloadFile")} onClick={() => void downloadFile(entry.path, entry.name).then((result) => { if (!result.ok && !result.cancelled) onNotice("error", t("downloadFailed", { error: result.error })); })}><FiDownload /></button>}
 				{!dir && !virtual && <button type="button" className="file-attach inline" title={t("attachInlineTip")} onClick={() => onAttach(entry.path, entry.name, "inline")}><FiPlus /></button>}
-				{!virtual && <button type="button" className="file-attach ref" title={t(dir ? "linkFolderTip" : "referenceTip")} onClick={() => onAttach(entry.path, entry.name, "reference", dir)}><FiLink /></button>}
 			</div>
 			{dir && open && <div role="group">{directories[entry.path] || virtual ? renderDirectory(entry.path, depth + 1) : <div className="tree-loading">{t("loading")}</div>}</div>}
 		</div>;

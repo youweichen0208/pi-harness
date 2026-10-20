@@ -153,7 +153,8 @@ await page.locator('.inputbox textarea').fill('');
 emit({messages:[...conversation,tool('active','sleep 10')],isStreaming:true,streamingMessage:null});
 await page.locator('.toolcall-bash.run .bash-running-dot').waitFor();
 assert.equal(await page.locator('.agent-working').count(),0,'command card owns the running indication');
-assert.equal(await actions.locator('.stop').innerText(),'停止任务');
+assert.equal(await actions.locator('.stop').innerText(),'');
+assert.equal(await actions.locator('.stop').getAttribute('aria-label'),'停止任务');
 assert.equal(await page.locator('.agent-working').count(),0);
 assert.equal(await page.locator('.thinking-spinner:visible,.working-spin:visible').count(),0);
 emit({messages:[...conversation,{id:'read-step',role:'assistant',model:'glm-5.3',content:[{type:'toolCall',id:'read-active',name:'read',argumentsText:JSON.stringify({path:'web/src/components/LeftPanel.tsx'})}]}],isStreaming:true,streamingMessage:null});
@@ -182,7 +183,8 @@ assert((await page.locator('.read-group .toolcall-markdown').first().textContent
 emit({messages:[...conversation,tool('active','sleep 10')],isStreaming:true,streamingMessage:null});
 await page.locator('.toolcall-bash.run .bash-running-dot').waitFor();
 assert.equal(await page.locator('.agent-working').count(),0,'command card owns the running indication');
-assert.equal(await actions.locator('.stop').innerText(),'停止任务');
+assert.equal(await actions.locator('.stop').innerText(),'');
+assert.equal(await actions.locator('.stop').getAttribute('aria-label'),'停止任务');
 await page.screenshot({path:app?'/private/tmp/pi-agent-working-desktop.png':'/private/tmp/pi-agent-working.png'});
 // Reference 5b: Git status alignment, command-only clock and authored plan labels.
 const commitCommand=`cd "${cwd}" && git commit -q -m "feat(ledger): wire agent-runtime subprocess boundary for phase1b llm_adjusted"`;

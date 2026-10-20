@@ -1,3 +1,4 @@
+import { wikiToolbar } from "./lib/wiki-toolbar.mjs";
 // Real Chromium regression for slash aliases, heading levels and persisted selection colors.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
@@ -33,21 +34,22 @@ try {
 	for (const [alias, label] of aliases) {
 		await editor.locator('p').last().fill('');
 		await wiki.keyboard.type(`/${alias}`);
-		check(await wiki.getByRole('option', { name: label, exact: true }).count() === 1, `/${alias} matches ${label}`);
+		check(await wiki.locator('.fp-slash-menu').getByRole('option', { name: label, exact: true }).count() === 1, `/${alias} matches ${label}`);
 		await wiki.keyboard.press('Escape');
 	}
 	for (let level = 1; level <= 6; level++) {
 		await editor.locator('p').last().fill('');
-		if (level === 2 || level === 3) { await wiki.keyboard.type(`/bt${level}`); await wiki.getByRole('option', { name: `标题 ${level}`, exact: true }).click(); }
+		if (level === 2 || level === 3) { await wiki.keyboard.type(`/bt${level}`); await wiki.locator('.fp-slash-menu').getByRole('option', { name: `标题 ${level}`, exact: true }).click(); }
 		else await wiki.keyboard.type('#'.repeat(level) + ' ');
 		await wiki.keyboard.type(`Heading ${level}`);
-		check(await editor.locator(`h${level}`).last().textContent() === `Heading ${level}`, `H${level} inserts correct heading level`);
+		const headings = await editor.locator(`h${level}`).allTextContents();
+		check(headings.at(-1) === `Heading ${level}`, `H${level} inserts correct heading level: ${JSON.stringify(headings)}`);
 		await wiki.keyboard.press('Enter');
 		await wiki.evaluate(() => document.execCommand('formatBlock', false, 'p'));
 	}
 	await editor.locator('p').last().fill('Before marked words after');
 	const selectWords = async () => {
-		await editor.locator('p').last().evaluate(p => {
+		await editor.locator('p:not([data-rich-tail])').last().evaluate(p => {
 			p.closest('[contenteditable]').focus();
 			const walker = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
 			let node, start, end, offset = 0;
@@ -60,11 +62,11 @@ try {
 			getSelection().removeAllRanges(); getSelection().addRange(range);
 		});
 	};
-	const yellow = wiki.getByRole('button', { name: '黄色背景', exact: true });
-	await selectWords(); await yellow.click();
-	check(await editor.locator('p').last().locator('span').evaluateAll(spans => spans.some(span => span.textContent === 'marked words' && span.style.backgroundColor === 'rgb(255, 243, 163)')), 'selection receives yellow background');
+	const highlight = async name => { await wikiToolbar(wiki, '背景标记'); await wiki.getByRole('menuitem', {name, exact:true}).click(); };
+	await selectWords(); await highlight('黄色背景');
+	check(await editor.locator('p:not([data-rich-tail])').last().locator('span').evaluateAll(spans => spans.some(span => span.textContent === 'marked words' && span.style.backgroundColor === 'rgb(255, 243, 163)')), 'selection receives yellow background');
 	await wiki.keyboard.press('ControlOrMeta+z');
-	check(await editor.locator('p').last().locator('span[style*="background-color"]').count() === 0, 'highlight supports native undo');
+	check(await editor.locator('p:not([data-rich-tail])').last().locator('span[style*="background-color"]').count() === 0, 'highlight supports native undo');
 	await wiki.keyboard.press('ControlOrMeta+Shift+z');
 	await wiki.keyboard.press('Meta+s');
 	await wiki.locator('.wiki-save-status.saved').waitFor();
@@ -75,11 +77,11 @@ try {
 	// Wiki mode restores after reload (ADR-0003) — the popup keeps its URL
 	// client id, so the same ephemeral conversation reattaches with the document.
 	await wiki.locator('.wiki-view:not(.hidden)').waitFor();
-	await editor.locator('p').last().waitFor();
-	check(await editor.locator('p').last().locator('span').evaluateAll(spans => spans.some(span => span.style.backgroundColor === 'rgb(255, 243, 163)')), 'highlight survives reload');
-	await selectWords(); await wiki.getByRole('button', { name: '绿色背景', exact: true }).click();
-	check(await editor.locator('p').last().locator('span').evaluateAll(spans => spans.some(span => span.style.backgroundColor === 'rgb(204, 235, 197)')), 'reopened highlight can change color');
-	await selectWords(); await wiki.getByRole('button', { name: '绿色背景', exact: true }).click();
+	await editor.locator('p:not([data-rich-tail])').last().waitFor();
+	check(await editor.locator('p:not([data-rich-tail])').last().locator('span').evaluateAll(spans => spans.some(span => span.style.backgroundColor === 'rgb(255, 243, 163)')), 'highlight survives reload');
+	await selectWords(); await highlight('绿色背景');
+	check(await editor.locator('p:not([data-rich-tail])').last().locator('span').evaluateAll(spans => spans.some(span => span.style.backgroundColor === 'rgb(204, 235, 197)')), 'reopened highlight can change color');
+	await selectWords(); await highlight('清除背景标记');
 	await wiki.keyboard.press('Meta+s');
 	await wiki.locator('.wiki-save-status.saved').waitFor();
 	source = readFileSync(join(base, 'note.md'), 'utf8');

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { FiCheck, FiChevronDown, FiChevronUp, FiPlus } from "react-icons/fi";
+import { FiBookOpen, FiCheck, FiChevronDown, FiChevronUp, FiPlus } from "react-icons/fi";
 import type { ProjectWorkspaceCatalog } from "../types";
 import { useT } from "../i18n";
 
@@ -23,7 +23,7 @@ function Avatar({ workspace, size }: { workspace: Workspace; size?: "sm" }) {
 
 /** Sidebar workspace switcher (design 2a–2c): a custom popover instead of a
  *  native select, so the empty state can create a workspace in place. */
-export function WorkspaceSwitcher({ workspaces, selected, disabled, busy, name, onName, onChoose, onCreate, onManage }: {
+export function WorkspaceSwitcher({ workspaces, selected, disabled, busy, name, onName, onChoose, onCreate, onManage, onAddProject }: {
 	workspaces: Workspace[];
 	selected: Workspace | undefined;
 	/** Catalog not loaded or an action is pending: switching is unavailable. */
@@ -36,6 +36,7 @@ export function WorkspaceSwitcher({ workspaces, selected, disabled, busy, name, 
 	onChoose: (id: string) => void;
 	onCreate: (name: string) => void;
 	onManage: () => void;
+	onAddProject: () => void;
 }) {
 	const t = useT();
 	const [open, setOpen] = useState(false);
@@ -63,7 +64,7 @@ export function WorkspaceSwitcher({ workspaces, selected, disabled, busy, name, 
 	const onMenuKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
 		if (event.key === "Escape") {
 			event.preventDefault();
-			if (creating) setCreating(false); else close();
+			if (creating && !empty) setCreating(false); else close();
 			return;
 		}
 		if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
@@ -86,10 +87,14 @@ export function WorkspaceSwitcher({ workspaces, selected, disabled, busy, name, 
 			onClick={() => setOpen((value) => !value)}
 			onKeyDown={(event) => { if (event.key === "ArrowDown" && !open) { event.preventDefault(); setOpen(true); } }}
 		>
-			{!selected && <span className="workspace-avatar placeholder" aria-hidden="true"><FiPlus /></span>}
-			<span className="workspace-switcher-name">{selected?.name ?? t("workspaceNoneSelected")}</span>
+			<span className="workspace-book" aria-hidden="true"><FiBookOpen /></span>
+			<span className="workspace-switcher-name" title={selected?.name}>{selected?.name ?? t("workspaceNoneSelected")}</span>
 			{open ? <FiChevronUp aria-hidden="true" /> : <FiChevronDown aria-hidden="true" />}
 		</button>
+		<button type="button" className="workspace-add" title={t(selected ? "workspaceAddProject" : "workspaceNew")} aria-label={t(selected ? "workspaceAddProject" : "workspaceNew")} disabled={busy} onClick={() => {
+			if (selected) { setOpen(false); onAddProject(); }
+			else { setCreating(true); setOpen(true); }
+		}}><FiPlus /></button>
 		{open && <div className="workspace-switcher-menu" role="menu" aria-label={t("workspaceSelect")} ref={menuRef} onKeyDown={onMenuKeyDown}>
 			{showForm ? <form className="workspace-switcher-create" onSubmit={(event) => { event.preventDefault(); if (name.trim()) onCreate(name); }}>
 				{empty && <p>{t("workspaceNoneYet")}</p>}

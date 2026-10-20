@@ -2,6 +2,7 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { FiChevronDown } from "react-icons/fi";
 
 interface DropdownProps {
+	keyboardNavigation?: boolean;
 	/** The clickable trigger (chip/button). */
 	trigger: ReactNode;
 	open: boolean;
@@ -33,31 +34,46 @@ export function Dropdown({
 	fit = false,
 	direction = "down",
 	menuClassName,
+	keyboardNavigation = false,
 }: DropdownProps) {
 	const ref = useRef<HTMLDivElement>(null);
 
 	useEffect(() => {
 		if (!open) return;
+		const owner = ref.current?.ownerDocument ?? document;
 		const onDown = (e: MouseEvent) => {
 			if (ref.current && !ref.current.contains(e.target as Node)) {
 				onOpenChange(false);
 			}
 		};
 		const onKey = (e: KeyboardEvent) => {
-			if (e.key === "Escape") { e.preventDefault(); onOpenChange(false); }
+			if (e.key === "Escape") { e.preventDefault(); onOpenChange(false); if (keyboardNavigation) ref.current?.querySelector<HTMLButtonElement>(":scope > button")?.focus(); }
 		};
-		document.addEventListener("mousedown", onDown);
-		document.addEventListener("keydown", onKey);
+		owner.addEventListener("mousedown", onDown);
+		owner.addEventListener("keydown", onKey);
 		return () => {
-			document.removeEventListener("mousedown", onDown);
-			document.removeEventListener("keydown", onKey);
+			owner.removeEventListener("mousedown", onDown);
+			owner.removeEventListener("keydown", onKey);
 		};
-	}, [open, onOpenChange]);
+	}, [open, onOpenChange, keyboardNavigation]);
+
+	useEffect(() => {
+		if (open && keyboardNavigation) ref.current?.querySelector<HTMLButtonElement>(".dd-item:not(:disabled)")?.focus();
+	}, [open, keyboardNavigation]);
 
 	return (
 		<div
 			className={`dropdown ${align} ${fit ? "fit" : ""} ${direction === "up" ? "dd-up" : ""}`}
 			ref={ref}
+			onKeyDown={event => {
+				if (!keyboardNavigation || !["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+				event.preventDefault();
+				if (!open) { onOpenChange(true); return; }
+				const items = Array.from(ref.current?.querySelectorAll<HTMLButtonElement>(".dd-item:not(:disabled)") ?? []);
+				const index = items.indexOf(document.activeElement as HTMLButtonElement);
+				const next = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 : (index + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
+				items[next]?.focus();
+			}}
 		>
 			<button
 				type="button"
@@ -91,6 +107,7 @@ export function DropdownItem({
 		<button
 			type="button"
 			className={`dd-item ${active ? "active" : ""}`}
+			aria-current={active ? "page" : undefined}
 			disabled={disabled}
 			title={title}
 			onClick={onClick}

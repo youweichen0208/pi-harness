@@ -1,14 +1,50 @@
+## 文档绑定与 Workspace 追加分析（当前规则）
+
+每篇 Markdown 按工作区真实根目录和文档规范路径绑定独立 chat；`chat-document` 恢复该文档最近会话，首次打开创建并记录 sidecar `documentPath`，历史按文档过滤。仍有消息的旧会话不自动绑定新文档。无消息的 SDK SessionManager 在客户端保留最多 32 篇文档以支持空白草稿切回，不增加后台 Agent；重启后非空历史从原生 transcript 恢复。
+
+追加分析范围来自已有 Workspace 分组下一个项目／知识库。`chat-projects` 返回现有目录，`chat-validate-project` 校验分组成员和目录存在性；选中项目以可见提示文本随本次问题发送，由原生工具按需读取，不放宽 Wiki 文件服务或附件路径边界，也不接入额外检索服务。当前 Markdown 固定携带编辑器快照。切换文档清空追加项目，返回旧文档也不恢复该选择；既有历史消息保持原样。项目选择在发送时冻结并再次校验，删除或移出分组后阻止发送。刷新同样回到仅当前文档。
+
+回归：`tests/wiki-assistant-test.mjs` 覆盖每文档会话、项目清除、原生提示范围、历史隔离、草稿、服务重启与窄屏；`tests/wiki-assistant-window-test.mjs` 覆盖原生浮窗。
+
 # Wiki 文档模式（Wiki mode）
 
-Wiki 运行在**独立顶层窗口**（ADR-0003，取代 ADR-0002 的同窗口全屏视图）：进入 Wiki mode（点击文件树、全局搜索或聊天文件链接中的 `.md` / `.markdown`，或顶栏 Wiki 切换）时，Web 端 `window.open` 弹出式窗口（命名目标 `pi-wiki`，重复进入复用并导航到新文档），桌面版由主进程创建/复用第二个 `BrowserWindow`；主窗口停留在 normal 对话，两边并行工作互不阻塞。窗口契约是 URL 参数 `?wiki-window=1&cwd=<工作区>&doc=<文档>&client=<窗口客户端>&model=<模型>&thinking=<思考档位>`（`web/src/wiki-window.ts`，后两项可选）：模型参数使用完整 `provider/model`，旧裸 ID 仅在模型列表中唯一匹配时继承；继承命令每项最多发送一次，失效模型或 5 秒内未确认时继续以当前模型打开文档，避免卡在普通会话。回归：`tests/wiki-bootstrap-model-test.mjs`。独立窗口从首帧显示 Wiki 外壳和文档名，不经过普通聊天页。`hello.wikiCwd` 让新客户端直接在目标目录创建内存 Wiki 会话，首个快照的 `wiki` 标记用于复用该会话，避免恢复普通历史、切目录和再次创建 SDK 运行环境；已有客户端重连仍复用原会话。新窗口启动后先通过现有 `set_model`／`set_thinking` 应用打开方携带的模型与思考档位，工作区不符再 `set_cwd`，随后复用首个临时会话进入 Wiki 视图（旧服务端不支持直达初始化时仍走创建流程）；鉴权 token 经 localStorage 同源继承，URL 不携带。每个窗口是独立客户端（桌面版 preload 注入的固定 clientId 在 Wiki 窗口被忽略，改用窗口级 sessionStorage，避免两个窗口镜像同一 ClientSession，issue #10）。视图由 `WikiWindowShell` 提供专用文档标题栏与「文档工作台 | 按需问 pi」布局，不再渲染主应用的 `TopBar` / `FooterBar`。标题栏 portal（`#wiki-modal-toolbar`）承接面包屑、保存状态及目录／搜索／改动操作；桌面端整条标题栏和面包屑是连续拖动区，按钮、保存状态与窗口控制显式 `no-drag`，macOS 保留红绿灯安全距离。默认只显示文档，点击「问 pi」、文件引用或选区提问时展开右侧原聊天；最近改动为覆盖抽屉，不再压缩正文。退出 Wiki mode = 关闭窗口（脏草稿守卫与运行中断确认照旧）；窗口关闭后客户端断开，闲置客户端逐出（`evictIdleClients`）清理临时会话。
+## 代码块与插入面板
 
-**临时 Wiki 会话（ephemeral wiki conversation，见 GLOSSARY.md）**：进入 Wiki mode 或切换文档时，前端经 `POST /api/wiki`（action `new-conversation`）调用 `cs.newChat(true, true)` 创建一个新会话并置为 active——服务端用 `SessionManager.inMemory`（不落盘、无 transcript 文件），`conv.wiki` 标记，不进入左侧会话列表与会话树（运行中的 Wiki 任务除外，便于停止后台运行）。发送沿用当前文件 chip 机制：发送前排空保存、版本校验、同路径去重、512 KiB 上限；选区「问 pi」与文件栏引用均回填该临时会话的输入框。切换文档或退出 Wiki mode 时会话被无条件删除（草稿纸语义，问答历史不保留），运行中任务须先经确认框中断（「取消 / 中断并继续」，abort 后等快照 settle，30 秒兜底）。`new-conversation` 路由仅在当前 active 会话本身是运行中的 Wiki 会话时拒绝（防止切换文档产生僵尸后台会话）；从正在运行的普通对话进入 Wiki 不受影响，该对话按多对话并发规则转为后台运行。前端在退出/切换快照未到达就快速重进时对 `Conversation unavailable` 用最新会话 ID 重试一次。`createChat` 的 `replaceActive` 只回收 wiki 会话，普通对话进入 Wiki 后保留在运行列表，作为退出时的回切锚点。
+行号与代码操作放在 `data-rich-ui` 的不可编辑节点中，代码正文继续使用原有 CSS Highlight ranges，不拆行、不改写 token DOM。`readRichDocument` 在克隆中移除行号、折叠属性和原生 resize 高度，保留未编辑块的原始字节。Mermaid 沿用自己的图形／源码控制，不叠加普通代码块折叠。
 
-聊天回复的流式冻结段、当前生成段与最终正文共用 `MarkdownBody` 的文件链接处理。打开 Markdown 文档走当前 Wiki 窗口内的保存保护和中断确认，不通过浏览器导航到 `/文件.md`；冻结段保留 memo 与稳定 key。回归：`tests/wiki-chat-links-desktop-test.mjs` 使用真实 Electron 和本地模拟流式回复，覆盖三种渲染状态、取消／确认中断、保存失败／重试及窗口和客户端归属。
+插入菜单与工具栏共用命令实现。空查询上方为两行六列常用格式图标，下方按基础元素（双列具名卡片）和内容块（图标、名称与说明）分组，搜索后为说明列表；方向键按实际行列选择，Enter 插入，Esc 关闭。最近使用只把三个命令 ID 写入 `pi-wiki-recent-insertions`，存储不可用时退回内存。菜单按实际渲染宽高限制在视口内。回归：`tests/wiki-editor-palette-test.mjs`、`tests/wiki-insert-position-test.mjs`。
 
-**退出与恢复**：退出（浏览器标题栏关闭按钮或桌面系统窗口控制）先经脏草稿守卫与运行中断确认；Wiki 独立窗口随后真正关闭，无锚点回切（窗口内没有普通对话），临时会话由服务端闲置逐出清理。主窗口重进 Wiki mode 打开回到上次 Wiki 工作区与文档的窗口（localStorage `pi-wiki-workspace`），会话永远是新建的。页面刷新经 sessionStorage `pi-wiki-view`（视图、文档、会话 ID）恢复：快照的 active 会话仍匹配时重进 Wiki mode 并挂回同一临时会话，否则清除记录；`pi-wiki-chat-open` 同时保留「问 pi」是否展开。
+## Wiki 右栏与编辑回归（#116–117）
 
-`WikiWindowShell` 负责专用标题栏、按需聊天栏与桌面窗口控制；`App.tsx` 维护进入前锚点（`wikiNormalAnchor`）、中断确认（`wikiInterrupt`）、settle 等待（`settleWaiters`）与恢复记录；`ChatDock` 继续负责把唯一的聊天实例（MessageList + ChatInput）搬进 Wiki 视图右侧或数据库弹窗。`WikiDocumentModal` 仅剩数据库弹窗使用。
+`WikiOutline` 观察当前工作台正文的 DOM 变化，以可见文档标题为根节点、正文可见 H1–H6 为子树，按最近的较浅标题归属，保留元素引用以区分重名标题；正文中隐藏的重复标题、引用、列表及表格内标题不进入目录。切换文档、源码模式及未保存编辑自动更新目录。节点可独立折叠，顶部提供隐藏／显示和全部折叠／展开；切换文档重置状态。通过正文滚动事件、ResizeObserver 和 requestAnimationFrame 更新当前标题，折叠后高亮最近可见祖先，不自动展开分支。目录只读，不更改 Markdown 或编辑器选区。聊天宿主保持挂载；`chatOpen` 控制助手展开，选区提问和文件引用设置它以展开聊天。状态沿用窗口级 `pi-wiki-chat-open`，无记录时默认显示目录。桌面右栏常驻；窄屏目录通过独立的临时开关展开，导航后收起覆盖面板。回归：`tests/wiki-outline-test.mjs`。
+
+`formatBlock` 保留浏览器原生选区；Markdown 标题快捷输入只根据原段落的位置寻找其替换标题并恢复光标，避免 Chromium 跳入前一个代码块。复合插入块用显式标记调整光标；不通过父容器的首个同级标题猜测位置。表格渲染时在块内补齐前后空段落，计入未编辑基线，保持原文字节；「选中表格」使用原生 Range，删除及撤销沿用浏览器命令。
+
+回归：`node tests/wiki-issues-test.mjs` 覆盖工具栏／斜杠／Markdown 标题输入、表格首尾导航／选择／删除撤销／保存重开、默认目录、聊天替换与收起恢复目录、目录更新／跳转、聊天草稿与文件引用、小屏布局。
+
+## 窗口与会话
+
+Wiki 使用独立顶层窗口（ADR-0003）：浏览器命名弹窗 `pi-wiki`，Electron 第二个 BrowserWindow；主窗口保持普通对话。URL 契约仍为 `?wiki-window=1&cwd=&doc=&client=&model=&thinking=`，客户端独立，token 不进 URL。标题栏和面包屑保持桌面拖动区，控件为 no-drag。原生模型／思考档位继承保持原有校验与超时兜底。
+
+**Wiki 对话**按工作区持久保存，每篇文档独立恢复对话；切换正文、新建或打开历史时切换 SDK 会话。`hello.wikiCwd` 在独立目录初始化空白会话，前端 `chat-document` 恢复目标文档的会话；无历史时创建或复用初始空白实例。SDK transcript 位于 `<dataDir>/wiki/<sha256(realpath(cwd))>/sessions/`，设置 sidecar 保存标题、额外文档引用和最近打开时间。普通会话仍使用 SDK 默认目录，普通历史不会扫描 Wiki 目录。未发送的空白会话不进入历史。旧临时会话已经清理的内容不能迁移恢复。
+
+`WikiChatStore` 提供路径受限的列表、查找、设置与删除；`/api/wiki` 新增 `chat-list/context/references/validate-references/resume/new/open/rename/delete`。写操作验证当前 conversationId、工作区和 quiesce，异步切换按工作区串行准入，跨窗口打开同一 transcript 时检查占用；已断开且无任务／终端的旧客户端先释放再恢复。会话文件路径由服务端根据稳定 SDK sessionId 查询，不接受任意客户端文件路径。删除先释放对应运行实例，只删除对话和设置，不删除文档；带运行任务或终端的会话拒绝删除。
+
+**退出与恢复**：关闭窗口先走文档保存和运行中断确认。关闭后运行实例可由闲置客户端清理，持久 transcript 保留。刷新优先复用仍存活的 runtime；服务重启后旧 conversationId 不再有效时重新按工作区恢复历史。明确指定的 URL 文档决定正文，恢复对话不会强制打开历史里的某篇文档。新建／切历史前保存文档，保存失败或中断取消保留现场。聊天草稿按工作区及稳定 sessionId 存 sessionStorage，额外引用随对话持久保存。运行中切换文档、工作区或对话仍先确认中断并等待 `agent_settled`。
+
+`WikiWindowShell` 管理浮动／固定展示，`ChatDock` 移动同一个 MessageList + ChatInput 宿主，切换布局不重建聊天。默认收起问 pi、显示大纲；打开问 pi 默认浮动（420px，视口内拖动与缩放），固定模式替换右侧大纲，收起恢复大纲。localStorage 保存布局选择和浮动位置／尺寸，sessionStorage 保存展开状态。小于 900px 使用覆盖面板，暂不提供固定和拖动。文档改动抽屉在浮动助手之上。`WikiDocumentModal` 仍只用于数据库。
+
+聊天正文文件链接继续在当前 Wiki 窗口内打开，保留保存与中断保护；不导航到裸文件 URL。回归：`wiki-chat-links-desktop-test.mjs` 覆盖 Electron 流式、冻结和完成回复的链接、切文件夹、空目录与主窗口隔离。
+
+## 多文档引用与历史面板
+
+`WikiAssistantSheet` 使用原生 modal dialog 保证焦点约束，关闭后恢复触发控件焦点。文档选择支持标题／路径过滤、按本地日历日的今天及滚动七／三十天修改时间过滤、文件夹分页浏览；范围为当前工作区 `.md/.markdown/.txt`，最多 100 个额外引用。时间来自 mtime，文案为“修改”而不是“我编辑”。索引受限时提示并提供文件夹继续查找。选择在点击确定后应用，取消不修改；文件夹只用于浏览，不隐式全选。
+
+当前文件 chip 继续镜像正文，手动额外引用独立保存，切文档保留、发送后保留；相同文件只发送一次，当前编辑器快照优先。旧版额外文档使用现有 reference 模式按需读取，既不自动注入所有全文，也不改变 Agent 工具权限。服务端校验路径及真实路径边界、存在性和文件类型；缺失引用阻止发送并保留输入，可移除后重试。发送冻结选择列表，预检仅验证文件、不覆盖期间改变的持久选择；排空正文保存后再次校验文档 token、工作区及会话；切换对话期间不发送旧草稿。
+
+历史按更新时间排列，支持标题搜索、重命名和确认删除；默认标题来自首条用户消息，不调用模型。文件改动记录保持独立，新 HTTP prompt 记录带稳定 sessionId，旧记录不推测归属。
+
+回归：`tests/wiki-assistant-test.mjs`（本地模拟模型，布局、引用、草稿、历史、重启、跨窗口占用、缺失文件、小屏和删除），`tests/unit/wiki-chat-store.test.ts`（原生持久化、路径与工作区隔离）。
 
 ## 切换文件夹
 
@@ -16,7 +52,7 @@ Wiki 运行在**独立顶层窗口**（ADR-0003，取代 ADR-0002 的同窗口�
 
 Wiki 左侧目录栏顶部的「打开文件夹」复用 `FolderPickerModal` 与 `browse_dirs`，从当前工作目录开始浏览，也支持手动输入服务器本地路径（桌面版为本机目录）。选择后先走自动保存导航守卫；运行中的任务先确认中断，等待 settle 后再保存和切换。取消或保存失败保留原文档，目录校验失败显示可重试错误。
 
-切换沿用 `set_cwd`，等待 `useChat` 收到请求确认及目标权威快照后创建新的临时 Wiki 会话；主窗口客户端不变。旧临时会话由既有项目切换生命周期回收。成功后同步 URL 的 cwd/doc、窗口恢复记录和最近 Wiki 工作区，保持同一个窗口及 client。新目录优先打开根 README/index.md，否则打开索引中的首篇文档；自动选中文档同样走 `openDocument`，保证 URL、会话和当前文件 chip 一致。没有文档时展开目录树，支持搜索与新建文件。
+切换沿用 `set_cwd`，等待 `useChat` 收到请求确认及目标权威快照后恢复目标工作区的 Wiki 对话；主窗口客户端不变。旧运行实例由既有项目切换生命周期回收，历史保留。成功后同步 URL 的 cwd/doc、窗口恢复记录和最近 Wiki 工作区，保持同一个窗口及 client。新目录优先打开根 README/index.md，否则打开索引中的首篇文档；自动选中文档同样走 `openDocument`，保证 URL、会话和当前文件 chip 一致。没有文档时展开目录树，支持搜索与新建文件。
 
 回归：`tests/wiki-chat-links-desktop-test.mjs` 覆盖跨目录、无效路径、保存失败／重试、中断取消／确认、主窗口隔离、刷新恢复及空目录。
 
@@ -24,7 +60,7 @@ Wiki 左侧目录栏顶部的「打开文件夹」复用 `FolderPickerModal` 与
 
 `WikiWorkbench` 继续通过 `useWikiAutosave` 在停止输入 800ms 后保存；写入以字节 SHA-256 比较版本，保存确认只更新基线，不覆盖新输入。加载、会话运行及恢复操作期间保持编辑保护，证据快照继续只读。退出与切换文档经过导航守卫：先排空保存，失败则保留现场，可继续编辑、重试或明确放弃。冲突必须先重载或保留自己的版本。
 
-选区「问 pi」捕获点击时的文字与文件路径，保存成功后回调 App，展开右侧 Agent Chat 并追加到临时 Wiki 会话的输入末尾，保留已有草稿和附件、聚焦但不发送，Wiki 视图保持打开；引用操作本身不额外附加整篇文档。保存失败不转移引用。请求带唯一 ID、cwd 和会话 conversationId，App 与 ChatInput 都检查归属，ChatInput 消费 ID 去重；卸载或文档读取序号变化后丢弃迟到结果。工作区或会话变化清除待传引用。
+选区「问 pi」捕获点击时的文字与文件路径，保存成功后回调 App，展开右侧 Agent Chat 并追加到Wiki 对话的输入末尾，保留已有草稿和附件、聚焦但不发送，Wiki 视图保持打开；引用操作本身不额外附加整篇文档。保存失败不转移引用。请求带唯一 ID、cwd 和会话 conversationId，App 与 ChatInput 都检查归属，ChatInput 消费 ID 去重；卸载或文档读取序号变化后丢弃迟到结果。工作区或会话变化清除待传引用。
 
 右栏输入框自动显示当前 Wiki 文档的 `@文件名` chip，切换文档时替换，退出 Wiki mode 后恢复普通文件预览上下文。Wiki 独立注册当前文件读取器，避免后台预览覆盖；发送时沿用完整编辑器快照、512 KiB 上限与同路径附件去重，保存成功后读取最新正文和版本。可手动移除 chip，重新打开文档恢复；无文本的媒体不产生 chip。选区「问 pi」仍只追加选中文字，整篇文档是否携带由当前文件 chip 决定。
 
@@ -34,13 +70,13 @@ Wiki 左侧目录栏顶部的「打开文件夹」复用 `FolderPickerModal` 与
 
 ## 阅读交互
 
-正文默认直接编辑，独立 44px 插入工具栏、选区浮动格式栏和源码切换。标准正文 760px、宽版 1000px；标题使用本地 Source Serif 4 / Noto Serif SC，正文 IBM Plex Sans，代码 JetBrains Mono。元信息保留更新时间、阅读时间和标签，frontmatter、重复 H1 及开头属性表隐藏于正文但保存时保留原文。
+正文默认直接编辑，统一 40px 顶部工具栏、选区“问 pi”和源码切换。标准正文内容最宽 760px，宽版内容 1000px（均不含响应式内边距）；标题与正文使用系统无衬线字体，代码 JetBrains Mono，最新尺寸与配色见 `ui-design.md` 的语雀桌面参考。元信息保留更新时间、阅读时间和标签，frontmatter、重复 H1 及开头属性表隐藏于正文但保存时保留原文。
 
-隐藏根目录分组、文件栏拖动宽度、目录树按需加载、双链和索引详情沿用已有行为。搜索支持 Cmd/Ctrl+P（兼容 Cmd/Ctrl+K），Cmd/Ctrl+Enter 把命中路径与片段按保存后的引用流程送回聊天。右栏默认收起，点击「问 pi」、文件引用或选区提问时展开；它是当前临时 Wiki 会话的完整聊天能力（附件、斜杠命令、模型选择），不显示底部输入胶囊或「对话 | Wiki」切换。
+隐藏根目录分组、文件栏拖动宽度、目录树按需加载、双链和索引详情沿用已有行为。搜索支持 Cmd/Ctrl+P（兼容 Cmd/Ctrl+K），Cmd/Ctrl+Enter 把命中路径与片段按保存后的引用流程送回聊天。右栏默认显示目录，切换文档和刷新保留助手展开选择；点击「问 pi」、文件引用或选区提问时展开助手；它是当前Wiki 对话的完整聊天能力（附件、斜杠命令、模型选择），不显示底部输入胶囊或「对话 | Wiki」切换。
 
 ### 编辑与阅读回归（#109–112）
 
-标题末尾按 Enter 回到普通段落；Shift+Enter 保留标题内换行。正文与 H1/H2/H3 使用各自字号。表格操作栏占据文档流空间，不覆盖单元格；提供删除整表，保存走原有自动保存路径。表头和内容默认居中，Markdown 显式列对齐优先，列之间显示分隔线。
+标题末尾按 Enter 回到普通段落；Shift+Enter 保留标题内换行。正文与 H1/H2/H3 使用各自字号。表格左上角选择手柄使用原生选区，选中后单元格整体高亮，不显示操作浮栏；选中后可按 Delete／Backspace 删除整表，保存走原有自动保存路径。表头和内容默认居中，Markdown 显式列对齐优先，列之间显示分隔线。
 
 文档标题下方不再额外显示「本页」自动阅读目录，避免与正文目录重复。用户手动插入的「目录」继续保留，支持标题更新、点击跳转与移除；关闭自动目录不会修改 Markdown 文件。回归：`tests/wiki-issues-browser-test.mjs`，使用独立 Wiki 窗口、隔离端口和临时工作区，不调用模型。
 
@@ -48,7 +84,7 @@ Wiki 左侧目录栏顶部的「打开文件夹」复用 `FolderPickerModal` 与
 
 OKF 扩展已移除；此前导出的知识目录中，带有效知识 manifest 的 evidence 副本仍排除后台索引与撤销快照并保持只读，显式打开保留；明确相对文件链接不依赖索引命中。
 
-文件栏使用与普通文件树一致的顶部搜索、32px 行高、18px 缩进与线框图标；悬停／聚焦的浅黄色链接按钮把文件或目录以 reference 附加到右侧临时 Wiki 会话，不自动发送或打开目录。文件栏提供新建文件，默认填入当前文档的父目录；与普通文件树共用创建表单和独占创建接口，详见 [附件与文件处理](architecture-attachments.md#手动新建文件)。创建成功后经过自动保存导航保护打开新文件。
+文件栏使用与普通文件树一致的顶部搜索、32px 行高、18px 缩进与线框图标；悬停／聚焦的浅黄色链接按钮把文件或目录以 reference 附加到右侧Wiki 对话，不自动发送或打开目录。文件栏提供新建文件，默认填入当前文档的父目录；与普通文件树共用创建表单和独占创建接口，详见 [附件与文件处理](architecture-attachments.md#手动新建文件)。创建成功后经过自动保存导航保护打开新文件。
 
 `wiki-service.ts` 负责工作区索引、文档读取、搜索和文件历史；`wiki-links.ts` 定义标签与链接解析。HTTP 类型只在 `server/protocol.ts` 声明，经现有 type-only shim 供浏览器使用。
 
@@ -113,16 +149,43 @@ Wiki 的 `/` 菜单在文本块开头或空格后触发，排除代码、链接�
 
 历史 Wiki 提问记录携带 `conversationId`、`requestId` 和 `assistantTimestamp`，Wiki 的最近改动继续读取这些记录与手工保存记录，展开时读取完整 diff；撤销仍按整个请求做版本预检。
 
-回归：`tests/wiki-editing-test.mjs` 覆盖延迟确认期间继续编辑、立即导航保存、失败重试、冲突处理、紧凑菜单、Markdown 简写、选区格式和窄屏；`tests/wiki-desktop-save-test.mjs` 在真实 Electron 验证标题栏连续拖动区、控件 `no-drag`、关闭、退出及失败保留窗口；`tests/wiki-modal-browser-test.mjs` 验证默认文档布局、按需问 pi、覆盖式改动抽屉、保存保护及选区回填。设计稿待定的 AI 续写/总结命令、最近使用分组及问 pi 结果替换流程未加入。
+回归：`tests/wiki-editing-test.mjs` 覆盖延迟确认期间继续编辑、立即导航保存、失败重试、冲突处理、紧凑菜单、Markdown 简写、选区格式和窄屏；`tests/wiki-desktop-save-test.mjs` 在真实 Electron 验证标题栏连续拖动区、控件 `no-drag`、关闭、退出及失败保留窗口；`tests/wiki-modal-browser-test.mjs` 验证默认目录、聊天替换及收起恢复目录、覆盖式改动抽屉、保存保护及选区回填。设计稿待定的 AI 续写/总结命令、最近使用分组及问 pi 结果替换流程未加入。
 
 ## 扩展 UI 与恢复状态
 
-Wiki 视图不注册独立扩展输入框。右栏是临时 Wiki 会话的输入框、扩展请求及恢复状态，直接显示 SDK 回复；可在右栏处理扩展交互。原生协议不变。
+Wiki 视图不注册独立扩展输入框。右栏是Wiki 对话的输入框、扩展请求及恢复状态，直接显示 SDK 回复；可在右栏处理扩展交互。原生协议不变。
 
 ## 文档画布视觉更新（2026-10-08）
 
 34a 规范见 `wiki-doc-v2-design.md`。视图头显示目录路径、文件名、保存状态、最近改动和聊天面板开关／退出 Wiki mode。`WikiToolbar` 提供分组 SVG 插入按钮；`TableSizePicker` 支持 8×6 鼠标/键盘选择；`CodeLanguagePicker` 支持搜索和 Mermaid。工具栏直接展示斜杠菜单的全部 11 个插入项，正文、H2、H3 独立设置格式，日期可直接插入；不再使用更多菜单，窄栏横向滚动。编辑块使用 `display: block`：原生 `formatBlock` 在 `display: contents` 中会丢失段落；`flow-root` 会阻止相邻块外边距合并，使段距翻倍。Mermaid 图和代码并存，图形装饰标记 `data-rich-ui`，保存时剔除。
 
-宽版隐藏两侧并使用 1000px 正文；打开新文档或最近改动退出。宽版不持久化。正文维持 800ms 自动保存、Cmd+S 和导航保存，未编辑块保留原文。默认焦点位于文末；空段落提示不写入 Markdown。本地字体仅用于标题，以 unicode-range 按需加载，并随文件附带 OFL 许可证。
+宽版隐藏两侧并使用 1000px 正文；打开新文档或最近改动退出。宽版不持久化。正文维持 800ms 自动保存、Cmd+S 和导航保存，未编辑块保留原文。默认焦点位于文末；空段落提示不写入 Markdown。标题与正文按 2026-10-19 走查统一使用 `--sans`；代码保留等宽字体。
 
 开头属性提取只解析属性候选段及正文边界见证，保留连续正文、Setext 标题、缩进和 CRLF 的判定以及属性原文范围。
+
+## Markdown 编辑器走查（2026-10-19）
+
+`WikiToolbar` 统一使用 Lucide 图标，正文样式遵循 `ui-design.md` 走查条目。`wiki-table-presentation.ts` 只为状态列补编辑器 class，不改变单元格内联样式或 Markdown 对齐；挂载时计入原文基线，输入时更新分类。代码由 `pre > code` 内部横向滚动，命令原文不换行、不重写。
+
+`WikiWindowShell` 提供窗口级 `.wiki-statusbar`，`WikiWorkbench` 将索引入口 portal 到 `#wiki-window-index`。Wiki 通知只在状态区渲染一次，原聊天与覆盖通知在 Wiki 模式下不重复渲染；沿用普通信息 3 秒自动消失和警告／错误手动关闭。状态区不覆盖正文，无内容时隐藏。回归：`tests/wiki-design-review-test.mjs`。
+
+### Desktop 原生助手浮窗
+
+桌面浮动模式通过受限 `about:blank` / `pi-wiki-assistant` 子窗口承载同一 React portal，标题栏提供系统拖动，窗口边缘提供缩放，可跨屏。`WikiAssistantWindow` 移动稳定 DOM 容器，聊天仍由 Wiki opener 的客户端持有，不另建连接或会话；固定回右栏不重挂输入框。主题属性同步到子窗口，样式表复制并使用 opener base URL。子窗口没有新增原生 API，禁止导航和嵌套弹窗；Wiki 关闭时销毁其子窗口。关闭或固定助手时先移回稳定 DOM 并隐藏原生窗口，重开复用同一个窗口，避免 Chromium 卸载已迁移 DOM 的事件监听；Wiki 退出才销毁原生窗口。关闭助手只收起并保留草稿，Wiki 的保存／中断确认仍是退出边界。Web 保持页面内浮动。回归：`node tests/wiki-assistant-window-test.mjs`。
+
+## 共用文档格式与小记
+
+Wiki 与小记共用 RichMarkdownEditor、RichFormattingToolbar 和 rich-markdown 编解码器；Wiki 的目录、双链、宽版、问 pi 与项目图片接口保留在 Wiki 宿主。新增字号、颜色、上下标、对齐、行距、格式刷、三色块、折叠块、链接卡片和列表缩进；表格行列变更通过原生编辑事务进入撤销栈，列对齐写回 GFM 表格。数据格式、受控 HTML 白名单及外链抓取边界见 [小记架构](architecture-notes.md#共用编辑与资源2026-10-20)。保存与 Agent 生命周期仍使用本页既有规则；资源结果迟到或编辑器卸载后不插入另一文档。
+
+
+## Wiki 单行工具栏与正文层级（2026-10-20）
+
+Wiki 的插入与格式命令统一挂载在标题栏下的 40px 工具栏，按钮 28px、图标 16px。按容器实际宽度将右侧分组移入“更多”，不换行；插入菜单集中图片、表格、代码、高亮块、折叠块、链接卡片、文档链接、日期及目录。菜单支持方向键、Home/End、Esc 返回触发按钮，保留编辑选区。选区浮层只保留“问 pi”。源码与宽版入口保持原有行为，小记继续使用紧凑工具栏。
+
+正文内容最大宽度 760px，宽版 1000px，容器另含左右各 48px 留白（窄屏 20px）；顶部留白 40px。沿用已确认字体，正文 15px/1.74、标题 36px/约 50px，段距 12px、列表缩进 24px、条目间距 4px。任务列表仅显示绿色复选框。日期与阅读时间为 12px 灰色辅助信息。文档属性默认折叠，按工作区和路径重新挂载，窄屏上下排列；展开、工具栏布局和大纲导航不调用保存或改写原文字节。
+
+回归：`tests/wiki-design-review-test.mjs` 检查属性展开字节保留、单行工具栏、菜单焦点、长标题与属性、明暗及窄屏截图、表格编辑和保存重开；编辑命令复用 `RichMarkdownEditor`，小记不变。
+
+### Wiki 正文与大纲共用滚动区（2026-10-20）
+
+桌面阅读时正文与大纲位于同一个 `.wiki-scroll` 内，页面滚动条在最右侧；大纲无面板边框、背景与正文连续，并在滚动时吸顶。超长大纲保留自身滚动，短大纲上的滚轮继续滚动正文。大纲通过窗口提供的 `WikiReadingOutline` 上下文进入正文布局；正文滚动位置恢复、标题高亮和跳转继续使用原 `.wiki-scroll`。窄屏保持目录覆盖抽屉，固定问 pi 时隐藏大纲并保留聊天独立滚动。

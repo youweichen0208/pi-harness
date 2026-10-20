@@ -1,3 +1,4 @@
+import { wikiToolbar, wikiInsert } from "./lib/wiki-toolbar.mjs";
 // #109–112: detached Wiki headings, automatic outline removal and table editing. No model calls.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
@@ -55,7 +56,7 @@ try {
 	await check('insert and repeatedly edit a fresh table', async () => {
 		await editor.locator('p', { hasText: 'End.' }).click();
 		await page.keyboard.press('End'); await page.keyboard.press('Enter');
-		await page.locator('.wiki-insert-toolbar').getByRole('button', { name: '插入表格', exact: true }).click();
+		await wikiInsert(page, '插入表格');
 		await page.keyboard.press('Enter');
 		await editor.locator('td').first().click(); await page.keyboard.type('Fresh cell');
 		await editor.locator('td').first().click();

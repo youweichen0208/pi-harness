@@ -56,7 +56,7 @@ try {
 		for (const width of [1100, 900, 720]) {
 			await page.setViewportSize({ width, height: 800 });
 			const controls = await page.locator(".wiki-window-header .desktop-window-controls").boundingBox();
-			const ask = await page.locator(".wiki-agent-toggle").boundingBox();
+			const ask = await page.locator(".wiki-ask-toggle").boundingBox();
 			assert(controls.x + controls.width <= width, "window controls stay inside the viewport");
 			assert(controls.x >= ask.x + ask.width, `${platform}/${width}: native controls overlap Wiki tools`);
 			for (const button of await page.locator(".wiki-window-header .desktop-window-controls button").all()) {

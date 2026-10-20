@@ -1,9 +1,7 @@
-import { useChanges } from "../changes-context";
-import { ChangeCounts } from "./ChangeSummaryCard";
 import { toolTextIncidents } from "../tool-text";
 import { openSessionTree } from "../tree-events";
 import { createPortal } from "react-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
 	FiSidebar,
 	FiBookOpen,
@@ -11,6 +9,7 @@ import {
 	FiGitBranch,
 	FiGlobe,
 	FiMenu,
+	FiMoreHorizontal,
 	FiMessageSquare,
 	FiSearch,
 	FiPlus,
@@ -94,7 +93,19 @@ export function TopBar({
 	onSoundPreview,
 }: TopBarProps) {
 	const { locale, setLocale, t } = useI18n();
-	const changes = useChanges();
+	const headerRef = useRef<HTMLElement>(null);
+	const [headerWidth, setHeaderWidth] = useState(0);
+	const [navigationOpen, setNavigationOpen] = useState(false);
+	useEffect(() => {
+		const header = headerRef.current;
+		if (!header) return;
+		const observer = new ResizeObserver(([entry]) => setHeaderWidth(entry.contentRect.width));
+		observer.observe(header);
+		return () => observer.disconnect();
+	}, []);
+	const showGit = headerWidth >= 740;
+	const showTerminal = headerWidth >= 600;
+	const navigate = (next: TopBarProps["view"]) => { setNavigationOpen(false); onViewChange(next); };
 	const [langOpen, setLangOpen] = useState(false);
 	const [moreOpen, setMoreOpen] = useState(false);
 	const [menuHost, setMenuHost] = useState<HTMLElement | null>(null);
@@ -195,7 +206,7 @@ export function TopBar({
 				</div>
 	);
 	return (
-		<header className="topbar">
+		<header className="topbar" ref={headerRef}>
 			<div className="brand">
 				<button
 					type="button"
@@ -219,97 +230,23 @@ export function TopBar({
 			{view !== "nodes" && <button type="button" className="project-panel-toggle" title={t(leftCollapsed ? "expandProjects" : "collapseProjects")} aria-label={t(leftCollapsed ? "expandProjects" : "collapseProjects")} aria-expanded={!leftCollapsed} onClick={() => onOpenPanel("left")}><FiSidebar /></button>}
 			<div className="header-location"><span title={chat.state?.cwd}>{projectName || t("desktopWorkspace")}</span><i>/</i><button className="conversation-title-button" title={t("treeTitle")} onClick={() => openSessionTree()}><strong title={conversationTitle}>{conversationTitle}</strong><span aria-hidden="true">⌄</span></button>{(interrupted || reminding || currentStep >= 0 || !!task?.plan?.awaitingConfirmation) && <button type="button" className={`header-task-progress${interrupted ? " interrupted" : reminding ? " reminding" : ""}`} title={t("taskProgress")} onClick={onOpenTask}><span aria-hidden="true">●</span>{interrupted ? t("toolRecoveryInterrupted") : reminding ? t("working") : task?.plan?.awaitingConfirmation ? t("taskProgress") : t("taskPlanPosition", { current: currentStep + 1, total: planItems.length })}</button>}</div>
 			<div className="topbar-actions">
-				{view === "chat" && changes && (changes.files.length > 0 || gitChangeCount > 0 || changes.open) && <button className="changes-toggle" aria-pressed={changes.open} title="⌘D" onClick={() => changes.set({ open: !changes.open })}><FiLayers aria-hidden="true" />{t("changesTitle")} <ChangeCounts files={changes.files} /></button>}
-				<div
-					className="view-switch"
-					role="tablist"
-					aria-label={t("viewSwitch")}
-				>
-					<button
-						type="button"
-						role="tab"
-						aria-label={t("chat")}
-						title={t("chat")}
-						aria-selected={view === "chat"}
-						className={view === "chat" ? "active" : ""}
-						onClick={() => onViewChange("chat")}
-					>
-						<FiMessageSquare />
-						<span>{t("chat")}</span>
-					</button>
-					<button
-						type="button"
-						role="tab"
-						aria-label={t("wikiMode")}
-						title={t("wikiMode")}
-						aria-selected={view === "wiki"}
-						className={`wiki-view-tab ${view === "wiki" ? "active" : ""}`}
-						onClick={() => onViewChange(view === "wiki" ? "chat" : "wiki")}
-					>
-						<FiBookOpen />
-						<span>{t("wikiMode")}</span>
-					</button>
-					<button
-						type="button"
-						role="tab"
-						aria-label={t("terminal")}
-						title={t("terminal")}
-						aria-selected={view === "terminal"}
-						className={view === "terminal" ? "active" : ""}
-						onClick={() => onViewChange("terminal")}
-					>
-						<FiTerminal />
-						<span>{t("terminal")}</span>
-					</button>
-					<button type="button" aria-label={t("dbTitle")} onClick={onOpenDatabase}><FiDatabase /><span>{t("dbTitle")}</span></button>
-					<button
-						type="button"
-						role="tab"
-						aria-label={t("nodes")}
-						title={t("nodes")}
-						aria-selected={view === "nodes"}
-						className={view === "nodes" ? "active" : ""}
-						onClick={() => onViewChange("nodes")}
-					>
-						<FiGlobe />
-						<span>{t("nodes")}</span>
-					</button>
-					<button
-						type="button"
-						role="tab"
-						aria-label={t("scmTab")}
-						title={notGitRepo ? t("notGitRepoShort") : t("scmTab")}
-						aria-disabled={notGitRepo}
-						className={view === "git" ? "active" : undefined}
-						aria-selected={view === "git"}
-						onClick={() => { if (!notGitRepo) onViewChange("git"); }}
-					>
-						<FiGitBranch />
-						<span>{t("scmTab")}</span>
-						{!notGitRepo && gitChangeCount > 0 && <em className="tab-change-count">{gitChangeCount}</em>}
-					</button>
-					<button type="button" className="workspace-jobs" onClick={onOpenBgTasks} title={t("bgTasksTip")}><FiLayers /><span>{t("bgTasks")}</span>{chat.bgServers.length > 0 && <em className="bg-task-badge">{chat.bgServers.length}</em>}</button>
-					{plugins.map((p) => {
-						const tip = p.error
-							? `${p.name}: ${p.error}`
-							: p.description
-								? `${p.name} — ${p.description}`
-								: p.name;
-						return (
-							<button
-								key={p.id}
-								type="button"
-								role="tab"
-								aria-selected={view === `plugin:${p.id}`}
-								className={`plugin-tab${view === `plugin:${p.id}` ? " active" : ""}${p.error ? " broken" : ""}`}
-								title={tip}
-								onClick={() => onViewChange(`plugin:${p.id}`)}
-							>
-								{p.icon ? <span aria-hidden>{p.icon}</span> : null}
-								<span>{p.name}</span>
-							</button>
-						);
-					})}
+				<div className="view-switch" role="tablist" aria-label={t("viewSwitch")}>
+					{([
+						["chat", t("chat"), <FiMessageSquare />],
+						["wiki", t("wikiMode"), <FiBookOpen />],
+						...(showTerminal ? [["terminal", t("terminal"), <FiTerminal />]] : []),
+						...(showGit ? [["git", t("scmTab"), <FiGitBranch />]] : []),
+					] as const).map(([id, label, icon]) => <button key={String(id)} type="button" role="tab" aria-label={String(label)} title={id === "git" && notGitRepo ? t("notGitRepoShort") : String(label)} aria-selected={view === id} aria-disabled={id === "git" && notGitRepo} className={view === id ? "active" : ""} onClick={() => { if (id !== "git" || !notGitRepo) navigate(id as TopBarProps["view"]); }}>{icon}<span>{label}</span>{id === "git" && !notGitRepo && gitChangeCount > 0 && <em className="tab-change-count">{gitChangeCount}</em>}</button>)}
+				</div>
+				<div className={`navigation-more${view === "nodes" || view.startsWith("plugin:") || (view === "git" && !showGit) || (view === "terminal" && !showTerminal) ? " has-active-view" : ""}`}>
+					<Dropdown keyboardNavigation trigger={<><FiMoreHorizontal /><span>{t("more")}</span></>} open={navigationOpen} onOpenChange={setNavigationOpen} menuClassName="navigation-menu">
+						{!showTerminal && <DropdownItem active={view === "terminal"} onClick={() => navigate("terminal")}><FiTerminal />{t("terminal")}</DropdownItem>}
+						{!showGit && <DropdownItem active={view === "git"} disabled={notGitRepo} title={notGitRepo ? t("notGitRepoShort") : undefined} onClick={() => navigate("git")}><FiGitBranch />{t("scmTab")}{!notGitRepo && gitChangeCount > 0 && <em className="tab-change-count">{gitChangeCount}</em>}</DropdownItem>}
+						<DropdownItem onClick={() => { setNavigationOpen(false); onOpenDatabase(); }}><FiDatabase />{t("dbTitle")}</DropdownItem>
+						<DropdownItem active={view === "nodes"} onClick={() => navigate("nodes")}><FiGlobe />{t("nodes")}</DropdownItem>
+						<DropdownItem onClick={() => { setNavigationOpen(false); onOpenBgTasks(); }}><FiLayers />{t("bgTasks")}{chat.bgServers.length > 0 && <em className="bg-task-badge">{chat.bgServers.length}</em>}</DropdownItem>
+						{plugins.map(p => <DropdownItem key={p.id} active={view === `plugin:${p.id}`} title={p.error ? `${p.name}: ${p.error}` : p.description} onClick={() => navigate(`plugin:${p.id}`)}><span>{p.icon}</span><span>{p.name}{p.error ? " ⚠" : ""}</span></DropdownItem>)}
+					</Dropdown>
 				</div>
 
 				{/* Desktop toolbar — hidden on mobile (model/thinking move into the
