@@ -41,6 +41,9 @@ const CODE_LANGUAGES = ["javascript", "typescript", "python", "bash", "json", "y
 export interface RichEditorHost {
 	uploadImage: (data: string, signal: AbortSignal) => Promise<string>;
 	resolveImage: (source: string) => string;
+	/** Offer a Run control on Java code blocks. Only the Notes host provides it,
+	 *  so the Wiki host deliberately gets no Run control. */
+	runCode?: (code: string) => void;
 }
 export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, readOnly, onChange, file = { cwd: "", path: "" }, wiki, host, compact = false }: {
 	file?: { cwd: string; path: string };
@@ -292,9 +295,28 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 			control.value = language;
 			control.disabled = readOnly;
 			control.setAttribute("aria-label", t("richCodeLanguage"));
+			// A Java block in a Note can be run; the chrome is imperative DOM, so the
+			// button is added and removed on each pass rather than rendered by React.
+			const chrome = control.parentElement!;
+			const canRun = !readOnly && !!host?.runCode && language === "java";
+			let runButton = chrome.querySelector<HTMLButtonElement>("button[data-code-run]");
+			if (canRun && !runButton) {
+				runButton = document.createElement("button");
+				runButton.type = "button";
+				runButton.dataset.codeRun = "";
+				runButton.onmousedown = event => event.preventDefault();
+				chrome.append(runButton);
+			}
+			if (!canRun) runButton?.remove();
+			else if (runButton) {
+				runButton.textContent = t("playgroundRun");
+				runButton.title = t("playgroundRun");
+				runButton.setAttribute("aria-label", t("playgroundRun"));
+				runButton.onclick = () => host!.runCode!(richCodeText(code));
+			}
 			paintCode(code, true);
 		});
-	}, [value, readOnly, t, wiki?.focused]);
+	}, [value, readOnly, t, wiki?.focused, host?.runCode]);
 	useLayoutEffect(() => {
 		root.current?.querySelectorAll<HTMLImageElement>("img").forEach((img) => {
 			const source = img.dataset.richImageSrc ?? img.getAttribute("src") ?? "";

@@ -346,6 +346,38 @@ try {
 			await forced;
 			await page.keyboard.press("Escape");
 
+			// --- the Notes entry ---
+			const javaBlock = '```java\npublic class Main { public static void main(String[] a) { System.out.println("note hello"); } }\n```';
+			const createNote = async (title, body) => (await (await fetch(`${base}/api/notes?token=${token}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title, body, pinned: false }) })).json()).note;
+			const note = await createNote("Playground note", javaBlock);
+			await page.getByRole("button", { name: "小记", exact: true }).click();
+			await page.locator(".note-list-item").first().click();
+			const noteRun = page.locator("button[data-code-run]").first();
+			await noteRun.waitFor({ timeout: 30000 });
+			assert.equal(await noteRun.innerText(), "运行", "the Note control is labelled in the active locale");
+			await noteRun.click();
+			const noteOut = page.locator(".notes-editor > .playground-result .playground-stream pre").first();
+			await noteOut.waitFor({ timeout: 60000 });
+			assert.match(await noteOut.innerText(), /note hello/);
+
+			// Running must not touch the note: not the body, not the version.
+			const afterRun = (await (await fetch(`${base}/api/notes/${note.id}?token=${token}`)).json()).note;
+			assert.equal(afterRun.body, javaBlock, "a Run must not write into the note body");
+			assert.equal(afterRun.version, note.version, "a Run must not bump the note version");
+
+			// Editing the code away marks the result stale rather than leaving it lying.
+			await page.getByRole("button", { name: "Markdown 源码", exact: true }).click();
+			await page.getByLabel("小记正文", { exact: true }).fill('```java\npublic class Main { }\n```');
+			await page.locator(".playground-result .playground-badge.stale").waitFor({ timeout: 10000 });
+
+			// Switching notes leaves no result behind.
+			await createNote("Another note", "plain text");
+			await page.getByRole("button", { name: "新建小记", exact: true }).first().click();
+			await page.locator(".notes-editor > .playground-result").waitFor({ state: "detached", timeout: 10000 });
+			await page.getByRole("button", { name: "对话", exact: true }).click();
+
+			console.log("PASS playground browser: Notes run, no body write, stale after edit and cleared on switch");
+
 			console.log("PASS playground browser: Run control on a reply, none on tool cards, streaming output, send-to-pi and the settings tab");
 		} finally {
 			await browser.close();

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { RichMarkdownEditor, type RichEditorHost } from "./RichMarkdownEditor";
 import { RichDocumentPreview } from "./RichDocumentPreview";
 import { withToken } from "../auth-token";
@@ -12,6 +12,9 @@ const notesHost: RichEditorHost = {
 };
 import { useT } from "../i18n";
 import type { NotesController } from "../use-notes";
+import { usePlaygroundHost } from "../playground-context";
+import { runKey, startRun } from "../playground-run-store";
+import { PlaygroundResult } from "./PlaygroundRun";
 
 export function NotesList({ notes: n }: { notes: NotesController }) {
 	const t = useT();
@@ -28,6 +31,18 @@ export function NotesEditor({ notes: n }: { notes: NotesController }) {
 	const [source, setSource] = useState(false);
 	const [preview, setPreview] = useState(false);
 	const textarea = useRef<HTMLTextAreaElement>(null);
+	// A Run started from a Note remembers the exact source it ran, so the result can
+	// be labelled stale the moment that source is edited away. Hooks stay above the
+	// `!d` early return.
+	const { status } = usePlaygroundHost();
+	const [lastRun, setLastRun] = useState<{ code: string; key: string } | null>(null);
+	useEffect(() => { setLastRun(null); }, [n.selected]);
+	const canRun = !!status?.enabled && status.jdk.available;
+	// Only the Notes host offers a Run control; the Wiki host does not, so its code
+	// blocks get no button at all.
+	const host = useMemo<RichEditorHost>(() => canRun
+		? { ...notesHost, runCode: code => { const key = runKey(`note:${n.selected}`, code); setLastRun({ code, key }); void startRun(key, code); } }
+		: notesHost, [canRun, n.selected]);
 	const d = n.draft;
 	if (!d) return <section className="notes-editor notes-empty"><h2>{t("notesTitle")}</h2><p>{t("notesChoose")}</p><button disabled={n.creating} onClick={() => void n.create()}>{t("notesNew")}</button></section>;
 	return <section className="notes-editor" aria-label={t("notesTitle")}>
@@ -49,6 +64,7 @@ export function NotesEditor({ notes: n }: { notes: NotesController }) {
 			<button disabled={d.saving || n.creating} onClick={() => void n.create(true)}>{t("notesSaveCopy")}</button>
 		</div>}
 		<input className="note-title" aria-label={t("notesName")} placeholder={t("notesUntitled")} maxLength={500} value={d.note.title} onChange={e => n.edit({ title: e.target.value })} />
-		{preview ? <RichDocumentPreview key={n.selected} value={d.note.body} onChange={body => n.edit({ body })} host={notesHost} /> : !source ? <RichMarkdownEditor key={n.selected} value={d.note.body} onChange={body => n.edit({ body })} readOnly={false} host={notesHost} compact /> : <textarea ref={textarea} aria-label={t("notesBody")} placeholder={t("notesBodyHint")} value={d.note.body} onChange={e => n.edit({ body: e.target.value })} />}
+		{preview ? <RichDocumentPreview key={n.selected} value={d.note.body} onChange={body => n.edit({ body })} host={host} /> : !source ? <RichMarkdownEditor key={n.selected} value={d.note.body} onChange={body => n.edit({ body })} readOnly={false} host={host} compact /> : <textarea ref={textarea} aria-label={t("notesBody")} placeholder={t("notesBodyHint")} value={d.note.body} onChange={e => n.edit({ body: e.target.value })} />}
+		{lastRun && !preview && <PlaygroundResult runKey={lastRun.key} stale={!d.note.body.includes(lastRun.code)} />}
 	</section>;
 }

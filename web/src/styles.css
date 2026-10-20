@@ -13559,3 +13559,9 @@ html.pi-desktop-darwin .compact-navigation .global-navigation { padding-top: 36p
 .playground-jdk-label { color: var(--text); }
 .playground-hint { margin: 0; font-size: 12px; color: var(--text-faint); }
 .playground-error { margin: 0; color: var(--red); font-size: 13px; }
+
+/* The Run control in a Note's code-block chrome, and its result below the editor. */
+.fp-code-language button[data-code-run] { padding: 1px 6px; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--text-muted); font: 11px var(--sans); cursor: pointer; }
+.fp-code-language button[data-code-run]:hover { background: var(--bg-elev2); color: var(--text); }
+.notes-editor > .playground-result { margin-top: 8px; border: 1px solid var(--border-soft); border-radius: var(--r-md); }
+.playground-badge.stale { background: var(--red-soft); color: var(--red); }

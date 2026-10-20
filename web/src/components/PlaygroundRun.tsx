@@ -1,5 +1,4 @@
-import type { ReactNode } from "react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { FiPlay, FiSquare } from "react-icons/fi";
 import { useT } from "../i18n";
 import { usePlaygroundHost } from "../playground-context";
@@ -7,22 +6,59 @@ import { runKey, startRun, stopRun, usePlaygroundRun } from "../playground-run-s
 import { CopyButton } from "./copy-button";
 
 /**
- * The Run control and its result area, rendered under a Java code block.
+ * A Run's result area.
+ *
+ * Shared by every entry point, because a Run looks the same wherever it was
+ * started. `onSendToPi` is optional: a Note has no agent conversation, so it
+ * gets the copy button and nothing else.
+ *
+ * The Run itself lives in `playground-run-store`, not here: the chat entry's
+ * component is re-mounted when its message moves from the in-flight slot into
+ * the settled list, and a Run must survive that.
+ */
+export function PlaygroundResult({ runKey: key, onSendToPi, stale = false }: { runKey: string; onSendToPi?: (text: string) => void; stale?: boolean }) {
+	const t = useT();
+	const [expanded, setExpanded] = useState(true);
+	const run = usePlaygroundRun(key);
+	const running = run.phase === "running";
+	const output = `${run.stdout}${run.stderr}`;
+	const failed = !!run.error || run.timedOut || run.truncated || run.compileError || (run.exitCode !== null && run.exitCode !== 0);
+
+	return <div className="playground-result" role="region" aria-label={t("playgroundRun")}>
+		<button type="button" className="playground-result-head" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>
+			<span className={`playground-dot ${running ? "running" : failed ? "failed" : "ok"}`} aria-hidden="true" />
+			<strong>{t(running ? "playgroundRunning" : "playgroundRun")}</strong>
+			{stale && <span className="playground-badge stale">{t("playgroundCodeChanged")}</span>}
+			{run.timedOut && <span className="playground-badge">{t("playgroundTimedOut")}</span>}
+			{run.truncated && <span className="playground-badge">{t("playgroundTruncated")}</span>}
+			{!running && !run.error && <span className="playground-meta">{t("playgroundExitCode")} {run.exitCode ?? "-"} · {t("playgroundDuration")} {run.durationMs}ms</span>}
+		</button>
+		{expanded && <>
+			{run.error && <div className="playground-notice" role="alert">{run.error}</div>}
+			{run.stdout && <section className="playground-stream"><h4>{t("playgroundStdout")}</h4><pre>{run.stdout}</pre></section>}
+			{run.stderr && <section className="playground-stream stderr"><h4>{t("playgroundStderr")}</h4><pre>{run.stderr}</pre></section>}
+			{!running && !run.error && (
+				<div className="playground-result-foot">
+					<CopyButton text={output} label />
+					{onSendToPi && <button type="button" className="playground-action" onClick={() => onSendToPi(fence(output))}>{t("playgroundSendToPi")}</button>}
+				</div>
+			)}
+		</>}
+	</div>;
+}
+
+/**
+ * The Run control on a Java code block, with its result below it.
  *
  * A Run is not a sandbox, so the control is deliberately loud about *why* it is
  * unavailable rather than hidden: a missing JDK, the setting being off and the
  * environment lock are three different problems with three different fixes.
  * Nothing here enters the model context — handing a result to pi is an explicit
  * click that only fills the composer.
- *
- * The Run itself lives in `playground-run-store`, not here: this component is
- * re-mounted when its message moves from the in-flight slot into the settled
- * list, and a Run must survive that.
  */
 export function PlaygroundRun({ code, pre }: { code: string; pre?: ReactNode }) {
 	const t = useT();
 	const { status, conversationId, sendToPi } = usePlaygroundHost();
-	const [expanded, setExpanded] = useState(true);
 	const key = runKey(conversationId, code);
 	const run = usePlaygroundRun(key);
 	const started = run.phase === "running" || run.stdout !== "" || run.stderr !== "" || run.exitCode !== null || !!run.error || run.stopped;
@@ -36,8 +72,6 @@ export function PlaygroundRun({ code, pre }: { code: string; pre?: ReactNode }) 
 				: !status.jdk.available
 					? [t("playgroundNoJdk"), status.jdk.reason].filter(Boolean).join(" — ")
 					: "";
-	const output = `${run.stdout}${run.stderr}`;
-	const failed = !!run.error || run.timedOut || run.truncated || run.compileError || (run.exitCode !== null && run.exitCode !== 0);
 
 	return <>
 		<div className="codeblock-bar">
@@ -53,7 +87,7 @@ export function PlaygroundRun({ code, pre }: { code: string; pre?: ReactNode }) 
 					disabled={!!reason}
 					title={reason || t(started ? "playgroundRerun" : "playgroundRun")}
 					aria-label={reason || t(started ? "playgroundRerun" : "playgroundRun")}
-					onClick={() => { setExpanded(true); void startRun(key, code); }}
+					onClick={() => void startRun(key, code)}
 				>
 					<FiPlay aria-hidden="true" /><span>{t(started ? "playgroundRerun" : "playgroundRun")}</span>
 				</button>
@@ -61,28 +95,7 @@ export function PlaygroundRun({ code, pre }: { code: string; pre?: ReactNode }) 
 			<CopyButton text={code} label />
 		</div>
 		{pre}
-		{started && (
-			<div className="playground-result" role="region" aria-label={t("playgroundRun")}>
-				<button type="button" className="playground-result-head" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>
-					<span className={`playground-dot ${running ? "running" : failed ? "failed" : "ok"}`} aria-hidden="true" />
-					<strong>{t(running ? "playgroundRunning" : "playgroundRun")}</strong>
-					{run.timedOut && <span className="playground-badge">{t("playgroundTimedOut")}</span>}
-					{run.truncated && <span className="playground-badge">{t("playgroundTruncated")}</span>}
-					{!running && !run.error && <span className="playground-meta">{t("playgroundExitCode")} {run.exitCode ?? "-"} · {t("playgroundDuration")} {run.durationMs}ms</span>}
-				</button>
-				{expanded && <>
-					{run.error && <div className="playground-notice" role="alert">{run.error}</div>}
-					{run.stdout && <section className="playground-stream"><h4>{t("playgroundStdout")}</h4><pre>{run.stdout}</pre></section>}
-					{run.stderr && <section className="playground-stream stderr"><h4>{t("playgroundStderr")}</h4><pre>{run.stderr}</pre></section>}
-					{!running && !run.error && (
-						<div className="playground-result-foot">
-							<CopyButton text={output} label />
-							<button type="button" className="playground-action" onClick={() => sendToPi(fence(output))}>{t("playgroundSendToPi")}</button>
-						</div>
-					)}
-				</>}
-			</div>
-		)}
+		{started && <PlaygroundResult runKey={key} onSendToPi={sendToPi} />}
 	</>;
 }
 
