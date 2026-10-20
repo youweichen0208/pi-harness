@@ -44,6 +44,7 @@ Desktop.ini
 
 # Scratch/test temp files
 tests/scratch/
+.scratch/
 dev/*.png
 dev/*-preview.html
 .cache/

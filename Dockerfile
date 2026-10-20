@@ -2,6 +2,10 @@
 # pi-harness — multi-stage build. Builds the server (tsc) + frontend (vite),
 # then runs a slim runtime image. `docker compose up -d` = one-command deploy
 # with auto-restart on boot (`restart: unless-stopped`).
+#
+# No JDK is installed here on purpose: the Java Playground
+# (docs/architecture-playground.md) needs a JDK on the host, is off by default,
+# and reports itself as unavailable when javac/java are missing.
 FROM node:22-bookworm-slim AS base
 WORKDIR /app
 # Both dependency installs need node-gyp on Linux (node-pty has no Linux

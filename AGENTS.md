@@ -11,6 +11,7 @@
 - [7. 环境变量](#7-环境变量)
 - [8. 部署](#8-部署)
 - [9. 常见坑](#9-常见坑)
+- [Agent skills](#agent-skills)
 <!-- /toc -->
 
 > 本文件是给 AI 编码助手（pi / Claude Code / Cursor 等）看的高层项目说明书。
@@ -43,6 +44,7 @@ SDK 与 pi-ai 精确锁定 1.2.0，不应用本项目的 SDK 补丁。Codemode �
 系统提示词：修改分段来源、原生文件编辑或重载时，读取 `docs/architecture-system-prompt.md`。
 Extensions：修改内置扩展清单/状态、包安装、启停、更新、作用域迁移、目录浏览或单文件编辑时，读取 `docs/architecture-extensions.md`。
 Codemode 卡片与 MCP/Codemode 设置遵循 15a/15b 设计；状态、项目覆盖、费用及输出限制读取 `docs/architecture-plugins.md`。
+Playground：修改 Java 代码块运行入口、执行限制、JDK 探测或总开关时，读取 `docs/architecture-playground.md`；默认关闭、明确非沙箱、结果不进模型上下文。
 工程上下文：修改跨仓来源、OpenViking 接入或本地评测时，读取 `docs/engineering-context.md`；先验证检索收益，再增加产品界面。
 
 SDK 生命周期：以 `agent_settled` 判定整个任务结束，`agent_end` 只表示一次循环结束。修改队列、纠正、压缩/重试状态、扩展 UI 对话隔离或工具完整输出下载前读 `docs/architecture-core.md`；修改桌面扩展子进程或打包前读 `docs/deployment.md`。
@@ -134,6 +136,7 @@ pi-harness/
 │   ├── architecture-attachments.md  # 附件、图片、文件上传/预览/下载
 │   ├── architecture-terminal.md    # 终端架构：PTY 管理、SCM 查询
 │   ├── architecture-plugins.md     # 插件系统：形态、协议、宿主扩展点、MCP 桥
+│   ├── architecture-playground.md  # Java 代码块运行（Playground）：默认关闭、非沙箱、JDK 探测与执行限制
 │   ├── development.md          # 开发工作流、CI、编码约定、测试规范
 │   ├── release.md              # 发布流程（GitHub + npm）
 │   ├── deployment.md           # 部署（CLI / Docker）
@@ -197,6 +200,7 @@ pi SDK 和 pi-ai 精确锁定 1.2.0，使用原版 SDK，不应用本项目的 S
 | **当前任务进度** | `docs/architecture-core.md`、`docs/ui-design.md` | 修改任务判定、提纲布局或计划触发时阅读：可选原生 `plan` 管理分支版本化计划，尊重用户／skill 的执行与等待规则；步骤按工具 ID 展开记录，暂停不自动完成，兼容历史 `task_plan`；历史任务列表尚未实现 |
 | **后台任务列表** | `docs/architecture-core.md` | bash 前后端口快照 diff；按客户端持久；单停/全部关闭 |
 | **扩展 UI 桥** | `docs/architecture-core.md` | setWidget/setStatus/notify/select/confirm/input → 浏览器消息；dialog_response 回传 |
+| **Playground（Java 运行）** | `docs/architecture-playground.md` | 修改代码块运行入口、限制或开关时阅读：宿主自备 JDK、裸子进程（非沙箱）、默认关闭、HTTP+SSE、结果不持久化、不进模型上下文 |
 
 Wiki：点击 `.md` / `.markdown` 在**独立窗口**打开 Wiki mode（Web 弹窗 / 桌面第二 BrowserWindow，URL 契约 `?wiki-window=1&cwd=&doc=&client=&model=&thinking=`（后两项可选），见 ADR-0003），主窗口留在 normal 对话并行工作；新窗口先通过现有 `set_model`／`set_thinking` 继承打开方的模型与思考档位，再创建会话；Wiki 对话按工作区保存在独立目录，每篇 Markdown 恢复自己的 chat，切换文档清空所选 Workspace 项目／知识库，支持新建与历史恢复／重命名／删除；媒体／代码等非文档文件只切换只读预览、沿用当前会话（不绑定、不清项目、不需中断确认）；退出即关窗，运行实例可清理、历史保留，运行中切换先确认中断。修改视图布局、左侧目录栏「打开文件夹」跨目录切换、Wiki 历史与运行实例生命周期、中断确认、刷新恢复、发送前保存、选区「问 pi」回填、保存与关闭保护、正文读取、索引／双链／搜索、改动记录或桌面默认应用打开时，读取 `docs/architecture-wiki.md`。专用窗口壳为 `WikiWindowShell.tsx`：不再渲染主 TopBar／FooterBar，文档标题栏与面包屑是桌面连续拖动区（控件 `no-drag`），右栏默认显示正文目录，「问 pi」默认浮动（Desktop 为独立窗口）、可固定替换目录，在当前文档基础上可追加一个 Workspace 项目／知识库进行分析，最近改动为覆盖抽屉；34a 工具栏为 `WikiToolbar.tsx`，正文排版见 `docs/wiki-doc-v2-design.md`。入口为 `App.tsx`（wiki view）+ `WikiWindowShell.tsx`、`WikiAssistantWindow.tsx`、`WikiProjectPicker.tsx`、`WikiWorkbench.tsx`、`wiki-window.ts`、`wiki-routes.ts`、`wiki-chat-store.ts` 与 `wiki-service.ts`；`WikiDocumentModal.tsx` 仅数据库弹窗使用。
 
@@ -285,3 +289,17 @@ Windows job 的终端冒烟测试必须通过才能上传安装包；`AttachCons
 数据库：顶栏打开三栏数据库弹窗，右侧复用原 Agent Chat。修改连接导入/同步、MySQL/PostgreSQL 查询、只读校验或 Agent 授权前读取 `docs/architecture-database.md`。后端在 `server/database/`，界面为 `DatabaseWorkbench.tsx`；旧 db-client 界面插件保持独立。
 
 小记：修改共用富文本格式、图片资源、链接卡片抓取、独立存储、HTTP 接口、自动保存、跨窗口冲突或导航时，读取 `docs/architecture-notes.md`。小记保存在服务数据目录，不自动进入模型上下文。
+
+## Agent skills
+
+### Issue tracker
+
+Issue 与 spec 是仓库根目录 `.scratch/<feature>/` 下的 markdown 文件，本地维护、不入库（`.scratch/` 已 gitignore）。见 `docs/agents/issue-tracker.md`。
+
+### Triage labels
+
+五个 triage 角色沿用默认标签名：`needs-triage` / `needs-info` / `ready-for-agent` / `ready-for-human` / `wontfix`。见 `docs/agents/triage-labels.md`。
+
+### Domain docs
+
+单上下文（single-context）：根 `GLOSSARY.md` + `docs/adr/`。见 `docs/agents/domain.md`。
