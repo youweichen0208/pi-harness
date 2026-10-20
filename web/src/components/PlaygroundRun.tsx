@@ -34,7 +34,7 @@ export function PlaygroundResult({ runKey: key, onSendToPi, stale = false }: { r
 			{!running && !run.error && <span className="playground-meta">{t("playgroundExitCode")} {run.exitCode ?? "-"} · {t("playgroundDuration")} {run.durationMs}ms</span>}
 		</button>
 		{expanded && <>
-			{run.error && <div className="playground-notice" role="alert">{run.error}</div>}
+			{run.error && <div className="playground-notice" role="alert">{run.errorStatus === 429 ? t("playgroundBusy") : run.error}</div>}
 			{run.needsProject && <div className="playground-hint" role="note">{t("playgroundSingleFileOnly")}</div>}
 			{run.stdout && <section className="playground-stream"><h4>{t("playgroundStdout")}</h4><pre>{run.stdout}</pre></section>}
 			{run.stderr && <section className="playground-stream stderr"><h4>{t("playgroundStderr")}</h4><pre>{run.stderr}</pre></section>}

@@ -28,6 +28,8 @@ export interface PlaygroundRunState {
 	truncated: boolean;
 	stopped: boolean;
 	error?: string;
+	/** HTTP status behind `error`, so a known refusal can be shown in the user's language. */
+	errorStatus?: number;
 }
 
 const IDLE: PlaygroundRunState = Object.freeze({ phase: "done", stdout: "", stderr: "", exitCode: null, durationMs: 0, compileError: false, needsProject: false, timedOut: false, truncated: false, stopped: false });
@@ -107,7 +109,7 @@ export async function startRun(key: string, code: string): Promise<void> {
 		});
 		if (!response.ok || !response.body) {
 			const body = (await response.json().catch(() => ({}))) as { error?: string };
-			patch({ phase: "done", error: body.error ?? `HTTP ${response.status}` });
+			patch({ phase: "done", error: body.error ?? `HTTP ${response.status}`, errorStatus: response.status });
 			return;
 		}
 		const reader = response.body.getReader();
