@@ -9951,7 +9951,7 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { height: 44px;
 .wiki-prose.md h3 { font-size: 16px; }
 
 .wiki-prose.md a[href^="#wiki="] { color: var(--wiki-accent); text-decoration: none; border-bottom: 1px dashed var(--wiki-accent); }
-.wiki-prose.md img { max-width: 100%; height: auto; }
+.wiki-prose.md img { max-width: 100%; height: auto; cursor: zoom-in; }
 .wiki-prose .wiki-added { padding: 12px 14px; background: var(--green-soft); color: var(--green); border-radius: var(--r-md); }
 .wiki-added > small { display: block; color: var(--green); font-size: 11px; margin-bottom: 6px; }
 .wiki-backlinks { border-top: 1px solid var(--wiki-line); margin-top: 40px; padding-top: 20px; }
@@ -9963,7 +9963,7 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { height: 44px;
 .wiki-backlinks > p { color: var(--text-faint); font-size: 12px; }
 .wiki-code-hint { color: var(--text-dim); font-size: 11px; margin-bottom: 12px; }
 .wiki-document .fp-code-editor { height: max(360px, 50vh); border: 1px solid var(--wiki-line); border-radius: var(--r-md); }
-.wiki-image { max-width: 100%; height: auto; }
+.wiki-image { max-width: 100%; height: auto; cursor: zoom-in; }
 .wiki-pdf { width: 100%; height: 65vh; border: 1px solid var(--wiki-line); border-radius: var(--r-sm); }
 .wiki-empty { padding: 80px 30px; text-align: center; color: var(--text-dim); }
 .wiki-empty > svg { font-size: 32px; color: var(--wiki-accent); }
@@ -13484,8 +13484,8 @@ html.pi-desktop-darwin .compact-navigation .global-navigation { padding-top: 36p
 }
 
 /* Wiki reading surface: document and sticky outline share the far-right scrollbar. */
-.wiki-reading-layout { display: flex; align-items: flex-start; min-height: 100%; min-width: 0; }
-.wiki-reading-layout > .wiki-document { flex: 1; min-width: 0; }
+.wiki-reading-layout { display: flex; align-items: flex-start; justify-content: center; min-height: 100%; min-width: 0; }
+.wiki-reading-layout > .wiki-document { flex: 0 1 auto; min-width: 0; margin: 0; }
 .wiki-reading-layout > .wiki-empty { flex: 1; }
 .wiki-window-body .wiki-reading-layout > .wiki-outline-aside {
 	display: flex; position: sticky; top: 24px; align-self: flex-start; flex: 0 0 240px;
@@ -13495,6 +13495,19 @@ html.pi-desktop-darwin .compact-navigation .global-navigation { padding-top: 36p
 .wiki-reading-layout > .wiki-outline-aside > .wiki-agent-header { display: none; }
 .wiki-reading-layout .wiki-outline-panel { overscroll-behavior: auto; }
 .wiki-reading-layout .wiki-outline { padding: 0 8px; }
+
+/* Wiki image zoom: click any document image for a full-screen natural-size view. */
+.wiki-image-zoom { position: fixed; inset: 0; z-index: 2300; display: flex; background: color-mix(in srgb, var(--shadow-color) 42%, transparent); backdrop-filter: blur(2px); }
+.wiki-image-zoom > section { position: relative; display: flex; flex: 1; flex-direction: column; min-width: 0; outline: none; }
+.wiki-image-zoom-tools { position: absolute; top: 14px; right: 14px; z-index: 1; display: flex; align-items: center; gap: 2px; padding: 3px; border: 1px solid var(--border-soft); border-radius: var(--r-md); background: var(--bg-elev); box-shadow: 0 8px 24px color-mix(in srgb, var(--shadow-color) 15%, transparent); }
+.wiki-image-zoom-tools button { display: inline-flex; align-items: center; justify-content: center; min-width: 30px; height: 30px; padding: 0 6px; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--text); font: 12.5px var(--sans); cursor: pointer; }
+.wiki-image-zoom-tools button:hover { background: var(--bg-elev2); }
+.wiki-image-zoom-tools button svg { width: 16px; height: 16px; }
+.wiki-image-zoom-level { min-width: 52px; }
+.wiki-image-zoom-stage { flex: 1; min-height: 0; overflow: auto; cursor: grab; }
+.wiki-image-zoom-stage.panning { cursor: grabbing; }
+.wiki-image-zoom-frame { display: flex; align-items: center; justify-content: center; box-sizing: border-box; min-width: 100%; min-height: 100%; width: max-content; padding: 56px; }
+.wiki-image-zoom-frame img { max-width: none; height: auto; border-radius: var(--r-sm); box-shadow: 0 12px 40px color-mix(in srgb, var(--shadow-color) 30%, transparent); }
 
 /* Keep the final editable line reachable after quotes and other block content. */
 .fp-rich-document > p[data-rich-tail] { min-height: 1.74em; margin-block: 12px; cursor: text; }
