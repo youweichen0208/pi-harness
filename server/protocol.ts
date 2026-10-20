@@ -1545,6 +1545,22 @@ export interface NoteResponse { note: Note }
 export interface NoteDeleteResponse { ok: true }
 export interface NoteErrorResponse { error: string }
 
+/**
+ * Playground HTTP API: running a Java code block on the host JDK. Deliberately
+ * independent of agent sessions — a Run never enters the model context and
+ * never changes cwd. Server-sent events carry one Run; see `PlaygroundEvent`.
+ */
+export interface PlaygroundJdkStatus { available: boolean; version?: string; path?: string; reason?: string }
+export interface PlaygroundLimits { timeoutMs: number; maxOutputBytes: number; maxHeapMb: number }
+export interface PlaygroundStatus { enabled: boolean; locked: boolean; jdk: PlaygroundJdkStatus; limits: PlaygroundLimits }
+export interface PlaygroundConfigInput { enabled: boolean; timeoutMs: number; maxOutputBytes: number; maxHeapMb: number; maxConcurrent: number }
+export interface PlaygroundErrorResponse { error: string }
+export type PlaygroundEvent =
+	| { type: "start"; runId: string }
+	| { type: "out"; stream: "stdout" | "stderr"; text: string }
+	| { type: "end"; exitCode: number | null; durationMs: number; truncated: boolean; timedOut: boolean; compileError: boolean }
+	| { type: "error"; message: string };
+
 /** Shared HTTP document resources; independent of agent sessions. */
 export interface RichImageUpload { data: string }
 export interface RichImageResult { path: string }

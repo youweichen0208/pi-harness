@@ -56,6 +56,7 @@ import { isValidClientId } from "./client-id.js";
 import { securityHeaders } from "./security-headers.js";
 import { needsTokenCookie, tokenCookie, tokenMatches } from "./token-auth.js";
 import { installNotesRoutes } from "./notes.js";
+import { installPlaygroundRoutes } from "./playground.js";
 import { createOriginPolicy } from "./origin-policy.js";
 import { PluginManager, resolvePluginClientFile } from "./plugins.js";
 
@@ -159,6 +160,8 @@ if (AUTH_TOKEN) {
 installNoteAssets(app, join(DATA_DIR, "notes", "assets"), originAllowed);
 installLinkPreview(app, originAllowed);
 installNotesRoutes(app, join(DATA_DIR, "notes"), originAllowed);
+// Before the compression middleware below: gzip would buffer the event stream.
+installPlaygroundRoutes(app, { dataDir: DATA_DIR, allowed: originAllowed });
 installCodemodeImageRoutes(app, () => service, originAllowed);
 installOpenAIProxyRoutes(app, openAIProxy, originAllowed);
 installExtensionsRoutes(app, () => service, originAllowed);
