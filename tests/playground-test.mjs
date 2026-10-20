@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { createServer as createHttpServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "node:net";
@@ -22,7 +23,7 @@ let server, logs = "";
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 async function start(extraEnv = {}) {
-	server = spawn(process.execPath, ["dist/server/index.js"], { env: { ...process.env, PORT: String(port), PI_WEB_TOKEN: token, PI_WEB_DATA_DIR: dataDir, PI_CODING_AGENT_DIR: join(root, "agent"), PI_WEB_CWD: root, ...extraEnv }, stdio: ["ignore", "pipe", "pipe"] });
+	server = spawn(process.execPath, ["dist/server/index.js"], { env: testEnv({ PORT: String(port), PI_WEB_TOKEN: token, PI_WEB_DATA_DIR: dataDir, PI_CODING_AGENT_DIR: join(root, "agent"), PI_WEB_CWD: root, ...extraEnv }), stdio: ["ignore", "pipe", "pipe"] });
 	server.stdout.on("data", data => { logs += data; }); server.stderr.on("data", data => { logs += data; });
 	for (let i = 0; i < 150; i++) { try { if ((await fetch(`${base}/api/health`)).ok) return; } catch {} if (server.exitCode !== null) break; await sleep(100); }
 	throw new Error(logs);
@@ -38,6 +39,21 @@ async function status(query = "", headers = {}) {
 	return fetch(`${base}/api/playground/status?${query ? `${query}&` : ""}token=${token}`, { headers });
 }
 function writeConfig(value) { mkdirSync(dataDir, { recursive: true }); writeFileSync(configFile, typeof value === "string" ? value : JSON.stringify(value)); }
+
+/**
+ * Strip every inherited PI_* variable before spawning the server.
+ *
+ * Running the suite from inside a pi-harness/Electron host otherwise leaks the
+ * host's own state into the test server: PI_WEB_PKG_ROOT makes it serve that
+ * host's web/dist (so the browser is tested against the wrong UI entirely), and
+ * PI_WEB_WORKSPACES_FILE / PI_SESSION_FILE point at the developer's real
+ * projects and session. The test must only ever see what it sets here.
+ */
+function testEnv(extra) {
+	const env = { ...process.env };
+	for (const key of Object.keys(env)) if (key.startsWith("PI_")) delete env[key];
+	return { ...env, ...extra };
+}
 
 /** Start a Run and collect its events; resolves when the stream ends. */
 async function run(code, { signal, client, origin } = {}) {
@@ -72,6 +88,33 @@ const looksLikeMissingProjectDependency = output => /\bpackage\s+[\w.]+\s+does n
 /** Temp directories a Run owns, to prove cleanup on every exit path. */
 const runDirs = () => readdirSync(tmpdir()).filter(name => name.startsWith("pi-playground-")).length;
 const HELLO = 'public class Main { public static void main(String[] args) { System.out.println("hello"); } }';
+
+// A local OpenAI-compatible provider, so the browser flow costs no tokens: the
+// first turn asks for a bash call (to prove tool cards gain no Run control), the
+// second returns the Java block the control is meant to attach to.
+const REPLY = `Here you go:\n\n\`\`\`java\n${HELLO}\n\`\`\``;
+const modelCalls = [];
+const model = createHttpServer(async (req, res) => {
+	let raw = "";
+	for await (const chunk of req) raw += chunk;
+	try { modelCalls.push(JSON.parse(raw)); } catch { modelCalls.push({}); }
+	const delta = modelCalls.length === 1
+		? { tool_calls: [{ index: 0, id: "call-1", type: "function", function: { name: "bash", arguments: JSON.stringify({ command: "echo java-snippet" }) } }] }
+		: { content: REPLY };
+	res.writeHead(200, { "content-type": "text/event-stream" });
+	// finish_reason must arrive as its own final chunk for the same choice index;
+	// folding it into a second choice leaves the SDK thinking the stream never ended.
+	const finish = modelCalls.length === 1 ? "tool_calls" : "stop";
+	res.write(`data: ${JSON.stringify({ id: "fixture", object: "chat.completion.chunk", model: "test-model", choices: [{ index: 0, delta, finish_reason: null }] })}\n\n`);
+	res.write(`data: ${JSON.stringify({ id: "fixture", object: "chat.completion.chunk", model: "test-model", choices: [{ index: 0, delta: {}, finish_reason: finish }] })}\n\n`);
+	res.end("data: [DONE]\n\n");
+});
+await new Promise(resolve => model.listen(0, "127.0.0.1", resolve));
+const agentDir = join(root, "agent");
+mkdirSync(agentDir, { recursive: true });
+// A real-looking provider so the one-time setup modal does not block the UI.
+writeFileSync(join(agentDir, "auth.json"), JSON.stringify({ test: { type: "api_key", key: "dummy" } }));
+writeFileSync(join(agentDir, "models.json"), JSON.stringify({ providers: { test: { api: "openai-completions", baseUrl: `http://127.0.0.1:${model.address().port}/v1`, apiKey: "dummy", models: [{ id: "test-model" }] } } }));
 
 try {
 	await start();
@@ -193,6 +236,50 @@ try {
 		console.log("PASS playground run: stdout/stderr, package, stdin EOF, compile vs runtime failure, timeout, output cap, concurrency and cleanup");
 	}
 
+	// --- the browser surface -----------------------------------------------------
+	if (process.argv.includes("--browser")) {
+		assert.ok(jdk.available, "--browser needs a JDK: the Run control is disabled without one");
+		// The switch must be on before the page loads, since status is fetched once.
+		writeConfig({ enabled: true, timeoutMs: 30000 });
+		const { chromium } = await import("playwright-core");
+		const { CHROME_PATH } = await import("./lib/chrome.mjs");
+		const browser = await chromium.launch({ executablePath: CHROME_PATH, headless: true });
+		try {
+			const page = await (await browser.newContext({ viewport: { width: 1440, height: 1000 } })).newPage();
+			await page.goto(`${base}/?token=${token}`);
+			// Only present when the machine has no usable provider configured.
+			if (await page.locator(".setup-modal .modal-close").count()) await page.locator(".setup-modal .modal-close").click();
+			await page.locator(".inputbox textarea").waitFor({ timeout: 30000 });
+			const composer = page.locator(".inputbox textarea");
+			await composer.fill("show me a java example");
+			await composer.press("Enter");
+
+			const run = page.locator(".msg-text .playground-action").first();
+			await run.waitFor({ timeout: 60000 });
+			assert.equal(await run.isDisabled(), false, "the Run control must be usable when enabled with a JDK");
+			assert.equal(await page.locator(".tool-call .playground-action").count(), 0, "tool-call cards must not gain a Run control");
+
+			await run.click();
+			const stdout = page.locator(".playground-stream pre").first();
+			try {
+				await stdout.waitFor({ timeout: 60000 });
+			} catch {
+				const area = await page.locator(".playground-result").first().innerText().catch(() => "(no result area)");
+				throw new Error(`Run produced no stdout; result area was: ${area}`);
+			}
+			await page.waitForFunction(() => document.querySelector(".playground-stream pre")?.textContent?.includes("hello"));
+			assert.match(await stdout.innerText(), /hello/);
+
+			await page.getByRole("button", { name: "把结果发给 pi" }).first().click();
+			await page.waitForFunction(() => document.querySelector(".inputbox textarea")?.value.includes("hello"));
+			assert.match(await composer.inputValue(), /```/, "send-to-pi inserts a fenced block, it does not send");
+			assert.equal(modelCalls.length, 2, "send-to-pi must not trigger a model call");
+			console.log("PASS playground browser: Run control on a reply, none on tool cards, streaming output and send-to-pi");
+		} finally {
+			await browser.close();
+		}
+	}
+
 	// --- the environment switch --------------------------------------------------
 	writeConfig({ enabled: true });
 	await stop();
@@ -204,5 +291,7 @@ try {
 	console.log("PASS playground API: auth, origin, default-off, limits, corrupt-config fail-closed, clamping and the environment lock");
 } finally {
 	await stop();
+	model.closeAllConnections();
+	await new Promise(resolve => model.close(resolve));
 	rmSync(root, { recursive: true, force: true });
 }

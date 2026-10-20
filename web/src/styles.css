@@ -13520,3 +13520,31 @@ html.pi-desktop-darwin .compact-navigation .global-navigation { padding-top: 36p
 .fp-rich-document.md table[data-table-selected] :is(th, td) { background: var(--accent-soft); }
 .fp-table-select-handle { position: fixed; z-index: 30; width: 24px; height: 24px; padding: 0; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--text-muted); cursor: pointer; font-size: 18px; }
 .fp-table-select-handle:hover, .fp-table-select-handle:focus-visible { background: var(--accent-soft); color: var(--accent); }
+
+/* ---------------------------------------------------------------------------
+   Playground — the Run control on a Java code block and its result area.
+   Nothing here is a sandbox, so the control states *why* it is unavailable
+   instead of disappearing. Colours and radii are theme tokens only.
+   --------------------------------------------------------------------------- */
+.playground-action { display: inline-flex; align-items: center; gap: 5px; height: auto; margin-left: 4px; padding: 3px 7px; border: 0; border-radius: var(--r-sm); background: transparent; color: inherit; font: 11.5px var(--sans); cursor: pointer; }
+.playground-action:hover:not(:disabled) { background: var(--bg-elev2); color: var(--text); }
+.playground-action:disabled { color: var(--text-faint); cursor: not-allowed; }
+.playground-result { border-top: 1px solid var(--border-soft); background: var(--output-bg); font: 12px var(--sans); }
+.playground-result-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 14px; border: 0; background: transparent; color: var(--text-muted); font: 11.5px var(--sans); text-align: left; cursor: pointer; }
+.playground-result-head:hover { background: var(--bg-elev2); }
+.playground-result-head strong { font-weight: 500; color: var(--text); }
+.playground-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-faint); flex: none; }
+.playground-dot.running { background: var(--yellow-fg); }
+.playground-dot.ok { background: var(--green); }
+.playground-dot.failed { background: var(--red); }
+.playground-badge { padding: 1px 6px; border-radius: var(--r-sm); background: var(--yellow-bg); color: var(--yellow-fg); font: 11px var(--sans); }
+.playground-meta { margin-left: auto; font: 11px var(--mono); color: var(--text-faint); }
+.playground-notice { padding: 8px 14px; border-top: 1px solid var(--border-soft); color: var(--red); }
+.playground-stream { border-top: 1px solid var(--border-soft); }
+.playground-stream h4 { margin: 0; padding: 6px 14px 0; font: 500 11px var(--sans); color: var(--text-faint); }
+.playground-stream.stderr h4 { color: var(--red); }
+.playground-stream pre { margin: 0; padding: 4px 14px 10px; max-height: 320px; overflow: auto; background: transparent; border: 0; font: 12px var(--mono); white-space: pre-wrap; word-break: break-word; }
+.playground-result-foot { display: flex; align-items: center; gap: 6px; padding: 6px 10px 8px 14px; border-top: 1px solid var(--border-soft); }
+.playground-result-foot .copy-btn { position: static; opacity: 1; display: inline-flex; align-items: center; gap: 5px; width: auto; height: auto; padding: 3px 7px; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--text-muted); font: 11.5px var(--sans); cursor: pointer; }
+.playground-result-foot .copy-btn:hover { background: var(--bg-elev2); color: var(--text); }
+.playground-result-foot .playground-action { margin-left: 0; color: var(--text-muted); }

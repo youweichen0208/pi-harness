@@ -12,6 +12,7 @@ import { remarkCjkAutolink } from "../remark-cjk-autolink";
 import { CopyButton } from "./copy-button";
 import { MermaidDiagram } from "./MermaidDiagram";
 import { DesignTree } from "./DesignTree";
+import { PlaygroundRun } from "./PlaygroundRun";
 import { parseTextTree } from "../design-tree";
 
 interface MarkdownProps {
@@ -21,6 +22,9 @@ interface MarkdownProps {
 	sourceLines?: boolean;
 	/** Interpret local file references in user-pasted text. */
 	fileLinks?: boolean;
+	/** Offer a Run control on Java code blocks. Set only where a Run belongs:
+	 *  the conversation, never tool-call cards or the streaming renderer. */
+	runnable?: boolean;
 }
 
 /** Shared markdown pipeline + codeblock chrome (copy button). Exported so
@@ -59,11 +63,11 @@ function withHeadingNote(children: ReactNode): ReactNode {
 
 const headingNotes: Components = Object.fromEntries((["h1", "h2", "h3", "h4"] as const).map(Tag => [Tag, ({ node: _node, children, ...props }: JSX.IntrinsicElements["h2"] & { node?: unknown }) => <Tag {...props}>{withHeadingNote(children)}</Tag>]));
 
-export function MarkdownBody({ text, imageSrc, sourceLines, fileLinks }: MarkdownProps) {
+export function MarkdownBody({ text, imageSrc, sourceLines, fileLinks, runnable }: MarkdownProps) {
 	const changes = useChangeLinks();
 	const links = changes && !sourceLines ? [...remarkPlugins, remarkChangeLinks(changes.files.map(file => file.path))] : remarkPlugins;
 	return (
-		<ReactMarkdown remarkPlugins={links} rehypePlugins={rehypePlugins} components={{ pre: ({ children, ...props }) => <PreWithCopy {...props} fileLinks={fileLinks}>{children}</PreWithCopy>, li: RouteListItem, a: ({ node: _node, href, children, ...props }) => {
+		<ReactMarkdown remarkPlugins={links} rehypePlugins={rehypePlugins} components={{ pre: ({ children, ...props }) => <PreWithCopy {...props} fileLinks={fileLinks} runnable={runnable}>{children}</PreWithCopy>, li: RouteListItem, a: ({ node: _node, href, children, ...props }) => {
 			const pr = /^https?:\/\/github\.com\/[^/]+\/[^/]+\/pull\/(\d+)(?:[?#].*)?$/.exec(href ?? "");
 			return <a {...props} href={href} className={pr ? "pr-reference" : undefined} onClick={event => {
 				if (href?.startsWith("#pi-change=")) { event.preventDefault(); const path = decodeURIComponent(href.slice(11)); changes?.show(changes.files, path); }
@@ -77,22 +81,31 @@ export function MarkdownBody({ text, imageSrc, sourceLines, fileLinks }: Markdow
 }
 
 /** GFM markdown with syntax highlighting; code blocks get a copy button. */
-export const Markdown = memo(function Markdown({ text, imageSrc, sourceLines, fileLinks }: MarkdownProps) {
+export const Markdown = memo(function Markdown({ text, imageSrc, sourceLines, fileLinks, runnable }: MarkdownProps) {
 	return (
 		<div className="md">
-			<MarkdownBody text={text} imageSrc={imageSrc} sourceLines={sourceLines} fileLinks={fileLinks} />
+			<MarkdownBody text={text} imageSrc={imageSrc} sourceLines={sourceLines} fileLinks={fileLinks} runnable={runnable} />
 		</div>
 	);
 });
 
-export function PreWithCopy({ children, fileLinks, showLanguage, ...props }: JSX.IntrinsicElements["pre"] & { fileLinks?: boolean; showLanguage?: boolean }) {
+export function PreWithCopy({ children, fileLinks, showLanguage, runnable, ...props }: JSX.IntrinsicElements["pre"] & { fileLinks?: boolean; showLanguage?: boolean; runnable?: boolean }) {
 	if (isMermaidCodeBlock(children)) {
 		return <MermaidDiagram code={codeText(children)} />;
 	}
-	const asciiTable = fileLinks && isAsciiTableCodeBlock(children);
 	const code = codeText(children);
 	const child = Array.isArray(children) ? children[0] : children;
 	const language = child && typeof child === "object" && "props" in child ? /language-([\w+-]+)/.exec(String(child.props.className ?? ""))?.[1] : undefined;
+	// A Java block is code, never box-drawing art, and it is the only block a Run
+	// control attaches to.
+	if (runnable && language === "java") {
+		return (
+			<div className="codeblock">
+				<PlaygroundRun code={code} pre={<pre {...props}>{children}</pre>} />
+			</div>
+		);
+	}
+	const asciiTable = fileLinks && isAsciiTableCodeBlock(children);
 	// Replies draw design trees as box-drawing art; user-pasted text keeps its exact shape.
 	const tree = !fileLinks && !showLanguage ? parseTextTree(code) : null;
 	if (tree) return <DesignTree tree={tree} source={code} />;

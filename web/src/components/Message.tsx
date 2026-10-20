@@ -708,11 +708,11 @@ export function SystemEvent({ message }: { message: UiMessage }) {
 }
 
 /** Reply prose, with grilling-style questions lifted into answerable cards (4a). */
-function ReplyMarkdown({ text, answerKey, conversationId }: { text: string; answerKey?: string; conversationId?: string }) {
+function ReplyMarkdown({ text, answerKey, conversationId, runnable }: { text: string; answerKey?: string; conversationId?: string; runnable?: boolean }) {
 	const segments = useMemo(() => parseReplySegments(text), [text]);
-	if (segments.length === 1 && segments[0].kind === "markdown") return <Markdown text={text} />;
+	if (segments.length === 1 && segments[0].kind === "markdown") return <Markdown text={text} runnable={runnable} />;
 	return <>{segments.map((segment, index) => segment.kind === "markdown"
-		? <Markdown key={index} text={segment.text} />
+		? <Markdown key={index} text={segment.text} runnable={runnable} />
 		: <QuestionCards key={index} questions={segment.questions} answerKey={answerKey} conversationId={conversationId} />)}</>;
 }
 
@@ -923,7 +923,7 @@ function Block({
 					) : user ? (
 						<Markdown text={preserveUserTree(body)} fileLinks />
 					) : (
-						<ReplyMarkdown text={body} answerKey={answerKey} conversationId={conversationId} />
+						<ReplyMarkdown text={body} answerKey={answerKey} conversationId={conversationId} runnable />
 					))}
 				{text.truncated && <div className="trunc-note">{t("truncated")}</div>}
 			</div>

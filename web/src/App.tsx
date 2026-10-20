@@ -43,6 +43,9 @@ import { useWorkspaceScm } from "./use-workspace-scm";
 import { TopBar } from "./components/TopBar";
 import { desktopAPI, flushWindowSaves } from "./desktop";
 import { useNotes } from "./use-notes";
+import { usePlayground } from "./use-playground";
+import { PlaygroundProvider } from "./playground-context";
+import { appendComposerText } from "./composer-text";
 import { NotesList, NotesEditor } from "./components/Notes";
 import { LeftPanel } from "./components/LeftPanel";
 import { RightPanel } from "./components/RightPanel";
@@ -368,6 +371,11 @@ export function App() {
 	}, [chat.state?.cwd, send]);
 	const [notesOpen, setNotesOpen] = useState(false);
 	const notes = useNotes(notesOpen, chat.status === "open");
+	// Where execution is allowed is a server answer, so it is fetched once and
+	// refreshed on focus/online/reconnect rather than derived from local state.
+	const playground = usePlayground(chat.status === "open");
+	const sendToPi = useCallback((text: string) => appendComposerText(chat.activeConversationId, text), [chat.activeConversationId]);
+	const playgroundHost = useMemo(() => ({ status: playground.status, conversationId: chat.activeConversationId, sendToPi }), [playground.status, chat.activeConversationId, sendToPi]);
 	const [view, setView] = useState<ViewName>(isWikiWindow ? "wiki" : "chat");
 	const [wikiFileRequest, setWikiFileRequest] = useState<{cwd:string;conversationId:string;path:string;token:string} | null>(null);
 	// 媒体/代码预览（issue #119）：无文本上下文、不产生当前文件 chip，但不禁用聊天输入。
@@ -1257,7 +1265,7 @@ export function App() {
 		// drop attaches. The plain preventDefault used to merely stop the browser
 		// navigating away; children with their own handlers (input bar / edit
 		// composer) call stopPropagation and keep priority.
-		<ChangesProvider conversationId={conversationState?.conversationId ?? ""} files={changedFiles} active={view === "chat"} onOpenChange={onChangesOpen}><div
+		<ChangesProvider conversationId={conversationState?.conversationId ?? ""} files={changedFiles} active={view === "chat"} onOpenChange={onChangesOpen}><PlaygroundProvider value={playgroundHost}><div
 			className={`app design-workspace dual-navigation ${notesOpen ? "notes-open" : ""} ${view === "wiki" ? "wiki-mode" : ""} ${changesOpen && view === "chat" ? "changes-open" : ""} ${leftCollapsed ? "left-collapsed" : ""} ${previewFile && view === "chat" ? "document-open" : ""}`}
 			style={{ "--left-w": `${leftWidth}px`, "--right-w": `${rightWidth}px` } as CSSProperties}
 			onDragOver={(e) => {
@@ -1658,6 +1666,6 @@ export function App() {
 					onPreviewFile={openPreview}
 				/>
 			)}
-		</div></ChangesProvider>
+		</div></PlaygroundProvider></ChangesProvider>
 	);
 }

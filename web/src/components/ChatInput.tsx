@@ -4,11 +4,12 @@ import { Dropdown, DropdownItem } from "./Dropdown";
 import { queuedMessagePreview } from "../skill-block";
 import { TreeDraftRestore } from "./TreeDraftRestore";
 import { useExtensionEditor } from "../extension-editor";
+import { useComposerAppend } from "../composer-text";
 import type { MutableRefObject, ReactNode } from "react";
 import type { CurrentFileContext, ReadCurrentFile, SaveCurrentFile } from "../current-file";
 import { mergeCurrentFile } from "../current-file";
 import { randomUuid } from "../uuid";
-import { memo, useLayoutEffect, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useLayoutEffect, useEffect, useRef, useState } from "react";
 import { FiCornerUpLeft, FiPlus, FiPaperclip, FiArrowUp } from "react-icons/fi";
 import type { ClientMessage, WikiProjectReference, PromptAttachment, ServerMessage, ModelInfo, SlashCommandInfo, UiMessage, UiState } from "../types";
 import { useT, useI18n } from "../i18n";
@@ -173,6 +174,9 @@ export const ChatInput = memo(function ChatInput({
 		}
 	}, [activeConversationId, text, draftStorageKey]);
 	useExtensionEditor(activeConversationId, active, setText);
+	// A Run's output is appended, never substituted: handing a result to pi must
+	// not destroy a draft the user is halfway through writing.
+	useComposerAppend(activeConversationId, active, useCallback((text: string) => setText(value => (value.trim() ? `${value}\n\n${text}` : text)), []));
 	useEffect(() => {
 		const pending = pendingSubmit.current;
 		if (!pending || promptResult?.requestId !== pending.id) return;
