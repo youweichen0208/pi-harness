@@ -21,11 +21,14 @@ type Node = NodeProfile;
 function unsupportedOptions(node: Node): string[] {
 	return (node.unsupported ?? []).filter((reason) => reason !== "key" || ((node.localAuth ?? node.auth) === "key" && !node.localKeyPath));
 }
-type Terminal = { id: string; conversationId: string; stream: ClientChannel; busy: boolean; buffer: string; promptMarker: string; promptReady: boolean; welcome: string; initializing: boolean; initScript: string; scan: string; cancelledCapture?: NodeTerminalOutput; pending?: { marker: string; capture: NodeTerminalOutput; resolve: (value: { output: string; code: number }) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> } };
+type Terminal = { id: string; conversationId: string; stream: ClientChannel; busy: boolean; buffer: string; promptMarker: string; promptReady: boolean; welcome: string; initializing: boolean; initScript: string; scan: string; manualTyped: boolean; altScreen: boolean; cancelledCapture?: NodeTerminalOutput; pending?: { marker: string; capture: NodeTerminalOutput; resolve: (value: { output: string; code: number }) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> } };
 type Connection = { client: Client; nodeId: string; clientId: string; terminals: Map<string, Terminal>; agent?: NodeAgent; agentStarting?: boolean; selectedTerminalId?: string; sftp?: SFTPWrapper; ready: boolean; startedAt: number; connectedAt?: number };
 
 const MAX_OUTPUT = 64 * 1024;
 const MAX_FILE = 512 * 1024;
+/** Append the invisible prompt marker to PS1 for Bash/Zsh/POSIX sh. The leading
+ * space keeps the setup out of shell history. */
+const promptSetup = (encoded: string) => ` __pi_prompt=$(printf '${encoded}'); if [ -n "\${BASH_VERSION-}" ]; then PS1="\${PS1}\\[\${__pi_prompt}\\]"; elif [ -n "\${ZSH_VERSION-}" ]; then PS1="\${PS1}%{\${__pi_prompt}%}"; else PS1="\${PS1}\${__pi_prompt}"; fi`;
 const identity = (clientId: string, nodeId: string) => JSON.stringify([clientId, nodeId]);
 const fail = (message: string): never => { throw new Error(message); };
 const field = (value: unknown, name: string, max = 256): string => {
@@ -280,7 +283,10 @@ export class NodeWorkbench {
 					const t = this.terminal(clientId, req);
 					if (t.busy || t.initializing) throw new Error("Agent 正在使用该终端或终端正在初始化");
 					t.promptReady = false;
-					t.stream.write(String(p.data ?? "").slice(0, 8192)); break;
+					// 行未提交（用户在输入或粘贴未回车）时不能安全探测空闲；回车/Ctrl+C/Ctrl+D 后行缓冲为空。
+					const text = String(p.data ?? "").slice(0, 8192);
+					t.manualTyped = !/[\r\n\x03\x04]$/.test(text);
+					t.stream.write(text); break;
 				}
 				case "terminal_select": { const terminal = this.terminal(clientId, req); this.connection(clientId, req.nodeId).selectedTerminalId = terminal.id; break; }
 				case "terminal_resize": this.terminal(clientId, req).stream.setWindow(Math.max(1, Number(p.rows) || 24), Math.max(1, Number(p.cols) || 80), 0, 0); break;
@@ -447,8 +453,8 @@ export class NodeWorkbench {
 		// Bash/zsh wrappers keep the invisible marker out of readline width counts.
 		const encoded = promptMarker.replace("\x1b", "\\033").replace("\x07", "\\007");
 		const directory = this.node(c.nodeId).defaultDir;
-		const initScript = ` __pi_prompt=$(printf '${encoded}'); if [ -n "\${BASH_VERSION-}" ]; then PS1="\${PS1}\\[\${__pi_prompt}\\]"; elif [ -n "\${ZSH_VERSION-}" ]; then PS1="\${PS1}%{\${__pi_prompt}%}"; else PS1="\${PS1}\${__pi_prompt}"; fi; cd '${directory.replaceAll("'", "'\\''")}'\n`;
-		const t: Terminal = { id, conversationId, stream, busy: false, buffer: "", promptMarker, promptReady: false, welcome: "", initializing: true, initScript, scan: "" };
+		const initScript = `${promptSetup(encoded)}; cd '${directory.replaceAll("'", "'\\''")}'\n`;
+		const t: Terminal = { id, conversationId, stream, busy: false, buffer: "", promptMarker, promptReady: false, welcome: "", initializing: true, initScript, scan: "", manualTyped: false, altScreen: false };
 		c.terminals.set(id, t);
 		c.selectedTerminalId ??= id;
 		const decoder = new StringDecoder("utf8");
@@ -457,6 +463,9 @@ export class NodeWorkbench {
 			t.scan = (t.scan + data).slice(-MAX_OUTPUT);
 			const atPrompt = t.scan.includes(t.promptMarker);
 			if (atPrompt) { t.promptReady = true; t.scan = ""; }
+			// Full-screen programs (vim/less/top) hold the alternate screen; probing
+			// keystrokes would edit or scroll the user's session, so track it.
+			for (const m of data.matchAll(/\x1b\[\?(?:1049|1047|47)([hl])/g)) t.altScreen = m[1] === "h";
 			if (t.initializing) {
 				t.welcome += data;
 				const end = t.welcome.indexOf(t.promptMarker);
@@ -511,7 +520,10 @@ export class NodeWorkbench {
 		}), signal);
 		this.ensureCurrent(c); signal?.throwIfAborted();
 		if (!t.promptReady) await this.waitPromptReady(c, t, signal);
-		if (!t.promptReady || t.busy) throw new Error("手动终端正忙；请先完成命令或按 Ctrl+C 后重试");
+		// #120: sudo/su/子 shell 或 PS1 被覆盖后提示符标记永久丢失，Agent 被长期挡在
+		// 「手动终端正忙」。标记丢失且终端不在输入/全屏状态时，探测当前 shell 并重新安装标记。
+		if (!t.promptReady && !t.busy) await this.recoverPrompt(c, t, signal);
+		if (!t.promptReady || t.busy || t.manualTyped) throw new Error("手动终端正忙；请先完成命令或按 Ctrl+C 后重试");
 		t.busy = true; t.promptReady = false;
 		const commandId = toolCallId ?? randomUUID(), started = Date.now();
 		let commandStatus: "done" | "error" = "error", lines = 0;
@@ -545,12 +557,27 @@ export class NodeWorkbench {
 			}; check();
 		}), signal);
 	}
-	private waitMarker(t: Terminal, start: string, marker: string, input: string, ms: number, signal?: AbortSignal): Promise<{ output: string; code: number }> {
+	/** 标记丢失后的恢复探测（#120）：向当前 shell 写入一行重新安装 PS1 标记并回显
+	 * 探针令牌；令牌返回说明 shell 空闲且标记已恢复。用户行未提交或全屏程序（备用
+	 * 屏幕）占用时拒绝写入——探测按键会污染输入或编辑用户会话。探测超时不发送
+	 * Ctrl+C、不留捕获：用户的手动进程不受打扰，界面显示不被吞掉。 */
+	private async recoverPrompt(c: Connection, t: Terminal, signal?: AbortSignal): Promise<void> {
+		if (t.manualTyped || t.altScreen || t.pending) return;
+		const begin = `__PI_BEGIN_${randomUUID().replaceAll("-", "")}__`, end = `__PI_DONE_${randomUUID().replaceAll("-", "")}__`;
+		const encoded = t.promptMarker.replace("\x1b", "\\033").replace("\x07", "\\007");
+		const input = `printf '\\n%s\\n' '${begin}'; ${promptSetup(encoded)}; printf '\\n%s:%s\\n' '${end}' 0\n`;
+		try {
+			await this.waitMarker(t, begin, end, input, 2000, signal, false);
+			if (c.terminals.has(t.id)) t.promptReady = true;
+		} catch (error) { if (signal?.aborted) throw error; /* 仍未确认空闲：保持手动正忙错误 */ }
+	}
+	private waitMarker(t: Terminal, start: string, marker: string, input: string, ms: number, signal?: AbortSignal, cancel = true): Promise<{ output: string; code: number }> {
 		if (signal?.aborted) return Promise.reject(new Error("命令已中断"));
 		return new Promise((resolve, reject) => {
 			const cleanup = () => { clearTimeout(timer); signal?.removeEventListener("abort", abort); if (t.pending?.marker === marker) t.pending = undefined; };
-			const abort = () => { t.cancelledCapture = t.pending?.capture; t.stream.write("\x03"); cleanup(); reject(new Error("命令已中断")); };
-			const timer = setTimeout(() => { t.cancelledCapture = t.pending?.capture; t.stream.write("\x03"); cleanup(); reject(new Error("无法确认 shell 提示符或命令超时")); }, ms);
+			const interrupt = () => { if (!cancel) return; t.cancelledCapture = t.pending?.capture; t.stream.write("\x03"); };
+			const abort = () => { interrupt(); cleanup(); reject(new Error("命令已中断")); };
+			const timer = setTimeout(() => { interrupt(); cleanup(); reject(new Error("无法确认 shell 提示符或命令超时")); }, ms);
 			signal?.addEventListener("abort", abort, { once: true });
 			t.pending = { marker, capture: new NodeTerminalOutput(start, marker), timer, resolve: (text) => { cleanup(); resolve(text); }, reject: (error) => { cleanup(); reject(error); } };
 			t.stream.write(input);

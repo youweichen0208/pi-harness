@@ -250,6 +250,9 @@ export async function startMockSsh(pluginDir, port, publicKeys = []) {
 							let trapped = false, promptMarker = "";
 							stream.on("data", (d) => {
 								buf += d.toString();
+								// A foreground program owns the tty: it consumes typed input (including the
+								// workbench's idle probe) and the shell never sees it until it exits.
+								if (trapped) { buf = ""; return; }
 								if (buf.includes("__pi_prompt=")) {
 									if (!buf.includes("\n")) return;
 									promptMarker = `\x1b]133;A;${buf.match(/133;A;([a-f0-9-]+)/)?.[1]}\x07`;
@@ -269,7 +272,6 @@ export async function startMockSsh(pluginDir, port, publicKeys = []) {
 									buf = buf.slice(i + 1);
 									const marker = line.match(/^printf '%s(?:\\n|:%s\\n)' '(__PI_(?:READY|DONE)_[a-f0-9]+__)'/);
 									if (line === "trap_foreground") { trapped = true; stream.write("foreground-trap\r\n"); }
-									else if (trapped) { /* foreground app consumes input, including Ctrl+C */ }
 									else if (marker) stream.write(`${marker[1]}${line.includes('"$?"') ? ":0" : ""}\r\n`);
 									else if (line) stream.write(`echo:${line}\r\n${promptMarker}`);
 								}

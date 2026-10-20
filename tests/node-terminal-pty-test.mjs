@@ -37,6 +37,34 @@ const afterManual=await service.execute('fixture',nodeId,'term',root,'printf "ag
 assert.equal(afterManual.output,'agent-after-manual');
 assert(terminal.buffer.includes('manual-finished'));
 await ready();
+// #120: sudo/su/子 shell 或 source 配置会换掉 PS1（真实环境里 PS1 不由环境继承），
+// 提示符标记永久丢失，之后每条 Agent 命令都报「手动终端正忙」。execute 应探测
+// 空闲 shell 并重新安装标记。这里用直接覆盖 PS1 模拟同一结果状态。
+await service.handle('fixture',{type:'node_request',action:'terminal_input',requestId:'ps1-override',nodeId,terminalId:'term',conversationId:opened.conversationId,payload:{data:`PS1='custom$ '\n`}});
+await new Promise(r=>setTimeout(r,300));
+assert.equal(terminal.promptReady,false,'overridden PS1 has no prompt marker');
+// A full-screen program (alternate screen) must not receive probe keystrokes.
+await service.handle('fixture',{type:'node_request',action:'terminal_input',requestId:'alt-on',nodeId,terminalId:'term',conversationId:opened.conversationId,payload:{data:'printf "\\033[?1049h"\n'}});
+await new Promise(r=>setTimeout(r,300));
+assert.equal(terminal.altScreen,true);
+await assert.rejects(service.execute('fixture',nodeId,'term',root,'echo must-not-probe-altscreen',2),/手动终端正忙/);
+await service.handle('fixture',{type:'node_request',action:'terminal_input',requestId:'alt-off',nodeId,terminalId:'term',conversationId:opened.conversationId,payload:{data:'printf "\\033[?1049l"\n'}});
+await new Promise(r=>setTimeout(r,300));
+assert.equal(terminal.altScreen,false);
+const recovered=await service.execute('fixture',nodeId,'term',root,'printf "recovered-in-subshell\\n"',5);
+assert.equal(recovered.output,'recovered-in-subshell');
+// The post-command prompt marker can still be in flight when execute() returns; wait
+// for it like the other manual handoffs above.
+await ready();
+assert.equal(terminal.promptReady,true,'probe re-armed the marker after the PS1 override');
+// An unsubmitted manual line must not receive probe text either.
+await service.handle('fixture',{type:'node_request',action:'terminal_input',requestId:'partial',nodeId,terminalId:'term',conversationId:opened.conversationId,payload:{data:'echo partial'}});
+assert.equal(terminal.manualTyped,true);
+await assert.rejects(service.execute('fixture',nodeId,'term',root,'echo must-not-probe-partial',2),/手动终端正忙/);
+await service.handle('fixture',{type:'node_request',action:'terminal_input',requestId:'partial-cancel',nodeId,terminalId:'term',conversationId:opened.conversationId,payload:{data:'\x03'}});
+await ready();
+assert(!terminal.buffer.includes('must-not-probe-altscreen'));
+assert(!terminal.buffer.includes('must-not-probe-partial'));
 const cancellation=new AbortController();
 const cancelled=service.execute('fixture',nodeId,'term',root,'sleep 20',5,cancellation.signal);
 setTimeout(()=>cancellation.abort(),100);
@@ -52,8 +80,12 @@ await new Promise(r=>setTimeout(r,100));
 await assert.rejects(service.execute('fixture',nodeId,'term',root,'echo must-not-steal',2),/手动终端正忙/);
 await service.handle('fixture',{type:'node_request',action:'interrupt',requestId:'interrupt',nodeId,terminalId:'term',conversationId:opened.conversationId,payload:{}});
 await ready();
+// The idle probe queued behind `sleep 20` runs after the interrupt and self-heals
+// the marker; its framing is captured, so only the stealing command itself could
+// ever surface in the visible buffer.
 assert(!terminal.buffer.includes('__PI_DONE_'));
 assert(!terminal.buffer.includes('__PI_BEGIN_'));
+assert(!terminal.buffer.includes('must-not-steal'));
 assert(!terminal.welcome.includes('__pi_prompt='));
-console.log('PASS actual Bash PTY: UTF-8, output framing, exit code, abort, timeout, manual-to-agent handoff (#96), manual ownership');
+console.log('PASS actual Bash PTY: UTF-8, output framing, exit code, abort, timeout, manual-to-agent handoff (#96), manual ownership, prompt-marker recovery (#120)');
 }finally{service.dispose();client.end();for(const c of peers)c.end();for(const t of terms)t.kill();await new Promise(r=>ssh.close(r));rmSync(root,{recursive:true,force:true});}
