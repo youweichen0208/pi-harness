@@ -4,15 +4,16 @@ import { SystemPromptPanel } from "./SystemPromptPanel";
 import { BuiltinExtensionsPanel } from "./BuiltinExtensionsPanel";
 import { ExtensionsPanel } from "./ExtensionsPanel";
 import { useState, useEffect } from "react";
-import { FiX, FiDroplet, FiSettings, FiCpu, FiPackage, FiBox, FiRefreshCw } from "react-icons/fi";
+import { FiX, FiDroplet, FiSettings, FiCpu, FiPackage, FiBox, FiRefreshCw, FiPlay } from "react-icons/fi";
 import { useT } from "../i18n";
 import type { ClientMessage, ServerMessage, UiSettingsState } from "../types";
 import { AppearancePanel } from "./AppearancePanel";
 import { NativeMcpPanel } from "./NativeMcpPanel";
+import { PlaygroundPanel, type PlaygroundControls } from "./PlaygroundPanel";
 import { SkillsPanel } from "./SkillsPanel";
 import { randomUuid } from "../uuid";
 
-type Tab = "prompt" | "appearance" | "skills" | "extensions" | "native-mcp" | "updates";
+type Tab = "prompt" | "appearance" | "skills" | "extensions" | "native-mcp" | "playground" | "updates";
 interface SettingsModalProps {
 	initialTab?: Tab;
 	chat: {
@@ -24,10 +25,11 @@ interface SettingsModalProps {
 		componentUpdates: Extract<ServerMessage, { type: "component_updates" }> | null;
 	};
 	send: (message: ClientMessage) => boolean;
+	playground: PlaygroundControls;
 	onClose: () => void;
 }
 
-export function SettingsModal({ chat, send, onClose, initialTab = "prompt" }: SettingsModalProps) {
+export function SettingsModal({ chat, send, playground, onClose, initialTab = "prompt" }: SettingsModalProps) {
 	const t = useT();
 	const dialogRef = useDialogFocus();
 	const [extensionUpdates,setExtensionUpdates]=useState(0);
@@ -43,6 +45,7 @@ export function SettingsModal({ chat, send, onClose, initialTab = "prompt" }: Se
 		{ id: "skills", label: t("settingsSkills"), icon: <FiCpu /> },
 		{ id: "extensions", label: t("settingsExtensions"), icon: <FiPackage /> },
 		{ id: "native-mcp", label: t("nativeMcp"), icon: <FiBox /> },
+		{ id: "playground", label: t("settingsPlayground"), icon: <FiPlay /> },
 		{ id: "updates", label: t("componentUpdates"), icon: <FiRefreshCw /> },
 	];
 	const updates = chat.componentUpdates?.cwd === chat.state?.cwd ? chat.componentUpdates : null;
@@ -68,6 +71,7 @@ export function SettingsModal({ chat, send, onClose, initialTab = "prompt" }: Se
 							/>}
 						/>}
 						{tab === "native-mcp" && chat.state?.cwd && <NativeMcpPanel key={`${chat.state.cwd}:${chat.state.conversationId}`} cwd={chat.state.cwd} send={send} dialog={chat.dialog} />}
+						{tab === "playground" && <PlaygroundPanel playground={playground} />}
 						{tab === "updates" && <ComponentUpdatesPanel cwd={chat.state?.cwd ?? ""} updates={updates} onUpdateCount={setExtensionUpdates} reload={() => send({ type: "extensions_reload" })} />}
 					</>}
 				</div></div>

@@ -1628,6 +1628,7 @@ export function App() {
 					initialTab={settingsInitialTab}
 					chat={chat}
 					send={send}
+					playground={playground}
 					onClose={() => setSettingsOpen(false)}
 				/>
 			)}

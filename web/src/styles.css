@@ -13548,3 +13548,14 @@ html.pi-desktop-darwin .compact-navigation .global-navigation { padding-top: 36p
 .playground-result-foot .copy-btn { position: static; opacity: 1; display: inline-flex; align-items: center; gap: 5px; width: auto; height: auto; padding: 3px 7px; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--text-muted); font: 11.5px var(--sans); cursor: pointer; }
 .playground-result-foot .copy-btn:hover { background: var(--bg-elev2); color: var(--text); }
 .playground-result-foot .playground-action { margin-left: 0; color: var(--text-muted); }
+
+/* Playground settings: the switch that grants code execution, plus its limits. */
+.playground-settings { display: flex; flex-direction: column; gap: 12px; }
+.playground-warning { margin: 0; padding: 10px 12px; border-radius: var(--r-md); background: var(--yellow-bg); color: var(--yellow-fg); font-size: 13px; line-height: 1.6; }
+.playground-toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.playground-field { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.playground-field input { width: 80px; }
+.playground-jdk { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; color: var(--text-muted); }
+.playground-jdk-label { color: var(--text); }
+.playground-hint { margin: 0; font-size: 12px; color: var(--text-faint); }
+.playground-error { margin: 0; color: var(--red); font-size: 13px; }

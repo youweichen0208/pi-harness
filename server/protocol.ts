@@ -1554,6 +1554,8 @@ export interface PlaygroundJdkStatus { available: boolean; version?: string; pat
 export interface PlaygroundLimits { timeoutMs: number; maxOutputBytes: number; maxHeapMb: number }
 export interface PlaygroundStatus { enabled: boolean; locked: boolean; jdk: PlaygroundJdkStatus; limits: PlaygroundLimits }
 export interface PlaygroundConfigInput { enabled: boolean; timeoutMs: number; maxOutputBytes: number; maxHeapMb: number; maxConcurrent: number }
+/** Partial write to the global switch; absent fields keep their stored value. */
+export type PlaygroundConfigPatch = Partial<PlaygroundConfigInput>;
 export interface PlaygroundErrorResponse { error: string }
 export type PlaygroundEvent =
 	| { type: "start"; runId: string }

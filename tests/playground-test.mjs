@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer as createHttpServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -37,6 +37,10 @@ async function stop() {
 }
 async function status(query = "", headers = {}) {
 	return fetch(`${base}/api/playground/status?${query ? `${query}&` : ""}token=${token}`, { headers });
+}
+/** Write the global switch. Returns the response, so callers can assert refusals. */
+async function configure(body, headers = {}) {
+	return fetch(`${base}/api/playground/config?token=${token}`, { method: "POST", headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify(body) });
 }
 function writeConfig(value) { mkdirSync(dataDir, { recursive: true }); writeFileSync(configFile, typeof value === "string" ? value : JSON.stringify(value)); }
 
@@ -87,6 +91,14 @@ const end = events => events.find(event => event.type === "end");
 const looksLikeMissingProjectDependency = output => /\bpackage\s+[\w.]+\s+does not exist\b/.test(output) || /cannot find symbol[\s\S]{0,400}?\bsymbol:\s*(?:class|interface|enum|record)\b/.test(output);
 /** Temp directories a Run owns, to prove cleanup on every exit path. */
 const runDirs = () => readdirSync(tmpdir()).filter(name => name.startsWith("pi-playground-")).length;
+/** Poll the status endpoint until it satisfies a predicate. */
+async function untilStatus(predicate, what) {
+	for (let i = 0; i < 60; i++) {
+		if (predicate(await (await status()).json())) return;
+		await sleep(200);
+	}
+	throw new Error(`status never became: ${what}`);
+}
 const HELLO = 'public class Main { public static void main(String[] args) { System.out.println("hello"); } }';
 
 // A local OpenAI-compatible provider, so the browser flow costs no tokens: the
@@ -154,6 +166,35 @@ try {
 	assert.equal((await run("")).status, 400, "empty source is rejected");
 	assert.equal((await run(123)).status, 400, "non-string source is rejected");
 	assert.equal((await run("x".repeat(300000))).status, 400, "oversized source is rejected");
+
+	// --- the settings write path -------------------------------------------------
+	writeConfig({});
+	const saved = await (await configure({ enabled: true, timeoutMs: 5000 })).json();
+	assert.equal(saved.enabled, true);
+	assert.equal(saved.limits.timeoutMs, 5000);
+	// It persists, and it is the same answer the status endpoint gives.
+	assert.equal((await (await status()).json()).enabled, true);
+	assert.equal(JSON.parse(readFileSync(configFile, "utf8")).timeoutMs, 5000);
+
+	// A partial write leaves everything else alone.
+	const partial = await (await configure({ timeoutMs: 20000 })).json();
+	assert.equal(partial.enabled, true, "a partial write must not reset the switch");
+	assert.equal(partial.limits.timeoutMs, 20000);
+
+	// Out-of-range values are clamped, exactly as they are when read.
+	assert.equal((await (await configure({ timeoutMs: 999999 })).json()).limits.timeoutMs, 60000);
+
+	// Wrong types are refused rather than silently reset to a default: a write
+	// that quietly changes something else is worse than a rejected write.
+	assert.equal((await configure({ enabled: "yes" })).status, 400);
+	assert.equal((await configure({ timeoutMs: "5000" })).status, 400);
+	assert.equal((await configure({ maxHeapMb: null })).status, 400);
+	assert.equal((await configure({ unknownField: 1 })).status, 400);
+	assert.equal((await configure({})).status, 400, "an empty write is a mistake, not a no-op");
+	assert.equal((await configure({ enabled: true }, { Origin: "https://evil.example" })).status, 403);
+	assert.equal((await fetch(`${base}/api/playground/config?token=${token}`)).status, 405);
+	// The refused writes changed nothing.
+	assert.equal((await (await status()).json()).limits.timeoutMs, 60000);
 
 	// --- execution (needs a JDK) -------------------------------------------------
 	const jdk = (await (await status()).json()).jdk;
@@ -274,7 +315,38 @@ try {
 			await page.waitForFunction(() => document.querySelector(".inputbox textarea")?.value.includes("hello"));
 			assert.match(await composer.inputValue(), /```/, "send-to-pi inserts a fenced block, it does not send");
 			assert.equal(modelCalls.length, 2, "send-to-pi must not trigger a model call");
-			console.log("PASS playground browser: Run control on a reply, none on tool cards, streaming output and send-to-pi");
+
+			// --- the settings tab ---
+			await page.getByRole("button", { name: "设置", exact: true }).first().click();
+			await page.getByText("所有设置", { exact: true }).click();
+			await page.getByRole("button", { name: "代码运行", exact: true }).click();
+			await page.locator(".playground-warning").waitFor();
+			assert.match(await page.locator(".playground-warning").innerText(), /不是沙箱/, "the panel must say it is not a sandbox");
+			assert.match(await page.locator(".playground-jdk").innerText(), /JDK 27/, "the detected JDK is reported");
+
+			// Turning it off needs no confirmation, and reaches the server.
+			await page.locator(".playground-toggle input").click();
+			await untilStatus(s => !s.enabled, "disabled");
+
+			// Turning it back on does ask first.
+			page.once("dialog", dialog => dialog.accept());
+			await page.locator(".playground-toggle input").click();
+			await untilStatus(s => s.enabled, "enabled");
+
+			// The timeout commits on blur, not per keystroke, and is clamped by the server.
+			await page.locator(".playground-field input").fill("5");
+			await page.locator(".playground-field input").blur();
+			await untilStatus(s => s.limits.timeoutMs === 5000, "a 5s timeout");
+			await page.locator(".playground-field input").fill("999");
+			await page.locator(".playground-field input").blur();
+			await untilStatus(s => s.limits.timeoutMs === 60000, "a clamped timeout");
+			// Re-detect must force a fresh probe, not just re-render the cached one.
+			const forced = page.waitForRequest(request => request.url().includes("/api/playground/status?refresh=1"));
+			await page.getByRole("button", { name: "重新检测", exact: true }).click();
+			await forced;
+			await page.keyboard.press("Escape");
+
+			console.log("PASS playground browser: Run control on a reply, none on tool cards, streaming output, send-to-pi and the settings tab");
 		} finally {
 			await browser.close();
 		}
@@ -287,6 +359,28 @@ try {
 	const locked = await (await status()).json();
 	assert.equal(locked.locked, true);
 	assert.equal(locked.enabled, false, "the environment switch must override an enabled config file");
+	assert.equal((await configure({ enabled: true })).status, 403, "a locked Playground must refuse to be enabled");
+	assert.equal((await (await status()).json()).enabled, false);
+
+	// The settings control must read as read-only rather than mysteriously off.
+	if (process.argv.includes("--browser")) {
+		const { chromium } = await import("playwright-core");
+		const { CHROME_PATH } = await import("./lib/chrome.mjs");
+		const browser = await chromium.launch({ executablePath: CHROME_PATH, headless: true });
+		try {
+			const page = await (await browser.newContext({ viewport: { width: 1440, height: 1000 } })).newPage();
+			await page.goto(`${base}/?token=${token}`);
+			if (await page.locator(".setup-modal .modal-close").count()) await page.locator(".setup-modal .modal-close").click();
+			await page.getByRole("button", { name: "设置", exact: true }).first().click();
+			await page.getByText("所有设置", { exact: true }).click();
+			await page.getByRole("button", { name: "代码运行", exact: true }).click();
+			assert.equal(await page.locator(".playground-toggle input").isDisabled(), true, "a locked switch is read-only");
+			assert.match(await page.locator(".playground-hint").innerText(), /PI_WEB_PLAYGROUND/);
+			console.log("PASS playground browser: the environment lock reads as read-only in settings");
+		} finally {
+			await browser.close();
+		}
+	}
 
 	console.log("PASS playground API: auth, origin, default-off, limits, corrupt-config fail-closed, clamping and the environment lock");
 } finally {

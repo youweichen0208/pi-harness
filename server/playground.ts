@@ -14,13 +14,16 @@
 import { join } from "node:path";
 import type { Express } from "express";
 import type { IncomingMessage } from "node:http";
-import type { PlaygroundEvent, PlaygroundStatus } from "./protocol.js";
+import type { PlaygroundConfigPatch, PlaygroundEvent, PlaygroundStatus } from "./protocol.js";
 import { PlaygroundConfigStore, playgroundEnvLock } from "./playground-config.js";
 import { createJdkProbe, resolveHostJdk, type JdkProbe } from "./playground-jdk.js";
 import { ConcurrencyGate, runJava } from "./playground-run.js";
 
 /** Source larger than this is refused before anything is written to disk. */
 const MAX_SOURCE_BYTES = 262_144;
+
+/** Accepted keys of a config write, and the exact type each one must have. */
+const FIELD_TYPES = { enabled: "boolean", timeoutMs: "number", maxOutputBytes: "number", maxHeapMb: "number", maxConcurrent: "number" } as const;
 
 export interface PlaygroundRouteOptions {
 	/** Data directory; the global switch lives at `<dataDir>/playground.json`. */
@@ -68,6 +71,48 @@ export function installPlaygroundRoutes(app: Express, options: PlaygroundRouteOp
 			res.json(await currentStatus(req.query.refresh !== undefined));
 		} catch {
 			res.status(500).json({ error: "Playground status failed" });
+		}
+	});
+
+	app.all("/api/playground/config", async (req, res) => {
+		res.setHeader("Cache-Control", "no-store");
+		if (!allowed(req)) {
+			res.status(403).json({ error: "Forbidden" });
+			return;
+		}
+		if (req.method !== "POST") {
+			res.sendStatus(405);
+			return;
+		}
+		if (!req.is("application/json")) {
+			res.status(403).json({ error: "Forbidden" });
+			return;
+		}
+		// Locked is read-only, not merely off: the write path refuses as well, so a
+		// deployment that sets PI_WEB_PLAYGROUND cannot be un-set from the page.
+		if (playgroundEnvLock(env)) {
+			res.status(403).json({ error: "Playground is locked by PI_WEB_PLAYGROUND" });
+			return;
+		}
+		const body = req.body as Record<string, unknown> | undefined;
+		if (!body || typeof body !== "object" || Array.isArray(body)) {
+			res.status(400).json({ error: "Invalid config" });
+			return;
+		}
+		const fields = Object.keys(body);
+		// Strict, including an empty write: a partial write that silently reset an
+		// unrelated field, or an empty one treated as a no-op, would both hide a bug
+		// in whatever sent it. Types are checked here so `normalize` never has to
+		// guess between "absent" and "nonsense".
+		if (!fields.length || fields.some(field => !(field in FIELD_TYPES) || typeof body[field] !== FIELD_TYPES[field as keyof typeof FIELD_TYPES])) {
+			res.status(400).json({ error: "Invalid config" });
+			return;
+		}
+		try {
+			store.write({ ...store.read(), ...(body as PlaygroundConfigPatch) });
+			res.json(await currentStatus(false));
+		} catch {
+			res.status(500).json({ error: "Playground config failed" });
 		}
 	});
 

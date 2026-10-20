@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { PlaygroundStatus } from "./types";
+import type { PlaygroundConfigPatch, PlaygroundStatus } from "./types";
 import { withToken } from "./auth-token";
 
 async function fetchStatus(redetect: boolean): Promise<PlaygroundStatus> {
@@ -44,5 +44,29 @@ export function usePlayground(connected: boolean) {
 	}, [refresh]);
 
 	const redetect = useCallback(() => refresh(true), [refresh]);
-	return { status, refresh, redetect };
+
+	/**
+	 * Write the global switch. Returns an error message, or "" on success — the
+	 * caller shows it, because a settings control that silently reverts is worse
+	 * than one that says why.
+	 */
+	const configure = useCallback(async (patch: PlaygroundConfigPatch): Promise<string> => {
+		try {
+			const response = await fetch(withToken("/api/playground/config"), {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(patch),
+			});
+			if (!response.ok) {
+				const body = (await response.json().catch(() => ({}))) as { error?: string };
+				return body.error ?? `HTTP ${response.status}`;
+			}
+			setStatus((await response.json()) as PlaygroundStatus);
+			return "";
+		} catch (error) {
+			return error instanceof Error ? error.message : "Failed";
+		}
+	}, []);
+
+	return { status, refresh, redetect, configure };
 }
