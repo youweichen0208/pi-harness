@@ -74,8 +74,10 @@ export interface RunSummary {
 	aborted: boolean;
 }
 
-/** Enough of the tail of stderr to classify a compiler failure, not to keep it. */
-const STDERR_TAIL_BYTES = 16_384;
+/** Enough of the tail of stderr to classify a compiler failure, not to keep it.
+ *  Counted in characters, not bytes — the classification only needs javac's
+ *  summary, which lands at the end, so an approximate bound is fine. */
+const STDERR_TAIL = 16_384;
 
 function spawnPhase(
 	command: string,
@@ -133,7 +135,7 @@ export async function runJava(options: RunJavaOptions): Promise<RunSummary> {
 	const forward = (stream: "stdout" | "stderr", chunk: string) => {
 		const text = budget.push(chunk);
 		if (!text) return;
-		if (stream === "stderr") stderrTail = `${stderrTail}${text}`.slice(-STDERR_TAIL_BYTES);
+		if (stream === "stderr") stderrTail = `${stderrTail}${text}`.slice(-STDERR_TAIL);
 		options.onEvent({ type: "out", stream, text });
 	};
 	const shouldStop = () => timedOut || aborted || budget.exceeded;

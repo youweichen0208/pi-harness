@@ -63,6 +63,11 @@ pi-harness/
 │   ├── process-utils.ts        # 进程工具：snapshotListeningPorts/killPidTree/lookupProcessName
 │   ├── client-state.ts         # ClientStateStore：<dataDir>/client-state.json 持久化
 │   ├── uploads.ts              # 文件对话上传 + 保留期清理
+│   ├── playground.ts           # Playground 路由：status/config/run（HTTP+SSE）；见 docs/architecture-playground.md
+│   ├── playground-config.ts    # Playground 全局开关：归一化、环境锁与 <dataDir>/playground.json 存储
+│   ├── playground-jdk.ts       # JDK 探测：命令解析（JAVA_HOME 优先）、懒探测 + TTL、失败只降级不崩服务
+│   ├── playground-run.ts       # Run 执行：两步编译运行、临时目录、超时/超输出杀进程树、并发闸门
+│   ├── playground-source.ts    # 纯函数：public 类型/package 解析、输出限额、needs-the-project 判定
 │   ├── bg-servers.ts           # 后台任务跟踪（bash 前后端口快照 diff + 存活刷新）
 │   ├── component-updates.ts    # pi Agent / 扩展版本检查、来源校验与包更新
 │   ├── extension-module-cache.ts # /restart、/reload 与扩展重载刷新扩展模块缓存（registerHooks 代数 + require.cache 清理，issue #64）
@@ -173,6 +178,7 @@ pi-harness/
 | `CollapsedMessage.tsx` / `LazyMount.tsx` | 消息折叠摘要行 / 消息级惰性挂载包装 |
 | `SearchBar.tsx` | 会话内搜索栏（Ctrl+F，CSS Custom Highlight API 高亮） |
 | `Markdown.tsx` / `Dropdown.tsx` / `copy-button.tsx` / `SoundSettings.tsx` | 通用件 |
+| `PlaygroundRun.tsx` / `PlaygroundPanel.tsx` | Java 代码块运行控件与结果区、代码运行设置页；Run 状态在 `playground-run-store.ts`（组件重挂载不丢）；详见 `docs/architecture-playground.md` |
 
 ## 原生代理边界
 
