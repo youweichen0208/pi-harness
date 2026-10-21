@@ -15,6 +15,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync, realpathSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import WebSocket from "ws";
+import { testEnv } from "./lib/test-env.mjs";
 
 const PORT = 8978;
 const BASE = `http://127.0.0.1:${PORT}`;
@@ -119,7 +120,7 @@ try {
 
 	proc = spawn(serverPath, [join(import.meta.dirname, "..", "dist", "server", "index.js")], {
 		env: {
-			...process.env,
+			...testEnv(),
 			PORT: String(PORT),
 			PI_WEB_DATA_DIR: dataDir,
 			PI_WEB_CWD: import.meta.dirname,

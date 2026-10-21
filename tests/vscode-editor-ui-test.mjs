@@ -17,6 +17,7 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } f
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
+import { testEnv } from "./lib/test-env.mjs";
 
 const CHROME = CHROME_PATH;
 const PORT = 8968;
@@ -48,7 +49,7 @@ let server = null;
 try {
 	server = spawn(process.execPath, ["dist/server/index.js"], {
 		cwd: repo,
-		env: { ...process.env, PORT: String(PORT), PI_WEB_DATA_DIR: dataDir, PI_WEB_CWD: workspace },
+		env: { ...testEnv(), PORT: String(PORT), PI_WEB_DATA_DIR: dataDir, PI_WEB_CWD: workspace },
 		stdio: ["ignore", "pipe", "pipe"],
 	});
 	server.stderr.on("data", (d) => process.stderr.write(`[server] ${d}`));

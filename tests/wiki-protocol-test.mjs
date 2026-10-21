@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import WebSocket from 'ws';
 import { portUp } from './lib/port-utils.mjs';
+import { testEnv } from "./lib/test-env.mjs";
 const port = 8996, clientId = 'wiki-protocol', token = 'wiki-test-only';
 assert.equal(await portUp(port), false, 'isolated port must be free');
 const base = mkdtempSync(join(tmpdir(), 'wiki-protocol-')), workspace = join(base, 'work');
@@ -17,7 +18,7 @@ let pdf = '%PDF-1.4\n', offsets = [];
 for (let i = 0; i < objects.length; i++) { offsets.push(Buffer.byteLength(pdf)); pdf += `${i + 1} 0 obj\n${objects[i]}\nendobj\n`; }
 const xref = Buffer.byteLength(pdf); pdf += `xref\n0 6\n0000000000 65535 f \n${offsets.map(n => String(n).padStart(10, '0') + ' 00000 n ').join('\n')}\ntrailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
 writeFileSync(join(workspace, 'report.pdf'), pdf);
-const server = spawn(process.execPath, ['dist/server/index.js'], { env: { ...process.env, PORT: String(port), PI_WEB_TOKEN: token, PI_WEB_DATA_DIR: join(base, 'data'), PI_CODING_AGENT_DIR: join(base, 'agent'), PI_WEB_CWD: workspace }, stdio: 'ignore' });
+const server = spawn(process.execPath, ['dist/server/index.js'], { env: { ...testEnv(), PORT: String(port), PI_WEB_TOKEN: token, PI_WEB_DATA_DIR: join(base, 'data'), PI_CODING_AGENT_DIR: join(base, 'agent'), PI_WEB_CWD: workspace }, stdio: 'ignore' });
 let ws;
 try {
 	for (let i = 0; i < 100 && !await portUp(port); i++) await new Promise(r => setTimeout(r, 100));

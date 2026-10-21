@@ -11,6 +11,7 @@ import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { portUp } from "./lib/port-utils.mjs";
 import { chromium } from "playwright-core";
 import { CHROME_PATH } from "./lib/chrome.mjs";
+import { testEnv } from "./lib/test-env.mjs";
 const PORT = Number(process.env.PI_TEST_PORT || 9254), MOCK = PORT + 1;
 assert(PORT >= 8900);
 for (const port of [PORT, MOCK]) assert.equal(await portUp(port), false, `port ${port} occupied`);
@@ -42,7 +43,7 @@ const mock = createServer(async (req, res) => {
 	res.write(chunk({}, "stop")); res.end("data: [DONE]\n\n");
 });
 await new Promise(resolve => mock.listen(MOCK, "127.0.0.1", resolve));
-const server = spawn(process.execPath, ["dist/server/index.js"], { env: { ...process.env, PORT: String(PORT), PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(root, "data"), PI_CODING_AGENT_DIR: agent }, stdio: ["ignore", "pipe", "pipe"] });
+const server = spawn(process.execPath, ["dist/server/index.js"], { env: { ...testEnv(), PORT: String(PORT), PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(root, "data"), PI_CODING_AGENT_DIR: agent }, stdio: ["ignore", "pipe", "pipe"] });
 let logs = "", ws, browser, state;
 server.stdout.on("data", d => logs += d); server.stderr.on("data", d => logs += d);
 const wire = [];

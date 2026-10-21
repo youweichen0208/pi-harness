@@ -10,6 +10,9 @@ import { once } from "node:events";
 import WebSocket from "ws";
 import { chromium } from "playwright-core";
 import { CHROME_PATH } from "./lib/chrome.mjs";
+import { testEnv, scrubHostEnv } from "./lib/test-env.mjs";
+
+scrubHostEnv();
 
 const count = Number(process.env.PI_HISTORY_MESSAGES ?? 4096);
 const root = mkdtempSync(join(tmpdir(), "pi-history-ui-"));
@@ -25,7 +28,7 @@ for (let i = 0; i < count; i++) manager.appendMessage(i % 2
 	: { role: "user", content: [{ type: "text", text: `question-${i}-unique` }], timestamp: i + 1 });
 const listener = createServer(); await new Promise(resolve => listener.listen(0, "127.0.0.1", resolve));
 const port = listener.address().port; await new Promise(resolve => listener.close(resolve)); assert(port >= 8900);
-const child = spawn(process.execPath, ["dist/server/index.js"], { env: { ...process.env, PORT: String(port), PI_WEB_DATA_DIR: join(root, "data"), PI_WEB_CWD: cwd }, stdio: ["ignore", "pipe", "pipe"] });
+const child = spawn(process.execPath, ["dist/server/index.js"], { env: { ...testEnv(), PORT: String(port), PI_WEB_DATA_DIR: join(root, "data"), PI_WEB_CWD: cwd }, stdio: ["ignore", "pipe", "pipe"] });
 let output = "", browser, ws;
 child.stdout.on("data", c => { output = (output + c).slice(-8000); }); child.stderr.on("data", c => { output = (output + c).slice(-8000); });
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));

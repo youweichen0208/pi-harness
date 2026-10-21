@@ -7,6 +7,9 @@ import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
+import { testEnv, scrubHostEnv } from "./lib/test-env.mjs";
+
+scrubHostEnv();
 
 const here = dirname(dirname(fileURLToPath(import.meta.url))); // tests/ → repo root
 const NODE = realpathSync(process.execPath);
@@ -44,7 +47,7 @@ execSync(`git remote add origin ${remotePath}`, { cwd: repo, stdio: "ignore" });
 execSync("git checkout -b feature", { cwd: repo, stdio: "ignore" });
 writeFileSync(join(repo, "a.txt"), "two\n");
 execSync("git add -A && git commit -m feature-work", { cwd: repo, stdio: "ignore" });
-execSync("git push -u origin feature", { cwd: repo, stdio: "ignore", env: process.env });
+execSync("git push -u origin feature", { cwd: repo, stdio: "ignore", env: testEnv() });
 execSync("git checkout main", { cwd: repo, stdio: "ignore" });
 writeFileSync(join(repo, "new.txt"), "untracked content\nsecond line\n");
 writeFileSync(join(repo, "binary.bin"), Buffer.from([0, 1, 2, 3]));

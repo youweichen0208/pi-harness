@@ -12,6 +12,7 @@ import { randomUUID } from "node:crypto";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { testEnv } from "./lib/test-env.mjs";
 
 const PORT = 9798;
 const URL = `ws://localhost:${PORT}/ws`;
@@ -28,7 +29,7 @@ async function startServer() {
 	server = spawn(process.execPath, ["dist/server/index.js"], {
 		cwd: PROJ,
 		env: {
-			...process.env,
+			...testEnv(),
 			PORT: String(PORT),
 			// 隔离 cwd + client-state：绝不写进仓库根的真实会话存储；
 			// 历史快照里也不会再出现旧 toolResult 干扰排序断言。

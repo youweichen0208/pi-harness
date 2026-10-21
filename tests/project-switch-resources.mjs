@@ -6,6 +6,9 @@ import { join, resolve } from "node:path";
 import { createServer } from "node:net";
 import { chromium } from "playwright-core";
 import { CHROME_PATH } from "./lib/chrome.mjs";
+import { testEnv, scrubHostEnv } from "./lib/test-env.mjs";
+
+scrubHostEnv();
 
 const base = mkdtempSync(join(tmpdir(), "pi-switch-"));
 const agent = join(base, "agent");
@@ -44,7 +47,7 @@ try {
 		assert(port >= 8900);
 		const server = spawn(process.execPath, ["--expose-gc", "--import", diagnostic, join(root, "dist/server/index.js")], {
 			cwd: root,
-			env: { ...process.env, PORT: String(port), PI_WEB_CWD: projects[0], PI_WEB_DATA_DIR: join(base, version), PI_WEB_PKG_ROOT: root, PI_CODING_AGENT_DIR: agent },
+			env: { ...testEnv(), PORT: String(port), PI_WEB_CWD: projects[0], PI_WEB_DATA_DIR: join(base, version), PI_WEB_PKG_ROOT: root, PI_CODING_AGENT_DIR: agent },
 			stdio: ["ignore", "pipe", "pipe", "ipc"],
 		});
 		let logs = "";

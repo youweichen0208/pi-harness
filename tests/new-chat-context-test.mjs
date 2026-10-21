@@ -11,6 +11,7 @@ import { chromium } from "playwright-core";
 import { CHROME_PATH } from "./lib/chrome.mjs";
 import { portUp } from "./lib/port-utils.mjs";
 import { createAgentSessionServices, createAgentSessionFromServices, SessionManager, createCodemodeExtension, createToolSearchExtension, createMcpExtension } from "@earendil-works/pi-coding-agent";
+import { testEnv } from "./lib/test-env.mjs";
 
 const PROTOCOL_ONLY = process.argv.includes("--protocol-only");
 const PORT = Number(process.argv.slice(2).find((arg) => /^\d+$/.test(arg)) || 8967);
@@ -111,7 +112,7 @@ const repoRoot = realpathSync(new URL("../", import.meta.url));
 const server = spawn(process.execPath, ["dist/server/index.js"], {
 	cwd: repoRoot,
 	env: {
-		...process.env,
+		...testEnv(),
 		PORT: String(PORT),
 		PI_WEB_DATA_DIR: dataDir,
 		PI_WEB_CWD: workdir,

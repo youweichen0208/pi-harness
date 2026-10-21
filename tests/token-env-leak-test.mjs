@@ -11,6 +11,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as sleep } from 'node:timers/promises';
 import WebSocket from 'ws';
+import { testEnv } from "./lib/test-env.mjs";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 8972;
@@ -18,7 +19,7 @@ const TOKEN = 'tok-' + randomUUID();
 const root = mkdtempSync(join(tmpdir(), 'pi-envleak-'));
 const cwd = join(root, 'ws'); mkdirSync(cwd);
 const server = spawn(process.execPath, [join(REPO, 'dist', 'server', 'index.js')], {
-	env: { ...process.env, PORT: String(PORT), PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(root, 'data'), PI_CODING_AGENT_DIR: join(root, 'agent'), PI_WEB_TOKEN: TOKEN, SHELL: process.env.SHELL || '/bin/sh' },
+	env: { ...testEnv(), PORT: String(PORT), PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(root, 'data'), PI_CODING_AGENT_DIR: join(root, 'agent'), PI_WEB_TOKEN: TOKEN, SHELL: process.env.SHELL || '/bin/sh' },
 	stdio: 'ignore', windowsHide: true,
 });
 try {

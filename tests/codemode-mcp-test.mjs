@@ -9,6 +9,7 @@ import WebSocket from 'ws';
 import { chromium } from 'playwright-core';
 import { CHROME_PATH } from './lib/chrome.mjs';
 import { portUp } from './lib/port-utils.mjs';
+import { testEnv } from "./lib/test-env.mjs";
 const port = 9204, token = 'codemode-fixture', clientId = 'codemode-mcp';
 for (const p of [port, port + 1]) assert.equal(await portUp(p), false, `Port ${p} busy`);
 const root = mkdtempSync(join(tmpdir(), 'codemode-mcp-')), cwd = join(root, 'work'), agent = join(root, 'agent');
@@ -36,7 +37,7 @@ writeFileSync(join(agent, 'settings.json'), JSON.stringify({ defaultProvider: 'f
 writeFileSync(join(agent, 'auth.json'), JSON.stringify({fixture:{type:'api_key',key:'local'}}));
 writeFileSync(join(agent, 'models.json'), JSON.stringify({ providers: { fixture: { api: 'openai-completions', baseUrl: `http://127.0.0.1:${port + 1}`, apiKey: 'local', models: [{ id: 'fixture', name: 'Fixture', input: ['text', 'image'], contextWindow: 32000, maxTokens: 4096 }] } } }));
 writeFileSync(join(agent, 'mcp.json'), JSON.stringify({ extra: 'preserve', mcpServers: { echo: { command: process.execPath, args: [resolve('tests/fixtures/mcp-echo-server.mjs')], env: { PRIVATE: 'secret-value' }, exposure: 'codemode' }, disabled: { command: 'not-a-command', enabled: false } } }));
-const server = spawn(process.execPath, ['dist/server/index.js'], { env: { ...process.env, PORT: String(port), PI_WEB_TOKEN: token, PI_WEB_CWD: cwd, PI_CODING_AGENT_DIR: agent, PI_WEB_DATA_DIR: join(root, 'data') }, stdio: ['ignore', 'pipe', 'pipe'] });
+const server = spawn(process.execPath, ['dist/server/index.js'], { env: { ...testEnv(), PORT: String(port), PI_WEB_TOKEN: token, PI_WEB_CWD: cwd, PI_CODING_AGENT_DIR: agent, PI_WEB_DATA_DIR: join(root, 'data') }, stdio: ['ignore', 'pipe', 'pipe'] });
 let browser, logs = '', ws, messages = [], counter = 0;
 server.stdout.on('data', d => logs += d); server.stderr.on('data', d => logs += d);
 const wait = async predicate => { const start = Date.now(); while (Date.now() - start < 20000) { const found = messages.find(predicate); if (found) return found; if (server.exitCode !== null) throw new Error(logs); await new Promise(r => setTimeout(r, 30)); } throw new Error('Message timeout: ' + logs.slice(-3000)); };

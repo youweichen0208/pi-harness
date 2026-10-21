@@ -23,6 +23,7 @@ import { gunzipSync } from "node:zlib";
 import { setTimeout as sleep } from "node:timers/promises";
 import { startMockSsh, dirs as mDirs, files as mFiles, ensurePluginSsh2Dep } from "./lib/mock-ssh.mjs";
 import WebSocket from "ws";
+import { testEnv } from "./lib/test-env.mjs";
 
 const PORT = 8964;
 const SSH_PORT = 22964;
@@ -141,7 +142,7 @@ try {
 	sshServer = await startMockSsh(plugDst, SSH_PORT);
 
 	proc = spawn(serverPath, [join(REPO, "dist", "server", "index.js")], {
-		env: { ...process.env, PORT: String(PORT), PI_WEB_DATA_DIR: dataDir, PI_WEB_CWD: dataDir },
+		env: { ...testEnv(), PORT: String(PORT), PI_WEB_DATA_DIR: dataDir, PI_WEB_CWD: dataDir },
 		stdio: ["ignore", "pipe", "pipe"],
 	});
 	proc.stderr.on("data", (d) => process.stderr.write(`[server] ${d}`));

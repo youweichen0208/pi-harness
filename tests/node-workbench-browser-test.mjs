@@ -8,6 +8,7 @@ import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { testEnv } from "./lib/test-env.mjs";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 mkdirSync(join(root, "tests/scratch"), { recursive: true });
@@ -15,7 +16,7 @@ const dataDir = mkdtempSync(join(tmpdir(), "pi-node-browser-"));
 const port = 8946, sshPort = 22946;
 const privateKey = generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey.export({ type: "pkcs1", format: "pem" });
 const mock = await startMockSsh(root, sshPort, [ssh2.utils.parseKey(privateKey)]);
-const server = spawn(process.execPath, [join(root, "dist/server/index.js")], { cwd: root, env: { ...process.env, PORT: String(port), PI_WEB_DATA_DIR: dataDir, PI_WEB_CWD: root, PI_CODING_AGENT_DIR: join(dataDir, "agent") }, stdio: "ignore" });
+const server = spawn(process.execPath, [join(root, "dist/server/index.js")], { cwd: root, env: { ...testEnv(), PORT: String(port), PI_WEB_DATA_DIR: dataDir, PI_WEB_CWD: root, PI_CODING_AGENT_DIR: join(dataDir, "agent") }, stdio: "ignore" });
 let browser;
 try {
 	for (let i = 0; i < 100; i++) { try { if ((await fetch(`http://127.0.0.1:${port}/api/health`)).ok) break; } catch {} await new Promise((r) => setTimeout(r, 100)); }

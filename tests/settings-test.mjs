@@ -4,6 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
+import { testEnv } from "./lib/test-env.mjs";
 
 const PORT = Number(process.argv[2] || 8931);
 const DATA_DIR = mkdtempSync(join(tmpdir(), "pi-web-set-test-"));
@@ -15,7 +16,7 @@ writeFileSync(join(extensionRoot, "custom-footer.ts"), "export default function 
 
 const server = spawn(process.execPath, ["dist/server/index.js"], {
 	env: {
-		...process.env,
+		...testEnv(),
 		PORT: String(PORT),
 		PI_WEB_DATA_DIR: DATA_DIR,
 		PI_WEB_CWD: process.cwd(),

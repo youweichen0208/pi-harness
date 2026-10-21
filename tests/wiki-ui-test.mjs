@@ -16,6 +16,7 @@ import { spawn } from 'node:child_process';
 import { chromium } from 'playwright-core';
 import { CHROME_PATH } from './lib/chrome.mjs';
 import { portUp } from './lib/port-utils.mjs';
+import { testEnv } from "./lib/test-env.mjs";
 const port = 8994;
 for (const p of [port, port + 1]) assert.equal(await portUp(p), false, `Port ${p} busy`);
 const base = mkdtempSync(join(tmpdir(), 'pi-wiki-ui-'));
@@ -52,7 +53,7 @@ await new Promise(r => mock.listen(port + 1, '127.0.0.1', r));
 writeFileSync(join(agent, 'models.json'), JSON.stringify({ providers: { wiki: { api: 'openai-completions', baseUrl: `http://127.0.0.1:${port + 1}`, apiKey: 'local-test', models: [{ id: 'wiki-test', name: 'Wiki test', input: ['text'], contextWindow: 32000, maxTokens: 4096 }] } } }));
 writeFileSync(join(agent, 'settings.json'), JSON.stringify({ defaultProvider: 'wiki', defaultModel: 'wiki-test', defaultTools: ['+codemode', '+tool_search'] }));
 writeFileSync(join(agent, 'auth.json'), JSON.stringify({ wiki: { type: 'api_key', key: 'local-test' } }));
-const server = spawn(process.execPath, ['dist/server/index.js'], { env: { ...process.env, PORT: String(port), PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(base, 'data'), PI_CODING_AGENT_DIR: agent }, stdio: ['ignore', 'pipe', 'pipe'] });
+const server = spawn(process.execPath, ['dist/server/index.js'], { env: { ...testEnv(), PORT: String(port), PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(base, 'data'), PI_CODING_AGENT_DIR: agent }, stdio: ['ignore', 'pipe', 'pipe'] });
 let log = ''; server.stdout.on('data', d => log += d); server.stderr.on('data', d => log += d);
 let browser;
 try {

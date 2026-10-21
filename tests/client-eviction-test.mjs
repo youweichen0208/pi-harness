@@ -13,6 +13,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as sleep } from 'node:timers/promises';
 import WebSocket from 'ws';
+import { testEnv } from "./lib/test-env.mjs";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 8961;
@@ -21,7 +22,7 @@ const DATA = join(root, 'data'), WS = join(root, 'ws'), OTHER = join(root, 'othe
 mkdirSync(WS, { recursive: true }); mkdirSync(OTHER, { recursive: true });
 
 const server = spawn(process.execPath, [join(REPO, 'dist', 'server', 'index.js')], {
-	env: { ...process.env, PORT: String(PORT), PI_WEB_DATA_DIR: DATA, PI_WEB_CWD: WS, PI_CODING_AGENT_DIR: join(root, 'agent'), PI_WEB_CLIENT_IDLE_MINUTES: '0.03' },
+	env: { ...testEnv(), PORT: String(PORT), PI_WEB_DATA_DIR: DATA, PI_WEB_CWD: WS, PI_CODING_AGENT_DIR: join(root, 'agent'), PI_WEB_CLIENT_IDLE_MINUTES: '0.03' },
 	stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true,
 });
 let log = ''; server.stdout.on('data', d => log += d); server.stderr.on('data', d => log += d);

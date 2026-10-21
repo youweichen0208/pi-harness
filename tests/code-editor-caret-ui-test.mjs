@@ -8,6 +8,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { chromium } from "playwright-core";
 import { CHROME_PATH } from "./lib/chrome.mjs";
 import { portUp } from "./lib/port-utils.mjs";
+import { testEnv } from "./lib/test-env.mjs";
 
 const port = 8995;
 const cwd = mkdtempSync(join(tmpdir(), "code-editor-caret-"));
@@ -21,7 +22,7 @@ writeFileSync(join(cwd, "caret.html"), lines.join("\n"));
 let server, browser;
 try {
 	assert.equal(await portUp(port), false);
-	server = spawn(process.execPath, ["dist/server/index.js"], { env: { ...process.env, PORT: String(port), PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(cwd, "data"), PI_CODING_AGENT_DIR: join(cwd, "agent") }, stdio: "ignore" });
+	server = spawn(process.execPath, ["dist/server/index.js"], { env: { ...testEnv(), PORT: String(port), PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(cwd, "data"), PI_CODING_AGENT_DIR: join(cwd, "agent") }, stdio: "ignore" });
 	for (let i = 0; i < 100 && !await portUp(port); i++) await sleep(100);
 	assert(await portUp(port));
 	browser = await chromium.launch({ executablePath: CHROME_PATH });

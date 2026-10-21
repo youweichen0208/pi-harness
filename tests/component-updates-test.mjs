@@ -9,6 +9,7 @@ import WebSocket from 'ws';
 import { chromium } from 'playwright-core';
 import { portUp } from './lib/port-utils.mjs';
 import { CHROME_PATH } from './lib/chrome.mjs';
+import { testEnv } from "./lib/test-env.mjs";
 const port = Number(process.argv.slice(2).find(arg => /^\d+$/.test(arg)) || 9149);
 assert.equal(await portUp(port), false, `Port ${port} busy`);
 const root = mkdtempSync(join(tmpdir(), 'pi-component-updates-'));
@@ -24,7 +25,7 @@ for (const name of ['sample', 'pinned', 'broken']) {
 mkdirSync(join(agent, 'skills', 'settings-fixture'), { recursive: true });
 writeFileSync(join(agent, 'skills', 'settings-fixture', 'SKILL.md'), '---\nname: settings-fixture\ndescription: A loaded skill description that expands in the compact settings list.\n---\nUse this fixture only in tests.\n');
 writeFileSync(join(agent, 'settings.json'), JSON.stringify({ packages: ['npm:sample', 'npm:pinned@1.0.0', 'npm:broken'] }));
-const server = spawn(process.execPath, ['--import', pathToFileURL(registryMock).href, 'dist/server/index.js'], { env: { ...process.env, PORT: String(port), PI_WEB_DATA_DIR: join(root, 'data'), PI_WEB_CWD: root, PI_CODING_AGENT_DIR: agent }, stdio: 'ignore' });
+const server = spawn(process.execPath, ['--import', pathToFileURL(registryMock).href, 'dist/server/index.js'], { env: { ...testEnv(), PORT: String(port), PI_WEB_DATA_DIR: join(root, 'data'), PI_WEB_CWD: root, PI_CODING_AGENT_DIR: agent }, stdio: 'ignore' });
 let browser, ws;
 const messages = [];
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));

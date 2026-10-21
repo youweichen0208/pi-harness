@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chromium } from "playwright-core";
 import { CHROME_PATH } from "./lib/chrome.mjs";
+import { testEnv } from "./lib/test-env.mjs";
 
 const port = 31000 + Math.floor(Math.random() * 10000);
 const probe = createServer();
@@ -18,7 +19,7 @@ const agent = join(data, "agent");
 mkdirSync(agent);
 writeFileSync(join(agent, "settings.json"), JSON.stringify({ defaultProvider: "fixture", defaultModel: "wiki-a" }));
 writeFileSync(join(agent, "models.json"), JSON.stringify({ providers: { fixture: { api: "openai-completions", baseUrl: "http://127.0.0.1:1", apiKey: "unused", models: ["wiki-a", "wiki-b"].map(id => ({ id, name: id, reasoning: true, input: ["text"], contextWindow: 32000, maxTokens: 4096 })) } } }));
-const server = spawn(process.execPath, ["dist/server/index.js"], { env: { ...process.env, PORT: String(port), PI_WEB_DATA_DIR: data, PI_WEB_CWD: data, PI_CODING_AGENT_DIR: join(data, "agent") }, stdio: ["ignore", "pipe", "pipe"] });
+const server = spawn(process.execPath, ["dist/server/index.js"], { env: { ...testEnv(), PORT: String(port), PI_WEB_DATA_DIR: data, PI_WEB_CWD: data, PI_CODING_AGENT_DIR: join(data, "agent") }, stdio: ["ignore", "pipe", "pipe"] });
 let logs = "", browser;
 server.stdout.on("data", (chunk) => { logs += chunk; });
 server.stderr.on("data", (chunk) => { logs += chunk; });

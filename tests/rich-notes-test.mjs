@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { createServer } from 'node:net';
 import { chromium } from 'playwright-core';
 import { CHROME_PATH } from './lib/chrome.mjs';
+import { testEnv } from "./lib/test-env.mjs";
 const root = mkdtempSync(join(tmpdir(),'rich-notes-'));
 const probe = createServer(); await new Promise(r => probe.listen(0,'127.0.0.1',r)); const port = probe.address().port; await new Promise(r => probe.close(r)); assert(port >= 8900);
 const base = `http://127.0.0.1:${port}`, token = 'rich-notes-test';
@@ -14,7 +15,7 @@ const sleep = ms => new Promise(r => setTimeout(r,ms));
 const api = (path, method = 'GET', body) => fetch(`${base}${path}?token=${token}`,{method,headers:{'Content-Type':'application/json'},body:body === undefined ? undefined : JSON.stringify(body)});
 async function until(fn) { for(let i=0;i<100;i++) { if(await fn()) return; await sleep(100); } throw Error('Condition timeout'); }
 try {
-	server = spawn(process.execPath,['dist/server/index.js'],{env:{...process.env,PORT:String(port),PI_WEB_TOKEN:token,PI_WEB_CWD:root,PI_WEB_DATA_DIR:join(root,'data'),PI_CODING_AGENT_DIR:join(root,'agent')},stdio:['ignore','pipe','pipe']});
+	server = spawn(process.execPath,['dist/server/index.js'],{env:{...testEnv(),PORT:String(port),PI_WEB_TOKEN:token,PI_WEB_CWD:root,PI_WEB_DATA_DIR:join(root,'data'),PI_CODING_AGENT_DIR:join(root,'agent')},stdio:['ignore','pipe','pipe']});
 	server.stdout.on('data',d=>log+=d); server.stderr.on('data',d=>log+=d);
 	await until(async()=>{ try{return (await fetch(`${base}/api/health`)).ok;}catch{return false;} });
 	const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jZioAAAAASUVORK5CYII=';

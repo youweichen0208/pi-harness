@@ -8,6 +8,7 @@ import WebSocket from 'ws';
 import { chromium } from 'playwright-core';
 import { CHROME_PATH } from './lib/chrome.mjs';
 import { portUp } from './lib/port-utils.mjs';
+import { testEnv } from "./lib/test-env.mjs";
 const port=9210,token='extensions-fixture',clientId='extensions-fixture';
 assert.equal(await portUp(port),false,'Port busy');
 const root=mkdtempSync(join(tmpdir(),'extensions-e2e-')),cwd=join(root,'work'),agent=join(root,'agent'),pkg=join(root,'local-tools');
@@ -22,7 +23,7 @@ writeFileSync(join(agent,'models.json'),JSON.stringify({providers:{fixture:{api:
 writeFileSync(join(agent,'webui-extensions.json'),JSON.stringify({autoCheck:false}));
 writeFileSync(join(agent,'auth.json'),JSON.stringify({fixture:{type:'api_key',key:'local'}}));
 const serverExecutable=process.argv.includes('--electron-node')?(await import('electron')).default:process.execPath;
-const server=spawn(serverExecutable,['dist/server/index.js'],{env:{...process.env,...(process.argv.includes('--electron-node')?{ELECTRON_RUN_AS_NODE:'1'}:{}),PORT:String(port),PI_WEB_TOKEN:token,PI_WEB_CWD:cwd,PI_CODING_AGENT_DIR:agent,PI_WEB_DATA_DIR:join(root,'data')},stdio:['ignore','pipe','pipe']});
+const server=spawn(serverExecutable,['dist/server/index.js'],{env:{...testEnv(),...(process.argv.includes('--electron-node')?{ELECTRON_RUN_AS_NODE:'1'}:{}),PORT:String(port),PI_WEB_TOKEN:token,PI_WEB_CWD:cwd,PI_CODING_AGENT_DIR:agent,PI_WEB_DATA_DIR:join(root,'data')},stdio:['ignore','pipe','pipe']});
 let logs='',ws,browser;server.stdout.on('data',d=>logs+=d);server.stderr.on('data',d=>logs+=d);
 const req=async(action,args={},headers={})=>{const res=await fetch(`http://127.0.0.1:${port}/api/extensions`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`,...headers},body:JSON.stringify({clientId,cwd,action,...args})});const text=await res.text();let body;try{body=JSON.parse(text);}catch{body={error:text};}return{status:res.status,...body};};
 const wait=async(fn)=>{for(let i=0;i<200;i++){const v=await fn();if(v)return v;await new Promise(r=>setTimeout(r,50));}throw Error('timeout '+logs.slice(-2000));};

@@ -10,6 +10,9 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
 import { CHROME_PATH } from "./lib/chrome.mjs";
+import { scrubHostEnv } from "./lib/test-env.mjs";
+
+scrubHostEnv();
 
 const here = dirname(dirname(fileURLToPath(import.meta.url))); // tests/ → repo root
 const NODE = realpathSync(process.execPath); // fnm shim → real installation

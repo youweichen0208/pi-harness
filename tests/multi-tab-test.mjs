@@ -16,6 +16,7 @@ import { spawn } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { CHROME_PATH } from "./lib/chrome.mjs";
+import { testEnv } from "./lib/test-env.mjs";
 
 const PORT = 8977;
 const base = mkdtempSync(join(tmpdir(), "pi-web-multitab-"));
@@ -34,7 +35,7 @@ const REPO = fileURLToPath(new globalThis.URL("../", import.meta.url));
 const server = spawn(NODE, ["dist/server/index.js"], {
 	cwd: REPO,
 	env: {
-		...process.env,
+		...testEnv(),
 		PORT: String(PORT),
 		PI_WEB_DATA_DIR: dataDir,
 		PI_WEB_CWD: workdir,

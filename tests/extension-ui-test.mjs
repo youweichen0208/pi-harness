@@ -9,6 +9,7 @@ import WebSocket from "ws";
 import { chromium } from "playwright-core";
 import { CHROME_PATH } from "./lib/chrome.mjs";
 import { portUp } from "./lib/port-utils.mjs";
+import { testEnv } from "./lib/test-env.mjs";
 const PORT = Number(process.env.PI_TEST_PORT || 9141);
 assert(PORT >= 8900); assert.equal(await portUp(PORT), false);
 const root = mkdtempSync(join(tmpdir(), "pi-extension-ui-"));
@@ -30,7 +31,7 @@ writeFileSync(join(agent, "extensions/ui.ts"), `export default function(pi) {
  pi.registerCommand("fixture-timeout", { handler: async (args, ctx) => { void ctx.ui.input("timeout", "", {timeout:200}).then(value => ctx.ui.notify("timeout:" + value)); } });
  pi.registerCommand("mcp", { handler: async (_args, ctx) => ctx.ui.notify("third-party-mcp") });
 }`);
-const server = spawn(process.execPath, ["dist/server/index.js"], { env: { ...process.env, PORT: String(PORT), PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(root, "data"), PI_CODING_AGENT_DIR: agent }, stdio: ["ignore", "pipe", "pipe"] });
+const server = spawn(process.execPath, ["dist/server/index.js"], { env: { ...testEnv(), PORT: String(PORT), PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(root, "data"), PI_CODING_AGENT_DIR: agent }, stdio: ["ignore", "pipe", "pipe"] });
 let logs = ""; server.stdout.on("data", d => logs += d); server.stderr.on("data", d => logs += d);
 let ws, browser;
 const wire = [];

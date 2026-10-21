@@ -9,6 +9,7 @@ import WebSocket from "ws";
 import { chromium } from "playwright-core";
 import { CHROME_PATH } from "./lib/chrome.mjs";
 import { portUp } from "./lib/port-utils.mjs";
+import { testEnv } from "./lib/test-env.mjs";
 const port=9212,mockPort=9213,clientId="system-prompt-fixture",token="prompt-fixture";
 for(const p of [port,mockPort])assert.equal(await portUp(p),false,"Port busy");
 const root=mkdtempSync(join(tmpdir(),"pi-system-prompt-")),cwd=join(root,"work"),agent=join(root,"agent");
@@ -29,7 +30,7 @@ const mock=createServer(async(req,res)=>{
 	res.end(`data: ${JSON.stringify({id:"fixture",object:"chat.completion.chunk",choices:[{index:0,delta:{},finish_reason:"stop"}]})}\n\ndata: [DONE]\n\n`);
 });
 await new Promise(r=>mock.listen(mockPort,"127.0.0.1",r));
-const server=spawn(process.execPath,["dist/server/index.js"],{env:{...process.env,PORT:String(port),PI_WEB_CWD:cwd,PI_CODING_AGENT_DIR:agent,PI_WEB_DATA_DIR:join(root,"data"),PI_WEB_TOKEN:token},stdio:["ignore","pipe","pipe"]});
+const server=spawn(process.execPath,["dist/server/index.js"],{env:{...testEnv(),PORT:String(port),PI_WEB_CWD:cwd,PI_CODING_AGENT_DIR:agent,PI_WEB_DATA_DIR:join(root,"data"),PI_WEB_TOKEN:token},stdio:["ignore","pipe","pipe"]});
 let logs="",ws,browser,current,conversationId;
 server.stdout.on("data",d=>logs+=d);server.stderr.on("data",d=>logs+=d);
 const wait=async(fn)=>{for(let i=0;i<300;i++){const value=await fn();if(value)return value;await new Promise(r=>setTimeout(r,50));}throw Error("Timed out: "+logs.slice(-2500));};

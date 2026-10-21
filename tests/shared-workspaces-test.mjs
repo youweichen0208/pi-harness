@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "node:net";
 import WebSocket from "ws";
+import { testEnv } from "./lib/test-env.mjs";
 
 const base = mkdtempSync(join(tmpdir(), "pi-shared-workspaces-"));
 const project = join(base, "project");
@@ -27,7 +28,7 @@ async function freePort() {
 const servers = [];
 async function start(dataDir, workspacesFile) {
 	const port = await freePort();
-	const env = { ...process.env, PORT: String(port), PI_WEB_CWD: project, PI_WEB_DATA_DIR: join(base, dataDir), PI_CODING_AGENT_DIR: join(base, "agent"), PI_WEB_TOKEN: "" };
+	const env = { ...testEnv(), PORT: String(port), PI_WEB_CWD: project, PI_WEB_DATA_DIR: join(base, dataDir), PI_CODING_AGENT_DIR: join(base, "agent"), PI_WEB_TOKEN: "" };
 	delete env.PI_WEB_WORKSPACES_FILE;
 	if (workspacesFile) env.PI_WEB_WORKSPACES_FILE = workspacesFile;
 	const server = spawn(process.execPath, ["dist/server/index.js"], { env, stdio: ["ignore", "pipe", "pipe"] });

@@ -11,6 +11,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { chromium, _electron as electron } from "playwright-core";
 import { CHROME_PATH } from "./lib/chrome.mjs";
 import { portUp } from "./lib/port-utils.mjs";
+import { testEnv } from "./lib/test-env.mjs";
 
 const base = mkdtempSync(join(tmpdir(), "current-file-ui-"));
 const cwd = join(base, "workspace");
@@ -18,7 +19,7 @@ mkdirSync(cwd);
 writeFileSync(join(cwd, "code.ts"), "const disk = 1;\n");
 writeFileSync(join(cwd, "note.md"), "# Note\n\nSelected paragraph.\n");
 writeFileSync(join(cwd, "large.txt"), "a".repeat(512 * 1024 + 1));
-const env = { ...process.env, PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(base, "data"), PI_CODING_AGENT_DIR: join(base, "agent") };
+const env = { ...testEnv(), PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(base, "data"), PI_CODING_AGENT_DIR: join(base, "agent") };
 let server, browser, app;
 try {
 	let page;

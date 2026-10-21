@@ -6,6 +6,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {setTimeout as sleep} from 'node:timers/promises';
 import {_electron as electron} from 'playwright-core';
+import { testEnv } from "./lib/test-env.mjs";
 
 const root=mkdtempSync(join(tmpdir(),'pi-desktop-recovery-'));
 const cwd=join(root,'workspace');mkdirSync(cwd);
@@ -19,7 +20,7 @@ const childPid=(parent)=>{
 };
 let app;
 try {
-	app=await electron.launch({args:['.',`--user-data-dir=${join(root,'profile')}`],env:{...process.env,PI_WEB_DATA_DIR:join(root,'data'),PI_WEB_CWD:cwd,PI_CODING_AGENT_DIR:join(root,'agent')}});
+	app=await electron.launch({args:['.',`--user-data-dir=${join(root,'profile')}`],env:{...testEnv(),PI_WEB_DATA_DIR:join(root,'data'),PI_WEB_CWD:cwd,PI_CODING_AGENT_DIR:join(root,'agent')}});
 	let page;
 	for(let n=0;n<200;n++){
 		page=app.windows().find(window=>window.url().startsWith('http://127.0.0.1:'));

@@ -19,6 +19,7 @@ import { cpSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
+import { testEnv } from "./lib/test-env.mjs";
 
 const PORT = 8965;
 const SSH_PORT = 22965;
@@ -48,7 +49,7 @@ try {
 
 	server = spawn(process.execPath, ["dist/server/index.js"], {
 		cwd: REPO,
-		env: { ...process.env, PORT: String(PORT), PI_WEB_DATA_DIR: dataDir, PI_WEB_CWD: REPO },
+		env: { ...testEnv(), PORT: String(PORT), PI_WEB_DATA_DIR: dataDir, PI_WEB_CWD: REPO },
 		stdio: ["ignore", "pipe", "pipe"],
 	});
 	server.stderr.on("data", () => {});

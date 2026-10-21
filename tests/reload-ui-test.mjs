@@ -8,6 +8,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { chromium } from "playwright-core";
 import { CHROME_PATH } from "./lib/chrome.mjs";
 import { portUp } from "./lib/port-utils.mjs";
+import { testEnv } from "./lib/test-env.mjs";
 
 const PORT = 8999;
 const temp = mkdtempSync(join(tmpdir(), "piweb-reload-ui-"));
@@ -19,7 +20,7 @@ try {
 	assert(CHROME_PATH, "Chrome is required for the browser test");
 	assert.equal(await portUp(PORT), false);
 	server = spawn(process.execPath, ["dist/server/index.js"], {
-		env: { ...process.env, PORT: String(PORT), PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(temp, "data"), PI_CODING_AGENT_DIR: join(temp, "agent") },
+		env: { ...testEnv(), PORT: String(PORT), PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(temp, "data"), PI_CODING_AGENT_DIR: join(temp, "agent") },
 		stdio: ["ignore", "pipe", "pipe"],
 	});
 	let stderr = "";

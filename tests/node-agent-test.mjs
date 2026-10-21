@@ -10,6 +10,9 @@ import ssh2 from "ssh2";
 import { chromium } from "playwright-core";
 import { CHROME_PATH } from "./lib/chrome.mjs";
 import { portUp } from "./lib/port-utils.mjs";
+import { testEnv, scrubHostEnv } from "./lib/test-env.mjs";
+
+scrubHostEnv();
 const port = 9232, modelPort = 9233;
 for (const portNumber of [port, modelPort]) assert.equal(await portUp(portNumber), false);
 const root = mkdtempSync(join(tmpdir(), "pi-node-agent-")), agentDir = join(root, "local-agent"), remoteDir = join(root, "ssh-node");
@@ -218,7 +221,7 @@ try {
 	console.log("PASS local node agent: automatic readiness, model/tool isolation, SSH commands/SFTP, streaming, queue, abort, timeout, reconnect/history");
 	if (process.argv.includes("--browser")) {
 		assert.equal(await portUp(9234), false);
-		web = spawn(process.execPath, [resolve("dist/server/index.js")], { env: { ...process.env, PORT: "9234", PI_WEB_TOKEN: "", PI_WEB_CWD: root, PI_WEB_DATA_DIR: join(root, "data") }, stdio: "ignore" });
+		web = spawn(process.execPath, [resolve("dist/server/index.js")], { env: { ...testEnv(), PORT: "9234", PI_WEB_TOKEN: "", PI_WEB_CWD: root, PI_WEB_DATA_DIR: join(root, "data") }, stdio: "ignore" });
 		for (let i = 0; i < 100 && !await portUp(9234); i++) await new Promise(resolve => setTimeout(resolve, 100));
 		browser = await chromium.launch({ executablePath: CHROME_PATH || chromium.executablePath() });
 		const page = await browser.newPage({ viewport: { width: 1400, height: 950 } });

@@ -17,6 +17,7 @@ import { tmpdir } from "node:os";
 import { spawn } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { testEnv } from "./lib/test-env.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -147,7 +148,7 @@ for (const name of targets) {
 			// 测试脚本内相对路径（如 dist/server/index.js）以仓库根为基准
 			cwd: dirname(here),
 			stdio: "inherit",
-			env: { ...process.env, PI_CODING_AGENT_DIR: agentDir, PI_WEB_DATA_DIR: dataDir },
+			env: { ...testEnv(), PI_CODING_AGENT_DIR: agentDir, PI_WEB_DATA_DIR: dataDir },
 		});
 		child.on("exit", (code) => resolveRun(code === 0));
 		child.on("error", () => resolveRun(false));

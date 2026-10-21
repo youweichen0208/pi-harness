@@ -8,6 +8,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { chromium } from "playwright-core";
 import { CHROME_PATH } from "./lib/chrome.mjs";
 import { portUp } from "./lib/port-utils.mjs";
+import { testEnv } from "./lib/test-env.mjs";
 
 const port = 8992;
 const cwd = mkdtempSync(join(tmpdir(), "file-open-ux-"));
@@ -22,7 +23,7 @@ let server;
 let browser;
 try {
 	assert.equal(await portUp(port), false);
-	server = spawn(process.execPath, ["dist/server/index.js"], { env: { ...process.env, PORT: String(port), PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(cwd, "data"), PI_CODING_AGENT_DIR: join(cwd, "agent") }, stdio: ["ignore", "pipe", "pipe"] });
+	server = spawn(process.execPath, ["dist/server/index.js"], { env: { ...testEnv(), PORT: String(port), PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(cwd, "data"), PI_CODING_AGENT_DIR: join(cwd, "agent") }, stdio: ["ignore", "pipe", "pipe"] });
 	let serverOutput = "";
 	server.stderr.on("data", (chunk) => { serverOutput += chunk; });
 	for (let i = 0; i < 100 && !await portUp(port); i++) await sleep(100);

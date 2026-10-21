@@ -8,6 +8,7 @@ import {setTimeout as sleep} from 'node:timers/promises';
 import {chromium, _electron as electron} from 'playwright-core';
 import {CHROME_PATH} from './lib/chrome.mjs';
 import {portUp} from './lib/port-utils.mjs';
+import { testEnv } from "./lib/test-env.mjs";
 const PORT=8992;
 const root=mkdtempSync(join(tmpdir(),'workspace-design-'));
 const cwd=join(root,'youwei-trading-agent');mkdirSync(cwd);
@@ -35,7 +36,7 @@ const messages=[
 ];
 let server,browser,app;
 try{
-const env={...process.env,PI_WEB_CWD:cwd,PI_WEB_DATA_DIR:join(root,'data'),PI_CODING_AGENT_DIR:join(root,'agent')};
+const env={...testEnv(),PI_WEB_CWD:cwd,PI_WEB_DATA_DIR:join(root,'data'),PI_CODING_AGENT_DIR:join(root,'agent')};
 let page;
 if(process.argv.includes('--electron')){
 app=await electron.launch({args:['.',`--user-data-dir=${join(root,'profile')}`],env});

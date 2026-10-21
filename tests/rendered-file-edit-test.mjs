@@ -8,6 +8,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { chromium, _electron as electron } from "playwright-core";
 import { CHROME_PATH } from "./lib/chrome.mjs";
 import { portUp } from "./lib/port-utils.mjs";
+import { testEnv } from "./lib/test-env.mjs";
 const base = mkdtempSync(join(tmpdir(), "pi-rendered-edit-"));
 const workspace = join(base, "workspace");
 mkdirSync(workspace);
@@ -20,7 +21,7 @@ const tree = "pi-harness/\n├── server/                  # 后端（Node ES
 writeFileSync(join(workspace, "tree.md"), "# Directory\n\n```\n" + tree + "```\n");
 writeFileSync(join(workspace, "empty.md"), "```python\n\n```\n");
 writeFileSync(join(workspace, "code.yaml"), "# comment\nname: original\n" + Array.from({ length: 100 }, (_, i) => `key${i}: value${i}`).join("\n"));
-const env = { ...process.env, PI_WEB_CWD: workspace, PI_WEB_DATA_DIR: join(base, "data"), PI_CODING_AGENT_DIR: join(base, "agent") };
+const env = { ...testEnv(), PI_WEB_CWD: workspace, PI_WEB_DATA_DIR: join(base, "data"), PI_CODING_AGENT_DIR: join(base, "agent") };
 let browser, app, server;
 try {
 	let page;

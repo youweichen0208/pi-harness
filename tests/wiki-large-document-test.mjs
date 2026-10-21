@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { chromium } from 'playwright-core';
 import { CHROME_PATH } from './lib/chrome.mjs';
 import { portUp } from './lib/port-utils.mjs';
+import { testEnv } from "./lib/test-env.mjs";
 const port = 8998;
 assert.equal(await portUp(port), false, 'isolated port must be free');
 const base = mkdtempSync(join(tmpdir(), 'wiki-navigation-')), cwd = join(base, 'work'), other = join(base, 'other');
@@ -19,7 +20,7 @@ writeFileSync(join(base, 'agent', 'settings.json'), JSON.stringify({ defaultProv
 const text = '# Large document\n\n' + Array.from({ length: 200 }, (_, i) => `## Section ${i}\n\n\`\`\`typescript\n${'const value = "data"; // sample\n'.repeat(112)}\`\`\`\n\nSome **formatted** text and [a link](https://example.com).\n\n`).join('');
 writeFileSync(join(cwd, 'large.md'), text);
 console.log(JSON.stringify({ bytes: Buffer.byteLength(text), lines: text.split('\n').length }));
-const server = spawn(process.execPath, ['dist/server/index.js'], { env: { ...process.env, PORT: String(port), PI_WEB_TOKEN: '', PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(base, 'data'), PI_CODING_AGENT_DIR: join(base, 'agent') }, stdio: ['ignore', 'pipe', 'pipe'] });
+const server = spawn(process.execPath, ['dist/server/index.js'], { env: { ...testEnv(), PORT: String(port), PI_WEB_TOKEN: '', PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(base, 'data'), PI_CODING_AGENT_DIR: join(base, 'agent') }, stdio: ['ignore', 'pipe', 'pipe'] });
 let log = '', browser, page;
 server.stdout.on('data', data => log += data); server.stderr.on('data', data => log += data);
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));

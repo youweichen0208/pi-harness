@@ -7,6 +7,9 @@ import { createServer } from "node:net";
 import WebSocket from "ws";
 import { chromium } from "playwright-core";
 import { CHROME_PATH } from "./lib/chrome.mjs";
+import { testEnv, scrubHostEnv } from "./lib/test-env.mjs";
+
+scrubHostEnv();
 
 const base = mkdtempSync(join(tmpdir(), "pi-switch-"));
 const agent = join(base, "agent");
@@ -30,7 +33,7 @@ await new Promise((r) => probe.close(r));
 assert(port >= 8900);
 mkdirSync(join(base, "data"), { recursive: true });
 writeFileSync(join(base, "data", "project-workspaces.json"), JSON.stringify({ revision: 1, workspaces: [{ id: "switch-fixture", name: "Projects", paths: projects }] }));
-const server = spawn(process.execPath, ["dist/server/index.js"], { env: { ...process.env, PORT: String(port), PI_WEB_CWD: projects[0], PI_WEB_DATA_DIR: join(base, "data"), PI_CODING_AGENT_DIR: agent }, stdio: ["ignore", "pipe", "pipe"] });
+const server = spawn(process.execPath, ["dist/server/index.js"], { env: { ...testEnv(), PORT: String(port), PI_WEB_CWD: projects[0], PI_WEB_DATA_DIR: join(base, "data"), PI_CODING_AGENT_DIR: agent }, stdio: ["ignore", "pipe", "pipe"] });
 let logs = ""; server.stderr.on("data", (d) => { logs += d; });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let ws, browser;

@@ -6,6 +6,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import WebSocket from "ws";
+import { testEnv } from "./lib/test-env.mjs";
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), "pi-builtin-chat-"))), agent = join(root, "agent"), data = join(root, "data");
 mkdirSync(agent); mkdirSync(data);
@@ -66,7 +67,7 @@ try {
 	writeFileSync(join(agent, "models.json"), JSON.stringify({ providers: { fixture: { api: "openai-completions", baseUrl: `http://127.0.0.1:${model.address().port}`, apiKey: "fixture", models: [{ id: "fixture", input: ["text"], contextWindow: 64000, maxTokens: 8000 }] } } }));
 	writeFileSync(join(agent, "settings.json"), JSON.stringify({ defaultProvider: "fixture", defaultModel: "fixture", defaultTools: ["+codemode", "+tool_search"], retry: { enabled: false }, compaction: { enabled: false } }));
 	const probe = createServer(); await new Promise((resolve, reject) => { probe.once("error", reject); probe.listen(0, "127.0.0.1", resolve); }); port = probe.address().port; assert(port >= 8900); await new Promise(resolve => probe.close(resolve));
-	child = spawn(process.execPath, ["dist/server/index.js"], { env: { ...process.env, PORT: String(port), PI_WEB_HOST: "127.0.0.1", PI_WEB_TOKEN: "", PI_WEB_CWD: root, PI_WEB_DATA_DIR: data, PI_CODING_AGENT_DIR: agent }, stdio: ["ignore", "pipe", "pipe"] });
+	child = spawn(process.execPath, ["dist/server/index.js"], { env: { ...testEnv(), PORT: String(port), PI_WEB_HOST: "127.0.0.1", PI_WEB_TOKEN: "", PI_WEB_CWD: root, PI_WEB_DATA_DIR: data, PI_CODING_AGENT_DIR: agent }, stdio: ["ignore", "pipe", "pipe"] });
 	child.stdout.on("data", value => logs += value); child.stderr.on("data", value => logs += value);
 	await wait(async () => { try { return (await (await fetch(`http://127.0.0.1:${port}/api/health`)).json()).pid === child.pid; } catch { return false; } }, "server health");
 	const a = await connect("builtin-a"), b = await connect("builtin-b");

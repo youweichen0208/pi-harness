@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { createServer } from "node:net";
 import { chromium } from "playwright-core";
 import { CHROME_PATH } from "./lib/chrome.mjs";
+import { testEnv } from "./lib/test-env.mjs";
 const base = mkdtempSync(join(tmpdir(), "pi-footer-"));
 const repo = join(base, "repo"), plain = join(base, "plain");
 mkdirSync(repo); mkdirSync(plain);
@@ -16,7 +17,7 @@ await new Promise((r) => probe.listen(0, "127.0.0.1", r));
 const port = probe.address().port;
 await new Promise((r) => probe.close(r));
 assert(port >= 8900);
-const server = spawn(process.execPath, ["dist/server/index.js"], { env: { ...process.env, PORT: String(port), PI_WEB_CWD: repo, PI_WEB_DATA_DIR: join(base, "data"), PI_CODING_AGENT_DIR: join(base, "agent") }, stdio: ["ignore", "pipe", "pipe"] });
+const server = spawn(process.execPath, ["dist/server/index.js"], { env: { ...testEnv(), PORT: String(port), PI_WEB_CWD: repo, PI_WEB_DATA_DIR: join(base, "data"), PI_CODING_AGENT_DIR: join(base, "agent") }, stdio: ["ignore", "pipe", "pipe"] });
 let logs = ""; server.stdout.on("data", (d) => { logs += d; }); server.stderr.on("data", (d) => { logs += d; });
 let browser;
 try {

@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { chromium } from 'playwright-core';
 import { CHROME_PATH } from './lib/chrome.mjs';
+import { testEnv } from "./lib/test-env.mjs";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 8979;
@@ -40,7 +41,7 @@ writeFileSync(join(agent, 'models.json'), JSON.stringify({ providers: { fixture:
 writeFileSync(join(agent, 'auth.json'), JSON.stringify({ fixture: { type: 'api_key', key: 'x' } })); // no first-run setup modal
 writeFileSync(join(agent, 'settings.json'), JSON.stringify({ defaultProvider: 'fixture', defaultModel: 'fixture', compaction: { enabled: false }, retry: { enabled: false } }));
 const server = spawn(process.execPath, [join(REPO, 'dist', 'server', 'index.js')], {
-	env: { ...process.env, PORT: String(PORT), PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(root, 'data'), PI_CODING_AGENT_DIR: agent },
+	env: { ...testEnv(), PORT: String(PORT), PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(root, 'data'), PI_CODING_AGENT_DIR: agent },
 	stdio: 'ignore', windowsHide: true,
 });
 let browser;

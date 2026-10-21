@@ -10,6 +10,9 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
 import { WebSocket } from "ws";
+import { scrubHostEnv } from "./lib/test-env.mjs";
+
+scrubHostEnv();
 
 const PORT = 30000 + Math.floor(Math.random() * 10000);
 const base = mkdtempSync(join(tmpdir(), "piweb-collapse-"));

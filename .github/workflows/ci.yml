@@ -28,6 +28,10 @@ jobs:
       - name: Check protocol sync
         run: node scripts/check-protocol-sync.mjs
 
+      # 自起 server 的测试不得泄漏宿主 PI_* 环境（见 tests/lib/test-env.mjs）
+      - name: Check test env isolation
+        run: node scripts/check-test-env.mjs
+
       - name: Typecheck
         run: npm run typecheck
 

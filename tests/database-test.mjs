@@ -11,6 +11,7 @@ import mysql from "mysql2/promise";
 import { chromium } from "playwright-core";
 import { CHROME_PATH } from "./lib/chrome.mjs";
 import { portUp } from "./lib/port-utils.mjs";
+import { testEnv } from "./lib/test-env.mjs";
 const root = realpathSync(mkdtempSync(join(tmpdir(), "pi-database-"))), agent = join(root, "agent"), data = join(root, "data");
 mkdirSync(agent); mkdirSync(data); mkdirSync(join(root, ".dbeaver"));
 const port = 9274; assert.equal(await portUp(port), false); assert.equal(await portUp(port + 1), false);
@@ -65,7 +66,7 @@ async function prompt(c, code) {
 	return c.state.messages.findLast(m => m.role === "toolResult");
 }
 try {
-	child = spawn(process.execPath, ["dist/server/index.js"], { env: { ...process.env, PORT: String(port), PI_WEB_TOKEN: "", PI_WEB_CWD: root, PI_WEB_DATA_DIR: data, PI_CODING_AGENT_DIR: agent }, stdio: ["ignore", "pipe", "pipe"] });
+	child = spawn(process.execPath, ["dist/server/index.js"], { env: { ...testEnv(), PORT: String(port), PI_WEB_TOKEN: "", PI_WEB_CWD: root, PI_WEB_DATA_DIR: data, PI_CODING_AGENT_DIR: agent }, stdio: ["ignore", "pipe", "pipe"] });
 	child.stdout.on("data", b => logs += b); child.stderr.on("data", b => logs += b);
 	await wait(() => portUp(port), "server");
 	const a = await connect("db-a"), b = await connect("db-b");

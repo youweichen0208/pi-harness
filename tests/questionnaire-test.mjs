@@ -15,6 +15,9 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chromium } from "playwright-core";
+import { scrubHostEnv } from "./lib/test-env.mjs";
+
+scrubHostEnv();
 
 const PORT = 30000 + Math.floor(Math.random() * 10000);
 const workdir = mkdtempSync(join(tmpdir(), "piweb-q-"));

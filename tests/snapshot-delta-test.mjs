@@ -19,6 +19,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
+import { testEnv } from "./lib/test-env.mjs";
 // fileURLToPath: URL.pathname 在 Windows 下是 /E:/... 形式，直接当 cwd 会失败
 const REPO_ROOT = fileURLToPath(new globalThis.URL("../", import.meta.url));
 
@@ -38,7 +39,7 @@ async function startServer() {
 	server = spawn("node", ["dist/server/index.js"], {
 		cwd: REPO_ROOT,
 		env: {
-			...process.env,
+			...testEnv(),
 			PORT: String(PORT),
 			PI_WEB_DATA_DIR: dataDir,
 			PI_WEB_CWD: REPO_ROOT,

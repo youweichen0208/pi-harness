@@ -8,6 +8,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { chromium } from 'playwright-core';
 import { CHROME_PATH } from './lib/chrome.mjs';
 import { portUp } from './lib/port-utils.mjs';
+import { testEnv } from "./lib/test-env.mjs";
 const port = 8999;
 assert.equal(await portUp(port), false, `Port ${port} busy`);
 const root = mkdtempSync(join(tmpdir(), 'pi-changes-'));
@@ -29,7 +30,7 @@ const messages = [
 ];
 let server, browser, snapshot, socket, upstreamSocket, forceNotRepo = false, terminalReady = false, regenerated;
 try {
-	server = spawn(process.execPath,['dist/server/index.js'],{env:{...process.env,PORT:String(port),PI_WEB_CWD:cwd,PI_WEB_DATA_DIR:join(root,'data'),PI_CODING_AGENT_DIR:join(root,'agent')},stdio:['ignore','pipe','pipe']});
+	server = spawn(process.execPath,['dist/server/index.js'],{env:{...testEnv(),PORT:String(port),PI_WEB_CWD:cwd,PI_WEB_DATA_DIR:join(root,'data'),PI_CODING_AGENT_DIR:join(root,'agent')},stdio:['ignore','pipe','pipe']});
 	let log=''; server.stdout.on('data', data=>log+=data); server.stderr.on('data',data=>log+=data);
 	for(let n=0;n<100&&!await portUp(port);n++) await sleep(100); assert(await portUp(port),log);
 	browser=await chromium.launch({executablePath:CHROME_PATH});

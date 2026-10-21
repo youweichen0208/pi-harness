@@ -10,12 +10,13 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { chromium } from "playwright-core";
 import { CHROME_PATH } from "./lib/chrome.mjs";
 import { portUp } from "./lib/port-utils.mjs";
+import { testEnv } from "./lib/test-env.mjs";
 
 const base = mkdtempSync(join(tmpdir(), "save-on-send-"));
 const cwd = join(base, "workspace");
 mkdirSync(cwd);
 writeFileSync(join(cwd, "code.ts"), "const disk = 1;\n");
-const env = { ...process.env, PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(base, "data"), PI_CODING_AGENT_DIR: join(base, "agent") };
+const env = { ...testEnv(), PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(base, "data"), PI_CODING_AGENT_DIR: join(base, "agent") };
 const PORT = 8997;
 let server, browser;
 try {

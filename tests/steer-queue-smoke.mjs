@@ -6,6 +6,7 @@ import { spawn, execSync } from "node:child_process";
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { testEnv } from "./lib/test-env.mjs";
 
 const PORT = 8921;
 const URL = `ws://localhost:${PORT}/ws`;
@@ -51,7 +52,7 @@ try {
 
 	server = spawn("node", ["dist/server/index.js"], {
 		env: {
-			...process.env,
+			...testEnv(),
 			PORT: String(PORT),
 			PI_WEB_DATA_DIR: dataDir,
 			PI_CODING_AGENT_DIR: fakeAgentDir,

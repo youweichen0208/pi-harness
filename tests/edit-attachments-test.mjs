@@ -18,6 +18,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
+import { testEnv } from "./lib/test-env.mjs";
 
 const REPO_ROOT = fileURLToPath(new globalThis.URL("../", import.meta.url));
 
@@ -37,7 +38,7 @@ async function startServer(dataDir) {
 	server = spawn("node", ["dist/server/index.js"], {
 		cwd: REPO_ROOT,
 		env: {
-			...process.env,
+			...testEnv(),
 			PORT: String(PORT),
 			PI_WEB_DATA_DIR: dataDir,
 			PI_WEB_CWD: REPO_ROOT,

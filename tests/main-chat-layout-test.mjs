@@ -6,13 +6,14 @@ import { join } from 'node:path';
 import { chromium } from 'playwright-core';
 import { CHROME_PATH } from './lib/chrome.mjs';
 import { portUp } from './lib/port-utils.mjs';
+import { testEnv } from "./lib/test-env.mjs";
 const port = 9297, root = mkdtempSync(join(tmpdir(), 'pi-main-chat-'));
 execFileSync('git', ['init', '-q'], { cwd: root });
 writeFileSync(join(root, 'example.txt'), 'Preview content\n');
 let server, browser;
 try {
 	assert.equal(await portUp(port), false);
-	server = spawn(process.execPath, ['dist/server/index.js'], { env: { ...process.env, PORT: String(port), PI_WEB_TOKEN: '', PI_WEB_CWD: root, PI_WEB_DATA_DIR: join(root, 'data'), PI_CODING_AGENT_DIR: join(root, 'agent') }, stdio: 'ignore' });
+	server = spawn(process.execPath, ['dist/server/index.js'], { env: { ...testEnv(), PORT: String(port), PI_WEB_TOKEN: '', PI_WEB_CWD: root, PI_WEB_DATA_DIR: join(root, 'data'), PI_CODING_AGENT_DIR: join(root, 'agent') }, stdio: 'ignore' });
 	for (let i = 0; i < 150 && !await portUp(port); i++) await new Promise(r => setTimeout(r, 100));
 	assert(await portUp(port));
 	browser = await chromium.launch({ executablePath: CHROME_PATH });

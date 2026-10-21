@@ -13,6 +13,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { WebSocket } from "ws";
 import { createConnection } from "node:net";
+import { testEnv } from "./lib/test-env.mjs";
 
 const PORT = 8911;
 const REPO = resolve(process.cwd());
@@ -34,7 +35,7 @@ const server = spawn(
 	[join(REPO, "dist", "server", "index.js")],
 	{
 		env: {
-			...process.env,
+			...testEnv(),
 			PORT: String(PORT),
 			PI_WEB_DATA_DIR: DATA,
 			PI_WEB_CWD: REPO,

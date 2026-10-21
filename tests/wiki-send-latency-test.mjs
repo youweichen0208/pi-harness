@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { chromium } from 'playwright-core';
 import { CHROME_PATH } from './lib/chrome.mjs';
 import { portUp } from './lib/port-utils.mjs';
+import { testEnv } from "./lib/test-env.mjs";
 const port = 8999, base = mkdtempSync(join(tmpdir(), 'wiki-send-latency-'));
 const cwd = join(base, 'workspace');
 mkdirSync(cwd);
@@ -31,7 +32,7 @@ try {
 	assert.equal(await portUp(port), false);
 	assert.equal(await portUp(9000), false);
 	await new Promise(r => mock.listen(9000, '127.0.0.1', r));
-	server = spawn(process.execPath, ['dist/server/index.js'], { env: { ...process.env, PORT: String(port), PI_WEB_TOKEN: '', PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(base, 'data'), PI_CODING_AGENT_DIR: join(base, 'agent') }, stdio: 'ignore' });
+	server = spawn(process.execPath, ['dist/server/index.js'], { env: { ...testEnv(), PORT: String(port), PI_WEB_TOKEN: '', PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(base, 'data'), PI_CODING_AGENT_DIR: join(base, 'agent') }, stdio: 'ignore' });
 	for (let i = 0; i < 100 && !await portUp(port); i++) await new Promise(r => setTimeout(r, 100));
 	browser = await chromium.launch({ executablePath: CHROME_PATH || chromium.executablePath() });
 	const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });

@@ -8,6 +8,7 @@ import {setTimeout as sleep} from 'node:timers/promises';
 import {chromium} from 'playwright-core';
 import {CHROME_PATH} from './lib/chrome.mjs';
 import {portUp} from './lib/port-utils.mjs';
+import { testEnv } from "./lib/test-env.mjs";
 const PORT=8993;
 const root=mkdtempSync(join(tmpdir(),'workspace-design-'));
 const cwd=join(root,'youwei-trading-agent');mkdirSync(cwd);
@@ -33,7 +34,7 @@ const messages=[
 let server,browser;
 try{
 assert.equal(await portUp(PORT),false);
-server=spawn(process.execPath,['dist/server/index.js'],{env:{...process.env,PORT:String(PORT),PI_WEB_CWD:cwd,PI_WEB_DATA_DIR:join(root,'data'),PI_CODING_AGENT_DIR:join(root,'agent')},stdio:['ignore','pipe','pipe']});
+server=spawn(process.execPath,['dist/server/index.js'],{env:{...testEnv(),PORT:String(PORT),PI_WEB_CWD:cwd,PI_WEB_DATA_DIR:join(root,'data'),PI_CODING_AGENT_DIR:join(root,'agent')},stdio:['ignore','pipe','pipe']});
 let log='';server.stderr.on('data',data=>log+=data);
 for(let n=0;n<80&&!await portUp(PORT);n++)await sleep(250);
 assert(await portUp(PORT),log);

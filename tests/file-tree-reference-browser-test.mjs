@@ -7,6 +7,7 @@ import {setTimeout as sleep} from 'node:timers/promises';
 import {chromium} from 'playwright-core';
 import {CHROME_PATH} from './lib/chrome.mjs';
 import {portUp} from './lib/port-utils.mjs';
+import { testEnv } from "./lib/test-env.mjs";
 const port=9252, root=mkdtempSync(join(tmpdir(),'pi-fluid-'));
 const cwd=join(root,'pi-harness');mkdirSync(cwd);writeFileSync(join(cwd,'README.md'),'# Project\n');
 for(const name of ['.claude','.github','.pytest_cache','.ruff_cache','.svelte-kit','.venv-workbench','backend','build','docs','ops','scripts']) mkdirSync(join(cwd,name));
@@ -14,7 +15,7 @@ writeFileSync(join(cwd,'docs','example.ts'),'export const example = true;');
 let server,browser;
 try {
 	assert.equal(await portUp(port),false);
-	server=spawn(process.execPath,['dist/server/index.js'],{env:{...process.env,PORT:String(port),PI_WEB_CWD:cwd,PI_WEB_DATA_DIR:join(root,'data'),PI_CODING_AGENT_DIR:join(root,'agent')},stdio:'ignore'});
+	server=spawn(process.execPath,['dist/server/index.js'],{env:{...testEnv(),PORT:String(port),PI_WEB_CWD:cwd,PI_WEB_DATA_DIR:join(root,'data'),PI_CODING_AGENT_DIR:join(root,'agent')},stdio:'ignore'});
 	for(let i=0;i<100&&!await portUp(port);i++)await sleep(150);
 	assert(await portUp(port));
 	browser=await chromium.launch({executablePath:CHROME_PATH});

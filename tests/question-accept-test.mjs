@@ -9,6 +9,7 @@ import { join } from 'node:path';
 import { chromium } from 'playwright-core';
 import { CHROME_PATH } from './lib/chrome.mjs';
 import { portUp } from './lib/port-utils.mjs';
+import { testEnv } from "./lib/test-env.mjs";
 
 const PORT = 9301, MOCK_PORT = 9302;
 for (const port of [PORT, MOCK_PORT]) if (await portUp(port)) throw new Error(`Port ${port} is occupied`);
@@ -52,7 +53,7 @@ writeFileSync(join(agentDir, 'settings.json'), JSON.stringify({ defaultProvider:
 
 let server, browser;
 try {
-	server = spawn(process.execPath, ['dist/server/index.js'], { env: { ...process.env, PORT: String(PORT), PI_WEB_TOKEN: '', PI_WEB_PKG_ROOT: process.cwd(), PI_WEB_CWD: workdir, PI_WEB_DATA_DIR: dataDir, PI_CODING_AGENT_DIR: agentDir }, stdio: 'ignore' });
+	server = spawn(process.execPath, ['dist/server/index.js'], { env: { ...testEnv(), PORT: String(PORT), PI_WEB_TOKEN: '', PI_WEB_CWD: workdir, PI_WEB_DATA_DIR: dataDir, PI_CODING_AGENT_DIR: agentDir }, stdio: 'ignore' });
 	for (let i = 0; i < 100 && !await portUp(PORT); i++) await new Promise(r => setTimeout(r, 100));
 	browser = await chromium.launch({ executablePath: CHROME_PATH || chromium.executablePath() });
 	const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });

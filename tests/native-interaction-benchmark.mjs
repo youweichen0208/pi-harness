@@ -11,6 +11,9 @@ import { join, resolve } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { chromium, _electron } from 'playwright-core';
 import { CHROME_PATH } from './lib/chrome.mjs';
+import { testEnv, scrubHostEnv } from "./lib/test-env.mjs";
+
+scrubHostEnv();
 const executable = process.argv.find(a => a.startsWith('--electron-executable='))?.slice('--electron-executable='.length);
 const mode = executable ? 'electron' : 'web';
 const directory = mkdtempSync(join(tmpdir(), 'pi-click-bench-'));
@@ -28,7 +31,7 @@ try {
 	for (let round = 1; round <= 3; round++) {
 		const launchedAt = performance.now();
 		let server, app, browser, page;
-		const env = { ...process.env, PI_WEB_DATA_DIR: join(directory, `data-${round}`), PI_WEB_CWD: paths[0], PI_CODING_AGENT_DIR: join(directory, 'agent') }; delete env.ELECTRON_RUN_AS_NODE;
+		const env = { ...testEnv(), PI_WEB_DATA_DIR: join(directory, `data-${round}`), PI_WEB_CWD: paths[0], PI_CODING_AGENT_DIR: join(directory, 'agent') }; delete env.ELECTRON_RUN_AS_NODE;
 		try {
 			if (executable) {
 				app = await _electron.launch({ executablePath: resolve(executable), args: [`--user-data-dir=${join(directory, `profile-${round}`)}`], env });

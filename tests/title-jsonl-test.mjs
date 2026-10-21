@@ -16,6 +16,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
+import { testEnv } from "./lib/test-env.mjs";
 // fileURLToPath: URL.pathname 在 Windows 下是 /E:/... 形式，直接当 cwd 会失败
 const REPO_ROOT = fileURLToPath(new globalThis.URL("../", import.meta.url));
 
@@ -42,7 +43,7 @@ try {
 const server = spawn("node", ["dist/server/index.js"], {
 	cwd: PROJ,
 	env: {
-		...process.env,
+		...testEnv(),
 		PORT: String(PORT),
 		PI_WEB_CWD: A,
 		// 隔离 client-state：不污染真实 ~/.pi-web（agent 目录保留 —— 需要真模型凭据）

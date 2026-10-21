@@ -59,6 +59,7 @@
     "test:smoke": "node tests/run-smoke.mjs",
     "check:lockfile": "node scripts/check-lockfile.mjs",
     "check:protocol": "node scripts/check-protocol-sync.mjs",
+    "check:testenv": "node scripts/check-test-env.mjs",
     "test:freeze": "node tests/freeze-test.mjs",
     "start": "node dist/server/index.js",
     "start:electron": "electron .",

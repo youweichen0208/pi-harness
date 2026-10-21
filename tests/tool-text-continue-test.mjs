@@ -13,6 +13,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as sleep } from 'node:timers/promises';
 import WebSocket from 'ws';
+import { testEnv } from "./lib/test-env.mjs";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..');
 // The shape seen in the field: leaked reasoning, then only the tail of the call.
@@ -38,7 +39,7 @@ async function scenario(port, replies) {
 	writeFileSync(join(agent, 'models.json'), JSON.stringify({ providers: { fixture: { api: 'openai-completions', baseUrl: `http://127.0.0.1:${model.address().port}/v1`, apiKey: 'x', models: [{ id: 'fixture', name: 'Fixture', input: ['text'], contextWindow: 64000, maxTokens: 1024 }] } } }));
 	writeFileSync(join(agent, 'settings.json'), JSON.stringify({ defaultProvider: 'fixture', defaultModel: 'fixture', compaction: { enabled: false }, retry: { enabled: false } }));
 	const server = spawn(process.execPath, [join(REPO, 'dist', 'server', 'index.js')], {
-		env: { ...process.env, PORT: String(port), PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(root, 'data'), PI_CODING_AGENT_DIR: agent },
+		env: { ...testEnv(), PORT: String(port), PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(root, 'data'), PI_CODING_AGENT_DIR: agent },
 		stdio: 'ignore', windowsHide: true,
 	});
 	try {

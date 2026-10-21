@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { randomUUID } from "node:crypto";
+import { testEnv } from "./lib/test-env.mjs";
 // fileURLToPath: URL.pathname 在 Windows 下是 /E:/... 形式，直接当 cwd 会失败
 const REPO_ROOT = fileURLToPath(new globalThis.URL("../", import.meta.url));
 
@@ -36,7 +37,7 @@ try {
 }
 const server = spawn("node", ["dist/server/index.js"], {
 	cwd: PROJ,
-	env: { ...process.env, PORT: String(PORT), PI_WEB_CWD: A, PI_WEB_DATA_DIR: mkdtempSync(join(tmpdir(), "pi-cwd-data-")), PI_CODING_AGENT_DIR: mkdtempSync(join(tmpdir(), "pi-cwd-agent-")) },
+	env: { ...testEnv(), PORT: String(PORT), PI_WEB_CWD: A, PI_WEB_DATA_DIR: mkdtempSync(join(tmpdir(), "pi-cwd-data-")), PI_CODING_AGENT_DIR: mkdtempSync(join(tmpdir(), "pi-cwd-agent-")) },
 	stdio: "ignore",
 });
 for (let i = 0; i < 40 && !(await portUp(PORT)); i++) await sleep(250);

@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { chromium } from 'playwright-core';
 import { CHROME_PATH } from './lib/chrome.mjs';
 import { portUp } from './lib/port-utils.mjs';
+import { testEnv } from "./lib/test-env.mjs";
 const port=9330;
 assert(!await portUp(port)); assert(!await portUp(port+1));
 const base=mkdtempSync(join(tmpdir(),'wiki-assistant-')), cwd=join(base,'workspace'), agent=join(base,'agent');
@@ -22,7 +23,7 @@ writeFileSync(join(agent,'models.json'),JSON.stringify({providers:{fixture:{api:
 writeFileSync(join(agent,'settings.json'),JSON.stringify({defaultProvider:'fixture',defaultModel:'fixture'}));
 writeFileSync(join(agent,'auth.json'),JSON.stringify({fixture:{type:'api_key',key:'unused'}}));
 let server,browser,page,log='';
-const start=async()=>{server=spawn(process.execPath,['dist/server/index.js'],{env:{...process.env,PORT:String(port),PI_WEB_TOKEN:'',PI_WEB_HOST:'127.0.0.1',PI_WEB_CWD:cwd,PI_WEB_DATA_DIR:join(base,'data'),PI_CODING_AGENT_DIR:agent},stdio:['ignore','pipe','pipe']});server.stdout.on('data',b=>log+=b);server.stderr.on('data',b=>log+=b);for(let i=0;i<150&&!await portUp(port);i++){assert.equal(server.exitCode,null,log);await new Promise(r=>setTimeout(r,100));}};
+const start=async()=>{server=spawn(process.execPath,['dist/server/index.js'],{env:{...testEnv(),PORT:String(port),PI_WEB_TOKEN:'',PI_WEB_HOST:'127.0.0.1',PI_WEB_CWD:cwd,PI_WEB_DATA_DIR:join(base,'data'),PI_CODING_AGENT_DIR:agent},stdio:['ignore','pipe','pipe']});server.stdout.on('data',b=>log+=b);server.stderr.on('data',b=>log+=b);for(let i=0;i<150&&!await portUp(port);i++){assert.equal(server.exitCode,null,log);await new Promise(r=>setTimeout(r,100));}};
 const stop=async()=>{if(server?.exitCode===null){server.kill('SIGTERM');await new Promise(r=>server.once('exit',r));}};
 try{
  await start();browser=await chromium.launch({executablePath:CHROME_PATH||chromium.executablePath()});page=await browser.newPage({viewport:{width:1440,height:1000}});page.setDefaultTimeout(12000);

@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { setTimeout as sleep } from "node:timers/promises";
+import { testEnv } from "./lib/test-env.mjs";
 
 const CHROME =
 	CHROME_PATH;
@@ -63,7 +64,7 @@ writeFileSync(
 const NODE = realpathSync(process.execPath);
 const server = spawn(NODE, ["dist/server/index.js"], {
 	env: {
-		...process.env,
+		...testEnv(),
 		PORT: String(PORT),
 		PI_WEB_DATA_DIR: dataDir,
 		PI_WEB_CWD: workdir,

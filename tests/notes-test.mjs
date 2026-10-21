@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "node:net";
+import { testEnv } from "./lib/test-env.mjs";
 const root = mkdtempSync(join(tmpdir(), "pi-notes-api-"));
 const probe = createServer();
 await new Promise(resolve => probe.listen(0, "127.0.0.1", resolve));
@@ -15,7 +16,7 @@ const token = "notes-test-only";
 let server, browser, logs = "";
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function start() {
-	server = spawn(process.execPath, ["dist/server/index.js"], { env: { ...process.env, PORT: String(port), PI_WEB_TOKEN: token, PI_WEB_DATA_DIR: join(root, "data"), PI_CODING_AGENT_DIR: join(root, "agent"), PI_WEB_CWD: root }, stdio: ["ignore", "pipe", "pipe"] });
+	server = spawn(process.execPath, ["dist/server/index.js"], { env: { ...testEnv(), PORT: String(port), PI_WEB_TOKEN: token, PI_WEB_DATA_DIR: join(root, "data"), PI_CODING_AGENT_DIR: join(root, "agent"), PI_WEB_CWD: root }, stdio: ["ignore", "pipe", "pipe"] });
 	server.stdout.on("data", data => { logs += data; }); server.stderr.on("data", data => { logs += data; });
 	for (let i = 0; i < 150; i++) { try { if ((await fetch(`${base}/api/health`)).ok) return; } catch {} if (server.exitCode !== null) break; await sleep(100); }
 	throw new Error(logs);

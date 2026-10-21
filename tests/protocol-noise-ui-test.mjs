@@ -9,13 +9,14 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { chromium } from 'playwright-core';
 import { TOOL_TEXT_CONTINUE_PROMPT } from '../dist/server/tool-text.js';
 import { CHROME_PATH } from './lib/chrome.mjs';
+import { testEnv } from "./lib/test-env.mjs";
 
 const port = 31000 + Math.floor(Math.random() * 10000);
 const probe = createServer();
 await new Promise((resolve, reject) => { probe.once('error', reject); probe.listen(port, '127.0.0.1', resolve); });
 await new Promise(resolve => probe.close(resolve));
 const root = mkdtempSync(join(tmpdir(), 'pi-protocol-noise-'));
-const server = spawn(process.execPath, ['dist/server/index.js'], { env: { ...process.env, PORT: String(port), PI_WEB_CWD: root, PI_WEB_DATA_DIR: join(root, 'data'), PI_CODING_AGENT_DIR: join(root, 'agent') }, stdio: ['ignore', 'pipe', 'pipe'] });
+const server = spawn(process.execPath, ['dist/server/index.js'], { env: { ...testEnv(), PORT: String(port), PI_WEB_CWD: root, PI_WEB_DATA_DIR: join(root, 'data'), PI_CODING_AGENT_DIR: join(root, 'agent') }, stdio: ['ignore', 'pipe', 'pipe'] });
 let logs = '', browser;
 server.stdout.on('data', chunk => logs += chunk);
 server.stderr.on('data', chunk => logs += chunk);

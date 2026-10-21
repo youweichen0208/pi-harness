@@ -9,6 +9,9 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { SessionManager, createBashTool } from "@earendil-works/pi-coding-agent";
 import WebSocket from "ws";
 import { portUp } from "./lib/port-utils.mjs";
+import { testEnv, scrubHostEnv } from "./lib/test-env.mjs";
+
+scrubHostEnv();
 const port = Number(process.env.PI_TEST_PORT || 9143);
 assert(port >= 8900); assert.equal(await portUp(port), false);
 const root = mkdtempSync(join(tmpdir(), "pi-output-http-"));
@@ -38,7 +41,7 @@ for (const toolName of ["bash", "powershell"]) manager.appendMessage({ role: "to
 const kept = manager.appendMessage({ role: "user", content: "after compaction", timestamp: 6 });
 manager.appendCompaction("summary", kept, 9000);
 const token = "fixture-token";
-const server = spawn(process.execPath, ["dist/server/index.js"], { env: { ...process.env, PORT: String(port), PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(root, "data"), PI_CODING_AGENT_DIR: agent, PI_WEB_TOKEN: token }, stdio: ["ignore", "pipe", "pipe"] });
+const server = spawn(process.execPath, ["dist/server/index.js"], { env: { ...testEnv(), PORT: String(port), PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(root, "data"), PI_CODING_AGENT_DIR: agent, PI_WEB_TOKEN: token }, stdio: ["ignore", "pipe", "pipe"] });
 let logs = ""; server.stderr.on("data", d => logs += d); server.stdout.on("data", () => {});
 let ws;
 try {

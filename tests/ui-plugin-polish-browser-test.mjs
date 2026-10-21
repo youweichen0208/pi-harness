@@ -7,6 +7,7 @@ import {setTimeout as sleep} from 'node:timers/promises';
 import {chromium} from 'playwright-core';
 import {CHROME_PATH} from './lib/chrome.mjs';
 import {portUp} from './lib/port-utils.mjs';
+import { testEnv } from "./lib/test-env.mjs";
 const port=9263, root=mkdtempSync(join(tmpdir(),'pi-fluid-'));
 const cwd=join(root,'pi-harness');mkdirSync(cwd);writeFileSync(join(cwd,'README.md'),'# Project\n');
 const plugin=join(root,'data','plugins','polish-fixture');mkdirSync(join(plugin,'client'),{recursive:true});
@@ -15,7 +16,7 @@ writeFileSync(join(plugin,'client','entry.mjs'),`let attempts=0;export default {
 let server,browser;
 try {
 	assert.equal(await portUp(port),false);
-	server=spawn(process.execPath,['dist/server/index.js'],{env:{...process.env,PORT:String(port),PI_WEB_CWD:cwd,PI_WEB_DATA_DIR:join(root,'data'),PI_CODING_AGENT_DIR:join(root,'agent')},stdio:'ignore'});
+	server=spawn(process.execPath,['dist/server/index.js'],{env:{...testEnv(),PORT:String(port),PI_WEB_CWD:cwd,PI_WEB_DATA_DIR:join(root,'data'),PI_CODING_AGENT_DIR:join(root,'agent')},stdio:'ignore'});
 	for(let i=0;i<100&&!await portUp(port);i++)await sleep(150);
 	assert(await portUp(port));
 	browser=await chromium.launch({executablePath:CHROME_PATH});

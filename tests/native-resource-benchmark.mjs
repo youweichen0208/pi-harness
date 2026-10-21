@@ -17,6 +17,9 @@ import { DatabaseSync } from 'node:sqlite';
 import { chromium, _electron } from 'playwright-core';
 import WebSocket from 'ws';
 import { CHROME_PATH } from './lib/chrome.mjs';
+import { testEnv, scrubHostEnv } from "./lib/test-env.mjs";
+
+scrubHostEnv();
 const arg = (name, fallback) => process.argv.find(a => a.startsWith(`--${name}=`))?.split('=').slice(1).join('=') ?? fallback;
 const mode = arg('mode', 'web'), seconds = Number(arg('seconds', '1800')), rounds = Number(arg('rounds', '3'));
 const idleOnly = process.argv.includes('--idle-only');
@@ -123,7 +126,7 @@ try {
 			seed.appendMessage({ role: 'user', content: `seed-${round}`, timestamp: Date.now() });
 			seed.appendMessage({ role: 'assistant', content: [{ type: 'text', text: 'seed' }], api: 'openai-completions', provider: 'fixture', model: 'fixture', usage, stopReason: 'stop', timestamp: Date.now() });
 		}
-		const env = { ...process.env, PI_WEB_CWD: projects[1], PI_WEB_DATA_DIR: join(base, `data-${round}`), PI_CODING_AGENT_DIR: agent, PI_RESOURCE_PROBE: directory, NODE_OPTIONS: `--import=${pathToFileURL(resolve('tests/fixtures/resource-probe.mjs'))}`, PI_WEB_NO_BROWSER: '1' };
+		const env = { ...testEnv(), PI_WEB_CWD: projects[1], PI_WEB_DATA_DIR: join(base, `data-${round}`), PI_CODING_AGENT_DIR: agent, PI_RESOURCE_PROBE: directory, NODE_OPTIONS: `--import=${pathToFileURL(resolve('tests/fixtures/resource-probe.mjs'))}`, PI_WEB_NO_BROWSER: '1' };
 		delete env.ELECTRON_RUN_AS_NODE;
 		let child, app, browser, page, cdp, url, timer, busy = false, phase = 'startup', netBytes = 0, requests = 0, frontendWsBytes = 0;
 		const start = performance.now();

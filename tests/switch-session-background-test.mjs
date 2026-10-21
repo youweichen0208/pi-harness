@@ -10,6 +10,7 @@ import { realpathSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { setTimeout as sleep } from "node:timers/promises";
 import WebSocket from "ws";
+import { testEnv } from "./lib/test-env.mjs";
 
 const PORT = Number(process.argv[2] || 8955);
 const MOCK_PORT = PORT + 1;
@@ -96,7 +97,7 @@ const repoRoot = realpathSync(new URL("../", import.meta.url));
 const server = spawn(process.execPath, ["dist/server/index.js"], {
 	cwd: repoRoot,
 	env: {
-		...process.env,
+		...testEnv(),
 		PORT: String(PORT),
 		PI_WEB_DATA_DIR: dataDir,
 		PI_WEB_CWD: workdir,

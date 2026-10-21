@@ -6,6 +6,9 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, appendFileSync, rm
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import WebSocket from 'ws';
+import { testEnv, scrubHostEnv } from "./lib/test-env.mjs";
+
+scrubHostEnv();
 const root = mkdtempSync(join(tmpdir(), 'pi-plan-settings-')), agent = join(root, 'agent');
 mkdirSync(agent, { recursive: true });
 let child, logs = '', held, hold = false;
@@ -24,7 +27,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 async function wait(test, label = 'condition') { const until = Date.now() + 20000; while (Date.now() < until) { if (test()) return; if (child?.exitCode != null) throw new Error(logs); await sleep(25); } throw new Error(`Timeout ${label}\n${logs}`); }
 let port;
 async function start() {
-	child = spawn(process.execPath, ['dist/server/index.js'], { env: { ...process.env, PORT: String(port), PI_WEB_DATA_DIR: root, PI_WEB_CWD: root, PI_CODING_AGENT_DIR: agent }, stdio: ['ignore', 'pipe', 'pipe'] });
+	child = spawn(process.execPath, ['dist/server/index.js'], { env: { ...testEnv(), PORT: String(port), PI_WEB_DATA_DIR: root, PI_WEB_CWD: root, PI_CODING_AGENT_DIR: agent }, stdio: ['ignore', 'pipe', 'pipe'] });
 	child.stdout.on('data', c => { logs += c; }); child.stderr.on('data', c => { logs += c; });
 	for (let i = 0; i < 150; i++) { try { const health = await (await fetch(`http://127.0.0.1:${port}/api/health`)).json(); if (health.pid === child.pid) return; } catch {} await sleep(50); }
 	throw new Error(logs);

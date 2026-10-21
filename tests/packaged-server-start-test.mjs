@@ -12,6 +12,7 @@ import { pathToFileURL } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 import { createRequire } from "node:module";
 import { relative, isAbsolute } from "node:path";
+import { testEnv } from "./lib/test-env.mjs";
 
 const [executable, appRoot] = process.argv.slice(2).map((p) => realpathSync(resolve(p)));
 assert(executable && appRoot, "Usage: node tests/packaged-server-start-test.mjs <executable> <resources/app>");
@@ -42,7 +43,7 @@ if (process.platform === "win32") {
 for (const module of ["api/anthropic-messages.js", "auth/oauth/openai-chatgpt.js", "auth/oauth/anthropic.js", "auth/oauth/radius.js"]) {
 const provider = pathToFileURL(join(appRoot, "node_modules/@earendil-works/pi-ai/dist", module)).href;
 execFileSync(executable, ["--input-type=module", "--eval", `await import(${JSON.stringify(provider)})`], {
-	env: { ...process.env, ELECTRON_RUN_AS_NODE: "1", NODE_PATH: "", NODE_OPTIONS: "" },
+	env: { ...testEnv(), ELECTRON_RUN_AS_NODE: "1", NODE_PATH: "", NODE_OPTIONS: "" },
 	timeout: 30000,
 	stdio: "pipe",
 });
@@ -63,7 +64,7 @@ await new Promise((resolve, reject) => {
 	let workerOutput = "";
 	const worker = fork(join(appRoot, "dist/server/sqlite-worker.js"), [], {
 		execPath: executable, execArgv: [],
-		env: { ...process.env, ELECTRON_RUN_AS_NODE: "1", NODE_PATH: "", NODE_OPTIONS: "" },
+		env: { ...testEnv(), ELECTRON_RUN_AS_NODE: "1", NODE_PATH: "", NODE_OPTIONS: "" },
 		stdio: ["ignore", "ignore", "pipe", "ipc"], serialization: "json",
 	});
 	const finish = (error) => {

@@ -16,6 +16,7 @@ import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
 import { execSync, spawn } from "node:child_process";
 import { setTimeout as sleep } from "node:timers/promises";
+import { testEnv } from "./lib/test-env.mjs";
 // fileURLToPath: URL.pathname 在 Windows 下是 /E:/... 形式，直接当 cwd 会失败
 const REPO_ROOT = fileURLToPath(new globalThis.URL("../", import.meta.url));
 
@@ -34,7 +35,7 @@ let server = null;
 async function startServer() {
 	server = spawn("node", ["dist/server/index.js"], {
 		cwd: PROJ,
-		env: { ...process.env, PORT: String(PORT) },
+		env: { ...testEnv(), PORT: String(PORT) },
 		stdio: "ignore",
 	});
 	// Wait until the port actually listens (or the process died).

@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { chromium } from 'playwright-core';
 import { CHROME_PATH } from './lib/chrome.mjs';
 import { portUp } from './lib/port-utils.mjs';
+import { testEnv } from "./lib/test-env.mjs";
 const port = 8997;
 assert.equal(await portUp(port), false, 'isolated port must be free');
 const base = mkdtempSync(join(tmpdir(), 'wiki-navigation-')), cwd = join(base, 'work'), other = join(base, 'other');
@@ -17,7 +18,7 @@ writeFileSync(join(base, 'agent', 'auth.json'), JSON.stringify({ local: { type: 
 writeFileSync(join(base, 'agent', 'models.json'), JSON.stringify({ providers: { local: { api: 'openai-completions', baseUrl: 'http://127.0.0.1:1', apiKey: 'unused', models: [{ id: 'unused', name: 'Unused local model', input: ['text'], contextWindow: 32000, maxTokens: 4096 }] } } }));
 writeFileSync(join(base, 'agent', 'settings.json'), JSON.stringify({ defaultProvider: 'local', defaultModel: 'unused' }));
 for (let i = 0; i < 500; i++) writeFileSync(join(cwd, `doc-${String(i).padStart(3, '0')}.md`), `# Document ${i}\n\n## Introduction\n\n${(i < 2 ? ('Ordinary document text about reading and editing. '.repeat(4) + 'See [[doc-000]] for references.\n\n').repeat(430) : 'Ordinary document text with [[doc-000]] references.\n\n'.repeat(20))}`);
-const server = spawn(process.execPath, ['dist/server/index.js'], { env: { ...process.env, PORT: String(port), PI_WEB_TOKEN: '', PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(base, 'data'), PI_CODING_AGENT_DIR: join(base, 'agent') }, stdio: ['ignore', 'pipe', 'pipe'] });
+const server = spawn(process.execPath, ['dist/server/index.js'], { env: { ...testEnv(), PORT: String(port), PI_WEB_TOKEN: '', PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(base, 'data'), PI_CODING_AGENT_DIR: join(base, 'agent') }, stdio: ['ignore', 'pipe', 'pipe'] });
 let log = '', browser, page;
 const sessionResponses = [];
 const durations = [];

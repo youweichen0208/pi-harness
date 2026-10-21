@@ -8,6 +8,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { chromium } from 'playwright-core';
 import { CHROME_PATH } from './lib/chrome.mjs';
 import { portUp } from './lib/port-utils.mjs';
+import { testEnv } from "./lib/test-env.mjs";
 const port = 9242;
 assert.equal(await portUp(port), false, `Port ${port} busy`);
 const root = mkdtempSync(join(tmpdir(), 'pi-design14-'));
@@ -18,7 +19,7 @@ const reply = "## 当前设计树\n\n```text\n根: 产出架构\n├── A. �
 let messages = [{id:"user",role:"user",timestamp:time,content:[{type:"text",text:"请设计架构"}]},{id:"reply",role:"assistant",timestamp:time+1,content:[{type:"text",text:reply}]}];
 let server, browser;
 try {
-	server = spawn(process.execPath, ['dist/server/index.js'], { env: { ...process.env, PORT: String(port), PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(root, 'data'), PI_CODING_AGENT_DIR: join(root, 'agent') }, stdio: ['ignore', 'pipe', 'pipe'] });
+	server = spawn(process.execPath, ['dist/server/index.js'], { env: { ...testEnv(), PORT: String(port), PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(root, 'data'), PI_CODING_AGENT_DIR: join(root, 'agent') }, stdio: ['ignore', 'pipe', 'pipe'] });
 	let log = ''; server.stderr.on('data', data => log += data); server.stdout.on('data', data => log += data);
 	for (let i = 0; i < 100 && !await portUp(port); i++) await sleep(100);
 	assert(await portUp(port), log);

@@ -7,9 +7,10 @@ import { once } from 'node:events';
 import { chromium } from 'playwright-core';
 import { CHROME_PATH } from './lib/chrome.mjs';
 import { portUp } from './lib/port-utils.mjs';
+import { testEnv } from "./lib/test-env.mjs";
 const port=9198; assert.equal(await portUp(port),false);
 const root=mkdtempSync(join(tmpdir(),'pi-one-ui-'));
-const server=spawn(process.execPath,['dist/server/index.js'],{env:{...process.env,PORT:String(port),PI_WEB_TOKEN:'',PI_WEB_CWD:root,PI_WEB_DATA_DIR:join(root,'data'),PI_CODING_AGENT_DIR:join(root,'agent')},stdio:'ignore'});
+const server=spawn(process.execPath,['dist/server/index.js'],{env:{...testEnv(),PORT:String(port),PI_WEB_TOKEN:'',PI_WEB_CWD:root,PI_WEB_DATA_DIR:join(root,'data'),PI_CODING_AGENT_DIR:join(root,'agent')},stdio:'ignore'});
 let browser;
 try {
 	for(let i=0;i<100;i++){if(await portUp(port)) break; await new Promise(r=>setTimeout(r,100));}

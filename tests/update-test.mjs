@@ -10,6 +10,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readFileSync } from "node:fs";
 import { chromium } from "playwright-core";
+import { scrubHostEnv } from "./lib/test-env.mjs";
+
+scrubHostEnv();
 
 const PORT = 30000 + Math.floor(Math.random() * 10000);
 const base = mkdtempSync(join(tmpdir(), "piweb-update-"));

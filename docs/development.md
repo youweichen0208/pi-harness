@@ -69,6 +69,10 @@ spawn 后记录 `server.pid`，测试收尾（含异常 catch 路径）用 `proc
 
 测试 server 设 `PI_WEB_DATA_DIR` 为 `mkdtempSync(tmpdir…)`，`PI_WEB_CWD` 指本地仓库——避免污染真实 user data / client-state / session。
 
+### 宿主环境隔离
+
+自起 server 的测试不得直接展开 `process.env`：从 pi-harness/Electron 宿主里跑测试时，宿主自己的 `PI_*` 会泄进被测 server——`PI_WEB_PKG_ROOT` 让它伺服宿主自己的 web/dist（浏览器测的就成了另一个应用），`PI_WEB_WORKSPACES_FILE` / `PI_SESSION_FILE` 指向真实工作区与会话。统一用 `tests/lib/test-env.mjs`：展开式写 `env: { ...testEnv(), PORT, … }`；「先改 `process.env.PI_*` 再让子进程继承」的旧式测试在文件头 `scrubHostEnv()` 一次（此后 `PI_*` 命名空间归测试所有，`testEnv()` 不再剥）。`scripts/check-test-env.mjs`（CI 独立一步）强制这三条。
+
 ### 自包含 vs 外部依赖
 
 能进 `tests/run-smoke.mjs` 清单的测试必须**自起 server + 自清理**；不进清单的分两类（原因写在 run-smoke.mjs 头部注释）：

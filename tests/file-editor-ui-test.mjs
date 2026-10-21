@@ -8,6 +8,7 @@ import { chromium } from "playwright-core";
 import { CHROME_PATH } from "./lib/chrome.mjs";
 import { portUp } from "./lib/port-utils.mjs";
 import { setTimeout as sleep } from "node:timers/promises";
+import { testEnv } from "./lib/test-env.mjs";
 
 const PORT = 8997;
 const root = mkdtempSync(join(tmpdir(), "file-editor-ui-"));
@@ -29,7 +30,7 @@ let server, browser;
 try {
 	assert.equal(await portUp(PORT), false, "isolated port must be free");
 	server = spawn(process.execPath, ["dist/server/index.js"], {
-		env: { ...process.env, PORT: String(PORT), PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(root, "data"), PI_CODING_AGENT_DIR: join(root, "agent") },
+		env: { ...testEnv(), PORT: String(PORT), PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(root, "data"), PI_CODING_AGENT_DIR: join(root, "agent") },
 		stdio: ["ignore", "pipe", "pipe"],
 	});
 	let logs = "";

@@ -17,6 +17,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import WebSocket from "ws";
+import { testEnv } from "./lib/test-env.mjs";
 
 const PORT = 8967;
 const BASE = `http://127.0.0.1:${PORT}`;
@@ -92,7 +93,7 @@ function rpc(sock, payload) {
 try {
 	proc = spawn(serverPath, [join(repoRoot, "dist", "server", "index.js")], {
 		env: {
-			...process.env,
+			...testEnv(),
 			PORT: String(PORT),
 			PI_WEB_DATA_DIR: dataDir,
 			PI_CODING_AGENT_DIR: agentDir,

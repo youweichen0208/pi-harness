@@ -17,6 +17,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { realpathSync } from "node:fs";
 import WebSocket from "ws";
+import { testEnv } from "./lib/test-env.mjs";
 
 const PORT = 8966;
 const HOST = `http://127.0.0.1:${PORT}`;
@@ -85,7 +86,7 @@ async function main() {
 			[join("dist", "server", "index.js")],
 			{
 				env: {
-					...process.env,
+					...testEnv(),
 					PORT: String(PORT),
 					PI_WEB_CWD: workspace,
 					PI_WEB_DATA_DIR: dataDir,

@@ -11,6 +11,7 @@ import { CHROME_PATH } from "./lib/chrome.mjs";
 import { serializeMessage } from "../dist/server/serialize.js";
 import { deriveTaskProgress } from "../dist/server/task-progress.js";
 import { TOOL_TEXT_CONTINUE_PROMPT } from "../dist/server/tool-text.js";
+import { testEnv } from "./lib/test-env.mjs";
 
 const port = 31000 + Math.floor(Math.random() * 10000);
 const probe = createServer();
@@ -19,7 +20,7 @@ await new Promise((resolve) => probe.close(resolve));
 const data = mkdtempSync(join(tmpdir(), "pi-plan-chat-"));
 mkdirSync(join(data, "src"));
 writeFileSync(join(data, "src/file-14.ts"), "export const example = true;\n");
-const server = spawn(process.execPath, ["dist/server/index.js"], { env: { ...process.env, PORT: String(port), PI_WEB_DATA_DIR: data, PI_WEB_CWD: data, PI_CODING_AGENT_DIR: join(data, "agent") }, stdio: ["ignore", "pipe", "pipe"] });
+const server = spawn(process.execPath, ["dist/server/index.js"], { env: { ...testEnv(), PORT: String(port), PI_WEB_DATA_DIR: data, PI_WEB_CWD: data, PI_CODING_AGENT_DIR: join(data, "agent") }, stdio: ["ignore", "pipe", "pipe"] });
 let logs = "", browser;
 server.stdout.on("data", (chunk) => { logs += chunk; });
 server.stderr.on("data", (chunk) => { logs += chunk; });

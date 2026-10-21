@@ -11,6 +11,7 @@ import { join, resolve } from "node:path";
 import { WebSocketServer } from "ws";
 import { OpenAIProxySettings } from "../dist/server/openai-proxy.js";
 import { portUp } from "./lib/port-utils.mjs";
+import { testEnv } from "./lib/test-env.mjs";
 
 if (process.argv[2] === "--network-child") {
 	const settings = new OpenAIProxySettings(process.argv[3]);
@@ -56,7 +57,7 @@ if (process.argv[2] === "--network-child") {
 	});
 	const direct = httpServer((_req, res) => res.end("direct"));
 	let server, browser, log = "";
-	const env = { ...process.env, PORT: "9362", PI_WEB_HOST: "127.0.0.1", PI_WEB_TOKEN: "fixture-token", PI_WEB_CWD: directory, PI_WEB_DATA_DIR: data, PI_CODING_AGENT_DIR: agent };
+	const env = { ...testEnv(), PORT: "9362", PI_WEB_HOST: "127.0.0.1", PI_WEB_TOKEN: "fixture-token", PI_WEB_CWD: directory, PI_WEB_DATA_DIR: data, PI_CODING_AGENT_DIR: agent };
 	const start = async () => {
 		server = spawn(process.execPath, ["dist/server/index.js"], { env, stdio: ["ignore", "pipe", "pipe"] });
 		server.stdout.on("data", b => { log += b; }); server.stderr.on("data", b => { log += b; });
@@ -79,7 +80,7 @@ if (process.argv[2] === "--network-child") {
 		assert.equal((await request({ action: "save", version: oldVersion, config: { enabled: false, url: "" } })).status, 400);
 		await stop(); await start();
 		state = await (await request({ action: "get" })).json(); assert.equal(state.restartRequired, false);
-		const child = spawn(process.execPath, ["tests/openai-proxy-test.mjs", "--network-child", data], { env: { ...process.env, NODE_EXTRA_CA_CERTS: cert }, stdio: ["ignore", "pipe", "pipe"] });
+		const child = spawn(process.execPath, ["tests/openai-proxy-test.mjs", "--network-child", data], { env: { ...testEnv(), NODE_EXTRA_CA_CERTS: cert }, stdio: ["ignore", "pipe", "pipe"] });
 		let output = ""; child.stdout.on("data", b => { output += b; }); child.stderr.on("data", b => { output += b; });
 		const timer = setTimeout(() => child.kill(), 20000);
 		const [code] = await once(child, "exit"); clearTimeout(timer); assert.equal(code, 0, output);

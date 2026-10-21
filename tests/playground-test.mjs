@@ -5,6 +5,7 @@ import { createServer as createHttpServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "node:net";
+import { testEnv } from "./lib/test-env.mjs";
 
 // Self-contained: own port (>= 8900) and own data dir, so it can run beside the
 // other suite scripts and never touches the developer's real ~/.pi-web.
@@ -43,21 +44,6 @@ async function configure(body, headers = {}) {
 	return fetch(`${base}/api/playground/config?token=${token}`, { method: "POST", headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify(body) });
 }
 function writeConfig(value) { mkdirSync(dataDir, { recursive: true }); writeFileSync(configFile, typeof value === "string" ? value : JSON.stringify(value)); }
-
-/**
- * Strip every inherited PI_* variable before spawning the server.
- *
- * Running the suite from inside a pi-harness/Electron host otherwise leaks the
- * host's own state into the test server: PI_WEB_PKG_ROOT makes it serve that
- * host's web/dist (so the browser is tested against the wrong UI entirely), and
- * PI_WEB_WORKSPACES_FILE / PI_SESSION_FILE point at the developer's real
- * projects and session. The test must only ever see what it sets here.
- */
-function testEnv(extra) {
-	const env = { ...process.env };
-	for (const key of Object.keys(env)) if (key.startsWith("PI_")) delete env[key];
-	return { ...env, ...extra };
-}
 
 /** Start a Run and collect its events; resolves when the stream ends. */
 async function run(code, { signal, client, origin } = {}) {

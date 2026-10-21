@@ -8,6 +8,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { chromium } from 'playwright-core';
 import { CHROME_PATH } from './lib/chrome.mjs';
 import { portUp } from './lib/port-utils.mjs';
+import { testEnv } from "./lib/test-env.mjs";
 
 const port = 8997;
 const root = mkdtempSync(join(tmpdir(), 'pi-write-stall-'));
@@ -19,7 +20,7 @@ writeFileSync(join(cwd, 'youwei_core/worker/__init__.py'), '');
 let server, browser;
 try {
 	assert.equal(await portUp(port), false);
-	server = spawn(process.execPath, ['dist/server/index.js'], { env: { ...process.env, PORT: String(port), PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(root, 'data'), PI_CODING_AGENT_DIR: join(root, 'agent') }, stdio: ['ignore', 'pipe', 'pipe'] });
+	server = spawn(process.execPath, ['dist/server/index.js'], { env: { ...testEnv(), PORT: String(port), PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(root, 'data'), PI_CODING_AGENT_DIR: join(root, 'agent') }, stdio: ['ignore', 'pipe', 'pipe'] });
 	let stderr = ''; server.stderr.on('data', (chunk) => { stderr += chunk; });
 	for (let i = 0; i < 80 && !await portUp(port); i++) await sleep(200);
 	assert(await portUp(port), stderr);

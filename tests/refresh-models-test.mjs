@@ -17,6 +17,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { realpathSync } from "node:fs";
+import { testEnv } from "./lib/test-env.mjs";
 
 const PORT = Number(process.argv[2] || 8957);
 const MOCK_PORT = PORT + 1;
@@ -56,7 +57,7 @@ mock.listen(MOCK_PORT, "127.0.0.1");
 const NODE = realpathSync(process.execPath);
 const server = spawn(NODE, ["dist/server/index.js"], {
 	env: {
-		...process.env,
+		...testEnv(),
 		PORT: String(PORT),
 		PI_WEB_DATA_DIR: dataDir,
 		PI_WEB_CWD: workdir,

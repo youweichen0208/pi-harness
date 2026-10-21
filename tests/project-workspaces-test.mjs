@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "node:net";
 import WebSocket from "ws";
+import { testEnv } from "./lib/test-env.mjs";
 
 const base = mkdtempSync(join(tmpdir(), "pi-workspace-groups-"));
 const projects = ["project-a", "project-b"].map((name) => join(base, name));
@@ -14,7 +15,7 @@ await new Promise((r) => probe.listen(0, "127.0.0.1", r));
 const port = probe.address().port;
 await new Promise((r) => probe.close(r));
 assert(port >= 8900);
-const server = spawn(process.execPath, ["dist/server/index.js"], { env: { ...process.env, PORT: String(port), PI_WEB_CWD: projects[0], PI_WEB_DATA_DIR: join(base, "data"), PI_CODING_AGENT_DIR: join(base, "agent"), PI_WEB_TOKEN: "" }, stdio: ["ignore", "pipe", "pipe"] });
+const server = spawn(process.execPath, ["dist/server/index.js"], { env: { ...testEnv(), PORT: String(port), PI_WEB_CWD: projects[0], PI_WEB_DATA_DIR: join(base, "data"), PI_CODING_AGENT_DIR: join(base, "agent"), PI_WEB_TOKEN: "" }, stdio: ["ignore", "pipe", "pipe"] });
 let logs = "";
 server.stdout.on("data", (data) => { logs += data; });
 server.stderr.on("data", (data) => { logs += data; });
