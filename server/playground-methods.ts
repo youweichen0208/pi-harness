@@ -11,9 +11,29 @@ const children = (node: Node | null): Node[] => {
 };
 const TYPES = new Set(["byte", "short", "int", "long", "float", "double", "boolean", "char", "Byte", "Short", "Integer", "Long", "Float", "Double", "Boolean", "Character", "String"]);
 const unbox: Record<string, string> = { Byte: "byte", Short: "short", Integer: "int", Long: "long", Float: "float", Double: "double", Boolean: "boolean", Character: "char" };
-const normalizeType = (text: string) => text.replace(/\s/g, "").replace(/^java\.lang\./, "");
-export const isReferenceType = (type: string): boolean => type.endsWith("[]") || /^[A-Z]/.test(type);
-export const supportedType = (type: string): boolean => TYPES.has(type.replace(/(?:\[\])+$/, ""));
+const normalizeType = (text: string) => text.replace(/\s/g, "").replace(/\bjava\.lang\./g, "").replace(/\bjava\.util\.List</g, "List<");
+export const listElementType = (type: string): string | undefined => /^List<(.+)>$/.exec(normalizeType(type))?.[1];
+export const isReferenceType = (type: string): boolean => type.endsWith("[]") || /^[A-Z]/.test(normalizeType(type));
+export const isJsonType = (type: string): boolean => type.endsWith("[]") || listElementType(type) !== undefined;
+export function supportedType(type: string, depth = 0): boolean {
+	if (depth >= 64) return false;
+	type = normalizeType(type);
+	const element = listElementType(type);
+	if (element !== undefined) return !element.endsWith("[]") && (Object.hasOwn(unbox, element) || element === "String" || (listElementType(element) !== undefined && supportedType(element, depth + 1)));
+	return TYPES.has(type.replace(/(?:\[\])+$/, ""));
+}
+const javaType = (type: string): string => normalizeType(type).replace(/\bList</g, "java.util.List<");
+export const reflectionType = (type: string): string => listElementType(type) !== undefined ? "java.util.List" : type;
+export function valuePlaceholder(type: string): string {
+	if (!supportedType(type)) return "";
+	type = normalizeType(type);
+	const element = listElementType(type);
+	if (element !== undefined) return `[${valuePlaceholder(element) || "1"}]`;
+	if (type.endsWith("[]")) return "[1, 2]";
+	if (type === "String" || type === "Character") return '"a"';
+	if (type === "boolean" || type === "Boolean") return "true";
+	return "";
+}
 
 export function discoverJavaMethods(input: string): { code: string; fileName: string; methods: PlaygroundMethod[] } {
 	let code = input;
@@ -62,7 +82,7 @@ export function discoverJavaMethods(input: string): { code: string; fileName: st
 			const isStatic = modifiers(node).includes("static");
 			if (name === "main" && isStatic && returnType === "void" && parameters.length === 1 && parameters[0].type === "String[]") continue;
 			let unsupported: string | undefined;
-			if (parameters.some(p => !supportedType(p.type)) || (returnType !== "void" && !supportedType(returnType))) unsupported = "Only primitive types, boxed types, String and arrays are supported.";
+			if (parameters.some(p => !supportedType(p.type)) || (returnType !== "void" && !supportedType(returnType))) unsupported = "Only primitive types, boxed types, String, arrays and Lists of boxed types, String or Lists are supported.";
 			if (node.getChild("TypeParameters") || klass.getChild("TypeParameters")) unsupported = "Generic methods and classes are not supported.";
 			if (!unsupported && !isStatic && !constructible) unsupported = "Instance methods require a concrete class with a default or public no-argument constructor.";
 			if (!node.getChild("Block")) unsupported = "The method must have an implementation.";
@@ -80,7 +100,12 @@ function javaString(value: string): string {
 function scalarLiteral(type: string, value: unknown): string {
 	if (value === null) {
 		if (!isReferenceType(type)) throw new Error(`${type} cannot be null`);
-		return `(${type})null`;
+		return `(${javaType(type)})null`;
+	}
+	const element = listElementType(type);
+	if (element !== undefined) {
+		if (!Array.isArray(value)) throw new Error(`${type} requires a JSON array`);
+		return `new java.util.ArrayList<${javaType(element)}>(java.util.Arrays.<${javaType(element)}>asList(${value.map(v => scalarLiteral(element, v)).join(",")}))`;
 	}
 	if (type.endsWith("[]")) {
 		if (!Array.isArray(value)) throw new Error(`${type} requires a JSON array`);
@@ -97,7 +122,7 @@ function scalarLiteral(type: string, value: unknown): string {
 		if (value !== true && value !== false && value !== "true" && value !== "false") throw new Error("boolean requires true or false");
 		literal = String(value);
 	} else if (["byte", "short", "int", "long"].includes(primitive)) {
-		if (typeof value === "number" && !Number.isSafeInteger(value)) throw new Error("Large integers in arrays must be quoted decimal strings");
+		if (typeof value === "number" && !Number.isSafeInteger(value)) throw new Error("Large integers in arrays or Lists must be quoted decimal strings");
 		if (!/^[+-]?\d+$/.test(String(value))) throw new Error(`${type} requires an integer`);
 		const number = BigInt(String(value));
 		const bits = { byte: 8n, short: 16n, int: 32n, long: 64n }[primitive]!;
@@ -113,7 +138,7 @@ function scalarLiteral(type: string, value: unknown): string {
 }
 export function valueLiteral(type: string, value: PlaygroundValue): string {
 	if (!supportedType(type)) throw new Error(`Unsupported type: ${type}`);
-	return scalarLiteral(type, value.isNull ? null : type.endsWith("[]") ? JSON.parse(value.text) : value.text);
+	return scalarLiteral(normalizeType(type), value.isNull ? null : isJsonType(type) ? JSON.parse(value.text) : value.text);
 }
 export function validateCases(method: PlaygroundMethod, cases: PlaygroundCase[]): void {
 	if (method.unsupported) throw new Error(method.unsupported);

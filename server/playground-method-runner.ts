@@ -1,11 +1,11 @@
 import type { PlaygroundCase, PlaygroundMethod } from "./protocol.js";
-import { valueLiteral } from "./playground-methods.js";
+import { reflectionType, valueLiteral } from "./playground-methods.js";
 
 /** Internal source is compiled beside the single user source, never saved to it. */
 export function methodRunnerSource(name: string, method: PlaygroundMethod, cases: PlaygroundCase[], maxBytes: number): string {
 	const packageName = method.className.includes(".") ? method.className.slice(0, method.className.lastIndexOf(".")) : "";
 	const arms = cases.map((test, index) => `case ${index}: {
-		java.lang.reflect.Method method = target.getDeclaredMethod("${method.name}", new Class<?>[]{${method.parameters.map(p => `${p.type}.class`).join(",")}});
+		java.lang.reflect.Method method = target.getDeclaredMethod("${method.name}", new Class<?>[]{${method.parameters.map(p => `${reflectionType(p.type)}.class`).join(",")}});
 		Object instance = ${method.isStatic ? "null" : "target.getDeclaredConstructor().newInstance()"};
 		Object actual = method.invoke(instance, new Object[]{${method.parameters.map((p, i) => valueLiteral(p.type, test.args[i])).join(",")}});
 		Object expected = ${test.expected ? valueLiteral(method.returnType, test.expected) : "null"};
@@ -29,6 +29,15 @@ public class ${name} {
 			for (int i = 0; i < java.lang.reflect.Array.getLength(value); i++) {
 				if (i > 0) append(out, ", ");
 				renderInto(out, java.lang.reflect.Array.get(value, i));
+			}
+			append(out, "]");
+		} else if (value instanceof java.util.List<?>) {
+			append(out, "[");
+			boolean first = true;
+			for (Object item : (java.util.List<?>)value) {
+				if (!first) append(out, ", ");
+				first = false;
+				renderInto(out, item);
 			}
 			append(out, "]");
 		} else if (value instanceof String || value instanceof Character) {

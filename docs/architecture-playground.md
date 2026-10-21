@@ -96,13 +96,14 @@ HTTP + SSE，**不新增 WS 消息、`PROTOCOL_VERSION` 不变**：
 
 ## 草稿页 public 方法测试（2026-10-22）
 
-- 「程序运行／方法测试」显式切换；方法模式支持只写 public 方法片段（自动包 `Main`，import/package 留在类外），或完整普通类。发现与参数校验在浏览器可用的 `server/playground-methods.ts`，使用 `@lezer/java` 语法树，服务端在执行前重新校验；完整代码仍由 javac 最终检查。
-- 只列顶层普通类显式声明的 public 方法，排除标准 main、构造器、继承和嵌套类方法。签名为 `全限定类名#方法名(参数类型列表)`，重载独立保存用例；不支持的类型、泛型、抽象方法或缺少无参构造时给出原因。实例方法使用默认或 public 无参构造，static 不构造对象。
-- 参数／返回值支持八种基本类型、包装类型、String、多维数组（varargs 按数组）；void 只检查执行成功。文本直接输入，数组 JSON，引用类型有显式 null；断言为可选 `expected`，因此空字符串和不做断言可以区分。long 使用 BigInt 校验并生成十进制 Java 字面量，JSON 数组内超安全整数必须写成字符串。精确按 Java 类型比较，数组递归比较；没有浮点容差、对象映射或 JUnit。
+- 草稿页仅提供方法测试，不再显示运行模式切换；支持只写 public 方法片段（自动包 `Main`，import/package 留在类外），或完整普通类。发现与参数校验在浏览器可用的 `server/playground-methods.ts`，使用 `@lezer/java` 语法树，服务端在执行前重新校验；完整代码仍由 javac 最终检查。
+- 只列顶层普通类显式声明的 public 方法，排除标准 main、构造器、继承和嵌套类方法。签名为 `全限定类名#方法名(参数类型列表)`，重载独立保存用例；不支持的类型、泛型类／方法、抽象方法或缺少无参构造时给出原因。实例方法使用默认或 public 无参构造，static 不构造对象。
+- 参数／返回值支持八种基本类型、包装类型、String、多维数组（varargs 按数组），以及 `List<T>`／`java.util.List<T>`（元素为包装类型、String 或嵌套 List）；void 只检查执行成功。文本直接输入，数组和 List 使用 JSON 数组，引用类型有显式 null；断言为可选 `expected`，因此空字符串和不做断言可以区分。long 使用 BigInt 校验并生成十进制 Java 字面量，JSON 数组内超安全整数必须写成字符串。精确按 Java 类型比较，数组递归比较，List 按顺序递归比较且不要求实现类一致；没有浮点容差、对象映射或 JUnit。
+- List 支持空列表、null 元素及 null 子列表；每层输入构造为可修改的 `ArrayList`，调用器使用擦除后的 `java.util.List.class` 反射查找。结果递归格式化并计入原有输出预算。类型归一化识别 `java.lang` 包装类型及 String，List 嵌套最多 64 层；不支持原始 List、通配符、自定义元素、其他集合或 List 与数组混用。用户源码需自行 import 或使用全限定名；private 辅助方法保留在源码中，由 public 方法正常调用。
 - 每批最多 50 用例、配置 256 KiB。一批编译一次，每条用例使用独立 JVM（静态状态也隔离）；调用器通过精确参数类型反射调用，仅注入校验后的值。生成源码在临时目录，既不改用户代码也不保存 main。Java 调用器源码由 `playground-method-runner.ts` 提供，随服务端 JS 打包，不依赖额外 jar。
 - 原有 `/run` 的 `{code}` 行为保留。`tests` 包含所选方法 ID 和用例列表；新增 `case_start{id}`、`case_result{result}` SSE。每条结果包含 ID、状态、返回值／预期值／异常文本及耗时。结构化结果走每条独立的限长内部文件，不从 stdout 猜测；采用 Base64 字段封装，结果也计入整批输出预算。普通断言失败和异常继续，编译错误、超时、超输出或取消中止整批，其余用例记为未执行。
 - 一批共用现有并发名额、墙钟超时、堆限制和输出预算，超时包括编译与所有 JVM 启动开销。中断杀进程树，最后清理临时目录。程序结束时 POSIX 进程组中的后台子进程也清理。
-- 草稿增加可选 `tests: {mode, selectedMethod, casesByMethod}`；旧文档按程序模式和空用例读取，旧客户端只写 content 保留用例配置。代码、模式和用例按 600ms 去抖串行保存，卸载 flush，重入先等待已排队写入；加载失败不覆盖旧草稿。签名消失保留用例，重新出现后可继续使用。
+- 草稿增加可选 `tests: {mode, selectedMethod, casesByMethod}`；旧文档保留代码和用例，草稿页加载时将模式归一化为 methods 并自动保存；首次使用填入 public 方法示例。服务端仍兼容旧 program 值，旧客户端只写 content 保留用例配置。代码、模式和用例按 600ms 去抖串行保存，卸载 flush，重入先等待已排队写入；加载失败不覆盖旧草稿。签名消失保留用例，重新出现后可继续使用。
 - Run 键包含代码、方法及本次用例；当前草稿结果引用保存在组件外，离开重入仍可见，刷新清空。代码、模式或用例变化标记过期；结果不自动发给模型。
 - 回归：`tests/unit/playground-methods.test.ts` 覆盖识别、片段包装、精度和参数验证；`node tests/playground-methods-test.mjs --browser` 自起隔离服务，覆盖真实 JDK、保存兼容、用例编辑、快捷键、结果过期与窄屏。无 JDK 时默认冒烟跳过执行部分，浏览器模式要求 JDK。
 

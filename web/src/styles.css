@@ -13592,7 +13592,7 @@ html.pi-desktop-darwin .compact-navigation .global-navigation { padding-top: 36p
 
 /* ---- Playground method tests ---- */
 .scratch-head { flex-wrap: wrap; }
-.scratch-mode, .method-toolbar select { border: 1px solid var(--border-soft); border-radius: var(--r-md); background: var(--bg); color: var(--text); padding: 6px 8px; font: inherit; max-width: 100%; }
+.method-toolbar select { border: 1px solid var(--border-soft); border-radius: var(--r-md); background: var(--bg); color: var(--text); padding: 6px 8px; font: inherit; max-width: 100%; }
 .scratch-page.method-mode { padding: 16px 20px 20px; overflow: auto; }
 .scratch-page.method-mode .playground-result { max-height: none; }
 .scratch-example { align-self: flex-start; }

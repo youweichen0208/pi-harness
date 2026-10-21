@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { discoverJavaMethods, isCaseList, isTestConfig, validateCases, valueLiteral } from "../../server/playground-methods.js";
+import { discoverJavaMethods, isCaseList, isTestConfig, validateCases, valueLiteral, supportedType, reflectionType, valuePlaceholder } from "../../server/playground-methods.js";
 
 it("discovers fragments, overloads, arrays and public static methods without main", () => {
 	const found = discoverJavaMethods(`import java.util.*;
@@ -34,7 +34,7 @@ it("handles incomplete edits and non-class top-level declarations", () => {
 });
 
 it("explains unsupported construction and types, while permitting static methods", () => {
-	const methods = discoverJavaMethods("public class A { public A(int a) {} public int f() {return 1;} public static int g(){return 1;} public java.util.List<String> h(){return null;} }").methods;
+	const methods = discoverJavaMethods("public class A { public A(int a) {} public int f() {return 1;} public static int g(){return 1;} public java.util.Map<String, String> h(){return null;} }").methods;
 	expect(methods[0].unsupported).toMatch(/constructor/);
 	expect(methods[1].unsupported).toBeUndefined();
 	expect(methods[2].unsupported).toMatch(/types/);
@@ -66,5 +66,47 @@ describe("typed input", () => {
 	it.each(["boolean", "char", "float", "double", "Integer", "Boolean", "String[][]"])("accepts %s", type => {
 		const values: Record<string, string> = { boolean: "true", char: "中", float: "1.2", double: "1e3", Integer: "42", Boolean: "false", "String[][]": '[["a"],null]' };
 		expect(valueLiteral(type, { text: values[type] })).toBeTruthy();
+	});
+});
+
+describe("List method inputs", () => {
+	it("discovers qualified and nested lists while keeping private helpers internal", () => {
+		const found = discoverJavaMethods(`import java.util.List;
+public int add(List<Integer> list) { return calculate(list); }
+private int calculate(List<Integer> list) { return list.size(); }
+public java.util.List<java.util.List<java.lang.String>> echo(java.util.List<java.util.List<java.lang.String>> xs) { return xs; }`);
+		expect(found.methods).toHaveLength(2);
+		expect(found.methods[0]).toMatchObject({ id: "Main#add(List<Integer>)", parameters: [{ name: "list", type: "List<Integer>" }] });
+		expect(found.methods[1]).toMatchObject({ returnType: "List<List<String>>" });
+		expect(found.methods.every(method => !method.unsupported)).toBe(true);
+		expect(reflectionType("List<List<String>>")).toBe("java.util.List");
+		expect(valuePlaceholder("List<List<String>>")).toBe('[["a"]]');
+	});
+	it("bounds nesting and handles unsupported types in input hints", () => {
+		const nested = (depth: number) => "List<".repeat(depth) + "Integer" + ">".repeat(depth);
+		expect(supportedType(nested(64))).toBe(true);
+		expect(supportedType(nested(65))).toBe(false);
+		expect(valuePlaceholder(nested(1000))).toBe("");
+		expect(valuePlaceholder("java.util.List<java.lang.String>")).toBe('["a"]');
+	});
+	it("constructs mutable lists with typed nulls and exact long values", () => {
+		expect(valueLiteral("List<Integer>", { text: "[]" })).toContain("new java.util.ArrayList<Integer>");
+		expect(valueLiteral("List<List<Long>>", { text: '[["9223372036854775807",null],[],null]' })).toContain("9223372036854775807L");
+		expect(valueLiteral("java.util.List<java.lang.String>", { text: "", isNull: true })).toBe("(java.util.List<String>)null");
+		expect(valueLiteral("List<String>", { text: '["\\n\\\"中",null]' })).toContain("new String(new char[]");
+	});
+	it.each(["List", "List<int>", "List<?>", "List<? extends Number>", "List<Object>", "List<Integer[]>", "List<Integer>[]", "Map<String,Integer>", "List<List<int>>"])("rejects unsupported %s", type => {
+		expect(supportedType(type)).toBe(false);
+	});
+	it.each([
+		["List<Integer>", "{}"], ["List<Integer>", "["], ["List<Integer>", "[2147483648]"],
+		["List<Long>", "[9223372036854775807]"], ["List<String>", "[1]"],
+		["List<List<Integer>>", "[1]"], ["List<Integer>", "[[1]]"],
+	])("rejects invalid %s input %s", (type, text) => {
+		expect(() => valueLiteral(type, { text })).toThrow();
+	});
+	it.each(["Byte", "Short", "Integer", "Long", "Float", "Double", "Boolean", "Character", "String"])("accepts List<%s>", element => {
+		const text = element === "Boolean" ? "[true,null]" : element === "Character" || element === "String" ? '["a",null]' : "[1,null]";
+		expect(() => valueLiteral(`List<${element}>`, { text })).not.toThrow();
 	});
 });

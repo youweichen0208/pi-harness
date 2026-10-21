@@ -10,7 +10,7 @@ import { PlaygroundResult } from "./PlaygroundRun";
 import { PlaygroundMethodCases, caseError, methodErrorText } from "./PlaygroundMethodCases";
 
 const ScratchEditor = lazy(() => import("./scratch-editor").then(m => ({ default: m.ScratchEditor })));
-const TEMPLATE = `public class Main {
+const LEGACY_TEMPLATE = `public class Main {
 	public static void main(String[] args) {
 		System.out.println("Hello, Playground");
 	}
@@ -18,7 +18,7 @@ const TEMPLATE = `public class Main {
 const EXAMPLE = `public int add(int a, int b) {
 	return a + b;
 }`;
-const EMPTY_TESTS: PlaygroundTestConfig = { mode: "program", selectedMethod: "", casesByMethod: {} };
+const EMPTY_TESTS: PlaygroundTestConfig = { mode: "methods", selectedMethod: "", casesByMethod: {} };
 type Draft = { content: string; tests: PlaygroundTestConfig };
 // Serialize writes across remounts as well as keystrokes. Re-entry waits for a
 // pending flush before reading the server, so an old response cannot win.
@@ -49,8 +49,7 @@ export function PlaygroundScratch() {
 	const queued = useRef("");
 	const snapshot = doc ? JSON.stringify(doc) : "";
 	const tests = doc?.tests ?? EMPTY_TESTS;
-	const methodMode = tests.mode === "methods";
-	const discovered = useMemo(() => methodMode ? discoverJavaMethods(doc?.content ?? "") : { methods: [] }, [methodMode, doc?.content]);
+	const discovered = useMemo(() => discoverJavaMethods(doc?.content ?? ""), [doc?.content]);
 	const method = discovered.methods.find(m => m.id === tests.selectedMethod);
 	const cases = Object.hasOwn(tests.casesByMethod, tests.selectedMethod) ? tests.casesByMethod[tests.selectedMethod] : [];
 
@@ -81,8 +80,8 @@ export function PlaygroundScratch() {
 				if (!response.ok) throw new Error(String(response.status));
 				const stored = await response.json() as ScratchDoc;
 				if (cancelled) return;
-				const draft = { content: stored.updatedAt === 0 && !stored.content ? TEMPLATE : stored.content, tests: stored.tests ?? EMPTY_TESTS };
-				persisted.current = stored.updatedAt ? JSON.stringify(draft) : "";
+				const draft: Draft = { content: stored.updatedAt === 0 && !stored.content ? EXAMPLE : stored.content, tests: { ...(stored.tests ?? EMPTY_TESTS), mode: "methods" } };
+				persisted.current = stored.updatedAt ? JSON.stringify({ content: stored.content, tests: stored.tests }) : "";
 				queued.current = persisted.current;
 				setDoc(draft);
 			} catch { if (!cancelled) setLoadFailed(true); }
@@ -103,49 +102,46 @@ export function PlaygroundScratch() {
 		if (latest.current && JSON.stringify(latest.current) !== queued.current) void save(latest.current);
 	}, [save]);
 	useEffect(() => {
-		if (methodMode && !tests.selectedMethod && discovered.methods.length) setDoc(current => current ? { ...current, tests: { ...current.tests, selectedMethod: discovered.methods[0].id } } : current);
-	}, [methodMode, tests.selectedMethod, discovered]);
+		if (!tests.selectedMethod && discovered.methods.length) setDoc(current => current ? { ...current, tests: { ...current.tests, selectedMethod: discovered.methods[0].id } } : current);
+	}, [tests.selectedMethod, discovered]);
 
 	const reason = !status ? t("playgroundChecking") : status.locked ? t("playgroundLocked") : !status.enabled ? t("playgroundDisabled") : !status.jdk.available ? [t("playgroundNoJdk"), status.jdk.reason].filter(Boolean).join(" — ") : "";
-	const inputError = methodMode ? !method ? t("pgNoMethods") : caseError(method, cases) : "";
+	const inputError = !method ? t("pgNoMethods") : caseError(method, cases);
 	const start = useCallback((selectedCases?: PlaygroundCase[]) => {
 		if (!doc || reason || running || !doc.content.trim()) return;
-		const requested = methodMode ? { methodId: tests.selectedMethod, cases: selectedCases ?? cases } : undefined;
-		if (requested && (!method || caseError(method, requested.cases))) return;
+		const requested = { methodId: tests.selectedMethod, cases: selectedCases ?? cases };
+		if (!method || caseError(method, requested.cases)) return;
 		const key = runKey("scratch", JSON.stringify({ code: doc.content, tests: requested }));
-		lastScratchRun = { key, snapshot: JSON.stringify(doc), methodId: requested?.methodId };
+		lastScratchRun = { key, snapshot: JSON.stringify(doc), methodId: requested.methodId };
 		setLastRun(lastScratchRun);
 		void startRun(key, doc.content, requested);
-	}, [doc, reason, running, methodMode, tests.selectedMethod, cases, method]);
+	}, [doc, reason, running, tests.selectedMethod, cases, method]);
 	const updateTests = (patch: Partial<PlaygroundTestConfig>) => setDoc(current => current ? { ...current, tests: { ...current.tests, ...patch } } : current);
 
-	return <div className={`scratch-page${methodMode ? " method-mode" : ""}`}>
+	return <div className="scratch-page method-mode">
 		<header className="scratch-head">
 			<h2>Playground</h2>
-			<select className="scratch-mode" aria-label={t("pgMode")} disabled={!doc} value={tests.mode} onChange={event => updateTests({ mode: event.target.value as PlaygroundTestConfig["mode"] })}>
-				<option value="program">{t("pgProgram")}</option><option value="methods">{t("pgMethods")}</option>
-			</select>
+
 			<span className={`scratch-save-status${saveState === "error" ? " error" : ""}`} role={saveState === "error" ? "alert" : undefined}>{saveState === "error" ? t("fileSaveFailed") : saveState === "pending" || saveState === "saving" ? t("playgroundSaving") : savedAt ? `${t("playgroundSaved")} · ${savedAt}` : doc ? t("playgroundSaved") : ""}</span>
 			{running ? <button type="button" className="btn" onClick={() => lastRun && stopRun(lastRun.key)}><FiSquare aria-hidden="true" />{t("playgroundStop")}</button> : <>
 				<span className="scratch-run-keys" aria-hidden="true">⌘/Ctrl ↵</span>
-				<button type="button" className="btn primary" disabled={!!reason || !!inputError || !doc?.content.trim()} title={reason || methodErrorText(inputError, t) || "⌘/Ctrl+Enter"} onClick={() => start()}><FiPlay aria-hidden="true" />{t(methodMode ? "pgRunAll" : "playgroundRun")}</button>
+				<button type="button" className="btn primary" disabled={!!reason || !!inputError || !doc?.content.trim()} title={reason || methodErrorText(inputError, t) || "⌘/Ctrl+Enter"} onClick={() => start()}><FiPlay aria-hidden="true" />{t("pgRunAll")}</button>
 			</>}
 		</header>
 		{loadFailed && <p className="playground-notice" role="alert">{t("pgLoadFailed")}</p>}
 		<div className="scratch-workspace">
 			<section className="scratch-code-pane" aria-label={t("pgSource")}>
 				<div className="scratch-pane-head"><strong>{t("pgSource")}</strong><span>Java</span></div>
-				{methodMode && doc && (!doc.content.trim() || doc.content === TEMPLATE) && <button type="button" className="btn scratch-example" onClick={() => setDoc({ ...doc, content: EXAMPLE })}>{t("pgExample")}</button>}
+				{doc && (!doc.content.trim() || doc.content === LEGACY_TEMPLATE) && <button type="button" className="btn scratch-example" onClick={() => setDoc({ ...doc, content: EXAMPLE })}>{t("pgExample")}</button>}
 				<Suspense fallback={<div className="scratch-editor-cm loading" aria-busy="true" />}>
 					<ScratchEditor value={doc?.content ?? ""} onChange={content => setDoc(current => current ? { ...current, content } : current)} onRun={() => start()} placeholder={t("playgroundScratchPlaceholder")} />
 				</Suspense>
 			</section>
-			{methodMode && doc && <aside className="scratch-test-pane" aria-label={t("pgMethods")}>
+			{doc && <aside className="scratch-test-pane" aria-label={t("pgMethods")}>
 				<div className="scratch-pane-head"><strong>{t("pgMethods")}</strong><span>{t("pgCase")} {cases.length} / 50</span></div>
 				<PlaygroundMethodCases key={tests.selectedMethod} methods={discovered.methods} selected={tests.selectedMethod} cases={cases} results={lastRun?.methodId === tests.selectedMethod ? run.cases : []} stale={snapshot !== lastRun?.snapshot} onSelect={selectedMethod => updateTests({ selectedMethod })} onChange={next => updateTests({ casesByMethod: { ...tests.casesByMethod, [tests.selectedMethod]: next } })} onRun={start} disabled={!!reason || running} />
 				{lastRun && <PlaygroundResult runKey={lastRun.key} stale={snapshot !== lastRun.snapshot} showCases={lastRun.methodId !== tests.selectedMethod} />}
 			</aside>}
 		</div>
-		{!methodMode && lastRun && <PlaygroundResult runKey={lastRun.key} stale={snapshot !== lastRun.snapshot} />}
 	</div>;
 }

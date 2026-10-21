@@ -62,6 +62,7 @@ try {
 	assert.equal((await api("scratch", { content: code, tests: { ...tests, mode: "invalid" } }, "PUT")).status, 400);
 	assert.equal((await api("run", { code, tests: { methodId: "Main#missing()", cases: [testCase("a", [])] } })).status, 400);
 	assert.equal((await api("run", { code, tests: { methodId: tests.selectedMethod, cases: [testCase("a", ["bad", 2])] } })).status, 400);
+	assert.equal((await api("run", { code: "import java.util.List; public int size(List<Integer> xs){ return xs.size(); }", tests: { methodId: "Main#size(List<Integer>)", cases: [testCase("a", ["[2147483648]"])] } })).status, 400);
 	const status = await (await api("status")).json();
 	if (!status.jdk.available) {
 		console.log("SKIP real Java method execution: no host JDK");
@@ -76,6 +77,19 @@ try {
 		const arrays = await run("public long[][] echo(long[][] a){return a;}", "Main#echo(long[][])", [testCase("a", ['[["9223372036854775807"],null]'], '[["9223372036854775807"],null]')]);
 		assert.equal(results(arrays)[0].status, "passed");
 		assert.match(results(arrays)[0].actual, /9223372036854775807/);
+		const listCode = "import java.util.List; public int add(List<Integer> list){ return calculate(list); } private int calculate(List<Integer> list){ int result=0; for(int i=0;i<list.size();i++) result++; return result; }";
+		const lists = await run(listCode, "Main#add(List<Integer>)", [testCase("a", ["[1,2,3]"], 3), testCase("b", ["[]"], 0), { id: "c", args: [{ text: "", isNull: true }] }]);
+		assert.deepEqual(results(lists).map(r => r.status), ["passed", "passed", "error"]);
+		const nestedCode = "public java.util.List<java.util.List<java.lang.Long>> echo(java.util.List<java.util.List<java.lang.Long>> xs){ return xs == null ? null : new java.util.LinkedList<>(xs); }";
+		const nestedValue = '[["9223372036854775807",null],[],null]';
+		const nested = await run(nestedCode, "Main#echo(List<List<Long>>)", [testCase("a", [nestedValue], nestedValue), testCase("b", ["[[1]]"], "[[2]]"), { id: "c", args: [{ text: "", isNull: true }], expected: { text: "", isNull: true } }]);
+		assert.deepEqual(results(nested).map(r => r.status), ["passed", "failed", "passed"]);
+		assert.equal(results(nested)[0].actual, "[[9223372036854775807, null], [], null]");
+		const mutable = await run("import java.util.List; public List<List<Integer>> mutate(List<List<Integer>> xs){ xs.get(0).add(2); xs.add(new java.util.ArrayList<>()); xs.get(0).remove(0); return xs; }", "Main#mutate(List<List<Integer>>)", [testCase("a", ["[[1]]"], "[[2],[]]")]);
+		assert.equal(results(mutable)[0].status, "passed");
+		const listStrings = await run("import java.util.List; public List<String> echo(List<String> xs){return xs;}", "Main#echo(List<String>)", [testCase("a", [JSON.stringify(['quote"\n中', null])], JSON.stringify(['quote"\n中', null]))]);
+		assert.equal(results(listStrings)[0].status, "passed");
+		assert.match(results(listStrings)[0].actual, /quote/);
 		const state = await run("public class Counter { static int n; int m; public int next(){ return ++n + ++m; } }", "Counter#next()", [testCase("a", [], 2), testCase("b", [], 2)]);
 		assert.deepEqual(results(state).map(r => r.status), ["passed", "passed"]);
 		const errors = await run('public int fail(int n){if(n==0) throw new IllegalArgumentException("bad"); return n;}', "Main#fail(int)", [testCase("a", [0]), testCase("b", [2], 2)]);
@@ -88,6 +102,8 @@ try {
 		await api("config", { maxOutputBytes: 1024 });
 		const huge = await run('public String f(){return "x".repeat(10000);}', "Main#f()", [testCase("a", [])]);
 		assert.equal(end(huge).truncated, true);
+		const hugeList = await run('public java.util.List<String> f(){return java.util.Arrays.asList("x".repeat(10000));}', "Main#f()", [testCase("a", [])]);
+		assert.equal(end(hugeList).truncated, true);
 		await api("config", { maxOutputBytes: 262144, timeoutMs: 1000 });
 		const timeout = await run("public int f(){while(true){}}", "Main#f()", [testCase("a", []), testCase("b", [])]);
 		assert.equal(end(timeout).timedOut, true); assert.deepEqual(results(timeout).map(r => r.status), ["skipped", "skipped"]);
@@ -100,9 +116,10 @@ try {
 		assert.throws(() => process.kill(pid, 0));
 		for (let i = 0; i < 30 && readdirSync(tmpdir()).some(n => n.startsWith("pi-playground-") && !baseline.has(n)); i++) await sleep(100);
 		assert.equal(readdirSync(tmpdir()).some(n => n.startsWith("pi-playground-") && !baseline.has(n)), false);
-		console.log("PASS Java methods: assertions, overloads, null, arrays, precision, state isolation, exceptions, compile errors, output cap, timeout, cancellation and cleanup");
+		console.log("PASS Java methods: assertions, overloads, null, arrays, nested Lists, mutable Lists, precision, state isolation, exceptions, compile errors, output cap, timeout, cancellation and cleanup");
 	}
 	if (process.argv.includes("--browser")) {
+		await api("scratch", { content: code, tests: { ...tests, mode: "program" } }, "PUT");
 		assert.ok(status.jdk.available);
 		const { chromium } = await import("playwright-core");
 		const { CHROME_PATH } = await import("./lib/chrome.mjs");
@@ -112,6 +129,7 @@ try {
 		await page.goto(`${base}/?token=${token}`);
 		await page.getByRole("button", { name: "Playground", exact: true }).click({ timeout: 30000 });
 		await page.locator(".method-case").waitFor();
+		assert.equal(await page.locator(".scratch-mode").count(), 0);
 		await page.getByRole("button", { name: "运行全部用例", exact: true }).click();
 		await page.locator(".method-result.passed").waitFor();
 		await page.getByRole("button", { name: "添加用例", exact: true }).click();
@@ -122,12 +140,15 @@ try {
 		await page.locator(".method-result.unasserted").waitFor();
 		assert.match(await page.locator(".method-result.unasserted").innerText(), /13/);
 		await page.waitForFunction(() => document.querySelector(".scratch-save-status")?.textContent.includes("已保存"));
+		assert.equal((await (await api("scratch")).json()).tests.mode, "methods", "legacy program drafts switch to method tests");
 		await page.reload();
 		await page.getByRole("button", { name: "Playground", exact: true }).click();
 		await page.locator(".method-case").nth(1).waitFor();
+		await page.locator(".method-case").nth(1).locator(".method-case-toggle").click();
 		assert.equal(await page.locator(".method-case").nth(1).getByRole("textbox", { name: "a", exact: true }).inputValue(), "5");
 		assert.equal(await page.locator(".method-result").count(), 0, "refresh clears execution results");
 		await page.locator(".method-case").nth(1).getByRole("button", { name: "删除用例" }).click();
+		await page.waitForFunction(() => document.activeElement === document.querySelector(".method-case-toggle"));
 		await page.locator(".cm-content").focus();
 		await page.keyboard.press(process.platform === "darwin" ? "Meta+Enter" : "Control+Enter");
 		await page.locator(".method-result.passed").waitFor();
@@ -169,6 +190,28 @@ try {
 		assert.ok(await page.locator(".method-case").isVisible());
 		await page.evaluate(() => document.documentElement.setAttribute("data-appearance", "dark"));
 		await page.screenshot({ path: join(tmpdir(), "pi-methods-dark.png") });
+		await page.setViewportSize({ width: 1280, height: 1000 });
+		const listCode = "import java.util.List; public List<List<Integer>> echo(List<List<Integer>> xs){return xs;}";
+		await page.locator(".cm-content").fill(listCode);
+		await page.locator(".method-toolbar select").selectOption("Main#echo(List<List<Integer>>)");
+		await page.getByRole("button", { name: "添加用例", exact: true }).click();
+		const listInput = page.getByRole("textbox", { name: "xs", exact: true });
+		assert.equal(await listInput.getAttribute("placeholder"), "[[1]]");
+		await listInput.fill("[[1,2],[],null]");
+		await page.getByRole("button", { name: "运行全部用例", exact: true }).click();
+		await page.locator(".method-result.unasserted").waitFor();
+		assert.match(await page.locator(".method-result").innerText(), /\[\[1, 2\], \[\], null\]/);
+		await page.locator(".method-value input[type=checkbox]").check();
+		assert.equal(await listInput.isDisabled(), true);
+		await page.locator(".playground-badge.stale").waitFor();
+		await page.locator(".method-case").getByRole("button", { name: "运行", exact: true }).click();
+		await page.locator(".method-result.unasserted").waitFor();
+		await page.waitForFunction(() => document.querySelector(".scratch-save-status")?.textContent.includes("已保存"));
+		await page.reload();
+		await page.getByRole("button", { name: "Playground", exact: true }).click();
+		await page.getByRole("textbox", { name: "xs", exact: true }).waitFor();
+		assert.equal(await page.getByRole("textbox", { name: "xs", exact: true }).inputValue(), "[[1,2],[],null]");
+		assert.equal(await page.locator(".method-value input[type=checkbox]").isChecked(), true);
 		console.log("PASS browser: method selection, case add/delete, batch run, no assertion, autosave/reload, shortcut, stale results and narrow layout");
 	}
 	console.log("PASS method test HTTP validation and backward-compatible draft persistence");

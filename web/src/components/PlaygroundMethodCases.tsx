@@ -3,20 +3,20 @@ import { FiChevronRight, FiPlus, FiPlay, FiTrash2 } from "react-icons/fi";
 import type { PlaygroundRunState } from "../playground-run-store";
 import { useT } from "../i18n";
 import type { PlaygroundCase, PlaygroundMethod, PlaygroundValue } from "../types";
-import { isReferenceType, validateCases } from "../../../server/playground-methods";
+import { isJsonType, isReferenceType, validateCases, valuePlaceholder } from "../../../server/playground-methods";
 import { randomUuid } from "../uuid";
 
 export function methodErrorText(message: string, t: ReturnType<typeof useT>): string {
 	const casePrefix = /^Case (\d+): (.*)$/.exec(message);
 	if (casePrefix) return `${t("pgCase")} ${casePrefix[1]}: ${methodErrorText(casePrefix[2], t)}`;
 	const exact = {
-		"Only primitive types, boxed types, String and arrays are supported.": "pgTypesOnly",
+		"Only primitive types, boxed types, String, arrays and Lists of boxed types, String or Lists are supported.": "pgTypesOnly",
 		"Generic methods and classes are not supported.": "pgNoGenerics",
 		"Instance methods require a concrete class with a default or public no-argument constructor.": "pgConstructor",
 		"The method must have an implementation.": "pgImplementation",
 		"Provide between 1 and 50 test cases": "pgCaseCount",
 		"Parameter count does not match the method": "pgParamCount",
-		"Large integers in arrays must be quoted decimal strings": "pgLargeInteger",
+		"Large integers in arrays or Lists must be quoted decimal strings": "pgLargeInteger",
 		"char requires exactly one UTF-16 character": "pgChar",
 		"boolean requires true or false": "pgBoolean",
 		"Unsupported type: void": "pgVoidExpected",
@@ -39,7 +39,7 @@ function ValueInput({ type, value, onChange, label }: { type: string; value: Pla
 	const t = useT();
 	return <div className="method-value">
 		<label><span>{label} <code>{type}</code></span>
-			<input aria-label={label} value={value.text} disabled={value.isNull} onChange={event => onChange({ ...value, text: event.target.value })} spellCheck={false} placeholder={type.endsWith("[]") ? "[1, 2]" : type === "boolean" || type === "Boolean" ? "true / false" : ""} />
+			<input aria-label={label} value={value.text} disabled={value.isNull} onChange={event => onChange({ ...value, text: event.target.value })} spellCheck={false} placeholder={isJsonType(type) ? valuePlaceholder(type) : type === "boolean" || type === "Boolean" ? "true / false" : ""} />
 		</label>
 		{isReferenceType(type) && <label className="method-check"><input type="checkbox" checked={!!value.isNull} onChange={event => onChange({ ...value, isNull: event.target.checked })} />{t("pgNull")}</label>}
 	</div>;
@@ -89,7 +89,7 @@ export function PlaygroundMethodCases({ methods, selected, cases, results, stale
 					<span className={`method-case-status ${stale && result ? "stale" : result?.status ?? ""}`}>{stale && result ? t("pgPreviousResult") : statusLabel}</span>
 				</button>
 				{expanded && <div className="method-case-body" id={`case-${test.id}`}>
-				{method?.parameters.some(parameter => /String|\[\]/.test(parameter.type)) && <p className="playground-hint">{t("pgInputHint")}</p>}
+				{method?.parameters.some(parameter => parameter.type === "String" || isJsonType(parameter.type)) && <p className="playground-hint">{t("pgInputHint")}</p>}
 				<div className="method-parameters">
 					{test.args.map((value, i) => <ValueInput key={i} type={method?.parameters[i]?.type ?? "String"} label={method?.parameters[i]?.name || `arg${i + 1}`} value={value} onChange={next => update(index, { ...test, args: test.args.map((v, j) => j === i ? next : v) })} />)}
 					{method?.returnType !== "void" && <div className="method-expected">
