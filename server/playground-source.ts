@@ -75,6 +75,8 @@ function blankNonCode(source: string): string {
 
 const PACKAGE = /\bpackage\s+([A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*)*)\s*;/;
 const PUBLIC_TYPE = /\bpublic\s+(?:(?:final|abstract|sealed|non-sealed|strictfp|static)\s+)*(class|interface|enum|record)\s+([A-Za-z_$][\w$]*)/;
+const ANY_TYPE = /\b(?:(?:final|abstract|sealed|non-sealed|strictfp|static)\s+)*(class|interface|enum|record)\s+[A-Za-z_$]/;
+const IMPORT_LINE = /^\s*(?:import\s+(?:static\s+)?[\w$.*]+\s*;)/gm;
 
 /**
  * Java names the file after the public top-level type, so the runner has to
@@ -92,6 +94,28 @@ export function introspectJavaSource(source: string): JavaSource {
 		fileName: `${directory}${typeName}.java`,
 		mainClass: packageName ? `${packageName}.${typeName}` : typeName,
 	};
+}
+
+/**
+ * Wrap a bare-statement snippet in a `main` scaffold, jshell-style.
+ *
+ * `System.out.println("hi");` alone is not a compilation unit, but it is what
+ * a human types into a scratchpad. When the source declares no top-level type
+ * (comments and strings excluded via `blankNonCode`), imports are hoisted and
+ * the rest becomes the body of `Main.main`, declared `throws Exception` so
+ * `Thread.sleep` and friends compile unchanged. Anything that already declares
+ * a type — even package-private — is returned untouched.
+ */
+export function wrapBareStatements(source: string): string {
+	if (ANY_TYPE.test(blankNonCode(source))) return source;
+	const imports: string[] = [];
+	let body = source.replace(IMPORT_LINE, match => {
+		imports.push(match.trim());
+		return "";
+	}).replace(/^\s*\n/, "");
+	return `${imports.length ? `${imports.join("\n")}\n\n` : ""}public class Main {
+\tpublic static void main(String[] args) throws Exception {
+${body.replace(/\n/g, "\n\t")}\n\t}\n}\n`;
 }
 
 /**

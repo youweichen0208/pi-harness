@@ -219,6 +219,12 @@ try {
 		assert.equal(text(mixed.events, "stdout"), "out\n");
 		assert.equal(text(mixed.events, "stderr"), "err\n");
 
+		// Bare statements get a Main scaffold, jshell-style; imports hoist.
+		const bare = await run('import java.util.List;\n\nSystem.out.println(List.of(1, 2));');
+		assert.equal(bare.status, 200);
+		assert.equal(text(bare.events, "stdout"), "[1, 2]\n");
+		assert.equal(end(bare.events).exitCode, 0);
+
 		// A package declaration and a non-Main type name both work.
 		const packaged = await run('package demo;\npublic class Greeter { public static void main(String[] a) { System.out.println("pkg"); } }');
 		assert.equal(text(packaged.events, "stdout"), "pkg\n");

@@ -19,7 +19,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { PlaygroundEvent, PlaygroundLimits } from "./protocol.js";
 import { killPidTree } from "./process-utils.js";
-import { OutputBudget, introspectJavaSource, looksLikeMissingProjectDependency } from "./playground-source.js";
+import { OutputBudget, introspectJavaSource, looksLikeMissingProjectDependency, wrapBareStatements } from "./playground-source.js";
 import type { JdkCommands } from "./playground-jdk.js";
 
 /**
@@ -155,10 +155,13 @@ export async function runJava(options: RunJavaOptions): Promise<RunSummary> {
 	options.signal.addEventListener("abort", onAbort, { once: true });
 
 	try {
-		const source = introspectJavaSource(options.code);
+		// Bare statements (`System.out.println("hi");`) get a Main scaffold so a
+		// scratchpad line compiles; a source that declares any type is untouched.
+		const code = wrapBareStatements(options.code);
+		const source = introspectJavaSource(code);
 		const file = join(directory, source.fileName);
 		mkdirSync(dirname(file), { recursive: true });
-		writeFileSync(file, options.code);
+		writeFileSync(file, code);
 
 		const register = (child: ChildProcess) => {
 			current = child;

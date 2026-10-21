@@ -39,6 +39,7 @@
 ## 执行
 
 - 两步：`javac -d <tmp> <源文件>` → `java -Xmx<maxHeapMb>m -cp <tmp> <主类全名>`。
+- **裸语句自动包 `Main`**（jshell 风格）：源码里没有任何顶层类型声明（注释/字符串里的假声明不算）时，`import` 提到 scaffold 外、其余语句成为 `public static void main(String[] args) throws Exception` 的函数体（`throws Exception` 让 `Thread.sleep` 之类不改就能编译）。已声明任何类型（含包私有）的源码原样不动。规则在 `wrapBareStatements`（纯函数，有单测），对四个入口统一生效。
 - javac 固定以 `-J-Duser.language=en -J-Duser.country=US` 运行：诊断文本会被解析（见下）并原样展示，**不能随宿主 locale 变化**——中文 macOS 会输出 `错误: 需要<标识符>`，那条规则会静默失效。程序自身的输出不受影响。
 - 从代码解析第一个 **public 顶层类型**（`class` / `record` / `enum` / `interface`），无 public 类型时用 `Main`；**支持 `package` 声明**（写到 `<tmp>/com/x/Foo.java`，主类用全限定名）。解析必须忽略注释与字符串/文本块里的假声明。
 - **只编译单个源文件**，`-cp` 只指向 `<tmp>`：不挂工作区、不加 `--source-path`。引用项目其他类会编译失败——这是刻意选择，失败时由 `needsProject` 给出人话解释（见「传输」）。

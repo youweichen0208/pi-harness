@@ -1,5 +1,5 @@
-import { expect, it } from "vitest";
-import { OutputBudget, introspectJavaSource, looksLikeMissingProjectDependency } from "../../server/playground-source.js";
+import { describe, expect, it } from "vitest";
+import { OutputBudget, introspectJavaSource, looksLikeMissingProjectDependency, wrapBareStatements } from "../../server/playground-source.js";
 
 it("names the file after the first public top-level type", () => {
 	expect(introspectJavaSource("public class Foo { }"))
@@ -78,4 +78,40 @@ it("recognises compile errors that need the rest of the project", () => {
 	expect(looksLikeMissingProjectDependency("Main.java:5: error: cannot find symbol\n  symbol:   variable total")).toBe(false);
 	expect(looksLikeMissingProjectDependency("Main.java:1: error: ';' expected")).toBe(false);
 	expect(looksLikeMissingProjectDependency("")).toBe(false);
+});
+
+describe("wrapBareStatements", () => {
+	it("wraps bare statements in a Main scaffold", () => {
+		const wrapped = wrapBareStatements('System.out.println("hello");');
+		expect(wrapped).toContain("public class Main {");
+		expect(wrapped).toContain("public static void main(String[] args) throws Exception {");
+		expect(wrapped).toContain('System.out.println("hello");');
+	});
+
+	it("hoists imports above the scaffold", () => {
+		const wrapped = wrapBareStatements("import java.util.List;\nimport static java.lang.Math.max;\n\nList.of(1);");
+		expect(wrapped.indexOf("import java.util.List;")).toBeLessThan(wrapped.indexOf("public class Main"));
+		expect(wrapped).toContain("import static java.lang.Math.max;");
+		expect(wrapped).not.toContain("List.of(1);\n\nList");
+	});
+
+	it("leaves any real type declaration untouched, public or not", () => {
+		const source = "class Foo { public static void main(String[] a) { System.out.println(1); } }";
+		expect(wrapBareStatements(source)).toBe(source);
+		const pub = "public record Point(int x, int y) {}";
+		expect(wrapBareStatements(pub)).toBe(pub);
+	});
+
+	it("is not fooled by type words in comments or strings", () => {
+		const wrapped = wrapBareStatements('// class RedHerring\nSystem.out.println("interface NotReal");');
+		expect(wrapped).toContain("public class Main {");
+		const textBlock = 'System.out.println("""\nclass AlsoFake\n""");';
+		expect(wrapBareStatements(textBlock)).toContain("public class Main {");
+	});
+
+	it("returns the source unchanged when it declares a type after statements-in-strings only", () => {
+		// `record` used as a plain identifier must not look like a declaration.
+		const wrapped = wrapBareStatements("int record = 1;\nSystem.out.println(record);");
+		expect(wrapped).toContain("public class Main {");
+	});
 });
