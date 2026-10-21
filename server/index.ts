@@ -1058,6 +1058,8 @@ httpServer.listen(PORT, HOST, () => {
 	console.log(`    workspace   : ${CWD}`);
 	console.log(`    session dir : ${SESSION_DIR_ROOT}`);
 	console.log(`    pi SDK      : v${VERSION}`);
+	// 泄漏排查：被 PI_WEB_PKG_ROOT 重定向时，这里一眼就能看出伺服的是哪份前端。
+	console.log(`    web dist    : ${webDist}${existsSync(webDist) ? "" : " (missing)"}`);
 	console.log(`    bind        : ${HOST}:${PORT}`);
 	console.log("");
 });
