@@ -13552,8 +13552,12 @@ html.pi-desktop-darwin .compact-navigation .global-navigation { padding-top: 36p
 .scratch-page { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; padding: 16px clamp(16px, 4vw, 64px) 20px; background: var(--bg); }
 .scratch-head { display: flex; align-items: center; gap: 12px; flex: none; }
 .scratch-head h2 { margin: 0; font: 600 18px/1.4 var(--sans); color: var(--text); }
-.scratch-head .btn { margin-left: auto; }
-.scratch-save-error { font: 12px var(--sans); color: var(--red); }
+.scratch-save-status { font: 12px var(--sans); color: var(--text-faint); margin-left: auto; }
+.scratch-save-status.error { color: var(--red); }
+/* The shortcut lives next to the button instead of hiding in a hover title —
+   it is the page's main keyboard affordance. */
+.scratch-run-keys { font: 11px var(--sans); color: var(--text-faint); }
+.scratch-head .btn { margin-left: 0; }
 .scratch-editor { flex: 1; min-height: 0; width: 100%; resize: none; border: 1px solid var(--border-soft); border-radius: var(--r-md); background: var(--output-bg); color: var(--text); font: 13px/1.7 var(--mono); padding: 14px 16px; outline-offset: 0; tab-size: 4; }
 .scratch-editor:focus-visible { border-color: var(--accent); outline: none; }
 /* CodeMirror scratch editor: same surface as the old textarea, but managed by
@@ -13589,15 +13593,14 @@ html.pi-desktop-darwin .compact-navigation .global-navigation { padding-top: 36p
 /* ---- Playground method tests ---- */
 .scratch-head { flex-wrap: wrap; }
 .scratch-mode, .method-toolbar select { border: 1px solid var(--border-soft); border-radius: var(--r-md); background: var(--bg); color: var(--text); padding: 6px 8px; font: inherit; max-width: 100%; }
-.scratch-page.method-mode { overflow: auto; }
-.scratch-page.method-mode .scratch-editor-cm { flex: none; height: 320px; }
+.scratch-page.method-mode { padding: 16px 20px 20px; overflow: auto; }
 .scratch-page.method-mode .playground-result { max-height: none; }
 .scratch-example { align-self: flex-start; }
 .method-tests { flex: none; display: flex; flex-direction: column; gap: 10px; }
 .method-toolbar { display: flex; align-items: end; gap: 12px; flex-wrap: wrap; }
 .method-toolbar > label { flex: 1; min-width: 180px; display: flex; flex-direction: column; gap: 6px; color: var(--text-muted); font-size: 12px; }
 .method-toolbar select { font-family: var(--mono); }
-.method-case { min-width: 0; margin: 0; padding: 12px; border: 1px solid var(--border-soft); border-radius: var(--r-md); background: var(--bg); }
+.method-case { min-width: 0; margin: 0; border-bottom: 1px solid var(--border-soft); background: var(--bg); }
 .method-parameters { display: flex; flex-wrap: wrap; align-items: start; gap: 12px; }
 .method-value, .method-expected { flex: 1; min-width: 150px; }
 .method-value > label:first-child { display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
@@ -13617,4 +13620,90 @@ html.pi-desktop-darwin .compact-navigation .global-navigation { padding-top: 36p
 .method-result pre { margin: 6px 0; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--mono); }
 @media (max-width: 600px) {
 	.method-parameters { flex-direction: column; align-items: stretch; }
+	.scratch-head .scratch-run-keys { display: none; }
+}
+
+.scratch-head .btn.primary { background: var(--action); border-color: var(--action); color: var(--action-fg); }
+
+/* Side-by-side scratch workspace; the code stays visible while cases scroll. */
+.scratch-workspace { flex: 1; min-height: 0; min-width: 0; display: flex; }
+.scratch-code-pane { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.scratch-pane-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; color: var(--text-muted); font-size: 12px; border-bottom: 1px solid var(--border-soft); }
+.scratch-pane-head strong { font-size: 13px; font-weight: 500; color: var(--text); }
+.scratch-workspace { border: 1px solid var(--border-soft); border-radius: var(--r-md); overflow: hidden; }
+.scratch-workspace .scratch-editor-cm { border: 0; border-radius: 0; }
+.method-mode .scratch-workspace { display: grid; grid-template-columns: minmax(0, 3fr) minmax(350px, 2fr); }
+.scratch-test-pane { min-width: 0; min-height: 0; overflow: auto; border-left: 1px solid var(--border-soft); }
+.scratch-test-pane > .scratch-pane-head { background: var(--bg-elev); }
+.scratch-test-pane .method-tests { gap: 0; }
+.scratch-test-pane .method-toolbar { padding: 16px; gap: 10px; }
+.scratch-test-pane .method-toolbar > label { min-width: 0; }
+.scratch-test-pane .method-toolbar select { width: 100%; font-size: 12px; }
+.scratch-test-pane .method-toolbar .btn { flex: none; }
+.scratch-test-pane .method-tests > :is(.playground-hint, .playground-notice) { margin: 0; padding: 12px 16px; font-size: 13px; line-height: 1.6; }
+.scratch-test-pane .playground-result { border: 0; border-radius: 0; border-top: 1px solid var(--border-soft); }
+.scratch-test-pane .playground-result-head { flex-wrap: wrap; padding: 12px 16px; }
+.scratch-test-pane .playground-meta { color: var(--text-muted); }
+.method-case-toggle { width: 100%; display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 12px 16px; border: 0; background: transparent; color: var(--text); text-align: left; font: 13px var(--sans); cursor: pointer; transition: background 120ms ease; }
+.method-case-toggle:hover { background: var(--bg-elev); }
+.method-case-toggle > svg { flex: none; transition: transform 140ms ease; color: var(--text-muted); }
+.method-case-toggle[aria-expanded="true"] > svg { transform: rotate(90deg); }
+.method-case-toggle > span:first-of-type { flex: none; }
+.method-case-toggle > code { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); font: 12px var(--mono); }
+.method-case-status { flex: none; font-size: 12px; color: var(--text-muted); }
+.method-case-status.passed { color: var(--green); }
+.method-case-status.failed, .method-case-status.error { color: var(--red); }
+.method-case-status.stale { color: var(--yellow-fg); }
+.method-case-status.running { color: var(--accent); }
+.method-case-body { padding: 0 16px 16px; animation: scratch-enter 140ms ease-out; }
+.method-case-body > .playground-hint { margin-bottom: 14px; line-height: 1.6; color: var(--text-muted); }
+.method-case-body .method-parameters { gap: 14px; }
+.method-case-body .method-value { min-width: 110px; }
+.method-case-body .method-expected { flex-basis: 100%; }
+.method-case-body .method-case-actions { margin: 16px 0; justify-content: flex-start; }
+.method-case-body .method-validation { flex-basis: 100%; line-height: 1.6; }
+.method-case-body .method-result { font-size: 13px; }
+.method-case-body .method-result pre { line-height: 1.6; }
+.scratch-example { margin: 12px 16px; }
+.scratch-head .btn { transition: transform 100ms ease, background 120ms ease; }
+.scratch-head .btn:active:not(:disabled) { transform: translateY(1px); }
+.scratch-workspace { animation: scratch-enter 180ms ease-out; }
+@keyframes scratch-enter { from { opacity: .6; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
+@media (max-width: 1100px) {
+	.scratch-page.method-mode { overflow: auto; }
+	.method-mode .scratch-workspace { flex: none; display: flex; flex-direction: column; overflow: visible; }
+	.method-mode .scratch-code-pane { flex: none; height: 340px; }
+	.scratch-test-pane { overflow: visible; border-left: 0; border-top: 1px solid var(--border-soft); }
+}
+@media (max-width: 600px) {
+	.scratch-page.method-mode { padding: 12px; }
+	.scratch-head { gap: 8px; }
+	.scratch-head h2 { font-size: 16px; }
+	.scratch-save-status { order: 4; flex-basis: 100%; }
+	.method-case-body .method-value { width: 100%; min-width: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+	.scratch-workspace, .method-case-body { animation: none; }
+	.scratch-head .btn, .method-case-toggle, .method-case-toggle > svg { transition: none; }
+	.scratch-head .btn:active:not(:disabled) { transform: none; }
+}
+
+.scratch-run-summary { padding: 0 16px 12px; line-height: 1.6; }
+.scratch-page { container-type: inline-size; }
+@container (max-width: 850px) {
+	.method-mode .scratch-workspace { flex: none; display: flex; flex-direction: column; overflow: visible; }
+	.method-mode .scratch-code-pane { flex: none; height: 340px; }
+	.scratch-test-pane { overflow: visible; border-left: 0; border-top: 1px solid var(--border-soft); }
+}
+
+/* Use the existing dark syntax palette within the scratch editor. */
+:root[data-appearance="dark"] .scratch-editor-cm {
+	--code-keyword: var(--wiki-code-keyword);
+	--code-title: var(--wiki-code-keyword);
+	--code-string: var(--wiki-code-string);
+	--code-number: var(--wiki-code-number);
+	--code-comment: var(--wiki-code-comment);
+}
+@container (max-width: 500px) {
+	.method-mode .scratch-code-pane { height: 260px; }
 }

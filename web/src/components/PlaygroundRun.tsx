@@ -16,7 +16,7 @@ import { CopyButton } from "./copy-button";
  * component is re-mounted when its message moves from the in-flight slot into
  * the settled list, and a Run must survive that.
  */
-export function PlaygroundResult({ runKey: key, onSendToPi, stale = false }: { runKey: string; onSendToPi?: (text: string) => void; stale?: boolean }) {
+export function PlaygroundResult({ runKey: key, onSendToPi, stale = false, showCases = true }: { runKey: string; onSendToPi?: (text: string) => void; stale?: boolean; showCases?: boolean }) {
 	const t = useT();
 	const [expanded, setExpanded] = useState(true);
 	const run = usePlaygroundRun(key);
@@ -27,16 +27,17 @@ export function PlaygroundResult({ runKey: key, onSendToPi, stale = false }: { r
 	return <div className="playground-result" role="region" aria-label={t("playgroundRun")}>
 		<button type="button" className="playground-result-head" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>
 			<span className={`playground-dot ${running ? "running" : failed ? "failed" : "ok"}`} aria-hidden="true" />
-			<strong>{t(running ? "playgroundRunning" : "playgroundRun")}</strong>
+			<strong>{t(running ? "playgroundRunning" : run.stopped ? "pgRunStopped" : failed ? "pgRunFailed" : "pgRunFinished")}</strong>
 			{stale && <span className="playground-badge stale">{t(run.cases.length ? "pgChanged" : "playgroundCodeChanged")}</span>}
 			{run.timedOut && <span className="playground-badge">{t("playgroundTimedOut")}</span>}
 			{run.truncated && <span className="playground-badge">{t("playgroundTruncated")}</span>}
 			{!running && !run.error && <span className="playground-meta">{t("playgroundExitCode")} {run.exitCode ?? "-"} · {t("playgroundDuration")} {run.durationMs}ms</span>}
 		</button>
+		{!showCases && run.cases.length > 0 && <div className="method-summary scratch-run-summary" aria-live="polite">{t("pgPassed")} {run.cases.filter(c => c.status === "passed").length} · {t("pgFailed")} {run.cases.filter(c => c.status === "failed").length} · {t("pgError")} {run.cases.filter(c => c.status === "error").length} · {t("pgUnasserted")} {run.cases.filter(c => c.status === "unasserted").length}</div>}
 		{expanded && <>
 			{run.error && <div className="playground-notice" role="alert">{run.errorStatus === 429 ? t("playgroundBusy") : run.error}</div>}
 			{run.needsProject && <div className="playground-hint" role="note">{t("playgroundSingleFileOnly")}</div>}
-			{run.cases.length > 0 && <section className="method-results" aria-live="polite">
+			{showCases && run.cases.length > 0 && <section className="method-results" aria-live="polite">
 				<div className="method-summary">{t("pgPassed")} {run.cases.filter(c => c.status === "passed").length} · {t("pgFailed")} {run.cases.filter(c => c.status === "failed").length} · {t("pgError")} {run.cases.filter(c => c.status === "error").length} · {t("pgUnasserted")} {run.cases.filter(c => c.status === "unasserted").length} · {t("pgSkipped")} {run.cases.filter(c => c.status === "skipped").length}</div>
 				{run.cases.map((result, index) => <div className={`method-result ${result.status}`} key={result.id}>
 					<strong>{t("pgCase")} {index + 1} · {t(({ passed: "pgPassed", failed: "pgFailed", error: "pgError", unasserted: "pgUnasserted", skipped: "pgSkipped", pending: "pgPending", running: "pgRunning" } as const)[result.status])}</strong>

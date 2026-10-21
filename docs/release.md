@@ -1,5 +1,9 @@
 # 发布流程
 
+## 1.3.1 恢复 Playground 并排调试界面
+
+按用户要求恢复 Playground 并排编辑／测试、折叠用例与内联结果、自动保存状态及主题适配；主导航与聊天界面保持原样，Wiki 宽屏居中修复保留。版本同步 1.3.1，GitHub 三平台发布；同一提交 CI 和全部打包检查通过后公开，发布说明见 `.github/release-notes/v1.3.1.md`。
+
 ## 1.3.0 Java Playground 与 Wiki 宽屏修复
 
 发布 Java Playground 全部入口、public 方法参数注入与测试用例、草稿自动保存及 Java 编辑辅助；包含回复长度提示、测试环境隔离与 Wiki 宽屏居中修复。此前视觉重构已撤回。版本同步为 1.3.0；SDK / pi-ai 保持 1.2.0，协议 v43 不变。本次仅发布 GitHub 三平台桌面 Release，不发布 npm（npm 旧编号线高于此版本）。说明见 `.github/release-notes/v1.3.0.md`；同一提交 CI、三平台打包与附件核对通过后公开。
