@@ -21,14 +21,14 @@ export function PlaygroundResult({ runKey: key, onSendToPi, stale = false }: { r
 	const [expanded, setExpanded] = useState(true);
 	const run = usePlaygroundRun(key);
 	const running = run.phase === "running";
-	const output = `${run.stdout}${run.stderr}`;
-	const failed = !!run.error || run.timedOut || run.truncated || run.compileError || (run.exitCode !== null && run.exitCode !== 0);
+	const output = `${run.cases.length ? JSON.stringify(run.cases, null, 2) + "\n" : ""}${run.stdout}${run.stderr}`;
+	const failed = run.cases.some(result => result.status === "failed" || result.status === "error") || !!run.error || run.timedOut || run.truncated || run.compileError || (run.exitCode !== null && run.exitCode !== 0);
 
 	return <div className="playground-result" role="region" aria-label={t("playgroundRun")}>
 		<button type="button" className="playground-result-head" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>
 			<span className={`playground-dot ${running ? "running" : failed ? "failed" : "ok"}`} aria-hidden="true" />
 			<strong>{t(running ? "playgroundRunning" : "playgroundRun")}</strong>
-			{stale && <span className="playground-badge stale">{t("playgroundCodeChanged")}</span>}
+			{stale && <span className="playground-badge stale">{t(run.cases.length ? "pgChanged" : "playgroundCodeChanged")}</span>}
 			{run.timedOut && <span className="playground-badge">{t("playgroundTimedOut")}</span>}
 			{run.truncated && <span className="playground-badge">{t("playgroundTruncated")}</span>}
 			{!running && !run.error && <span className="playground-meta">{t("playgroundExitCode")} {run.exitCode ?? "-"} · {t("playgroundDuration")} {run.durationMs}ms</span>}
@@ -36,6 +36,16 @@ export function PlaygroundResult({ runKey: key, onSendToPi, stale = false }: { r
 		{expanded && <>
 			{run.error && <div className="playground-notice" role="alert">{run.errorStatus === 429 ? t("playgroundBusy") : run.error}</div>}
 			{run.needsProject && <div className="playground-hint" role="note">{t("playgroundSingleFileOnly")}</div>}
+			{run.cases.length > 0 && <section className="method-results" aria-live="polite">
+				<div className="method-summary">{t("pgPassed")} {run.cases.filter(c => c.status === "passed").length} · {t("pgFailed")} {run.cases.filter(c => c.status === "failed").length} · {t("pgError")} {run.cases.filter(c => c.status === "error").length} · {t("pgUnasserted")} {run.cases.filter(c => c.status === "unasserted").length} · {t("pgSkipped")} {run.cases.filter(c => c.status === "skipped").length}</div>
+				{run.cases.map((result, index) => <div className={`method-result ${result.status}`} key={result.id}>
+					<strong>{t("pgCase")} {index + 1} · {t(({ passed: "pgPassed", failed: "pgFailed", error: "pgError", unasserted: "pgUnasserted", skipped: "pgSkipped", pending: "pgPending", running: "pgRunning" } as const)[result.status])}</strong>
+					<span className="playground-meta">{result.durationMs}ms</span>
+					{"actual" in result && result.actual !== undefined && <pre>{t("pgActual")}: {result.actual}</pre>}
+					{"expected" in result && result.expected !== undefined && <pre>{t("pgExpectedValue")}: {result.expected}</pre>}
+					{"error" in result && result.error && <pre>{result.error}</pre>}
+				</div>)}
+			</section>}
 			{run.stdout && <section className="playground-stream"><h4>{t("playgroundStdout")}</h4><pre>{run.stdout}</pre></section>}
 			{run.stderr && <section className="playground-stream stderr"><h4>{t("playgroundStderr")}</h4><pre>{run.stderr}</pre></section>}
 			{!running && !run.error && (

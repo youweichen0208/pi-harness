@@ -44,7 +44,7 @@ SDK 与 pi-ai 精确锁定 1.2.0，不应用本项目的 SDK 补丁。Codemode �
 系统提示词：修改分段来源、原生文件编辑或重载时，读取 `docs/architecture-system-prompt.md`。
 Extensions：修改内置扩展清单/状态、包安装、启停、更新、作用域迁移、目录浏览或单文件编辑时，读取 `docs/architecture-extensions.md`。
 Codemode 卡片与 MCP/Codemode 设置遵循 15a/15b 设计；状态、项目覆盖、费用及输出限制读取 `docs/architecture-plugins.md`。
-Playground：修改 Java 代码块运行入口、执行限制、JDK 探测或总开关时，读取 `docs/architecture-playground.md`；默认关闭、明确非沙箱、结果不进模型上下文。
+Playground：修改 Java 代码块运行入口、草稿页 public 方法测试／用例保存、执行限制、JDK 探测或总开关时，读取 `docs/architecture-playground.md`；默认关闭、明确非沙箱、结果不进模型上下文。
 工程上下文：修改跨仓来源、OpenViking 接入或本地评测时，读取 `docs/engineering-context.md`；先验证检索收益，再增加产品界面。
 
 SDK 生命周期：以 `agent_settled` 判定整个任务结束，`agent_end` 只表示一次循环结束。修改队列、纠正、压缩/重试状态、扩展 UI 对话隔离或工具完整输出下载前读 `docs/architecture-core.md`；修改桌面扩展子进程或打包前读 `docs/deployment.md`。

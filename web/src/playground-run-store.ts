@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { withToken } from "./auth-token";
 import { getClientId } from "./use-chat";
-import type { PlaygroundEvent } from "./types";
+import type { PlaygroundEvent, PlaygroundTests, PlaygroundCaseResult } from "./types";
 
 /**
  * Run state for the Playground, kept outside React.
@@ -17,6 +17,7 @@ import type { PlaygroundEvent } from "./types";
 
 export interface PlaygroundRunState {
 	phase: "running" | "done";
+	cases: (PlaygroundCaseResult | { id: string; status: "pending" | "running"; durationMs: number })[];
 	stdout: string;
 	stderr: string;
 	exitCode: number | null;
@@ -32,7 +33,7 @@ export interface PlaygroundRunState {
 	errorStatus?: number;
 }
 
-const IDLE: PlaygroundRunState = Object.freeze({ phase: "done", stdout: "", stderr: "", exitCode: null, durationMs: 0, compileError: false, needsProject: false, timedOut: false, truncated: false, stopped: false });
+const IDLE: PlaygroundRunState = Object.freeze({ phase: "done", cases: [], stdout: "", stderr: "", exitCode: null, durationMs: 0, compileError: false, needsProject: false, timedOut: false, truncated: false, stopped: false });
 
 interface Entry {
 	state: PlaygroundRunState;
@@ -50,7 +51,11 @@ function ensure(key: string): Entry {
 		entry = { state: IDLE, controller: null, listeners: new Set() };
 		runs.set(key, entry);
 		// Map preserves insertion order, so the oldest entry is the first key.
-		while (runs.size > MAX_ENTRIES) runs.delete(runs.keys().next().value!);
+		while (runs.size > MAX_ENTRIES) {
+			const victim = [...runs].find(([candidate, value]) => candidate !== key && value.state.phase !== "running" && !value.listeners.size);
+			if (!victim) break;
+			runs.delete(victim[0]);
+		}
 	}
 	return entry;
 }
@@ -84,19 +89,20 @@ export function stopRun(key: string): void {
 	if (!entry?.controller) return;
 	entry.controller.abort();
 	entry.controller = null;
-	entry.state = { ...entry.state, phase: "done", stopped: true };
+	entry.state = { ...entry.state, phase: "done", stopped: true, cases: entry.state.cases.map(c => c.status === "pending" || c.status === "running" ? { ...c, status: "skipped" } : c) };
 	emit(entry);
 }
 
-export async function startRun(key: string, code: string): Promise<void> {
+export async function startRun(key: string, code: string, tests?: PlaygroundTests): Promise<void> {
 	const entry = ensure(key);
 	entry.controller?.abort();
 	const controller = new AbortController();
 	entry.controller = controller;
-	entry.state = { ...IDLE, phase: "running" };
+	entry.state = { ...IDLE, phase: "running", cases: tests?.cases.map(c => ({ id: c.id, status: "pending", durationMs: 0 })) ?? [] };
 	emit(entry);
 
 	const patch = (change: Partial<PlaygroundRunState>) => {
+		if (entry.controller !== controller || controller.signal.aborted) return;
 		entry.state = { ...entry.state, ...change };
 		emit(entry);
 	};
@@ -104,7 +110,7 @@ export async function startRun(key: string, code: string): Promise<void> {
 		const response = await fetch(withToken("/api/playground/run"), {
 			method: "POST",
 			headers: { "Content-Type": "application/json", "x-pi-client": getClientId() },
-			body: JSON.stringify({ code }),
+			body: JSON.stringify({ code, tests }),
 			signal: controller.signal,
 		});
 		if (!response.ok || !response.body) {
@@ -130,7 +136,9 @@ export async function startRun(key: string, code: string): Promise<void> {
 				} catch {
 					continue;
 				}
-				if (event.type === "out") patch(event.stream === "stdout" ? { stdout: entry.state.stdout + event.text } : { stderr: entry.state.stderr + event.text });
+				if (event.type === "case_start") patch({ cases: entry.state.cases.map(c => c.id === event.id ? { ...c, status: "running" } : c) });
+				else if (event.type === "case_result") patch({ cases: entry.state.cases.map(c => c.id === event.result.id ? event.result : c) });
+				else if (event.type === "out") patch(event.stream === "stdout" ? { stdout: entry.state.stdout + event.text } : { stderr: entry.state.stderr + event.text });
 				else if (event.type === "end") patch({ phase: "done", exitCode: event.exitCode, durationMs: event.durationMs, compileError: event.compileError, needsProject: event.needsProject, timedOut: event.timedOut, truncated: event.truncated });
 				else if (event.type === "error") patch({ phase: "done", error: event.message });
 			}
@@ -142,6 +150,9 @@ export async function startRun(key: string, code: string): Promise<void> {
 		if (controller.signal.aborted) return; // Stop already recorded the state.
 		patch({ phase: "done", error: error instanceof Error ? error.message : "Run failed" });
 	} finally {
-		if (entry.controller === controller) entry.controller = null;
+		if (entry.controller === controller) {
+			patch({ cases: entry.state.cases.map(c => c.status === "pending" || c.status === "running" ? { ...c, status: "skipped" } : c) });
+			entry.controller = null;
+		}
 	}
 }

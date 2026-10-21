@@ -1,5 +1,9 @@
 # 发布流程
 
+## 1.3.0 Java Playground 与 Wiki 宽屏修复
+
+发布 Java Playground 全部入口、public 方法参数注入与测试用例、草稿自动保存及 Java 编辑辅助；包含回复长度提示、测试环境隔离与 Wiki 宽屏居中修复。此前视觉重构已撤回。版本同步为 1.3.0；SDK / pi-ai 保持 1.2.0，协议 v43 不变。本次仅发布 GitHub 三平台桌面 Release，不发布 npm（npm 旧编号线高于此版本）。说明见 `.github/release-notes/v1.3.0.md`；同一提交 CI、三平台打包与附件核对通过后公开。
+
 ## 1.2.2 SSH 终端标记恢复与 Wiki 媒体预览
 
 修复 #120：手动终端执行过替换 `PS1` 的命令（`sudo`/`su`、子 shell、source 过 rc 文件）后不可见提示符标记丢失，agent 的 `remote_command` 此后永远报「手动终端正忙」，即使 shell 空闲；现在 `execute()` 在标记缺失时先探测并重新安装标记，用户有未提交输入或全屏程序占用备用屏时跳过探测，超时不发 Ctrl+C，探测输出自行捕获不外泄。修复 #119：Wiki 目录树点击图片、PDF 或源码文件不再尝试启动按文档会话（非文档路径只切换只读预览、复用当前会话、保留项目选择、跳过中断确认），`isWikiDocumentPath` 在服务端与客户端共用；宽屏下文档／大纲组合贴近文件树，左侧留白上限 240px。版本同步为 1.2.2；SDK / pi-ai 保持 1.2.0，协议 v43 不变。本次仅发布 GitHub 三平台桌面 Release，不发布 npm（npm 上 1.3.1 高于该编号）。说明见 `.github/release-notes/v1.2.2.md`；同一提交 CI、三平台打包回归及附件核对通过后公开。

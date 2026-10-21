@@ -1558,8 +1558,35 @@ export interface PlaygroundConfigInput { enabled: boolean; timeoutMs: number; ma
 export type PlaygroundConfigPatch = Partial<PlaygroundConfigInput>;
 export interface PlaygroundErrorResponse { error: string }
 /** The scratch draft of the left-panel Playground page; one per install. */
-export interface PlaygroundScratch { content: string; updatedAt: number }
+export interface PlaygroundValue { text: string; isNull?: boolean }
+export interface PlaygroundCase { id: string; args: PlaygroundValue[]; expected?: PlaygroundValue }
+export interface PlaygroundMethod {
+	id: string;
+	className: string;
+	name: string;
+	returnType: string;
+	parameters: { name: string; type: string }[];
+	isStatic: boolean;
+	unsupported?: string;
+}
+export interface PlaygroundTests { methodId: string; cases: PlaygroundCase[] }
+export interface PlaygroundTestConfig {
+	mode: "program" | "methods";
+	selectedMethod: string;
+	casesByMethod: Record<string, PlaygroundCase[]>;
+}
+export interface PlaygroundCaseResult {
+	id: string;
+	status: "passed" | "failed" | "error" | "unasserted" | "skipped";
+	actual?: string;
+	expected?: string;
+	error?: string;
+	durationMs: number;
+}
+export interface PlaygroundScratch { content: string; updatedAt: number; tests?: PlaygroundTestConfig }
 export type PlaygroundEvent =
+	| { type: "case_start"; id: string }
+	| { type: "case_result"; result: PlaygroundCaseResult }
 	| { type: "start"; runId: string }
 	| { type: "out"; stream: "stdout" | "stderr"; text: string }
 	| { type: "end"; exitCode: number | null; durationMs: number; truncated: boolean; timedOut: boolean; compileError: boolean; needsProject: boolean }

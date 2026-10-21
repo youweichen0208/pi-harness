@@ -16,9 +16,10 @@ import { writeFileAtomic } from "./private-file.js";
 import { join } from "node:path";
 import type { Express } from "express";
 import type { IncomingMessage } from "node:http";
-import type { PlaygroundConfigPatch, PlaygroundEvent, PlaygroundScratch, PlaygroundStatus } from "./protocol.js";
+import type { PlaygroundConfigPatch, PlaygroundEvent, PlaygroundScratch, PlaygroundStatus, PlaygroundTests, PlaygroundTestConfig } from "./protocol.js";
 import { PlaygroundConfigStore, playgroundEnvLock } from "./playground-config.js";
 import { createJdkProbe, resolveHostJdk, type JdkProbe } from "./playground-jdk.js";
+import { discoverJavaMethods, isCaseList, isTestConfig, validateCases } from "./playground-methods.js";
 import { ConcurrencyGate, runJava } from "./playground-run.js";
 
 /** Source larger than this is refused before anything is written to disk. */
@@ -33,16 +34,16 @@ class PlaygroundScratchStore {
 	constructor(private readonly file: string) {}
 	read(): PlaygroundScratch {
 		try {
-			const raw = JSON.parse(readFileSync(this.file, "utf8")) as { content?: unknown };
-			return { content: typeof raw.content === "string" ? raw.content : "", updatedAt: typeof (raw as { updatedAt?: unknown }).updatedAt === "number" ? (raw as { updatedAt: number }).updatedAt : 0 };
+			const raw = JSON.parse(readFileSync(this.file, "utf8")) as { content?: unknown; tests?: unknown };
+			return { ...(isTestConfig(raw.tests) ? { tests: raw.tests } : {}), content: typeof raw.content === "string" ? raw.content : "", updatedAt: typeof (raw as { updatedAt?: unknown }).updatedAt === "number" ? (raw as { updatedAt: number }).updatedAt : 0 };
 		} catch {
 			// Missing or corrupt file: an empty draft, never a crash. Fail-open only
 			// loses scratch text, which is the least valuable thing here.
 			return { content: "", updatedAt: 0 };
 		}
 	}
-	write(content: string): PlaygroundScratch {
-		const doc = { content, updatedAt: Date.now() };
+	write(content: string, tests?: PlaygroundTestConfig): PlaygroundScratch {
+		const doc = { content, tests: tests ?? this.read().tests, updatedAt: Date.now() };
 		writeFileAtomic(this.file, JSON.stringify(doc));
 		return doc;
 	}
@@ -157,15 +158,15 @@ export function installPlaygroundRoutes(app: Express, options: PlaygroundRouteOp
 			res.sendStatus(405);
 			return;
 		}
-		// Strict shape, same reasoning as the config write: exactly `content`, a
-		// string, within the source cap. An empty string is a valid clear.
+		// Content is required; tests are an optional bounded configuration.
+		// Legacy content-only writes preserve tests. Empty content is a valid clear.
 		const body = req.body as Record<string, unknown> | undefined;
-		if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).length !== 1 || typeof body.content !== "string" || Buffer.byteLength(body.content, "utf8") > MAX_SOURCE_BYTES) {
+		if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).some(key => key !== "content" && key !== "tests") || (body.tests !== undefined && !isTestConfig(body.tests)) || typeof body.content !== "string" || Buffer.byteLength(body.content, "utf8") > MAX_SOURCE_BYTES) {
 			res.status(400).json({ error: "Invalid scratch" });
 			return;
 		}
 		try {
-			res.json(scratchStore.write(body.content));
+			res.json(scratchStore.write(body.content, body.tests as PlaygroundTestConfig | undefined));
 		} catch {
 			res.status(500).json({ error: "Playground scratch failed" });
 		}
@@ -188,6 +189,18 @@ export function installPlaygroundRoutes(app: Express, options: PlaygroundRouteOp
 		if (typeof code !== "string" || !code.trim() || Buffer.byteLength(code, "utf8") > MAX_SOURCE_BYTES) {
 			res.status(400).json({ error: "Invalid code" });
 			return;
+		}
+		const tests = (req.body as { tests?: PlaygroundTests }).tests;
+		if (tests !== undefined) {
+			try {
+				if (!tests || typeof tests !== "object" || typeof tests.methodId !== "string" || !isCaseList(tests.cases) || Buffer.byteLength(JSON.stringify(tests)) > MAX_SOURCE_BYTES) throw new Error("Invalid test cases");
+				const method = discoverJavaMethods(code).methods.find(m => m.id === tests.methodId);
+				if (!method) throw new Error("The selected method no longer exists");
+				validateCases(method, tests.cases);
+			} catch (error) {
+				res.status(400).json({ error: error instanceof Error ? error.message : "Invalid test cases" });
+				return;
+			}
 		}
 		const jdk = await probe.get();
 		if (!jdk.available) {
@@ -228,6 +241,7 @@ export function installPlaygroundRoutes(app: Express, options: PlaygroundRouteOp
 		try {
 			const summary = await runJava({
 				code,
+				tests,
 				limits: { timeoutMs: config.timeoutMs, maxOutputBytes: config.maxOutputBytes, maxHeapMb: config.maxHeapMb },
 				jdk: commands,
 				onEvent: send,

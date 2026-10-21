@@ -14,12 +14,14 @@
 
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import type { PlaygroundEvent, PlaygroundLimits } from "./protocol.js";
+import type { PlaygroundEvent, PlaygroundLimits, PlaygroundTests, PlaygroundCaseResult } from "./protocol.js";
 import { killPidTree } from "./process-utils.js";
 import { OutputBudget, introspectJavaSource, looksLikeMissingProjectDependency, wrapBareStatements } from "./playground-source.js";
+import { discoverJavaMethods, validateCases } from "./playground-methods.js";
+import { methodRunnerSource } from "./playground-method-runner.js";
 import type { JdkCommands } from "./playground-jdk.js";
 
 /**
@@ -55,6 +57,7 @@ export class ConcurrencyGate {
 
 export interface RunJavaOptions {
 	code: string;
+	tests?: PlaygroundTests;
 	limits: PlaygroundLimits;
 	jdk: JdkCommands;
 	onEvent: (event: PlaygroundEvent) => void;
@@ -114,6 +117,9 @@ function spawnPhase(
 		child.stdout?.on("data", feed("stdout"));
 		child.stderr?.on("data", feed("stderr"));
 		child.on("error", () => finish(null));
+		// Detached descendants belong to this execution even if the parent exits
+		// successfully. On POSIX the process group survives its leader.
+		child.on("exit", () => { if (child.pid && process.platform !== "win32") killPidTree(child.pid); });
 		child.on("close", code => finish(code));
 	});
 }
@@ -124,7 +130,8 @@ export async function runJava(options: RunJavaOptions): Promise<RunSummary> {
 	const budget = new OutputBudget(options.limits.maxOutputBytes);
 	const startedAt = Date.now();
 	let timedOut = false;
-	let aborted = false;
+	let aborted = options.signal.aborted;
+	const completedCases = new Set<string>();
 	let compileError = false;
 	let exitCode: number | null = null;
 	let current: ChildProcess | undefined;
@@ -157,21 +164,65 @@ export async function runJava(options: RunJavaOptions): Promise<RunSummary> {
 	try {
 		// Bare statements (`System.out.println("hi");`) get a Main scaffold so a
 		// scratchpad line compiles; a source that declares any type is untouched.
-		const code = wrapBareStatements(options.code);
-		const source = introspectJavaSource(code);
+		const discovered = options.tests ? discoverJavaMethods(options.code) : undefined;
+		const method = discovered?.methods.find(m => m.id === options.tests?.methodId);
+		if (options.tests) {
+			if (!method) throw new Error("The selected method no longer exists");
+			validateCases(method, options.tests.cases);
+		}
+		const code = discovered?.code ?? wrapBareStatements(options.code);
+		const source = discovered ? { fileName: discovered.fileName, mainClass: "" } : introspectJavaSource(code);
 		const file = join(directory, source.fileName);
 		mkdirSync(dirname(file), { recursive: true });
 		writeFileSync(file, code);
 
 		const register = (child: ChildProcess) => {
 			current = child;
+			if (shouldStop()) stop();
 		};
+		const runnerName = `PiTest_${runId.replace(/-/g, "")}`;
+		const sources = [file];
+		if (method && options.tests) {
+			const runnerFile = join(dirname(file), `${runnerName}.java`);
+			writeFileSync(runnerFile, methodRunnerSource(runnerName, method, options.tests.cases, options.limits.maxOutputBytes));
+			sources.push(runnerFile);
+		}
 		// javac's diagnostics are parsed (`looksLikeMissingProjectDependency`) and shown
 		// verbatim, so they must not change with the host locale: a Chinese macOS
 		// emits `错误: 需要<标识符>`, which would silently disable that detection.
-		const compiled = await spawnPhase(options.jdk.javac, ["-J-Duser.language=en", "-J-Duser.country=US", "-d", directory, file], { cwd: directory, forward, shouldStop, register });
+		const compiled = shouldStop() ? null : await spawnPhase(options.jdk.javac, ["-J-Duser.language=en", "-J-Duser.country=US", "-proc:none", "-cp", directory, "-sourcepath", directory, "-d", directory, ...sources], { cwd: directory, forward, shouldStop, register });
 		if (!shouldStop()) {
 			if (compiled !== 0) compileError = true;
+			else if (method && options.tests) {
+				let failed = false;
+				const packagePrefix = method.className.includes(".") ? method.className.slice(0, method.className.lastIndexOf(".") + 1) : "";
+				for (const [index, test] of options.tests.cases.entries()) {
+					if (shouldStop()) break;
+					options.onEvent({ type: "case_start", id: test.id });
+					const began = Date.now();
+					const resultFile = join(directory, `result-${index}`);
+					const code = await spawnPhase(options.jdk.java, [`-Xmx${options.limits.maxHeapMb}m`, "-cp", directory, packagePrefix + runnerName, String(index), resultFile], { cwd: directory, forward, shouldStop, register });
+					if (shouldStop()) break;
+					let result: PlaygroundCaseResult = { id: test.id, status: "error", error: `Process exited without a result (exit ${code})`, durationMs: Date.now() - began };
+					try {
+						if (statSync(resultFile).size > options.limits.maxOutputBytes) budget.push(" ".repeat(options.limits.maxOutputBytes + 1));
+						else {
+							const raw = readFileSync(resultFile, "utf8");
+							if (raw.startsWith("overflow")) budget.push(" ".repeat(options.limits.maxOutputBytes + 1));
+							else {
+								budget.push(raw);
+								const [status, actual, expected, error] = raw.split("\n");
+								if (code === 0 && ["passed", "failed", "error", "unasserted"].includes(status) && error !== undefined) result = { id: test.id, status: status as PlaygroundCaseResult["status"], actual: Buffer.from(actual, "base64").toString("utf8"), expected: test.expected ? Buffer.from(expected, "base64").toString("utf8") : undefined, error: error ? Buffer.from(error, "base64").toString("utf8") : undefined, durationMs: Date.now() - began };
+							}
+						}
+					} catch { /* Missing output (System.exit, VM failure) is a case error. */ }
+					if (shouldStop()) break;
+					failed ||= result.status === "failed" || result.status === "error";
+					completedCases.add(test.id);
+					options.onEvent({ type: "case_result", result });
+				}
+				exitCode = shouldStop() ? null : failed ? 1 : 0;
+			}
 			else exitCode = await spawnPhase(options.jdk.java, [`-Xmx${options.limits.maxHeapMb}m`, "-cp", directory, source.mainClass], { cwd: directory, forward, shouldStop, register });
 		}
 	} catch (error) {
@@ -182,7 +233,14 @@ export async function runJava(options: RunJavaOptions): Promise<RunSummary> {
 		rmSync(directory, { recursive: true, force: true });
 	}
 
-	const summary: RunSummary = { runId, durationMs: Date.now() - startedAt, exitCode, compileError, needsProject: compileError && looksLikeMissingProjectDependency(stderrTail), timedOut, truncated: budget.exceeded, aborted };
-	options.onEvent({ type: "end", exitCode: summary.exitCode, durationMs: summary.durationMs, truncated: summary.truncated, timedOut: summary.timedOut, compileError: summary.compileError, needsProject: summary.needsProject });
-	return summary;
+	return finishSummary();
+
+	function finishSummary(): RunSummary {
+		for (const test of options.tests?.cases ?? []) {
+			if (!completedCases.has(test.id)) options.onEvent({ type: "case_result", result: { id: test.id, status: "skipped", durationMs: 0 } });
+		}
+		const summary: RunSummary = { runId, durationMs: Date.now() - startedAt, exitCode, compileError, needsProject: compileError && looksLikeMissingProjectDependency(stderrTail), timedOut, truncated: budget.exceeded, aborted };
+		options.onEvent({ type: "end", exitCode: summary.exitCode, durationMs: summary.durationMs, truncated: summary.truncated, timedOut: summary.timedOut, compileError: summary.compileError, needsProject: summary.needsProject });
+		return summary;
+	}
 }

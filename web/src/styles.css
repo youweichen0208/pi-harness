@@ -13483,11 +13483,10 @@ html.pi-desktop-darwin .compact-navigation .global-navigation { padding-top: 36p
 	.design-workspace .msg:hover .msg-actions, .design-workspace .msg:focus-within .msg-actions { opacity: 1; }
 }
 
-/* Wiki reading surface: document and sticky outline share the far-right scrollbar.
- * The cluster stays near the file tree on wide screens: the left gutter takes
- * one third of the slack and caps at 240px, extra space collects past the outline. */
-.wiki-reading-layout { display: flex; align-items: flex-start; justify-content: flex-start; min-height: 100%; min-width: 0; }
-.wiki-reading-layout > .wiki-document { flex: 0 1 auto; min-width: 0; margin: 0; margin-left: clamp(0px, calc((100% - 1112px) / 3), 240px); }
+/* Wiki reading surface: center the document and sticky outline together in the
+ * available reading pane, including when the outline is hidden or chat is pinned. */
+.wiki-reading-layout { display: flex; align-items: flex-start; justify-content: center; min-height: 100%; min-width: 0; }
+.wiki-reading-layout > .wiki-document { flex: 0 1 auto; min-width: 0; margin: 0; }
 .wiki-workbench.is-focused .wiki-reading-layout { justify-content: center; }
 .wiki-workbench.is-focused .wiki-reading-layout > .wiki-document { margin-left: 0; }
 .wiki-reading-layout > .wiki-empty { flex: 1; }
@@ -13557,6 +13556,17 @@ html.pi-desktop-darwin .compact-navigation .global-navigation { padding-top: 36p
 .scratch-save-error { font: 12px var(--sans); color: var(--red); }
 .scratch-editor { flex: 1; min-height: 0; width: 100%; resize: none; border: 1px solid var(--border-soft); border-radius: var(--r-md); background: var(--output-bg); color: var(--text); font: 13px/1.7 var(--mono); padding: 14px 16px; outline-offset: 0; tab-size: 4; }
 .scratch-editor:focus-visible { border-color: var(--accent); outline: none; }
+/* CodeMirror scratch editor: same surface as the old textarea, but managed by
+   the editor's own theme (built from the same CSS variables). */
+.scratch-editor-cm { flex: 1; min-height: 0; overflow: hidden; border: 1px solid var(--border-soft); border-radius: var(--r-md); background: var(--output-bg); }
+.scratch-editor-cm:focus-within { border-color: var(--accent); }
+.scratch-editor-cm .cm-editor { height: 100%; background: transparent; }
+.scratch-editor-cm .cm-scroller { font: 13px/1.7 var(--mono); padding: 12px 0; }
+.scratch-editor-cm .cm-line { padding: 0 16px; }
+.scratch-editor-cm .cm-gutters { padding: 0 10px 0 8px; user-select: none; border-right: 1px solid var(--border-soft); background: var(--bg); }
+.scratch-editor-cm .cm-tooltip.cm-tooltip-autocomplete > ul { font: 12.5px var(--mono); max-height: 220px; }
+.scratch-editor-cm .cm-placeholder { color: var(--text-faint); }
+.scratch-editor-cm.loading { min-height: 200px; }
 .scratch-page .playground-result { border: 1px solid var(--border-soft); border-radius: var(--r-md); flex: none; max-height: 45%; overflow: auto; }
 
 /* Playground settings: the switch that grants code execution, plus its limits. */
@@ -13575,3 +13585,36 @@ html.pi-desktop-darwin .compact-navigation .global-navigation { padding-top: 36p
 .fp-code-language button[data-code-run]:hover { background: var(--bg-elev2); color: var(--text); }
 .notes-editor > .playground-result { margin-top: 8px; border: 1px solid var(--border-soft); border-radius: var(--r-md); }
 .playground-badge.stale { background: var(--red-soft); color: var(--red); }
+
+/* ---- Playground method tests ---- */
+.scratch-head { flex-wrap: wrap; }
+.scratch-mode, .method-toolbar select { border: 1px solid var(--border-soft); border-radius: var(--r-md); background: var(--bg); color: var(--text); padding: 6px 8px; font: inherit; max-width: 100%; }
+.scratch-page.method-mode { overflow: auto; }
+.scratch-page.method-mode .scratch-editor-cm { flex: none; height: 320px; }
+.scratch-page.method-mode .playground-result { max-height: none; }
+.scratch-example { align-self: flex-start; }
+.method-tests { flex: none; display: flex; flex-direction: column; gap: 10px; }
+.method-toolbar { display: flex; align-items: end; gap: 12px; flex-wrap: wrap; }
+.method-toolbar > label { flex: 1; min-width: 180px; display: flex; flex-direction: column; gap: 6px; color: var(--text-muted); font-size: 12px; }
+.method-toolbar select { font-family: var(--mono); }
+.method-case { min-width: 0; margin: 0; padding: 12px; border: 1px solid var(--border-soft); border-radius: var(--r-md); background: var(--bg); }
+.method-parameters { display: flex; flex-wrap: wrap; align-items: start; gap: 12px; }
+.method-value, .method-expected { flex: 1; min-width: 150px; }
+.method-value > label:first-child { display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+.method-value code { margin-left: 6px; color: var(--text-muted); }
+.method-value input:not([type="checkbox"]) { width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid var(--border-soft); border-radius: var(--r-md); background: var(--input-bg, var(--bg)); color: var(--text); font: 13px var(--mono); }
+.method-value input:disabled { opacity: .5; }
+.method-check { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); margin: 6px 0; }
+.method-check input { accent-color: var(--accent); }
+.method-case-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 10px; }
+.method-validation { flex: 1; font-size: 12px; color: var(--red); }
+.method-results { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.method-summary { color: var(--text-muted); font-size: 12px; }
+.method-result { border-top: 1px solid var(--border-soft); padding-top: 10px; font-size: 12px; }
+.method-result > .playground-meta { margin-left: 10px; }
+.method-result.passed > strong { color: var(--green); }
+.method-result.failed > strong, .method-result.error > strong { color: var(--red); }
+.method-result pre { margin: 6px 0; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--mono); }
+@media (max-width: 600px) {
+	.method-parameters { flex-direction: column; align-items: stretch; }
+}

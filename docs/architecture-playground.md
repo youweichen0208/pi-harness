@@ -42,7 +42,7 @@
 - **裸语句自动包 `Main`**（jshell 风格）：源码里没有任何顶层类型声明（注释/字符串里的假声明不算）时，`import` 提到 scaffold 外、其余语句成为 `public static void main(String[] args) throws Exception` 的函数体（`throws Exception` 让 `Thread.sleep` 之类不改就能编译）。已声明任何类型（含包私有）的源码原样不动。规则在 `wrapBareStatements`（纯函数，有单测），对四个入口统一生效。
 - javac 固定以 `-J-Duser.language=en -J-Duser.country=US` 运行：诊断文本会被解析（见下）并原样展示，**不能随宿主 locale 变化**——中文 macOS 会输出 `错误: 需要<标识符>`，那条规则会静默失效。程序自身的输出不受影响。
 - 从代码解析第一个 **public 顶层类型**（`class` / `record` / `enum` / `interface`），无 public 类型时用 `Main`；**支持 `package` 声明**（写到 `<tmp>/com/x/Foo.java`，主类用全限定名）。解析必须忽略注释与字符串/文本块里的假声明。
-- **只编译单个源文件**，`-cp` 只指向 `<tmp>`：不挂工作区、不加 `--source-path`。引用项目其他类会编译失败——这是刻意选择，失败时由 `needsProject` 给出人话解释（见「传输」）。
+- **只编译单个用户源文件（方法测试另加内部调用器）**，`-cp` 只指向 `<tmp>`：不挂工作区、不加 `--source-path`。引用项目其他类会编译失败——这是刻意选择，失败时由 `needsProject` 给出人话解释（见「传输」）。
 - 每次运行独立 `mkdtemp`，**无论成功、失败、超时、取消都删除**。
 - stdin 是 `/dev/null`，`System.in.read()` 立即得到 EOF，不会挂到超时。
 - 超时 / 取消 / 超输出上限一律 `killPidTree` 整个进程树（子进程 `detached`，否则拿不到进程组）。
@@ -55,8 +55,8 @@ HTTP + SSE，**不新增 WS 消息、`PROTOCOL_VERSION` 不变**：
 
 - `GET /api/playground/status` → `{ enabled, locked, jdk: { available, version?, path?, reason? }, limits }`；`?refresh=1` 强制重新探测。
 - `POST /api/playground/config` → 同上的状态体。
-- `GET/PUT /api/playground/scratch` → `{content, updatedAt}`，左栏草稿页的唯一持久化（`<dataDir>/playground-scratch.json`，`writeFileAtomic` + 私有权限）。PUT 严格只收 `{content: string}`（空串 = 清空，超 `MAX_SOURCE_BYTES` 拒绝）；**草稿读写不受总开关限制**——写代码不是运行代码。文件损坏降级为空草稿，绝不崩服务。
-- `POST /api/playground/run`，body `{ code }`，响应体就是流（`text/event-stream`）。**单请求、无 runId 注册表**。
+- `GET/PUT /api/playground/scratch` → `{content, updatedAt}`，左栏草稿页的唯一持久化（`<dataDir>/playground-scratch.json`，`writeFileAtomic` + 私有权限）。PUT 接受 `{content: string, tests?: PlaygroundTestConfig}`，拒绝未知顶层字段；省略 `tests` 保留已存用例（空串 = 清空，超 `MAX_SOURCE_BYTES` 拒绝）；**草稿读写不受总开关限制**——写代码不是运行代码。文件损坏降级为空草稿，绝不崩服务。
+- `POST /api/playground/run`，body `{ code, tests?: {methodId, cases} }`，响应体就是流（`text/event-stream`）。**单请求、无 runId 注册表**。
 - 事件：`start{runId}` / `out{stream:"stdout"|"stderr", text}` / `end{exitCode, durationMs, truncated, timedOut, compileError, needsProject}` / `error{message}`。
 - `needsProject` 由服务端从 stderr 尾部判定（`looksLikeMissingProjectDependency`）。放在服务端而不是浏览器，是因为 web 无法 import `playground-source.ts`——它用 `Buffer` 记账，浏览器里不存在；规则留在一处，三个入口都拿到同一句解释。
 - 取消：**监听 `res` 的 `close`**（`!res.writableEnded` 时 abort）→ `killPidTree`。不能监听 `req`：`express.json()` 在进入 handler 前已经把请求流读完，`req` 的 `close` 早已发生，取消会静默失效并留下孤儿进程。
@@ -78,6 +78,7 @@ HTTP + SSE，**不新增 WS 消息、`PROTOCOL_VERSION` 不变**：
 - 开启时弹一次二次确认，文案明确「不是沙箱」。
 - **不进**顶栏「后台任务」面板（那是给长期存活的服务进程用的）。
 - **草稿页**（`PlaygroundScratch.tsx`，2026-10-22）：左栏「对话／Playground／小记」的中间入口，**不受总开关隐藏**；运行复用 `playground-run-store`（key 前缀 `scratch`），结果区共用 `PlaygroundResult`（stale 标记用精确比对——这里文本完全由本页拥有）。自动保存 600ms 去抖 + 卸载 flush；首访（`updatedAt === 0` 且空）种入模板。页面刷新仍清空运行结果，与其它入口一致。
+- **草稿编辑器与补全**（`scratch-editor.tsx`）：草稿页正文是 CodeMirror 6 + `@codemirror/lang-java`，提供语法高亮、行号、括号匹配与**词级补全**——Java 关键字 + 当前草稿里已出现的标识符，输入单词或 `.` 后弹出。**没有语义引擎**（不上 JDT language server，也不维护静态 API 成员词表）：`System.out.` 后弹的是文档词，不是真成员。编辑器与补全是编辑辅助，**不受总开关限制**（同草稿读写）。⌘/Ctrl+Enter 用 `Prec.highest` 键位永远优先运行、不被补全弹窗拦截；可用性检查留在页面层，与 Run 按钮同一套 `reason`。主题从 CSS 变量生成、监听 `THEME_CHANGE_EVENT` 重建（语法配色复用 `--code-*`，同 highlight.js 调色板）。编辑器经 `React.lazy` 懒加载（约 466KB 独立 chunk，主包不涨）。补全只在草稿页：对话代码块只读，右栏 `.java` 预览用通用编辑器，均不涉及。
 
 ## 留痕
 
@@ -92,3 +93,15 @@ HTTP + SSE，**不新增 WS 消息、`PROTOCOL_VERSION` 不变**：
 ## 回归
 
 `npm run typecheck && npm run build && npm test`；`node tests/playground-test.mjs --browser`（需要 `JAVA_HOME` 指向 JDK 才会执行真实运行的那部分）。
+
+## 草稿页 public 方法测试（2026-10-22）
+
+- 「程序运行／方法测试」显式切换；方法模式支持只写 public 方法片段（自动包 `Main`，import/package 留在类外），或完整普通类。发现与参数校验在浏览器可用的 `server/playground-methods.ts`，使用 `@lezer/java` 语法树，服务端在执行前重新校验；完整代码仍由 javac 最终检查。
+- 只列顶层普通类显式声明的 public 方法，排除标准 main、构造器、继承和嵌套类方法。签名为 `全限定类名#方法名(参数类型列表)`，重载独立保存用例；不支持的类型、泛型、抽象方法或缺少无参构造时给出原因。实例方法使用默认或 public 无参构造，static 不构造对象。
+- 参数／返回值支持八种基本类型、包装类型、String、多维数组（varargs 按数组）；void 只检查执行成功。文本直接输入，数组 JSON，引用类型有显式 null；断言为可选 `expected`，因此空字符串和不做断言可以区分。long 使用 BigInt 校验并生成十进制 Java 字面量，JSON 数组内超安全整数必须写成字符串。精确按 Java 类型比较，数组递归比较；没有浮点容差、对象映射或 JUnit。
+- 每批最多 50 用例、配置 256 KiB。一批编译一次，每条用例使用独立 JVM（静态状态也隔离）；调用器通过精确参数类型反射调用，仅注入校验后的值。生成源码在临时目录，既不改用户代码也不保存 main。Java 调用器源码由 `playground-method-runner.ts` 提供，随服务端 JS 打包，不依赖额外 jar。
+- 原有 `/run` 的 `{code}` 行为保留。`tests` 包含所选方法 ID 和用例列表；新增 `case_start{id}`、`case_result{result}` SSE。每条结果包含 ID、状态、返回值／预期值／异常文本及耗时。结构化结果走每条独立的限长内部文件，不从 stdout 猜测；采用 Base64 字段封装，结果也计入整批输出预算。普通断言失败和异常继续，编译错误、超时、超输出或取消中止整批，其余用例记为未执行。
+- 一批共用现有并发名额、墙钟超时、堆限制和输出预算，超时包括编译与所有 JVM 启动开销。中断杀进程树，最后清理临时目录。程序结束时 POSIX 进程组中的后台子进程也清理。
+- 草稿增加可选 `tests: {mode, selectedMethod, casesByMethod}`；旧文档按程序模式和空用例读取，旧客户端只写 content 保留用例配置。代码、模式和用例按 600ms 去抖串行保存，卸载 flush，重入先等待已排队写入；加载失败不覆盖旧草稿。签名消失保留用例，重新出现后可继续使用。
+- Run 键包含代码、方法及本次用例；当前草稿结果引用保存在组件外，离开重入仍可见，刷新清空。代码、模式或用例变化标记过期；结果不自动发给模型。
+- 回归：`tests/unit/playground-methods.test.ts` 覆盖识别、片段包装、精度和参数验证；`node tests/playground-methods-test.mjs --browser` 自起隔离服务，覆盖真实 JDK、保存兼容、用例编辑、快捷键、结果过期与窄屏。无 JDK 时默认冒烟跳过执行部分，浏览器模式要求 JDK。
