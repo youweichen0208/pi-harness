@@ -178,7 +178,7 @@ pi-harness/
 | `CollapsedMessage.tsx` / `LazyMount.tsx` | 消息折叠摘要行 / 消息级惰性挂载包装 |
 | `SearchBar.tsx` | 会话内搜索栏（Ctrl+F，CSS Custom Highlight API 高亮） |
 | `Markdown.tsx` / `Dropdown.tsx` / `copy-button.tsx` / `SoundSettings.tsx` | 通用件 |
-| `PlaygroundRun.tsx` / `PlaygroundPanel.tsx` | Java 代码块运行控件与结果区、代码运行设置页；Run 状态在 `playground-run-store.ts`（组件重挂载不丢）；详见 `docs/architecture-playground.md` |
+| `PlaygroundRun.tsx` / `PlaygroundPanel.tsx` / `PlaygroundScratch.tsx` | Java 代码块运行控件与结果区、代码运行设置页、左栏极简草稿页；Run 状态在 `playground-run-store.ts`（组件重挂载不丢）；详见 `docs/architecture-playground.md` |
 
 ## 原生代理边界
 

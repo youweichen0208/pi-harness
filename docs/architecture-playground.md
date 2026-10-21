@@ -2,7 +2,7 @@
 
 > 决策背景见 `docs/adr/0004-playground-execution-model.md`；术语见 `GLOSSARY.md` 的 **Playground** / **Run**；界面规范见 `docs/ui-design.md`。
 
-一句话：对话消息、小记与右栏文件预览里的 Java 代码块上的运行入口，把代码交给**宿主机器的 JDK** 编译执行，输出流式回到同一界面。默认关闭、**不是沙箱**、结果不进入模型上下文、不持久化。
+一句话：对话消息、小记、右栏文件预览里的 Java 代码块与左栏 Playground 草稿页上的运行入口，把代码交给**宿主机器的 JDK** 编译执行，输出流式回到同一界面。默认关闭、**不是沙箱**、结果不进入模型上下文、不持久化。
 
 ## 定位与边界
 
@@ -10,7 +10,7 @@
 - **默认关闭**，由服务端全局配置强制；客户端界面偏好**不改变执行能力**。
 - **不是沙箱**：执行的是宿主机上的任意 Java 代码，拥有服务进程的用户权限。UI 与文档都明说这一点。
 - **不挂载工作区**：代码看不到项目文件、`uploads/`、`notes/assets`。**三个入口都适用**——右栏文件预览里的 `.java` 文件同样在隔离临时目录里单独编译，不拿工作区当 classpath。
-- **不进入模型上下文**：WebUI 不自动发起额外模型调用。对话里有显式的「把结果发给 pi」，把输出作为 fenced block 追加进输入框、**不自动发送**；小记没有 agent 会话，只有复制按钮。
+- **不进入模型上下文**：WebUI 不自动发起额外模型调用。对话里有显式的「把结果发给 pi」，把输出作为 fenced block 追加进输入框、**不自动发送**；小记与草稿页没有 agent 会话，只有复制按钮。
 
 ## 依赖与探测
 
@@ -54,6 +54,7 @@ HTTP + SSE，**不新增 WS 消息、`PROTOCOL_VERSION` 不变**：
 
 - `GET /api/playground/status` → `{ enabled, locked, jdk: { available, version?, path?, reason? }, limits }`；`?refresh=1` 强制重新探测。
 - `POST /api/playground/config` → 同上的状态体。
+- `GET/PUT /api/playground/scratch` → `{content, updatedAt}`，左栏草稿页的唯一持久化（`<dataDir>/playground-scratch.json`，`writeFileAtomic` + 私有权限）。PUT 严格只收 `{content: string}`（空串 = 清空，超 `MAX_SOURCE_BYTES` 拒绝）；**草稿读写不受总开关限制**——写代码不是运行代码。文件损坏降级为空草稿，绝不崩服务。
 - `POST /api/playground/run`，body `{ code }`，响应体就是流（`text/event-stream`）。**单请求、无 runId 注册表**。
 - 事件：`start{runId}` / `out{stream:"stdout"|"stderr", text}` / `end{exitCode, durationMs, truncated, timedOut, compileError, needsProject}` / `error{message}`。
 - `needsProject` 由服务端从 stderr 尾部判定（`looksLikeMissingProjectDependency`）。放在服务端而不是浏览器，是因为 web 无法 import `playground-source.ts`——它用 `Buffer` 记账，浏览器里不存在；规则留在一处，三个入口都拿到同一句解释。
@@ -75,6 +76,7 @@ HTTP + SSE，**不新增 WS 消息、`PROTOCOL_VERSION` 不变**：
 - 不可用时显示**禁用态 + tooltip 说明原因**（对话入口），不隐藏——隐藏会让人以为功能不存在。
 - 开启时弹一次二次确认，文案明确「不是沙箱」。
 - **不进**顶栏「后台任务」面板（那是给长期存活的服务进程用的）。
+- **草稿页**（`PlaygroundScratch.tsx`，2026-10-22）：左栏「对话／Playground／小记」的中间入口，**不受总开关隐藏**；运行复用 `playground-run-store`（key 前缀 `scratch`），结果区共用 `PlaygroundResult`（stale 标记用精确比对——这里文本完全由本页拥有）。自动保存 600ms 去抖 + 卸载 flush；首访（`updatedAt === 0` 且空）种入模板。页面刷新仍清空运行结果，与其它入口一致。
 
 ## 留痕
 

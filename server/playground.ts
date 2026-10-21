@@ -11,16 +11,42 @@
  * buffer the event stream.
  */
 
+import { readFileSync } from "node:fs";
+import { writeFileAtomic } from "./private-file.js";
 import { join } from "node:path";
 import type { Express } from "express";
 import type { IncomingMessage } from "node:http";
-import type { PlaygroundConfigPatch, PlaygroundEvent, PlaygroundStatus } from "./protocol.js";
+import type { PlaygroundConfigPatch, PlaygroundEvent, PlaygroundScratch, PlaygroundStatus } from "./protocol.js";
 import { PlaygroundConfigStore, playgroundEnvLock } from "./playground-config.js";
 import { createJdkProbe, resolveHostJdk, type JdkProbe } from "./playground-jdk.js";
 import { ConcurrencyGate, runJava } from "./playground-run.js";
 
 /** Source larger than this is refused before anything is written to disk. */
 const MAX_SOURCE_BYTES = 262_144;
+
+/**
+ * The scratch draft of the left-panel Playground page — one doc per install,
+ * persisted so "next time it's still there" holds. Deliberately writable even
+ * when execution is off: writing code is not running it.
+ */
+class PlaygroundScratchStore {
+	constructor(private readonly file: string) {}
+	read(): PlaygroundScratch {
+		try {
+			const raw = JSON.parse(readFileSync(this.file, "utf8")) as { content?: unknown };
+			return { content: typeof raw.content === "string" ? raw.content : "", updatedAt: typeof (raw as { updatedAt?: unknown }).updatedAt === "number" ? (raw as { updatedAt: number }).updatedAt : 0 };
+		} catch {
+			// Missing or corrupt file: an empty draft, never a crash. Fail-open only
+			// loses scratch text, which is the least valuable thing here.
+			return { content: "", updatedAt: 0 };
+		}
+	}
+	write(content: string): PlaygroundScratch {
+		const doc = { content, updatedAt: Date.now() };
+		writeFileAtomic(this.file, JSON.stringify(doc));
+		return doc;
+	}
+}
 
 /** Accepted keys of a config write, and the exact type each one must have. */
 const FIELD_TYPES = { enabled: "boolean", timeoutMs: "number", maxOutputBytes: "number", maxHeapMb: "number", maxConcurrent: "number" } as const;
@@ -39,6 +65,7 @@ export function installPlaygroundRoutes(app: Express, options: PlaygroundRouteOp
 	const { dataDir, allowed } = options;
 	const env = options.env ?? process.env;
 	const store = new PlaygroundConfigStore(join(dataDir, "playground.json"));
+	const scratchStore = new PlaygroundScratchStore(join(dataDir, "playground-scratch.json"));
 	const probe = options.probe ?? createJdkProbe(env);
 	const gate = new ConcurrencyGate();
 
@@ -113,6 +140,34 @@ export function installPlaygroundRoutes(app: Express, options: PlaygroundRouteOp
 			res.json(await currentStatus(false));
 		} catch {
 			res.status(500).json({ error: "Playground config failed" });
+		}
+	});
+
+	app.all("/api/playground/scratch", (req, res) => {
+		res.setHeader("Cache-Control", "no-store");
+		if (!allowed(req)) {
+			res.status(403).json({ error: "Forbidden" });
+			return;
+		}
+		if (req.method === "GET" || req.method === "HEAD") {
+			res.json(scratchStore.read());
+			return;
+		}
+		if (req.method !== "PUT" || !req.is("application/json")) {
+			res.sendStatus(405);
+			return;
+		}
+		// Strict shape, same reasoning as the config write: exactly `content`, a
+		// string, within the source cap. An empty string is a valid clear.
+		const body = req.body as Record<string, unknown> | undefined;
+		if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).length !== 1 || typeof body.content !== "string" || Buffer.byteLength(body.content, "utf8") > MAX_SOURCE_BYTES) {
+			res.status(400).json({ error: "Invalid scratch" });
+			return;
+		}
+		try {
+			res.json(scratchStore.write(body.content));
+		} catch {
+			res.status(500).json({ error: "Playground scratch failed" });
 		}
 	});
 

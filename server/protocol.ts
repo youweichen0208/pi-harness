@@ -1557,6 +1557,8 @@ export interface PlaygroundConfigInput { enabled: boolean; timeoutMs: number; ma
 /** Partial write to the global switch; absent fields keep their stored value. */
 export type PlaygroundConfigPatch = Partial<PlaygroundConfigInput>;
 export interface PlaygroundErrorResponse { error: string }
+/** The scratch draft of the left-panel Playground page; one per install. */
+export interface PlaygroundScratch { content: string; updatedAt: number }
 export type PlaygroundEvent =
 	| { type: "start"; runId: string }
 	| { type: "out"; stream: "stdout" | "stderr"; text: string }

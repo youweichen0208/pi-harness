@@ -19,6 +19,8 @@ const STORAGE_KEY = "pi-harness:lang";
 const zh = {
 	notesTitle: "小记",
 	notesChat: "对话",
+	notesPlayground: "Playground",
+	playgroundScratchPlaceholder: "写点 Java，随时运行…（⌘↵ 运行）",
 	notesNew: "新建小记",
 	notesSearch: "搜索标题与正文",
 	notesUntitled: "无标题小记",
@@ -2067,6 +2069,8 @@ const zh = {
 const en: Record<keyof typeof zh, string> = {
 	notesTitle: "Notes",
 	notesChat: "Chats",
+	notesPlayground: "Playground",
+	playgroundScratchPlaceholder: "Scratch some Java, run it any time… (⌘↵ to run)",
 	notesNew: "New note",
 	notesSearch: "Search titles and content",
 	notesUntitled: "Untitled note",

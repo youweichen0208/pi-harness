@@ -47,6 +47,7 @@ import { usePlayground } from "./use-playground";
 import { PlaygroundProvider } from "./playground-context";
 import { appendComposerText } from "./composer-text";
 import { NotesList, NotesEditor } from "./components/Notes";
+import { PlaygroundScratch } from "./components/PlaygroundScratch";
 import { LeftPanel } from "./components/LeftPanel";
 import { RightPanel } from "./components/RightPanel";
 import { MessageList } from "./components/MessageList";
@@ -370,6 +371,7 @@ export function App() {
 		return () => window.removeEventListener("pi-configure-radius", configure);
 	}, [chat.state?.cwd, send]);
 	const [notesOpen, setNotesOpen] = useState(false);
+	const [scratchOpen, setScratchOpen] = useState(false);
 	const notes = useNotes(notesOpen, chat.status === "open");
 	// Where execution is allowed is a server answer, so it is fetched once and
 	// refreshed on focus/online/reconnect rather than derived from local state.
@@ -1071,7 +1073,7 @@ export function App() {
 			if (document.querySelector(".wiki-document-dialog[open]")) return;
 			if ((event.metaKey || event.ctrlKey) && !event.shiftKey && event.key.toLowerCase() === "n") {
 				event.preventDefault();
-				if (notesOpen) return;
+				if (notesOpen || scratchOpen) return;
 				if (wikiGuard.current) { wikiGuard.current(() => { setView("chat"); rawSend({ type: "new_chat" }); }); return; }
 				setView("chat");
 				panelSend({ type: "new_chat" });
@@ -1079,7 +1081,7 @@ export function App() {
 		};
 		window.addEventListener("keydown", onNewChat);
 		return () => window.removeEventListener("keydown", onNewChat);
-	}, [panelSend, rawSend, notesOpen]);
+	}, [panelSend, rawSend, notesOpen, scratchOpen]);
 
 	// -- pasted / dropped / uploaded images (no workspace path) ---------------
 	const pasteImageId = useRef(0);
@@ -1266,10 +1268,10 @@ export function App() {
 		// navigating away; children with their own handlers (input bar / edit
 		// composer) call stopPropagation and keep priority.
 		<ChangesProvider conversationId={conversationState?.conversationId ?? ""} files={changedFiles} active={view === "chat"} onOpenChange={onChangesOpen}><PlaygroundProvider value={playgroundHost}><div
-			className={`app design-workspace dual-navigation ${notesOpen ? "notes-open" : ""} ${view === "wiki" ? "wiki-mode" : ""} ${changesOpen && view === "chat" ? "changes-open" : ""} ${leftCollapsed ? "left-collapsed" : ""} ${previewFile && view === "chat" ? "document-open" : ""}`}
+			className={`app design-workspace dual-navigation ${notesOpen || scratchOpen ? "notes-open" : ""} ${view === "wiki" ? "wiki-mode" : ""} ${changesOpen && view === "chat" ? "changes-open" : ""} ${leftCollapsed ? "left-collapsed" : ""} ${previewFile && view === "chat" ? "document-open" : ""}`}
 			style={{ "--left-w": `${leftWidth}px`, "--right-w": `${rightWidth}px` } as CSSProperties}
 			onDragOver={(e) => {
-				if (notesOpen) { e.preventDefault(); return; }
+				if (notesOpen || scratchOpen) { e.preventDefault(); return; }
 				if (!Array.from(e.dataTransfer?.types ?? []).includes("Files")) return;
 				e.preventDefault();
 				setAppDragOver(true);
@@ -1279,7 +1281,7 @@ export function App() {
 					setAppDragOver(false);
 			}}
 			onDrop={(e) => {
-				if (notesOpen) { e.preventDefault(); return; }
+				if (notesOpen || scratchOpen) { e.preventDefault(); return; }
 				setAppDragOver(false);
 				if (!Array.from(e.dataTransfer?.types ?? []).includes("Files")) return;
 				e.preventDefault();
@@ -1308,10 +1310,11 @@ export function App() {
 					directoryCollapsed={leftCollapsed}
 					onToggleDirectory={() => setLeftCollapsed(value => !value)}
 					notesOpen={notesOpen}
+					scratchOpen={scratchOpen}
 					notesList={<NotesList notes={notes} />}
-					onNavigate={open => { setNotesOpen(open); setLeftCollapsed(false); if (!open) setView("chat"); }}
+					onNavigate={target => { setNotesOpen(target === "notes"); setScratchOpen(target === "playground"); setLeftCollapsed(false); if (target === "chat") setView("chat"); }}
 					onOpenSettings={() => { setSettingsInitialTab("prompt"); setSettingsOpen(true); }}
-					onNewChat={() => { setNotesOpen(false); setView("chat"); panelSend({ type: "new_chat" }); }}
+					onNewChat={() => { setNotesOpen(false); setScratchOpen(false); setView("chat"); panelSend({ type: "new_chat" }); }}
 					send={panelSend}
 					active={!isMobile || drawer === "left"}
 					ready={chat.ready && !!conversationState && (!wikiFileRequest?.path || wikiMediaPreview || (wikiCurrentFile?.id === wikiFileRequest.token && wikiContextSession === chat.state?.sessionId))}
@@ -1344,6 +1347,7 @@ export function App() {
 					plugins={enabledPlugins}
 					onViewChange={(v: ViewName) => {
 						setNotesOpen(false);
+						setScratchOpen(false);
 						// The terminal panel stays mounted while hidden. Create the first
 						// shell on the user's terminal-view click, not on initial mount.
 						terminalOpenRequested.current =
@@ -1392,9 +1396,11 @@ export function App() {
 					{chat.notices.map((n) => <NoticeToast key={n.id} notice={n} onDismiss={dismissNotice} onOpenExtensions={openExtensionSettings} />)}
 				</div>}
 				{notesOpen && drawer && isNarrow && <div className="drawer-backdrop" onClick={() => setDrawer(null)} />}
+				{scratchOpen && drawer && isNarrow && <div className="drawer-backdrop" onClick={() => setDrawer(null)} />}
 				{notesOpen && <NotesEditor notes={notes} />}
+				{scratchOpen && <PlaygroundScratch />}
 				<div
-					className={`layout ${notesOpen ? "notes-chat-hidden" : ""}`}
+					className={`layout ${notesOpen || scratchOpen ? "notes-chat-hidden" : ""}`}
 					style={{ "--left-w": `${leftWidth}px`, "--right-w": `${rightWidth}px`, "--editor-share": editorShare } as CSSProperties}
 				>
 					{drawer && (isMobile || (isNarrow && !previewFile) || (drawer === "left" && !!previewFile)) && (
@@ -1404,7 +1410,7 @@ export function App() {
 						<ChatDock target={wikiFileRequest || databaseOpen ? wikiChatHost : null}>
 							{conversationState ? (
 								<WorkspacePathContext.Provider value={conversationState.cwd}><MessageList recovery={{ ...toolRecovery, models: chat.models, onLoadModels: () => { if (!chat.models.length && !chat.modelsLoading) send({ type: "list_models" }); } }}
-									active={!notesOpen && (view === "chat" || view === "wiki" || databaseOpen)}
+									active={!notesOpen && !scratchOpen && (view === "chat" || view === "wiki" || databaseOpen)}
 									connected={chat.ready}
 									silenceNotified={chat.agentSilence?.conversationId === conversationState.conversationId && chat.agentSilence.phase === "silent"}
 									key={conversationState.conversationId}

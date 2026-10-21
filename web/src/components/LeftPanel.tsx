@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef, useState, type ReactNode } from "react";
 import {
 	FiSearch,
+	FiCode,
 	FiFeather,
 	FiChevronLeft,
 	FiMessageSquare,
@@ -41,7 +42,8 @@ interface LeftPanelProps {
 	directoryCollapsed: boolean;
 	onToggleDirectory: () => void;
 	notesOpen: boolean;
-	onNavigate: (notes: boolean) => void;
+	scratchOpen: boolean;
+	onNavigate: (target: "chat" | "notes" | "playground") => void;
 	notesList: ReactNode;
 	onOpenSettings: () => void;
 	onNewChat: () => void;
@@ -94,7 +96,7 @@ function WorkspaceBook() {
 }
 
 export const LeftPanel = memo(function LeftPanel({
-	directoryCollapsed, onToggleDirectory, notesOpen, onNavigate, notesList, onOpenSettings, onNewChat, ready, status, cwd, sessionFile, conversations, sessions, projects, projectWorkspaces, projectWorkspaceResult, dirBrowse, activeConversationId, send, active }: LeftPanelProps) {
+	directoryCollapsed, onToggleDirectory, notesOpen, scratchOpen, onNavigate, notesList, onOpenSettings, onNewChat, ready, status, cwd, sessionFile, conversations, sessions, projects, projectWorkspaces, projectWorkspaceResult, dirBrowse, activeConversationId, send, active }: LeftPanelProps) {
 	const { t, locale } = useI18n();
 	const [selectedWorkspace, setSelectedWorkspace] = useState(() => {
 		try { return localStorage.getItem("pi-harness:project-workspace") ?? ""; } catch { return ""; }
@@ -140,7 +142,7 @@ export const LeftPanel = memo(function LeftPanel({
 	useEffect(() => {
 		if (!workspacePending || projectWorkspaceResult?.requestId !== workspacePending.requestId) return;
 		if (projectWorkspaceResult.ok) {
-			if (workspacePending.kind === "create") { chooseWorkspace(projectWorkspaceResult.workspaceId ?? ""); onNavigate(false); }
+			if (workspacePending.kind === "create") { chooseWorkspace(projectWorkspaceResult.workspaceId ?? ""); onNavigate("chat"); }
 			if (workspacePending.kind === "add") setPicking(false);
 			setWorkspaceForm(null);
 			setWorkspaceError("");
@@ -418,7 +420,7 @@ export const LeftPanel = memo(function LeftPanel({
 						<input autoFocus type="search" aria-label={t("workspaceFilter")} placeholder={t("workspaceFilter")} value={groupQuery} onChange={event => setGroupQuery(event.target.value)} />
 						<div className="workspace-list">
 					{projectWorkspaces?.workspaces.filter(group => group.name.toLocaleLowerCase().includes(groupQuery.toLocaleLowerCase())).map(group => <div className="workspace-list-row" key={group.id}>
-						<button className={selectedWorkspace === group.id ? "active" : ""} disabled={!!workspacePending} onClick={() => { chooseWorkspace(group.id); onNavigate(false); }}><WorkspaceBook /><span>{group.name}</span>{selectedWorkspace === group.id && <FiCheck className="workspace-selected-check" />}</button>
+						<button className={selectedWorkspace === group.id ? "active" : ""} disabled={!!workspacePending} onClick={() => { chooseWorkspace(group.id); onNavigate("chat"); }}><WorkspaceBook /><span>{group.name}</span>{selectedWorkspace === group.id && <FiCheck className="workspace-selected-check" />}</button>
 						<div className="lp-menu-zone" data-menu-key={`ws:${group.id}`}><button className="lp-menu-trigger" aria-label={`${group.name} · ${t("more")}`} aria-haspopup="menu" aria-expanded={openMenu === `ws:${group.id}`} onClick={() => setOpenMenu(openMenu === `ws:${group.id}` ? null : `ws:${group.id}`)}><FiMoreHorizontal /></button>
 							{openMenu === `ws:${group.id}` && <div className="lp-menu-popover" role="menu">
 								<button role="menuitem" disabled={workspaceBusy} onClick={() => { setWorkspaceName(group.name); setWorkspaceForm(group.id); setOpenMenu(null); setWorkspaceOpen(false); }}>{t("workspaceRename")}</button>
@@ -433,12 +435,13 @@ export const LeftPanel = memo(function LeftPanel({
 				</div>
 				{!notesOpen && selectedGroup && <label className="navigation-search"><FiSearch aria-hidden="true" /><input className="workspace-project-search" type="search" aria-label={t("workspaceSearch")} placeholder={t("workspaceSearch")} value={workspaceQuery} onChange={event => setWorkspaceQuery(event.target.value)} /></label>}
 				<nav className="global-entries">
-					<button title={t("notesChat")} className={!notesOpen ? "active" : ""} onClick={() => onNavigate(false)}><FiMessageSquare /><span>{t("notesChat")}</span></button>
-					<button title={t("notesTitle")} className={notesOpen ? "active" : ""} onClick={() => { onNavigate(true); }}><FiFeather /><span>{t("notesTitle")}</span></button>
+					<button title={t("notesChat")} className={!notesOpen && !scratchOpen ? "active" : ""} onClick={() => onNavigate("chat")}><FiMessageSquare /><span>{t("notesChat")}</span></button>
+					<button title={t("notesPlayground")} className={scratchOpen ? "active" : ""} onClick={() => onNavigate("playground")}><FiCode /><span>{t("notesPlayground")}</span></button>
+					<button title={t("notesTitle")} className={notesOpen ? "active" : ""} onClick={() => { onNavigate("notes"); }}><FiFeather /><span>{t("notesTitle")}</span></button>
 				</nav>
 				{workspaceError && <p className="workspace-group-error" role="alert">{workspaceError}</p>}
 
-			<button className="compact-project-shortcut" title={t("workspaceProjects")} aria-label={t("workspaceProjects")} onClick={() => onNavigate(false)}><FiList /></button>
+			<button className="compact-project-shortcut" title={t("workspaceProjects")} aria-label={t("workspaceProjects")} onClick={() => onNavigate("chat")}><FiList /></button>
 			<div className="workspace-directory">
 			{notesOpen ? notesList : <>
 			{!selectedGroup && <button className="compact-empty-create" disabled={workspaceBusy} onClick={() => { setWorkspaceName(""); setWorkspaceForm("create"); }}>{t("workspaceNew")}</button>}

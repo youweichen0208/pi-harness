@@ -13549,6 +13549,16 @@ html.pi-desktop-darwin .compact-navigation .global-navigation { padding-top: 36p
 .playground-result-foot .copy-btn:hover { background: var(--bg-elev2); color: var(--text); }
 .playground-result-foot .playground-action { margin-left: 0; color: var(--text-muted); }
 
+/* Playground scratch page — the left-panel draft between Chats and Notes. */
+.scratch-page { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; padding: 16px clamp(16px, 4vw, 64px) 20px; background: var(--bg); }
+.scratch-head { display: flex; align-items: center; gap: 12px; flex: none; }
+.scratch-head h2 { margin: 0; font: 600 18px/1.4 var(--sans); color: var(--text); }
+.scratch-head .btn { margin-left: auto; }
+.scratch-save-error { font: 12px var(--sans); color: var(--red); }
+.scratch-editor { flex: 1; min-height: 0; width: 100%; resize: none; border: 1px solid var(--border-soft); border-radius: var(--r-md); background: var(--output-bg); color: var(--text); font: 13px/1.7 var(--mono); padding: 14px 16px; outline-offset: 0; tab-size: 4; }
+.scratch-editor:focus-visible { border-color: var(--accent); outline: none; }
+.scratch-page .playground-result { border: 1px solid var(--border-soft); border-radius: var(--r-md); flex: none; max-height: 45%; overflow: auto; }
+
 /* Playground settings: the switch that grants code execution, plus its limits. */
 .playground-settings { display: flex; flex-direction: column; gap: 12px; }
 .playground-warning { margin: 0; padding: 10px 12px; border-radius: var(--r-md); background: var(--yellow-bg); color: var(--yellow-fg); font-size: 13px; line-height: 1.6; }

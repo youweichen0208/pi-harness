@@ -153,6 +153,25 @@ try {
 	assert.equal((await run(123)).status, 400, "non-string source is rejected");
 	assert.equal((await run("x".repeat(300000))).status, 400, "oversized source is rejected");
 
+	// --- scratch draft -----------------------------------------------------------
+	// The draft of the left-panel Playground page: one per install, persisted so
+	// "next time it's still there" holds. Writable while execution is off —
+	// writing code is not running it.
+	const scratch = `${base}/api/playground/scratch?token=${token}`;
+	assert.equal((await fetch(`${base}/api/playground/scratch`)).status, 401);
+	assert.equal((await fetch(scratch, { method: "POST" })).status, 405);
+	assert.equal((await (await fetch(scratch)).json()).content, "", "a fresh install has an empty draft");
+	const scratchPut = (body) => fetch(scratch, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+	const savedDraft = await (await scratchPut({ content: HELLO })).json();
+	assert.equal(savedDraft.content, HELLO);
+	assert.equal(typeof savedDraft.updatedAt, "number");
+	assert.equal((await (await fetch(scratch)).json()).content, HELLO, "the draft survives a reload");
+	assert.equal((await scratchPut({ content: "" })).status, 200, "an empty string is a valid clear");
+	assert.equal((await scratchPut({ content: "x", extra: 1 })).status, 400, "unknown fields are rejected");
+	assert.equal((await scratchPut({ content: 5 })).status, 400);
+	assert.equal((await scratchPut({})).status, 400);
+	assert.equal((await fetch(scratch, { headers: { Origin: "https://evil.example" } })).status, 403);
+
 	// --- the settings write path -------------------------------------------------
 	writeConfig({});
 	const saved = await (await configure({ enabled: true, timeoutMs: 5000 })).json();
