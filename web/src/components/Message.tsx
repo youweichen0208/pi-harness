@@ -205,6 +205,9 @@ export const Message = memo(function Message({
 	turnContinues,
 }: MessageProps) {
 	const t = useT();
+	const lengthOnlyReply = message.role === "assistant" && message.stopReason === "length"
+		&& !message.content.some(block => block.type === "toolCall" || block.type === "image"
+			|| block.type === "text" && typeof block.text === "string" && !!block.text.trim());
 	const cwd = useContext(WorkspacePathContext);
 	const changesPanel = useChangesAvailable();
 	const replyQuestions = useMemo(() => message.role === "assistant" ? message.content.flatMap(block => block.type === "text" && typeof block.text === "string" ? parseReplySegments(block.text).flatMap(segment => segment.kind === "questions" ? segment.questions : []) : []) : [], [message.content, message.role]);
@@ -654,6 +657,9 @@ export const Message = memo(function Message({
 					<>
 						{message.errorMessage && (
 							<div className="msg-error">{message.errorMessage}</div>
+						)}
+						{lengthOnlyReply && !message.errorMessage && (
+							<div className="msg-error" role="status">{t("replyLengthLimit")}</div>
 						)}
 						{isFileAttachment ? (
 							<AttachmentCard message={message} />
