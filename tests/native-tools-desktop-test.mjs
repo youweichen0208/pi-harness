@@ -8,7 +8,7 @@ import { fork } from 'node:child_process';
 import { once } from 'node:events';
 import { createServer } from 'node:http';
 import { agentRuntimeEnvironment } from '../electron/agent-runtime-env.mjs';
-const codeFixture = 'const found = await searchTools("add"); text(found); const result = await tools.mcp__echo__add({a: 2, b: 3}); text(result); text(await tools.mcp__http__add({a: 4, b: 5})); const painter = await models.getModelOfType("image", "image-fixture", "fixture"); const generated = await models.generateImages(painter, {input:[{type:"text",text:"Fixture image"}]}); for(const block of generated.output) if(block.type === "image") image(block);';
+const codeFixture = 'const found = await searchTools("add"); text(found); const result = await tools.mcp__echo__add({a: 2, b: 3}); text(result); text(await tools.mcp__http__add({a: 4, b: 5})); const painter = await models.getModelOfType("image", "image-fixture", "fixture"); const generated = await models.generateImages(painter, {input:[{type:"text",text:"Fixture image"}]}); for(const block of generated.output) if(block.type === "image") image(block); const classifier = await models.getModelOfType("classifier", "image-fixture", "classifier"); text(await models.classify(classifier, {state:{fixture:true},images:generated.output.filter(block=>block.type==="image"),questions:{visible:{type:"bool",instructions:"Is there an image?",criteria:{true:"Image present",false:"No image"}}}}));';
 const [executable = process.execPath, root = process.cwd()] = process.argv.slice(2).map(p => resolve(p));
 if (!process.env.PI_NATIVE_TOOLS_WORKER) {
 	const directory = mkdtempSync(join(tmpdir(), 'pi-native-tools-'));
@@ -51,6 +51,7 @@ if (!process.env.PI_NATIVE_TOOLS_WORKER) {
 	const { createAssistantMessageEventStream } = await import(pathToFileURL(join(root, 'node_modules/@earendil-works/pi-ai/dist/index.js')));
 	const { expandNativeTemplate } = await import(pathToFileURL(join(root, 'dist/server/native-prompt-template.js')));
 	for (const separator of [' ', '\n', '\t', '\r\n']) assert.equal(await expandNativeTemplate(`/fixture${separator}"one two" three`, [{ name: 'fixture', content: '$1 / $2', description: '', filePath: '', sourceInfo: {} }]), 'one two / three');
+	for (const quote of ['""', "''"]) assert.equal(await expandNativeTemplate(`/fixture ${quote} second ${quote}`, [{ name: 'fixture', content: '${1:-default} / $2 / ${3:-last}', description: '', filePath: '', sourceInfo: {} }]), 'default / second / last');
 	const { nativeToolExtensions } = await import(pathToFileURL(join(root, 'dist/server/native-tools.js')));
 	assert.match(readFileSync(join(root, 'node_modules/@earendil-works/pi-coding-agent/docs/codemode.md'), 'utf8'), /generateImages/);
 	const sdkRoot = join(root, 'node_modules/@earendil-works/pi-coding-agent');
@@ -69,7 +70,15 @@ if (!process.env.PI_NATIVE_TOOLS_WORKER) {
 	assert(session.getActiveToolNames().includes('codemode'));
 	assert(session.extensionRunner.getRegisteredCommands().some(command => command.invocationName === 'mcp'));
 	const imageModel = {type:"image",id:"fixture",name:"Fixture",provider:"image-fixture",api:"fixture-images",baseUrl:"http://127.0.0.1",input:["text"],output:["image"],cost:{input:0,output:0,cacheRead:0,cacheWrite:0}};
-	session.modelRuntime.registerNativeProvider({id:"image-fixture",name:"Image fixture",auth:{apiKey:{name:"Fixture",resolve:async()=>({auth:{apiKey:"FIXTURE_IMAGE_SECRET"},source:"fixture"})}},getModels:()=>[],getAllModels:()=>[imageModel],generateImages:async(_model,_context,options)=>{assert.equal(options.apiKey,"FIXTURE_IMAGE_SECRET");return {api:imageModel.api,provider:imageModel.provider,model:imageModel.id,stopReason:"stop",usage:{input:1,output:1,cacheRead:0,cacheWrite:0,totalTokens:2,cost:{input:0,output:0.01,cacheRead:0,cacheWrite:0,total:0.01}},output:[{type:"image",mimeType:"image/png",data:"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jXioAAAAASUVORK5CYII="}],timestamp:Date.now()};}});
+	const classifierModel = {...imageModel,type:"classifier",id:"classifier",api:"fixture-classify",input:["text","image"]};
+	let classifications = 0;
+	session.modelRuntime.registerNativeProvider({id:"image-fixture",name:"Image fixture",auth:{apiKey:{name:"Fixture",resolve:async()=>({auth:{apiKey:"FIXTURE_IMAGE_SECRET"},source:"fixture"})}},getModels:()=>[],getAllModels:()=>[imageModel,classifierModel],classify:async(_model,context,options)=>{
+		assert.equal(options.apiKey,"FIXTURE_IMAGE_SECRET");
+		assert.equal(context.images.length,1); assert.equal(context.images[0].mimeType,"image/png");
+		assert.equal(context.images[0].data,"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jXioAAAAASUVORK5CYII=");
+		classifications++;
+		return {api:classifierModel.api,provider:classifierModel.provider,model:classifierModel.id,answers:{visible:{type:"bool",probability:1}},stopReason:"stop",timestamp:Date.now()};
+	},generateImages:async(_model,_context,options)=>{assert.equal(options.apiKey,"FIXTURE_IMAGE_SECRET");return {api:imageModel.api,provider:imageModel.provider,model:imageModel.id,stopReason:"stop",usage:{input:1,output:1,cacheRead:0,cacheWrite:0,totalTokens:2,cost:{input:0,output:0.01,cacheRead:0,cacheWrite:0,total:0.01}},output:[{type:"image",mimeType:"image/png",data:"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jXioAAAAASUVORK5CYII="}],timestamp:Date.now()};}});
 	session.subscribe(event => events.push(event));
 	try {
 		await session.prompt('Run the local fixture.');
@@ -78,6 +87,8 @@ if (!process.env.PI_NATIVE_TOOLS_WORKER) {
 		assert(result.content.some(block => block.type === "image"), "codemode generation returns an image block");
 		const { serializeMessage } = await import(pathToFileURL(join(root, 'dist/server/serialize.js')));
 		const card = serializeMessage(result, 0);
+		assert.equal(classifications,1);
+		assert(card.codemode.calls.some(call => call.name === "models.classify" && call.status === "ok"), JSON.stringify(card.codemode));
 		assert(card.codemode.calls.some(call => call.name === 'models.generateImages' && call.status === 'ok' && call.cost === 0.01), JSON.stringify(card.codemode));
 		assert(result.nestedCalls?.calls.some(call => call.name === 'mcp__echo__add' && call.status === 'ok'), JSON.stringify(result));
 		assert(result.nestedCalls?.calls.some(call => call.name === 'mcp__http__add' && call.status === 'ok'), JSON.stringify(result));
@@ -96,13 +107,20 @@ if (!process.env.PI_NATIVE_TOOLS_WORKER) {
 		assert(session.getActiveToolNames().includes('codemode'));
 		assert(session.getActiveToolNames().includes('mcp__echo__add'), 'reload restores discovered deferred MCP tools');
 		assert.deepEqual(resourceLoader.getExtensions().errors, []);
+		await session.prompt("Record the changed tool loadout before resume.");
 		const saved = session.sessionFile; assert(saved);
-		const resumedLoader = new DefaultResourceLoader({ cwd, agentDir, settingsManager, extensionFactories: nativeToolExtensions() }); await resumedLoader.reload();
+		const resumedLoader = new DefaultResourceLoader({ cwd, agentDir, settingsManager, extensionFactories: [...nativeToolExtensions(), { name: "new-tools", factory: pi => {
+			for (const [name, defaultActive] of [["new_active_tool", true], ["new_inactive_tool", false]]) pi.registerTool({ name, defaultActive, label: name, description: name, parameters: {type:"object",properties:{}}, execute: async () => ({content:[{type:"text",text:"fixture"}],details:{}}) });
+		} }] }); await resumedLoader.reload();
 		const { session: resumed } = await createAgentSession({ cwd, agentDir, settingsManager, resourceLoader: resumedLoader, sessionManager: SessionManager.open(saved) });
 		try {
 			await resumed.bindExtensions({mode:"rpc"});
 			await resumed.extensionRunner.getCommand("mcp").handler("", resumed.extensionRunner.createCommandContext());
-			// Original Pi 1.0.4 resumes with its configured active loadout. Discovery remains native.
+			// Pi 1.3+ restores the transcript loadout before applying default modifiers.
+			assert(resumed.getActiveToolNames().includes('new_active_tool'), 'new extension tools activate after historical tools restore');
+			assert(!resumed.getActiveToolNames().includes('new_inactive_tool'), 'new defaultActive:false tool stays inactive');
+			assert(!resumed.getActiveToolNames().includes('edit'), 'resume retains explicitly disabled tools');
+			assert(resumed.getActiveToolNames().includes('mcp__echo__add'), 'resume restores discovered tools without a new search');
 			const search = resumed.getToolDefinition("tool_search");
 			assert(search, "native discovery remains available on resume");
 			await search.execute("resume-search", { query: "add" });

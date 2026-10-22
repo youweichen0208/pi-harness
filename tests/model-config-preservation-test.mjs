@@ -9,9 +9,9 @@ const directory = mkdtempSync(join(tmpdir(), 'pi-model-preservation-'));
 const endpoint = createServer((request, response) => response.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({ data: [{ id: 'chat' }, { id: 'picture' }] })));
 try {
 	const image = { id: 'picture', type: 'image', maxImages: 3 };
-	const classifier = { id: 'label', type: 'classifier', samplingParams: { temperature: 0 } };
+	const classifier = { id: 'label', type: 'classifier', compat: { imageInput: true, sendImageOptInHeader: true }, samplingParams: { temperature: 0 } };
 	const chat = { id: 'chat', type: 'chat', cost: { input: 2 }, samplingParams: { temperature: 0.4 } };
-	const original = { api: 'openai-completions', headers: { Authorization: 'FIXTURE_SECRET' }, operations: { image: { enabled: true } }, models: [chat, image, classifier] };
+	const original = { compat: { imageInput: true, sendImageOptInHeader: false }, futureField: { preserve: true }, api: 'openai-completions', headers: { Authorization: 'FIXTURE_SECRET' }, operations: { image: { enabled: true } }, models: [chat, image, classifier] };
 	const path = join(directory, 'models.json');
 	writeFileSync(path, JSON.stringify({ providers: { fixture: original } }));
 	const wire = [];

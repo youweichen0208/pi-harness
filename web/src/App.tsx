@@ -1,3 +1,5 @@
+import { useWikiCoordinator } from "./use-wiki-coordinator";
+import { WikiCoordinationError, type WikiOperation } from "./wiki-coordinator";
 import type { WikiProjectReference } from "./types";
 import { ModelThinking } from "./components/ModelThinking";
 import { FluidDrawer } from "./components/FluidDrawer";
@@ -277,7 +279,8 @@ const WIKI_CHAT_KEY = "pi-wiki-chat-open";
 const WIKI_WORKSPACE_KEY = "pi-wiki-workspace";
 
 export function App() {
-	useEffect(() => desktopAPI?.onBeforeClose?.(flushWindowSaves), []);
+	const beforeClose = useRef(flushWindowSaves);
+	useEffect(() => desktopAPI?.onBeforeClose?.(() => beforeClose.current()), []);
 	const t = useT();
 	const { locale } = useI18n();
 	const { chat, send: rawSend, dismissNotice, pushNotice, setPendingEcho, terminal, switching, switchError } = useChat();
@@ -332,12 +335,15 @@ export function App() {
 		if (!switching && chat.state?.cwd && previewFile && previewFile.cwd !== chat.state.cwd) setPreviewFile(null);
 	}, [switching, chat.state?.cwd, previewFile]);
 	const fileGuard = useRef<FileNavigationGuard | null>(null);
-	const wikiGuard = useRef<((next: () => void) => void) | null>(null);
+	const wikiGuard = useRef<((next: () => void, cancel?: () => void) => void) | null>(null);
+	const { coordinator: wikiCoordinator, busy: wikiBusy } = useWikiCoordinator(chat.state?.conversationId ?? "", !!chat.state?.isStreaming, chat.ready && !switching, chat.state?.sessionId);
+	const guardWiki = () => new Promise<boolean>(resolve => { if (wikiGuard.current) wikiGuard.current(() => resolve(true), () => resolve(false)); else resolve(true); });
 	const wikiSave = useRef<(() => Promise<boolean>) | null>(null);
 	const send = useCallback((message: ClientMessage) => {
 		const navigation = message.type === "switch_conversation" || message.type === "new_chat" || message.type === "set_cwd" || message.type === "switch_session" ||
 			(message.type === "prompt" && /^\/cwd(?:\s|$)/.test(message.text));
-		if (navigation && wikiGuard.current) { wikiGuard.current(() => { rawSend(message); }); return false; }
+		if (navigation && message.type !== "prompt" && wikiCoordinator.busy()) return false;
+		if (navigation && wikiGuard.current) { const operation = wikiCoordinator.begin(); if (operation) void guardWiki().then(ok => { if (ok) rawSend(message); }).finally(operation.release); return false; }
 		if (navigation && fileGuard.current) {
 			setView("chat");
 			setDrawer("right");
@@ -387,7 +393,6 @@ export function App() {
 	const [wikiCurrentIncluded, setWikiCurrentIncluded] = useState(false);
 	const [wikiReferences, setWikiReferences] = useState<string[]>([]);
 	const [wikiContextSession, setWikiContextSession] = useState("");
-	const wikiActionPending = useRef(false);
 	const [wikiProject, setWikiProject] = useState<WikiProjectReference | null>(null);
 	const [wikiChatHost, setWikiChatHost] = useState<HTMLElement | null>(null);
 	const [wikiChatOpen, setWikiChatOpen] = useState(() => {
@@ -401,8 +406,8 @@ export function App() {
 	const wikiRequestRef = useRef(wikiFileRequest);
 	wikiRequestRef.current = wikiFileRequest;
 	const [chatReference, setChatReference] = useState<ChatReferenceRequest | null>(null);
-	const wikiCurrent = useRef({ cwd: chat.state?.cwd, conversationId: chat.activeConversationId });
-	wikiCurrent.current = { cwd: chat.state?.cwd, conversationId: chat.activeConversationId };
+	const wikiCurrent = useRef({ cwd: chat.state?.cwd, conversationId: chat.state?.conversationId ?? chat.activeConversationId, sessionId: chat.state?.sessionId });
+	wikiCurrent.current = { cwd: chat.state?.cwd, conversationId: chat.state?.conversationId ?? chat.activeConversationId, sessionId: chat.state?.sessionId };
 	// —— Wiki mode（独立窗口 + 持久化 Wiki 会话，ADR-0003）——
 	// 进入 Wiki mode 前的普通对话锚点：退出时切回它（Q16）。
 	const wikiNormalAnchor = useRef<{ cwd: string; conversationId: string } | null>(null);
@@ -411,19 +416,31 @@ export function App() {
 	const [wikiFolderError, setWikiFolderError] = useState<string>();
 	const [wikiFolderPending, setWikiFolderPending] = useState<{ path: string } | null>(null);
 	const wikiFolderOpening = useRef(false);
-	const [wikiInterrupt, setWikiInterrupt] = useState<{ run: () => void } | null>(null);
-	// abort 后等待任务结束的 waiter；快照观察到非 streaming 时统一唤醒。
-	const settleWaiters = useRef<(() => void)[]>([]);
-	const waitSettle = useCallback(() => new Promise<void>(resolve => {
-		const done = () => { clearTimeout(timer); resolve(); };
-		const timer = setTimeout(() => { settleWaiters.current = settleWaiters.current.filter(item => item !== done); resolve(); }, 30000);
-		settleWaiters.current.push(done);
-	}), []);
-	useEffect(() => {
-		if (conversationState?.isStreaming) return;
-		const waiters = settleWaiters.current;
-		if (waiters.length) { settleWaiters.current = []; waiters.forEach(item => item()); }
-	}, [conversationState?.isStreaming, conversationState?.conversationId]);
+	const [wikiInterrupt, setWikiInterrupt] = useState<{ run: (operation: WikiOperation) => Promise<unknown>; operation: WikiOperation; conversationId: string; sessionId?: string } | null>(null);
+	const runWikiOperation = (run: (operation: WikiOperation) => Promise<unknown>, interruptible = false) => {
+		const operation = wikiCoordinator.begin();
+		if (!operation) return;
+		const source = wikiCurrent.current;
+		void (async () => {
+			let handedToDialog = false;
+			try {
+				if (interruptible && source.cwd && chat.state?.wiki) {
+					const activity = await wikiRequest<{ sessionId: string; isStreaming: boolean }>(source.cwd, "chat-context", { conversationId: source.conversationId }, AbortSignal.timeout(30000));
+					if (activity.sessionId !== source.sessionId || !operation.accepts(wikiCurrent.current, source)) return;
+					wikiCoordinator.observe(source.conversationId, activity.isStreaming, true, activity.sessionId);
+					if (activity.isStreaming) {
+						handedToDialog = true;
+						setWikiInterrupt({ run, operation, conversationId: source.conversationId, sessionId: source.sessionId });
+						return;
+					}
+				}
+				await run(operation);
+			} catch (error) { pushNotice("error", (error as Error).message); }
+			finally { if (!handedToDialog) operation.release(); }
+		})();
+	};
+	const folderOperation = useRef<WikiOperation | null>(null);
+	const folderComplete = useRef<(() => void) | null>(null);
 	// 刷新恢复（Q15）：view + 文档 + 运行时会话 ID，随标签页（clientId）存 sessionStorage。
 	const wikiPersist = useCallback((entry: { client: string | null; cwd: string; conversationId: string; sessionId?: string; path: string | null; anchor: { cwd: string; conversationId: string } | null } | null) => {
 		try { if (entry) sessionStorage.setItem(WIKI_VIEW_KEY, JSON.stringify(entry)); else sessionStorage.removeItem(WIKI_VIEW_KEY); } catch { /* best effort */ }
@@ -433,11 +450,13 @@ export function App() {
 	}, []);
 	/** 进入时恢复当前文档的独立 Wiki 历史，
 	 * 携带当前文档的当前文件 chip。调用方已处理运行中任务的确认。 */
-	const enterWiki = useCallback(async (path: string | null, reuseInitial = false) => {
+	const enterWiki = useCallback(async (path: string | null, reuseInitial = false, held?: WikiOperation) => {
 		const current = wikiCurrent.current;
 		// Destructured locals keep the non-undefined narrowing inside the closure below.
 		const wikiCwd = current.cwd, activeId = current.conversationId;
 		if (!wikiCwd || !activeId || switching) return false;
+		const operation = held ?? wikiCoordinator.begin();
+		if (!operation) return false;
 		// 媒体/代码等只读预览不绑定文档会话（issue #119）：沿用当前 Wiki 会话，
 		// 仅切换正文预览；当前不是 Wiki 会话时（如刷新后直接打开媒体）先建空白会话。
 		const media = path !== null && !isWikiDocumentPath(path);
@@ -463,7 +482,7 @@ export function App() {
 				if (refreshed.cwd !== wikiCwd || !refreshed.conversationId || refreshed.conversationId === activeId) throw error;
 				result = await create(refreshed.conversationId);
 			}
-			if (wikiCurrent.current.cwd !== wikiCwd) return false; // 期间切换了工作区
+			if (!operation.accepts(wikiCurrent.current, current, { cwd: wikiCwd, conversationId: result.conversationId, sessionId: result.sessionId })) return false;
 			// Wiki 独立窗口没有可回切的普通对话锚点——退出即关窗。
 			const anchor = isWikiWindow ? null : view === "wiki" && wikiFileRequest ? wikiNormalAnchor.current : { cwd: wikiCwd, conversationId: activeId };
 			wikiNormalAnchor.current = anchor;
@@ -486,7 +505,8 @@ export function App() {
 			setView("wiki");
 			return true;
 		} catch (e) { pushNotice("error", (e as Error).message); return false; }
-	}, [switching, view, wikiFileRequest, pushNotice, wikiPersist, chat.state?.sessionId]);
+		finally { if (!held) operation.release(); }
+	}, [switching, view, wikiFileRequest, pushNotice, wikiPersist, chat.state?.sessionId, wikiCoordinator]);
 	useEffect(() => {
 		if (!wikiFileRequest || !chat.state?.wiki || chat.activeConversationId !== wikiFileRequest.conversationId) return;
 		let alive = true;
@@ -504,71 +524,68 @@ export function App() {
 	};
 	const wikiChatAction = (action: string, id?: string) => {
 		const current = wikiRequestRef.current;
+		const source = wikiCurrent.current;
 		if (!current) return;
-		const run = async () => {
-			if (wikiActionPending.current) return;
-			wikiActionPending.current = true;
-			try {
-				if (wikiRequestRef.current?.token !== current.token || !await wikiSave.current?.()) return;
-				if (wikiRequestRef.current?.token !== current.token) return;
-				const result = await wikiRequest<{ conversationId: string; sessionId: string }>(current.cwd, action, { conversationId: current.conversationId, id, path: current.path });
-				if (wikiCurrent.current.cwd !== current.cwd) return;
-				setWikiFileRequest({ ...current, conversationId: result.conversationId, token: randomUuid() });
-				wikiPersist({ client: wikiWindowClient(), cwd: current.cwd, conversationId: result.conversationId, sessionId: result.sessionId, path: current.path, anchor: wikiNormalAnchor.current });
-			} catch (error) { pushNotice("error", (error as Error).message); }
-			finally { wikiActionPending.current = false; }
-		};
-		if (conversationState?.isStreaming) setWikiInterrupt({ run: () => { void run(); } });
-		else void run();
+		runWikiOperation(async operation => {
+			if (wikiRequestRef.current?.token !== current.token || !await wikiSave.current?.()) return;
+			if (!operation.current() || wikiRequestRef.current?.token !== current.token) return;
+			const result = await wikiRequest<{ conversationId: string; sessionId: string }>(current.cwd, action, { conversationId: current.conversationId, id, path: current.path });
+			if (!operation.accepts(wikiCurrent.current, source, { cwd: current.cwd, conversationId: result.conversationId, sessionId: result.sessionId })) return;
+			setWikiFileRequest({ ...current, conversationId: result.conversationId, token: randomUuid() });
+			wikiPersist({ client: wikiWindowClient(), cwd: current.cwd, conversationId: result.conversationId, sessionId: result.sessionId, path: current.path, anchor: wikiNormalAnchor.current });
+		}, true);
 	};
-	const openWikiDocument = useCallback(async (path: string) => {
+	const openWikiDocument = async (path: string) => {
 		if (switching) return;
-		// 只读媒体预览不切换会话（issue #119），运行中的任务无需中断确认。
-		if (!isWikiDocumentPath(path)) { void enterWiki(path); return; }
-		// 每篇文档恢复自己的 Wiki 会话，切换清除附加项目。
-		// 运行中的任务必须先经用户确认中断，等任务结束后才能切换。
-		if (view === "wiki" && wikiFileRequest && conversationState?.isStreaming && conversationState.conversationId === wikiFileRequest.conversationId) {
-			setWikiInterrupt({ run: () => { void enterWiki(path); } });
-			return;
-		}
-		void enterWiki(path);
-	}, [switching, view, wikiFileRequest, conversationState, enterWiki]);
-	const pickWikiFolder = useCallback((path: string) => {
+		const source = wikiCurrent.current;
+		runWikiOperation(async operation => {
+			if (await guardWiki() && operation.accepts(wikiCurrent.current, source)) await enterWiki(path, false, operation);
+		}, isWikiDocumentPath(path));
+	};
+	const pickWikiFolder = (path: string) => {
 		if (!chat.ready || switching || wikiFolderPending) return;
-		setWikiFolderPicker(false);
-		const change = () => {
-			setWikiFolderError(undefined);
-			setWikiFolderPicker(true);
-			if (rawSend({ type: "set_cwd", path, source: "ui" })) setWikiFolderPending({ path });
-			else setWikiFolderError(t("wikiFolderOpenFailed"));
-		};
-		const guarded = () => { if (wikiGuard.current) wikiGuard.current(change); else change(); };
-		if (conversationState?.isStreaming) setWikiInterrupt({ run: guarded });
-		else guarded();
-	}, [chat.ready, switching, wikiFolderPending, rawSend, conversationState?.isStreaming, t]);
+		const source = wikiCurrent.current;
+		runWikiOperation(async operation => {
+			if (!await guardWiki() || !operation.accepts(wikiCurrent.current, source)) return;
+			setWikiFolderError(undefined); setWikiFolderPicker(true);
+			if (!rawSend({ type: "set_cwd", path, source: "ui" })) { setWikiFolderError(t("wikiFolderOpenFailed")); return; }
+			folderOperation.current = operation;
+			setWikiFolderPending({ path });
+			await new Promise<void>(resolve => {
+				const timer = setTimeout(() => { wikiFolderOpening.current = false; setWikiFolderPending(null); setWikiFolderError(t("wikiFolderOpenFailed")); resolve(); }, 30000);
+				folderComplete.current = () => { clearTimeout(timer); resolve(); };
+			});
+		}, true);
+	};
 	// useChat clears switching only after the request acknowledgement AND the
 	// authoritative target snapshot. Never create a Wiki chat on a cached preview.
 	useEffect(() => {
-		if (!wikiFolderPending || switching || !chat.ready || wikiFolderOpening.current) return;
+		if (!wikiFolderPending || switching || !chat.ready || wikiFolderOpening.current || !folderOperation.current?.current()) return;
 		if (switchError) {
-			setWikiFolderPending(null);
+			setWikiFolderPending(null); folderComplete.current?.();
 			setWikiFolderError(t("wikiFolderOpenFailed"));
 			return;
 		}
 		if (wikiFileRequest && wikiFileRequest.cwd === chat.state?.cwd && wikiFileRequest.conversationId === chat.activeConversationId) {
-			setWikiFolderPending(null); setWikiFolderPicker(false); return; // Same folder.
+			setWikiFolderPending(null); setWikiFolderPicker(false); folderComplete.current?.(); return; // Same folder.
 		}
 		wikiFolderOpening.current = true;
-		void enterWiki(null).then(ok => {
+		const operation = folderOperation.current, complete = folderComplete.current;
+		void enterWiki(null, false, operation).then(ok => {
+			if (!operation.current()) return;
 			setWikiFolderPending(null);
 			if (ok) setWikiFolderPicker(false);
 			else setWikiFolderError(t("wikiFolderOpenFailed"));
-		}).finally(() => { wikiFolderOpening.current = false; });
+		}).finally(() => {
+			if (folderOperation.current !== operation) return;
+			wikiFolderOpening.current = false; complete?.(); folderOperation.current = null;
+		});
 	}, [wikiFolderPending, switching, chat.ready, chat.state?.cwd, chat.activeConversationId, switchError, wikiFileRequest, enterWiki, t]);
 
 	/** 退出 Wiki mode：脏草稿先保存；运行中任务确认中断；切回进入前的普通对话，
 	 * 运行实例可回收，独立 Wiki 历史继续保留。 */
 	const exitWiki = useCallback(() => {
+		const source = wikiCurrent.current;
 		const leave = () => {
 			// Wiki 独立窗口：退出即关窗，客户端断开后由服务端逐出清理运行实例。
 			if (isWikiWindow) {
@@ -593,20 +610,45 @@ export function App() {
 				if (rawSend({ type: "set_cwd", path: anchor.cwd, source: "ui" })) finish();
 			} else finish();
 		};
-		if (wikiFileRequest && conversationState?.isStreaming && conversationState.conversationId === wikiFileRequest.conversationId) {
-			setWikiInterrupt({ run: leave });
-			return;
-		}
-		if (wikiGuard.current) wikiGuard.current(leave); else leave();
-	}, [chat.conversations, conversationState, wikiFileRequest, rawSend]);
-	const confirmWikiInterrupt = useCallback(async () => {
+		runWikiOperation(async operation => { if (await guardWiki() && operation.accepts(wikiCurrent.current, source)) leave(); }, true);
+	}, [chat.conversations, conversationState, wikiFileRequest, rawSend, wikiCoordinator]);
+	const confirmWikiInterrupt = async () => {
 		const pending = wikiInterrupt;
 		setWikiInterrupt(null);
 		if (!pending) return;
-		rawSend({ type: "abort" });
-		await waitSettle();
-		pending.run();
-	}, [wikiInterrupt, rawSend, waitSettle]);
+		try {
+			if (wikiCurrent.current.conversationId !== pending.conversationId || wikiCurrent.current.sessionId !== pending.sessionId || !chat.ready || !rawSend({ type: "abort" })) throw new Error(t("stopUnavailable"));
+			await wikiCoordinator.waitSettled(pending.conversationId, 30000, pending.sessionId);
+			await pending.run(pending.operation);
+		} catch (error) { pushNotice("error", error instanceof WikiCoordinationError ? t(error.reason === "timeout" ? "wikiInterruptTimeout" : "wikiInterruptChanged") : (error as Error).message); }
+		finally { pending.operation.release(); }
+	};
+	const desktopCloseApproved = useRef(false);
+	beforeClose.current = async () => {
+		if (!isWikiWindow) return flushWindowSaves();
+		if (desktopCloseApproved.current) { desktopCloseApproved.current = false; return true; }
+		const operation = wikiCoordinator.begin();
+		if (!operation) return false;
+		const source = wikiCurrent.current;
+		let handedToDialog = false;
+		try {
+			if (!source.cwd || !chat.ready) return false;
+			const activity = await wikiRequest<{ sessionId: string; isStreaming: boolean }>(source.cwd, "chat-context", { conversationId: source.conversationId }, AbortSignal.timeout(30000));
+			if (activity.sessionId !== source.sessionId || !operation.accepts(wikiCurrent.current, source)) return false;
+			wikiCoordinator.observe(source.conversationId, activity.isStreaming, true, activity.sessionId);
+			if (activity.isStreaming) {
+				handedToDialog = true;
+				setWikiInterrupt({ operation, conversationId: source.conversationId, sessionId: source.sessionId, run: async held => {
+					if (await flushWindowSaves() && held.accepts(wikiCurrent.current, source)) {
+						held.release(); desktopCloseApproved.current = true; desktopAPI?.windowAction("close");
+					}
+				} });
+				return false;
+			}
+			return await flushWindowSaves() && operation.accepts(wikiCurrent.current, source);
+		} catch (error) { pushNotice("error", (error as Error).message); return false; }
+		finally { if (!handedToDialog) operation.release(); }
+	};
 	/** 顶栏进入 Wiki mode：打开独立 Wiki 窗口（ADR-0003），主窗口留在 normal 对话。
 	 * 窗口记住上次 Wiki 的工作区与文档，由新窗口自己切工作区并打开文档。 */
 	const enterWikiMode = useCallback(() => {
@@ -724,7 +766,6 @@ export function App() {
 		if (wikiCurrent.current.cwd === current.cwd && wikiCurrent.current.conversationId === current.conversationId) setDatabaseReferences(items => items.filter(i => i.id !== id));
 	};
 	const prepareChatPrompt = async (project?: WikiProjectReference | null) => {
-		if (wikiActionPending.current) return false;
 		const current = wikiCurrent.current;
 		if (!(await saveWikiBeforePrompt())) return false;
 		if (wikiFileRequest) {
@@ -1447,6 +1488,8 @@ export function App() {
 								draftStorageKey={wikiFileRequest && chat.state?.sessionId ? `pi-wiki-draft:${wikiFileRequest.cwd}:${chat.state.sessionId}` : undefined}
 								active={!notesOpen && (view === "chat" || view === "wiki" || databaseOpen)}
 								beforeSend={prepareChatPrompt}
+								coordinator={wikiCoordinator}
+								sessionId={conversationState?.sessionId}
 								databaseReferences={databaseReferences}
 								onRemoveDatabase={id => void revokeDatabase(id).catch(error => pushNotice("error", error.message))}
 								cwd={chat.state?.cwd ?? ""}
@@ -1555,7 +1598,7 @@ export function App() {
 							onClose={exitWiki}
 							chatHost={setWikiChatHost}
 						>
-							{wikiFileRequest.cwd === chat.state?.cwd && wikiFileRequest.conversationId === chat.activeConversationId ? <WikiWorkbench key={wikiFileRequest.cwd} cwd={wikiFileRequest.cwd} conversationId={wikiFileRequest.conversationId} fileRequest={wikiFileRequest} streaming={!!conversationState?.isStreaming} active={view === "wiki"} ready={chat.ready && !switching} writingBlocked={!!switching || !!conversationState?.isStreaming} openDocument={openWikiDocument} onOpenFolder={() => { setWikiFolderError(undefined); setWikiFolderPicker(true); }} folderBusy={!chat.ready || !!switching || !!wikiFolderPending} connected={chat.ready} guard={wikiGuard} saveBeforePrompt={wikiSave} contextReader={wikiContextReader} contextSaver={wikiContextSaver} onContextChange={setWikiCurrentFile} onAttach={(path, name, isDir) => { attach(path, name, "reference", isDir); setWikiChatOpen(true); }} onReference={receiveWikiReference} /> : <div className="boot-wait">{chat.ready ? t("loadingSession") : t("connectingServer")}</div>}
+							{wikiFileRequest.cwd === chat.state?.cwd && wikiFileRequest.conversationId === chat.activeConversationId ? <WikiWorkbench coordinator={wikiCoordinator} key={wikiFileRequest.cwd} cwd={wikiFileRequest.cwd} conversationId={wikiFileRequest.conversationId} fileRequest={wikiFileRequest} streaming={!!conversationState?.isStreaming} active={view === "wiki"} ready={chat.ready && !switching} writingBlocked={!!switching || !!conversationState?.isStreaming} openDocument={openWikiDocument} onOpenFolder={() => { setWikiFolderError(undefined); setWikiFolderPicker(true); }} folderBusy={!chat.ready || !!switching || !!wikiFolderPending || wikiBusy} connected={chat.ready} guard={wikiGuard} saveBeforePrompt={wikiSave} contextReader={wikiContextReader} contextSaver={wikiContextSaver} onContextChange={setWikiCurrentFile} onAttach={(path, name, isDir) => { attach(path, name, "reference", isDir); setWikiChatOpen(true); }} onReference={receiveWikiReference} /> : <div className="boot-wait">{chat.ready ? t("loadingSession") : t("connectingServer")}</div>}
 						</WikiWindowShell> : <WikiWindowShell notices={chat.notices.length > 0 && <div className="notices wiki-status-notices">{chat.notices.map(n => <NoticeToast key={n.id} notice={n} onDismiss={dismissNotice} onOpenExtensions={openExtensionSettings} />)}</div>} documentPath={wikiWindowParams().doc ?? ""} loading chatOpen={false} chatWidth={wikiChatWidth} onChatOpen={setWikiChatOpen} onChatResize={resizeWikiChat} onClose={exitWiki} chatHost={setWikiChatHost}><div className="boot-wait" role="status">{chat.ready ? t("loadingSession") : t("connectingServer")}</div></WikiWindowShell>)}
 					</div>
 					<div className={`view-pane ${view === "terminal" ? "" : "hidden"}`}>
@@ -1599,7 +1642,7 @@ export function App() {
 			{wikiInterrupt && <div className="wiki-modal-backdrop"><section className="wiki-confirm" role="dialog" aria-modal="true" aria-label={t("wikiInterruptTitle")}>
 				<h2>{t("wikiInterruptTitle")}</h2>
 				<p>{t("wikiInterruptHint")}</p>
-				<div><button onClick={() => setWikiInterrupt(null)}>{t("cancel")}</button><button onClick={() => void confirmWikiInterrupt()}>{t("wikiInterruptConfirm")}</button></div>
+				<div><button onClick={() => { wikiInterrupt.operation.release(); setWikiInterrupt(null); }}>{t("cancel")}</button><button onClick={() => void confirmWikiInterrupt()}>{t("wikiInterruptConfirm")}</button></div>
 			</section></div>}
 
 			{chat.ready &&

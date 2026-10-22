@@ -901,6 +901,11 @@ export function useChat() {
 			} else if (switchRef.current && msg.type !== "get_state" && msg.type !== "list_project_workspaces" && msg.type !== "project_workspace_action") {
 				return false;
 			}
+			if (msg.type === "prompt") {
+				const state = authoritative.current.state;
+				if (!state?.sessionId) return false;
+				msg = { ...msg, target: msg.target ?? { cwd: state.cwd, conversationId: state.conversationId, sessionId: state.sessionId } };
+			}
 			ws.send(JSON.stringify(msg));
 			return true;
 		}

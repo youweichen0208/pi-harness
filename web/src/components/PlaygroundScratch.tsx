@@ -1,10 +1,11 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { FiPlay, FiSquare } from "react-icons/fi";
 import { useT } from "../i18n";
 import { usePlaygroundHost } from "../playground-context";
 import { runKey, startRun, stopRun, usePlaygroundRun } from "../playground-run-store";
-import { withToken } from "../auth-token";
-import type { PlaygroundScratch as ScratchDoc, PlaygroundTestConfig, PlaygroundCase } from "../types";
+import { usePlaygroundScratch } from "../use-playground-scratch";
+import { SCRATCH_EXAMPLE as EXAMPLE, EMPTY_SCRATCH_TESTS as EMPTY_TESTS } from "../playground-scratch-store";
+import type { PlaygroundTestConfig, PlaygroundCase } from "../types";
 import { discoverJavaMethods } from "../../../server/playground-methods";
 import { PlaygroundResult } from "./PlaygroundRun";
 import { PlaygroundMethodCases, caseError, methodErrorText } from "./PlaygroundMethodCases";
@@ -15,95 +16,25 @@ const LEGACY_TEMPLATE = `public class Main {
 		System.out.println("Hello, Playground");
 	}
 }`;
-const EXAMPLE = `public int add(int a, int b) {
-	return a + b;
-}`;
-const EMPTY_TESTS: PlaygroundTestConfig = { mode: "methods", selectedMethod: "", casesByMethod: {} };
-type Draft = { content: string; tests: PlaygroundTestConfig };
-// Serialize writes across remounts as well as keystrokes. Re-entry waits for a
-// pending flush before reading the server, so an old response cannot win.
-let saveQueue: Promise<void> = Promise.resolve();
 let lastScratchRun: { key: string; snapshot: string; methodId?: string } | null = null;
-function persistDraft(doc: Draft): Promise<void> {
-	const operation = saveQueue.then(async () => {
-		const response = await fetch(withToken("/api/playground/scratch"), { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(doc) });
-		if (!response.ok) throw new Error(String(response.status));
-	});
-	saveQueue = operation.catch(() => {});
-	return operation;
-}
 
 export function PlaygroundScratch() {
 	const t = useT();
 	const { status } = usePlaygroundHost();
-	const [doc, setDoc] = useState<Draft | null>(null);
-	const [loadFailed, setLoadFailed] = useState(false);
-	const [saveState, setSaveState] = useState<"pending" | "saving" | "saved" | "error">("saved");
-	const [savedAt, setSavedAt] = useState("");
+	const { doc, edit: setDoc, loadFailed, saveState, savedAt: savedTime } = usePlaygroundScratch();
+	const savedAt = savedTime ? new Date(savedTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
 	const [lastRun, setLastRun] = useState(lastScratchRun);
 	const run = usePlaygroundRun(lastRun?.key ?? "");
 	const running = run.phase === "running";
-	const latest = useRef(doc);
-	latest.current = doc;
-	const persisted = useRef("");
-	const queued = useRef("");
 	const snapshot = doc ? JSON.stringify(doc) : "";
 	const tests = doc?.tests ?? EMPTY_TESTS;
 	const discovered = useMemo(() => discoverJavaMethods(doc?.content ?? ""), [doc?.content]);
 	const method = discovered.methods.find(m => m.id === tests.selectedMethod);
 	const cases = Object.hasOwn(tests.casesByMethod, tests.selectedMethod) ? tests.casesByMethod[tests.selectedMethod] : [];
 
-	const save = useCallback(async (draft: Draft) => {
-		const serialized = JSON.stringify(draft);
-		if (serialized === queued.current) return;
-		queued.current = serialized;
-		setSaveState("saving");
-		try {
-			await persistDraft(draft);
-			persisted.current = serialized;
-			if (serialized === JSON.stringify(latest.current) && queued.current === serialized) {
-				setSavedAt(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
-				setSaveState("saved");
-			}
-		} catch {
-			if (queued.current === serialized) queued.current = persisted.current;
-			setSaveState("error");
-		}
-	}, []);
-
 	useEffect(() => {
-		let cancelled = false;
-		void (async () => {
-			try {
-				await saveQueue;
-				const response = await fetch(withToken("/api/playground/scratch"));
-				if (!response.ok) throw new Error(String(response.status));
-				const stored = await response.json() as ScratchDoc;
-				if (cancelled) return;
-				const draft: Draft = { content: stored.updatedAt === 0 && !stored.content ? EXAMPLE : stored.content, tests: { ...(stored.tests ?? EMPTY_TESTS), mode: "methods" } };
-				persisted.current = stored.updatedAt ? JSON.stringify({ content: stored.content, tests: stored.tests }) : "";
-				queued.current = persisted.current;
-				setDoc(draft);
-			} catch { if (!cancelled) setLoadFailed(true); }
-		})();
-		return () => { cancelled = true; };
-	}, []);
-	useEffect(() => {
-		if (!doc) return;
-		if (snapshot === queued.current) {
-			if (snapshot === persisted.current) setSaveState("saved");
-			return;
-		}
-		setSaveState("pending");
-		const timer = window.setTimeout(() => { void save(doc); }, 600);
-		return () => window.clearTimeout(timer);
-	}, [doc, snapshot, save]);
-	useEffect(() => () => {
-		if (latest.current && JSON.stringify(latest.current) !== queued.current) void save(latest.current);
-	}, [save]);
-	useEffect(() => {
-		if (!tests.selectedMethod && discovered.methods.length) setDoc(current => current ? { ...current, tests: { ...current.tests, selectedMethod: discovered.methods[0].id } } : current);
-	}, [tests.selectedMethod, discovered]);
+		if (!tests.selectedMethod && discovered.methods.length) setDoc(current => ({ ...current, tests: { ...current.tests, selectedMethod: discovered.methods[0].id } }));
+	}, [tests.selectedMethod, discovered, setDoc]);
 
 	const reason = !status ? t("playgroundChecking") : status.locked ? t("playgroundLocked") : !status.enabled ? t("playgroundDisabled") : !status.jdk.available ? [t("playgroundNoJdk"), status.jdk.reason].filter(Boolean).join(" — ") : "";
 	const inputError = !method ? t("pgNoMethods") : caseError(method, cases);

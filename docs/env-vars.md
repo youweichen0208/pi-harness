@@ -18,3 +18,9 @@
 | `PI_WEB_TOKEN` | 空 | **可选共享口令鉴权**：设置后所有 HTTP/WS 请求必须携带（`Authorization: Bearer` / `X-PI-Token` 头、`?token=` 参数或 `pi_web_token` cookie 任一匹配；浏览器首次经 `?token=xxx` 进入后存 localStorage 并下发 HttpOnly cookie）；`/api/health` 保持开放供探针。前端 `web/src/auth-token.ts` 统一注入；口令变化（或换端口重启）时服务端会重发 cookie，不会被旧 cookie 挡住；比较用常量时间；`/api/health` 不再返回工作区路径。**桌面版每次启动自动生成随机口令**（`electron/server-auth.mjs`），无需配置；回归：`tests/token-auth-test.mjs`（端口 8975）、`tests/desktop-server-auth-test.mjs` |
 | `PI_WEB_PLAYGROUND` | 空 | 设为 `off`（或 `0`/`false`）时**硬关闭 Java 代码运行（Playground）并在设置页锁定为不可修改**，用于 Docker/共享部署；不设置时由 `<PI_WEB_DATA_DIR>/playground.json` 的 `enabled` 决定（**默认关闭**）。见 `docs/architecture-playground.md` |
 | `PI_WEB_CLIENT_IDLE_MINUTES` | `30` | 客户端（浏览器标签页）断开且无运行任务、终端、后台服务后，超过 N 分钟回收其会话（释放运行时与定时器；最近项目等状态已持久化，同一 clientId 回来会重建）；0 = 不回收。`client-state.json` 另外最多保留 200 个客户端条目 |
+
+## Pi Codemode worker 数量
+
+Pi 1.4.0 的 `PI_CODEMODE_MAX_WORKERS` 控制同一服务进程中所有会话共享的 Codemode worker 上限。未设置或不是正整数时使用原生默认值 2；多个服务进程分别计数。超过上限的脚本按到达顺序等待，最长 60 秒，脚本自己的 deadline 更短时以 deadline 为准；等待也计入脚本执行期限，取消等待不会启动脚本。
+
+例如前台启动：`PI_CODEMODE_MAX_WORKERS=4 pi-harness`。使用 systemd、launchd 或 Docker 时配置服务进程的环境并重启服务；终端中设置变量不会修改已经运行的服务。该值由 SDK 读取，WebUI 不提供额外设置项；提高上限会增加并发内存占用。

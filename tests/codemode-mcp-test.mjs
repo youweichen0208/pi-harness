@@ -1,4 +1,4 @@
-/** Actual Pi 1.0.4: MCP management, Codemode execution, output limits and image saves. Zero paid tokens. */
+/** Actual Pi 1.4.0: MCP management, Codemode execution, output limits and image saves. Zero paid tokens. */
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
@@ -36,7 +36,7 @@ await new Promise(r => mock.listen(port + 1, '127.0.0.1', r));
 writeFileSync(join(agent, 'settings.json'), JSON.stringify({ defaultProvider: 'fixture', defaultModel: 'fixture', defaultTools: ['+codemode', '+tool_search'], retry: { enabled: false } }));
 writeFileSync(join(agent, 'auth.json'), JSON.stringify({fixture:{type:'api_key',key:'local'}}));
 writeFileSync(join(agent, 'models.json'), JSON.stringify({ providers: { fixture: { api: 'openai-completions', baseUrl: `http://127.0.0.1:${port + 1}`, apiKey: 'local', models: [{ id: 'fixture', name: 'Fixture', input: ['text', 'image'], contextWindow: 32000, maxTokens: 4096 }] } } }));
-writeFileSync(join(agent, 'mcp.json'), JSON.stringify({ extra: 'preserve', mcpServers: { echo: { command: process.execPath, args: [resolve('tests/fixtures/mcp-echo-server.mjs')], env: { PRIVATE: 'secret-value' }, exposure: 'codemode' }, disabled: { command: 'not-a-command', enabled: false } } }));
+writeFileSync(join(agent, 'mcp.json'), '\uFEFF' + JSON.stringify({ extra: 'preserve', mcpServers: { echo: { command: process.execPath, args: [resolve('tests/fixtures/mcp-echo-server.mjs')], env: { PRIVATE: 'secret-value' }, exposure: 'codemode' }, disabled: { command: 'not-a-command', enabled: false } } }));
 const server = spawn(process.execPath, ['dist/server/index.js'], { env: { ...testEnv(), PORT: String(port), PI_WEB_TOKEN: token, PI_WEB_CWD: cwd, PI_CODING_AGENT_DIR: agent, PI_WEB_DATA_DIR: join(root, 'data') }, stdio: ['ignore', 'pipe', 'pipe'] });
 let browser, logs = '', ws, messages = [], counter = 0;
 server.stdout.on('data', d => logs += d); server.stderr.on('data', d => logs += d);
@@ -56,13 +56,22 @@ try {
  let settings = await mcp('codemode', { version: saved.codemode.version, codemode: { mode: 'only', inlineBudget: 1200 } }); assert(!settings.error, settings.error); assert.equal(settings.codemode.effectiveMode, 'only');
  assert.equal(JSON.parse(readFileSync(join(agent, 'settings.json'))).retry.enabled, false);
  settings = await mcp('codemode', { version: settings.codemode.version, codemode: { mode: 'on', inlineBudget: 3000 } }); assert(!settings.error);
+ // Exercise BOM parsing in both scopes, including inherited settings and override validation.
+ const globalRaw = readFileSync(join(agent, 'mcp.json'), 'utf8');
+ writeFileSync(join(agent, 'mcp.json'), '\uFEFF' + globalRaw);
+ assert((await mcp('save', { version: saved.state.version, document: saved.state.document })).error?.includes('changed externally'), 'adding only a BOM changes the conflict version');
+ mkdirSync(join(cwd, '.pi'), { recursive: true });
+ writeFileSync(join(cwd, '.pi', 'mcp.json'), '\uFEFF' + JSON.stringify({ extra: 'project-preserve', mcpServers: {} }));
  let project = await mcp('get', { scope: 'project' });
  assert.equal(project.state.inheritedAutoEnableCodemode, false, 'project switch inherits the global setting');
  project = await mcp('save', { scope: 'project', version: project.state.version, document: { mcpServers: { echo: { enabled: false } } } }); assert(!project.error, project.error);
+ assert.equal(JSON.parse(readFileSync(join(cwd, '.pi', 'mcp.json'))).extra, 'project-preserve');
  project = await mcp('trust', { scope: 'project' }); assert(!project.error, project.error); assert(project.state.trusted);
  for (let i = 0; i < 25 && !project.servers.some(s => s.name === 'echo' && s.state === 'disabled'); i++) { await new Promise(r => setTimeout(r, 100)); project = await mcp('get', { scope: 'project' }); }
  assert(project.servers.some(s => s.name === 'echo' && s.state === 'disabled'));
  project = await mcp('save', { scope: 'project', version: project.state.version, document: { mcpServers: {} } }); assert(!project.error, project.error);
+ config = await mcp('get');
+ assert(!(await mcp('save', { version: config.state.version, document: config.state.document })).error);
  for (const kind of ['success', 'failure', 'limit']) {
   send({ type: 'prompt', text: kind, requestId: kind });
   const result = await wait(m => (m.type === 'snapshot' || m.type === 'snapshot_delta') && (m.state.messages ?? m.appended)?.some(v => v.toolCallId === `script-${kind}`));
@@ -134,6 +143,6 @@ try {
   assert.deepEqual(errors, []); await browser.close(); browser = undefined;
   console.log('PASS real browser Codemode tabs, call window, native images, attachment, MCP tools, saved settings, mobile layout');
  }
- console.log('PASS Pi 1.0.4 MCP status, secrets, config conflicts, project overrides, native settings, live Codemode, failure effects, output limit, images');
+ console.log('PASS Pi 1.4.0 MCP status, secrets, config conflicts, project overrides, native settings, live Codemode, failure effects, output limit, images');
 } catch (error) { console.error(logs.slice(-4000)); throw error; }
 finally { await browser?.close(); ws?.terminate(); server.kill(); if (server.exitCode === null) await new Promise(r => server.once('exit', r)); mock.closeAllConnections(); await new Promise(r => mock.close(r)); rmSync(root, { recursive: true, force: true }); }

@@ -1,3 +1,5 @@
+import { getClientId } from "../use-chat";
+import type { WikiCoordinator } from "../wiki-coordinator";
 import { UiIcon } from "./UiIcon";
 import { appendChatReference, takeChatReference, type ChatReferenceRequest } from "../chat-reference";
 import { Dropdown, DropdownItem } from "./Dropdown";
@@ -25,6 +27,8 @@ import { composeAnswers, isAnswered } from "../question-cards";
  *  by the server when the persisted set is unchanged), so the shallow-compared
  *  memo() below skips this input bar on every text delta. */
 interface ChatInputProps {
+	coordinator?: WikiCoordinator;
+	sessionId?: string;
 	wikiReferences?: string[];
 	wikiProject?: WikiProjectReference | null;
 	onRemoveWikiProject?: () => void;
@@ -105,7 +109,7 @@ interface ChatInputProps {
 }
 
 export const ChatInput = memo(function ChatInput({
-	active = true, cwd, referenceRequest, beforeSend, wikiReferences, wikiProject, onRemoveWikiProject, onCurrentFileIncluded, onRemoveWikiReference, draftStorageKey, databaseReferences = [], onRemoveDatabase,
+	active = true, coordinator, sessionId, cwd, referenceRequest, beforeSend, wikiReferences, wikiProject, onRemoveWikiProject, onCurrentFileIncluded, onRemoveWikiReference, draftStorageKey, databaseReferences = [], onRemoveDatabase,
 	currentFile, contextReader, contextSaver,
 	stats,
 	ready, promptResult, verifying, pendingCount = 0, queue, workingStatus,
@@ -134,9 +138,14 @@ export const ChatInput = memo(function ChatInput({
 	const autoFile = currentFile && (wikiReferences !== undefined || dismissed[activeConversationId] !== currentFile.id) ? currentFile : null;
 	useEffect(() => { onCurrentFileIncluded?.(!!autoFile); }, [!!autoFile, onCurrentFileIncluded]);
 	const preparing = useRef(false);
-	const owner = useRef({ cwd, activeConversationId });
-	owner.current = { cwd, activeConversationId };
-	const pendingSubmit = useRef<{ id: string; conversation: string; text: string; queued: boolean; attachments: ChatInputProps["attachments"] } | null>(null);
+	const owner = useRef({ cwd, activeConversationId, sessionId });
+	owner.current = { cwd, activeConversationId, sessionId };
+	const sendLease = useRef<ReturnType<WikiCoordinator["begin"]>>(null);
+	const pendingKey = `pi-pending-prompt:${getClientId()}`;
+	const [receiptWarning, setReceiptWarning] = useState<"unknown" | "acceptedElsewhere" | null>(null);
+	const mounted = useRef(true);
+	const [submissionEpoch, setSubmissionEpoch] = useState(0);
+	const pendingSubmit = useRef<{ id: string; sessionId?: string; conversation: string; text: string; queued: boolean; attachments: ChatInputProps["attachments"] } | null>(null);
 
 	const { locale } = useI18n();
 	const slashDesc = (c: SlashCommandInfo) =>
@@ -180,17 +189,48 @@ export const ChatInput = memo(function ChatInput({
 	useEffect(() => {
 		const pending = pendingSubmit.current;
 		if (!pending || promptResult?.requestId !== pending.id) return;
+		if (promptResult.receipt === "processing") return;
 		pendingSubmit.current = null;
-		if (!promptResult.ok) return;
+		try { sessionStorage.removeItem(pendingKey); } catch { /* Optional refresh recovery. */ }
+		sendLease.current?.release(); sendLease.current = null;
+		if (!promptResult.ok) {
+			if (["unknown", "missing", "expired", "conflict"].includes(promptResult.receipt ?? "")) setReceiptWarning("unknown");
+			return;
+		}
+		if (pending.sessionId !== sessionId) { setReceiptWarning("acceptedElsewhere"); return; }
 		if (promptResult.attachmentsConsumed !== false) onSent(pending.conversation, pending.attachments);
-		if (pending.conversation === activeConversationId) {
+		if (pending.conversation === activeConversationId && pending.sessionId === sessionId) {
 			setText((value) => value === pending.text ? "" : value);
 			if (!pending.queued && !promptResult.commandExecuted && pending.text.trim() !== "/reload") setPendingEcho(activeConversationId, pending.text.trim());
 		} else {
 			if (drafts.current.get(pending.conversation) === pending.text) drafts.current.delete(pending.conversation);
 		}
-	}, [promptResult, activeConversationId, onSent, setPendingEcho]);
-	useEffect(() => { if (!ready) pendingSubmit.current = null; }, [ready]);
+	}, [promptResult, activeConversationId, sessionId, onSent, setPendingEcho]);
+	useEffect(() => {
+		if (!pendingSubmit.current) {
+			try {
+				const saved = JSON.parse(sessionStorage.getItem(pendingKey) ?? "null");
+				if (saved && typeof saved.id === "string" && typeof saved.text === "string" && typeof saved.conversation === "string") {
+					pendingSubmit.current = { ...saved, attachments: [] };
+					setText(value => value || saved.text);
+				}
+			} catch { /* Invalid browser metadata does not permit replay. */ }
+		}
+		if (!pendingSubmit.current) return;
+		const query = () => {
+			if (!ready || !pendingSubmit.current) return;
+			if (coordinator && !sendLease.current) sendLease.current = coordinator.begin();
+			send({ type: "query_prompt_receipt", requestId: pendingSubmit.current.id });
+		};
+		query();
+		const interval = setInterval(query, 2000);
+		const timeout = setTimeout(() => {
+			clearInterval(interval);
+			if (pendingSubmit.current) { pendingSubmit.current = null; sendLease.current?.release(); sendLease.current = null; setReceiptWarning("unknown"); }
+		}, 30000);
+		return () => { clearInterval(interval); clearTimeout(timeout); };
+	}, [ready, pendingKey, send, submissionEpoch]);
+	useEffect(() => { mounted.current = true; return () => { mounted.current = false; sendLease.current?.release(); }; }, []);
 	const [dragOver, setDragOver] = useState(false);
 	/** Slash-command picker: non-null while open (filtered by the current input). */
 	const [completions, setCompletions] = useState<SlashCommandInfo[] | null>(
@@ -414,6 +454,7 @@ export const ChatInput = memo(function ChatInput({
 		const selectedProject = wikiProject;
 		const selectedReferences = wikiReferences ? [...wikiReferences] : [];
 		const deliverPrompt = () => {
+			if (!mounted.current || (coordinator && !sendLease.current?.current())) return;
 			let outgoing: PromptAttachment[] = attachments.map(({ key, isDir, ...attachment }) => attachment);
 			for (const path of selectedReferences) if (!outgoing.some(item => item.path === path && item.mode !== "lines")) outgoing.push({ path, name: path.split("/").at(-1) || path, mode: "reference" });
 			// 当前文件 chip：发送时才取编辑器快照（含未保存修改），并取代同路径的
@@ -431,19 +472,23 @@ export const ChatInput = memo(function ChatInput({
 				outgoing = mergeCurrentFile(outgoing, snapshot);
 			}
 			const requestId = randomUuid();
-			if (send({ type: "prompt", text: selectedProject && !trimmed.startsWith("/") ? `${trimmed}
+			if (send({ type: "prompt", target: sessionId ? { cwd, conversationId: activeConversationId, sessionId } : undefined, text: selectedProject && !trimmed.startsWith("/") ? `${trimmed}
 
 ${t("wikiProjectPrompt", { workspace: selectedProject.workspaceName, path: JSON.stringify(selectedProject.path) })}` : trimmed, queue, requestId, attachments: outgoing })) {
-				pendingSubmit.current = { id: requestId, conversation: activeConversationId, text, queued: streaming, attachments };
+				pendingSubmit.current = { id: requestId, sessionId, conversation: activeConversationId, text, queued: streaming, attachments };
+				try { sessionStorage.setItem(pendingKey, JSON.stringify({ id: requestId, sessionId, conversation: activeConversationId, text, queued: streaming })); } catch { /* Live connection still tracks the receipt. */ }
+				setSubmissionEpoch(value => value + 1);
+				setReceiptWarning(null);
 			}
 		};
 		const dispatchPrompt = () => {
-			if (!beforeSend) { deliverPrompt(); return; }
+			if (coordinator && !sendLease.current) { sendLease.current = coordinator.begin(); if (!sendLease.current) return; }
+			if (!beforeSend) { deliverPrompt(); if (!pendingSubmit.current) { sendLease.current?.release(); sendLease.current = null; } return; }
 			if (preparing.current) return;
 			preparing.current = true;
 			void beforeSend(selectedProject).then(ok => {
-				if (ok && owner.current.cwd === cwd && owner.current.activeConversationId === activeConversationId) deliverPrompt();
-			}).catch(error => onNotice("error", (error as Error).message)).finally(() => { preparing.current = false; });
+				if (ok && owner.current.cwd === cwd && owner.current.activeConversationId === activeConversationId && owner.current.sessionId === sessionId) deliverPrompt();
+			}).catch(error => onNotice("error", (error as Error).message)).finally(() => { preparing.current = false; if (!pendingSubmit.current) { sendLease.current?.release(); sendLease.current = null; } });
 		};
 		// 发送即保存：携带当前文件且草稿未保存时，先落盘再发送（磁盘 == 快照 ==
 		// 模型的工作基准）。落盘冲突/失败由编辑器的冲突 UI 呈现且不回调 —
@@ -455,7 +500,7 @@ ${t("wikiProjectPrompt", { workspace: selectedProject.workspaceName, path: JSON.
 				onNotice("error", t("currentFileTooLarge"));
 				return;
 			}
-			if (preview?.editorSnapshot?.dirty) {
+			if (preview?.editorSnapshot?.dirty && wikiReferences === undefined) {
 				const started = contextSaver.current?.(autoFile.id, dispatchPrompt);
 				if (!started) {
 					onNotice("error", t("currentFileSaving"));
@@ -639,6 +684,7 @@ ${t("wikiProjectPrompt", { workspace: selectedProject.workspaceName, path: JSON.
 			{wikiProject && <div className="wiki-reference-chips"><button title={wikiProject.path} onClick={onRemoveWikiProject}><span>{wikiProject.workspaceName} / {wikiProject.name}</span><span aria-hidden="true">×</span></button></div>}
 			{wikiReferences && wikiReferences.length > 0 && <div className="wiki-reference-chips">{wikiReferences.filter(path => path !== autoFile?.path).map(path => <button key={path} title={path} aria-label={`${t("removeAttachment")} ${path}`} onClick={() => onRemoveWikiReference?.(path)}><span>{path.split("/").at(-1)}</span><span aria-hidden="true">×</span></button>)}</div>}
 			<div className={`inputbox${text.length > 0 ? " has-draft" : ""}`}>
+			{receiptWarning && <div role="status">{t(receiptWarning === "unknown" ? "promptReceiptUnknown" : "promptReceiptAcceptedElsewhere")}</div>}
 			{promptResult?.commandExecuted && promptResult.conversationId === activeConversationId && attachments.length > 0 && <div role="status">{t("commandAttachmentsRetained")}</div>}
 			{(attachments.length > 0 || databaseReferences.length > 0 || autoFile) && (
 				<div className="attach-row">

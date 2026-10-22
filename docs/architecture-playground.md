@@ -110,3 +110,11 @@ HTTP + SSE，**不新增 WS 消息、`PROTOCOL_VERSION` 不变**：
 ### 方法测试界面（2026-10-22）
 
 草稿页采用左代码、右方法与用例的并排布局；可用宽度不足时上下排列。用例支持展开编辑，收起显示参数摘要和状态；执行结果按方法签名和用例 ID 就近展示，切换方法不将旧结果映射到新用例。日志与整次运行汇总仍共用 `PlaygroundResult`。界面布局和展开状态不写入草稿或模型上下文，保存与执行协议不变。
+
+### 草稿保存 module（2026-10-23）
+
+`web/src/playground-scratch-store.ts` 的 `PlaygroundScratchStore` 统一拥有草稿、已确认基线、串行保存队列和 600ms 去抖；`use-playground-scratch.ts` 连接 HTTP 与 React 订阅，页面只编辑和展示。最后一个订阅视图离开时 flush；重新进入先等待已排队写入，再读取持久草稿。写失败保留内存草稿，重入不以旧服务器内容覆盖；后续编辑或 flush 可以恢复。读取失败不写入模板，已离开视图的读取结果以及读取期间发生编辑的旧结果均不应用。
+
+保存确认只推进对应写入基线；有后续写入时不能提前显示已保存。写入失败不会阻断后续队列。Run 状态仍归现有 `playground-run-store.ts`，不与持久草稿合并；跨窗口仍沿用原有最后写入行为，不增加版本冲突协议。
+
+回归：`tests/unit/playground-scratch-store.test.ts` 通过同一 interface 控制传输确认与时间，验证回退、失败恢复、卸载重入和迟到读取；`tests/playground-methods-test.mjs --browser` 验证页面保存、模式迁移及等待写入确认期间离开重入。

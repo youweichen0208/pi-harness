@@ -68,11 +68,12 @@ try {
 		return state;
 	};
 	const main = track(page);
-	let failWrites = false, delayWrites = false;
+	let failWrites = false, delayWrites = false, holdDocument = null;
 	const actions = [];
 	// Context 级路由：主页面与 Wiki 弹窗的 /api/wiki 都经过这里。
 	await page.context().route("**/api/wiki", async route => {
 		const body = route.request().postDataJSON(); actions.push(body.action);
+		if (body.action === "chat-document" && holdDocument) { await holdDocument; return route.continue(); }
 		if (body.action === "write" && failWrites) return route.fulfill({status: 503, json: {error: "Save unavailable"}});
 		if (body.action === "write" && delayWrites) { const response = await route.fetch(); await new Promise(r => setTimeout(r, 600)); return route.fulfill({response}); }
 		return route.continue();
@@ -230,6 +231,24 @@ try {
 	await clickToClose(wiki.page.getByRole("button", {name: "放弃修改", exact: true}));
 	failWrites = false;
 	assert(!readFileSync(join(cwd, "README.md"), "utf8").includes("Unsaved text."));
+
+	// First transition wins while its HTTP response is delayed; sending stays blocked.
+	await open(); await showChat();
+	let releaseDocument; holdDocument = new Promise(resolve => { releaseDocument = resolve; });
+	const beforeTransitions = actions.filter(action => action === "chat-document").length;
+	const beforePrompts = wiki.state.prompts.length;
+	await wiki.page.locator('.wiki-tree-row[title="other.md"]').click();
+	for (let i = 0; i < 100 && actions.filter(action => action === "chat-document").length === beforeTransitions; i++) await new Promise(resolve => setTimeout(resolve, 20));
+	await wiki.page.locator('.wiki-tree-row[title="README.md"]').click();
+	await wiki.input.fill('Retained during transition'); await wiki.input.press('Enter');
+	assert.equal(wiki.state.prompts.length, beforePrompts);
+	assert.equal(actions.filter(action => action === "chat-document").length, beforeTransitions + 1);
+	releaseDocument(); holdDocument = null;
+	await wiki.page.locator('.wiki-document-heading h1', { hasText: 'Other document' }).waitFor();
+	await wiki.page.locator('.wiki-tree-row[title="README.md"]').click();
+	await wiki.page.locator('.wiki-document-heading h1', { hasText: 'Knowledge entry' }).waitFor();
+	assert.equal(await wiki.input.inputValue(), 'Retained during transition');
+	await wiki.input.fill(''); await close();
 
 	// CAS conflict retains the editor until resolved.
 	await open(); await append(" My version."); writeFileSync(join(cwd, "README.md"), "# External\n\nDisk version.\n");

@@ -1,3 +1,4 @@
+import type { WikiCoordinator } from "../wiki-coordinator";
 import { WikiReadingOutline } from "../wiki-reading-outline";
 import { LuCode, LuMoveHorizontal } from "react-icons/lu";
 import { useDialogFocus } from "../use-dialog-focus";
@@ -23,11 +24,12 @@ import { WikiImageZoom } from "./WikiImageZoom";
 import { useWikiAutosave } from "../use-wiki-autosave";
 import { randomUuid } from "../uuid";
 
-type Guard = (next: () => void) => void;
+type Guard = (next: () => void, cancel?: () => void) => void;
 const EMPTY: WikiState = { entries: [], tags: [], revisions: [], running: false, limited: false };
 const NO_ADDED_LINES = new Set<string>();
 const readingPositions = new Map<string, number>();
-export function WikiWorkbench({ cwd, conversationId, streaming, active, ready, guard, fileRequest, openDocument, onOpenFolder, folderBusy, connected, writingBlocked, onReference, saveBeforePrompt, onAttach, contextReader, contextSaver, onContextChange }: {
+export function WikiWorkbench({ coordinator, cwd, conversationId, streaming, active, ready, guard, fileRequest, openDocument, onOpenFolder, folderBusy, connected, writingBlocked, onReference, saveBeforePrompt, onAttach, contextReader, contextSaver, onContextChange }: {
+	coordinator?: WikiCoordinator;
 	cwd: string; conversationId: string; streaming: boolean; active: boolean; ready: boolean;
 	fileRequest: {path:string;token:string}; writingBlocked: boolean; connected: boolean;
 	openDocument: (path: string) => Promise<void>;
@@ -212,16 +214,33 @@ export function WikiWorkbench({ cwd, conversationId, streaming, active, ready, g
 		document.querySelector<HTMLElement>(".wiki-confirm button")?.focus();
 		return () => { if (previous instanceof HTMLElement && previous.isConnected) previous.focus({ preventScroll: true }); };
 	}, [nav]);
-	const navigationSequence = useRef(0);
-	const navigate = useCallback<Guard>((next) => { const sequence = ++navigationSequence.current; if (dirty || saving) { void save().then(ok => { if (!alive.current || sequence !== navigationSequence.current) return; if (ok) next(); else setNav(() => next); }); } else next(); }, [dirty, saving, save]);
-	useEffect(() => { guard.current = dirty || saving ? navigate : null; return () => { guard.current = null; }; }, [guard, navigate, dirty, saving]);
+	const navigationPending = useRef(false);
+	const cancelNavigation = useRef<(() => void) | null>(null);
+	const navigate = useCallback((next: () => void, cancel?: () => void, held = false) => {
+		if (navigationPending.current) { cancel?.(); return; }
+		const operation = held ? null : coordinator?.begin();
+		if (!held && coordinator && !operation) { cancel?.(); return; }
+		navigationPending.current = true;
+		const finish = () => { navigationPending.current = false; operation?.release(); cancelNavigation.current = null; };
+		const proceed = () => { finish(); next(); };
+		cancelNavigation.current = () => { finish(); cancel?.(); };
+		if (dirty || saving) void save().then(ok => {
+			if (!alive.current) { cancelNavigation.current?.(); return; }
+			if (ok) proceed(); else setNav(() => proceed);
+		}).catch(() => { cancelNavigation.current?.(); });
+		else proceed();
+	}, [dirty, saving, save, coordinator]);
+	useEffect(() => { guard.current = dirty || saving ? (next, cancel) => navigate(next, cancel, true) : null; return () => { guard.current = null; }; }, [guard, navigate, dirty, saving]);
+	useEffect(() => () => { cancelNavigation.current?.(); }, []);
 	useEffect(() => { const leave = (e: BeforeUnloadEvent) => { if (dirty) { void save(); e.preventDefault(); e.returnValue = ""; } }; window.addEventListener("beforeunload", leave); return () => window.removeEventListener("beforeunload", leave); }, [dirty, save]);
-	const open = (target: string) => navigate(() => {
+	const open = (target: string) => {
 		if (target !== path) { void openDocument(target); return; }
-		setPath(target); setSource(false); setSearch(false); setSelectionMenu(null);
-		setExpanded(prev => { const next = new Set(prev), parts = target.split("/"); for (let i = 1; i < parts.length; i++) next.add(parts.slice(0, i).join("/")); return next; });
-		if (target === path) void load(target, true);
-	});
+		navigate(() => {
+			setPath(target); setSource(false); setSearch(false); setSelectionMenu(null);
+			setExpanded(prev => { const next = new Set(prev), parts = target.split("/"); for (let i = 1; i < parts.length; i++) next.add(parts.slice(0, i).join("/")); return next; });
+			if (target === path) void load(target, true);
+		});
+	};
 
 	useEffect(() => {
 		if (!active) return;
@@ -233,7 +252,7 @@ export function WikiWorkbench({ cwd, conversationId, streaming, active, ready, g
 			if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") { e.preventDefault(); if (!editorBusy) void save(); }
 			if (e.key === "Escape" && (nav || search || selectionMenu || drawer)) {
 				e.preventDefault();
-				if (nav) setNav(null); else if (search) setSearch(false); else if (selectionMenu) setSelectionMenu(null); else if (drawer) setDrawer(null);
+				if (nav) { cancelNavigation.current?.(); setNav(null); } else if (search) setSearch(false); else if (selectionMenu) setSelectionMenu(null); else if (drawer) setDrawer(null);
 			}
 		};
 		window.addEventListener("keydown", key); return () => window.removeEventListener("keydown", key);
@@ -359,7 +378,7 @@ export function WikiWorkbench({ cwd, conversationId, streaming, active, ready, g
 		{drawer && <aside className="wiki-changes"><header><div><h2>{t(drawer === "recent" ? "wikiRecent" : "wikiRelatedChanges")}</h2><span>{cwd.split(/[\\/]/).at(-1)}</span></div><button aria-label={t("close")} onClick={() => setDrawer(null)}><FiX /></button></header><div className="wiki-changes-scroll">{state.revisions.filter(r => drawer === "recent" || r.id === drawer).map((revision, index, list) => <div key={revision.id} className="wiki-revision">{(index === 0 || new Date(list[index - 1].at).toDateString() !== new Date(revision.at).toDateString()) && <time>{new Date(revision.at).toLocaleDateString(locale === "zh" ? "zh-CN" : "en-US")}</time>}<div className="wiki-revision-title"><span className={`wiki-avatar ${revision.author}`}>{revision.author === "pi" ? <img src="/icon/1a-mark.svg" alt="pi" /> : t("wikiMe")}</span><div><strong>{revision.title.split("\n")[0]}</strong><small>{new Date(revision.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · {t("wikiFileCount", { count: revision.changes.length })}</small></div></div><div className="wiki-revision-actions"><button disabled={busy || revision.changes.every(c => c.undone)} onClick={() => void restore(revision, true)}><FiCornerUpLeft />{t("wikiUndoAll")}</button><button disabled={busy || revision.changes.every(c => !c.undone)} onClick={() => void restore(revision, false)}><FiCornerUpRight />{t("wikiRedoAll")}</button></div>{revision.changes.map(summary => { const change = { ...summary, ...(fullChanges[`${revision.id}:${summary.path}`] ?? {}), undone: summary.undone }; return <div className={`wiki-file-change ${change.undone ? "undone" : ""}`} key={change.path}><div><button title={change.path} onClick={() => open(change.path)}>{change.path}</button><button disabled={busy} onClick={() => void restore(revision, !change.undone, change.path)}>{t(change.undone ? "wikiRedo" : "wikiUndo")}</button></div><small><em>+{change.additions}</em> <b>−{change.deletions}</b></small><details onToggle={e => { if (e.currentTarget.open && change.truncated) void wikiRequest<WikiChange>(cwd, "change", { id: revision.id, path: change.path }).then(result => { if (alive.current) setFullChanges(previous => ({ ...previous, [`${revision.id}:${change.path}`]: result })); }).catch(e => setError(e.message)); }}><summary>{t("wikiViewDiff")}</summary>{change.binary ? <p>{t("wikiBinaryChange")}</p> : <><pre className="wiki-diff-before">{change.before ?? t("wikiNewFile")}</pre><pre className="wiki-diff-after">{change.after ?? t("wikiDeletedFile")}</pre></>}</details></div>; })}{revision.skipped.length > 0 && <p className="wiki-skipped">{t("wikiUntracked")}: {revision.skipped.join(", ")}</p>}</div>)}{!state.revisions.length && <p className="wiki-muted">{t("wikiNoChanges")}</p>}</div></aside>}
 		{selectionMenu && createPortal(<div className="wiki-selection-menu" style={{ left: selectionMenu.x, top: selectionMenu.y }} onMouseDown={e => e.preventDefault()}><button onClick={() => { void ask(selectionMenu.text); setSelectionMenu(null); }}>{t("wikiAskPi")}</button></div>, document.querySelector(".wiki-document-dialog") ?? document.body)}
 		{search && <div className="wiki-modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) setSearch(false); }}><section ref={searchDialogRef} className="wiki-search-modal" role="dialog" aria-modal="true" aria-label={t("wikiSearchAll")}><div><FiSearch /><input autoFocus aria-label={t("wikiSearchAll")} placeholder={t("wikiSearchHint")} value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => { if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); setCursor(i => Math.max(0, Math.min(results.length - 1, i + (e.key === "ArrowDown" ? 1 : -1)))); } if (e.key === "Enter" && results[cursor]) { e.preventDefault(); if (e.metaKey || e.ctrlKey) attachResult(results[cursor]); else open(results[cursor].path); } }} /><button aria-label={t("close")} onClick={() => setSearch(false)}><FiX /></button></div><div className="wiki-search-results">{searching && <p role="status">{t("loading")}</p>}{results.map((result, i) => <div key={`${result.path}:${result.line}:${i}`}>{(i === 0 || results[i - 1].kind !== result.kind) && <h3>{t(result.kind === "document" ? "wikiDocuments" : result.kind === "pdf" ? "wikiPdf" : result.kind === "code" ? "wikiCode" : "wikiFiles")}</h3>}<button className={cursor === i ? "selected" : ""} onMouseEnter={() => setCursor(i)} onClick={e => e.metaKey || e.ctrlKey ? attachResult(result) : open(result.path)}><strong>{result.path}{result.page ? ` · ${t("wikiPage", { page: result.page })}` : ""}</strong><span>{result.snippet}</span></button></div>)}{query && !searching && !results.length && <p>{t("wikiNoResults")}</p>}{searchLimited && <p>{t("wikiSearchLimited")}</p>}</div><footer>{t("wikiSearchKeys")}</footer></section></div>}
-		{nav && <div className="wiki-modal-backdrop"><section ref={navigationDialogRef} className="wiki-confirm" role="dialog" aria-modal="true" aria-label={t("wikiUnsaved")}><h2>{t("wikiUnsaved")}</h2><p>{t("wikiUnsavedHint")}</p><div><button disabled={saving} onClick={() => setNav(null)}>{t("cancel")}</button><button disabled={saving} onClick={() => { const next = nav; setDraft(doc?.text ?? ""); setNav(null); next(); }}>{t("wikiDiscard")}</button><button disabled={busy} onClick={() => void (async () => { if (await save()) { const next = nav; setNav(null); next(); } })()}>{t("wikiSaveContinue")}</button></div></section></div>}
+		{nav && <div className="wiki-modal-backdrop"><section ref={navigationDialogRef} className="wiki-confirm" role="dialog" aria-modal="true" aria-label={t("wikiUnsaved")}><h2>{t("wikiUnsaved")}</h2><p>{t("wikiUnsavedHint")}</p><div><button disabled={saving} onClick={() => { cancelNavigation.current?.(); setNav(null); }}>{t("cancel")}</button><button disabled={saving} onClick={() => { const next = nav; setDraft(doc?.text ?? ""); setNav(null); next(); }}>{t("wikiDiscard")}</button><button disabled={busy} onClick={() => void (async () => { if (await save()) { const next = nav; setNav(null); next(); } })()}>{t("wikiSaveContinue")}</button></div></section></div>}
 		{zoomImage && <WikiImageZoom image={zoomImage} onClose={() => setZoomImage(null)} />}
 	</section>;
 }

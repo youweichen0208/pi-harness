@@ -2,7 +2,7 @@
 
 ## 原生上下文边界
 
-会话由 pi 1.2.0 原版 SDK 创建。WebUI 只桥接用户输入、原生事件和界面交互；不覆盖原生 bash，不注入终端状态消息。原生 plan 扩展默认开启（保留已保存的关闭选择），启用时由扩展注册工具、提供规则与压缩背景（见 [计划扩展](architecture-plan.md)）。原生配置文件、技能、用户扩展和官方 MCP/Codemode/tool_search 由 pi 加载。WebUI 设置支持显示偏好、界面插件可见性及原生配置管理；Extensions 管理用户明确选择的包；plan 的服务全局开关独立协调激活状态。系统提示词页编辑用户选择的原生 SYSTEM/APPEND/上下文文件，空闲时原生 reload，下一次请求由 SDK 应用变化；来源、文件校验与运行中保存见 [系统提示词架构](architecture-system-prompt.md)。新会话、切换、恢复和重载共用同一个原生运行时工厂。历史 transcript 不会改写。
+会话由 pi 1.4.0 原版 SDK 创建。WebUI 只桥接用户输入、原生事件和界面交互；不覆盖原生 bash，不注入终端状态消息。原生 plan 扩展默认开启（保留已保存的关闭选择），启用时由扩展注册工具、提供规则与压缩背景（见 [计划扩展](architecture-plan.md)）。原生配置文件、技能、用户扩展和官方 MCP/Codemode/tool_search 由 pi 加载。WebUI 设置支持显示偏好、界面插件可见性及原生配置管理；Extensions 管理用户明确选择的包；plan 的服务全局开关独立协调激活状态。系统提示词页编辑用户选择的原生 SYSTEM/APPEND/上下文文件，空闲时原生 reload，下一次请求由 SDK 应用变化；来源、文件校验与运行中保存见 [系统提示词架构](architecture-system-prompt.md)。新会话、切换、恢复和重载共用同一个原生运行时工厂。历史 transcript 不会改写。
 
 > 改代码前必读。本文档覆盖快照驱动、协议单源、安全边界、多对话并发等全局架构决策。
 
@@ -214,3 +214,17 @@ Wiki 复用当前工作区，使用原生内存会话，离开后释放，不写
 ## 全局导航与小记
 
 Workspace 列表与项目目录分为两栏，选择分组保持当前会话与工作目录。小记使用独立 HTTP 存储，不生成 Agent 会话或模型上下文；保存、冲突和测试约定见 [全局小记](architecture-notes.md)。
+
+### 发送回执（协议 v44）
+
+普通聊天与 Wiki 的 `ClientSession.prompt` 共用 `server/prompt-receipts.ts`；WebSocket 和 Wiki HTTP 入口都先占用请求 ID，再执行附件、扩展或原生命令。浏览器 prompt 携带 cwd、运行中 conversationId 与稳定的原生 sessionId，异步保存期间切换或重建会话不能把旧输入送进新会话。SSH 节点聊天不使用这条路径。
+
+回执以 clientId + requestId 隔离，原子写入 `<dataDir>/prompt-receipts.json`（目录 0700、文件 0600）。记录只含身份、载荷摘要、时间与结果；不保存输入正文、附件或凭据。重复 ID 返回已有状态，载荷或目标不一致返回 conflict。`query_prompt_receipt` 使用同一个 `prompt_result` 返回 processing / accepted / rejected / unknown / missing / expired / conflict；结果成功落盘后才发回客户端。损坏或写入失败时不继续接收新请求，不能把异常当成空存储。
+
+SDK started/queued 只证明当时接收，**不表示模型完成、transcript 已落盘或内存队列能在重启后继续**。原生命令执行后才确认；扩展 input/command 已开始但没有确认结果时为 unknown。进程恢复时未完成的处理记录也是 unknown，不自动重放。SDK 副作用与本地回执不构成原子事务，因此不承诺 exactly-once；当前文件原子替换保障进程重启，不承诺断电耐久。
+
+终态结果可查询 7 天；之后返回 expired，并在下一次写入时移除结果、保留请求 ID 和摘要墓碑，避免旧 ID 再次执行。处理中记录不按时间淘汰。当前容量上限为 10,000 个 ID，达到后拒绝新请求并报告错误；不可把删除账本当作正常清理操作，这会失去去重依据。
+
+浏览器保留 pending request 身份到标签页 sessionStorage，断线/刷新后只查询、不重发。等待最多 30 秒；unknown、missing、expired 或查询超时解除界面操作锁并保留草稿、显示核对提示。明确接收后只清除与原发送文本相同的草稿，期间输入的新内容保留；恢复后的回执不按可复用的 conversationId 清除另一原生会话的输入。再次发送是用户显式操作，使用新 ID。
+
+回归：`prompt-receipts-test.mjs` 使用真实 SDK 扩展验证副作用计数、重复 ID、断线/刷新查询、进程重启与执行中 SIGKILL；单测覆盖容量、损坏、写失败、过期与客户端隔离。

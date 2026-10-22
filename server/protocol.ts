@@ -416,6 +416,8 @@ export interface NativeMcpTool { name: string; exposure: string; description: st
 export interface NativeCodemodeSettings { version: string; path: string; mode: "on" | "only"; inlineBudget: number; effectiveMode: "on" | "only"; effectiveInlineBudget: number; }
 export interface NativeMcpConfigState { path: string; paths?: { global: string; project: string }; scope: "global" | "project"; version: string; document: Record<string, unknown>; trusted: boolean; inheritedAutoEnableCodemode?: boolean; }
 
+export type PromptResult = { type: "prompt_result"; requestId: string; ok: boolean; conversationId?: string; sessionId?: string; commandExecuted?: boolean; attachmentsConsumed?: boolean; receipt?: "processing" | "accepted" | "rejected" | "unknown" | "missing" | "expired" | "conflict" };
+
 export type ClientMessage =
 	| { type: "recall_queue"; conversationId: string; requestId: string }
 	| { type: "queue_recall_ack"; conversationId: string; requestId: string }
@@ -425,8 +427,10 @@ export type ClientMessage =
 	| { type: "hello"; clientId: string; protocolVersion?: number; wikiCwd?: string }
 	/** Re-request the slash-command catalog (also pushed on attach / cwd change). */
 	| { type: "get_commands" }
+	| { type: "query_prompt_receipt"; requestId: string }
 	| {
 			type: "prompt";
+			target?: { cwd: string; conversationId: string; sessionId: string };
 			requestId?: string;
 			text: string;
 			/**
@@ -1180,7 +1184,7 @@ export type ServerMessage =
 	 *  (path = the listed directory; unknown/unsupported fs falls back to the
 	 *  10s polling). */
 	| { type: "file_changed"; path: string }
-	| { type: "prompt_result"; requestId: string; ok: boolean; conversationId?: string; commandExecuted?: boolean; attachmentsConsumed?: boolean }
+	| PromptResult
 	| { type: "file_result"; operation: "read" | "write"; requestId?: string; cwd: string; path: string; ok: boolean; version?: string; error?: string; conflict?: boolean }
 	| {
 			type: "file_content";

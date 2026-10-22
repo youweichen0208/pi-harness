@@ -1,3 +1,6 @@
+import { WikiConversations } from "./wiki-conversations.js";
+import { promptReceiptsFor } from "./prompt-receipts.js";
+import type { PromptResult } from "./protocol.js";
 import { withSessionErrors } from "./session-errors.js";
 import { WikiChatStore } from "./wiki-chat-store.js";
 import { isSelectableProvider } from "./provider-catalog.js";
@@ -1654,7 +1657,30 @@ export class ClientSession {
 		return n;
 	}
 
-	async prompt(
+	queryPromptReceipt(requestId: string): PromptResult {
+		return promptReceiptsFor(this.stateStore.dataDir).query(this.clientId, requestId);
+	}
+
+	/** All transports enter here; claim before attachment, extension or command effects. */
+	async prompt(text: string, attachments?: PromptAttachment[], queue = false, requestId?: string, onAccepted?: (ok: boolean) => void, target?: { cwd: string; conversationId: string; sessionId: string }): Promise<void> {
+		if (requestId === undefined) { await this.deliverAcceptedPrompt(text, attachments, queue, undefined, onAccepted); return; }
+		const store = promptReceiptsFor(this.stateStore.dataDir);
+		const emit = (result: PromptResult) => { this.emit(result); onAccepted?.(result.ok); };
+		try {
+			const prior = store.begin(this.clientId, requestId, { text, attachments, queue, target }, target ?? { cwd: this.cwd, conversationId: this.conversationId, sessionId: this.session.sessionId });
+			if (prior) { emit(prior); return; }
+			const acknowledge = (result: PromptResult) => emit(store.finish(this.clientId, result));
+			if (this.switchingWorkspace || (target && (target.cwd !== this.cwd || target.conversationId !== this.conversationId || target.sessionId !== this.session.sessionId))) {
+				acknowledge({ type: "prompt_result", requestId, ok: false, receipt: "rejected" }); return;
+			}
+			await this.deliverAcceptedPrompt(text, attachments, queue, requestId, undefined, acknowledge);
+		} catch (error) {
+			emit({ type: "prompt_result", requestId, ok: false, receipt: "unknown" });
+			this.emit({ type: "notice", level: "error", text: `发送回执不可用：${(error as Error).message}` });
+		}
+	}
+
+	private async deliverAcceptedPrompt(
 		text: string,
 		attachments?: PromptAttachment[],
 		/**
@@ -1666,13 +1692,16 @@ export class ClientSession {
 		queue = false,
 		requestId?: string,
 		onAccepted?: (ok: boolean) => void,
+		onReceipt?: (result: PromptResult) => void,
 	): Promise<void> {
 		const conv = this.conv;
+		const receiptSessionId = conv.session.sessionId;
+		let sideEffectsStarted = false;
 		let acknowledged = false;
 		const acknowledge = (ok: boolean, commandExecuted?: boolean) => {
 			if (acknowledged) return;
 			acknowledged = true;
-			if (requestId) this.emit({ type: "prompt_result", requestId, conversationId: conv.id, ok, commandExecuted, attachmentsConsumed: ok && !commandExecuted });
+			if (requestId) (onReceipt ?? (result => this.emit(result)))({ type: "prompt_result", requestId, conversationId: conv.id, sessionId: receiptSessionId, ok, commandExecuted, attachmentsConsumed: ok && !commandExecuted, receipt: ok ? "accepted" : sideEffectsStarted ? "unknown" : "rejected" });
 			onAccepted?.(ok);
 		};
 		try {
@@ -1685,8 +1714,9 @@ export class ClientSession {
 			// from the original session file without touching the dead session.
 			if (conv.rebuilding) {
 				if (parseSlash(text)?.name !== "restart" || this.forcedResets.has(conv)) throw new Error("当前会话正在强制重建或恢复失败，请输入 /restart 重试或新开对话。");
+				sideEffectsStarted = true;
 				await this.restartSession(conv.id);
-				acknowledge(true);
+				acknowledge(true, true);
 				this.flushSnapshot();
 				return;
 			}
@@ -1704,9 +1734,9 @@ export class ClientSession {
 			// never reach the SDK. Extension / skill / template commands fall
 			// through — AgentSession.prompt() handles those itself.
 			const slash = parseSlash(text);
-			if (slash?.name === "reload") acknowledge(true);
+			if (slash) sideEffectsStarted = true;
 			if (slash && (await this.slash.exec(slash.name, slash.args, { conversationId: conv.id, requestId: requestId ?? `reload-${Date.now()}` }))) {
-				acknowledge(true);
+				acknowledge(true, true);
 				this.flushSnapshot();
 				return;
 			}
@@ -1735,6 +1765,7 @@ export class ClientSession {
 			if (!s.isStreaming) { conv.toolsExecutedSincePrompt = false; conv.lastTaskEndedAt = undefined; }
 			conv.toolTextContinues = 0;
 			this.coordinatePlan(conv);
+			sideEffectsStarted = true;
 			await deliverPrompt(s, text, asides, queue, acknowledge);
 		} catch (err) {
 			acknowledge(false);
@@ -3122,6 +3153,15 @@ export class AgentService {
 	/** index.ts 注入：停止插件任务（kill_background_server with taskId）。 */
 	pluginStopBgTask: ((taskId: string) => boolean) | undefined = undefined;
 	private clients = new Map<string, ClientSession>();
+	readonly wikiConversations = new WikiConversations({
+		clients: this.clients,
+		quiesced: () => this.quiesced,
+		release: async clientId => {
+			const client = this.clients.get(clientId);
+			this.clients.delete(clientId);
+			await client?.dispose();
+		},
+	});
 	/** Quiesce (draining) state — the service refuses NEW work (prompts, forks,
 	 *  session resumes, new clients) so a deploy/upgrade/backup can stop cleanly
 	 *  once existing runs finish. Controlled via the local control socket:
@@ -3169,14 +3209,6 @@ export class AgentService {
 		return evicted.length;
 	}
 
-	async prepareWikiSession(cwd: string, id: string, requester: string): Promise<void> {
-		for (const [clientId, cs] of this.clients) {
-			if (clientId === requester || !cs.ownsWikiSession(id)) continue;
-			if (cs.connected || cs.wikiSessionBusy(id)) throw new Error("Wiki conversation is open in another window");
-			this.clients.delete(clientId);
-			await cs.dispose();
-		}
-	}
 
 	/** Get or create the session for a client, racing attach calls safely. */
 	/** True while the service is draining — new work is refused. */

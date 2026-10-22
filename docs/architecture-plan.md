@@ -1,6 +1,6 @@
 # 原生 plan 扩展
 
-`server/plan/` 是 pi 1.2.0 可替换 inline extension，名称 `pi-harness-plan`。它不进入 CLI 自动发现目录，也不修改 SDK、原生 bash 或自动续跑策略。默认开启，尊重已保存的布尔开关（包括关闭）；缺失或无效配置使用默认值。服务实例的 `<dataDir>/plan-settings.json` 保存唯一全局 `enabled` 偏好。
+`server/plan/` 是 pi 1.4.0 可替换 inline extension，名称 `pi-harness-plan`。它不进入 CLI 自动发现目录，也不修改 SDK、原生 bash 或自动续跑策略。默认开启，尊重已保存的布尔开关（包括关闭）；缺失或无效配置使用默认值。服务实例的 `<dataDir>/plan-settings.json` 保存唯一全局 `enabled` 偏好。
 
 ## 工具与持久化
 

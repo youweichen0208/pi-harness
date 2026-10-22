@@ -639,8 +639,7 @@ wss.on("connection", (ws) => {
 			pending.push(msg);
 			return;
 		}
-		if (cs.switchingWorkspace && msg.type !== "set_cwd" && msg.type !== "get_state" && msg.type !== "node_request" && msg.type !== "list_project_workspaces" && msg.type !== "project_workspace_action") {
-			if (msg.type === "prompt" && msg.requestId) send({ type: "prompt_result", requestId: msg.requestId, ok: false });
+		if (cs.switchingWorkspace && msg.type !== "prompt" && msg.type !== "query_prompt_receipt" && msg.type !== "set_cwd" && msg.type !== "get_state" && msg.type !== "node_request" && msg.type !== "list_project_workspaces" && msg.type !== "project_workspace_action") {
 			if (msg.type === "read_file" || msg.type === "write_file") send({
 				type: "file_result", operation: msg.type === "read_file" ? "read" : "write",
 				requestId: msg.requestId, cwd: msg.cwd ?? cs.cwd, path: msg.path,
@@ -656,8 +655,11 @@ wss.on("connection", (ws) => {
 				}
 				void nodeWorkbench.handle(clientId, msg);
 				break;
+			case "query_prompt_receipt":
+				send(cs.queryPromptReceipt(msg.requestId));
+				break;
 			case "prompt":
-				void cs.prompt(msg.text, msg.attachments, msg.queue, msg.requestId);
+				void cs.prompt(msg.text, msg.attachments, msg.queue, msg.requestId, undefined, msg.target);
 				break;
 			case "abort":
 				void cs.abort();

@@ -13,6 +13,8 @@ const MASK = "••••••••";
 type Document = { mcpServers?: Record<string, Record<string, unknown>>; [key: string]: unknown };
 function read(path: string): string { try { return readFileSync(path, "utf8"); } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return "{}"; throw error; } }
 function version(raw: string) { return createHash("sha256").update(raw).digest("hex"); }
+// Match native MCP loading while keeping the original bytes for conflict detection.
+function parseMcpDocument(raw: string): Document { return JSON.parse(raw.replace(/^\uFEFF/, "")) as Document; }
 function transform(value: unknown, old: unknown, mask: boolean, secret = false): unknown {
 	if (Array.isArray(value)) return value.map((v,i) => transform(v, Array.isArray(old) ? old[i] : undefined, mask, secret));
 	if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([k,v]) => [k, transform(v, old && typeof old === "object" ? (old as Record<string,unknown>)[k] : undefined, mask, secret || /secret|token|password|apiKey|headers|env/i.test(k))]));
@@ -26,16 +28,16 @@ export class NativeMcpConfigService {
 	isTrusted(cwd: string): boolean { return new ProjectTrustStore(getAgentDir()).get(cwd) === true; }
 	path(cwd: string, scope: "global" | "project") { if (scope !== "global" && scope !== "project") throw new Error("Invalid MCP configuration scope"); return scope === "global" ? join(getAgentDir(), "mcp.json") : join(cwd, ".pi", "mcp.json"); }
 	get(cwd: string, scope: "global" | "project"): NativeMcpConfigState {
-		const path = this.path(cwd,scope), raw = read(path), document = JSON.parse(raw) as Document;
+		const path = this.path(cwd,scope), raw = read(path), document = parseMcpDocument(raw);
 		if (!document || typeof document !== "object" || Array.isArray(document)) throw new Error("MCP configuration must be an object");
-		const inheritedAutoEnableCodemode = scope === "global" || JSON.parse(read(this.path(cwd, "global")))?.autoEnableCodemode !== false;
+		const inheritedAutoEnableCodemode = scope === "global" || parseMcpDocument(read(this.path(cwd, "global")))?.autoEnableCodemode !== false;
 		return { path, paths: { global: this.path(cwd, "global"), project: this.path(cwd, "project") }, scope, version: version(raw), document: transform(document, undefined, true) as Record<string,unknown>, trusted: this.isTrusted(cwd), inheritedAutoEnableCodemode };
 	}
 	save(cwd: string, scope: "global" | "project", expected: string, incoming: Record<string,unknown>) {
 		if (!incoming || typeof incoming !== "object" || Array.isArray(incoming)) throw new Error("MCP configuration must be an object");
 		const path = this.path(cwd,scope), raw = read(path);
 		if (version(raw) !== expected) throw new Error("MCP configuration changed externally; refresh before saving");
-		const old = JSON.parse(raw) as Document;
+		const old = parseMcpDocument(raw);
 		const document = transform({ ...old, ...incoming }, old, false) as Document;
 		document.mcpServers ??= {};
 		if (!document.mcpServers || Array.isArray(document.mcpServers) || typeof document.mcpServers !== "object") throw new Error("mcpServers must be an object");
@@ -44,7 +46,7 @@ export class NativeMcpConfigService {
 			let candidate = config;
 			if (scope === "project" && config && typeof config === "object" && !Array.isArray(config) && !["command", "url", "type"].some(key => Object.hasOwn(config, key))) {
 				if (Object.keys(config).some(key => !["enabled", "exposure", "toolExposure"].includes(key))) throw new Error("Project overrides only allow enabled, exposure, and toolExposure");
-				const base = (JSON.parse(read(this.path(cwd, "global"))) as Document).mcpServers?.[name];
+				const base = parseMcpDocument(read(this.path(cwd, "global"))).mcpServers?.[name];
 				if (!base) throw new Error(`No global MCP server to override: ${name}`);
 				candidate = { ...base, ...config };
 			}

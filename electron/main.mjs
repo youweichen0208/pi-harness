@@ -311,6 +311,8 @@ function wireAppWindow(win, { hideOnClose }) {
 		if (win === wikiWindow && target === "about:blank" && frameName === "pi-wiki-assistant") {
 			return { action: "allow", overrideBrowserWindowOptions: {
 				width: 375, height: 820, minWidth: 360, minHeight: 420,
+				// Do not inherit the Wiki opener's fullscreen Space on macOS.
+				fullscreen: false, fullscreenable: false,
 				frame: false, title: "问 pi", autoHideMenuBar: true,
 				webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true, backgroundThrottling: false },
 			} };

@@ -11114,7 +11114,9 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { height: 44px;
 }
 
 .design-workspace .msg-text { font-size: 13.5px; line-height: 1.7; }
-.design-workspace .msg-user > .msg-body { max-width: 75%; border-radius: var(--r-md); }
+.design-workspace .msg-user > .msg-body { max-width: 75%; border-radius: var(--r-md); padding: 8px 12px; }
+.design-workspace .msg-user .md > :first-child { margin-top: 0; }
+.design-workspace .msg-user .md > :last-child { margin-bottom: 0; }
 .design-workspace .usage-trigger { font-family: var(--sans); color: var(--text-dim); }
 .design-workspace .usage-cache-short, .design-workspace .usage-cache-short strong { color: inherit; font-weight: 400; }
 .bash-row code { font-variant-ligatures: none; }
@@ -12238,8 +12240,8 @@ pre.wiki-mermaid-source-hidden > .wiki-mermaid-preview { border-bottom: 0; margi
 .design-workspace .msg-assistant > .msg-meta .msg-role { color: var(--heading); font-size: 13px; font-weight: 600; }
 .design-workspace .msg-assistant > .msg-meta .msg-time { margin-left: 0; }
 .design-workspace .msg-assistant > .msg-meta .qn-tag, .design-workspace .msg-assistant > .msg-meta .msg-collapse-btn { margin-left: auto; }
-.msg-user-foot { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 6px; font-size: 11px; color: var(--text-faint); }
-.msg-user-foot .msg-time { margin-left: 0; }
+.msg-user-foot { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 4px; font-size: 11px; line-height: 1.4; color: var(--text-faint); }
+.msg-user-foot .msg-time { margin-left: 0; font-size: 10px; font-variant-numeric: tabular-nums; }
 .msg-repeat { padding: 0 6px; border-radius: var(--r-sm); background: var(--bg-elev2); color: var(--text-dim); }
 /* System prompt snapshots and other quiet events: a centered divider. */
 .system-event { display: flex; align-items: center; gap: 10px; width: calc(100% - 2 * var(--composer-gutter, 20px)); max-width: var(--chat-max); margin: 4px auto 18px; color: var(--text-faint); font-size: 11px; }
@@ -13449,7 +13451,7 @@ html.pi-desktop-darwin .compact-navigation .global-navigation { padding-top: 36p
 .design-workspace .view-pane:not(.wiki-view) .main .inputbox textarea { min-height: 24px; max-height: 180px; }
 .design-workspace .input-tools .dropdown > .chip { background: transparent; border-color: transparent; box-shadow: none; }
 .design-workspace .view-pane:not(.wiki-view) .main .msg-text { line-height: 1.74; }
-.design-workspace .view-pane:not(.wiki-view) .main .msg-text .md p { margin-block: 12px; }
+.design-workspace .view-pane:not(.wiki-view) .main .msg-assistant .msg-text .md p { margin-block: 12px; }
 .design-workspace .view-pane:not(.wiki-view) .main .msg-text .md :is(ul, ol) { padding-left: 24px; }
 .design-workspace .view-pane:not(.wiki-view) .main .msg-text .md li { margin-block: 4px; }
 .design-workspace .view-pane:not(.wiki-view) .main .msg-text .md :not(pre) > code { font-size: .9em; padding: 1px 4px; border-radius: var(--r-sm); background: var(--bg-elev2); }
@@ -13484,6 +13486,7 @@ html.pi-desktop-darwin .compact-navigation .global-navigation { padding-top: 36p
  * Focused mode centers the reading surface after hiding the tree. */
 .wiki-reading-layout { display: flex; align-items: flex-start; justify-content: flex-start; min-height: 100%; min-width: 0; }
 .wiki-reading-layout > .wiki-document { flex: 0 1 auto; min-width: 0; margin: 0; }
+.wiki-workbench:not(.is-focused) .wiki-reading-layout > .wiki-document { flex: 1 1 0; max-width: none; }
 .wiki-workbench.is-focused .wiki-reading-layout { justify-content: center; }
 .wiki-workbench.is-focused .wiki-reading-layout > .wiki-document { margin-left: 0; }
 .wiki-reading-layout > .wiki-empty { flex: 1; }

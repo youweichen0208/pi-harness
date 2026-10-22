@@ -184,6 +184,28 @@ try {
 		await page.waitForFunction(() => document.querySelector(".scratch-save-status")?.textContent.includes("已保存"));
 		assert.equal((await (await api("scratch")).json()).tests.casesByMethod["Main#add(int,int)"][0].args[0].text, "9", "reverting during an in-flight save must persist the latest draft");
 		await page.unroute("**/api/playground/scratch*");
+		// Leaving before debounce flushes through the same draft owner. Re-entry
+		// must not read an older server copy while that write is awaiting its ack.
+		let releaseSave;
+		const holdSave = new Promise(resolve => { releaseSave = resolve; });
+		await page.route("**/api/playground/scratch*", async route => {
+			if (route.request().method() !== "PUT") return route.continue();
+			const response = await route.fetch();
+			await holdSave;
+			await route.fulfill({ response });
+		});
+		await page.getByRole("textbox", { name: "a", exact: true }).fill("17");
+		const leavingWrite = page.waitForRequest(request => request.url().includes("/api/playground/scratch") && request.method() === "PUT");
+		await page.getByRole("button", { name: "对话", exact: true }).click();
+		await leavingWrite;
+		await page.getByRole("button", { name: "Playground", exact: true }).click();
+		assert.equal(await page.getByRole("textbox", { name: "a", exact: true }).inputValue(), "17");
+		releaseSave();
+		await page.waitForFunction(() => document.querySelector(".scratch-save-status")?.textContent.includes("已保存"));
+		assert.equal((await (await api("scratch")).json()).tests.casesByMethod["Main#add(int,int)"][0].args[0].text, "17");
+		await page.unroute("**/api/playground/scratch*");
+		await page.getByRole("textbox", { name: "a", exact: true }).fill("9");
+		await page.waitForFunction(() => document.querySelector(".scratch-save-status")?.textContent.includes("已保存"));
 		await page.screenshot({ path: join(tmpdir(), "pi-methods-desktop.png") });
 		await page.setViewportSize({ width: 580, height: 900 });
 		await page.screenshot({ path: join(tmpdir(), "pi-methods-narrow.png") });

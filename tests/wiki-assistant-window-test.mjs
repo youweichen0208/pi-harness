@@ -75,6 +75,10 @@ try {
 	const editor = wiki.locator(".wiki-prose .fp-rich-document");
 	await editor.waitFor();
 
+	if (process.argv.includes("--fullscreen")) await app.evaluate(async ({ BrowserWindow }) => {
+		const win = BrowserWindow.getAllWindows().find(w => w.webContents.getURL().includes("wiki-window=1"));
+		await new Promise(resolve => { win.once("enter-full-screen", resolve); win.setFullScreen(true); });
+	});
 	await wiki.locator(".wiki-ask-toggle").click();
 	let floating;
 	for (let i = 0; i < 100; i++) {
@@ -84,7 +88,21 @@ try {
 	}
 	assert(floating, "assistant opens a native window");
 	await floating.locator(".wiki-assistant").waitFor();
+	const bounds = await app.evaluate(({ BrowserWindow }) => { const w = BrowserWindow.getAllWindows().find(w => w.webContents.getURL() === "about:blank"); return { ...w.getBounds(), fullscreen: w.isFullScreen() }; });
+	assert(!bounds.fullscreen && bounds.width < 700, `assistant must open as a compact window: ${JSON.stringify(bounds)}`);
 	await floating.locator(".inputbar textarea").fill("Keep this draft across windows");
+	await floating.getByRole("button", { name: "收起对话面板", exact: true }).click();
+	await wiki.locator(".wiki-ask-toggle[aria-expanded=false]").waitFor();
+	const afterCollapse = await app.evaluate(({ BrowserWindow }) => {
+		const windows = BrowserWindow.getAllWindows();
+		return { assistantVisible: windows.find(w => w.webContents.getURL() === "about:blank").isVisible(), wikiVisible: windows.find(w => w.webContents.getURL().includes("wiki-window=1")).isVisible() };
+	});
+	assert.deepEqual(afterCollapse, { assistantVisible: false, wikiVisible: true }, "collapse hides the assistant and keeps Wiki visible");
+	await editor.getByText("Original content.", { exact: true }).waitFor();
+	await wiki.screenshot({ path: "/tmp/pi-wiki-after-collapse.png" });
+	await wiki.locator(".wiki-ask-toggle").click();
+	await floating.locator(".inputbar textarea").waitFor();
+	assert.equal(await floating.locator(".inputbar textarea").inputValue(), "Keep this draft across windows");
 	await floating.locator(".wiki-analysis-scope").click();
 	await floating.locator("dialog[open]").waitFor();
 	await floating.keyboard.press("Escape");
@@ -124,10 +142,32 @@ try {
 	await floating.getByRole("button", { name: "停止任务", exact: true }).waitFor({ state: "detached" });
 	await wiki.waitForFunction(() => document.querySelector(".wiki-prose .fp-rich-document")?.getAttribute("contenteditable") === "true");
 	await floating.getByRole("link", { name: "Open document", exact: true }).waitFor();
+	const nextContext = wiki.waitForResponse(response => response.url().includes("/api/wiki") && response.request().postDataJSON()?.action === "chat-context" && response.ok());
 	await floating.getByRole("link", { name: "Open document", exact: true }).click();
 	await wiki.waitForURL(url => url.searchParams.get("doc") === "other.md");
+	await nextContext;
+	await floating.locator(".attach-chip.current-file").filter({ hasText: "other.md" }).waitFor();
+	// Native title-bar close follows the same interrupt/operation contract.
+	await floating.bringToFront();
+	await floating.locator(".inputbar textarea").fill("Keep running until close is confirmed");
+	await floating.locator(".composer-action.send").click();
+	for (let i = 0; i < 100 && replies.length < 2; i++) await sleep(100);
+	assert.equal(replies.length, 2);
+	const closeWiki = () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find(w => w.webContents.getURL().includes("wiki-window=1")).close());
+	await closeWiki();
+	await wiki.getByRole("dialog", { name: "对话任务仍在运行" }).waitFor();
+	await wiki.getByRole("button", { name: "取消", exact: true }).click();
+	assert.equal(wiki.isClosed(), false);
+	await floating.getByRole("button", { name: "停止任务", exact: true }).waitFor();
+	await closeWiki();
+	await wiki.getByRole("dialog", { name: "对话任务仍在运行" }).waitFor();
+	await Promise.all([
+		wiki.waitForEvent("close"),
+		wiki.getByRole("button", { name: "中断并继续", exact: true }).click({ noWaitAfter: true }).catch(error => { if (!wiki.isClosed()) throw error; }),
+	]);
+	assert.equal(main.isClosed(), false);
 	assert.deepEqual(errors, []);
-	console.log("PASS native assistant: independent window, resize, picker, dock, draft, close and reopen");
+	console.log("PASS native assistant: independent window, resize, picker, dock, draft, close/reopen and guarded native close");
 } catch (error) { console.error(error); throw error; } finally {
 	if (app) { await app.evaluate(({ BrowserWindow }) => { for (const win of BrowserWindow.getAllWindows()) win.destroy(); }).catch(() => {}); await app.close(); }
 	mock.closeAllConnections(); mock.close();

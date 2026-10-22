@@ -58,6 +58,15 @@ test.each(["one-at-a-time", "all"] as const)("native templates expand before fro
 			expect(recallPending(session).images).toHaveLength(2);
 		}
 		expect(inputs).toHaveLength(24);
+		for (const quote of ['""', "''"]) {
+			vi.spyOn(session, "promptTemplates", "get").mockReturnValue([{ name: "fixture", content: "${1:-default} / $2 / ${3:-last}", description: "", filePath: "", sourceInfo: { path: root, source: "fixture", scope: "user", origin: "top-level" } }]);
+			for (const queue of [true, false]) {
+				await deliverPrompt(session, `/fixture ${quote} second ${quote}`, [{ message: { customType: "file", display: true, content: "frozen $1" } }], queue, () => {});
+				expect((queue ? session.getFollowUpMessages() : session.getSteeringMessages())[0]).toBe("default / second / last\n\nfrozen $1");
+			}
+			recallPending(session);
+		}
+		expect(inputs).toHaveLength(28);
 	} finally { session.dispose(); vi.restoreAllMocks(); rmSync(root, { recursive: true, force: true }); }
 });
 

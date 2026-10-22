@@ -103,7 +103,7 @@ npm run publish:electron       # 同 build，但 --publish always——本地跑
 
 - 主进程 `fork()` 一个隐藏子进程跑 `dist/server/index.js`（`ELECTRON_RUN_AS_NODE=1`，
   即用 Electron 自带的 Node 运行时跑纯 Node 代码，不是渲染进程）。
-- 桌面 Pi SDK 精确锁定为 1.2.0；终端 `pi update` 只更新外部 CLI。
+- 桌面 Pi SDK 精确锁定为 1.4.0；终端 `pi update` 只更新外部 CLI。
 - 打包排除仓库里的 `.pi`、`.omp` 和 `.env*`。产物运行 `tests/packaged-server-start-test.mjs`、`tests/native-tools-desktop-test.mjs`、`tests/provider-auth-test.mjs`，检查终端、Codemode worker、SDK 文档、OAuth lazy 模块。
 
 - 通过 stdout 里的 `⚡ pi-harness` 标记（见 `server/index.ts` 的 `httpServer.listen` 回调）
@@ -178,11 +178,11 @@ npm run publish:electron       # 同 build，但 --publish always——本地跑
 
 Windows 发布先构建，再执行 `tests/packaged-server-start-test.mjs`（使用打包后的 Electron 加载懒加载 provider 并启动包内服务端）及 `tests/portable-relaunch-test.ps1`（首次启动、重复打开、原进程存活及模块保留），通过后才上传安装包；这些检查失败会阻断 Windows 发布。手动运行 `Verify Windows desktop build` 时传入 `release_tag`，可直接验证已发布的 ZIP、NSIS 和便携 EXE，无需重新构建。
 
-### Pi 1.2.0 原版 SDK
+### Pi 1.4.0 原版 SDK
 
 依赖安装前运行 `npm run check:lockfile`，验证 lockfile 下载地址全部使用 HTTPS npm 官方源，再运行 `npm ci`。常规 CI、桌面发布和 Windows 验证工作流均在每次安装前检查；不修改用户全局 npm 配置。
 
-不应用 WebUI 的 SDK 补丁，恢复行为遵循 pi 1.2.0。每个对话创建原生 SettingsManager，getDefaultTools() 原生返回 undefined 时才在读取时提供由公开 getter 解析的 `["+codemode", "+tool_search"]` 默认工具副本；不写入配置。对话级压缩/重试开关也仅在 getter 读取时应用内存覆盖，原生保存、reload 和信任切换均保留对话选择。已有原生选择（含空数组和禁用项）保持权威，不自动删除旧版已写入的值。MCP 使用原生 mcp.json，不配置外部服务器。
+不应用 WebUI 的 SDK 补丁，恢复行为遵循 pi 1.4.0。每个对话创建原生 SettingsManager，getDefaultTools() 原生返回 undefined 时才在读取时提供由公开 getter 解析的 `["+codemode", "+tool_search"]` 默认工具副本；不写入配置。对话级压缩/重试开关也仅在 getter 读取时应用内存覆盖，原生保存、reload 和信任切换均保留对话选择。已有原生选择（含空数组和禁用项）保持权威，不自动删除旧版已写入的值。MCP 使用原生 mcp.json，不配置外部服务器。
 
 ### Wiki 文件与 PDF
 
@@ -196,7 +196,7 @@ Extensions 包管理的 `extensions-worker` 与服务端一起编译打包，在
 
 三平台发布上传前还验证实际安装产物：macOS 从 DMG 复制应用、Windows 静默安装 NSIS、Linux 安装 deb。`packaged-upgrade-test.mjs` 使用最近一个已公开 Release 的运行时（首次发布没有旧版本时跳过）生成隔离配置、凭据、会话与附件，再由新安装运行时读取；不调用真实模型或使用用户数据。
 
-Wiki 的「问 pi」浮动模式使用独立无边框助手窗口，可拖动到其他屏幕，固定按钮返回 Wiki 右栏。助手关闭仅收起；Wiki 关闭时一并销毁助手，继续使用原有保存保护。
+Wiki 的「问 pi」浮动模式使用独立无边框助手窗口，可拖动到其他屏幕，固定按钮返回 Wiki 右栏。助手不继承 Wiki 的全屏状态，保持可缩放的小窗；助手关闭仅收起；Wiki 关闭时一并销毁助手，继续使用原有保存保护。
 
 ### Java 代码运行与 JDK
 

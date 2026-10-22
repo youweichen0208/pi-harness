@@ -136,11 +136,6 @@ async function run() {
 			timeout: 30000,
 		});
 
-		// Join the fixture workspace before opening the composer model menu.
-		await page.locator('.workspace-group-manager input').fill('Models');
-		await page.locator('.workspace-group-actions button[type=submit]').click();
-		await page.locator('.workspace-outside button').click();
-		await page.locator('.project-item.active').waitFor();
 		// Open the visible composer model dropdown → 管理模型.
 		const modelChip = page.locator(".chip-model:visible").first();
 		await modelChip.click();

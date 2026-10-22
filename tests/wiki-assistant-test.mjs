@@ -1,8 +1,9 @@
 // Real SDK + local fake model; no external credentials or model calls.
 import assert from 'node:assert/strict';
+import WebSocket from 'ws';
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, unlinkSync, readdirSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, unlinkSync, readdirSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium } from 'playwright-core';
@@ -22,7 +23,7 @@ await new Promise(resolve=>mock.listen(port+1,'127.0.0.1',resolve));
 writeFileSync(join(agent,'models.json'),JSON.stringify({providers:{fixture:{api:'openai-completions',baseUrl:`http://127.0.0.1:${port+1}`,apiKey:'unused',models:[{id:'fixture',name:'Local model',input:['text'],contextWindow:32000,maxTokens:4096}]}}}));
 writeFileSync(join(agent,'settings.json'),JSON.stringify({defaultProvider:'fixture',defaultModel:'fixture'}));
 writeFileSync(join(agent,'auth.json'),JSON.stringify({fixture:{type:'api_key',key:'unused'}}));
-let server,browser,page,log='';
+let server,browser,page,otherSocket,log='';
 const start=async()=>{server=spawn(process.execPath,['dist/server/index.js'],{env:{...testEnv(),PORT:String(port),PI_WEB_TOKEN:'',PI_WEB_HOST:'127.0.0.1',PI_WEB_CWD:cwd,PI_WEB_DATA_DIR:join(base,'data'),PI_CODING_AGENT_DIR:agent},stdio:['ignore','pipe','pipe']});server.stdout.on('data',b=>log+=b);server.stderr.on('data',b=>log+=b);for(let i=0;i<150&&!await portUp(port);i++){assert.equal(server.exitCode,null,log);await new Promise(r=>setTimeout(r,100));}};
 const stop=async()=>{if(server?.exitCode===null){server.kill('SIGTERM');await new Promise(r=>server.once('exit',r));}};
 try{
@@ -81,6 +82,29 @@ try{
  let box=await page.locator('.wiki-assistant').boundingBox();assert(box.x>=0&&box.x+box.width<=391);
  await page.locator('.wiki-assistant-context').click();await sheet.waitFor();box=await sheet.boundingBox();assert(box.x>=0&&box.x+box.width<=391);await page.keyboard.press('Escape');
  await page.setViewportSize({width:1440,height:1000});await page.evaluate(()=>document.documentElement.dataset.appearance='dark');await page.screenshot({path:'/tmp/pi-wiki-document-analysis-dark.png'});
+ // Real runtime adapter: a second connected window cannot claim this history.
+ otherSocket=new WebSocket(`ws://127.0.0.1:${port}/ws`);
+ const otherState=await new Promise((resolve,reject)=>{
+  const timer=setTimeout(()=>reject(new Error('second Wiki client timeout')),10000);
+  otherSocket.on('open',()=>otherSocket.send(JSON.stringify({type:'hello',clientId:'lifecycle-other',wikiCwd:cwd})));
+  otherSocket.on('message',wire=>{const message=JSON.parse(wire);if(message.type==='snapshot'){clearTimeout(timer);resolve(message.state);}});
+  otherSocket.on('error',reject);
+ });
+ const occupied=await api('chat-open',{clientId:'lifecycle-other',conversationId:otherState.conversationId,id:original});
+ assert.equal(occupied.status,400);assert.match(occupied.body.error,/another window/);
+ otherSocket.terminate();
+ assert.equal((await api('chat-rename',{id:original,title:'Lifecycle regression'})).status,200);
+ assert.equal((await api('chat-list',{path:'note.md'})).body[0].title,'Lifecycle regression');
+ const deleted=await api('chat-delete',{id:original});assert.equal(deleted.status,200);
+ assert.notEqual(deleted.body.sessionId,original);
+ // The active deletion invalidates the browser's restored view record. Read
+ // authoritative history directly, independent of that transient UI state.
+ const historyResponse=await fetch(`http://127.0.0.1:${port}/api/wiki`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({clientId:'assistant-test',cwd,action:'chat-list'})});
+ assert.equal(historyResponse.status,200);
+ const remainingHistory=await historyResponse.json();
+ assert.equal(remainingHistory.filter(item=>item.documentPath==='note.md').length,0);
+ assert.equal(remainingHistory.filter(item=>item.documentPath==='other.md').length,1);
+ assert(existsSync(join(cwd,'note.md')),'deleting a Wiki conversation preserves its document');
  assert.deepEqual(errors,[]);
- console.log('PASS Wiki per-document chats, cleared project scope, native prompt scope, history isolation, drafts, restart and mobile');
-}catch(error){await page?.screenshot({path:'/tmp/pi-wiki-assistant-failure.png'}).catch(()=>{});console.error(log.slice(-7000));console.error(await page.locator('body').innerText());throw error;}finally{await browser?.close();await stop();await new Promise(r=>mock.close(r));rmSync(base,{recursive:true,force:true});}
+ console.log('PASS Wiki per-document chats, cleared project scope, native prompt scope, history isolation, drafts, restart, mobile, cross-window ownership and active history deletion');
+}catch(error){await page?.screenshot({path:'/tmp/pi-wiki-assistant-failure.png'}).catch(()=>{});console.error(log.slice(-7000));console.error(await page.locator('body').innerText());throw error;}finally{otherSocket?.terminate();await browser?.close();await stop();await new Promise(r=>mock.close(r));rmSync(base,{recursive:true,force:true});}
