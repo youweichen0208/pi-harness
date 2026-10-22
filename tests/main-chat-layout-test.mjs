@@ -48,7 +48,7 @@ try {
 		assert((await input.boundingBox()).height < 35);
 		assert.equal(await page.locator('.panel-lower').isVisible(), false);
 		await input.fill('保留这份草稿');
-		for (const width of [1440, 1280, 1100, 768, 390]) {
+		for (const width of [1440, 1280, 1079, 900, 768, 390]) {
 			await page.setViewportSize({ width, height: 900 });
 			await page.waitForTimeout(150);
 			const more = page.locator('.navigation-more > .dropdown > button');
@@ -121,7 +121,7 @@ try {
 		assert.deepEqual(errors, []);
 		await page.close();
 	}
-	console.log('Main chat layout: Web/macOS/Windows, five widths, menu keyboard/focus, draft and screenshots passed');
+	console.log('Main chat layout: Web/macOS/Windows, six widths, menu keyboard/focus, draft and screenshots passed');
 } finally {
 	await browser?.close();
 	server?.kill('SIGTERM');

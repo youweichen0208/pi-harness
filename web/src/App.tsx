@@ -796,10 +796,10 @@ export function App() {
 		() => window.matchMedia("(max-width: 768px)").matches,
 	);
 	const [isNarrow, setIsNarrow] = useState(
-		() => window.matchMedia("(max-width: 1100px)").matches,
+		() => window.matchMedia("(max-width: 900px)").matches,
 	);
 	useEffect(() => {
-		const mq = window.matchMedia("(max-width: 1100px)");
+		const mq = window.matchMedia("(max-width: 900px)");
 		const onChange = (e: MediaQueryListEvent) => {
 			setIsNarrow(e.matches);
 			setDrawer(null);

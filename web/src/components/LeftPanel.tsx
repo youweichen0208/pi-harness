@@ -3,7 +3,6 @@ import {
 	FiSearch,
 	FiCode,
 	FiFeather,
-	FiChevronLeft,
 	FiMessageSquare,
 	FiCheck,
 	FiChevronDown,
@@ -415,7 +414,6 @@ export const LeftPanel = memo(function LeftPanel({
 					<button ref={switcherButton} className="compact-workspace-trigger" title={selectedGroup?.name ?? t("workspaceSelect")} aria-label={t("workspaceSelect")} aria-expanded={workspaceOpen} aria-haspopup="dialog" onClick={() => { setGroupQuery(""); setWorkspaceOpen(value => !value); }}>
 						<img src="/icon/1a-mark.svg" alt="pi-harness" /><span>{selectedGroup?.name ?? t("workspaceNoneSelected")}</span><FiChevronDown />
 					</button>
-					<button className="directory-toggle" aria-label={t("notesDirectoryToggle")} aria-expanded={!directoryCollapsed} onClick={onToggleDirectory}>{directoryCollapsed ? <FiChevronRight /> : <FiChevronLeft />}</button>
 					{workspaceOpen && <div className="workspace-picker" role="dialog" aria-label={t("workspaceSelect")}>
 						<input autoFocus type="search" aria-label={t("workspaceFilter")} placeholder={t("workspaceFilter")} value={groupQuery} onChange={event => setGroupQuery(event.target.value)} />
 						<div className="workspace-list">

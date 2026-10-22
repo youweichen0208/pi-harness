@@ -120,7 +120,9 @@ try {
 	await floating.locator(".inputbar textarea").press("Enter");
 	for (let i = 0; i < 100 && replies.length === 0; i++) await sleep(100);
 	assert.equal(replies.length, 1, "detached composer sends through the existing Wiki session");
-	replies[0].finish();
+	await floating.getByRole("button", { name: "停止任务", exact: true }).click();
+	await floating.getByRole("button", { name: "停止任务", exact: true }).waitFor({ state: "detached" });
+	await wiki.waitForFunction(() => document.querySelector(".wiki-prose .fp-rich-document")?.getAttribute("contenteditable") === "true");
 	await floating.getByRole("link", { name: "Open document", exact: true }).waitFor();
 	await floating.getByRole("link", { name: "Open document", exact: true }).click();
 	await wiki.waitForURL(url => url.searchParams.get("doc") === "other.md");

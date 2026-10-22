@@ -62,6 +62,7 @@ const ALL = [
 	"session-tree-test",
 	"tool-output-test",
 	"recovery-service-test",
+	"gateway-error-test",
 	"restart-session-test",
 	"restart-extension-cache-test",
 	"system-prompt-test",

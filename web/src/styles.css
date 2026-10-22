@@ -8320,7 +8320,7 @@ html.pi-desktop .desktop-window-controls {
 .desktop-window-controls button:hover { background: var(--bg-elev2); color: var(--text); }
 .desktop-window-controls .desktop-window-close:hover { background: #dc3545; color: var(--accent-fg); }
 
-@media (max-width: 1100px) {
+@media (max-width: 900px) {
 	html.pi-desktop .topbar { padding-right: 0; }
 	html.pi-desktop .topbar-actions > .panel-toggle { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; flex: none; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-elev2); color: var(--text-dim); cursor: pointer; }
 	html.pi-desktop .drawer-right.panel-drawer {
@@ -8809,7 +8809,7 @@ html.pi-desktop .design-workspace .topbar { height: 52px; padding-left: 20px; }
 	.design-workspace .workspace-column:has(.view-pane:not(.hidden):not(.preview-open) .drawer-right:not(.files-collapsed)) > .statusbar .status-cwd { width: 100%; margin-left: 0; font: 10.5px var(--mono); }
 	.design-workspace .view-pane:not(.preview-open) .file-list-host { padding-bottom: 80px; }
 }
-@media (min-width: 769px) and (max-width: 1100px) {
+@media (min-width: 769px) and (max-width: 900px) {
 	.design-workspace .view-pane:not(.preview-open) > .drawer-right { position: fixed; top: 52px; bottom: 0; right: 0; z-index: 60; width: min(320px, 86vw); transform: translateX(105%); background: var(--bg-elev); transition: transform .2s ease; }
 	.design-workspace .view-pane:not(.preview-open) > .drawer-right.open { transform: none; }
 }
@@ -9105,7 +9105,7 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { position: fix
 .status-item.working .working-dots i { width: 3px; height: 3px; }
 @media (max-width: 600px) { .design-workspace .input-tools:has(.btn.stop) { flex-wrap: wrap; } .design-workspace .input-tools:has(.btn.stop) .input-tools-right { margin-left: auto; } }
 
-.design-workspace .main { --composer-gutter: 32px; --chat-max: 760px; }
+.design-workspace .main { --composer-gutter: 32px; --chat-max: clamp(760px, 76vw, 1800px); }
 .design-workspace .inputbar { padding-inline: var(--composer-gutter); }
 .design-workspace .scroll-bottom { right: max(var(--composer-gutter), calc((100% - var(--chat-max)) / 2)); }
 .agent-working { width: calc(100% - 56px); max-width: calc(var(--chat-max) - 56px); margin: 12px auto 20px; }
@@ -9850,7 +9850,7 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { height: 44px;
 	html.pi-desktop-darwin .design-workspace .topbar { padding-left: 92px; }
 	.design-workspace .view-switch button { padding-inline: 7px; }
 }
-@media (min-width: 769px) and (max-width: 1100px) {
+@media (min-width: 769px) and (max-width: 900px) {
 	.design-workspace .view-pane:not(.preview-open) > .drawer-right,
 	html.pi-desktop .design-workspace .view-pane:not(.preview-open) > .drawer-right { top: 44px; }
 }
@@ -9931,7 +9931,7 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { height: 44px;
 .wiki-search-trigger span { flex: 1; }
 .wiki-search-trigger kbd { font: 10px "JetBrains Mono", monospace; }
 .wiki-tree-label { display: flex; justify-content: space-between; align-items: center; padding: 4px 16px; color: var(--text-dim); font-size: 11px; }
-.wiki-tree-label button { display: flex; border: none; padding: 5px; background: transparent; color: var(--wiki-accent); }
+.wiki-tree-label button { display: flex; align-items: center; gap: 4px; border: none; padding: 5px; background: transparent; color: var(--wiki-accent); }
 .wiki-tree { flex: 1; min-height: 0; overflow: auto; padding: 4px 8px; }
 .wiki-tree-row { display: flex; align-items: center; gap: 7px; width: 100%; height: 30px; border: 0; background: transparent; border-radius: var(--r-sm); text-align: left; padding-right: 8px; }
 .wiki-tree-row > svg { flex: none; width: 12px; color: var(--text-dim); }
@@ -10049,8 +10049,8 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { height: 44px;
 .wiki-confirm h2 { font-size: 18px; margin-top: 0; }
 .wiki-confirm p { color: var(--text-dim); }
 .wiki-confirm > div { display: flex; justify-content: flex-end; gap: 8px; margin-top: 24px; }
-.wiki-confirm button { border: 1px solid var(--wiki-line); border-radius: var(--r-sm); padding: 7px 10px; background: var(--bg-elev); }
-.wiki-confirm button:last-child { background: var(--wiki-accent); color: var(--accent-fg); }
+.wiki-confirm button { border: 1px solid var(--border); border-radius: var(--r-sm); padding: 7px 10px; background: var(--bg-elev); }
+.wiki-confirm button:last-child { background: var(--action); color: var(--action-fg); }
 .wiki-mobile-tools, .wiki-sidebar-scrim { display: none; }
 @media (max-width: 1200px) {
 
@@ -13176,7 +13176,6 @@ html.pi-desktop .wiki-window-header .desktop-window-controls { -webkit-app-regio
 .workspace-directory-heading { padding: 24px 28px 16px 16px; overflow-wrap: anywhere; }
 .workspace-directory .workspace-project-search { width: calc(100% - 24px); margin: 0 12px 12px; }
 .workspace-directory .panel-projects { flex: 1; min-height: 0; }
-.directory-toggle { position: absolute; right: 4px; top: 4px; z-index: 2; border: 0; color: var(--text-dim); background: var(--bg-elev); border-radius: var(--r-sm); padding: 3px; }
 .directory-collapsed .workspace-directory { display: none; }
 .design-workspace.dual-navigation > .drawer-left:has(.directory-collapsed) { width: 200px; }
 .design-workspace.dual-navigation.left-collapsed > .drawer-left:not(.open) { display: block; width: 200px; }
@@ -13200,7 +13199,7 @@ html.pi-desktop .wiki-window-header .desktop-window-controls { -webkit-app-regio
 .notes-error button + button { margin-left: 8px; }
 .notes-empty { align-items: center; justify-content: center; color: var(--text-dim); }
 .layout.notes-chat-hidden { display: none; }
-@media (max-width: 1100px) {
+@media (max-width: 900px) {
 	.design-workspace.dual-navigation > .drawer-left { position: fixed; left: 0; top: 0; bottom: 0; z-index: 60; width: min(440px, 94vw); transform: translateX(-105%); transition: transform 180ms; box-shadow: var(--card-shadow); }
 	.design-workspace.dual-navigation > .drawer-left.open { transform: translateX(0); }
 	.design-workspace.dual-navigation.left-collapsed > .drawer-left:not(.open) { width: min(440px, 94vw); }
@@ -13216,7 +13215,7 @@ html.pi-desktop .wiki-window-header .desktop-window-controls { -webkit-app-regio
 .design-workspace .workspace-navigation .workspace-add:disabled { background: var(--row-hover); color: var(--text-faint); }
 .workspace-list > button { border: 0; background: transparent; color: var(--text-dim); padding: 8px 12px; font: inherit; text-align: left; }
 .workspace-list > button:hover { background: var(--row-hover); border-radius: var(--r-md); }
-@media (max-width: 1100px) {
+@media (max-width: 900px) {
 	.design-workspace.dual-navigation > .drawer-left[data-fluid-drawer="overlay"] { display: flex; flex-direction: column; }
 	.design-workspace.dual-navigation > .drawer-left .workspace-navigation { flex: 1; min-height: 0; height: auto; }
 }
@@ -13346,7 +13345,6 @@ html.pi-desktop-darwin .design-workspace.dual-navigation.left-collapsed .topbar 
 .compact-navigation .sidebar-footer { flex: none; margin-top: auto; padding: 8px; }
 .compact-navigation .sidebar-footer button { display: flex; align-items: center; gap: 12px; font-size: 13px; }
 .compact-navigation .sidebar-connection { display: none; }
-.compact-navigation .directory-toggle { position: static; display: flex; align-items: center; justify-content: center; flex: none; width: 24px; height: 32px; margin: 0; padding: 0; background: transparent; color: var(--text-faint); }
 .compact-empty-create { margin: 8px; padding: 8px; border: 0; background: transparent; color: var(--text-dim); font: inherit; text-align: left; }
 .design-workspace.dual-navigation.left-collapsed > .drawer-left:not(.open),
 .design-workspace.dual-navigation > .drawer-left:has(.compact-navigation.directory-collapsed) { display: block; width: 56px; }
@@ -13365,7 +13363,7 @@ html.pi-desktop-darwin .design-workspace.dual-navigation.left-collapsed .topbar 
 	.compact-navigation .lp-add-project { opacity: 1; }
 	.compact-navigation .workspace-list-row .lp-menu-zone { visibility: visible; pointer-events: auto; }
 }
-@media (max-width: 1100px) {
+@media (max-width: 900px) {
 	.design-workspace.dual-navigation > .drawer-left,
 	.design-workspace.dual-navigation.left-collapsed > .drawer-left:not(.open),
 	.design-workspace.dual-navigation > .drawer-left:has(.compact-navigation.directory-collapsed) { width: 240px; max-width: 94vw; }
@@ -13381,7 +13379,7 @@ html.pi-desktop-darwin .compact-navigation .global-navigation { padding-top: 36p
 .compact-project-shortcut { display: none; border: 0; background: transparent; color: var(--text); height: 30px; margin-top: 12px; }
 .compact-project-shortcut svg { width: 14px; height: 14px; }
 .compact-navigation.directory-collapsed:not(:hover):not(:focus-within) .compact-project-shortcut { display: block; }
-@media (max-width: 1100px) { .drawer-left.open .compact-navigation .compact-project-shortcut { display: none; } }
+@media (max-width: 900px) { .drawer-left.open .compact-navigation .compact-project-shortcut { display: none; } }
 .compact-navigation .workspace-directory-label { font: inherit; color: inherit; }
 
 /* Workspace create/rename dialog uses app tokens, not Wiki-only variables. */
@@ -13444,7 +13442,6 @@ html.pi-desktop-darwin .compact-navigation .global-navigation { padding-top: 36p
 /* Main chat: quiet navigation and one shared reading/composer rail. */
 .compact-workspace-switcher { display: flex; align-items: center; }
 .compact-workspace-trigger { min-width: 0; }
-.compact-navigation.directory-collapsed:not(:hover):not(:focus-within) .directory-toggle { display: none; }
 .design-workspace .compact-navigation :is(.project-item, .session-item, .global-entries button) { min-height: 32px; height: 32px; border: 0; border-radius: var(--r-sm); }
 .compact-navigation .workspace-directory { margin-top: 8px; }
 .design-workspace .panel-right .tree-search { min-height: 32px; height: 32px; padding-block: 0; }
@@ -13483,9 +13480,9 @@ html.pi-desktop-darwin .compact-navigation .global-navigation { padding-top: 36p
 	.design-workspace .msg:hover .msg-actions, .design-workspace .msg:focus-within .msg-actions { opacity: 1; }
 }
 
-/* Wiki reading surface: center the document and sticky outline together in the
- * available reading pane, including when the outline is hidden or chat is pinned. */
-.wiki-reading-layout { display: flex; align-items: flex-start; justify-content: center; min-height: 100%; min-width: 0; }
+/* Keep the document and sticky outline next to the file tree on wide screens.
+ * Focused mode centers the reading surface after hiding the tree. */
+.wiki-reading-layout { display: flex; align-items: flex-start; justify-content: flex-start; min-height: 100%; min-width: 0; }
 .wiki-reading-layout > .wiki-document { flex: 0 1 auto; min-width: 0; margin: 0; }
 .wiki-workbench.is-focused .wiki-reading-layout { justify-content: center; }
 .wiki-workbench.is-focused .wiki-reading-layout > .wiki-document { margin-left: 0; }

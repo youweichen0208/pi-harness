@@ -99,9 +99,11 @@ try {
 	const send = async () => {
 		const before = replies.length;
 		const input = wiki.locator(".inputbar textarea");
-		await input.fill("Show document link"); await input.press("Enter");
+		await input.fill("Show document link");
+		// Click the enabled button: native focus can remain on the document after navigation.
+		await wiki.locator(".inputbar .composer-action.send").click();
 		for (let i = 0; i < 200 && replies.length === before; i++) await sleep(50);
-		assert.equal(replies.length, before + 1);
+		assert.equal(replies.length, before + 1, await wiki.locator("body").innerText());
 		await wiki.locator(".wiki-agent-chat a", { hasText: "Open document" }).last().waitFor();
 	};
 	const pickFolder = async target => {
@@ -116,6 +118,8 @@ try {
 	await showChat(); await send();
 	// Active tail: cancel must leave both the document and running reply intact.
 	await link.click(); await interrupt.waitFor();
+	const confirmStyle = await interrupt.getByRole("button", { name: "中断并继续", exact: true }).evaluate(button => ({ background: getComputedStyle(button).backgroundColor, color: getComputedStyle(button).color }));
+	assert.notEqual(confirmStyle.background, "rgba(0, 0, 0, 0)", "interrupt confirmation needs a visible background outside Wiki token scope (#122)");
 	await interrupt.getByRole("button", { name: "取消", exact: true }).click();
 	await checkWindow("README.md");
 	// Folder switches use the same explicit interruption guard.
@@ -203,6 +207,7 @@ try {
 	if (wiki && !wiki.isClosed()) console.error({
 		url: wiki.url(),
 		editor: await wiki.locator(".wiki-prose .fp-rich-document").allTextContents(),
+		input: await wiki.locator(".inputbar textarea").inputValue(),
 		save: await wiki.locator(".wiki-save-status, .wiki-error, .wiki-confirm").allTextContents(),
 	});
 	throw error;
@@ -212,8 +217,9 @@ try {
 	mock.closeAllConnections();
 	if (app) {
 		const timer = setTimeout(() => app.process()?.kill("SIGKILL"), 15000);
-		try { await app.close(); } finally { clearTimeout(timer); }
+		try { await app.evaluate(({ BrowserWindow }) => { for (const win of BrowserWindow.getAllWindows()) win.destroy(); }).catch(() => {}); await app.close(); } finally { clearTimeout(timer); }
 	}
+	mock.closeAllConnections();
 	await new Promise(resolve => mock.close(resolve));
 	rmSync(base, { recursive: true, force: true });
 }

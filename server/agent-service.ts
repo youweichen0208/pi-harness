@@ -1,3 +1,4 @@
+import { withSessionErrors } from "./session-errors.js";
 import { WikiChatStore } from "./wiki-chat-store.js";
 import { isSelectableProvider } from "./provider-catalog.js";
 import { databaseScope } from "./database/service.js";
@@ -1178,7 +1179,7 @@ export class ClientSession {
 			conv.treeProjectionRevision = tree.revision;
 		}
 		const occurrences = new Map<string, number>();
-		const rawMessages = projectToolTextMessages(conv.session.agent.state.messages
+		const projectedMessages = projectToolTextMessages(conv.session.agent.state.messages
 			.map((m) => {
 				const key = messageKey(m), index = occurrences.get(key) ?? 0; occurrences.set(key, index + 1);
 				const entryId = conv.treeEntryIds?.get(key)?.[index];
@@ -1186,6 +1187,7 @@ export class ClientSession {
 				return value ? conv.tree?.decorate(value, entryId) ?? value : null;
 			})
 			.filter((m): m is NonNullable<typeof m> => m !== null));
+		const rawMessages = withSessionErrors(conv.session.sessionManager, projectedMessages, (message, entryId) => this.serializeCached(message, entryId));
 		// Reuse the previous array when nothing changed: the element objects are
 		// cached (reference-stable) anyway, and a stable array reference lets the
 		// frontend memoize derived maps instead of rebuilding them every 60ms.
