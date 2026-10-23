@@ -1,5 +1,11 @@
 # 发布流程
 
+## 1.6.0：知识库与 Java 语言服务
+
+新增本地文件夹知识库、单文件弹窗与主聊天引用，精简顶栏和步骤展示，移除后台任务；Playground 接入外部 JDT LS、Tab 补全和保存格式化，并在未保存配置且检测到 JDK 时默认开启运行。保留用户关闭和环境锁。协议 v45，SDK / pi-ai 1.4.0。桌面安装包不内置 JDK/JDT LS；安装说明见 `architecture-playground.md`。
+
+本次仅发布 GitHub 桌面 Release，不发布 npm；版本说明见 `.github/release-notes/v1.6.0.md`。通过相同提交的 CI、三平台打包与安装验证后公开。
+
 ## 1.5.1 Playground 与桌面窗口修复
 
 处理 #126–#128：移除持续思考时长提示，支持非 private Java 方法测试及格式化，补齐小窗口顶栏拖动区域。版本同步为 1.5.1，SDK / pi-ai 保持 1.4.0、协议 v44 不变。本次仅发布 GitHub 三平台桌面 Release；同一提交 CI、打包回归及附件检查通过后公开。说明见 `.github/release-notes/v1.5.1.md`。

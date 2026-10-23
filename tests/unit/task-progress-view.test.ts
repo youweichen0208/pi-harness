@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import type { TaskProgress, TaskStep, UiMessage } from "../../server/protocol.js";
-import { planStepArtifacts, phaseSummary, plainTitle, progressPhases, progressResult } from "../../web/src/task-progress-view.js";
+import { phaseHeadline, planStepArtifacts, phaseSummary, plainTitle, progressPhases, progressResult } from "../../web/src/task-progress-view.js";
 
 const makeStep = (id: string, title: string, kind: string, timestamp: number): TaskStep => ({ id, messageId: id, title, status: "done", startedAt: timestamp, endedAt: timestamp + 1000, artifacts: [{ toolCallId: id, kind, label: title }] });
 
@@ -41,4 +41,35 @@ test("step details use explicit ownership even when timestamps are identical", (
 	const task: TaskProgress = { id: "task", conversationId: "c", sourceMessageId: "u", title: "task", status: "running", startedAt: 100, completed: 0, steps };
 	expect(planStepArtifacts(task, { id: "first", title: "first", status: "done", startedAt: 100, toolCallIds: ["a"] }).map((row) => row.artifact.toolCallId)).toEqual(["a"]);
 	expect(planStepArtifacts(task, { id: "second", title: "second", status: "running", startedAt: 100, toolCallIds: [] })).toEqual([]);
+});
+
+
+test("compact headlines preserve authored intent and only label explicit validation commands", () => {
+	const task: TaskProgress = { id: "task", conversationId: "c", sourceMessageId: "u", title: "检查", status: "running", startedAt: 100, completed: 0, steps: [makeStep("a", "npm run typecheck", "bash", 100), makeStep("b", "npm run build", "bash", 200)] };
+	const phase = progressPhases(task)[0];
+	phase.title = "运行工具";
+	expect(phaseHeadline(phase, "zh", true)).toBe("验证类型与构建");
+	expect(phaseHeadline(phase, "en", true)).toBe("Check types and build");
+	expect(phaseHeadline(phase, "zh")).toBe("运行 2 条命令");
+	phase.steps[1].artifacts[0].label = "npm run build && npm publish";
+	expect(phaseHeadline(phase, "zh", true)).toBe("运行命令");
+	phase.title = "检查发布前的构建产物";
+	expect(phaseHeadline(phase, "zh", true)).toBe("检查发布前的构建产物");
+});
+
+test("generated command headlines are compact even after phase truncation", () => {
+	const command = "lsof -i :8788 -i :5173 -sTCP:LISTEN";
+	const first = makeStep("ports", `运行 ${command}`, "bash", 100);
+	first.artifacts[0].label = command;
+	const second = makeStep("start", "运行 export PATH=/bin:$PATH && npm run dev", "bash", 200);
+	second.artifacts[0].label = "export PATH=/bin:$PATH && npm run dev";
+	const task: TaskProgress = { id: "task", conversationId: "c", sourceMessageId: "u", title: "启动", status: "done", startedAt: 100, completed: 2, steps: [first, second] };
+	const phase = progressPhases(task)[0];
+	expect(phase.title).toBe(`运行 ${command}`.slice(0, 32));
+	expect(phaseHeadline(phase, "zh", true)).toBe("运行命令");
+	expect(phaseHeadline(phase, "en", true)).toBe("Run commands");
+	expect(phaseHeadline(phase, "zh")).toBe("运行 2 条命令");
+	phase.title = "运行服务并确认端口可用";
+	expect(phaseHeadline(phase, "zh", true)).toBe("运行服务并确认端口可用");
+	expect(phase.steps).toEqual([first, second]);
 });

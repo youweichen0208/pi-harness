@@ -29,7 +29,6 @@ try {
 				}
 				if (message.type === 'git_branch') message.notRepo = false;
 				if (message.type === 'scm_data' && message.kind === 'status') Object.assign(message, { ok: true, notRepo: false, files: Array.from({ length: changeCount }, (_, i) => ({ path: `changed-${i}.ts`, x: ' ', y: 'M' })) });
-				if (message.type === 'bg_servers') message.servers = [{ port: 9001, since: Date.now() }, { port: 9002, since: Date.now() }];
 				route.send(JSON.stringify(message));
 			});
 		});
@@ -41,11 +40,10 @@ try {
 			await page.setViewportSize({ width, height: 850 });
 			await page.goto(`http://127.0.0.1:${port}`);
 			await page.locator('.topbar-actions .topbar-more').waitFor();
-			if (!await page.locator('.tab-change-count').isVisible()) await page.locator('.navigation-more > .dropdown > button').click();
 			await page.locator('.tab-change-count', { hasText: String(changeCount) }).waitFor();
 			await page.keyboard.press('Escape');
 			await page.locator('.view-switch button.active').waitFor();
-			assert.equal(await page.locator('.topbar').evaluate(el => el.getBoundingClientRect().height), 44);
+			assert.equal(await page.locator('.topbar').evaluate(el => el.getBoundingClientRect().height), 48);
 			assert.equal(await page.locator('.topbar').evaluate(el => getComputedStyle(el).getPropertyValue('-webkit-app-region')), 'drag', 'restored desktop windows retain a continuous titlebar drag region');
 			assert.equal(await page.locator('.conversation-title-button').evaluate(el => getComputedStyle(el).getPropertyValue('-webkit-app-region')), 'no-drag', 'session selector remains clickable');
 			assert.equal(await page.locator('.status-messages').count(), 0);
@@ -59,8 +57,6 @@ try {
 			assert.equal(await sendButton.evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(38, 38, 38)');
 			assert.equal(await page.locator('.inputbox').evaluate(el => getComputedStyle(el).boxShadow), 'none');
 			await input.fill('');
-			await page.locator('.navigation-more > .dropdown > button').click();
-			assert.equal(await page.locator('.navigation-menu .bg-task-badge').textContent(), '2');
 			await page.keyboard.press('Escape');
 			assert.equal(await page.locator('.header-task-progress').textContent(), '●第 2 / 5 步');
 			assert.equal(await page.locator('.view-switch').evaluate(el => getComputedStyle(el).backgroundColor), 'rgba(0, 0, 0, 0)');
@@ -68,7 +64,7 @@ try {
 			assert.equal(await page.locator('.topbar-actions > .panel-toggle').evaluate(el => getComputedStyle(el).borderTopWidth), '0px');
 			if (platform === 'darwin') assert.equal((await page.locator('.project-panel-toggle').boundingBox()).x, 92);
 			for (const view of ['chat', 'nodes']) {
-				if (view === 'nodes') { await page.locator('.navigation-more > .dropdown > button').click(); await page.locator('.navigation-menu').getByRole('button', { name: '节点', exact: true }).click(); }
+				if (view === 'nodes') await page.getByRole('tab', { name: '节点', exact: true }).click();
 				const actions = await page.locator('.topbar-actions').boundingBox();
 				const controls = await page.locator('.desktop-window-controls').count() ? await page.locator('.desktop-window-controls').boundingBox() : null;
 				await page.locator('.topbar').screenshot({ path: `tests/scratch/toolbar-${platform}-${width}-${view}.png` });
@@ -77,7 +73,7 @@ try {
 				assert(taskButton.x + taskButton.width <= actions.x + 1, `${platform}/${width}/${view}: task overlaps tabs`);
 				const menu = page.locator('.topbar-actions .topbar-more .chip');
 				if (view === 'nodes') {
-					assert(await page.locator('.navigation-more').isVisible(), 'secondary navigation stays available in nodes');
+					assert(await page.getByRole('tab', { name: '节点', exact: true }).isVisible(), 'secondary navigation stays available in nodes');
 					continue;
 				}
 				const box = await menu.boundingBox();
@@ -98,7 +94,6 @@ try {
 				await page.locator('.topbar-actions > .panel-toggle').click();
 				changeCount++;
 				socket.send(JSON.stringify({ type: 'scm_changed' }));
-				if (!await page.locator('.tab-change-count').isVisible()) await page.locator('.navigation-more > .dropdown > button').click();
 			await page.locator('.tab-change-count', { hasText: String(changeCount) }).waitFor();
 			await page.keyboard.press('Escape');
 			await page.locator('.view-switch button.active').waitFor();

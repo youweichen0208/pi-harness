@@ -11,6 +11,7 @@
  * buffer the event stream.
  */
 
+import { JavaLanguageSession } from "./playground-java-language.js";
 import { readFileSync } from "node:fs";
 import { writeFileAtomic } from "./private-file.js";
 import { join } from "node:path";
@@ -62,7 +63,7 @@ export interface PlaygroundRouteOptions {
 	probe?: JdkProbe;
 }
 
-export function installPlaygroundRoutes(app: Express, options: PlaygroundRouteOptions): void {
+export function installPlaygroundRoutes(app: Express, options: PlaygroundRouteOptions): () => Promise<void> {
 	const { dataDir, allowed } = options;
 	const env = options.env ?? process.env;
 	const store = new PlaygroundConfigStore(join(dataDir, "playground.json"));
@@ -70,15 +71,44 @@ export function installPlaygroundRoutes(app: Express, options: PlaygroundRouteOp
 	const probe = options.probe ?? createJdkProbe(env);
 	const gate = new ConcurrencyGate();
 
+	const languageSessions = new Map<string, { session: JavaLanguageSession; touched: number }>();
+	const languageCleanup = setInterval(() => {
+		for (const [id, entry] of languageSessions) if (Date.now() - entry.touched > 300_000) { entry.session.close(); languageSessions.delete(id); }
+	}, 30_000);
+	languageCleanup.unref();
+	app.post("/api/playground/language", async (req, res) => {
+		res.setHeader("Cache-Control", "no-store");
+		if (!allowed(req) || !req.is("application/json")) { res.sendStatus(403); return; }
+		const body = req.body;
+		if (!body || typeof body.id !== "string" || !/^[a-zA-Z0-9-]{1,64}$/.test(body.id) || !["completion", "diagnostics", "signature", "close"].includes(body.action)) { res.sendStatus(400); return; }
+		if (body.action === "close") { languageSessions.get(body.id)?.session.close(); languageSessions.delete(body.id); res.json({}); return; }
+		if (typeof body.code !== "string" || Buffer.byteLength(body.code) > MAX_SOURCE_BYTES || !Number.isInteger(body.offset) || body.offset < 0 || body.offset > body.code.length) { res.sendStatus(400); return; }
+		try {
+			let entry = languageSessions.get(body.id);
+			if (!entry) {
+				if (languageSessions.size >= 3) { res.status(429).json({ error: "Java language service busy" }); return; }
+				entry = { session: new JavaLanguageSession(env.PI_WEB_JDTLS_HOME || join(dataDir, "jdtls"), env), touched: Date.now() };
+				languageSessions.set(body.id, entry);
+			}
+			entry.touched = Date.now();
+			res.json(await entry.session.analyze(body.code, body.offset, body.action));
+		} catch (error) {
+			if (error instanceof Error && error.message === "Java language service busy") { res.status(429).json({ error: error.message }); return; }
+			languageSessions.get(body.id)?.session.close(); languageSessions.delete(body.id);
+			res.status(503).json({ error: error instanceof Error ? error.message : "Java language service unavailable" });
+		}
+	});
+
 	async function currentStatus(force: boolean): Promise<PlaygroundStatus> {
-		const config = store.read();
+		const jdk = await probe.get(force);
+		const config = store.read(jdk.available);
 		const locked = playgroundEnvLock(env);
 		return {
 			// The environment switch wins over the file, and the UI reports it as
 			// locked so the setting reads as read-only rather than mysteriously off.
 			enabled: locked ? false : config.enabled,
 			locked,
-			jdk: await probe.get(force),
+			jdk,
 			limits: { timeoutMs: config.timeoutMs, maxOutputBytes: config.maxOutputBytes, maxHeapMb: config.maxHeapMb },
 		};
 	}
@@ -137,7 +167,7 @@ export function installPlaygroundRoutes(app: Express, options: PlaygroundRouteOp
 			return;
 		}
 		try {
-			store.write({ ...store.read(), ...(body as PlaygroundConfigPatch) });
+			store.write({ ...store.read((await probe.get()).available), ...(body as PlaygroundConfigPatch) });
 			res.json(await currentStatus(false));
 		} catch {
 			res.status(500).json({ error: "Playground config failed" });
@@ -195,7 +225,8 @@ export function installPlaygroundRoutes(app: Express, options: PlaygroundRouteOp
 			return;
 		}
 		// The gate is the file plus the environment lock, never a client preference.
-		const config = store.read();
+		const jdk = await probe.get();
+		const config = store.read(jdk.available);
 		if (playgroundEnvLock(env) || !config.enabled) {
 			res.status(403).json({ error: "Playground is disabled" });
 			return;
@@ -219,7 +250,6 @@ export function installPlaygroundRoutes(app: Express, options: PlaygroundRouteOp
 				return;
 			}
 		}
-		const jdk = await probe.get();
 		if (!jdk.available) {
 			res.status(503).json({ error: jdk.reason ?? "No JDK found" });
 			return;
@@ -273,4 +303,5 @@ export function installPlaygroundRoutes(app: Express, options: PlaygroundRouteOp
 			if (!res.writableEnded) res.end();
 		}
 	});
+	return async () => { clearInterval(languageCleanup); const closing = [...languageSessions.values()].map(entry => entry.session.close()); languageSessions.clear(); await Promise.all(closing); };
 }

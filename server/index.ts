@@ -4,6 +4,7 @@ import { installDatabaseRoutes } from "./database/routes.js";
 import { installSystemPromptRoutes } from "./system-prompt-routes.js";
 import { installExtensionsRoutes } from "./extensions-routes.js";
 import { installCodemodeImageRoutes } from "./codemode-image-routes.js";
+import { installKnowledgeLibraryRoutes } from "./knowledge-library.js";
 import { installWikiRoutes } from "./wiki-routes.js";
 import { OpenAIProxySettings } from "./openai-proxy.js";
 import { installOpenAIProxyRoutes } from "./openai-proxy-routes.js";
@@ -161,12 +162,13 @@ installNoteAssets(app, join(DATA_DIR, "notes", "assets"), originAllowed);
 installLinkPreview(app, originAllowed);
 installNotesRoutes(app, join(DATA_DIR, "notes"), originAllowed);
 // Before the compression middleware below: gzip would buffer the event stream.
-installPlaygroundRoutes(app, { dataDir: DATA_DIR, allowed: originAllowed });
+const stopPlayground = installPlaygroundRoutes(app, { dataDir: DATA_DIR, allowed: originAllowed });
 installCodemodeImageRoutes(app, () => service, originAllowed);
 installOpenAIProxyRoutes(app, openAIProxy, originAllowed);
 installExtensionsRoutes(app, () => service, originAllowed);
 installDatabaseRoutes(app, () => service, originAllowed);
 installSystemPromptRoutes(app, () => service, originAllowed);
+installKnowledgeLibraryRoutes(app, DATA_DIR, originAllowed);
 installWikiRoutes(app, () => service, join(DATA_DIR, "wiki"), originAllowed, () => projectWorkspaces.read());
 
 app.get("/api/health", (_req, res) => {
@@ -480,10 +482,6 @@ const pluginMgr = new PluginManager(DATA_DIR, CWD);
 // 插件扩展点：SDK 工具执行事件（bash/读文件等 start+end）转发给已注册的插件。
 service.onToolEvent = (ev) => pluginMgr.emitToolEvent(ev);
 
-// 插件扩展点：插件常驻后台任务（registerBackgroundTask）→ 并入「后台任务」面板。
-pluginMgr.onBgTasksChanged = () => service.refreshBackgroundServers();
-service.pluginBgTasksProvider = () => pluginMgr.bgTasks();
-service.pluginStopBgTask = (taskId) => pluginMgr.stopPluginBgTask(taskId);
 // 插件宿主工作区实时跟随当前项目：任意客户端 set_cwd 成功后同步给
 // PluginManager，编辑器等工作区跟随型插件随即切根（详见 plugins.ts notifyCwd）。
 service.onClientCwdChanged = (cwd) => pluginMgr.notifyCwd(cwd);
@@ -668,16 +666,6 @@ wss.on("connection", (ws) => {
 				void cs.retrySilentPrompt(msg.conversationId, msg.text);
 				break;
 
-			case "kill_background_server":
-				void cs.killBackgroundServer(msg.port, msg.taskId);
-				break;
-			case "kill_background_servers":
-				void cs.killAllBackgroundServers();
-				break;
-
-			case "list_bg_servers":
-				void cs.listBgServers();
-				break;
 			case "new_chat":
 				void cs.newChat();
 				break;
@@ -1080,6 +1068,7 @@ async function shutdown(): Promise<void> {
 	console.log("\nshutting down…");
 	clearInterval(heartbeatTimer);
 	stopControl();
+	await stopPlayground();
 	nodeWorkbench.dispose();
 	pluginMgr.dispose();
 

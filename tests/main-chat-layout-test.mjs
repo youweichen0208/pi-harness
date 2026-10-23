@@ -51,14 +51,12 @@ try {
 		for (const width of [1440, 1280, 1079, 900, 768, 390]) {
 			await page.setViewportSize({ width, height: 900 });
 			await page.waitForTimeout(150);
-			const more = page.locator('.navigation-more > .dropdown > button');
-			await more.click();
-			await page.keyboard.press('End');
-			assert(await page.locator('.navigation-menu .dd-item').last().evaluate(el => el === document.activeElement));
-			await page.keyboard.press('Escape');
-			assert(await more.evaluate(el => el === document.activeElement));
+			assert.equal(await page.locator('.navigation-more').count(), 0);
+			assert.equal(await page.getByRole('tab', { name: 'Wiki 模式', exact: true }).count(), 0);
+			await page.getByRole('tab', { name: '节点', exact: true }).scrollIntoViewIfNeeded();
+			await page.getByRole('tab', { name: '对话', exact: true }).scrollIntoViewIfNeeded();
 			assert.equal(await input.inputValue(), '保留这份草稿');
-			const geometry = await page.evaluate(() => ({ width: innerWidth, scroll: document.documentElement.scrollWidth, buttons: [...document.querySelectorAll('.topbar-actions > .panel-toggle, .navigation-more > .dropdown > button, .desktop-window-controls')].filter(el => el.getClientRects().length).map(el => ({ x: el.getBoundingClientRect().x, right: el.getBoundingClientRect().right })) }));
+			const geometry = await page.evaluate(() => ({ width: innerWidth, scroll: document.documentElement.scrollWidth, buttons: [...document.querySelectorAll('.topbar-actions > .panel-toggle, .desktop-window-controls')].filter(el => el.getClientRects().length).map(el => ({ x: el.getBoundingClientRect().x, right: el.getBoundingClientRect().right })) }));
 			assert(geometry.scroll <= width, JSON.stringify(geometry));
 			assert(geometry.buttons.every(rect => rect.x >= 0 && rect.right <= width + 1), JSON.stringify(geometry));
 			if (platform === 'win32') {
@@ -66,7 +64,7 @@ try {
 				const actions = await page.locator('.topbar-actions').boundingBox();
 				assert(actions.x + actions.width <= controls.x + 1, 'toolbar must leave window controls clear');
 			}
-			for (const button of await page.locator('.navigation-more > .dropdown > button, .topbar-actions > .panel-toggle').all()) assert(await button.evaluate(el => { const b = el.getBoundingClientRect(); return el.contains(document.elementFromPoint(b.x + b.width / 2, b.y + b.height / 2)); }), 'navigation must be clickable');
+			for (const button of await page.locator('.topbar-actions > .panel-toggle').all()) assert(await button.evaluate(el => { const b = el.getBoundingClientRect(); return el.contains(document.elementFromPoint(b.x + b.width / 2, b.y + b.height / 2)); }), 'navigation must be clickable');
 			for (const appearance of ['light', 'dark']) {
 				await page.evaluate(value => document.documentElement.dataset.appearance = value, appearance);
 				await page.waitForTimeout(200);
@@ -114,14 +112,13 @@ try {
 		await input.fill(Array(25).fill('多行输入').join('\n'));
 		assert((await input.boundingBox()).height <= 181);
 		await input.fill('保留这份草稿');
-		await page.locator('.navigation-more > .dropdown > button').click();
-		await page.locator('.navigation-menu').getByRole('button', { name: '数据库', exact: true }).click();
+		await page.locator('.view-switch').getByRole('button', { name: '数据库', exact: true }).click();
 		await page.locator('.database-workbench').waitFor();
 		assert.equal(await input.inputValue(), '保留这份草稿');
 		assert.deepEqual(errors, []);
 		await page.close();
 	}
-	console.log('Main chat layout: Web/macOS/Windows, six widths, menu keyboard/focus, draft and screenshots passed');
+	console.log('Main chat layout: Web/macOS/Windows, six widths, direct navigation, draft and screenshots passed');
 } finally {
 	await browser?.close();
 	server?.kill('SIGTERM');

@@ -1,3 +1,4 @@
+import { openKnowledge } from "./lib/open-knowledge.mjs";
 // Real Electron, local streaming model, isolated data. Run after npm run build.
 // Desktop-only regression: chat links must not navigate the Wiki renderer to /file.md.
 import assert from "node:assert/strict";
@@ -65,7 +66,7 @@ try {
 	await main.locator(".conn-dot.ok").first().waitFor({ state: "attached" });
 	// This suite exercises docked chat; native floating coverage lives in wiki-assistant-window-test.
 	await main.evaluate(() => localStorage.setItem("pi-wiki-assistant-docked", "true"));
-	await main.locator(".file-name", { hasText: "README.md" }).click();
+	await openKnowledge(main, cwd, "README.md");
 	for (let i = 0; i < 100; i++) {
 		wiki = app.windows().find(page => page.url().includes("wiki-window=1"));
 		if (wiki) break;
@@ -107,10 +108,10 @@ try {
 		await wiki.locator(".wiki-agent-chat a", { hasText: "Open document" }).last().waitFor();
 	};
 	const pickFolder = async target => {
-		await wiki.locator(".wiki-sidebar").getByRole("button", { name: "打开文件夹", exact: true }).click();
-		const picker = wiki.getByRole("dialog", { name: "打开文件夹", exact: true });
+		await wiki.locator(".wiki-sidebar").getByRole("button", { name: "更换知识库文件夹", exact: true }).click();
+		const picker = wiki.getByRole("dialog", { name: "更换知识库文件夹", exact: true });
 		await picker.locator("input").fill(target);
-		await picker.getByRole("button", { name: "打开文件夹", exact: true }).click();
+		await picker.getByRole("button", { name: "更换知识库文件夹", exact: true }).click();
 	};
 
 	const link = wiki.locator(".wiki-agent-chat a", { hasText: "Open document" }).last();
@@ -164,7 +165,7 @@ try {
 	await checkWindow("README.md");
 	// Failed directory validation preserves the current Wiki and permits retry.
 	await pickFolder(join(base, "missing"));
-	const picker = wiki.getByRole("dialog", { name: "打开文件夹", exact: true });
+	const picker = wiki.getByRole("dialog", { name: "更换知识库文件夹", exact: true });
 	await picker.getByRole("alert").waitFor();
 	await checkWindow("README.md");
 	await picker.getByTitle("取消", { exact: true }).click();

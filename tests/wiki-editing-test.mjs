@@ -1,3 +1,4 @@
+import { openKnowledge } from "./lib/open-knowledge.mjs";
 import { wikiToolbar } from "./lib/wiki-toolbar.mjs";
 // Wiki editing 22a: real filesystem writes, delayed acknowledgements and conflicts.
 import assert from 'node:assert/strict';
@@ -44,7 +45,7 @@ try {
 	});
 	await page.goto(`http://127.0.0.1:${port}`);
 	await page.locator('.conn-dot.ok').first().waitFor({ state: 'attached' });
-	await page.locator('.file-name', { hasText: 'README.md' }).click();
+	await openKnowledge(page, cwd, "README.md");
 	const editor = page.locator('.wiki-prose .fp-rich-document');
 	await editor.waitFor();
 	await page.getByRole('button', { name: '新对话', exact: true }).waitFor();

@@ -1,3 +1,20 @@
+## 知识库入口（ADR-0006）
+
+左侧「知识库」打开独立 Wiki 窗口。一个本地文件夹就是整个知识库，子目录用于分类；配置独立于 Workspace。首次选择目录，后续恢复上次打开的 Markdown；空目录可直接打开，目录失效时重新选择。窗口内「更换知识库文件夹」沿用保存与中断保护，更换成功后保存配置，保留原目录的文件和聊天历史。
+
+`server/knowledge-library.ts` 将配置与最近文档原子写入 `<dataDir>/knowledge-library.json`。`POST /api/knowledge-library` 提供 read/configure/remember，沿用鉴权与同源检查；目录规范化为真实路径，最近文档须位于目录内且为 Markdown，旧窗口不能覆盖新目录的记录。新入口同步打开带 `knowledge-library=1` 的 Wiki 窗口，在窗口内读取配置，避免异步弹窗拦截。旧 Wiki URL 继续兼容；知识库窗口不会切换主聊天项目。
+
+普通模式的文件树、聊天链接、工具卡片和本轮文件入口打开 Markdown 时，使用单文件弹窗与主聊天，详见 `architecture-attachments.md`。Wiki 内部链接仍在 Wiki 内导航。回归：`tests/knowledge-library-browser-test.mjs` 与 `tests/unit/knowledge-library.test.ts`。
+
+
+### 打开与恢复的职责
+
+`wiki-window-session.ts` 的 WikiWindowSession 持有本地知识库启动与恢复状态；`use-wiki-window-session.ts` 是 React／窗口／网络 adapter。配置读取、明确选择目录、URL 目标、模型和思考继承、服务端确认、运行实例恢复在同一 module 内排序。明确选择目录使迟到的配置读取失效，卸载后忽略异步结果；模型继承最多等待 5 秒，切目录只在权威状态确认后进入 Wiki 对话。恢复必须同时匹配窗口客户端、cwd、sessionId、conversationId 及明确的 URL 文档。
+
+App 保留展示和用户交互；已打开窗口的保存、中断与切换仍由 WikiCoordinator 准入，更换目录成功后才调用 folderOpened 提交知识库配置。文档记忆串行写入，旧窗口不能覆盖新的库根目录。自动保存 module、发送回执和聊天归属规则保持不变。
+
+回归：`tests/unit/wiki-window-session.test.ts` 控制配置读取和切目录确认的顺序，覆盖迟到结果、关闭、刷新、模型继承超时、失效目录和配置失败；浏览器与 Electron 回归继续覆盖真实窗口 adapter。
+
 ## 文档绑定与 Workspace 追加分析（当前规则）
 
 每篇 Markdown 按工作区真实根目录和文档规范路径绑定独立 chat；`chat-document` 恢复该文档最近会话，首次打开创建并记录 sidecar `documentPath`，历史按文档过滤。仍有消息的旧会话不自动绑定新文档。无消息的 SDK SessionManager 在客户端保留最多 32 篇文档以支持空白草稿切回，不增加后台 Agent；重启后非空历史从原生 transcript 恢复。媒体、代码等非文档文件（`isWikiDocumentPath` 之外）不绑定会话：点击只切换正文只读预览（图片 / PDF / 源码 / 下载），沿用当前 Wiki 会话，不产生当前文件 chip、不清空追加项目，也无需中断运行中的任务；当前不是 Wiki 会话时（刷新后直接打开媒体）先建空白会话。回归：`tests/wiki-media-preview-test.mjs`（issue #119）。
@@ -32,7 +49,7 @@ Wiki 使用独立顶层窗口（ADR-0003）：浏览器命名弹窗 `pi-wiki`，
 
 **退出与恢复**：关闭窗口先走文档保存和运行中断确认。关闭后运行实例可由闲置客户端清理，持久 transcript 保留。刷新优先复用仍存活的 runtime；服务重启后旧 conversationId 不再有效时重新按工作区恢复历史。明确指定的 URL 文档决定正文，恢复对话不会强制打开历史里的某篇文档。新建／切历史前保存文档，保存失败或中断取消保留现场。聊天草稿按工作区及稳定 sessionId 存 sessionStorage，额外引用随对话持久保存。运行中切换文档、工作区或对话仍先确认中断并等待 `agent_settled`。
 
-`WikiWindowShell` 管理浮动／固定展示，`ChatDock` 移动同一个 MessageList + ChatInput 宿主，切换布局不重建聊天。默认收起问 pi、显示大纲；打开问 pi 默认浮动（420px，视口内拖动与缩放），固定模式替换右侧大纲，收起恢复大纲。localStorage 保存布局选择和浮动位置／尺寸，sessionStorage 保存展开状态。小于 900px 使用覆盖面板，暂不提供固定和拖动。文档改动抽屉在浮动助手之上。`WikiDocumentModal` 仍只用于数据库。
+`WikiWindowShell` 管理浮动／固定展示，`ChatDock` 移动同一个 MessageList + ChatInput 宿主，切换布局不重建聊天。默认收起问 pi、显示大纲；打开问 pi 默认浮动（420px，视口内拖动与缩放），固定模式替换右侧大纲，收起恢复大纲。localStorage 保存布局选择和浮动位置／尺寸，sessionStorage 保存展开状态。小于 900px 使用覆盖面板，暂不提供固定和拖动。文档改动抽屉在浮动助手之上。`WikiDocumentModal` 同时承载数据库与普通单文件文档弹窗。
 
 聊天正文文件链接继续在当前 Wiki 窗口内打开，保留保存与中断保护；不导航到裸文件 URL。回归：`wiki-chat-links-desktop-test.mjs` 覆盖 Electron 流式、冻结和完成回复的链接、切文件夹、空目录与主窗口隔离。
 
@@ -177,7 +194,7 @@ Wiki 视图不注册独立扩展输入框。右栏是Wiki 对话的输入框、�
 
 ## 共用文档格式与小记
 
-Wiki 与小记共用 RichMarkdownEditor、RichFormattingToolbar 和 rich-markdown 编解码器；Wiki 的目录、双链、宽版、问 pi 与项目图片接口保留在 Wiki 宿主。新增字号、颜色、上下标、对齐、行距、格式刷、三色块、折叠块、链接卡片和列表缩进；表格行列变更通过原生编辑事务进入撤销栈，列对齐写回 GFM 表格。数据格式、受控 HTML 白名单及外链抓取边界见 [小记架构](architecture-notes.md#共用编辑与资源2026-10-20)。保存与 Agent 生命周期仍使用本页既有规则；资源结果迟到或编辑器卸载后不插入另一文档。
+Wiki 与小记共用 RichMarkdownEditor、RichFormattingToolbar 和 rich-markdown 编解码器；Wiki 的目录、双链、宽版、问 pi 与项目图片接口保留在 Wiki 宿主。新增字号、颜色、上下标、对齐、行距、三色块、折叠块、链接卡片和列表缩进；表格行列变更通过原生编辑事务进入撤销栈，列对齐写回 GFM 表格。数据格式、受控 HTML 白名单及外链抓取边界见 [小记架构](architecture-notes.md#共用编辑与资源2026-10-20)。保存与 Agent 生命周期仍使用本页既有规则；资源结果迟到或编辑器卸载后不插入另一文档。
 
 
 ## Wiki 单行工具栏与正文层级（2026-10-20）

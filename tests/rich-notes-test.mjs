@@ -41,7 +41,7 @@ try {
 	await until(async()=> (await read()).body.includes('[!NOTE]'));
 	assert.equal(await editor.locator('[data-rich-highlight=tip]').count(),0);
 	assert.equal((await read()).body.includes('[!TIP]'),false);
-	await select('p'); await page.getByLabel('字号',{exact:true}).selectOption('24');
+	await select('p'); await page.getByLabel('字号',{exact:true}).selectOption({ label: '24px' });
 	await until(async()=> (await read()).body.includes('font-size: 24px'));
 	await select('p'); await page.getByRole('button',{name:'下划线',exact:true}).click();
 	await until(async()=> /<u>|text-decoration/.test((await read()).body));
@@ -88,10 +88,6 @@ try {
 	await select('p'); await page.getByLabel('行距',{exact:true}).selectOption('2');
 	await until(async()=> (await readFormatting()).body.includes('line-height: 2'));
 	await select('p'); await page.getByRole('button',{name:'粗体',exact:true}).click();
-	await select('p'); await page.getByRole('button',{name:'格式刷',exact:true}).click();
-	await select('[data-rich-block="1"] p'); await editor.dispatchEvent('mouseup');
-	await until(async()=> (await readFormatting()).body.includes('font-weight: 700'));
-	await select('[data-rich-block="1"] p'); await page.getByRole('button',{name:'清除格式',exact:true}).click();
 	assert.equal(await page.evaluate(()=>window.richUnsafe),undefined);
 	await until(async()=> (await readFormatting()).body.includes('<script>window.richUnsafe = true</script>'));
 	// Whole-table selection supports native delete/undo/redo and preserves column alignment.
@@ -123,6 +119,6 @@ try {
 	await page.getByRole('button',{name:'预览',exact:true}).click();
 	await page.setViewportSize({width:600,height:800}); await page.evaluate(()=>document.documentElement.dataset.appearance='dark');
 	mkdirSync('tests/scratch',{recursive:true});await page.screenshot({path:'tests/scratch/rich-notes-mobile.png',fullPage:true});
-	assert.deepEqual(errors,[]);console.log('PASS rich Notes: formats, painter, alignment, table undo, safe HTML, nesting, disclosure, preview, assets, cards, copy survival, narrow/dark');
+	assert.deepEqual(errors,[]);console.log('PASS rich Notes: formats, alignment, table undo, safe HTML, nesting, disclosure, preview, assets, cards, copy survival, narrow/dark');
 } catch(error) {console.error(log.slice(-3000));throw error;}
 finally {await browser?.close();if(server?.exitCode===null){server.kill('SIGTERM');await Promise.race([new Promise(r=>server.once('exit',r)),sleep(5000)]);if(server.exitCode===null)server.kill('SIGKILL');}rmSync(root,{recursive:true,force:true});}

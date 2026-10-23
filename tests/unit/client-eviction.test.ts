@@ -7,7 +7,7 @@ import { DEFAULT_CLIENT_IDLE_MS, clientIdleMsFromEnv, isClientEvictable, type Cl
 
 const idle: ClientIdleFacts = {
 	socketCount: 0, idleSince: 1_000, streamingConversations: 0, queuedMessages: 0,
-	liveTerminals: 0, backgroundTasks: 0, switchingWorkspace: false, disposed: false,
+	liveTerminals: 0, switchingWorkspace: false, disposed: false,
 };
 const LATER = 1_000 + DEFAULT_CLIENT_IDLE_MS;
 
@@ -23,7 +23,6 @@ describe("isClientEvictable", () => {
 		["a run is streaming", { streamingConversations: 1 }],
 		["messages are queued", { queuedMessages: 2 }],
 		["a terminal is alive", { liveTerminals: 1 }],
-		["background servers are tracked", { backgroundTasks: 1 }],
 		["the workspace is switching", { switchingWorkspace: true }],
 		["it is already disposed", { disposed: true }],
 	])("keeps the client when %s", (_name, patch) => {

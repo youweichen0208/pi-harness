@@ -123,13 +123,18 @@ try {
 	assert.equal((await fetch(`${base}/api/playground/status?token=${token}`, { method: "POST" })).status, 405);
 
 	const fresh = await (await status()).json();
-	assert.equal(fresh.enabled, false, "the Playground must default to off");
+	assert.equal(fresh.enabled, fresh.jdk.available, "first use follows detected JDK availability");
 	assert.equal(fresh.locked, false);
 	assert.deepEqual(fresh.limits, { timeoutMs: 10000, maxOutputBytes: 262144, maxHeapMb: 256 });
 	assert.equal(typeof fresh.jdk.available, "boolean");
 	if (fresh.jdk.available) assert.match(String(fresh.jdk.version), /\d/);
 	else assert.match(String(fresh.jdk.reason), /JDK/);
 	assert.equal((await status("refresh=1")).status, 200);
+	if (fresh.jdk.available) {
+		const firstRun = await run(HELLO);
+		assert.equal(firstRun.status, 200, "fresh JDK detection also opens the run gate");
+	}
+
 
 	writeConfig({ enabled: true, timeoutMs: 30000 });
 	const on = await (await status()).json();
@@ -457,7 +462,7 @@ try {
 		}
 	}
 
-	console.log("PASS playground API: auth, origin, default-off, limits, corrupt-config fail-closed, clamping and the environment lock");
+	console.log("PASS playground API: auth, origin, JDK-based default, limits, corrupt-config fail-closed, clamping and the environment lock");
 } finally {
 	await stop();
 	model.closeAllConnections();

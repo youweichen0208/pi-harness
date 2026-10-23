@@ -11,7 +11,6 @@ import { randomUuid } from "./uuid";
 import { withToken } from "./auth-token";
 import type {
 	ClientMessage,
-	BgServer,
 	CommandDef,
 	ConversationSummary,
 	FileContent,
@@ -152,9 +151,6 @@ export interface ChatState {
 
 	/** Settings-panel state (system prompt, skill/extension toggles, presets). */
 	settings: UiSettingsState | null;
-	/** AI-started background servers (managed from the 后台任务 panel). The
-	 *  list lives on the client session, so it survives conversation ends. */
-	bgServers: BgServer[];
 	/** Last fetch_models probe result (custom-provider model list), matched by
 	 *  reqId in the model config modal. */
 	fetchModelsResult: {
@@ -300,7 +296,6 @@ type Action =
 
 	| { type: "settings"; settings: UiSettingsState }
 
-	| { type: "bg_servers"; servers: BgServer[] }
 	| { type: "plugins"; plugins: UiPluginInfo[]; epoch: number }
 	| { type: "set_pending_echo"; echo: PendingEcho }
 	| { type: "clear_pending_echo" };
@@ -629,8 +624,6 @@ function reducer(state: ChatState, action: Action): ChatState {
 
 		case "settings":
 			return { ...state, settings: action.settings };
-		case "bg_servers":
-			return { ...state, bgServers: action.servers };
 		case "plugins":
 			return { ...state, plugins: action.plugins, pluginsEpoch: action.epoch };
 		case "terminal_add":
@@ -774,7 +767,6 @@ export function useChat() {
 		slashCommands: [],
 		terminals: [],
 
-		bgServers: [],
 		settings: null,
 		fetchModelsResult: null,
 		refreshProviderResult: null,
@@ -1258,9 +1250,6 @@ export function useChat() {
 
 				case "settings_state":
 					dispatch({ type: "settings", settings: msg.settings });
-					break;
-				case "bg_servers":
-					dispatch({ type: "bg_servers", servers: msg.servers });
 					break;
 				case "plugins":
 					dispatch({ type: "plugins", plugins: msg.plugins, epoch: msg.epoch });

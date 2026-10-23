@@ -2,12 +2,12 @@
 
 > 决策背景见 `docs/adr/0004-playground-execution-model.md`；术语见 `GLOSSARY.md` 的 **Playground** / **Run**；界面规范见 `docs/ui-design.md`。
 
-一句话：对话消息、小记、右栏文件预览里的 Java 代码块与左栏 Playground 草稿页上的运行入口，把代码交给**宿主机器的 JDK** 编译执行，输出流式回到同一界面。默认关闭、**不是沙箱**、结果不进入模型上下文、不持久化。
+一句话：对话消息、小记、右栏文件预览里的 Java 代码块与左栏 Playground 草稿页上的运行入口，把代码交给**宿主机器的 JDK** 编译执行，输出流式回到同一界面。未保存配置时检测到可用 JDK 默认开启、**不是沙箱**、结果不进入模型上下文、不持久化。
 
 ## 定位与边界
 
 - **核心功能，不是插件**：插件只能加顶栏 tab + 独立 client bundle，无法内联进消息渲染与小记正文。
-- **默认关闭**，由服务端全局配置强制；客户端界面偏好**不改变执行能力**。
+- **未保存配置时检测到可用 JDK 默认开启**，已保存的手动选择优先，由服务端全局配置强制；客户端界面偏好**不改变执行能力**。
 - **不是沙箱**：执行的是宿主机上的任意 Java 代码，拥有服务进程的用户权限。UI 与文档都明说这一点。
 - **不挂载工作区**：代码看不到项目文件、`uploads/`、`notes/assets`。**三个入口都适用**——右栏文件预览里的 `.java` 文件同样在隔离临时目录里单独编译，不拿工作区当 classpath。
 - **不进入模型上下文**：WebUI 不自动发起额外模型调用。对话里有显式的「把结果发给 pi」，把输出作为 fenced block 追加进输入框、**不自动发送**；小记与草稿页没有 agent 会话，只有复制按钮。
@@ -26,7 +26,7 @@
 
 | 字段 | 默认 | 说明 |
 | --- | --- | --- |
-| `enabled` | `false` | 总开关；设置页写入，**路由处理器强制校验** |
+| `enabled` | 首次随 JDK 可用性 | 总开关；设置页写入，**路由处理器强制校验** |
 | `timeoutMs` | `10000` | 墙钟超时，设置页可调 1–60s |
 | `maxOutputBytes` | `262144` | stdout + stderr 合计上限 |
 | `maxHeapMb` | `256` | 传给 `java -Xmx` 的软堆上限 |
@@ -76,9 +76,8 @@ HTTP + SSE，**不新增 WS 消息、`PROTOCOL_VERSION` 不变**：
 - **失效**：小记与文件预览记住「这次运行的源码」，源码被改掉后结果**不消失**，而是打上「代码已改变」标记——让结果凭空消失会让人怀疑自己到底跑没跑过。对话里的代码块不可编辑，所以只有这两处需要。
 - 不可用时显示**禁用态 + tooltip 说明原因**（对话入口），不隐藏——隐藏会让人以为功能不存在。
 - 开启时弹一次二次确认，文案明确「不是沙箱」。
-- **不进**顶栏「后台任务」面板（那是给长期存活的服务进程用的）。
 - **草稿页**（`PlaygroundScratch.tsx`，2026-10-22）：左栏「对话／Playground／小记」的中间入口，**不受总开关隐藏**；运行复用 `playground-run-store`（key 前缀 `scratch`），结果区共用 `PlaygroundResult`（stale 标记用精确比对——这里文本完全由本页拥有）。自动保存 600ms 去抖 + 卸载 flush；首访（`updatedAt === 0` 且空）种入模板。页面刷新仍清空运行结果，与其它入口一致。
-- **草稿编辑器与补全**（`scratch-editor.tsx`）：草稿页正文是 CodeMirror 6 + `@codemirror/lang-java`，提供语法高亮、行号、括号匹配与**词级补全**——Java 关键字 + 当前草稿里已出现的标识符，输入单词或 `.` 后弹出。**没有语义引擎**（不上 JDT language server，也不维护静态 API 成员词表）：`System.out.` 后弹的是文档词，不是真成员。编辑器与补全是编辑辅助，**不受总开关限制**（同草稿读写）。⌘/Ctrl+Enter 用 `Prec.highest` 键位永远优先运行、不被补全弹窗拦截；可用性检查留在页面层，与 Run 按钮同一套 `reason`。主题从 CSS 变量生成、监听 `THEME_CHANGE_EVENT` 重建（语法配色复用 `--code-*`，同 highlight.js 调色板）。编辑器经 `React.lazy` 懒加载（约 466KB 独立 chunk，主包不涨）。补全只在草稿页：对话代码块只读，右栏 `.java` 预览用通用编辑器，均不涉及。
+- **草稿编辑器与补全**（`scratch-editor.tsx`、`playground-java-language.ts`）：CodeMirror 6 + Java 语法高亮，真实补全来自 Eclipse JDT Language Server；移除原关键词／文档单词候选，不使用静态 API 词表。支持成员与泛型参数候选、方法参数浮窗、编译诊断及选择类型候选时附带的 import 编辑。服务启动中／不可用状态在代码栏显示，原因在悬停提示中；不可用不影响输入、保存、格式化和运行。Mac / Windows 的 Tab 在补全列表打开时接受当前候选，无候选时缩进，Shift+Tab 反缩进。⌘/Ctrl+Enter 继续优先运行，⌘/Ctrl+S 格式化并保存。服务仅接入 Playground 草稿页。
 
 ## 留痕
 
@@ -119,4 +118,13 @@ HTTP + SSE，**不新增 WS 消息、`PROTOCOL_VERSION` 不变**：
 
 回归：`tests/unit/playground-scratch-store.test.ts` 通过同一 interface 控制传输确认与时间，验证回退、失败恢复、卸载重入和迟到读取；`tests/playground-methods-test.mjs --browser` 验证页面保存、模式迁移及等待写入确认期间离开重入。
 
-草稿编辑器提供「格式化」按钮和 Shift+Alt+F 快捷键（#127）：服务端使用 Prettier Java，仅调整代码、不执行；支持方法片段和完整 class，执行关闭或没有 JDK 时仍可使用。解析失败保留原文；请求期间编辑过代码时不应用旧结果，离开页面取消请求，格式化可撤销。`POST /api/playground/format` 接受 `{code}` 并返回 `{code}`，沿用鉴权与 256 KiB 源码限制。方法识别支持 public、protected 和默认访问权限，private 方法保持作为辅助方法；旧签名的用例保留，选择新方法后可添加新用例。
+草稿编辑器提供「格式化」按钮和 Shift+Alt+F 快捷键（#127）：服务端使用 Prettier Java，仅调整代码、不执行；支持方法片段和完整 class，执行关闭或没有 JDK 时仍可使用。解析失败保留原文；请求期间编辑过代码时不应用旧结果，离开页面取消请求，格式化可撤销。⌘/Ctrl+S 先格式化再立即保存；格式化失败仍保存原文，普通输入的去抖自动保存不触发重排。`POST /api/playground/format` 接受 `{code}` 并返回 `{code}`，沿用鉴权与 256 KiB 源码限制。方法识别支持 public、protected 和默认访问权限，private 方法保持作为辅助方法；旧签名的用例保留，选择新方法后可添加新用例。
+
+### Java 语言服务
+
+- 使用 Eclipse JDT LS **1.57.0**（Java 21+）；默认读取 `<dataDir>/jdtls`，可通过 `PI_WEB_JDTLS_HOME` 指定解压目录。JDK 沿用 `JAVA_HOME` / PATH 探测。JDT LS 发行包不放入仓库、不随 npm 或 Electron 打包，也不会在启动时自动下载。
+- 安装：从 [Eclipse 官方固定版本](https://download.eclipse.org/jdtls/milestones/1.57.0/jdt-language-server-1.57.0-202602261110.tar.gz) 下载并解压至上述目录，确保根目录包含 `plugins`、`config_mac_arm` 等平台配置目录。首次补全需等待 JVM 初始化。较新的 JDT LS 可能要求更高版本 JDK，升级需重新验证。
+- `POST /api/playground/language` 沿用鉴权与 Origin 检查，接受随机编辑器 ID、源码、UTF-16 光标偏移以及白名单动作 completion / diagnostics / signature / close。不提供任意 LSP RPC、命令执行或客户端文件路径接口；源代码限制 256 KiB。
+- 每个编辑器使用一个独立临时 Eclipse Java 项目、配置目录及 JVM（堆上限 512 MiB），最多 3 个，空闲 5 分钟回收。源码只用于分析，不运行用户方法；不扫描工作区，不导入 Maven/Gradle 项目或安装第三方依赖。方法片段包装为 Main，映射原始光标、诊断与 import 编辑；完整类保留 package。
+- 每个文档串行更新与查询，最多 4 个待处理请求。JSON-RPC 帧限 8 MiB，初始化 60 秒、单请求 20 秒超时。编辑器卸载关闭服务，服务端退出清理子进程和临时目录。旧文档响应不能覆盖新的输入或选区，补全应用前再次核对原文。
+- 验证：`tests/unit/playground-java-language.test.ts` 覆盖源码包装；设置 `PI_WEB_JDTLS_HOME` 后运行 `node --import tsx tests/playground-java-language-test.mjs` 验证真实 JDT 方法补全、泛型、参数、类型错误、片段和自动导入。

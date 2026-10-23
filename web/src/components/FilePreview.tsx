@@ -1,3 +1,4 @@
+import { useFileDocument } from "../use-file-document";
 import { UiIcon } from "./UiIcon";
 import type { CurrentFileContext, ReadCurrentFile, SaveCurrentFile } from "../current-file";
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -18,7 +19,6 @@ import { Markdown } from "./Markdown";
 import { highlightLines, langFromPath } from "../hljs-lite";
 import { useT } from "../i18n";
 import { getClientId } from "../use-chat";
-import { randomUuid } from "../uuid";
 import { markdownImageUrl } from "../markdown-image";
 import { downloadFile } from "../download";
 import { withToken } from "../auth-token";
@@ -41,6 +41,8 @@ export interface PreviewFile {
 export type FileNavigationGuard = (action: () => void) => void;
 
 interface FilePreviewProps {
+	/** Single-document dialogs save on idle and before leaving. */
+	autoSave?: boolean;
 	contextReader?: MutableRefObject<ReadCurrentFile | null>;
 	/** 发送即保存：提交携带当前文件的消息前，把未保存草稿落盘。 */
 	contextSaver?: MutableRefObject<SaveCurrentFile | null>;
@@ -70,7 +72,7 @@ interface Range {
 }
 
 export const FilePreviewContent = memo(function FilePreviewContent({
-	result, guard, disabled, connected, contextReader, contextSaver, onContextChange,
+	result, guard, disabled, connected, contextReader, contextSaver, onContextChange, autoSave = false,
 	file,
 	content,
 	send,
@@ -82,24 +84,16 @@ export const FilePreviewContent = memo(function FilePreviewContent({
 	scmDirty,
 }: FilePreviewProps) {
 	const t = useT();
-	const [loaded, setLoaded] = useState<FileContent | null>(null);
-	// Live mirror of `loaded` (kept in sync at every setLoaded site): read at
-	// submit time from callbacks that run BEFORE React commits the new state —
-	// e.g. save-on-send's `next()` fires inside the write-result effect, while
-	// the reader closure still holds the previous render's `loaded`.
-	const loadedRef = useRef<FileContent | null>(null);
-	const [loading, setLoading] = useState(false);
+	const { document, loaded, draft, loading, status, error: documentError, conflict, leave, savedAt, remoteText, readRevision } = useFileDocument(file, send, autoSave, connected, disabled, content, result, fileChanged);
+	const [localError, setError] = useState("");
+	const error = documentError ? documentError.message ?? t(documentError.kind === "offline" ? "fileOffline" : "fileSaveFailed") : localError;
+	const dirty = document.dirty, eligible = document.eligible, externalChanged = remoteText !== null;
+	const setDraft = document.edit, requestContent = document.reload, saveEditing = document.save;
 	const [sel, setSel] = useState<Range | null>(null);
 	const [dragging, setDragging] = useState(false);
 	const [added, setAdded] = useState(false);
 	// Editable files retain their visual formatting while accepting input.
 	const [editing, setEditing] = useState(true);
-	const [draft, updateDraft] = useState("");
-	const draftRef = useRef("");
-	const setDraft = (value: string) => { draftRef.current = value; updateDraft(value); };
-	// Identity of this open instance — the current-file chip + snapshot read
-	// key off it, so a reopen gets a fresh id and the chip follows along.
-	const openId = useRef(randomUuid());
 	// Markdown preview renders the current draft.
 	const [markdownPreview, setMarkdownPreview] = useState(true);
 	const [diffMode, setDiffMode] = useState<"git" | "external" | null>(null);
@@ -107,9 +101,6 @@ export const FilePreviewContent = memo(function FilePreviewContent({
 	const [gitDiff, setGitDiff] = useState("");
 	const [gitUntracked, setGitUntracked] = useState(false);
 	const [diffLoading, setDiffLoading] = useState(false);
-	const [externalChanged, setExternalChanged] = useState(false);
-	const [remoteText, setRemoteText] = useState<string | null>(null);
-	const [savedAt, setSavedAt] = useState(() => new Date());
 	const [selectionAnchor, setSelectionAnchor] = useState<{ x: number; y: number } | null>(null);
 	// Code lines scroll horizontally unless the user enables wrapping.
 	const [wrap, setWrap] = useState(false);
@@ -125,69 +116,20 @@ export const FilePreviewContent = memo(function FilePreviewContent({
 	const draggingRef = useRef(false);
 	const addedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-	const readId = useRef("");
-	const compareReadId = useRef("");
 	const statusReqId = useRef(0);
 	const diffReqId = useRef(0);
-	const pending = useRef<{ id: string; text: string; next?: () => void } | null>(null);
-	const [status, setStatus] = useState<"saved" | "saving" | "failed">("saved");
-	const [error, setError] = useState("");
-	const [conflict, setConflict] = useState(false);
-	const [leave, setLeave] = useState<{ action: () => void } | null>(null);
-	const dirty = loaded !== null && draft !== loaded.text;
-
-	const requestContent = () => {
-		if (disabled) return;
-		readId.current = randomUuid();
-		setLoading(true);
-		setError("");
-		if (!send({ type: "read_file", path: file.path, cwd: file.cwd, requestId: readId.current })) {
-			setLoading(false);
-			setError(t("fileOffline"));
-		}
-	};
-	useEffect(() => { requestContent(); }, [file.path, file.cwd]);
-
 	useEffect(() => {
-		if (content?.requestId !== readId.current || content?.cwd !== file.cwd || content?.path !== file.path) return;
-		readId.current = "";
-		loadedRef.current = content;
-		setLoaded(content);
-		setSel(null);
-		setDraft(content.text);
-		setEditing(content.kind === "text" && !content.binary && !content.truncated);
-		setMarkdownPreview(true);
-		setLoading(false);
-		setConflict(false);
-		setStatus("saved");
-		setSavedAt(new Date());
-		setExternalChanged(false);
-		setRemoteText(null);
-		setDiffMode(null);
-	}, [content, file.path, file.cwd]);
-
-	useEffect(() => {
-		if (!content || content.requestId !== compareReadId.current || content.path !== file.path || content.cwd !== file.cwd) return;
-		compareReadId.current = "";
-		if (loaded && content.version !== loaded.version) {
-			if (dirty) {
-				setRemoteText(content.text);
-				setExternalChanged(true);
-			} else {
-				// 改动回流（干净分支）：编辑器无未保存修改时自动重载为磁盘新版。
-				loadedRef.current = content;
-				setLoaded(content);
-				setDraft(content.text);
-			}
-		}
-	}, [content, loaded, dirty, file.path, file.cwd]);
-	useEffect(() => {
-		// 磁盘变化时对比读取：草稿干净则自动重载（改动回流），有未保存修改
-		// 则走外部修改横幅，保留用户草稿由其二选一。
-		if (!fileChanged || !loaded || pending.current || disabled) return;
-		compareReadId.current = randomUuid();
-		send({ type: "read_file", path: file.path, cwd: file.cwd, requestId: compareReadId.current });
-	}, [fileChanged, file.path, file.cwd, loaded, dirty, disabled, send]);
+		setSel(null); setEditing(document.canEdit); setMarkdownPreview(true); setDiffMode(null); setError("");
+	}, [readRevision]);
+	useEffect(() => { setSel(null); }, [savedAt]);
+	useLayoutEffect(() => {
+		guard.current = document.guard;
+		if (contextReader) contextReader.current = document.readContext;
+		if (contextSaver) contextSaver.current = document.saveContext;
+		return () => { guard.current = null; if (contextReader) contextReader.current = null; if (contextSaver) contextSaver.current = null; };
+	}, [document, guard, contextReader, contextSaver]);
+	useLayoutEffect(() => { onContextChange?.(document.context); }, [document, eligible, dirty, onContextChange]);
+	useLayoutEffect(() => () => onContextChange?.(null), [onContextChange]);
 	useEffect(() => {
 		if (disabled || !connected) return;
 		statusReqId.current = --filePreviewScmRequestId;
@@ -213,116 +155,6 @@ export const FilePreviewContent = memo(function FilePreviewContent({
 	const diffMarkers = useMemo(() => gitUntracked
 		? new Map((loaded?.text.split("\n") ?? []).map((_, index) => [index + 1, "added" as const]))
 		: fileDiffMarkers(gitDiff), [gitDiff, gitUntracked, loaded?.text]);
-
-	useEffect(() => {
-		if (!result || result.cwd !== file.cwd || result.path !== file.path) return;
-		if (result.operation === "read" && result.requestId === readId.current) {
-			readId.current = "";
-			setLoading(false);
-			setError(result.error ?? t("fileSaveFailed"));
-		}
-		if (result.operation !== "write" || result.requestId !== pending.current?.id) return;
-		const saved = pending.current;
-		if (!saved) return;
-		pending.current = null;
-		if (result.ok) {
-			const previous = loadedRef.current;
-			if (previous) {
-				const updated = {
-					...previous,
-					text: saved.text,
-					version: result.version,
-					size: new TextEncoder().encode(saved.text).length,
-					lines: saved.text ? saved.text.split("\n").length - (saved.text.endsWith("\n") ? 1 : 0) : 0,
-				};
-				loadedRef.current = updated;
-				setLoaded(updated);
-			}
-			setStatus("saved");
-			setSavedAt(new Date());
-			setSel(null);
-			setConflict(false);
-			setError("");
-			saved.next?.();
-		} else {
-			setStatus("failed");
-			setConflict(!!result.conflict);
-			setError(result.error ?? t("fileSaveFailed"));
-		}
-	}, [result, file.cwd, file.path, t]);
-
-	useEffect(() => {
-		if (!loading) return;
-		const fail = () => { readId.current = ""; setLoading(false); setError(t("fileOffline")); };
-		if (!connected) { fail(); return; }
-		const timer = setTimeout(fail, 15000);
-		return () => clearTimeout(timer);
-	}, [loading, connected, t]);
-
-	useEffect(() => {
-		if (status !== "saving") return;
-		const fail = () => {
-			pending.current = null;
-			setStatus("failed");
-			setError(t("fileOffline"));
-		};
-		if (!connected) { fail(); return; }
-		const timer = setTimeout(fail, 15000);
-		return () => clearTimeout(timer);
-	}, [status, connected, t]);
-
-	useLayoutEffect(() => {
-		guard.current = (action) => {
-			if (pending.current) return;
-			if (dirty) setLeave({ action });
-			else action();
-		};
-		return () => { guard.current = null; };
-	}, [dirty, guard]);
-	useEffect(() => {
-		if (!dirty) return;
-		const prevent = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
-		window.addEventListener("beforeunload", prevent);
-		return () => window.removeEventListener("beforeunload", prevent);
-	}, [dirty]);
-
-	// 当前文件上下文（0.50.0 语义）：预览打开且可编辑时向 App 上报自己，
-	// 并注册快照读取器 — 发送时取的是编辑器草稿（含未保存修改），不是磁盘。
-	const eligible = !!loaded && loaded.kind === "text" && !loaded.binary && !loaded.truncated && !loading && !disabled;
-	useLayoutEffect(() => {
-		if (!contextReader) return;
-		contextReader.current = (id) => eligible && loaded && id === openId.current ? {
-			path: file.path, mode: "inline",
-			editorSnapshot: {
-				cwd: file.cwd,
-				text: draftRef.current,
-				dirty: draftRef.current !== loadedRef.current?.text,
-				version: loadedRef.current?.version,
-			},
-		} : null;
-		return () => { contextReader.current = null; };
-	}, [contextReader, eligible, loaded, file.path, file.cwd]);
-	useLayoutEffect(() => {
-		onContextChange?.(eligible ? { ...file, id: openId.current, dirty } : null);
-	}, [eligible, dirty, file, onContextChange]);
-	useLayoutEffect(() => () => onContextChange?.(null), [onContextChange]);
-	// 发送即保存：草稿干净就直接续走；脏则先落盘（乐观并发，冲突走现有
-	// 冲突 UI 且不回调 next —— 发送被挡住）；保存中/离线等无法启动时返回 false。
-	useLayoutEffect(() => {
-		if (!contextSaver) return;
-		contextSaver.current = (id, next) => {
-			const current = loadedRef.current;
-			if (!eligible || !current || id !== openId.current) return false;
-			if (draftRef.current === current.text) {
-				next();
-				return true;
-			}
-			if (loading || disabled || pending.current) return false;
-			saveEditing(false, next);
-			return true;
-		};
-		return () => { contextSaver.current = null; };
-	}, [contextSaver, eligible, loading, disabled, draft, file.path, file.cwd]);
 
 	// End drag selection on mouseup anywhere.
 	useEffect(() => {
@@ -423,19 +255,6 @@ export const FilePreviewContent = memo(function FilePreviewContent({
 		setSel(null);
 	};
 
-	const saveEditing = (force = false, next?: () => void) => {
-		if (!loaded || !canEdit || loading || disabled || pending.current) return;
-		const id = randomUuid();
-		pending.current = { id, text: draft, next };
-		setStatus("saving");
-		setError("");
-		if (!send({ type: "write_file", path: file.path, cwd: file.cwd, text: draft, requestId: id, expectedVersion: loaded.version, force })) {
-			pending.current = null;
-			setStatus("failed");
-			setError(t("fileOffline"));
-		}
-	};
-
 	const handleClose = () => guard.current?.(onClose);
 
 	const setZoomLevel = (next: number) => {
@@ -523,9 +342,9 @@ export const FilePreviewContent = memo(function FilePreviewContent({
 				</div>}
 				{leave && <div className="fp-leave" role="alertdialog" aria-label={t("fileUnsaved")}>
 					<p>{t("fileLeavePrompt")}</p>
-					<button className="btn primary" disabled={disabled} onClick={() => { const next = leave.action; setLeave(null); saveEditing(false, next); }}>{t("fileSaveContinue")}</button>
-					<button className="btn" onClick={() => { const next = leave.action; setLeave(null); next(); }}>{t("fileDiscard")}</button>
-					<button className="btn" onClick={() => setLeave(null)}>{t("cancel")}</button>
+					<button className="btn primary" disabled={disabled} onClick={() => document.resolveLeave("save")}>{t("fileSaveContinue")}</button>
+					<button className="btn" onClick={() => document.resolveLeave("discard")}>{t("fileDiscard")}</button>
+					<button className="btn" onClick={() => document.resolveLeave("cancel")}>{t("cancel")}</button>
 				</div>}
 				{loading && !loaded && <div className="fp-empty">{t("loading")}</div>}
 

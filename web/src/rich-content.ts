@@ -1,6 +1,6 @@
 /** Controlled HTML is a small document format, never a general HTML renderer. */
-export const FONT_SIZES = [12, 13, 14, 15, 16, 18, 20, 24, 28, 32, 36, 48];
-export const LINE_HEIGHTS = [1, 1.5, 1.74, 2, 2.5, 3];
+import { FONT_SIZES, LINE_HEIGHTS } from "./rich-commands";
+export { FONT_SIZES, LINE_HEIGHTS } from "./rich-commands";
 export function safeLink(value: string): boolean {
 	if (/[\u0000-\u001f<>]/.test(value) || value.startsWith("//")) return false;
 	try { return ["http:", "https:", "mailto:"].includes(new URL(value, "https://document.invalid/").protocol); } catch { return false; }

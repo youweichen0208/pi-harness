@@ -13,7 +13,6 @@ export interface ClientIdleFacts {
 	streamingConversations: number;
 	queuedMessages: number;
 	liveTerminals: number;
-	backgroundTasks: number;
 	switchingWorkspace: boolean;
 	disposed: boolean;
 }
@@ -31,6 +30,6 @@ export function isClientEvictable(facts: ClientIdleFacts, now: number, idleMs: n
 	if (idleMs <= 0 || facts.disposed || facts.switchingWorkspace) return false;
 	if (facts.socketCount > 0 || facts.idleSince <= 0) return false;
 	if (facts.streamingConversations > 0 || facts.queuedMessages > 0) return false;
-	if (facts.liveTerminals > 0 || facts.backgroundTasks > 0) return false;
+	if (facts.liveTerminals > 0) return false;
 	return now - facts.idleSince >= idleMs;
 }

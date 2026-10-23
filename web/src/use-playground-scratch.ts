@@ -20,5 +20,5 @@ const scratch = new PlaygroundScratchStore({
 export function usePlaygroundScratch() {
 	const state = useSyncExternalStore(scratch.subscribe, scratch.getSnapshot);
 	useEffect(scratch.connect, []);
-	return { ...state, edit: scratch.edit };
+	return { ...state, edit: scratch.edit, save: scratch.flush };
 }

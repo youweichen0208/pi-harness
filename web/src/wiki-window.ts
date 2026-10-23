@@ -80,3 +80,10 @@ export function openWikiWindow(cwd: string, doc: string | null, carry?: { model?
 	const open = (globalThis as { open?: (url: string, target: string, features: string) => void }).open;
 	open?.(buildWikiWindowUrl(cwd, doc, randomUuid(), carry), WIKI_WINDOW_NAME, "width=1100,height=800");
 }
+
+/** Resolve the configured folder inside the new window, leaving the opener untouched. */
+export const isKnowledgeLibraryWindow = new URLSearchParams(currentSearch()).get("knowledge-library") === "1";
+export function openKnowledgeLibrary(carry?: { model?: string | null; thinking?: string | null }): void {
+	const open = (globalThis as { open?: (url: string, target: string, features: string) => void }).open;
+	open?.(`${buildWikiWindowUrl("", null, randomUuid(), carry)}&knowledge-library=1`, WIKI_WINDOW_NAME, "width=1100,height=800");
+}

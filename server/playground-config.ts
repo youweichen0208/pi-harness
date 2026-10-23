@@ -1,10 +1,9 @@
 /**
  * Playground configuration — one global, server-side switch plus the Run limits.
  *
- * The switch is deliberately global rather than a per-client UI preference: a
- * per-client toggle could be turned on by anyone who can open the page, which
- * would make "off by default" meaningless. `PI_WEB_PLAYGROUND=off` locks it off
- * on top of the file, for deployments where the file itself is page-writable.
+ * One server-side setting applies to all clients. Before a choice is saved,
+ * the default follows detected JDK availability. PI_WEB_PLAYGROUND=off takes
+ * precedence over both the detected default and saved preferences.
  *
  * Pure: no I/O, no environment reads beyond the map handed in. The store at the
  * bottom of this file is the only I/O, kept here so the shape and the file live
@@ -65,18 +64,18 @@ export function playgroundEnvLock(env: Readonly<Record<string, string | undefine
 }
 
 /**
- * The global switch on disk (`<dataDir>/playground.json`). A missing or corrupt
- * file reads as the defaults: this is a safety switch, so failing open would be
- * the wrong direction — failing closed means "off".
+ * Explicit saved choices win. Only a missing file uses the detected JDK default;
+ * unreadable or corrupt configuration stays disabled.
  */
 export class PlaygroundConfigStore {
 	constructor(private readonly file: string) {}
 
-	read(): PlaygroundConfig {
+	read(jdkAvailable = false): PlaygroundConfig {
 		try {
 			return normalizePlaygroundConfig(JSON.parse(readFileSync(this.file, "utf8")));
-		} catch {
-			return normalizePlaygroundConfig(undefined);
+		} catch (error) {
+			const missing = (error as NodeJS.ErrnoException).code === "ENOENT";
+			return { ...PLAYGROUND_DEFAULTS, enabled: missing && jdkAvailable };
 		}
 	}
 

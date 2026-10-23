@@ -1,3 +1,4 @@
+import { openKnowledge } from "./lib/open-knowledge.mjs";
 // Real Electron: the Wiki window is a second BrowserWindow (ADR-0003); closing
 // it (or quitting the app) must wait for Wiki saves, including failure.
 import assert from 'node:assert/strict';
@@ -24,7 +25,7 @@ try {
 	for (let i = 0; i < 200; i++) { page = app.windows().find(p => p.url().startsWith('http://127.0.0.1:')); if (page) break; await sleep(100); }
 	assert(page); page.setDefaultTimeout(10000);
 	await page.locator('.conn-dot.ok').first().waitFor({ state: 'attached' });
-	await page.locator('.file-name', { hasText: 'README.md' }).click();
+	await openKnowledge(page, cwd, "README.md");
 	// Wiki mode opens a second BrowserWindow; the main window stays in normal view.
 	for (let i = 0; i < 100; i++) { wiki = app.windows().find(p => p.url().includes('wiki-window=1')); if (wiki) break; await sleep(100); }
 	assert(wiki, 'clicking a Markdown file opens the detached Wiki window');
@@ -59,7 +60,7 @@ try {
 
 	await wiki.waitForFunction(() => !document.querySelector('.wiki-send')?.textContent?.includes('会话准备中'));
 	// Re-entering reuses the same window instead of spawning more.
-	await page.locator('.file-name', { hasText: 'README.md' }).click();
+	await openKnowledge(page, cwd, "README.md");
 	await sleep(500);
 	assert.equal((await wikiUrls()).filter(u => u.includes('wiki-window=1')).length, 1, 're-entering reuses the Wiki window');
 	const type = async text => { await editor.locator('p').last().evaluate(el => { el.closest('[contenteditable]').focus(); const r = document.createRange(), s = getSelection(); r.selectNodeContents(el); r.collapse(false); s.removeAllRanges(); s.addRange(r); }); await wiki.keyboard.type(text); };
@@ -71,7 +72,7 @@ try {
 	assert.equal(await windowVisible('127.0.0.1'), true, 'the main window survives the Wiki window closing');
 
 	// Failed saves keep the Wiki window open and the draft intact.
-	await page.locator('.file-name', { hasText: 'README.md' }).click();
+	await openKnowledge(page, cwd, "README.md");
 	for (let i = 0; i < 100; i++) { wiki = app.windows().find(p => p.url().includes('wiki-window=1')); if (wiki && !wiki.isClosed()) break; await sleep(100); }
 	wiki.setDefaultTimeout(10000);
 	// The reused window is a NEW Page object — rebind the editor to it.

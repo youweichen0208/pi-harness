@@ -165,12 +165,30 @@ export function phaseItems(phase: ProgressPhase, cwd: string): PhaseItem[] {
 const GENERIC_TITLE = /^(?:读取与确认|实现主体|运行测试|运行并修复|执行操作|读取文件|修改文件|运行工具|(?:读取|运行|修改|写入|执行)\s*\d*\s*(?:项|个文件|条命令)?(?:完成)?)$/;
 
 /** Generic step titles ("读取 2 项") are rebuilt from what the phase did; narrated titles stay. */
-export function phaseHeadline(phase: ProgressPhase, locale: "zh" | "en" = "zh"): string {
-	if (!GENERIC_TITLE.test(phase.title.trim())) return phase.title;
+export function phaseHeadline(phase: ProgressPhase, locale: "zh" | "en" = "zh", compact = false): string {
+	// The server falls back to “运行 <command>” for a single bash call.
+	// Compare against the artifact, including the display truncation, so authored
+	// descriptions beginning with “运行” are not mistaken for generated labels.
+	const generatedCommand = phase.steps.some(step => step.artifacts.some(item => {
+		if (!["bash", "terminal"].includes(item.kind)) return false;
+		const fallback = plainTitle(`${item.kind === "bash" ? "运行 " : ""}${item.label}`);
+		return phase.title === fallback || phase.title === fallback.slice(0, 32);
+	}));
+	if (!GENERIC_TITLE.test(phase.title.trim()) && !generatedCommand) return phase.title;
 	const artifacts = phase.steps.flatMap(step => step.artifacts);
 	const reads = new Set(artifacts.filter(item => ["read", "grep", "find", "ls"].includes(item.kind)).map(item => item.path ?? item.label)).size;
 	const changes = new Set(artifacts.filter(item => ["write", "edit"].includes(item.kind)).map(item => item.path ?? item.label)).size;
 	const commands = artifacts.filter(item => ["bash", "terminal"].includes(item.kind)).length;
+	if (compact) {
+		// Only name validation when every command is an explicit typecheck/build.
+		const commandLabels = artifacts.filter(item => ["bash", "terminal"].includes(item.kind)).map(item => item.label.trim());
+		const validation = !reads && !changes && commandLabels.length > 0 && commandLabels.every(label => /^(?:npm run|pnpm(?: run)?|yarn(?: run)?|bun run) (?:typecheck|build)$/.test(label));
+		if (validation && commandLabels.some(label => label.endsWith(" typecheck")) && commandLabels.some(label => label.endsWith(" build"))) return locale === "en" ? "Check types and build" : "验证类型与构建";
+		const labels = locale === "en"
+			? [reads && "Read files", changes && "Modify files", commands && "Run commands"]
+			: [reads && "读取文件", changes && "修改文件", commands && "运行命令"];
+		return labels.filter(Boolean).join(" · ") || phase.title;
+	}
 	const parts = locale === "en"
 		? [reads && `Read ${reads} file${reads === 1 ? "" : "s"}`, changes && `Changed ${changes} file${changes === 1 ? "" : "s"}`, commands && `Ran ${commands} command${commands === 1 ? "" : "s"}`]
 		: [reads && `读取 ${reads} 个文件`, changes && `修改 ${changes} 个文件`, commands && `运行 ${commands} 条命令`];

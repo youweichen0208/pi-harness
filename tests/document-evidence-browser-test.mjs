@@ -1,3 +1,4 @@
+import { openKnowledge } from "./lib/open-knowledge.mjs";
 /** Explicit evidence links work without index membership and open read-only. No model calls. */
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
@@ -38,7 +39,7 @@ try {
 	const errors = []; page.on("pageerror", error => errors.push(error.message));
 	await page.goto(`http://127.0.0.1:${port}`);
 	await page.locator(".conn-dot.ok").first().waitFor({ state: "attached" });
-	await page.locator(".file-name", { hasText: "README.md" }).first().evaluate(element => element.click());
+	await openKnowledge(page, cwd, "README.md");
 	await page.locator(".wiki-document-heading h1", { hasText: "Knowledge entry" }).waitFor();
 	await page.locator(".wiki-prose a", { hasText: "原始资料" }).click();
 	await page.locator(".wiki-document-heading h1", { hasText: "Archived evidence" }).waitFor();

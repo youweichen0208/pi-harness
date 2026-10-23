@@ -1,6 +1,6 @@
 {
   "name": "@youweichen/pi-harness",
-  "version": "1.5.1",
+  "version": "1.6.0",
   "description": "Web chat interface for the pi coding agent, powered by the pi SDK (@earendil-works/pi-coding-agent) — one-command run, Docker/systemd/launchd deployable",
   "license": "MIT",
   "author": {
@@ -76,6 +76,7 @@
     "@codemirror/commands": "^6.11.1",
     "@codemirror/lang-java": "^6.0.2",
     "@codemirror/language": "^6.13.1",
+    "@codemirror/lint": "^6.9.7",
     "@codemirror/search": "^6.7.2",
     "@codemirror/state": "^6.7.6",
     "@codemirror/view": "^6.43.15",

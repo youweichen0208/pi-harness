@@ -1,5 +1,5 @@
 /**
- * 全局搜索（search_files / search_files_result）+ BgServer.command 协议冒烟。
+ * 全局搜索（search_files / search_files_result）协议冒烟。
  * 零 token：自起编译后的 server（隔离端口 8962 + 临时 data-dir），
  * 发 search_files 断言 reqId 回显与文件名匹配结果；空 query 返回空列表。
  */

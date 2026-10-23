@@ -32,3 +32,13 @@ _Avoid_: 任务、会话、进程
 
 Playground 草稿页中保存的 Java 代码及其 public 方法测试用例。每个安装共享一份，离开草稿页后仍可继续编辑；Run 的输出不属于草稿。
 _Avoid_: Run 历史、项目源文件
+
+## 本地知识库（local knowledge base）
+
+一个单独配置的本地文件夹及其文档内容，在独立 Wiki 窗口中浏览和编辑，不依赖 Workspace 项目分组；子目录是文档分类，不是独立知识库。
+_Avoid_: Workspace 知识库项目
+
+## 单文件文档弹窗（single-document dialog）
+
+普通对话中打开一篇 Markdown 的编辑弹窗；其中的 Agent Chat 属于主聊天，通过引用当前文档进行讨论和修改。
+_Avoid_: 独立文档会话、知识库窗口

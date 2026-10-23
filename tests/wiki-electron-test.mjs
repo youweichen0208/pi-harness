@@ -1,3 +1,4 @@
+import { openKnowledge } from "./lib/open-knowledge.mjs";
 // Actual Electron/preload/backend integration; OS opening is stubbed at the shell boundary.
 import { _electron as electron } from 'playwright-core';
 import { mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync } from 'node:fs';
@@ -31,7 +32,7 @@ try {
 	assert(!existsSync(disabledMarker), 'native extension disable rules remain authoritative');
 	await app.evaluate(({ BrowserWindow, shell }) => { BrowserWindow.getAllWindows()[0].setSize(1440, 950); shell.openPath = async path => { globalThis.wikiOpened = path; return ''; }; });
 	assert.equal(await page.getByRole('tab', { name: 'Wiki 模式', exact: true }).count(), 0);
-	await page.locator('.file-name', { hasText: 'README.md' }).click();
+	await openKnowledge(page, cwd, "README.md");
 	await page.locator('.wiki-document-heading h1', { hasText: 'Desktop Wiki' }).waitFor();
 	// The original chat docks beside the document; the header button collapses and restores it.
 	const chat = page.locator('.wiki-agent-chat'), chatToggle = page.getByRole('button', { name: 'Agent Chat', exact: true });

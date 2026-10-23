@@ -1,3 +1,4 @@
+import { openKnowledge } from "./lib/open-knowledge.mjs";
 import { wikiToolbar } from "./lib/wiki-toolbar.mjs";
 // Real Chromium regression for slash aliases, heading levels and persisted selection colors.
 import assert from 'node:assert/strict';
@@ -20,9 +21,9 @@ try {
 	const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
 	await page.goto(`http://127.0.0.1:${port}`);
 	await page.locator('.setup-modal .modal-close').click();
-	// ADR-0003: opening a Markdown file opens the detached Wiki window.
+	// The knowledge-library entry opens the detached Wiki window.
 	const popupPromise = page.context().waitForEvent('page');
-	await page.locator('.file-name', { hasText: 'note.md' }).click();
+	await openKnowledge(page, base, "note.md");
 	const wiki = await popupPromise;
 	wiki.setDefaultTimeout(15000);
 	await wiki.locator('.setup-modal .modal-close').click().catch(() => {});

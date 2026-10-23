@@ -1,3 +1,4 @@
+import { openKnowledge } from "./lib/open-knowledge.mjs";
 import { wikiToolbar, wikiInsert } from "./lib/wiki-toolbar.mjs";
 /** Real SDK, isolated workspace and local model: Wiki mode contracts (ADR-0003 独立窗口). */
 import { createServer } from "node:http";
@@ -98,7 +99,7 @@ try {
 	const open = async () => {
 		const reuse = wikiPage && !wikiPage.isClosed();
 		const popupPromise = reuse ? null : page.context().waitForEvent("page");
-		await page.locator(".file-name", {hasText: "README.md"}).first().evaluate(el => el.click());
+		await openKnowledge(page, cwd, "README.md");
 		if (!reuse) wireWiki(await popupPromise);
 		await wiki.view.waitFor(); await wiki.editor.waitFor();
 		assert.equal(new URL(wiki.page.url()).searchParams.get("model"), "fixture/unused");
@@ -329,7 +330,7 @@ try {
 
 	// Reusing the open window with a different document boots that document
 	// instead of reattaching the stale one (named-window navigation).
-	await page.locator(".file-name", {hasText: "other.md"}).first().evaluate(el => el.click());
+	await openKnowledge(page, cwd, "other.md");
 	await wiki.page.locator(".wiki-document-heading h1", {hasText: "Other document"}).waitFor();
 	for (let i = 0; i < 100 && wiki.state.conversation === beforeReload; i++) await new Promise(r => setTimeout(r, 100));
 	assert.notEqual(wiki.state.conversation, beforeReload, "navigating the reused window replaces the conversation");
@@ -340,12 +341,12 @@ try {
 	assert.equal(main.conversation, original);
 	assert.equal(main.navigation.length, 0, "exit never switches the main window");
 
-	// Chat file-link events on the main window open the Wiki window on the same terms.
-	const popupPromise = page.context().waitForEvent("page");
+	// Main chat file links now use the single-document modal and main conversation.
 	await page.evaluate(() => window.dispatchEvent(new CustomEvent("pi-harness:open-tool-file", {detail: {path: "README.md"}})));
-	wireWiki(await popupPromise);
-	await wiki.view.waitFor(); await wiki.editor.waitFor();
-	await close();
+	await page.locator(".single-document-editor").waitFor();
+	assert.equal(page.context().pages().length, 1);
+	await page.keyboard.press("Escape");
+	await page.locator(".single-document-editor").waitFor({ state: "detached" });
 	await page.locator(".messages", {hasText: "local background reply"}).waitFor();
 
 	// A background preview on the main window keeps its own context; the Wiki

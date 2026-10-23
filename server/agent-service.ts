@@ -94,7 +94,6 @@ import {
 // 一致的版本号，保证两边用的是同一份实现。
 import { contentText } from "@earendil-works/pi-ai";
 import { estimateContextParts } from "./context-breakdown.js";
-import { BgServerTracker } from "./bg-servers.js";
 import type {   PluginToolEvent } from "./plugins.js";
 import { SettingsService } from "./settings-service.js";
 
@@ -115,7 +114,6 @@ import {
 
 } from "./attachments.js";
 import type {
-		BgServer,
 		CommandDef,
 		ConversationSummary,
 		FileEntry,
@@ -264,8 +262,6 @@ export class ClientSession {
 	/** Live AbortControllers of THIS client's running bash tool calls — aborting
 	 *  them kills only the command (agent run and conversation continue). */
 
-	/** Background-server tracking (port snapshots + 后台任务 panel state) —
-	 *  自包含模块，见 bg-servers.ts。列表按 CLIENT 存活，不随对话切换/结束消失。 */
 	/** 文件树 / 预览读写 / SCM 查询 / watcher —— 自包含模块，见 files-service.ts。 */
 	private readonly files = new FilesService({
 		emit: (msg) => this.emit(msg),
@@ -275,14 +271,6 @@ export class ClientSession {
 	});
 	/** One ripgrep search at a time per client; a newer request replaces it. */
 	private readonly codeSearch = new CodeSearch((msg) => { if (!this.disposed) this.emit(msg); });
-	private readonly bg = new BgServerTracker({
-		emit: (msg) => this.emit(msg),
-		flushSnapshot: () => this.flushSnapshot(),
-		isDisposed: () => this.disposed,
-		// 插件注册的常驻任务（host.registerBackgroundTask）并入同一「后台任务」面板。
-		pluginTasks: () => this.pluginBgTasksProvider?.() ?? [],
-	});
-
 	/** index.ts 注入（经 AgentService 拷贝到每个新会话）：把 SDK 工具执行事件转发给
 	 *  插件（PluginManager.emitToolEvent）。未设置时不做任何事。 */
 	onToolEvent: ((ev: PluginToolEvent) => void) | undefined = undefined;
@@ -290,10 +278,6 @@ export class ClientSession {
 
 	/** index.ts 注入：读取插件当前注册的斜杠命令（目录展示 + prompt 拦截执行）。 */
 
-	/** index.ts 注入：读取插件注册的常驻后台任务（并入 bg_servers 面板）。 */
-	pluginBgTasksProvider: (() => BgServer[]) | undefined = undefined;
-	/** index.ts 注入：停止插件任务（kill_background_server with taskId）。 */
-	pluginStopBgTask: ((taskId: string) => boolean) | undefined = undefined;
 	/** 上一轮注入会话的插件工具名集合（用于检测注销/移除）。 */
 
 	/** The active conversation (all session operations target it). */
@@ -578,7 +562,6 @@ export class ClientSession {
 		});
 		// Prune dead background tasks every 30s (only spawns netstat/lsof while
 		// the list is non-empty). unref: must not keep the process alive.
-		this.bg.start();
 	}
 
 	static async create(
@@ -758,7 +741,6 @@ export class ClientSession {
 		this.pushSettings();
 		// Reconnect: push the background-task list — it must survive reconnects
 		// and outlive the conversation that started the tasks.
-		this.bg.push();
 		// PTYs are conversation-owned and survive a socket reconnect.
 		this.pushTerminals();
 	}
@@ -785,7 +767,6 @@ export class ClientSession {
 			streamingConversations: this.activeConversations(),
 			queuedMessages: this.pendingMessages(),
 			liveTerminals: [...this.convs.values()].reduce((n, conv) => n + conv.terminals.list().length, 0),
-			backgroundTasks: this.bg.hasServers() ? 1 : 0,
 			switchingWorkspace: this.cwdSwitchRunning,
 			disposed: this.disposed,
 		}, now, idleMs);
@@ -930,12 +911,6 @@ export class ClientSession {
 				// Record the moment the tool actually starts so tool_status can
 				// report real execution time (vs. time spent waiting on the model).
 				conv.toolStartTimes.set(event.toolCallId, Date.now());
-				// Snapshot listeners before a bash run — the post-run diff catches
-				// servers the agent started in the background.
-				if (event.toolName === "bash") {
-					this.bg.snapshotBefore();
-				}
-
 				// 插件扩展点：工具开始执行（异常由 emitToolEvent 隔离）。
 				this.onToolEvent?.({ phase: "start", toolName: event.toolName, conversationId: conv.id });
 				break;
@@ -945,9 +920,6 @@ export class ClientSession {
 				const startedAt = conv.toolStartTimes.get(event.toolCallId);
 				conv.toolStartTimes.delete(event.toolCallId);
 
-				// Bash finished — wait briefly for background servers to bind their
-				// ports, then diff against the pre-run snapshot and record them.
-				if (event.toolName === "bash") void this.bg.trackAfterBash();
 				// SDK 1.1+ reports execute() time on a monotonic clock; wall clock is the fallback.
 				const durationMs = event.durationMs ??
 					(startedAt !== undefined ? Date.now() - startedAt : undefined);
@@ -1811,8 +1783,7 @@ export class ClientSession {
 	 * overnight. The notice fires only on the forced-reset path.
 	 */
 	async abort(): Promise<void> {
-		// 只停止智能体运行本身；AI 在后台启动的服务由「后台任务」面板单独
-		// 管理（可逐个停止或全部关闭），不会在停止对话时被连带杀掉。
+		// 只停止当前智能体运行。
 		const conv = this.conv;
 		await this.interruptRun(conv, "已停止");
 		conv.runningToolNames.clear();
@@ -1868,45 +1839,9 @@ export class ClientSession {
 		}
 	}
 
-	/** Re-push the current list on request (panel opened); prunes dead entries first. */
-	async listBgServers(): Promise<void> {
-		await this.bg.listAndPush();
-	}
-
-	/** 插件任务集合变化时由宿主调用：重推一次 bg_servers（含插件任务）。 */
-	refreshBgTasks(): void {
-		this.bg.push();
-	}
-
 	/** 插件设置保存结果等需要从 index.ts 发 notice 时用（emit 是私有的）。 */
 	emitNotice(level: "info" | "warning" | "error", text: string): void {
 		this.emit({ type: "notice", level, text });
-	}
-
-	/** Kill ONE background server (by port); returns whether anything was killed. */
-	/** Kill ONE background server (by port) OR a plugin task (by taskId). */
-	async killBackgroundServer(port: number | undefined, taskId?: string): Promise<boolean> {
-		if (taskId) {
-			// 插件任务：交给插件管理器 stop 回调（不杀进程树——任务在宿主进程内）。
-			const ok = this.pluginStopBgTask?.(taskId) ?? false;
-			if (!ok) {
-				this.emit({
-					type: "notice",
-					level: "info",
-					text: `后台任务「${taskId}」不存在或已结束`,
-				});
-			}
-			this.bg.push();
-			this.flushSnapshot();
-			return ok;
-		}
-		if (typeof port !== "number") return false;
-		return this.bg.killOne(port);
-	}
-
-	/** Kill every background server the agent started; returns the freed ports. */
-	async killAllBackgroundServers(): Promise<string[]> {
-		return this.bg.killAll();
 	}
 
 	/** Kill only the running bash command(s) — the agent run itself continues
@@ -3127,7 +3062,6 @@ export class ClientSession {
 		this.files.unwatchGit();
 		this.providerAuth.cancel();
 		for (const conv of this.convs.values()) { conv.tree?.dispose(); conv.webUi.dispose(); }
-		this.bg.stop();
 		for (const conv of this.convs.values()) {
 
 			conv.unsubscribe?.();
@@ -3148,10 +3082,6 @@ export class AgentService {
 
 	/** index.ts 注入：读取插件当前注册的斜杠命令（attach 时拷贝到每个新会话）。 */
 
-	/** index.ts 注入：读取插件注册的常驻后台任务（并入 bg_servers 面板）。 */
-	pluginBgTasksProvider: (() => BgServer[]) | undefined = undefined;
-	/** index.ts 注入：停止插件任务（kill_background_server with taskId）。 */
-	pluginStopBgTask: ((taskId: string) => boolean) | undefined = undefined;
 	private clients = new Map<string, ClientSession>();
 	readonly wikiConversations = new WikiConversations({
 		clients: this.clients,
@@ -3345,8 +3275,6 @@ export class AgentService {
 		cs.onQuit = this.onQuit;
 		cs.onToolEvent = this.onToolEvent;
 
-		cs.pluginBgTasksProvider = this.pluginBgTasksProvider;
-		cs.pluginStopBgTask = this.pluginStopBgTask;
 		cs.isQuiesced = () => this.quiesced;
 		// 插件宿主工作区跟随：初次接入也同步一次（恢复的 lastCwd 可能≠服务启动目录），
 		// notifyCwd 幂等去重；此后 set_cwd 成功时由 cs.onCwdChanged 继续驱动。
@@ -3358,11 +3286,6 @@ export class AgentService {
 	/** 插件 AI 工具集合变化（注册/注销）时由 index.ts 触发：推送到所有客户端的全部会话。 */
 
 	/** 插件斜杠命令集合变化时由 index.ts 触发：重推各客户端的命令目录。 */
-
-	/** 插件常驻后台任务变化时由 index.ts 触发：重推各客户端的 bg_servers。 */
-	refreshBackgroundServers(): void {
-		for (const cs of this.clients.values()) cs.refreshBgTasks();
-	}
 
 	/** Remove a socket from a client's broadcast set (called on socket close). */
 	detach(clientId: string, send: (msg: ServerMessage) => void): void {

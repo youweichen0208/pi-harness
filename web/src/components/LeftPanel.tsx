@@ -2,6 +2,7 @@ import { memo, useEffect, useRef, useState, type ReactNode } from "react";
 import {
 	FiSearch,
 	FiCode,
+	FiBookOpen,
 	FiFeather,
 	FiMessageSquare,
 	FiCheck,
@@ -42,7 +43,7 @@ interface LeftPanelProps {
 	onToggleDirectory: () => void;
 	notesOpen: boolean;
 	scratchOpen: boolean;
-	onNavigate: (target: "chat" | "notes" | "playground") => void;
+	onNavigate: (target: "chat" | "notes" | "playground" | "knowledge") => void;
 	notesList: ReactNode;
 	onOpenSettings: () => void;
 	onNewChat: () => void;
@@ -434,6 +435,7 @@ export const LeftPanel = memo(function LeftPanel({
 				{!notesOpen && selectedGroup && <label className="navigation-search"><FiSearch aria-hidden="true" /><input className="workspace-project-search" type="search" aria-label={t("workspaceSearch")} placeholder={t("workspaceSearch")} value={workspaceQuery} onChange={event => setWorkspaceQuery(event.target.value)} /></label>}
 				<nav className="global-entries">
 					<button title={t("notesChat")} className={!notesOpen && !scratchOpen ? "active" : ""} onClick={() => onNavigate("chat")}><FiMessageSquare /><span>{t("notesChat")}</span></button>
+					<button title={t("knowledgeLibrary")} onClick={() => onNavigate("knowledge")}><FiBookOpen /><span>{t("knowledgeLibrary")}</span></button>
 					<button title={t("notesPlayground")} className={scratchOpen ? "active" : ""} onClick={() => onNavigate("playground")}><FiCode /><span>{t("notesPlayground")}</span></button>
 					<button title={t("notesTitle")} className={notesOpen ? "active" : ""} onClick={() => { onNavigate("notes"); }}><FiFeather /><span>{t("notesTitle")}</span></button>
 				</nav>

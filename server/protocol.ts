@@ -475,15 +475,6 @@ export type ClientMessage =
 	| { type: "save_commands"; commands: CommandDef[] }
 	| { type: "abort" }
 	| { type: "retry_silent_prompt"; conversationId: string; text: string }
-		// -- background tasks (AI-started servers) ------------------------------
-	/** Kill ONE background server the agent started (by listening port). */
-	| { type: "kill_background_server"; port?: number; taskId?: string }
-	/** Kill EVERY background server the agent started (frees all ports). */
-	| { type: "kill_background_servers" }
-	/** Re-push the current background-server list (the server also refreshes it
-	 *  on its own and prunes entries whose process exited). */
-	| { type: "list_bg_servers" }
-
 	/** Global-search recursive filename match across the active workspace.
 	 *  Server-side bounded walk; reqId echoes back in search_files_result. */
 	| { type: "search_files"; reqId: number; query: string }
@@ -720,31 +711,6 @@ export type DirBrowse = {
 	 *  the picker can never leave the boot drive. Absent on POSIX. */
 	drives?: string[];
 };
-
-/** A background server the agent left running (listening-port diff around a
- *  bash tool run). Keyed by port. Managed from the 后台任务 panel: each entry
- *  can be stopped individually or all at once, and the list persists even
- *  after the conversation that started them ends. */
-export interface BgServer {
-	/** Port the server listens on (the stable key for agent-started servers).
-	 *  Plugin-registered tasks have no port — they carry taskId/plugin instead. */
-	port?: number;
-	/** Process id of the listening process (agent-started servers). */
-	pid?: number;
-	/** Plugin task id (host.registerBackgroundTask) — present for plugin tasks. */
-	taskId?: string;
-	/** Plugin id that registered this task (kill routing). */
-	plugin?: string;
-	/** When the server/task was first detected or registered (ms epoch). */
-	since: number;
-	/** Best-effort process name (tasklist / ps), undefined when unknown. */
-	name?: string;
-	/** Best-effort full command line (PowerShell CIM / ps -o command=) so the
-	 *  panel can show WHAT is actually running, undefined when unknown. */
-	command?: string;
-	/** 插件任务的活动状态文案（如轮询间隔、连接数），可经 update 刷新。 */
-	status?: string;
-}
 
 /** A code-search hit; ranges are [start, end) UTF-16 offsets into text for highlighting. */
 export interface ContentSearchMatch {
@@ -1340,7 +1306,6 @@ export type ServerMessage =
 	 *  conversation — the list survives conversation switches/ends and only
 	 *  empties when the tasks are stopped (individually or all at once) or the
 	 *  process exits on its own. Pushed on change, on attach and on request. */
-	| { type: "bg_servers"; servers: BgServer[] }
 
 /** Node workbench profiles contain metadata only; credentials never enter state snapshots. */
 export type NodePolicy = "readonly" | "confirm" | "auto" | "off";
@@ -1603,3 +1568,11 @@ export interface LinkPreviewRequest { url: string }
 export interface LinkPreview { url: string; title: string; description: string; imageUrl?: string; imageData?: string }
 
 export interface PlaygroundFormatResult { code: string }
+
+/** Playground language assistance uses HTTP, never arbitrary client-supplied LSP methods. */
+export interface JavaTextEdit { from: number; to: number; text: string }
+export interface JavaLanguageResult {
+	items?: { label: string; detail?: string; info?: string; kind?: number; edit: JavaTextEdit; additionalEdits: JavaTextEdit[] }[];
+	diagnostics?: { from: number; to: number; severity: "error" | "warning" | "info"; message: string }[];
+	signatures?: string[];
+}

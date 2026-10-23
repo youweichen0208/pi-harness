@@ -17,6 +17,7 @@ import { SessionTreeWorkbench } from "./components/SessionTreeWorkbench";
 import { RecoveryStatus } from "./components/RecoveryStatus";
 import { LinkedText } from "./components/LinkedText";
 import { WikiWorkbench } from "./components/WikiWorkbench";
+import { useWikiWindowSession } from "./use-wiki-window-session";
 import { FolderPickerModal } from "./components/FolderPickerModal";
 import { WikiWindowShell } from "./components/WikiWindowShell";
 import { ChatDock } from "./components/ChatDock";
@@ -24,7 +25,7 @@ import { WikiDocumentModal } from "./components/WikiDocumentModal";
 import { useWikiPanelWidth } from "./components/WikiResizeHandle";
 import { wikiRequest } from "./wiki-api";
 import { isWikiDocumentPath } from "./wiki-document";
-import { isWikiWindow, openWikiWindow, wikiWindowCarry, wikiWindowClient, wikiWindowParams } from "./wiki-window";
+import { isKnowledgeLibraryWindow, openKnowledgeLibrary, isWikiWindow, wikiWindowClient, wikiWindowParams } from "./wiki-window";
 import type { ChatReferenceRequest } from "./chat-reference";
 
 import { ProviderAuthModal } from "./components/ProviderAuthModal";
@@ -76,7 +77,6 @@ import { PiSetupModal } from "./components/PiSetupModal";
 import { ModelConfigModal } from "./components/ModelConfigModal";
 
 import { SettingsModal } from "./components/SettingsModal";
-import { BgTasksModal } from "./components/BgTasksModal";
 import { GlobalSearchModal } from "./components/GlobalSearchModal";
 import { CodeSearchModal } from "./components/CodeSearchModal";
 import { FilePreviewContent, type FileNavigationGuard, type PreviewFile } from "./components/FilePreview";
@@ -271,8 +271,7 @@ function ResizeHandle({
 /** 顶栏视图：内置三个 + 每个已装插件一个 `plugin:<id>`。 */
 type ViewName = "chat" | "wiki" | "terminal" | "git" | "nodes" | `plugin:${string}`;
 
-/** 刷新后恢复 Wiki mode 所需的最小状态（存 sessionStorage，随标签页）。 */
-const WIKI_VIEW_KEY = "pi-wiki-view";
+/** Wiki 聊天展开状态（随标签页）。 */
 const WIKI_CHAT_KEY = "pi-wiki-chat-open";
 /** 上次 Wiki 的工作区与文档（存 localStorage，跨退出保留，顶栏重进用）。 */
 const WIKI_WORKSPACE_KEY = "pi-wiki-workspace";
@@ -310,6 +309,8 @@ export function App() {
 		}
 	}, [chat.activeConversationId, attachments]);
 	const [previewFile, setPreviewFile] = useState<PreviewFile | null>(null);
+	const documentPreview = !!previewFile && /\.(md|markdown)$/i.test(previewFile.path);
+	const inlinePreview = !!previewFile && !documentPreview;
 	const previousPreview = useRef<PreviewFile | null>(null);
 	useLayoutEffect(() => {
 		const previous = previousPreview.current;
@@ -440,13 +441,20 @@ export function App() {
 	};
 	const folderOperation = useRef<WikiOperation | null>(null);
 	const folderComplete = useRef<(() => void) | null>(null);
-	// 刷新恢复（Q15）：view + 文档 + 运行时会话 ID，随标签页（clientId）存 sessionStorage。
-	const wikiPersist = useCallback((entry: { client: string | null; cwd: string; conversationId: string; sessionId?: string; path: string | null; anchor: { cwd: string; conversationId: string } | null } | null) => {
-		try { if (entry) sessionStorage.setItem(WIKI_VIEW_KEY, JSON.stringify(entry)); else sessionStorage.removeItem(WIKI_VIEW_KEY); } catch { /* best effort */ }
-	}, []);
-	const readWikiPersist = useCallback(() => {
-		try { return JSON.parse(sessionStorage.getItem(WIKI_VIEW_KEY) ?? "null") as { client?: string | null; cwd: string; conversationId: string; sessionId?: string; path: string | null; anchor: { cwd: string; conversationId: string } | null } | null; } catch { return null; }
-	}, []);
+	const library = useWikiWindowSession({
+		chat, switching: !!switching, switchError: !!switchError, opened: !!wikiFileRequest,
+		send: rawSend,
+		enter: (path, reuse) => enterWiki(path, reuse),
+		restore: stored => {
+			wikiNormalAnchor.current = stored.anchor ?? null;
+			setWikiFileRequest({ cwd: stored.cwd, conversationId: stored.conversationId, path: stored.path ?? "", token: randomUuid() });
+			setView("wiki");
+		},
+		changeFolder: path => pickWikiFolder(path),
+		warn: message => pushNotice("warning", message),
+	});
+	const wikiPersist = library.session.persist;
+	const libraryReady = library.ready, librarySaving = library.saving;
 	/** 进入时恢复当前文档的独立 Wiki 历史，
 	 * 携带当前文档的当前文件 chip。调用方已处理运行中任务的确认。 */
 	const enterWiki = useCallback(async (path: string | null, reuseInitial = false, held?: WikiOperation) => {
@@ -566,14 +574,21 @@ export function App() {
 			return;
 		}
 		if (wikiFileRequest && wikiFileRequest.cwd === chat.state?.cwd && wikiFileRequest.conversationId === chat.activeConversationId) {
-			setWikiFolderPending(null); setWikiFolderPicker(false); folderComplete.current?.(); return; // Same folder.
+			wikiFolderOpening.current = true;
+			void library.session.folderOpened(wikiFileRequest.cwd).then(ok => { if (ok) setWikiFolderPicker(false); }).finally(() => {
+				wikiFolderOpening.current = false; setWikiFolderPending(null); folderComplete.current?.();
+			});
+			return; // Same folder.
 		}
 		wikiFolderOpening.current = true;
 		const operation = folderOperation.current, complete = folderComplete.current;
-		void enterWiki(null, false, operation).then(ok => {
+		void enterWiki(null, false, operation).then(async ok => {
 			if (!operation.current()) return;
 			setWikiFolderPending(null);
-			if (ok) setWikiFolderPicker(false);
+			if (ok) {
+				if (wikiCurrent.current.cwd && !await library.session.folderOpened(wikiCurrent.current.cwd)) return;
+				setWikiFolderPicker(false);
+			}
 			else setWikiFolderError(t("wikiFolderOpenFailed"));
 		}).finally(() => {
 			if (folderOperation.current !== operation) return;
@@ -648,89 +663,13 @@ export function App() {
 		} catch (error) { pushNotice("error", (error as Error).message); return false; }
 		finally { if (!handedToDialog) operation.release(); }
 	};
-	/** 顶栏进入 Wiki mode：打开独立 Wiki 窗口（ADR-0003），主窗口留在 normal 对话。
-	 * 窗口记住上次 Wiki 的工作区与文档，由新窗口自己切工作区并打开文档。 */
 	const enterWikiMode = useCallback(() => {
 		if (view === "wiki") return;
-		const cwd = chat.state?.cwd;
-		let parsed: unknown = null;
-		try { parsed = JSON.parse(localStorage.getItem(WIKI_WORKSPACE_KEY) ?? "null"); } catch { parsed = null; }
-		const memory = parsed && typeof parsed === "object" && typeof (parsed as { cwd?: unknown }).cwd === "string"
-			? { cwd: (parsed as { cwd: string }).cwd, path: typeof (parsed as { path?: unknown }).path === "string" ? (parsed as { path: string }).path : null }
-			: null;
-		const targetCwd = memory?.cwd ?? cwd;
-		if (!targetCwd) return;
-		openWikiWindow(targetCwd, memory?.path ?? null, { model: chat.state?.model ? `${chat.state.model.provider}/${chat.state.model.id}` : null, thinking: chat.state?.thinkingLevel ?? null });
-	}, [view, chat.state?.cwd, chat.state?.model?.provider, chat.state?.model?.id, chat.state?.thinkingLevel]);
-	// Wiki 独立窗口自举（ADR-0003）：URL 指定工作区与文档；工作区不符先 set_cwd，
-	// 切换完成后 effect 重跑再进入。刷新恢复（同工作区、同文档的 pi-wiki-view 记录）
-	// 优先于自举；窗口被复用导航到新文档（URL 与记录不符）时按 URL 全新进入。
-	const wikiBoot = useRef(isWikiWindow);
-	// Model inheritance is best effort; opening the document must not depend on it.
-	const wikiCarrySent = useRef(new Set<string>());
-	const [wikiCarryExpired, setWikiCarryExpired] = useState(false);
-	useEffect(() => {
-		if (!isWikiWindow || !chat.ready || wikiFileRequest) return;
-		const timer = window.setTimeout(() => setWikiCarryExpired(true), 5000);
-		return () => window.clearTimeout(timer);
-	}, [chat.ready, wikiFileRequest]);
-	useEffect(() => {
-		if (!wikiBoot.current || !chat.ready || switching) return;
-		const params = wikiWindowParams();
-		const cwd = chat.state?.cwd;
-		if (!cwd) return;
-		// 先应用打开方携带的模型与思考档位（独立客户端不共享主窗口会话；
-		// 应用后 createChat 的会话内携带会把它们带进临时 Wiki 会话）。
-		const carry = wikiWindowCarry();
-		const currentModel = chat.state?.model;
-		const currentModelId = currentModel ? `${currentModel.provider}/${currentModel.id}` : null;
-		// Old URLs carried an unqualified id. Only resolve them when unambiguous.
-		const candidates = carry.model ? chat.models.filter(model => model.id === carry.model || model.id.slice(model.provider.length + 1) === carry.model) : [];
-		const carriedModel = carry.model?.includes("/") ? carry.model : candidates.length === 1 ? candidates[0].id : null;
-		if (!wikiCarryExpired) {
-			if (carriedModel && currentModelId !== carriedModel && (!chat.models.length || chat.models.some(model => model.id === carriedModel))) {
-				if (!wikiCarrySent.current.has("model")) {
-					wikiCarrySent.current.add("model");
-					rawSend({ type: "set_model", modelId: carriedModel });
-				}
-				return;
-			}
-			if (carry.thinking && chat.state?.thinkingLevel !== carry.thinking && chat.state?.availableThinkingLevels?.includes(carry.thinking)) {
-				if (!wikiCarrySent.current.has("thinking")) {
-					wikiCarrySent.current.add("thinking");
-					rawSend({ type: "set_thinking", level: carry.thinking });
-				}
-				return;
-			}
-		}
-		if (params.cwd && params.cwd !== cwd) {
-			// 发送失败（未知工作区等）时放弃自举，窗口停在 normal 视图。
-			if (!rawSend({ type: "set_cwd", path: params.cwd, source: "ui" })) wikiBoot.current = false;
-			return;
-		}
-		wikiBoot.current = false;
-		if (wikiFileRequest) return; // 刷新恢复已挂回原会话
-		// 只有同一客户端（同一次窗口打开，URL client 参数未变）的记录才可恢复；
-		// 复用窗口导航到新文档换用了新客户端，必须全新进入。
-		const stored = readWikiPersist();
-		if (stored && stored.sessionId === chat.state?.sessionId && stored.conversationId === chat.activeConversationId && stored.client === wikiWindowClient() && stored.cwd === cwd && (params.doc === null || params.doc === stored.path)) return; // 交由下方恢复 effect
-		wikiPersist(null);
-		void enterWiki(params.doc, chat.state?.wiki === true);
-	}, [chat.ready, switching, chat.state?.cwd, chat.state?.model?.provider, chat.state?.model?.id, chat.state?.thinkingLevel, chat.state?.availableThinkingLevels, chat.state?.wiki, chat.models, wikiCarryExpired, wikiFileRequest, enterWiki, rawSend, readWikiPersist, wikiPersist]);
-	// 页面刷新恢复（Q15）：会话还在服务端运行时重进 wiki mode 并挂回同一运行实例；
-	// 服务端重启后按稳定 sessionId 判断归属，并经 chat-resume 恢复历史。
-	useEffect(() => {
-		if (wikiFileRequest || !chat.ready || !chat.state || switching) return;
-		const stored = readWikiPersist();
-		if (stored && stored.sessionId === chat.state.sessionId && (isWikiWindow ? stored.client === wikiWindowClient() : true) && chat.state.conversationId === stored.conversationId && chat.state.cwd === stored.cwd) {
-			wikiNormalAnchor.current = stored.anchor ?? null;
-			setWikiFileRequest({ cwd: stored.cwd, conversationId: stored.conversationId, path: stored.path ?? "", token: randomUuid() });
-			setView("wiki");
-		} else if (stored) wikiPersist(null);
-	}, [chat.ready, chat.state, switching, wikiFileRequest]);
+		openKnowledgeLibrary({ model: chat.state?.model ? `${chat.state.model.provider}/${chat.state.model.id}` : null, thinking: chat.state?.thinkingLevel ?? null });
+	}, [view, chat.state?.model?.provider, chat.state?.model?.id, chat.state?.thinkingLevel]);
 	useEffect(() => {
 		if (!wikiFileRequest || wikiFileRequest.conversationId !== chat.activeConversationId || wikiFileRequest.cwd !== chat.state?.cwd || !chat.state.sessionId) return;
-		wikiPersist({ client: wikiWindowClient(), cwd: wikiFileRequest.cwd, conversationId: wikiFileRequest.conversationId, sessionId: chat.state.sessionId, path: wikiFileRequest.path, anchor: wikiNormalAnchor.current });
+		library.session.documentOpened({ client: wikiWindowClient(), cwd: wikiFileRequest.cwd, conversationId: wikiFileRequest.conversationId, sessionId: chat.state.sessionId, path: wikiFileRequest.path, anchor: wikiNormalAnchor.current });
 	}, [wikiFileRequest, chat.activeConversationId, chat.state?.cwd, chat.state?.sessionId, wikiPersist]);
 	const receiveWikiReference = useCallback((request: ChatReferenceRequest) => {
 		const current = wikiCurrent.current;
@@ -753,7 +692,7 @@ export function App() {
 		if (wikiRequestRef.current?.token !== request.token) return false;
 		const saved = await wikiSave.current?.();
 		return !!saved && wikiRequestRef.current?.token === request.token && wikiCurrent.current.cwd === request.cwd && wikiCurrent.current.conversationId === request.conversationId;
-	}, [wikiFileRequest, databaseOpen]);
+	}, [wikiFileRequest, databaseOpen, documentPreview]);
 	const openDatabase = () => {
 		const open = () => { setWikiFileRequest(null); setDatabaseOpen(true); setWikiChatOpen(!window.matchMedia("(max-width: 900px)").matches); };
 		if (wikiGuard.current) wikiGuard.current(open); else open();
@@ -878,9 +817,9 @@ export function App() {
 		const cwd = chat.state.cwd;
 		const open = () => {
 			if (/\.(md|markdown)$/i.test(path)) {
-				// Wiki 窗口内点击文档链接 = 切换文档；normal 视图 = 打开独立 Wiki 窗口。
+				// Wiki 内部切文档；普通模式使用单文件弹窗和原聊天。
 				if (view === "wiki") void openWikiDocument(path);
-				else openWikiWindow(cwd, path, { model: chat.state?.model ? `${chat.state.model.provider}/${chat.state.model.id}` : null, thinking: chat.state?.thinkingLevel ?? null });
+				else { setView("chat"); setDatabaseOpen(false); setWikiChatOpen(true); setPreviewFile({ path, name, cwd }); }
 			} else {
 				setView("chat");
 				setDrawer("right");
@@ -941,7 +880,6 @@ export function App() {
 	const [settingsInitialTab, setSettingsInitialTab] = useState<"prompt" | "extensions">("prompt");
 	const openExtensionSettings = () => { setSettingsInitialTab("extensions"); setSettingsOpen(true); };
 	// Background-task panel (AI-started servers — stop individually or all).
-	const [bgTasksOpen, setBgTasksOpen] = useState(false);
 	// Global search panel (sessions / projects / workspace files).
 	const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
 	const [globalSearchFilesOnly, setGlobalSearchFilesOnly] = useState(false);
@@ -990,14 +928,14 @@ export function App() {
 	// Ctrl+K / Cmd+K opens global search (also reachable via the topbar button).
 	useEffect(() => {
 		const onKey = (e: KeyboardEvent) => {
-			if (wikiFileRequest || databaseOpen || !(e.ctrlKey || e.metaKey) || !["k", "p"].includes(e.key.toLowerCase())) return;
+			if (wikiFileRequest || databaseOpen || documentPreview || !(e.ctrlKey || e.metaKey) || !["k", "p"].includes(e.key.toLowerCase())) return;
 			e.preventDefault();
 			setGlobalSearchFilesOnly(e.key.toLowerCase() === "p");
 			setGlobalSearchOpen(true);
 		};
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
-	}, [wikiFileRequest, databaseOpen]);
+	}, [wikiFileRequest, databaseOpen, documentPreview]);
 
 	// -- sound notifications --------------------------------------------------
 	const [sound, setSound] = useState<SoundSettings>(loadSoundSettings);
@@ -1302,13 +1240,32 @@ export function App() {
 		if (createShell()) terminalOpenRequested.current = false;
 	}, [chat.terminals.length, createShell, view]);
 
+	const filePreview = previewFile && <FilePreviewContent autoSave={documentPreview}
+		key={`${previewFile.cwd}:${previewFile.path}`}
+		file={previewFile}
+		contextReader={contextReader}
+		contextSaver={contextSaver}
+		onContextChange={setCurrentFile}
+		guard={fileGuard}
+		result={chat.fileResult}
+		disabled={!!switching || previewFile.cwd !== chat.state?.cwd}
+		connected={chat.status === "open"}
+		content={chat.fileContent}
+		fileChanged={chat.fileChanged}
+		scmData={chat.scmData?.type === "scm_data" ? chat.scmData : null}
+		scmDirty={chat.scmDirty}
+		send={send}
+		onAddLines={attachPreviewLines}
+		onAttach={attach}
+		onClose={closePreview}
+		/>;
 	return (
 		// Whole window is a drop target (issue #19): dragover highlights + any
 		// drop attaches. The plain preventDefault used to merely stop the browser
 		// navigating away; children with their own handlers (input bar / edit
 		// composer) call stopPropagation and keep priority.
 		<ChangesProvider conversationId={conversationState?.conversationId ?? ""} files={changedFiles} active={view === "chat"} onOpenChange={onChangesOpen}><PlaygroundProvider value={playgroundHost}><div
-			className={`app design-workspace dual-navigation ${notesOpen || scratchOpen ? "notes-open" : ""} ${view === "wiki" ? "wiki-mode" : ""} ${changesOpen && view === "chat" ? "changes-open" : ""} ${leftCollapsed ? "left-collapsed" : ""} ${previewFile && view === "chat" ? "document-open" : ""}`}
+			className={`app design-workspace dual-navigation ${notesOpen || scratchOpen ? "notes-open" : ""} ${view === "wiki" ? "wiki-mode" : ""} ${changesOpen && view === "chat" ? "changes-open" : ""} ${leftCollapsed ? "left-collapsed" : ""} ${inlinePreview && view === "chat" ? "document-open" : ""}`}
 			style={{ "--left-w": `${leftWidth}px`, "--right-w": `${rightWidth}px` } as CSSProperties}
 			onDragOver={(e) => {
 				if (notesOpen || scratchOpen) { e.preventDefault(); return; }
@@ -1352,7 +1309,7 @@ export function App() {
 					notesOpen={notesOpen}
 					scratchOpen={scratchOpen}
 					notesList={<NotesList notes={notes} />}
-					onNavigate={target => { setNotesOpen(target === "notes"); setScratchOpen(target === "playground"); setLeftCollapsed(false); if (target === "chat") setView("chat"); }}
+					onNavigate={target => { if (target === "knowledge") { enterWikiMode(); return; } setNotesOpen(target === "notes"); setScratchOpen(target === "playground"); setLeftCollapsed(false); if (target === "chat") setView("chat"); }}
 					onOpenSettings={() => { setSettingsInitialTab("prompt"); setSettingsOpen(true); }}
 					onNewChat={() => { setNotesOpen(false); setScratchOpen(false); setView("chat"); panelSend({ type: "new_chat" }); }}
 					send={panelSend}
@@ -1404,7 +1361,7 @@ export function App() {
 							setDrawer(null);
 							changesLeftRestore.current = null;
 							setLeftCollapsed((value) => { localStorage.setItem("pi-left-collapsed", String(!value)); return !value; });
-						} else if (side === "right" && !isMobile && !isNarrow && !previewFile) setFilesCollapsed((value) => !value);
+						} else if (side === "right" && !isMobile && !isNarrow && !inlinePreview) setFilesCollapsed((value) => !value);
 						else {
 							if (side === "right") setFilesCollapsed(false);
 							setDrawer((value) => value === side ? null : side);
@@ -1412,7 +1369,6 @@ export function App() {
 					}}
 					onManageModels={() => setManageModelsOpen(true)}
 					onOpenSettings={() => { setSettingsInitialTab("prompt"); setSettingsOpen(true); }}
-					onOpenBgTasks={() => setBgTasksOpen(true)}
 					onOpenGlobalSearch={() => { setGlobalSearchFilesOnly(false); setGlobalSearchOpen(true); }}
 					sound={sound}
 					onSoundChange={setSound}
@@ -1443,11 +1399,11 @@ export function App() {
 					className={`layout ${notesOpen || scratchOpen ? "notes-chat-hidden" : ""}`}
 					style={{ "--left-w": `${leftWidth}px`, "--right-w": `${rightWidth}px`, "--editor-share": editorShare } as CSSProperties}
 				>
-					{drawer && (isMobile || (isNarrow && !previewFile) || (drawer === "left" && !!previewFile)) && (
+					{drawer && (isMobile || (isNarrow && !inlinePreview) || (drawer === "left" && !!previewFile)) && (
 						<div className="drawer-backdrop" onClick={() => setDrawer(null)} />
 					)}
-					<div className={`view-pane ${previewFile ? "preview-open" : ""} ${view === "chat" ? "" : "hidden"}`}>
-						<ChatDock target={wikiFileRequest || databaseOpen ? wikiChatHost : null}>
+					<div className={`view-pane ${inlinePreview ? "preview-open" : ""} ${view === "chat" ? "" : "hidden"}`}>
+						<ChatDock target={wikiFileRequest || databaseOpen || documentPreview ? wikiChatHost : null}>
 							{conversationState ? (
 								<WorkspacePathContext.Provider value={conversationState.cwd}><MessageList recovery={{ ...toolRecovery, models: chat.models, onLoadModels: () => { if (!chat.models.length && !chat.modelsLoading) send({ type: "list_models" }); } }}
 									active={!notesOpen && !scratchOpen && (view === "chat" || view === "wiki" || databaseOpen)}
@@ -1521,16 +1477,16 @@ export function App() {
 							/>
 						</ChatDock>
 						<ChangesPanel key={conversationState?.conversationId ?? ""} cwd={conversationState?.cwd ?? ""} data={chat.scmDiffData} send={send} ready={chat.ready && !switching} notRepo={!workspaceScm.loaded || workspaceScm.notRepo} branch={workspaceScm.branch} defaultBase={workspaceScm.base} branches={workspaceScm.branches} dirty={chat.scmDirty} />
-						{!isMobile && (!isNarrow || !!previewFile) && (!filesCollapsed || !!previewFile) && (
-							<ResizeHandle side={previewFile ? "editor" : "right"} width={previewFile ? 480 : rightWidth} onResize={previewFile ? resizeEditor : resizeRight} onReset={previewFile ? () => { setEditorShare(0.45); localStorage.setItem("pi-harness:editor-share", "0.45"); } : undefined} />
+						{!isMobile && (!isNarrow || inlinePreview) && (!filesCollapsed || inlinePreview) && (
+							<ResizeHandle side={inlinePreview ? "editor" : "right"} width={inlinePreview ? 480 : rightWidth} onResize={inlinePreview ? resizeEditor : resizeRight} onReset={inlinePreview ? () => { setEditorShare(0.45); localStorage.setItem("pi-harness:editor-share", "0.45"); } : undefined} />
 						)}
-						<FluidDrawer side="right" onOpen={() => setDrawer("right")} open={drawer === "right"} overlay={isNarrow && !previewFile} label={t("workspaceFiles")} onClose={() => setDrawer(null)}
-							className={`panel-drawer drawer-right ${filesCollapsed && !previewFile ? "files-collapsed" : ""} ${drawer === "right" ? "open" : ""}`}
+						<FluidDrawer side="right" onOpen={() => setDrawer("right")} open={drawer === "right"} overlay={isNarrow && !inlinePreview} label={t("workspaceFiles")} onClose={() => setDrawer(null)}
+							className={`panel-drawer drawer-right ${filesCollapsed && !inlinePreview ? "files-collapsed" : ""} ${drawer === "right" ? "open" : ""}`}
 						>
-							<div className="file-list-host" hidden={!!previewFile}>
+							<div className="file-list-host" hidden={inlinePreview}>
 								<RightPanel
 									onSearchFiles={openFileSearch}
-									active={!filesCollapsed && !previewFile && !switching && view === "chat" && ((!isMobile && !isNarrow) || drawer === "right")}
+									active={!filesCollapsed && !inlinePreview && !switching && view === "chat" && ((!isMobile && !isNarrow) || drawer === "right")}
 									send={send}
 									files={chat.files}
 									changed={workspaceScm.files}
@@ -1551,27 +1507,7 @@ export function App() {
 									onPreview={openPreview}
 								/>
 							</div>
-							{previewFile && (
-								<FilePreviewContent
-									key={`${previewFile.cwd}:${previewFile.path}`}
-									file={previewFile}
-									contextReader={contextReader}
-									contextSaver={contextSaver}
-									onContextChange={setCurrentFile}
-									guard={fileGuard}
-									result={chat.fileResult}
-									disabled={!!switching || previewFile.cwd !== chat.state?.cwd}
-									connected={chat.status === "open"}
-									content={chat.fileContent}
-									fileChanged={chat.fileChanged}
-									scmData={chat.scmData?.type === "scm_data" ? chat.scmData : null}
-									scmDirty={chat.scmDirty}
-									send={send}
-									onAddLines={attachPreviewLines}
-									onAttach={attach}
-									onClose={closePreview}
-								/>
-							)}
+							{!documentPreview && filePreview}
 						</FluidDrawer>
 					</div>
 
@@ -1630,13 +1566,16 @@ export function App() {
 				</div>
 			</div>
 			{view !== "wiki" && <FooterBar chat={chat} send={send} />}
-			{databaseOpen && chat.state?.cwd && <WikiDocumentModal title={t("dbTitle")} onClose={() => setDatabaseOpen(false)} chatHost={setWikiChatHost} chatOpen={wikiChatOpen} onChatOpen={setWikiChatOpen}>
+			{documentPreview && previewFile && <WikiDocumentModal title={previewFile.name} onClose={() => { if (fileGuard.current) fileGuard.current(closePreview); else closePreview(); }} chatHost={setWikiChatHost} chatOpen={wikiChatOpen} onChatOpen={setWikiChatOpen}>
+				<div className="single-document-editor">{filePreview}</div>
+			</WikiDocumentModal>}
+			{databaseOpen && !documentPreview && chat.state?.cwd && <WikiDocumentModal title={t("dbTitle")} onClose={() => setDatabaseOpen(false)} chatHost={setWikiChatHost} chatOpen={wikiChatOpen} onChatOpen={setWikiChatOpen}>
 				<DatabaseWorkbench cwd={chat.state.cwd} conversationId={chat.activeConversationId} onReference={receiveWikiReference} onRevoke={revokeDatabase} />
 			</WikiDocumentModal>}
-			{wikiFolderPicker && <FolderPickerModal dirBrowse={chat.dirBrowse} initialPath={chat.state?.cwd}
-				onBrowse={path => { rawSend({ type: "browse_dirs", path }); }} onPick={pickWikiFolder}
-				onClose={() => { if (!wikiFolderPending) setWikiFolderPicker(false); }}
-				busy={!chat.ready || !!switching || !!wikiFolderPending} error={wikiFolderError} pickLabel={t("wikiOpenFolder")} />}
+			{(wikiFolderPicker || library.needsFolder) && <FolderPickerModal dirBrowse={chat.dirBrowse} initialPath={chat.state?.cwd}
+				onBrowse={path => { rawSend({ type: "browse_dirs", path }); }} onPick={isKnowledgeLibraryWindow ? library.session.chooseFolder : pickWikiFolder}
+				onClose={() => { if (librarySaving || wikiFolderPending) return; if (isKnowledgeLibraryWindow && !libraryReady) window.close(); else { setWikiFolderPicker(false); library.session.dismissFolder(); } }}
+				busy={!chat.ready || !!switching || !!wikiFolderPending || librarySaving} error={library.error ?? (library.unavailable ? t("knowledgeUnavailable") : wikiFolderError)} pickLabel={t(isKnowledgeLibraryWindow ? libraryReady ? "knowledgeChangeFolder" : "knowledgeChooseFolder" : "wikiOpenFolder")} />}
 			{wikiInterrupt && <div className="wiki-modal-backdrop"><section className="wiki-confirm" role="dialog" aria-modal="true" aria-label={t("wikiInterruptTitle")}>
 				<h2>{t("wikiInterruptTitle")}</h2>
 				<p>{t("wikiInterruptHint")}</p>
@@ -1677,13 +1616,6 @@ export function App() {
 					send={send}
 					playground={playground}
 					onClose={() => setSettingsOpen(false)}
-				/>
-			)}
-			{bgTasksOpen && (
-				<BgTasksModal
-					servers={chat.bgServers}
-					send={send}
-					onClose={() => setBgTasksOpen(false)}
 				/>
 			)}
 			{globalSearchOpen && globalSearchFilesOnly && (

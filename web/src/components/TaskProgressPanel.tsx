@@ -28,6 +28,7 @@ export function TaskProgressPanel({ task, silence, cwd, messages, onPreview, str
 	const phase = conversationWait(messages, new Map());
 	const [progressOpen, setProgressOpen] = useState(true);
 	const [outputsOpen, setOutputsOpen] = useState(true);
+	const [expandedPhase, setExpandedPhase] = useState<string | null>(null);
 	const [expanded, setExpanded] = useState<string | null>(null);
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const items = task?.plan?.items.filter(item => item.status !== "removed") ?? [];
@@ -83,9 +84,10 @@ export function TaskProgressPanel({ task, silence, cwd, messages, onPreview, str
 						const duration = phase.status !== "running" && phase.endedAt && phase.startedAt ? phase.endedAt - phase.startedAt : undefined;
 						return <li key={phase.id} className={`task-step ${phase.status}`}>
 							<span className="task-step-mark" aria-hidden="true">{phase.status === "done" ? "✓" : phase.status === "failed" ? "×" : <i className="thinking-spinner" />}</span>
-							<span className="task-step-title">{phaseHeadline(phase, locale)}</span>
+							<button type="button" className="task-step-title task-step-toggle" title={phaseHeadline(phase, locale)} aria-expanded={expandedPhase === phase.id} onClick={() => setExpandedPhase(value => value === phase.id ? null : phase.id)}><span>{phaseHeadline(phase, locale, true)}</span><FiChevronRight className={expandedPhase === phase.id ? "open" : ""} /></button>
+							{phase.status === "running" && <span className="task-step-current">{t("taskStepCurrent")}</span>}
 							{duration !== undefined && duration >= 100 && <span className="task-step-time">{duration < 60_000 ? commandDuration(duration) : elapsedLabel(duration / 1000)}</span>}
-							{shown.length > 0 && <ul className="task-step-items">
+							{expandedPhase === phase.id && shown.length > 0 && <ul className="task-step-items">
 								{shown.map(item => <li key={item.key}><button type="button" title={item.path ?? item.label} onClick={() => item.path ? preview(item.path) : window.dispatchEvent(new CustomEvent("pi:jump-tool", { detail: { messageId: item.messageId, toolCallId: item.toolCallId } }))}>{item.label}</button></li>)}
 								{items.length > shown.length && <li className="task-step-more">{t("taskStepsMore", { n: items.length - shown.length })}</li>}
 							</ul>}
@@ -94,11 +96,11 @@ export function TaskProgressPanel({ task, silence, cwd, messages, onPreview, str
 				</div>}
 			</section>
 			<section className="task-section">
-				<button type="button" className="task-section-heading" aria-expanded={outputsOpen} onClick={() => setOutputsOpen(value => !value)}><FiChevronRight className={outputsOpen ? "open" : ""} />{t("taskOutputsHeading")}</button>
+				<button type="button" className="task-section-heading" aria-expanded={outputsOpen} onClick={() => setOutputsOpen(value => !value)}><FiChevronRight className={outputsOpen ? "open" : ""} />{t("taskOutputsHeading")}<span className="task-section-count">{t("taskOutputsCount", { n: files.length })}</span></button>
 				{outputsOpen && <div className="task-section-content">{files.length ? <div className="task-file-results">{files.map(file => <div className="task-file-result" key={file.path}>
-					<FiFile aria-hidden="true" /><button type="button" title={file.path} onClick={() => preview(file.path)}><span>{file.path.split("/").at(-1)}</span>{file.path.includes("/") && <small>{file.path}</small>}</button>
-					{file.counted && <span className="task-file-counts"><span>+{file.added}</span> <span>−{file.removed}</span></span>}
-				</div>)}</div> : <div className="task-section-empty"><FiFile className="task-empty-file" aria-hidden="true" /><p>{t("taskOutputsEmpty")}</p></div>}</div>}
+					<FiFile aria-hidden="true" /><button type="button" title={file.path} aria-label={file.path} onClick={() => preview(file.path)}><span>{file.path.split("/").at(-1)}</span>{file.path.includes("/") && <small>{file.path.slice(0, file.path.lastIndexOf("/")) || "/"}</small>}</button>
+					{file.counted && <span className="task-file-counts" title={t("taskOutputsCountsHint")} aria-label={t("taskOutputsCountsLabel", { added: file.added, removed: file.removed })}><span>+{file.added}</span> <span>−{file.removed}</span></span>}
+				</div>)}</div> : <p className="task-files-empty">{t("taskOutputsEmpty")}</p>}</div>}
 			</section>
 		</div>
 	</div>;

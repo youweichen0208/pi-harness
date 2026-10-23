@@ -1,3 +1,4 @@
+import { openKnowledge } from "./lib/open-knowledge.mjs";
 // Real Electron, local streaming model, isolated data. Run after npm run build.
 // Desktop-only regression: chat links must not navigate the Wiki renderer to /file.md.
 import assert from "node:assert/strict";
@@ -63,7 +64,7 @@ try {
 	assert(main, "main window ready");
 	main.setDefaultTimeout(10000);
 	await main.locator(".conn-dot.ok").first().waitFor({ state: "attached" });
-	await main.locator(".file-name", { hasText: "README.md" }).click();
+	await openKnowledge(main, cwd, "README.md");
 	for (let i = 0; i < 100; i++) {
 		wiki = app.windows().find(page => page.url().includes("wiki-window=1"));
 		if (wiki) break;

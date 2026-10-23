@@ -20,7 +20,7 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
-import type { ServerMessage, UiPluginInfo, BgServer, UiPluginSettingField } from "./protocol.js";
+import type { ServerMessage, UiPluginInfo, UiPluginSettingField } from "./protocol.js";
 import { PluginStorage, PluginSecrets, ensurePluginDeps, WorkspaceFS } from "./plugin-facilities.js";
 import type { Request, Response } from "express";
 import { createHash } from "node:crypto";
@@ -112,20 +112,6 @@ export interface PluginHost {
 		write(relPath: string, data: string | Uint8Array): Promise<void>;
 		remove(relPath: string): Promise<void>;
 	};
-	/** 注册一个常驻后台任务（轮询器/连接池/后台 worker…）：出现在顶栏「后台任务」
-	 *  面板，用户可一键停止。返回 { update, unregister }。id 在插件内唯一。 */
-	registerBackgroundTask(task: {
-		id: string;
-		/** 面板显示名（如「📬 邮件轮询」）。 */
-		label: string;
-		/** 停止回调（面板「停止」按钮触发；用户也可能直接 kill 进程树）。 */
-		stop?: () => void;
-		/** 可选初始状态文案，之后可经 update() 刷新。 */
-		status?: string;
-	}): {
-		update(next: Partial<{ label: string; status: string; stop: () => void }>): void;
-		unregister(): void;
-	};
 	/** 读取宿主管理的设置值（manifest "settings" 声明的字段，storage.json
 	 *  存值 + 默认值合并）。插件应以此为准做运行时行为。 */
 	getSettings(): Record<string, unknown>;
@@ -170,15 +156,6 @@ export const PLUGIN_API_VERSION = 1;
  *  命令是纯配置动作（不消耗 token），与内置命令同级拦截执行。 */
 
 /** 每个插件的 AI 工具注册表（name → 定义）。 */
-
-/** 插件注册的常驻后台任务（经 host.registerBackgroundTask）。 */
-export interface PluginBgTask {
-	id: string;
-	label: string;
-	stop?: () => void;
-	status?: string;
-	since: number;
-}
 
 /** 消息处理器超时：仅作为不再等待的日志阈值（响应由 handler 自己发出）。 */
 const MESSAGE_TIMEOUT_MS = 30_000;
@@ -292,10 +269,6 @@ export class PluginManager {
 	private senders = new Set<Sender>();
 	private messageHandlers = new Map<string, Set<(payload: unknown, from?: string) => void>>();
 
-	/** 插件常驻任务：pluginId → Map<taskId, PluginBgTask>。宿主经 bgTasks() 读取。 */
-	private pluginBgTasks = new Map<string, Map<string, PluginBgTask>>();
-	/** 任务集合变化回调（index.ts 接到 AgentService，重推 bg_servers）。 */
-	onBgTasksChanged: (() => void) | undefined = undefined;
 	/** 服务端重载纪元：每次 reload() +1，前端用作 import 缓存击穿参数。 */
 	private epochCounter = 0;
 	/** 当前全局工作区（host.cwd 的背后存储）——随 notifyCwd 更新。 */
@@ -332,43 +305,6 @@ export class PluginManager {
 	/** 全部插件注册的斜杠命令（按插件 id 稳定排序）。 */
 
 	/** 按名查找命令（供 prompt() 拦截执行；找不到返回 null）。 */
-
-	/** 全部插件注册的常驻后台任务（扁平化为 BgServer 形状）。 */
-	bgTasks(): BgServer[] {
-		const out: BgServer[] = [];
-		for (const [pluginId, table] of this.pluginBgTasks) {
-			for (const t of table.values()) {
-				out.push({
-					taskId: t.id,
-					plugin: pluginId,
-					since: t.since,
-					name: t.label,
-					...(t.status ? { status: t.status } : {}),
-				});
-			}
-		}
-		return out;
-	}
-
-	/** 停止一个插件任务（kill_background_server with taskId）；返回是否命中。 */
-	stopPluginBgTask(taskId: string): boolean {
-		for (const [pluginId, table] of this.pluginBgTasks) {
-			const t = table.get(taskId);
-			if (!t) continue;
-			try {
-				t.stop?.();
-			} catch (err) {
-				console.error(`[plugin:${pluginId}] background task ${taskId} stop failed:`, err);
-			}
-			table.delete(taskId);
-			if (table.size === 0) this.pluginBgTasks.delete(pluginId);
-			try {
-				this.onBgTasksChanged?.();
-			} catch {}
-			return true;
-		}
-		return false;
-	}
 
 	/** 保存某插件的声明式设置（⚙ 面板 → plugin_settings 消息）：按 schema 校验、
 	 *  原子写 storage.json 的 settings 键、通知插件 onSettingsChanged、重推清单
@@ -608,14 +544,7 @@ export class PluginManager {
 				console.error(`[plugin:${id}] deactivate failed:`, err);
 			}
 
-			// 反激活时停掉它注册的常驻后台任务（轮询器等），不留孤儿计时器。
-			for (const t of this.pluginBgTasks.get(id)?.values() ?? []) {
-				try {
-					t.stop?.();
-				} catch {}
-			}
 		}
-		this.pluginBgTasks.clear();
 		this.loaded.clear();
 		this.messageHandlers.clear();
 	}
@@ -691,7 +620,6 @@ export class PluginManager {
 		const cwdHandlers = new Set<(cwd: string) => void>();
 		const httpRoutes = new Map<string, (req: Request, res: Response) => void>();
 
-		const bgTaskTable = new Map<string, PluginBgTask>();
 		const settingsHandlers = new Set<(values: Record<string, unknown>) => void>();
 		// 宿主 API 版本协商：插件要的比宿主新 → 明确拒绝（而不是让它在运行期
 		// 撞 undefined 接口莫名其妙地坏）。与激活失败同一处理：error 字段 + 置灰。
@@ -783,43 +711,6 @@ export class PluginManager {
 				readText: (p, max) => (can("fs") ? workspaceFs.readText(p, max) : NO_FS_PROMISE),
 				write: (p, data) => (can("fs") ? workspaceFs.write(p, data) : NO_FS_PROMISE),
 				remove: (p) => (can("fs") ? workspaceFs.remove(p) : NO_FS_PROMISE),
-			},
-			registerBackgroundTask: (task) => {
-				const id = String(task?.id ?? "").trim();
-				if (!id || bgTaskTable.has(id)) {
-					console.error(`[plugin:${info.id}] registerBackgroundTask: 非法/重复 id「${task?.id}」，忽略`);
-					return { update: () => {}, unregister: () => {} };
-				}
-				const entry: PluginBgTask = {
-					id,
-					label: String(task?.label ?? id),
-					since: Date.now(),
-					...(typeof task?.stop === "function" ? { stop: task.stop } : {}),
-					...(typeof task?.status === "string" ? { status: task.status } : {}),
-				};
-				bgTaskTable.set(id, entry);
-				this.pluginBgTasks.set(info.id, bgTaskTable);
-				const fire = () => {
-					try {
-						this.onBgTasksChanged?.();
-					} catch {}
-				};
-				fire();
-				return {
-					update: (next) => {
-						if (!bgTaskTable.has(id)) return;
-						if (next.label !== undefined) entry.label = String(next.label);
-						if (next.status !== undefined) entry.status = next.status;
-						if (typeof next.stop === "function") entry.stop = next.stop;
-						fire();
-					},
-					unregister: () => {
-						if (bgTaskTable.delete(id)) {
-							if (bgTaskTable.size === 0) this.pluginBgTasks.delete(info.id);
-							fire();
-						}
-					},
-				};
 			},
 			getSettings: () => storedSettingsValues(dir, info.settingsSchema ?? []),
 			onSettingsChanged: (h) => {

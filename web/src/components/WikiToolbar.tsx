@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import * as Icon from "react-icons/lu";
-import { FONT_SIZES, LINE_HEIGHTS } from "../rich-content";
+import type { RichCommands, RichCommand } from "../rich-commands";
 import { useT } from "../i18n";
 export interface WikiInsertItem { id: string; label: string; hint: string; help: string; icon: ReactNode }
 export interface WikiInsertPopup { kind: "table" | "code"; x: number; y: number }
@@ -21,26 +21,29 @@ export function WikiInsertPopover({ popup, onClose, children }: { popup: WikiIns
 	}, [onClose]);
 	return createPortal(<div ref={ref} className={`wiki-insert-popover wiki-${popup.kind}-popover`} role="dialog" onKeyDown={e => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onClose(); } }} style={{ left: popup.x, top: popup.y }}>{children}</div>, document.querySelector(".wiki-document-dialog") ?? document.body);
 }
-type Action = { label: string; icon?: ReactNode; command?: string; value?: string; id?: string; options?: Action[] };
-export function WikiToolbar({ readOnly, focused, onWidth, items, onPrepare, onSelect, run, painter, editor }: {
-	readOnly: boolean; focused: boolean; onWidth: () => void; items: WikiInsertItem[]; onPrepare: () => void;
-	onSelect: (id: string) => void; run: (command: string, value?: string) => void; painter: boolean; editor: HTMLElement | null;
+type Action = { label: string; icon?: ReactNode; command?: RichCommand; value?: string; id?: string; options?: Action[] };
+export function WikiToolbar({ readOnly, focused, onWidth, items, commands, editor }: {
+	readOnly: boolean; focused: boolean; onWidth: () => void; items: WikiInsertItem[];
+	commands: RichCommands; editor: HTMLElement | null;
 }) {
 	const t = useT(), bar = useRef<HTMLDivElement>(null), menuRef = useRef<HTMLDivElement>(null);
 	const trigger = useRef<HTMLButtonElement | null>(null);
 	const [count, setCount] = useState(0), [menu, setMenu] = useState<Action[] | null>(null);
 	const [state, setState] = useState<Record<string, string | boolean>>({});
-	const a = (key: Parameters<typeof t>[0], icon: ReactNode, command: string, value?: string): Action => ({ label: t(key), icon, command, value });
+	const a = (command: RichCommand, icon: ReactNode, value?: string): Action => ({ label: t(commands.describe(command).label), icon, command, value });
 	const choices = (key: Parameters<typeof t>[0], icon: ReactNode, options: Action[]): Action => ({ label: t(key), icon, options });
+	const select = (command: RichCommand, icon: ReactNode): Action => ({
+		label: t(commands.describe(command).label), icon,
+		options: commands.describe(command).options?.map(option => ({ label: option.label ? t(option.label) + (option.suffix ?? "") : option.text ?? option.value, command, value: option.value })),
+	});
 	const insert = (id: string): Action => { const item = items.find(item => item.id === id); return { label: item?.label ?? id, icon: item?.icon, id }; };
 	const groups: Action[][] = [
-		[a("richUndo", <Icon.LuUndo2 />, "undo"), a("richRedo", <Icon.LuRedo2 />, "redo")],
-		[a("richPainter", <Icon.LuPaintbrush />, "paint"), a("richClearFormat", <Icon.LuRemoveFormatting />, "clear")],
-		[choices("richParagraph", <span>{state.block === "p" ? t("richParagraph") : state.block || "—"}</span>, [a("richParagraph", null, "formatBlock", "p"), ...[1,2,3,4,5,6].map(n => ({ label: `${t("richHeading")} ${n}`, command: "formatBlock", value: `h${n}` }))]), choices("richFontSize", <span>{state.size || "—"}</span>, FONT_SIZES.map(n => ({ label: `${n}px`, command: "font-size", value: `${n}px` })))],
-		[a("richBold", <Icon.LuBold />, "bold"), a("richItalic", <Icon.LuItalic />, "italic"), a("richStrike", <Icon.LuStrikethrough />, "strikeThrough"), a("richUnderline", <Icon.LuUnderline />, "underline")],
-		[choices("richTextColor", <Icon.LuBaseline />, ([['--text','richDefaultColor'],['--accent','richColorBlue'],['--action','richColorGreen'],['--red','richColorRed']] as const).map(([value,key]) => a(key, null, "color", getComputedStyle(document.documentElement).getPropertyValue(value).trim()))), choices("richTextHighlight", <Icon.LuHighlighter />, [...(['yellow','green','blue','pink','purple'] as const).map(color => a(`richHighlight_${color}`, null, "highlight", color)), a("richHighlightClear", null, "highlight", "clear")])],
-		[choices("richAlignment", <Icon.LuAlignLeft />, (['left','center','right','justify'] as const).map(value => a(`richAlign_${value}`, null, "text-align", value))), a("richList", <Icon.LuList />, "insertUnorderedList"), a("richOrderedList", <Icon.LuListOrdered />, "insertOrderedList"), a("richOutdent", <Icon.LuIndentDecrease />, "outdent"), a("richIndent", <Icon.LuIndentIncrease />, "indent"), choices("richLineHeight", <Icon.LuChevronsUpDown />, LINE_HEIGHTS.map(n => ({ label: `${n}×`, command: "line-height", value: String(n) })))],
-		[a("richTaskList", <Icon.LuSquareCheck />, "task"), { ...insert("link"), icon: <Icon.LuLink /> }, { ...insert("yy"), icon: <Icon.LuTextQuote /> }, { ...insert("fgx"), icon: <Icon.LuMinus /> }],
+		[a("undo", <Icon.LuUndo2 />), a("redo", <Icon.LuRedo2 />)],
+		[select("formatBlock", <span>{state.block === "p" ? t("richParagraph") : state.block || "—"}</span>), select("font-size", <span>{state.size || "—"}</span>)],
+		[a("bold", <Icon.LuBold />), a("italic", <Icon.LuItalic />), a("strikeThrough", <Icon.LuStrikethrough />), a("underline", <Icon.LuUnderline />)],
+		[select("color", <Icon.LuBaseline />), select("highlight", <Icon.LuHighlighter />)],
+		[select("text-align", <Icon.LuAlignLeft />), a("insertUnorderedList", <Icon.LuList />), a("insertOrderedList", <Icon.LuListOrdered />), a("outdent", <Icon.LuIndentDecrease />), a("indent", <Icon.LuIndentIncrease />), select("line-height", <Icon.LuChevronsUpDown />)],
+		[a("task", <Icon.LuSquareCheck />), { ...insert("link"), icon: <Icon.LuLink /> }, { ...insert("yy"), icon: <Icon.LuTextQuote /> }, { ...insert("fgx"), icon: <Icon.LuMinus /> }],
 	];
 	const close = () => { setMenu(null); trigger.current?.focus({ preventScroll: true }); };
 	useLayoutEffect(() => {
@@ -76,9 +79,9 @@ export function WikiToolbar({ readOnly, focused, onWidth, items, onPrepare, onSe
 		const outside = (event: PointerEvent) => { if (!menuRef.current?.contains(event.target as Node) && !trigger.current?.contains(event.target as Node)) setMenu(null); };
 		document.addEventListener("pointerdown", outside); return () => document.removeEventListener("pointerdown", outside);
 	}, [menu]);
-	const execute = (action: Action) => { if (action.options) { setMenu(action.options); return; } setMenu(null); if (action.id) onSelect(action.id); else if (action.command) run(action.command, action.value); };
-	const button = (action: Action, index: number) => <button key={index} type="button" disabled={readOnly} title={action.label} aria-label={action.label} aria-haspopup={action.options ? "menu" : undefined} aria-expanded={action.options ? !!menu && trigger.current?.getAttribute("aria-label") === action.label : undefined} aria-pressed={action.command === "paint" ? painter : typeof state[action.command ?? ""] === "boolean" ? !!state[action.command!] : undefined} onMouseDown={e => { e.preventDefault(); onPrepare(); }} onClick={e => { onPrepare(); if (action.options) { trigger.current = e.currentTarget; setMenu(action.options); } else execute(action); }}>{action.icon}</button>;
-	const overflow = [...groups.slice(count).flat(), a("richSuperscript", <Icon.LuSuperscript />, "superscript"), a("richSubscript", <Icon.LuSubscript />, "subscript"), a("richPlainBlock", <Icon.LuType />, "plainBlock")];
+	const execute = (action: Action) => { if (action.options) { setMenu(action.options); return; } setMenu(null); if (action.id) commands.insert(action.id); else if (action.command) commands.execute(action.command, action.value); };
+	const button = (action: Action, index: number) => <button key={index} type="button" disabled={readOnly} title={action.label} aria-label={action.label} aria-haspopup={action.options ? "menu" : undefined} aria-expanded={action.options ? !!menu && trigger.current?.getAttribute("aria-label") === action.label : undefined} aria-pressed={typeof state[action.command ?? ""] === "boolean" ? !!state[action.command!] : undefined} onMouseDown={e => { e.preventDefault(); commands.prepare(); }} onClick={e => { commands.prepare(); if (action.options) { trigger.current = e.currentTarget; setMenu(action.options); } else execute(action); }}>{action.icon}</button>;
+	const overflow = [...groups.slice(count).flat(), a("superscript", <Icon.LuSuperscript />), a("subscript", <Icon.LuSubscript />), a("plainBlock", <Icon.LuType />)];
 	return <div ref={bar} className="wiki-insert-toolbar wiki-unified-toolbar" role="toolbar" aria-label={t("richFormatToolbar")}>
 		<div className="wiki-toolbar-insert">{button(choices("richInsertMenu", <Icon.LuPlus />, ["tp","bg","dmk","glk","tip","warning","collapse","card","sl","date","ml"].map(insert)), 0)}</div>
 		{groups.slice(0,count).map((group,i) => <div className="wiki-tool-group" key={i}>{group.map(button)}</div>)}

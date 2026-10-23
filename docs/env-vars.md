@@ -24,3 +24,5 @@
 Pi 1.4.0 的 `PI_CODEMODE_MAX_WORKERS` 控制同一服务进程中所有会话共享的 Codemode worker 上限。未设置或不是正整数时使用原生默认值 2；多个服务进程分别计数。超过上限的脚本按到达顺序等待，最长 60 秒，脚本自己的 deadline 更短时以 deadline 为准；等待也计入脚本执行期限，取消等待不会启动脚本。
 
 例如前台启动：`PI_CODEMODE_MAX_WORKERS=4 pi-harness`。使用 systemd、launchd 或 Docker 时配置服务进程的环境并重启服务；终端中设置变量不会修改已经运行的服务。该值由 SDK 读取，WebUI 不提供额外设置项；提高上限会增加并发内存占用。
+
+`PI_WEB_JDTLS_HOME`：Playground Java 语言服务发行包根目录，默认 `<PI_WEB_DATA_DIR>/jdtls`；使用 JDT LS 1.57.0 与 JDK 21+，安装与隔离策略见 `architecture-playground.md`。

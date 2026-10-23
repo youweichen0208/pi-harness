@@ -83,7 +83,6 @@ const ALL = [
 	"wiki-insert-position-test",
 	"current-file-protocol-test",
 	"left-panel-delete-test",
-	"plugin-bgtask-test",
 	"plugin-cwd-test",
 	"plugin-http-test",
 	"native-tools-desktop-test",

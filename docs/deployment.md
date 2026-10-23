@@ -139,7 +139,7 @@ npm run publish:electron       # 同 build，但 --publish always——本地跑
 - Electron 渲染页加 `pi-desktop` 类，次要操作位于设置菜单；窗口宽度
   ≤900px 时右侧文件树变为抽屉。Web 和桌面共用工作区布局，模型设置位于输入框底部；
   顶栏高 44px，项目栏全高显示；macOS 品牌区为原生窗口按钮留空，项目栏开关固定在红绿灯右侧，收起项目栏时标题仍避让这些控件。Windows/Linux 顶栏为右上角 132px 窗口按钮预留空间；顶栏横跨对话与文件栏，窗口按钮避让始终由顶栏承担。设置和文件按钮不压缩，视图入口在空间不足时依次将 Git、终端移入更多菜单。`tests/desktop-toolbar-test.mjs` 在 Chromium 中模拟两平台外壳，验证顶栏边界、状态数字与任务定位（不替代真机窗口验证）。详见 [界面布局](ui-design.md)。
-- 初始窗口背景匹配默认简白主题；界面优先使用系统无衬线字体（macOS 苹方、Windows 微软雅黑），中文回退和代码字体随 web/dist 本地打包。视觉以 `ui-design.md` 的语雀桌面参考为准。顶栏直接提供对话、Wiki、终端、Git；数据库、节点、后台任务与插件位于更多菜单；连接与路径位于底部状态栏。
+- 初始窗口背景匹配默认简白主题；界面优先使用系统无衬线字体（macOS 苹方、Windows 微软雅黑），中文回退和代码字体随 web/dist 本地打包。视觉以 `ui-design.md` 的语雀桌面参考为准。顶栏直接提供对话、终端、Git、数据库、节点与插件，窄屏横向滚动；Wiki 从左栏知识库进入；连接与路径位于底部状态栏。
 - 流畅界面与 Web 共用：窄窗口抽屉使用可中断弹簧与独立拖动区；系统减少动态效果/透明度与提高对比度设置有对应降级。窗口控件、拖动区域与 IPC 不变。
 - SDK 原生提示词引用的 README、docs 与 examples 通过 extraResources 原样保留，防止 electron-builder 的生产依赖剪枝删除扩展示例。afterPack 检查文档和示例入口；native-tools-desktop-test 使用包内 SDK 的真实路径读取资源，缺失时阻断打包回归。
 - 原生模块（`node-pty`）：`electron-builder.yml` 里 `npmRebuild: true`，打包时自动

@@ -1,3 +1,4 @@
+import { isKnowledgeLibraryWindow } from "../wiki-window";
 import type { WikiCoordinator } from "../wiki-coordinator";
 import { WikiReadingOutline } from "../wiki-reading-outline";
 import { LuCode, LuMoveHorizontal } from "react-icons/lu";
@@ -334,7 +335,7 @@ export function WikiWorkbench({ coordinator, cwd, conversationId, streaming, act
 
 		<aside className="wiki-sidebar open">
 			<WikiResizeHandle side="sidebar" width={sidebarWidth} onResize={resizeSidebar} />
-			<button className="file-search-trigger" aria-label={t("wikiOpenFolder")} title={`${t("wikiOpenFolder")} · ${cwd}`} disabled={folderBusy} onClick={onOpenFolder}><FiFolder /><span>{t("wikiOpenFolder")}</span></button>
+			<button className="file-search-trigger" aria-label={t(isKnowledgeLibraryWindow ? "knowledgeChangeFolder" : "wikiOpenFolder")} title={`${t(isKnowledgeLibraryWindow ? "knowledgeChangeFolder" : "wikiOpenFolder")} · ${cwd}`} disabled={folderBusy} onClick={onOpenFolder}><FiFolder /><span>{t(isKnowledgeLibraryWindow ? "knowledgeChangeFolder" : "wikiOpenFolder")}</span></button>
 			<button className="wiki-search-trigger file-search-trigger" onClick={() => setSearch(true)}><FiSearch /><span>{t("fileTreeSearch")}</span><kbd>{navigator.platform.includes("Mac") ? "⌘ P" : "Ctrl P"}</kbd></button>
 			<div className="wiki-tree-label"><span>{t("wikiFiles")}</span><button aria-label={t("newWorkspaceFile")} title={t("newWorkspaceFile")} disabled={writingBlocked || !connected || state.running} onClick={() => setCreating(value => !value)}><FiPlus /><span>{t("newWorkspaceFile")}</span></button><button aria-label={t("wikiRefresh")} onClick={() => void refresh(true)}><FiRefreshCw /></button></div>
 			{creating && <CreateFileForm key={`${cwd}:${conversationId}`} cwd={cwd} conversationId={conversationId} initialPath={path.includes("/") ? path.slice(0, path.lastIndexOf("/") + 1) : ""} disabled={writingBlocked || !connected || state.running} onCancel={() => setCreating(false)} onCreated={target => { setCreating(false); void refresh(true); open(target); }} />}

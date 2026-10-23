@@ -1,3 +1,4 @@
+import { openKnowledge } from "./lib/open-knowledge.mjs";
 // Issue #89: Electron paints the fullscreen page over the open document dialog unless it is restacked.
 import { _electron as electron } from 'playwright-core';
 import { mkdtempSync, mkdirSync, realpathSync, writeFileSync, rmSync } from 'node:fs';
@@ -16,7 +17,7 @@ try {
 	let page;
 	for (let i = 0; i < 200; i++) { page = app.windows().find(w => w.url().startsWith('http://127.0.0.1:')); if (page) break; await new Promise(r => setTimeout(r, 100)); }
 	assert(page); page.setDefaultTimeout(15000);
-	await page.locator('.file-name', { hasText: 'README.md' }).first().evaluate(el => el.click());
+	await openKnowledge(page, cwd, "README.md");
 	await page.locator('.wiki-prose .fp-rich-document').waitFor();
 	await page.locator('.wiki-scroll').evaluate(el => { el.scrollTop = 300; el.style.background = 'rgb(0, 255, 0)'; });
 	// macOS ignores leaving fullscreen mid-animation; enter-full-screen fires once the window has settled.

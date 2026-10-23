@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
-import { autocompletion, type Completion, type CompletionContext } from "@codemirror/autocomplete";
+import { javaLanguageSupport } from "../playground-java-language";
+import { acceptCompletion } from "@codemirror/autocomplete";
 import { indentWithTab } from "@codemirror/commands";
 import { java } from "@codemirror/lang-java";
 import { tags as t } from "@lezer/highlight";
@@ -8,65 +9,6 @@ import { Compartment, EditorState, Prec, type Extension } from "@codemirror/stat
 import { EditorView, keymap, placeholder as cmPlaceholder } from "@codemirror/view";
 import { basicSetup } from "codemirror";
 import { THEME_CHANGE_EVENT } from "../theme";
-
-/**
- * The Playground scratch editor: CodeMirror 6 with Java syntax highlighting
- * and completion.
- *
- * Completion is deliberately word-level only — Java keywords plus identifiers
- * that already occur in the draft. There is no semantic engine behind it
- * (no JDT language server): typing `System.out.` suggests words from the
- * document, never real members of anything. That is the agreed scope.
- *
- * The theme is generated from the app's CSS variables and rebuilt on
- * THEME_CHANGE_EVENT, so the editor follows the appearance (light / graphite /
- * system) like every other surface.
- */
-
-/** Java keywords and literals — the fixed half of the completion list. */
-const KEYWORDS = [
-	"abstract", "assert", "boolean", "break", "byte", "case", "catch", "char",
-	"class", "const", "continue", "default", "do", "double", "else", "enum",
-	"extends", "final", "finally", "float", "for", "goto", "if", "implements",
-	"import", "instanceof", "int", "interface", "long", "native", "new",
-	"package", "private", "protected", "public", "record", "return", "short",
-	"static", "strictfp", "super", "switch", "synchronized", "this", "throw",
-	"throws", "transient", "try", "var", "void", "volatile", "while",
-	"true", "false", "null",
-];
-
-const KEYWORD_OPTIONS: Completion[] = KEYWORDS.map(label => ({ label, type: "keyword", boost: -10 }));
-
-/**
- * Word-level completion: keywords plus every identifier that already occurs
- * in the draft. Triggers on typing a word (activateOnTyping) and after a `.`
- * (the agreed trigger), where the popup offers document words — never members.
- */
-function completions(context: CompletionContext): { from: number; options: Completion[] } | null {
-	// After a `.`: complete the (possibly empty) identifier that follows.
-	const member = context.matchBefore(/\.[\w$]*$/);
-	const word = member ?? context.matchBefore(/[\w$]+/);
-	if (!word) return null;
-	if (word.from === word.to && !context.explicit) return null;
-
-	const from = member ? word.from + 1 : word.from;
-	const current = word.text.replace(/^[.\s]+/, "");
-	const seen = new Set<string>();
-	const options: Completion[] = [];
-	const add = (label: string, type: string) => {
-		if (label === current || seen.has(label) || label.length < 2) return;
-		seen.add(label);
-		options.push({ label, type });
-	};
-
-	// Identifiers from the document come first — they are what the user just wrote.
-	const doc = context.state.doc.toString();
-	for (const match of doc.matchAll(/[A-Za-z_$][\w$]{1,}/g) ?? []) add(match[0], "variable");
-	for (const option of KEYWORD_OPTIONS) {
-		if (!seen.has(option.label)) options.push({ ...option });
-	}
-	return options.length ? { from, options } : null;
-}
 
 /** Build a CodeMirror theme from the app's CSS variables, like buildTermTheme. */
 function buildEditorTheme(): Extension {
@@ -107,12 +49,14 @@ const highlightStyle = HighlightStyle.define([
 	{ tag: t.variableName, color: "var(--text)" },
 ]);
 
-export function ScratchEditor({ value, onChange, onRun, onFormat, placeholder }: {
+export function ScratchEditor({ value, onChange, onRun, onFormat, onSave, onLanguageStatus, placeholder }: {
 	value: string;
 	onChange: (value: string) => void;
 	/** ⌘/Ctrl+Enter always runs — the completion popup must not swallow it. */
 	onRun: () => void;
 	onFormat: () => void;
+	onSave: () => void;
+	onLanguageStatus: (state: "loading" | "ready" | "error", reason?: string) => void;
 	placeholder: string;
 }) {
 	const holder = useRef<HTMLDivElement>(null);
@@ -120,6 +64,8 @@ export function ScratchEditor({ value, onChange, onRun, onFormat, placeholder }:
 	runRef.current = onRun;
 	const formatRef = useRef(onFormat);
 	formatRef.current = onFormat;
+	const saveRef = useRef(onSave);
+	saveRef.current = onSave;
 
 	useEffect(() => {
 		const theme = new Compartment();
@@ -131,7 +77,7 @@ export function ScratchEditor({ value, onChange, onRun, onFormat, placeholder }:
 					basicSetup,
 					java(),
 					syntaxHighlighting(highlightStyle),
-					autocompletion({ override: [completions] }),
+					javaLanguageSupport(onLanguageStatus),
 					theme.of(buildEditorTheme()),
 					cmPlaceholder(placeholder),
 					Prec.highest(keymap.of([
@@ -142,7 +88,9 @@ export function ScratchEditor({ value, onChange, onRun, onFormat, placeholder }:
 								return true;
 							},
 						},
+						{ key: "Mod-s", run: () => { saveRef.current(); return true; } },
 						{ key: "Alt-Shift-f", run: () => { formatRef.current(); return true; } },
+						{ key: "Tab", run: acceptCompletion },
 						indentWithTab,
 					])),
 					EditorView.updateListener.of(update => {

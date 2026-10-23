@@ -1,4 +1,5 @@
-import { cleanStyle, editableDisclosures } from "../rich-content";
+import { RichCommands } from "../rich-commands";
+import { editableDisclosures } from "../rich-content";
 import { RichFormattingToolbar } from "./RichFormattingToolbar";
 import { RichLinkCardDialog } from "./RichLinkCardDialog";
 import { decorateWikiTables } from "../wiki-table-presentation";
@@ -57,7 +58,6 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 	const t = useT();
 	const [cardOpen, setCardOpen] = useState(false);
 	const cardRange = useRef<Range | null>(null);
-	const [painter, setPainter] = useState<string | null>(null);
 	const [insertPopup, setInsertPopup] = useState<WikiInsertPopup | null>(null);
 	const savedRange = useRef<Range | null>(null);
 	const [diagrams, setDiagrams] = useState<{ host: HTMLElement; code: string }[]>([]);
@@ -619,35 +619,25 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		if (target) { target.removeAttribute("data-slash-insert"); const range = document.createRange(); range.selectNodeContents(target); range.collapse(true); window.getSelection()?.removeAllRanges(); window.getSelection()?.addRange(range); update(); }
 		prepareInsert();
 	};
-	const styledSelection = (styles: string, reset = false) => {
+	const styledSelection = (styles: string) => {
 		const selection = window.getSelection();
 		if (!selection?.rangeCount) return;
 		const collapsed = selection.isCollapsed;
 		const span = document.createElement("span"); span.style.cssText = styles; span.dataset.richSelection = "";
 		if (collapsed) { span.dataset.richTyping = ""; span.textContent = "\u200b"; } else span.append(selection.getRangeAt(0).cloneContents());
-		if (reset) { span.querySelectorAll("[style]").forEach(el => el.removeAttribute("style")); span.querySelectorAll("b,strong,i,em,u,s,del,sub,sup,mark").forEach(el => el.replaceWith(...el.childNodes)); }
 		command("insertHTML", span.outerHTML);
 		const inserted = root.current?.querySelector<HTMLElement>("[data-rich-selection]");
 		if (inserted) { inserted.removeAttribute("data-rich-selection"); const range = document.createRange(); range.selectNodeContents(inserted); if (collapsed) range.collapse(false); selection.removeAllRanges(); selection.addRange(range); prepareInsert(); update(); }
 	};
 	const format = (action: string, argument?: string) => {
-		if (!restoreInsert()) return;
 		const selection = window.getSelection(); const node = selection?.anchorNode;
 		const element = node instanceof HTMLElement ? node : node?.parentElement;
 		if (action === "text-align" && selectedCell() && ["left", "center", "right"].includes(argument ?? "")) { editTable(argument as "left" | "center" | "right", selectedCell()); return; }
 		if (action === "task") { insertToolbar("rw"); return; }
-		if (action === "paint") {
-			let sample = selection?.rangeCount ? selection.getRangeAt(0).startContainer : root.current;
-			if (sample instanceof Element) sample = sample.childNodes[selection?.getRangeAt(0).startOffset ?? 0] ?? sample;
-			while (sample?.firstChild) sample = sample.firstChild;
-			const styled = sample instanceof HTMLElement ? sample : sample?.parentElement;
-			setPainter(painter === null ? cleanStyle(getComputedStyle(styled ?? element ?? root.current!)) : null); return;
-		}
 		if (action === "highlight") { const color = TEXT_HIGHLIGHT_COLORS.find(c => c.name === argument); command("hiliteColor", color?.hex ?? "transparent"); return; }
 		if (["font-size", "color"].includes(action)) { styledSelection(`${action}: ${argument}`); return; }
-		if (action === "line-height" || action === "text-align" || action === "plainBlock" || action === "clear") {
+		if (action === "line-height" || action === "text-align" || action === "plainBlock") {
 			const block = element?.closest<HTMLElement>(action === "plainBlock" ? "blockquote,details,div[data-rich-collapse],figure" : "p,h1,h2,h3,h4,h5,h6,li,td,th");
-			if (action === "clear") { command("removeFormat"); if (!block) return; }
 			if (!block || !root.current?.contains(block)) return;
 			const clone = block.cloneNode(true) as HTMLElement;
 			if (action === "plainBlock" && block.tagName === "BLOCKQUOTE") {
@@ -657,7 +647,7 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 				clone.querySelectorAll("[data-rich-ui]").forEach(el => el.remove());
 				clone.querySelectorAll("[data-rich-summary], [data-rich-collapse-body]").forEach(el => { el.removeAttribute("data-rich-summary"); el.removeAttribute("data-rich-collapse-body"); el.removeAttribute("hidden"); });
 				clone.querySelectorAll("summary").forEach(summary => { const p = document.createElement("p"); p.textContent = summary.textContent; summary.replaceWith(p); });
-			} else if (action === "clear") { clone.removeAttribute("style"); clone.querySelectorAll("[style]").forEach(el => el.removeAttribute("style")); }
+			}
 			else { clone.style.setProperty(action, argument!); clone.dataset.richFormat = ""; }
 			const range = document.createRange();
 			if (action === "plainBlock") {
@@ -672,6 +662,12 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		}
 		command(action, argument); prepareInsert();
 	};
+	const commands = new RichCommands({
+		editable: () => !readOnly,
+		captureSelection: prepareInsert, restoreSelection: restoreInsert, execute: format,
+		insert: id => insertToolbar(id),
+		color: variable => getComputedStyle(document.documentElement).getPropertyValue(variable).trim(),
+	});
 	const inspectSlash = (resetActive = true) => {
 		if (readOnly) return closeMenu();
 		const selection = window.getSelection();
@@ -812,12 +808,12 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 	};
 
 	return <div className="fp-rich-editor" onScrollCapture={(event) => { if (!(event.target as HTMLElement).closest(".fp-slash-menu")) { if (menu) inspectSlash(false); } }}>
-		{wiki?.toolbarHost && createPortal(<WikiToolbar readOnly={readOnly} focused={!!wiki.focused} onWidth={wiki.onWidth ?? (() => {})} items={items.map(item => ({ id: item.alias, label: itemLabel(item), hint: hints[item.alias] ?? "", help: t(help[item.alias] ?? item.label), icon: icons[item.label] }))} editor={root.current} run={format} painter={painter !== null} onPrepare={prepareInsert} onSelect={id => insertToolbar(id)} />, wiki.toolbarHost)}
+		{wiki?.toolbarHost && createPortal(<WikiToolbar readOnly={readOnly} focused={!!wiki.focused} onWidth={wiki.onWidth ?? (() => {})} items={items.map(item => ({ id: item.alias, label: itemLabel(item), hint: hints[item.alias] ?? "", help: t(help[item.alias] ?? item.label), icon: icons[item.label] }))} editor={root.current} commands={commands} />, wiki.toolbarHost)}
 		{diagrams.map(({ host, code }, index) => createPortal(<MermaidDiagram code={code} />, host, String(index)))}
 		{insertPopup && !readOnly && <WikiInsertPopover popup={insertPopup} onClose={() => { setInsertPopup(null); restoreInsert(); }}>
 			{insertPopup.kind === "table" ? <TableSizePicker onInsert={(columns, rows) => insertToolbar("bg", { columns, rows })} /> : <CodeLanguagePicker onInsert={language => insertToolbar("dmk", undefined, language)} />}
 		</WikiInsertPopover>}
-		{!wiki && !readOnly && <RichFormattingToolbar compact={compact} disabled={readOnly} prepare={prepareInsert} run={format} insert={id => insertToolbar(id)} painter={painter !== null} />}
+		{!wiki && !readOnly && <RichFormattingToolbar compact={compact} commands={commands} />}
 		{cardOpen && <RichLinkCardDialog onClose={() => setCardOpen(false)} onInsert={async (card, signal) => {
 			const range = cardRange.current, editor = root.current;
 			if (!range || !editor?.contains(range.startContainer) || readOnlyRef.current) throw Error();
@@ -863,7 +859,6 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 					onBlur={closeMenu}
 					onCompositionStart={closeMenu}
 					onCompositionEnd={() => { const code = selectedCode(); if (code) paintCode(code); update(); inspectSlash(); }}
-					onMouseUp={() => { if (painter !== null && !window.getSelection()?.isCollapsed) { styledSelection(painter, true); setPainter(null); } }}
 					onKeyUp={() => setTableCell(selectedCell())}
 					onKeyDown={(event) => {
 						if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === "a" && !event.nativeEvent.isComposing) {

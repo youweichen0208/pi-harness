@@ -1,3 +1,4 @@
+import { openKnowledge } from "./lib/open-knowledge.mjs";
 // Actual Electron /table insertion: document sizing must survive .msg-text ancestry.
 import { _electron as electron } from 'playwright-core';
 import { mkdtempSync, mkdirSync, realpathSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
@@ -16,7 +17,7 @@ try {
 	let page;
 	for (let i = 0; i < 200; i++) { page = app.windows().find(w => w.url().startsWith('http://127.0.0.1:')); if (page) break; await new Promise(r => setTimeout(r, 100)); }
 	assert(page); page.setDefaultTimeout(15000);
-	await page.locator('.file-name', { hasText: 'README.md' }).first().evaluate(el => el.click());
+	await openKnowledge(page, cwd, "README.md");
 	const editor = page.locator('.wiki-prose .fp-rich-document');
 	await editor.waitFor();
 	await editor.locator('p').last().fill('');
@@ -45,7 +46,7 @@ try {
 	await page.locator('.wiki-save-status.saved').waitFor();
 	assert(readFileSync(join(cwd, 'README.md'), 'utf8').includes('Saved cell'));
 	await page.reload();
-	await page.locator('.file-name', { hasText: 'README.md' }).first().evaluate(el => el.click());
+	await openKnowledge(page, cwd, "README.md");
 	await table.waitFor();
 	const reopened = await measure();
 	assert(reopened.width - reopened.grid <= 3, 'reopened table has empty space beside columns');

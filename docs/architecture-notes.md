@@ -14,7 +14,7 @@
 
 ## 共用编辑与资源（2026-10-20）
 
-`RichMarkdownEditor` 的 `RichEditorHost` 提供图片上传和解析；Wiki 使用项目内 `.assets`，小记使用独立 HTTP 宿主。小记不传 cwd 或 Wiki/Agent 回调。精简工具栏默认展开常用格式及插入，表格、代码、字号、颜色、对齐、行距和格式刷放入“更多”。修改文档序列化时同时验证 Wiki 和小记，不能只验证编辑 DOM。
+`RichMarkdownEditor` 的 `RichEditorHost` 提供图片上传和解析；Wiki 使用项目内 `.assets`，小记使用独立 HTTP 宿主。小记不传 cwd 或 Wiki/Agent 回调。精简工具栏默认展开常用格式及插入，表格、代码、字号、颜色、对齐和行距放入“更多”。修改文档序列化时同时验证 Wiki 和小记，不能只验证编辑 DOM。
 
 普通格式保存为 Markdown；蓝／绿／黄高亮块使用 `[!NOTE]`／`[!TIP]`／`[!WARNING]`。特殊格式由 `rich-content.ts` 的白名单处理：字号、文字颜色、背景、对齐、行距、下划线及上下标；折叠块为 `<details data-rich-collapse><summary>…</summary>…</details>`；链接卡片为 `<figure data-rich-card="1">`，内部保存链接、标题、摘要和可选图片。未知 HTML 保留源码，不执行脚本或事件属性。编辑态折叠块使用普通 div/p，规避 Chromium insertHTML 拆散 summary；保存时还原 details，展开状态不持久化。浏览器生成的兄弟嵌套列表仅在序列化副本中归一化，保留原生撤销记录。
 
@@ -23,3 +23,10 @@
 `POST /api/link-preview` 接受 `{url}`，仅用户主动“获取网页信息”时执行，返回标题、摘要及可选 Base64 封面。仅访问公共 HTTP/HTTPS 80/443，DNS 结果固定到连接，重定向逐次检查（最多 3 次），总超时 8 秒、HTML 2MiB、封面 5MiB、最多 4 个并发请求。不转发口令、Cookie 或其他用户请求头。获取失败可手动填写；确认插入后封面通过当前宿主持久化，卡片为快照，重开不重新请求目标网页。新增 HTTP 类型仍只定义于 protocol.ts。
 
 回归：`tests/rich-notes-test.mjs` 验证格式往返、嵌套列表、折叠、图片、卡片及副本资源；`tests/unit/rich-resources.test.ts` 验证地址范围、网页元数据和图片校验。`notes-test.mjs --browser` 继续覆盖保存失败、离线及跨窗口冲突。测试卡片成功抓取使用受控响应，不依赖外站可用性。
+
+
+### 共用格式命令
+
+`rich-commands.ts` 集中格式命令目录、参数选项、可编辑检查、选区捕获／恢复顺序和主题颜色解析。WikiToolbar 与 RichFormattingToolbar 是两种展示 adapter，各自保留布局与 Wiki 专有入口，通过同一个 RichCommands 执行操作；RichMarkdownEditor 保留现有 DOM 编辑、原生撤销和序列化实现。格式字号与行距白名单和序列化共用同一份定义。
+
+`tests/unit/rich-commands.test.ts` 验证命令可用性、非法参数拒绝及执行顺序；`wiki-format-editor-test.mjs` 和 `rich-notes-test.mjs` 验证真实 DOM、选区、保存与撤销。

@@ -21,12 +21,14 @@ let lastScratchRun: { key: string; snapshot: string; methodId?: string } | null 
 
 export function PlaygroundScratch() {
 	const t = useT();
+	const [language, setLanguage] = useState<{ state: "loading" | "ready" | "error"; reason?: string }>({ state: "loading" });
+	const languageStatus = useCallback((state: "loading" | "ready" | "error", reason?: string) => setLanguage({ state, reason }), []);
 	const [formatting, setFormatting] = useState(false);
 	const [formatError, setFormatError] = useState(false);
 	const formatController = useRef<AbortController | null>(null);
 	useEffect(() => () => formatController.current?.abort(), []);
 	const { status } = usePlaygroundHost();
-	const { doc, edit: setDoc, loadFailed, saveState, savedAt: savedTime } = usePlaygroundScratch();
+	const { doc, edit: setDoc, save, loadFailed, saveState, savedAt: savedTime } = usePlaygroundScratch();
 	const savedAt = savedTime ? new Date(savedTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
 	const [lastRun, setLastRun] = useState(lastScratchRun);
 	const run = usePlaygroundRun(lastRun?.key ?? "");
@@ -52,7 +54,7 @@ export function PlaygroundScratch() {
 		setLastRun(lastScratchRun);
 		void startRun(key, doc.content, requested);
 	}, [doc, reason, running, tests.selectedMethod, cases, method]);
-	const formatCode = async () => {
+	const formatCode = async (saveAfter = false) => {
 		if (!doc || formatController.current) return;
 		const source = doc.content;
 		const controller = new AbortController();
@@ -67,7 +69,10 @@ export function PlaygroundScratch() {
 			if (!controller.signal.aborted) setFormatError(true);
 		} finally {
 			formatController.current = null;
-			if (!controller.signal.aborted) setFormatting(false);
+			if (!controller.signal.aborted) {
+				setFormatting(false);
+				if (saveAfter) await save();
+			}
 		}
 	};
 	const updateTests = (patch: Partial<PlaygroundTestConfig>) => setDoc(current => current ? { ...current, tests: { ...current.tests, ...patch } } : current);
@@ -85,11 +90,11 @@ export function PlaygroundScratch() {
 		{loadFailed && <p className="playground-notice" role="alert">{t("pgLoadFailed")}</p>}
 		<div className="scratch-workspace">
 			<section className="scratch-code-pane" aria-label={t("pgSource")}>
-				<div className="scratch-pane-head"><strong>{t("pgSource")}</strong><button type="button" className="btn" disabled={!doc || formatting} title="Shift+Alt+F" onClick={() => void formatCode()}>{t(formatting ? "pgFormatting" : "pgFormat")}</button></div>
+				<div className="scratch-pane-head"><strong>{t("pgSource")}</strong><span className="scratch-language-status" title={language.reason} role="status">{t(language.state === "ready" ? "pgLanguageReady" : language.state === "error" ? "pgLanguageError" : "pgLanguageLoading")}</span><button type="button" className="btn" disabled={!doc || formatting} title="Shift+Alt+F" onClick={() => void formatCode()}>{t(formatting ? "pgFormatting" : "pgFormat")}</button></div>
 				{formatError && <p className="playground-notice" role="alert">{t("pgFormatFailed")}</p>}
 				{doc && (!doc.content.trim() || doc.content === LEGACY_TEMPLATE) && <button type="button" className="btn scratch-example" onClick={() => setDoc({ ...doc, content: EXAMPLE })}>{t("pgExample")}</button>}
 				<Suspense fallback={<div className="scratch-editor-cm loading" aria-busy="true" />}>
-					<ScratchEditor value={doc?.content ?? ""} onChange={content => setDoc(current => current ? { ...current, content } : current)} onRun={() => start()} onFormat={() => void formatCode()} placeholder={t("playgroundScratchPlaceholder")} />
+					<ScratchEditor value={doc?.content ?? ""} onChange={content => setDoc(current => current ? { ...current, content } : current)} onRun={() => start()} onFormat={() => void formatCode()} onSave={() => void formatCode(true)} onLanguageStatus={languageStatus} placeholder={t("playgroundScratchPlaceholder")} />
 				</Suspense>
 			</section>
 			{doc && <aside className="scratch-test-pane" aria-label={t("pgMethods")}>

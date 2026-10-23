@@ -33,7 +33,6 @@
 | `host.fs` | 受限工作区文件访问（WorkspaceFS，路径锚定活 cwd 根，越界拒绝） |
 | `host.getSettings()` | 读取声明式设置（manifest.settings schema） |
 | `host.onSettingsChanged(h)` | 订阅设置变更 |
-| `host.registerBackgroundTask(task)` | 注册插件常驻任务，并入顶栏「后台任务」面板 |
 | `host.notifyCwd(cwd)` | 当主应用 set_cwd 成功后通知插件（幂等去重，异常隔离） |
 
 ### 宿主设施（plugin-facilities.ts）
@@ -82,7 +81,6 @@ App 按 chat.plugins 动态 import 各插件的 client bundle（`/* @vite-ignore
 | --- | --- | --- |
 | `plugin-test.mjs` | 8978 | 清单推送 / message 回环 / 静默丢弃 / 静态服务 / 路径穿越拒绝 |
 | `plugin-http-test.mjs` | 8981 | host.route 全链路（GET/POST/404/500） |
-| `plugin-bgtask-test.mjs` | 8982 | registerBackgroundTask 全链路 |
 | `plugin-settings-test.mjs` | 8983 | 声明式设置 schema 校验/持久化/回显 |
 | `plugin-cwd-test.mjs` | 8989 | set_cwd→notifyCwd→广播全链路 |
 | `plugin-update-test.mjs` | — | install/check-updates/rollback 全链路 |
@@ -133,3 +131,5 @@ App 按 chat.plugins 动态 import 各插件的 client bundle（`/* @vite-ignore
 ## 可选原生计划扩展
 
 服务通过可替换 inline extension 注册 plan，默认关闭且不加入 CLI 自动发现。全局开关、来源冲突、模型专用工具与压缩背景的契约见 [计划扩展](architecture-plan.md)。
+
+后台任务面板与注册接口已移除；插件在自身 deactivate 中清理计时器、连接与 worker。
