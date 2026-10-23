@@ -1,3 +1,4 @@
+import { openKnowledge } from "./lib/open-knowledge.mjs";
 // Wiki chats keep the thinking level chosen in the main chat. Always-thinking
 // models (Volc GLM) reject the default "off" with a 400.
 import assert from 'node:assert/strict';
@@ -61,7 +62,7 @@ try {
 	// ADR-0003: the Wiki chat runs in a detached window; the main window's
 	// chosen thinking level travels in the window URL and is applied on boot.
 	const popupPromise = page.context().waitForEvent('page');
-	await page.locator('.file-name', { hasText: 'note.md' }).click();
+	await openKnowledge(page, cwd, "note.md");
 	const wiki = await popupPromise;
 	wiki.setDefaultTimeout(15000);
 	await wiki.locator('.wiki-prose .fp-rich-document').waitFor();

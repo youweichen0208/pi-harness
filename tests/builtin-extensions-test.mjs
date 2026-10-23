@@ -32,11 +32,12 @@ async function wait(check, label) {
 async function connect(id) {
 	const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`);
 	const client = { id, ws, state: undefined, wire: [], send: message => ws.send(JSON.stringify(message)) }; clients.push(client);
-	ws.on("message", raw => {
+	// Exercise delayed snapshots: model completion must never expose a previous turn as settled.
+	ws.on("message", raw => setTimeout(() => {
 		const message = JSON.parse(raw); client.wire.push(message);
 		if (message.type === "snapshot") client.state = message.state;
 		if (message.type === "snapshot_delta" && client.state) client.state = { ...client.state, ...message.state, messages: [...client.state.messages, ...(message.appended ?? [])] };
-	});
+	}, 200));
 	await new Promise((resolve, reject) => { ws.once("open", resolve); ws.once("error", reject); });
 	client.send({ type: "hello", clientId: id, protocolVersion: 41 });
 	await wait(() => client.state && !client.state.tree?.verifying, "initial snapshot");
@@ -54,7 +55,9 @@ async function toggle(client, id, enabled) {
 async function prompt(client, text, code) {
 	nextCode = code; const before = calls;
 	client.send({ type: "prompt", text, requestId: `fixture-${before}` });
-	await wait(() => calls >= before + 2 && !client.state.isStreaming, text);
+	// Model HTTP completion can precede the throttled WebSocket snapshot.
+	await wait(() => calls >= before + 2 && !client.state.isStreaming &&
+		client.state.messages.some(message => message.role === "toolResult" && message.toolCallId === `call-${before + 1}`), text);
 	assert.equal(calls, before + 2, "one requested tool turn and one final answer");
 }
 async function reload(client) {

@@ -9,7 +9,7 @@
 
 ### 打开与恢复的职责
 
-`wiki-window-session.ts` 的 WikiWindowSession 持有本地知识库启动与恢复状态；`use-wiki-window-session.ts` 是 React／窗口／网络 adapter。配置读取、明确选择目录、URL 目标、模型和思考继承、服务端确认、运行实例恢复在同一 module 内排序。明确选择目录使迟到的配置读取失效，卸载后忽略异步结果；模型继承最多等待 5 秒，切目录只在权威状态确认后进入 Wiki 对话。恢复必须同时匹配窗口客户端、cwd、sessionId、conversationId 及明确的 URL 文档。
+`wiki-window-session.ts` 的 WikiWindowSession 持有本地知识库启动与恢复状态；`use-wiki-window-session.ts` 是 React／窗口／网络 adapter。配置读取、明确选择目录、URL 目标、模型和思考继承、服务端确认、运行实例恢复在同一 module 内排序。明确选择目录使迟到的配置读取失效，卸载后忽略异步结果；先等待目标目录的权威状态确认，再应用模型和思考继承（最多等待 5 秒），最后进入 Wiki 对话，避免切目录恢复的默认设置覆盖继承值。恢复必须同时匹配窗口客户端、cwd、sessionId、conversationId 及明确的 URL 文档。
 
 App 保留展示和用户交互；已打开窗口的保存、中断与切换仍由 WikiCoordinator 准入，更换目录成功后才调用 folderOpened 提交知识库配置。文档记忆串行写入，旧窗口不能覆盖新的库根目录。自动保存 module、发送回执和聊天归属规则保持不变。
 

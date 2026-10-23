@@ -60,9 +60,6 @@ export class WikiWindowSession {
 	private valid(generation: number) { return this.active && generation === this.generation; }
 	observe(observation: WikiWindowObservation) {
 		this.current = observation;
-		if (this.active && this.detached && observation.ready && !this.carryTimer && !this.carryExpired) {
-			this.carryTimer = setTimeout(() => { this.carryExpired = true; this.advance(); }, 5000);
-		}
 		this.advance();
 	}
 	private advance() {
@@ -74,6 +71,16 @@ export class WikiWindowSession {
 		}
 		const target = this.adapter.params();
 		if (this.detached) {
+			if (target.cwd && target.cwd !== current.cwd) {
+				if (!this.sent.has("cwd:" + target.cwd)) {
+					this.sent.add("cwd:" + target.cwd);
+					if (!this.adapter.send({ type: "set_cwd", path: target.cwd, source: "ui" })) this.boot = false;
+				}
+				return;
+			}
+			if (!this.carryTimer && !this.carryExpired) {
+				this.carryTimer = setTimeout(() => { this.carryExpired = true; this.advance(); }, 5000);
+			}
 			const candidates = target.model ? current.models.filter(model => model.id === target.model || model.id.slice(model.provider.length + 1) === target.model) : [];
 			const model = target.model?.includes("/") ? target.model : candidates.length === 1 ? candidates[0].id : null;
 			if (!this.carryExpired) {
@@ -85,13 +92,6 @@ export class WikiWindowSession {
 					if (!this.sent.has("thinking")) { this.sent.add("thinking"); this.adapter.send({ type: "set_thinking", level: target.thinking }); }
 					return;
 				}
-			}
-			if (target.cwd && target.cwd !== current.cwd) {
-				if (!this.sent.has("cwd:" + target.cwd)) {
-					this.sent.add("cwd:" + target.cwd);
-					if (!this.adapter.send({ type: "set_cwd", path: target.cwd, source: "ui" })) this.boot = false;
-				}
-				return;
 			}
 		}
 		this.boot = false; clearTimeout(this.carryTimer);

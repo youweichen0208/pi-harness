@@ -77,3 +77,15 @@ it("existing windows use coordinated switching and commit configuration only aft
 	expect(f.session.getSnapshot()).toMatchObject({ needsFolder: true, error: "cannot persist", saving: false });
 	expect(await f.session.folderOpened("/other")).toBe(true);
 });
+
+it("applies carried settings after the target workspace resets its session defaults", () => {
+	const f = fixture(false, "/library"); f.target.thinking = "high";
+	f.session.connect(); f.session.observe(f.current);
+	expect(f.send).toHaveBeenCalledExactlyOnceWith({ type: "set_cwd", path: "/library", source: "ui" });
+	vi.advanceTimersByTime(6000);
+	f.session.observe({ ...f.current, cwd: "/library", thinking: "off" });
+	expect(f.send).toHaveBeenLastCalledWith({ type: "set_thinking", level: "high" });
+	expect(f.enter).not.toHaveBeenCalled();
+	f.session.observe({ ...f.current, cwd: "/library", thinking: "high" });
+	expect(f.enter).toHaveBeenCalledOnce();
+});

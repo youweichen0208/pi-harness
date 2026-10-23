@@ -1,3 +1,4 @@
+import { openKnowledge } from "./lib/open-knowledge.mjs";
 import { wikiToolbar, wikiInsert } from "./lib/wiki-toolbar.mjs";
 // Real Chromium regression for slash picker anchors after deleting the command text.
 import assert from 'node:assert/strict';
@@ -22,7 +23,7 @@ try {
 	await page.locator('.setup-modal .modal-close').click();
 	// ADR-0003: the editor lives in the detached Wiki window.
 	const popupPromise = page.context().waitForEvent('page');
-	await page.locator('.file-name', { hasText: 'note.md' }).click();
+	await openKnowledge(page, base, "note.md");
 	const wiki = await popupPromise;
 	wiki.setDefaultTimeout(15000);
 	await wiki.locator('.setup-modal .modal-close').click().catch(() => {});
