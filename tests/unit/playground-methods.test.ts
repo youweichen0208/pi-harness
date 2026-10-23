@@ -110,3 +110,14 @@ public java.util.List<java.util.List<java.lang.String>> echo(java.util.List<java
 		expect(() => valueLiteral(`List<${element}>`, { text })).not.toThrow();
 	});
 });
+
+
+it("discovers package-access methods from issue #127 in fragments and classes", () => {
+	const method = 'List<String> regularID(List<String> cardIds) { return List.of(); }';
+	for (const code of [`import java.util.List; ${method}`, `import java.util.List; class Solution { ${method} }`]) {
+		const found = discoverJavaMethods(code);
+		expect(found.methods).toHaveLength(1);
+		expect(found.methods[0]).toMatchObject({ name: "regularID", returnType: "List<String>", parameters: [{ name: "cardIds", type: "List<String>" }] });
+		expect(found.methods[0].unsupported).toBeUndefined();
+	}
+});

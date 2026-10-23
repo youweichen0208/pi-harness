@@ -1601,3 +1601,5 @@ export interface RichImageUpload { data: string }
 export interface RichImageResult { path: string }
 export interface LinkPreviewRequest { url: string }
 export interface LinkPreview { url: string; title: string; description: string; imageUrl?: string; imageData?: string }
+
+export interface PlaygroundFormatResult { code: string }

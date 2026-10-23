@@ -63,6 +63,19 @@ try {
 	assert.equal((await api("run", { code, tests: { methodId: "Main#missing()", cases: [testCase("a", [])] } })).status, 400);
 	assert.equal((await api("run", { code, tests: { methodId: tests.selectedMethod, cases: [testCase("a", ["bad", 2])] } })).status, 400);
 	assert.equal((await api("run", { code: "import java.util.List; public int size(List<Integer> xs){ return xs.size(); }", tests: { methodId: "Main#size(List<Integer>)", cases: [testCase("a", ["[2147483648]"])] } })).status, 400);
+	// Formatting does not require the execution switch or a JDK.
+	await api("config", { enabled: false });
+	const compact = 'import java.util.List; List<String> regularID(List<String> cardIds){return List.of("a;b{c}");}';
+	const formatted = await api("format", { code: compact });
+	assert.equal(formatted.status, 200);
+	const formattedCode = (await formatted.json()).code;
+	assert.match(formattedCode, /\n\treturn/);
+	assert.ok(formattedCode.includes('"a;b{c}"'));
+	assert.equal((await api("format", { code: "class {" })).status, 422);
+	assert.equal((await api("format", { code: "x".repeat(262145) })).status, 400);
+	assert.equal((await api("format", { code: "", extra: true })).status, 400);
+	assert.equal((await fetch(`${base}/api/playground/format`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: compact }) })).status, 401);
+	await api("config", { enabled: true });
 	const status = await (await api("status")).json();
 	if (!status.jdk.available) {
 		console.log("SKIP real Java method execution: no host JDK");
@@ -72,6 +85,12 @@ try {
 		assert.deepEqual(results(mixed).map(r => r.status), ["passed", "failed", "unasserted"]);
 		assert.equal(results(mixed)[2].actual, "13");
 		assert.equal(mixed.filter(e => e.type === "out" && e.stream === "stdout").map(e => e.text).join(""), "log\nlog\nlog\n");
+		for (const [source, id] of [
+			['import java.util.List; List<String> regularID(List<String> cardIds) { return cardIds; }', "Main#regularID(List<String>)"],
+			['package demo; import java.util.List; class Solution { Solution() {} List<String> regularID(List<String> cardIds) { return cardIds; } }', "demo.Solution#regularID(List<String>)"],
+		]) {
+			assert.equal(results(await run(source, id, [testCase("package-access", ['["a"]'], '["a"]')]))[0].status, "passed");
+		}
 		const strings = await run('package demo; public class A { public static String echo(String s) {return s;} public static int echo(int n){return n;} }', "demo.A#echo(String)", [testCase("a", ['quote"\n\\中'], 'quote"\n\\中'), testCase("b", [""] , ""), { id: "c", args: [{ text: "", isNull: true }], expected: { text: "", isNull: true } }]);
 		assert.deepEqual(results(strings).map(r => r.status), ["passed", "passed", "passed"]);
 		const arrays = await run("public long[][] echo(long[][] a){return a;}", "Main#echo(long[][])", [testCase("a", ['[["9223372036854775807"],null]'], '[["9223372036854775807"],null]')]);
@@ -129,6 +148,16 @@ try {
 		await page.goto(`${base}/?token=${token}`);
 		await page.getByRole("button", { name: "Playground", exact: true }).click({ timeout: 30000 });
 		await page.locator(".method-case").waitFor();
+		// Formatting is undoable, preserves literals, and uses the same shortcut.
+		await page.locator(".cm-content").fill('public int add(int a,int b){return a+b;}');
+		await page.getByRole("button", { name: "格式化", exact: true }).click();
+		await page.waitForFunction(() => document.querySelector(".cm-content")?.textContent.includes("a + b"));
+		await page.locator(".cm-content").focus();
+		await page.keyboard.press(process.platform === "darwin" ? "Meta+z" : "Control+z");
+		await page.waitForFunction(() => document.querySelector(".cm-content")?.textContent.includes("return a+b;"));
+		await page.keyboard.press("Alt+Shift+f");
+		await page.waitForFunction(() => document.querySelector(".cm-content")?.textContent.includes("a + b"));
+
 		assert.equal(await page.locator(".scratch-mode").count(), 0);
 		await page.getByRole("button", { name: "运行全部用例", exact: true }).click();
 		await page.locator(".method-result.passed").waitFor();
@@ -234,6 +263,31 @@ try {
 		await page.getByRole("textbox", { name: "xs", exact: true }).waitFor();
 		assert.equal(await page.getByRole("textbox", { name: "xs", exact: true }).inputValue(), "[[1,2],[],null]");
 		assert.equal(await page.locator(".method-value input[type=checkbox]").isChecked(), true);
+		// The issue screenshot leaves old cases selected while replacing the source.
+		await page.locator(".cm-content").fill('import java.util.List; class Solution { List<String> regularID(List<String> cardIds){return cardIds;} }');
+		await page.locator(".method-toolbar select").selectOption("Solution#regularID(List<String>)");
+		await page.getByRole("button", { name: "添加用例", exact: true }).click();
+		await page.getByRole("textbox", { name: "cardIds", exact: true }).fill('["id-1"]');
+		await page.getByRole("button", { name: "运行全部用例", exact: true }).click();
+		await page.locator(".method-result.unasserted").waitFor();
+		assert.match(await page.locator(".method-result").innerText(), /id-1/);
+		await page.waitForFunction(() => document.querySelector(".scratch-save-status")?.textContent.includes("已保存"));
+		assert.ok((await (await api("scratch")).json()).tests.casesByMethod["Main#add(int,int)"].length, "old method cases are preserved");
+		let releaseFormat;
+		const heldFormat = new Promise(resolve => { releaseFormat = resolve; });
+		await page.route("**/api/playground/format*", async route => {
+			const response = await route.fetch();
+			await heldFormat;
+			await route.fulfill({ response });
+		});
+		const formatRequest = page.waitForRequest("**/api/playground/format*");
+		await page.getByRole("button", { name: "格式化", exact: true }).click();
+		await formatRequest;
+		await page.locator(".cm-content").fill('int later(){return 42;}');
+		releaseFormat();
+		await page.getByRole("button", { name: "格式化", exact: true }).waitFor();
+		assert.equal(await page.locator(".cm-content").innerText(), 'int later(){return 42;}');
+		await page.unroute("**/api/playground/format*");
 		console.log("PASS browser: method selection, case add/delete, batch run, no assertion, autosave/reload, shortcut, stale results and narrow layout");
 	}
 	console.log("PASS method test HTTP validation and backward-compatible draft persistence");

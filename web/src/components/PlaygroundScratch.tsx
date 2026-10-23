@@ -1,11 +1,12 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FiPlay, FiSquare } from "react-icons/fi";
 import { useT } from "../i18n";
+import { withToken } from "../auth-token";
 import { usePlaygroundHost } from "../playground-context";
 import { runKey, startRun, stopRun, usePlaygroundRun } from "../playground-run-store";
 import { usePlaygroundScratch } from "../use-playground-scratch";
 import { SCRATCH_EXAMPLE as EXAMPLE, EMPTY_SCRATCH_TESTS as EMPTY_TESTS } from "../playground-scratch-store";
-import type { PlaygroundTestConfig, PlaygroundCase } from "../types";
+import type { PlaygroundTestConfig, PlaygroundCase, PlaygroundFormatResult } from "../types";
 import { discoverJavaMethods } from "../../../server/playground-methods";
 import { PlaygroundResult } from "./PlaygroundRun";
 import { PlaygroundMethodCases, caseError, methodErrorText } from "./PlaygroundMethodCases";
@@ -20,6 +21,10 @@ let lastScratchRun: { key: string; snapshot: string; methodId?: string } | null 
 
 export function PlaygroundScratch() {
 	const t = useT();
+	const [formatting, setFormatting] = useState(false);
+	const [formatError, setFormatError] = useState(false);
+	const formatController = useRef<AbortController | null>(null);
+	useEffect(() => () => formatController.current?.abort(), []);
 	const { status } = usePlaygroundHost();
 	const { doc, edit: setDoc, loadFailed, saveState, savedAt: savedTime } = usePlaygroundScratch();
 	const savedAt = savedTime ? new Date(savedTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
@@ -47,6 +52,24 @@ export function PlaygroundScratch() {
 		setLastRun(lastScratchRun);
 		void startRun(key, doc.content, requested);
 	}, [doc, reason, running, tests.selectedMethod, cases, method]);
+	const formatCode = async () => {
+		if (!doc || formatController.current) return;
+		const source = doc.content;
+		const controller = new AbortController();
+		formatController.current = controller;
+		setFormatting(true); setFormatError(false);
+		try {
+			const response = await fetch(withToken("/api/playground/format"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: source }), signal: controller.signal });
+			if (!response.ok) throw new Error("format failed");
+			const result = await response.json() as PlaygroundFormatResult;
+			if (!controller.signal.aborted) setDoc(current => current.content === source ? { ...current, content: result.code } : current);
+		} catch {
+			if (!controller.signal.aborted) setFormatError(true);
+		} finally {
+			formatController.current = null;
+			if (!controller.signal.aborted) setFormatting(false);
+		}
+	};
 	const updateTests = (patch: Partial<PlaygroundTestConfig>) => setDoc(current => current ? { ...current, tests: { ...current.tests, ...patch } } : current);
 
 	return <div className="scratch-page method-mode">
@@ -62,10 +85,11 @@ export function PlaygroundScratch() {
 		{loadFailed && <p className="playground-notice" role="alert">{t("pgLoadFailed")}</p>}
 		<div className="scratch-workspace">
 			<section className="scratch-code-pane" aria-label={t("pgSource")}>
-				<div className="scratch-pane-head"><strong>{t("pgSource")}</strong><span>Java</span></div>
+				<div className="scratch-pane-head"><strong>{t("pgSource")}</strong><button type="button" className="btn" disabled={!doc || formatting} title="Shift+Alt+F" onClick={() => void formatCode()}>{t(formatting ? "pgFormatting" : "pgFormat")}</button></div>
+				{formatError && <p className="playground-notice" role="alert">{t("pgFormatFailed")}</p>}
 				{doc && (!doc.content.trim() || doc.content === LEGACY_TEMPLATE) && <button type="button" className="btn scratch-example" onClick={() => setDoc({ ...doc, content: EXAMPLE })}>{t("pgExample")}</button>}
 				<Suspense fallback={<div className="scratch-editor-cm loading" aria-busy="true" />}>
-					<ScratchEditor value={doc?.content ?? ""} onChange={content => setDoc(current => current ? { ...current, content } : current)} onRun={() => start()} placeholder={t("playgroundScratchPlaceholder")} />
+					<ScratchEditor value={doc?.content ?? ""} onChange={content => setDoc(current => current ? { ...current, content } : current)} onRun={() => start()} onFormat={() => void formatCode()} placeholder={t("playgroundScratchPlaceholder")} />
 				</Suspense>
 			</section>
 			{doc && <aside className="scratch-test-pane" aria-label={t("pgMethods")}>

@@ -107,16 +107,19 @@ const highlightStyle = HighlightStyle.define([
 	{ tag: t.variableName, color: "var(--text)" },
 ]);
 
-export function ScratchEditor({ value, onChange, onRun, placeholder }: {
+export function ScratchEditor({ value, onChange, onRun, onFormat, placeholder }: {
 	value: string;
 	onChange: (value: string) => void;
 	/** ⌘/Ctrl+Enter always runs — the completion popup must not swallow it. */
 	onRun: () => void;
+	onFormat: () => void;
 	placeholder: string;
 }) {
 	const holder = useRef<HTMLDivElement>(null);
 	const runRef = useRef(onRun);
 	runRef.current = onRun;
+	const formatRef = useRef(onFormat);
+	formatRef.current = onFormat;
 
 	useEffect(() => {
 		const theme = new Compartment();
@@ -139,6 +142,7 @@ export function ScratchEditor({ value, onChange, onRun, placeholder }: {
 								return true;
 							},
 						},
+						{ key: "Alt-Shift-f", run: () => { formatRef.current(); return true; } },
 						indentWithTab,
 					])),
 					EditorView.updateListener.of(update => {

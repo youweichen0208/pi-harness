@@ -55,7 +55,6 @@ import { RightPanel } from "./components/RightPanel";
 import { MessageList } from "./components/MessageList";
 import { ChatInput } from "./components/ChatInput";
 import { AgentSilenceStatus } from "./components/AgentSilenceStatus";
-import { LongThinkingStatus } from "./components/LongThinkingStatus";
 import type { CurrentFileContext, ReadCurrentFile, SaveCurrentFile } from "./current-file";
 
 import { FooterBar } from "./components/FooterBar";
@@ -1472,7 +1471,6 @@ export function App() {
 							)}
 
 							<AgentSilenceStatus chat={chat} send={send} />
-							<LongThinkingStatus chat={chat} send={send} />
 							{/* 扩展问卷：非模态内联面板，插在输入框上方，对话内容保持可见 */}
 							{chat.dialog && <Dialog dialog={chat.dialog} send={send} />}
 							{view !== "wiki" && chat.notices.length > 0 && <div className="notices">

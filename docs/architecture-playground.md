@@ -94,12 +94,12 @@ HTTP + SSE，**不新增 WS 消息、`PROTOCOL_VERSION` 不变**：
 
 `npm run typecheck && npm run build && npm test`；`node tests/playground-test.mjs --browser`（需要 `JAVA_HOME` 指向 JDK 才会执行真实运行的那部分）。
 
-## 草稿页 public 方法测试（2026-10-22）
+## 草稿页方法测试（2026-10-22）
 
-- 草稿页仅提供方法测试，不再显示运行模式切换；支持只写 public 方法片段（自动包 `Main`，import/package 留在类外），或完整普通类。发现与参数校验在浏览器可用的 `server/playground-methods.ts`，使用 `@lezer/java` 语法树，服务端在执行前重新校验；完整代码仍由 javac 最终检查。
-- 只列顶层普通类显式声明的 public 方法，排除标准 main、构造器、继承和嵌套类方法。签名为 `全限定类名#方法名(参数类型列表)`，重载独立保存用例；不支持的类型、泛型类／方法、抽象方法或缺少无参构造时给出原因。实例方法使用默认或 public 无参构造，static 不构造对象。
+- 草稿页仅提供方法测试，不再显示运行模式切换；支持只写非 private 方法片段（自动包 `Main`，import/package 留在类外），或完整普通类。发现与参数校验在浏览器可用的 `server/playground-methods.ts`，使用 `@lezer/java` 语法树，服务端在执行前重新校验；完整代码仍由 javac 最终检查。
+- 只列顶层普通类显式声明的非 private 方法，排除标准 main、构造器、继承和嵌套类方法。签名为 `全限定类名#方法名(参数类型列表)`，重载独立保存用例；不支持的类型、泛型类／方法、抽象方法或缺少无参构造时给出原因。实例方法使用默认或非 private 无参构造，static 不构造对象。
 - 参数／返回值支持八种基本类型、包装类型、String、多维数组（varargs 按数组），以及 `List<T>`／`java.util.List<T>`（元素为包装类型、String 或嵌套 List）；void 只检查执行成功。文本直接输入，数组和 List 使用 JSON 数组，引用类型有显式 null；断言为可选 `expected`，因此空字符串和不做断言可以区分。long 使用 BigInt 校验并生成十进制 Java 字面量，JSON 数组内超安全整数必须写成字符串。精确按 Java 类型比较，数组递归比较，List 按顺序递归比较且不要求实现类一致；没有浮点容差、对象映射或 JUnit。
-- List 支持空列表、null 元素及 null 子列表；每层输入构造为可修改的 `ArrayList`，调用器使用擦除后的 `java.util.List.class` 反射查找。结果递归格式化并计入原有输出预算。类型归一化识别 `java.lang` 包装类型及 String，List 嵌套最多 64 层；不支持原始 List、通配符、自定义元素、其他集合或 List 与数组混用。用户源码需自行 import 或使用全限定名；private 辅助方法保留在源码中，由 public 方法正常调用。
+- List 支持空列表、null 元素及 null 子列表；每层输入构造为可修改的 `ArrayList`，调用器使用擦除后的 `java.util.List.class` 反射查找。结果递归格式化并计入原有输出预算。类型归一化识别 `java.lang` 包装类型及 String，List 嵌套最多 64 层；不支持原始 List、通配符、自定义元素、其他集合或 List 与数组混用。用户源码需自行 import 或使用全限定名；private 辅助方法保留在源码中，由非 private 方法正常调用。
 - 每批最多 50 用例、配置 256 KiB。一批编译一次，每条用例使用独立 JVM（静态状态也隔离）；调用器通过精确参数类型反射调用，仅注入校验后的值。生成源码在临时目录，既不改用户代码也不保存 main。Java 调用器源码由 `playground-method-runner.ts` 提供，随服务端 JS 打包，不依赖额外 jar。
 - 原有 `/run` 的 `{code}` 行为保留。`tests` 包含所选方法 ID 和用例列表；新增 `case_start{id}`、`case_result{result}` SSE。每条结果包含 ID、状态、返回值／预期值／异常文本及耗时。结构化结果走每条独立的限长内部文件，不从 stdout 猜测；采用 Base64 字段封装，结果也计入整批输出预算。普通断言失败和异常继续，编译错误、超时、超输出或取消中止整批，其余用例记为未执行。
 - 一批共用现有并发名额、墙钟超时、堆限制和输出预算，超时包括编译与所有 JVM 启动开销。中断杀进程树，最后清理临时目录。程序结束时 POSIX 进程组中的后台子进程也清理。
@@ -118,3 +118,5 @@ HTTP + SSE，**不新增 WS 消息、`PROTOCOL_VERSION` 不变**：
 保存确认只推进对应写入基线；有后续写入时不能提前显示已保存。写入失败不会阻断后续队列。Run 状态仍归现有 `playground-run-store.ts`，不与持久草稿合并；跨窗口仍沿用原有最后写入行为，不增加版本冲突协议。
 
 回归：`tests/unit/playground-scratch-store.test.ts` 通过同一 interface 控制传输确认与时间，验证回退、失败恢复、卸载重入和迟到读取；`tests/playground-methods-test.mjs --browser` 验证页面保存、模式迁移及等待写入确认期间离开重入。
+
+草稿编辑器提供「格式化」按钮和 Shift+Alt+F 快捷键（#127）：服务端使用 Prettier Java，仅调整代码、不执行；支持方法片段和完整 class，执行关闭或没有 JDK 时仍可使用。解析失败保留原文；请求期间编辑过代码时不应用旧结果，离开页面取消请求，格式化可撤销。`POST /api/playground/format` 接受 `{code}` 并返回 `{code}`，沿用鉴权与 256 KiB 源码限制。方法识别支持 public、protected 和默认访问权限，private 方法保持作为辅助方法；旧签名的用例保留，选择新方法后可添加新用例。

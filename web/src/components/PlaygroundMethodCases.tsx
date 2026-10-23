@@ -12,7 +12,7 @@ export function methodErrorText(message: string, t: ReturnType<typeof useT>): st
 	const exact = {
 		"Only primitive types, boxed types, String, arrays and Lists of boxed types, String or Lists are supported.": "pgTypesOnly",
 		"Generic methods and classes are not supported.": "pgNoGenerics",
-		"Instance methods require a concrete class with a default or public no-argument constructor.": "pgConstructor",
+		"Instance methods require a concrete class with a default or non-private no-argument constructor.": "pgConstructor",
 		"The method must have an implementation.": "pgImplementation",
 		"Provide between 1 and 50 test cases": "pgCaseCount",
 		"Parameter count does not match the method": "pgParamCount",

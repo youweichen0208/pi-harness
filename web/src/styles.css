@@ -13707,3 +13707,13 @@ html.pi-desktop-darwin .compact-navigation .global-navigation { padding-top: 36p
 @container (max-width: 500px) {
 	.method-mode .scratch-code-pane { height: 260px; }
 }
+
+/* Restored desktop windows keep a continuous drag region (#128). */
+html.pi-desktop .design-workspace .topbar {
+	-webkit-app-region: drag;
+	app-region: drag;
+}
+html.pi-desktop .design-workspace .topbar :is(button, input, select, a, [role="button"]) {
+	-webkit-app-region: no-drag;
+	app-region: no-drag;
+}

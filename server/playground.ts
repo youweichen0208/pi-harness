@@ -172,6 +172,23 @@ export function installPlaygroundRoutes(app: Express, options: PlaygroundRouteOp
 		}
 	});
 
+	// Formatting is editing, so it remains available with execution disabled.
+	app.post("/api/playground/format", async (req, res) => {
+		res.setHeader("Cache-Control", "no-store");
+		if (!allowed(req) || !req.is("application/json")) { res.sendStatus(403); return; }
+		const body = req.body;
+		if (!body || typeof body.code !== "string" || Object.keys(body).some(key => key !== "code") || Buffer.byteLength(body.code, "utf8") > MAX_SOURCE_BYTES) {
+			res.status(400).json({ error: "Invalid code" }); return;
+		}
+		try {
+			const [{ format }, { default: java }] = await Promise.all([import("prettier"), import("prettier-plugin-java")]);
+			const code = await format(body.code, { parser: "java", plugins: [java], useTabs: true, tabWidth: 4 });
+			res.json({ code });
+		} catch {
+			res.status(422).json({ error: "Java formatting failed" });
+		}
+	});
+
 	app.post("/api/playground/run", async (req, res) => {
 		if (!allowed(req) || !req.is("application/json")) {
 			res.status(403).json({ error: "Forbidden" });

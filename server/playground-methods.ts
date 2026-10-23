@@ -67,8 +67,8 @@ export function discoverJavaMethods(input: string): { code: string; fileName: st
 		const className = `${packageName ? packageName + "." : ""}${text(klass.getChild("Definition"))}`;
 		const members = children(klass.getChild("ClassBody")!);
 		const constructors = members.filter(n => n.name === "ConstructorDeclaration");
-		const constructible = !modifiers(klass).includes("abstract") && (!constructors.length || constructors.some(n => modifiers(n).includes("public") && !children(n.getChild("FormalParameters")!).some(p => /Parameter$/.test(p.name))));
-		for (const node of members.filter(n => n.name === "MethodDeclaration" && modifiers(n).includes("public"))) {
+		const constructible = !modifiers(klass).includes("abstract") && (!constructors.length || constructors.some(n => !modifiers(n).includes("private") && !children(n.getChild("FormalParameters")!).some(p => /Parameter$/.test(p.name))));
+		for (const node of members.filter(n => n.name === "MethodDeclaration" && !modifiers(n).includes("private"))) {
 			const parts = children(node);
 			const name = text(node.getChild("Definition"));
 			if (!validName(name)) continue;
@@ -84,7 +84,7 @@ export function discoverJavaMethods(input: string): { code: string; fileName: st
 			let unsupported: string | undefined;
 			if (parameters.some(p => !supportedType(p.type)) || (returnType !== "void" && !supportedType(returnType))) unsupported = "Only primitive types, boxed types, String, arrays and Lists of boxed types, String or Lists are supported.";
 			if (node.getChild("TypeParameters") || klass.getChild("TypeParameters")) unsupported = "Generic methods and classes are not supported.";
-			if (!unsupported && !isStatic && !constructible) unsupported = "Instance methods require a concrete class with a default or public no-argument constructor.";
+			if (!unsupported && !isStatic && !constructible) unsupported = "Instance methods require a concrete class with a default or non-private no-argument constructor.";
 			if (!node.getChild("Block")) unsupported = "The method must have an implementation.";
 			methods.push({ id: `${className}#${name}(${parameters.map(p => p.type).join(",")})`, className, name, parameters, returnType, isStatic, ...(unsupported ? { unsupported } : {}) });
 		}

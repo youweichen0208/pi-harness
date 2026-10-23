@@ -22,7 +22,7 @@ assert(!JSON.parse(readFileSync(join(appRoot, "package.json"), "utf8")).pi?.exte
 // A checkout-local package can otherwise hide missing runtime dependencies by
 // resolving them from the repository's parent node_modules directory.
 const packagedRequire = createRequire(join(appRoot, "package.json"));
-for (const name of ["unified", "remark-parse", "@vscode/ripgrep"]) {
+for (const name of ["unified", "remark-parse", "@vscode/ripgrep", "prettier", "prettier-plugin-java", "web-tree-sitter"]) {
 	const resolved = packagedRequire.resolve(name);
 	const inside = relative(appRoot, resolved);
 	assert(!isAbsolute(inside) && inside !== ".." && !inside.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`), `${name} must resolve inside the packaged app: ${resolved}`);
@@ -140,6 +140,14 @@ try {
 	const page = await fetch(`http://127.0.0.1:${port}/`);
 	assert.equal(page.status, 200);
 	assert.match(await page.text(), /<div id="root">/);
+	const formatted = await fetch(`http://127.0.0.1:${port}/api/playground/format`, {
+		method: "POST", headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ code: "int add(int a,int b){return a+b;}" }),
+		signal: AbortSignal.timeout(15000),
+	});
+	assert.equal(formatted.status, 200, "packaged Java formatter and WASM assets must load");
+	assert.match((await formatted.json()).code, /return a \+ b;/);
+	console.log("PASS packaged Java formatting with execution disabled");
 	const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`);
 	try {
 		await new Promise((resolve, reject) => {

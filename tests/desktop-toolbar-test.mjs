@@ -37,7 +37,7 @@ try {
 			window.electronAPI = { platform, windowAction() {}, onWindowState() { return () => {}; } };
 			localStorage.setItem('pi-left-collapsed', 'true');
 		}, platform);
-		for (const width of [1000, 900, 1500]) {
+		for (const width of [800, 1000, 900, 1500]) {
 			await page.setViewportSize({ width, height: 850 });
 			await page.goto(`http://127.0.0.1:${port}`);
 			await page.locator('.topbar-actions .topbar-more').waitFor();
@@ -46,6 +46,8 @@ try {
 			await page.keyboard.press('Escape');
 			await page.locator('.view-switch button.active').waitFor();
 			assert.equal(await page.locator('.topbar').evaluate(el => el.getBoundingClientRect().height), 44);
+			assert.equal(await page.locator('.topbar').evaluate(el => getComputedStyle(el).getPropertyValue('-webkit-app-region')), 'drag', 'restored desktop windows retain a continuous titlebar drag region');
+			assert.equal(await page.locator('.conversation-title-button').evaluate(el => getComputedStyle(el).getPropertyValue('-webkit-app-region')), 'no-drag', 'session selector remains clickable');
 			assert.equal(await page.locator('.status-messages').count(), 0);
 			assert.equal(await page.evaluate(() => getComputedStyle(document.body).fontSize), platform === 'win32' ? '14.5px' : '14px');
 			assert.equal(await page.locator('.topbar-actions > .icon-btn').count(), 0);
@@ -125,7 +127,7 @@ try {
 
 		await page.close();
 	}
-	console.log('PASS Windows/macOS toolbar bounds and settings at 900/1000/1500px');
+	console.log('PASS Windows/macOS toolbar bounds and settings at 800/900/1000/1500px');
 } finally {
 	await browser?.close();
 	const stopped = new Promise(resolve => server.once('exit', resolve)); server.kill(); await stopped;
