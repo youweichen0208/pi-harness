@@ -1,3 +1,4 @@
+import { openKnowledge } from "./lib/open-knowledge.mjs";
 // Real Chromium regression for new fenced-code editing, line breaks and /dmk.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
@@ -16,10 +17,12 @@ try {
 	server = spawn(process.execPath, ['dist/server/index.js'], { env: { ...testEnv(), PORT: String(port), PI_WEB_TOKEN: '', PI_WEB_CWD: base, PI_WEB_DATA_DIR: join(base, 'data'), PI_CODING_AGENT_DIR: join(base, 'agent') }, stdio: 'ignore' });
 	for (let i = 0; i < 100 && !await portUp(port); i++) await new Promise(r => setTimeout(r, 100));
 	browser = await chromium.launch({ executablePath: CHROME_PATH || chromium.executablePath() });
-	const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+	let page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
 	await page.goto(`http://127.0.0.1:${port}`);
 	await page.locator('.setup-modal .modal-close').click();
-	await page.locator('.file-name', { hasText: 'note.md' }).click();
+	const opened = page.waitForEvent('popup');
+	await openKnowledge(page, base, 'note.md');
+	page = await opened;
 	const editor = page.locator('.wiki-prose .fp-rich-document');
 	await page.waitForFunction(() => [...(CSS.highlights.get('rich-code-keyword') ?? [])].some(range => range.toString() === 'public'));
 	const failures = [], errors = [];
@@ -32,10 +35,10 @@ try {
 	await page.keyboard.type('/code');
 	await page.getByRole('option', { name: '代码块', exact: true }).waitFor();
 	await page.keyboard.press('Enter');
-	await page.locator('.wiki-language-picker [role=option]').first().click();
-	assert.equal(await editor.locator('pre > code').count(), 2, 'language selection inserts a separate code block');
-	await editor.locator('select[data-code-language]').last().selectOption('java');
+	assert.equal(await editor.locator('pre > code').count(), 2, 'code insertion directly creates a separate block');
+	assert.equal(await editor.locator('select[data-code-language]').count(), 0, 'language selectors are removed');
 	await page.keyboard.type('public class Demo {');
+	await page.waitForFunction(() => { const code = [...document.querySelectorAll('.wiki-prose pre > code')].at(-1); return [...(CSS.highlights.get('rich-code-keyword') ?? [])].some(range => code?.contains(range.startContainer) && range.toString() === 'public'); });
 	check(await editor.locator('pre').last().locator('code').evaluate(code => {
 		const ranges = CSS.highlights?.get('rich-code-keyword');
 		return [...(ranges ?? [])].some(range => code.contains(range.startContainer) && range.toString() === 'public')

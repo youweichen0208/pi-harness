@@ -22,10 +22,12 @@ try {
 					grid: el.querySelector('thead').getBoundingClientRect().width,
 				}));
 				assert(small.width - small.grid <= 3, `table has empty right area: ${JSON.stringify(small)}`);
-				const wide = await page.locator('table').last().evaluate(el => {
+				if (wiki) assert(small.width >= width - 3, 'Wiki table should fill prose width');
+				const wide = await page.locator('table').last().evaluate((table, wiki) => {
+					const el = wiki ? table.parentElement : table;
 					el.scrollLeft = 100;
 					return { width: el.getBoundingClientRect().width, available: el.parentElement.clientWidth, scrollWidth: el.scrollWidth, clientWidth: el.clientWidth, scrollLeft: el.scrollLeft };
-				});
+				}, wiki);
 				assert(wide.width <= wide.available + 1, `wide table escapes its container: ${JSON.stringify(wide)}`);
 				assert(wide.scrollWidth > wide.clientWidth && wide.scrollLeft > 0, 'wide table must scroll internally');
 			}

@@ -178,7 +178,7 @@ try {
 	await page.evaluate(() => { localStorage.setItem('pi-harness:code-theme', 'light'); window.dispatchEvent(new Event('pi-harness:code-theme')); });
 	assert.equal(readingCode, "rgb(36, 37, 34)");
 	assert.equal(await page.locator(".wiki-prose .codeblock").evaluate(el => getComputedStyle(el).backgroundColor), readingCode);
-	assert.equal(await page.locator('.wiki-prose select[data-code-language]').first().inputValue(), 'js');
+	assert.equal(await page.locator('.wiki-prose select[data-code-language]').count(), 0);
 	await page.locator('.wiki-scroll').evaluate(el => { el.scrollTo({ top: 0, behavior: 'instant' }); el.dispatchEvent(new Event('scroll')); });
 	await page.screenshot({ path: '/tmp/pi-wiki-reading-dark.png' });
 	await page.evaluate(() => { document.documentElement.dataset.appearance = 'light'; localStorage.setItem('pi-harness:code-theme', 'dark'); window.dispatchEvent(new Event('pi-harness:code-theme')); });

@@ -40,7 +40,7 @@ try {
 	await wikiInsert(wiki, '提及日期');
 	assert.ok((await editor.locator('p:not([data-rich-tail])').last().textContent()).includes(new Date().toLocaleDateString('sv-SE')));
 	console.log('PASS complete toolbar, explicit headings/paragraph and date insertion');
-	for (const [alias, label, kind] of [['dmk', '代码块', 'code'], ['bg', '插入表格', 'table']]) {
+	for (const [alias, label, kind] of [['bg', '插入表格', 'table']]) {
 		for (const input of ['mouse', 'keyboard']) {
 			await editor.locator('p').last().fill('');
 			await wiki.keyboard.type(`/${alias}`);
@@ -56,22 +56,20 @@ try {
 	await editor.locator('p').last().fill('');
 	await wiki.keyboard.type('/dmk');
 	await wiki.getByRole('option', { name: '代码块', exact: true }).click();
-	await wiki.locator('.wiki-code-popover').getByRole('option', { name: 'python', exact: false }).click();
+	assert.equal(await wiki.locator('.wiki-code-popover, select[data-code-language]').count(), 0);
 	await wiki.keyboard.type('print("slash")');
 	await wiki.keyboard.press('Meta+s');
 	await wiki.locator('.wiki-save-status.saved').waitFor();
-	assert.ok(readFileSync(join(base, 'note.md'), 'utf8').includes('```python\nprint("slash")'));
+	assert.ok(readFileSync(join(base, 'note.md'), 'utf8').includes('```\nprint("slash")'));
 	console.log('PASS slash insertion/save');
 	await editor.locator('p').last().click();
 	// Insertion from the unified menu retains the document caret.
 	await wikiInsert(wiki, '代码块');
-	const popup = await wiki.locator('.wiki-code-popover').boundingBox();
-	assert(popup.x >= 0 && popup.y >= 0);
-	await wiki.locator('.wiki-code-popover').getByRole('option', { name: 'python', exact: false }).click();
+	assert.equal(await wiki.locator('.wiki-code-popover, select[data-code-language]').count(), 0);
 	await wiki.keyboard.type('print("anchored")');
 	await wiki.keyboard.press('Meta+s');
 	await wiki.locator('.wiki-save-status.saved').waitFor();
-	assert.ok(readFileSync(join(base, 'note.md'), 'utf8').includes('```python\nprint("anchored")'));
+	assert.ok(readFileSync(join(base, 'note.md'), 'utf8').includes('```\nprint("anchored")'));
 	console.log('PASS toolbar positioning and insertion/save');
 	await wiki.screenshot({ path: "/tmp/pi-wiki-toolbar-full.png" });
 	await wiki.setViewportSize({ width: 800, height: 900 });
@@ -83,8 +81,9 @@ try {
 	await wikiInsert(wiki, '提及日期');
 	assert.ok(await wiki.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'toolbar does not widen the page');
 	await wikiInsert(wiki, '代码块');
-	const narrowPopup = await wiki.locator('.wiki-code-popover').boundingBox();
-	assert.ok(narrowPopup.x >= 0 && narrowPopup.x + narrowPopup.width <= 800, 'scrolled toolbar picker remains inside viewport');
+	await wiki.keyboard.type('print("narrow")');
+	assert.ok((await editor.locator('pre > code').last().innerText()).includes('print("narrow")'));
+	assert.ok(await wiki.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'direct code insertion stays inside viewport');
 	await wiki.keyboard.press('Escape');
 	await wiki.screenshot({ path: "/tmp/pi-wiki-toolbar-narrow.png" });
 	console.log('PASS narrow toolbar scrolling and popup bounds');

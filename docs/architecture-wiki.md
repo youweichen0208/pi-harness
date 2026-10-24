@@ -176,7 +176,7 @@ Wiki 视图不注册独立扩展输入框。右栏是Wiki 对话的输入框、�
 
 ## 文档画布视觉更新（2026-10-08）
 
-34a 规范见 `wiki-doc-v2-design.md`。视图头显示目录路径、文件名、保存状态、最近改动和聊天面板开关／退出 Wiki mode。`WikiToolbar` 提供分组 SVG 插入按钮；`TableSizePicker` 支持 8×6 鼠标/键盘选择；`CodeLanguagePicker` 支持搜索和 Mermaid。工具栏直接展示斜杠菜单的全部 11 个插入项，正文、H2、H3 独立设置格式，日期可直接插入；不再使用更多菜单，窄栏横向滚动。编辑块使用 `display: block`：原生 `formatBlock` 在 `display: contents` 中会丢失段落；`flow-root` 会阻止相邻块外边距合并，使段距翻倍。Mermaid 图和代码并存，图形装饰标记 `data-rich-ui`，保存时剔除。
+34a 规范见 `wiki-doc-v2-design.md`。视图头显示目录路径、文件名、保存状态、最近改动和聊天面板开关／退出 Wiki mode。`WikiToolbar` 提供分组 SVG 插入按钮；`TableSizePicker` 支持 8×6 鼠标/键盘选择；代码块直接插入并自动识别高亮，不再显示语言选择器。工具栏直接展示斜杠菜单的全部 11 个插入项，正文、H2、H3 独立设置格式，日期可直接插入；不再使用更多菜单，窄栏横向滚动。编辑块使用 `display: block`：原生 `formatBlock` 在 `display: contents` 中会丢失段落；`flow-root` 会阻止相邻块外边距合并，使段距翻倍。Mermaid 图和代码并存，图形装饰标记 `data-rich-ui`，保存时剔除。
 
 宽版隐藏两侧并使用 1000px 正文；打开新文档或最近改动退出。宽版不持久化。正文维持 800ms 自动保存、Cmd+S 和导航保存，未编辑块保留原文。默认焦点位于文末；空段落提示不写入 Markdown。标题与正文按 2026-10-19 走查统一使用 `--sans`；代码保留等宽字体。
 
@@ -230,3 +230,13 @@ Wiki 的插入与格式命令统一挂载在标题栏下的 40px 工具栏，按
 异步查找或释放后重新校验客户端、工作区、来源会话、quiesce 与运行状态；切换失败不更新文档绑定，删除前须成功离开活动会话并回收目标运行实例。此顺序不声称 SDK 与磁盘之间存在事务；与前端 WikiCoordinator 的操作租约及发送回执保持独立。
 
 回归：`tests/unit/wiki-conversations.test.ts` 使用真实临时目录和 SDK SessionManager、受控运行实例 adapter，覆盖文档恢复、占用、并发准入、迟到操作、替换／回收失败和删除保护；`wiki-assistant-test.mjs`、`wiki-media-preview-test.mjs`、`wiki-protocol-test.mjs` 验证真实接线。
+
+助手浮窗中的共用代码复制按钮从点击元素的 `ownerDocument.defaultView` 获取 Clipboard API，避免 React portal 仍在父窗口执行导致失焦拒绝；API 不可用或拒绝时在当前文档中选取临时文本进行复制并恢复焦点／选区，失败显示可重试提示。`wiki-assistant-window-test.mjs` 覆盖父窗口拒绝、子窗口降级和失败反馈，并核对系统剪贴板中的完整多行代码。
+
+所有前端文本复制入口共用 `web/src/clipboard.ts`：交互入口传入按钮或编辑器的 ownerDocument，覆盖整条回复、工具／命令、Wiki 内容、节点终端与设置路径；异步会话树返回使用主文档，复制失败保留内容预览。剪贴板成功后才显示成功，失败保留重试入口。
+
+## 当前文档磁盘同步
+
+WikiWorkbench 直接通过 `document-content` 检查已打开文件的内容版本，不依赖目录索引的 mtime 或 pi 改动记录。任务运行时每秒检查，任务状态变化时立即检查，空闲时随 30 秒轮询检查。无本地草稿时同步正文、磁盘版本及文档引用，后续保存使用新版本；存在未保存草稿时保留草稿并显示原有冲突操作。读取期间发生输入、保存、导航或卸载时，依据当前草稿、版本、读取序号和 effect 生命周期拒绝不适用的结果。读取不触发模型调用或写入磁盘。
+
+回归：`node tests/wiki-document-sync-test.mjs` 使用真实文件读写和模拟任务状态，覆盖索引滞后期间运行中的正文同步、后续编辑保存，以及本地草稿冲突保护。

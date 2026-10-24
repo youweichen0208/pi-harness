@@ -1,5 +1,5 @@
 import { richCodeText } from "./rich-code-text";
-import { highlightLine, highlightWikiCode } from "./hljs-lite";
+import { highlightWikiCode } from "./hljs-lite";
 
 type Paint = { add: (range: Range) => void; delete: (range: Range) => void; size: number; priority: number };
 const groups = ["plain", "keyword", "string", "number", "title", "comment"] as const;
@@ -52,7 +52,7 @@ export function createRichCodeHighlighter(wiki = false) {
 			const text = richCodeText(code);
 			if (!text) return;
 			const template = document.createElement("template");
-			template.innerHTML = (wiki ? highlightWikiCode : highlightLine)(text, language === "toml" ? "ini" : language);
+			template.innerHTML = highlightWikiCode(text, language === "toml" ? "ini" : language);
 			const nodes: { node: Text; start: number; end: number }[] = [];
 			const walker = document.createTreeWalker(code, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
 			let node: Node | null, offset = 0;

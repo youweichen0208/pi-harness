@@ -1,3 +1,4 @@
+import { copyText } from "../clipboard";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { FiCheck, FiLoader, FiX, FiMoreHorizontal } from "react-icons/fi";
 import { useT } from "../i18n";
@@ -80,7 +81,7 @@ export function WikiChatPanel({ resizeHandle, messages, live, streaming, toolSta
 					})}
 					{message.role === "user" && <details className="wiki-message-actions"><summary aria-label={t("wikiMessageActions")}><FiMoreHorizontal /></summary><div role="menu">
 						<button role="menuitem" onClick={e => { e.currentTarget.closest("details")?.removeAttribute("open"); setRequestPreview(original); }}>{t("wikiFullRequest")}</button>
-						<button role="menuitem" onClick={e => { e.currentTarget.closest("details")?.removeAttribute("open"); void navigator.clipboard.writeText(original).catch(e => setActionError(e.message)); }}>{t("copy")}</button>
+						<button role="menuitem" onClick={e => { e.currentTarget.closest("details")?.removeAttribute("open"); void copyText(original, e.currentTarget.ownerDocument).catch(e => setActionError(e.message)); }}>{t("copy")}</button>
 						<button role="menuitem" disabled={disabled || streaming} onClick={e => { e.currentTarget.closest("details")?.removeAttribute("open"); onResend(original); }}>{t("wikiResend")}</button>
 					</div></details>}
 					{message.role === "assistant" && revisions.filter(r => r.author === "pi" && r.conversationId === conversationId && r.assistantTimestamp !== undefined && r.assistantTimestamp === message.timestamp && r.changes.length > 0).map(revision => <div className="wiki-reply-change" key={revision.id}>

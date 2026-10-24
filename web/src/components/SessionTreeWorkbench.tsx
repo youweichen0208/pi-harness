@@ -1,3 +1,4 @@
+import { copyText } from "../clipboard";
 import { useDialogFocus } from "../use-dialog-focus";
 import { ToolOutputDownload } from "./ToolOutputDownload";
 import { getClientId } from "../use-chat";
@@ -90,7 +91,7 @@ export function SessionTreeWorkbench({ state, connected, send }: { state: UiStat
 			if (message.type === "tree" && message.reqId === getId.current) { setNodes(message.nodes); setTruncated(message.truncated); setLoading(false); }
 			if (message.type === "tree_preview_result" && message.reqId === previewId.current) setPreview(message.entryCount);
 			if (message.type === "tree_content_result") {
-				if (action?.copy) void navigator.clipboard.writeText(message.content).catch(() => setContent({ id: message.entryId, text: message.content, toolCallId: message.toolCallId }));
+				if (action?.copy) void copyText(message.content, document).catch(() => setContent({ id: message.entryId, text: message.content, toolCallId: message.toolCallId }));
 				else setContent({ id: message.entryId, text: message.content, toolCallId: message.toolCallId });
 			}
 			if (message.type === "tree_navigate_result") {

@@ -1,3 +1,4 @@
+import { copyText } from "../clipboard";
 import { useDialogFocus } from "../use-dialog-focus";
 import { UiIcon } from "./UiIcon";
 import { ExtensionCatalogList, extensionResourceKeys } from "./ExtensionCatalogList";
@@ -61,7 +62,7 @@ export function ExtensionsPanel({ cwd, reload, onUpdateCount, mode = "manage", c
 		catch(e){setError((e as Error).message);}finally{setBusy(false);}
 	}
 	async function inspect(value:string){setBusy(true);setError("");try{const result=await request<ExtensionPreview>(cwd,"preview",{source:value});if(!mounted.current)return;setPreview(result);setJob(undefined);setSource(value);setInstallOpen(true);setPin(false);}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
-	async function open(item:ExtensionPackage){try{if(desktopAPI?.openExtensionPath)await desktopAPI.openExtensionPath({clientId:getClientId(),cwd,id:item.id});else{await navigator.clipboard.writeText(item.path??item.source);}}catch(e){setError((e as Error).message);}}
+	async function open(item:ExtensionPackage, doc: Document){try{if(desktopAPI?.openExtensionPath)await desktopAPI.openExtensionPath({clientId:getClientId(),cwd,id:item.id});else{await copyText(item.path??item.source, doc);}}catch(e){setError((e as Error).message);}}
 	const working=busy||job?.phase==="running";
 	const updates=state?.packages.filter(p=>p.update && !p.protected)??[];
 	useEffect(()=>onUpdateCount?.(updates.length),[updates.length,onUpdateCount]);
@@ -78,14 +79,14 @@ export function ExtensionsPanel({ cwd, reload, onUpdateCount, mode = "manage", c
 				<button className="ext-expand" aria-label={`${t("extDetails")} ${item.name}`} aria-expanded={isOpen} onClick={()=>setExpanded(isOpen?undefined:item.id)}>{isOpen?<FiChevronDown/>:<FiChevronRight/>}</button>
 				<div className="ext-row-info"><div className="ext-name"><strong>{item.name}</strong>{newId===item.id&&<span className="ext-new">{t("extNew")}</span>}</div><div className="ext-meta">{item.kind==="file"?<code title={item.path}>{item.path?.replace(/^\/Users\/[^/]+|^\/home\/[^/]+/,"~")}</code>:<span>{item.kind} · {t(item.scope==="user"?"extPersonal":"extProject")}</span>}{!item.trusted&&<span className="ext-pin">{t("extUntrustedNotLoaded")}</span>}</div></div>
 				{item.kind!=="file"&&<div className="ext-resource-counts">{counts(item)}</div>}
-				{mode==="manage"&&item.kind==="file"&&<><button onClick={()=>void open(item)}>{t(desktopAPI?.openExtensionPath?"extOpen":"extCopyPath")}</button><button disabled={working} onClick={reload}>{t("extReload")}</button></>}
+				{mode==="manage"&&item.kind==="file"&&<><button onClick={event=>void open(item, event.currentTarget.ownerDocument)}>{t(desktopAPI?.openExtensionPath?"extOpen":"extCopyPath")}</button><button disabled={working} onClick={reload}>{t("extReload")}</button></>}
 				<div className="ext-version">{mode==="manage"&&item.update&&!item.protected&&item.trusted&&!item.pinned?<button className="ext-version-update" disabled={working||checking} onClick={()=>void start({action:"update",id:item.id})}>{item.version}{item.latest&&` → ${item.latest}`} · {t("extUpdate")}</button>:<>{item.version??(item.kind==="git"?"git":"")}{item.latest&&item.update&&<span> → {item.latest}</span>}</>}{item.pinned&&<span className="ext-pin"><FiLock/>{t("extPinned")}</span>}</div>
 				{mode==="updates"&&item.update&&!item.protected&&<button className="ext-update" disabled={working||checking} onClick={()=>void start({action:"update",id:item.id})}>{t("extUpdate")}</button>}
 				{mode!=="updates"&&<input className="ext-switch" role="switch" type="checkbox" aria-label={`${t("extEnable")} ${item.name}`} checked={item.enabled} disabled={working||checking||!item.trusted||item.protected} onChange={e=>void start({action:"toggle",id:item.id,enabled:e.target.checked})}/>}
 			</div>
 			{isOpen&&<div className="ext-details"><p>{item.description??item.source}</p><code className="ext-source">{item.source}</code><div className="ext-actions">{item.kind==="file"&&<button disabled={working||!item.trusted} onClick={()=>void editFile(item)}>{t("extEditFile")}</button>}
 				{item.kind==="npm"&&<a href={`https://pi.dev/packages/${item.name}`} target="_blank" rel="noreferrer"><FiExternalLink/>pi.dev</a>}
-				{item.path&&<button onClick={()=>void open(item)}><FiFolder/>{t(desktopAPI?.openExtensionPath?"extOpen":"extCopyPath")}</button>}
+				{item.path&&<button onClick={event=>void open(item, event.currentTarget.ownerDocument)}><FiFolder/>{t(desktopAPI?.openExtensionPath?"extOpen":"extCopyPath")}</button>}
 				{item.pinned&&<button disabled={working||checking||!item.trusted||item.protected} onClick={()=>setConfirm({operation:{action:"unpin",id:item.id},name:item.name})}>{t("extUnpin")}</button>}
 				{item.kind!=="file"&&<><button disabled={working||checking||!state?.trusted||item.protected} onClick={()=>setConfirm({operation:{action:"move",id:item.id},name:item.name})}>{t(item.scope==="user"?"extMoveProject":"extMovePersonal")}</button><button className="ext-danger" disabled={working||checking||!item.trusted||item.protected} onClick={()=>setConfirm({operation:{action:"remove",id:item.id},name:item.name})}>{t(item.kind==="local"?"extRemoveReference":"extUninstall")}</button></>}
 			</div>{notes&&<div className="ext-release-notes"><strong>{t("extReleaseNotes")} {notes.title}</strong>{notes.notes.length?<ul>{notes.notes.map((line,i)=><li key={i}>{line}</li>)}</ul>:<p>{t("extNoNotes")}</p>}{notes.url&&<a href={notes.url} target="_blank" rel="noreferrer">{t("extViewNotes")} <UiIcon name="external" /></a>}</div>}{Object.entries(item.resources).some(([,v])=>v.length>0)&&<details><summary>{t("extResources")}</summary>{Object.entries(item.resources).filter(([,v])=>v.length).map(([key,values])=><div key={key}><strong>{resourceLabel(key)}</strong><pre>{values.join("\n")}</pre></div>)}</details>}<p className="ext-muted">{t("extResourceConfig")}</p></div>}

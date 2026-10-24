@@ -48,16 +48,14 @@ export async function checkWikiV2(page, cwd) {
 	await page.keyboard.type('Header marker');
 	await end();
 	await page.locator('.wiki-insert-toolbar button[aria-expanded]').nth(1).click();
-	await page.locator('.wiki-language-picker input').fill('merm');
-	await page.locator('.wiki-language-picker button').click();
-	await editor.locator('.wiki-mermaid-preview svg.flowchart').waitFor();
-	assert((await editor.locator('code.language-mermaid').innerText()).includes('flowchart LR'));
+	assert.equal(await editor.locator('select[data-code-language]').count(), 0);
+	await page.keyboard.type('SELECT 1;');
 	await page.keyboard.press('Meta+s');
 	await page.locator('.wiki-save-status.saved').waitFor();
 	const markdown = readFileSync(join(cwd, 'toolbar.md'), 'utf8');
 	assert(markdown.includes('Header marker'));
 	assert(markdown.includes('protocol_id：fixture-v1\\\n准备日期：2026-10-08\\\n状态：**草稿**'));
-	assert(markdown.includes('```mermaid\nflowchart LR'));
+	assert(markdown.includes('SELECT 1;'));
 	assert(!markdown.includes('<svg') && !markdown.includes('wiki-mermaid-preview'));
 	await end();
 	// The toolbar and the / menu are one list: all eleven actions, no overflow menu.

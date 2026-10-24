@@ -1,3 +1,4 @@
+import { openKnowledge } from "./lib/open-knowledge.mjs";
 import { wikiToolbar } from "./lib/wiki-toolbar.mjs";
 // #99: selection toolbar heading levels must look different and retain their semantics.
 import assert from 'node:assert/strict';
@@ -13,7 +14,7 @@ import { testEnv } from "./lib/test-env.mjs";
 const port = 9348;
 assert.equal(await portUp(port), false);
 const base = mkdtempSync(join(tmpdir(), 'wiki-heading-toolbar-'));
-writeFileSync(join(base, 'note.md'), '# Table selection\n\nBefore table\n\n| File | Purpose |\n| --- | --- |\n| [`architecture.md`](architecture.md) | Architecture purpose |\n| [`TASKS.md`](TASKS.md) | Task purpose |\n| `examples/*.json` | Final purpose |\n\nAfter table\n');
+writeFileSync(join(base, 'note.md'), '# Table selection\n\nBefore table\n\n| File | Purpose |\n| --- | --- |\n| [`architecture.md`](architecture.md) | Architecture purpose |\n| [`TASKS.md`](TASKS.md) | Task purpose |\n| `examples/*.json` | Final purpose |\n\nAfter table\n\n```sql\nSELECT * FROM accounts;\nSELECT * FROM scratch_accounts;\n```\n');
 let server, browser;
 try {
 	server = spawn(process.execPath, ['dist/server/index.js'], { env: { ...testEnv(), PORT: String(port), PI_WEB_TOKEN: '', PI_WEB_CWD: base, PI_WEB_DATA_DIR: join(base, 'data'), PI_CODING_AGENT_DIR: join(base, 'agent') }, stdio: 'ignore' });
@@ -24,7 +25,7 @@ try {
 	await page.goto(`http://127.0.0.1:${port}`);
 	await page.locator('.setup-modal .modal-close').click();
 	const popup = page.context().waitForEvent('page');
-	await page.locator('.file-name', { hasText: 'note.md' }).click();
+	await openKnowledge(page, base, 'note.md');
 	page = await popup;
 
 	const editor = page.locator('.wiki-prose .fp-rich-document');
@@ -52,13 +53,42 @@ try {
 	await page.keyboard.press('ControlOrMeta+a');
 	assert((await page.evaluate(() => getSelection().toString())).includes('After table'));
 	await editor.locator('td').last().click();
-	await page.locator('.fp-table-select-handle').click();
+	const tableBounds = await editor.locator('table').boundingBox();
+	await page.mouse.click(tableBounds.x + 1, tableBounds.y + tableBounds.height / 2);
 	const viaButton = await page.evaluate(() => getSelection().toString());
 	assert(viaButton.includes('File') && viaButton.includes('Final purpose') && !viaButton.includes('After table'));
 	assert.equal(await page.locator('.fp-table-tools').count(), 0);
 	await page.waitForFunction(() => document.querySelector('table[data-table-selected]'));
 	assert(await editor.locator('table').evaluate(table => getComputedStyle(table.querySelector('th')).backgroundColor === getComputedStyle(table.querySelector('td')).backgroundColor), 'header and body share selection fill');
 	await page.screenshot({ path: 'tests/scratch/wiki-table-selection.png' });
+	await editor.locator('pre > code').click();
+	await page.keyboard.press('ControlOrMeta+a');
+	const selectedCode = await page.evaluate(() => getSelection().toString());
+	assert(selectedCode.includes('SELECT * FROM accounts;') && selectedCode.includes('SELECT * FROM scratch_accounts;'));
+	assert(!selectedCode.includes('Before table') && !selectedCode.includes('复制'), 'code select-all excludes surrounding prose and controls');
+	await page.keyboard.press('ControlOrMeta+c');
+	assert.equal((await page.evaluate(() => navigator.clipboard.readText())).trim(), 'SELECT * FROM accounts;\nSELECT * FROM scratch_accounts;');
+	await page.keyboard.press('ControlOrMeta+a');
+	assert((await page.evaluate(() => getSelection().toString())).includes('Before table'), 'second code select-all selects document');
+	const codeBounds = await editor.locator('pre').boundingBox();
+	await page.mouse.click(codeBounds.x + 1, codeBounds.y + codeBounds.height / 2);
+	assert.equal(await page.locator('[data-code-select], .fp-table-select-handle').count(), 0);
+	assert.equal((await page.evaluate(() => getSelection().toString())).trim(), 'SELECT * FROM accounts;\nSELECT * FROM scratch_accounts;', 'code border selects only code');
+	for (const block of [editor.locator('table'), editor.locator('pre')]) {
+		const r = await block.boundingBox();
+		for (const [x, y] of [[r.x + 1, r.y + r.height / 2], [r.x + r.width - 1, r.y + r.height / 2], [r.x + r.width / 2, r.y + 1], [r.x + r.width / 2, r.y + r.height - 1]]) {
+			await page.mouse.click(x, y);
+			const text = await page.evaluate(() => getSelection().toString());
+			assert(text.includes('Final purpose') || text.includes('SELECT * FROM scratch_accounts;'), 'each outer edge selects its entire block');
+			assert(!text.includes('Before table') && !text.includes('After table'));
+		}
+	}
+	await editor.locator('td').last().click();
+	assert(await page.evaluate(() => getSelection().isCollapsed), 'cell content click still places the caret');
+	await editor.locator('pre > code').click();
+	assert(await page.evaluate(() => getSelection().isCollapsed), 'code content click still places the caret');
+	assert.equal(readFileSync(join(base, 'note.md'), 'utf8').includes('SELECT * FROM scratch_accounts;'), true, 'selection preserves source');
+
 	console.log('PASS linked table drag, scoped select-all, whole document select-all, toolbar and copy');
 } finally {
 	await browser?.close();

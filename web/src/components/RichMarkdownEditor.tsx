@@ -1,3 +1,4 @@
+import { copyText } from "../clipboard";
 import { RichCommands } from "../rich-commands";
 import { editableDisclosures } from "../rich-content";
 import { RichFormattingToolbar } from "./RichFormattingToolbar";
@@ -6,7 +7,6 @@ import { decorateWikiTables } from "../wiki-table-presentation";
 import { WikiTableIcon, WikiQuoteIcon } from "./WikiIcons";
 import { WikiToolbar, WikiInsertPopover, type WikiInsertPopup } from "./WikiToolbar";
 import { TableSizePicker } from "./TableSizePicker";
-import { CodeLanguagePicker } from "./CodeLanguagePicker";
 import { MermaidDiagram } from "./MermaidDiagram";
 import { createPortal } from "react-dom";
 import { WikiReadingDialog } from "./WikiReading";
@@ -17,7 +17,6 @@ import { markdownImageUrl } from "../markdown-image";
 import { withToken } from "../auth-token";
 import { getClientId } from "../use-chat";
 import { richCodeText } from "../rich-code-text";
-import { highlightLine } from "../hljs-lite";
 import { createRichCodeHighlighter } from "../rich-code-highlight";
 import { useT } from "../i18n";
 import { LuHeading2, LuHeading3, LuTableOfContents, LuPanelTop, LuInfo, LuLightbulb, LuTriangleAlert, LuChevronsUpDown, LuListOrdered } from "react-icons/lu";
@@ -37,7 +36,6 @@ function ensureTrailingParagraph(root: HTMLElement): void {
 	root.append(paragraph);
 }
 
-const CODE_LANGUAGES = ["javascript", "typescript", "python", "bash", "json", "yaml", "html", "css", "sql", "go", "rust", "java", "c", "cpp", "csharp", "ruby", "php", "swift", "kotlin", "markdown", "xml", "toml", "diff", "mermaid"];
 
 export interface RichEditorHost {
 	uploadImage: (data: string, signal: AbortSignal) => Promise<string>;
@@ -175,7 +173,6 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		try { localStorage.setItem("pi-wiki-recent-insertions", JSON.stringify(next)); } catch { /* Storage may be unavailable. */ }
 	};
 	const [tableCell, setTableCell] = useState<HTMLTableCellElement | null>(null);
-	const [tableHandle, setTableHandle] = useState<{ left: number; top: number } | null>(null);
 	useEffect(() => {
 		const refresh = () => {
 			const selection = window.getSelection();
@@ -186,9 +183,7 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 				const selected = !!range && range.compareBoundaryPoints(Range.START_TO_START, contents) <= 0 && range.compareBoundaryPoints(Range.END_TO_END, contents) >= 0;
 				table.toggleAttribute("data-table-selected", selected);
 			});
-			const table = tableCell?.isConnected ? tableCell.closest("table") : null;
-			const rect = table?.getBoundingClientRect();
-			setTableHandle(rect ? { left: Math.max(0, rect.left - 24), top: rect.top } : null);
+
 		};
 		refresh();
 		document.addEventListener("selectionchange", refresh);
@@ -250,19 +245,16 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		root.current?.querySelectorAll<HTMLElement>("pre > code").forEach((code) => {
 			const pre = code.parentElement!;
 			if (wiki) pre.classList.add("codeblock");
-			let control = pre.querySelector<HTMLSelectElement>("select[data-code-language]");
-			if (!control) {
-				const chrome = document.createElement("span");
+			let chrome = pre.querySelector<HTMLElement>(".fp-code-language");
+			if (!chrome) {
+				chrome = document.createElement("span");
 				chrome.dataset.richUi = "";
 				chrome.contentEditable = "false";
 				chrome.className = "fp-code-language";
-				control = document.createElement("select");
-				control.dataset.codeLanguage = "";
-				chrome.append(control);
 				if (wiki) {
 					const copy = document.createElement("button"); copy.type = "button"; copy.textContent = t("copy");
 					copy.onmousedown = event => event.preventDefault();
-					copy.onclick = () => { void navigator.clipboard.writeText(richCodeText(code)); };
+					copy.onclick = () => { void copyText(richCodeText(code), code.ownerDocument).then(() => { copy.textContent = t("copied"); }, () => { copy.textContent = t("copyFailed"); }); };
 					chrome.append(copy);
 				}
 				pre.prepend(chrome);
@@ -288,16 +280,6 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 			}
 			const detected = code.className.match(/language-([^\s]+)/)?.[1] ?? "";
 			const language = detected === "plaintext" ? "" : detected;
-			control.replaceChildren();
-			for (const lang of ["", ...new Set([...CODE_LANGUAGES, ...(language ? [language] : [])])]) {
-				control.add(new Option(lang || t(wiki ? "wikiCodeAutomatic" : "richPlainText"), lang));
-			}
-			control.value = language;
-			control.disabled = readOnly;
-			control.setAttribute("aria-label", t("richCodeLanguage"));
-			// A Java block in a Note can be run; the chrome is imperative DOM, so the
-			// button is added and removed on each pass rather than rendered by React.
-			const chrome = control.parentElement!;
 			const canRun = !readOnly && !!host?.runCode && language === "java";
 			let runButton = chrome.querySelector<HTMLButtonElement>("button[data-code-run]");
 			if (canRun && !runButton) {
@@ -484,25 +466,6 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 			if (upload.current === controller) upload.current = null;
 		}
 	};
-	const changeLanguage = (control: HTMLSelectElement) => {
-		const pre = control.closest("pre");
-		const code = pre?.querySelector("code");
-		if (readOnly || !pre || !code || !root.current?.contains(pre)) return;
-		const language = control.value;
-		// Language metadata is separate from native text editing. Do not replace the
-		// pre element: Chromium can inherit its old CODE wrapper during insertHTML.
-		code.className = `hljs language-${language || "plaintext"}`;
-		code.innerHTML = highlightLine(richCodeText(code), language === "toml" ? "ini" : language);
-		if (!code.textContent) code.append(document.createElement("br"));
-		root.current.focus();
-		const range = document.createRange();
-		range.selectNodeContents(code);
-		range.collapse(false);
-		const selection = window.getSelection();
-		selection?.removeAllRanges();
-		selection?.addRange(range);
-		update();
-	};
 	const update = () => {
 		if (readOnly || !root.current || !documentState.current) return;
 		editableDisclosures(root.current, t("richCollapse"));
@@ -584,9 +547,9 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 	};
 	const insertToolbar = (id: string, dimensions?: { columns: number; rows: number }, language?: string, popupAnchor?: Pick<DOMRect, "left" | "bottom">) => {
 		if (!restoreInsert()) return;
-		if ((id === "bg" && !dimensions) || (id === "dmk" && language === undefined)) {
+		if (id === "bg" && !dimensions) {
 			const rect = popupAnchor ?? savedRange.current?.getBoundingClientRect();
-			setInsertPopup({ kind: id === "bg" ? "table" : "code", x: insertPopup?.x ?? rect?.left ?? 16, y: insertPopup?.y ?? (rect?.bottom ?? 80) + 6 }); return;
+			setInsertPopup({ kind: "table", x: insertPopup?.x ?? rect?.left ?? 16, y: insertPopup?.y ?? (rect?.bottom ?? 80) + 6 }); return;
 		}
 		setInsertPopup(null);
 		rememberInsertion(id);
@@ -811,7 +774,7 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		{wiki?.toolbarHost && createPortal(<WikiToolbar readOnly={readOnly} focused={!!wiki.focused} onWidth={wiki.onWidth ?? (() => {})} items={items.map(item => ({ id: item.alias, label: itemLabel(item), hint: hints[item.alias] ?? "", help: t(help[item.alias] ?? item.label), icon: icons[item.label] }))} editor={root.current} commands={commands} />, wiki.toolbarHost)}
 		{diagrams.map(({ host, code }, index) => createPortal(<MermaidDiagram code={code} />, host, String(index)))}
 		{insertPopup && !readOnly && <WikiInsertPopover popup={insertPopup} onClose={() => { setInsertPopup(null); restoreInsert(); }}>
-			{insertPopup.kind === "table" ? <TableSizePicker onInsert={(columns, rows) => insertToolbar("bg", { columns, rows })} /> : <CodeLanguagePicker onInsert={language => insertToolbar("dmk", undefined, language)} />}
+			<TableSizePicker onInsert={(columns, rows) => insertToolbar("bg", { columns, rows })} />
 		</WikiInsertPopover>}
 		{!wiki && !readOnly && <RichFormattingToolbar compact={compact} commands={commands} />}
 		{cardOpen && <RichLinkCardDialog onClose={() => setCardOpen(false)} onInsert={async (card, signal) => {
@@ -827,9 +790,7 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 			root.current.focus(); const selection = window.getSelection(); selection?.removeAllRanges(); selection?.addRange(range); command("insertHTML", "<p><br></p>" + figure.outerHTML + "<p><br></p>");
 		}} />}
 
-		{tableHandle && !readOnly && createPortal(<button type="button" className="fp-table-select-handle"
-			style={tableHandle} aria-label={t("richSelectTable")} title={t("richSelectTable")}
-			onMouseDown={event => event.preventDefault()} onClick={() => editTable("selectTable")}>⠿</button>, document.body)}
+
 		{uploading && <div className="fp-notice" role="status">{t("richImageUploading")}</div>}
 		{imageError && <div className="fp-notice" role="alert">{imageError}</div>}
 		{wiki && floating && linkInput === null && createPortal(<div ref={floatingToolbar} className="wiki-format-popover" role="toolbar" aria-label={t("richFormatToolbar")} style={{ left: floating.x, top: floating.y }} onMouseDown={e => e.preventDefault()}>
@@ -859,9 +820,18 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 					onBlur={closeMenu}
 					onCompositionStart={closeMenu}
 					onCompositionEnd={() => { const code = selectedCode(); if (code) paintCode(code); update(); inspectSlash(); }}
-					onKeyUp={() => setTableCell(selectedCell())}
+					onKeyUp={() => { const cell = selectedCell(); if (cell || window.getSelection()?.isCollapsed) setTableCell(cell); }}
 					onKeyDown={(event) => {
 						if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === "a" && !event.nativeEvent.isComposing) {
+							const code = selectedCode();
+							if (code) {
+								event.preventDefault();
+								const selection = code.ownerDocument.getSelection();
+								const range = code.ownerDocument.createRange(); range.selectNodeContents(code);
+								const current = selection?.rangeCount ? selection.getRangeAt(0) : null;
+								if (current && !current.collapsed && current.compareBoundaryPoints(Range.START_TO_START, range) <= 0 && current.compareBoundaryPoints(Range.END_TO_END, range) >= 0) range.selectNodeContents(root.current!);
+								selection?.removeAllRanges(); selection?.addRange(range); return;
+							}
 							const cell = selectedCell();
 							if (cell) {
 								event.preventDefault();
@@ -922,10 +892,6 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 						else if (event.key === "ArrowLeft" || event.key === "ArrowRight" || event.key === "Home" || event.key === "End") closeMenu();
 					}}
 					onInput={(event) => {
-						if (event.target instanceof HTMLSelectElement && event.target.hasAttribute("data-code-language")) {
-							changeLanguage(event.target);
-							return;
-						}
 						const input = event.target as HTMLInputElement;
 						if (input.type === "checkbox") input.toggleAttribute("checked", input.checked);
 						update();
@@ -936,6 +902,26 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 								const range = selection.getRangeAt(0).cloneRange(); range.setStart(node, selection.anchorOffset - 2); linkRange.current = range; setLinkInput("[[");
 							}
 						}
+					}}
+					onMouseDown={(event) => {
+						if (event.button !== 0 || event.shiftKey) return;
+						const target = event.target as HTMLElement;
+						if (target.closest("button, select, input")) return;
+						const block = target.closest<HTMLElement>("pre, table");
+						if (!block || !root.current?.contains(block)) return;
+						const rect = block.getBoundingClientRect(), x = event.clientX, y = event.clientY;
+						// Use a narrow inner edge so cell dividers and code text remain editable.
+						if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) return;
+						if (Math.min(x - rect.left, rect.right - x, y - rect.top, rect.bottom - y) > 6) return;
+						// Keep the native code-block resize grip usable.
+						if (block.tagName === "PRE" && rect.right - x < 16 && rect.bottom - y < 16) return;
+						event.preventDefault();
+						root.current.focus({ preventScroll: true });
+						const range = block.ownerDocument.createRange();
+						if (block.tagName === "TABLE") { range.selectNode(block); setTableCell(block.querySelector<HTMLTableCellElement>("th, td")); }
+						else { const code = block.querySelector("code"); if (!code) return; range.selectNodeContents(code); }
+						const selection = block.ownerDocument.getSelection(); selection?.removeAllRanges(); selection?.addRange(range);
+						closeMenu();
 					}}
 					onDragStart={(event) => {
 						if ((event.target as HTMLElement).closest("table a")) event.preventDefault();

@@ -1,3 +1,4 @@
+import { copyText } from "../clipboard";
 import { useEffect, useRef, useState } from "react";
 import { useT } from "../i18n";
 import { withToken } from "../auth-token";
@@ -27,7 +28,7 @@ export function SkillsPanel({ cwd, reload }: { cwd: string; reload: () => void }
 	const enabled = skills.filter(skill => skill.enabled);
 	const tokens = Math.ceil(enabled.filter(skill => skill.promptVisible).reduce((n, skill) => n + skill.name.length + skill.description.length, 0) / 4);
 	return <section className="settings-skills">
-		<header className="settings-page-heading"><h2 className="settings-page-title">{t("settingsSkills")}</h2><span className="settings-count">{t("v2SkillCount", { n: skills.length, enabled: enabled.length, tokens })}</span><button disabled={!state} onClick={() => void (desktopAPI?.openExtensionPath ? desktopAPI.openExtensionPath({ clientId: getClientId(), cwd, id: "skills:user" }) : navigator.clipboard.writeText(state?.paths.join("\n") ?? "")).catch(e => setError(e.message))}>{t(desktopAPI?.openExtensionPath ? "v2OpenSkills" : "v2CopyPaths")}</button></header>
+		<header className="settings-page-heading"><h2 className="settings-page-title">{t("settingsSkills")}</h2><span className="settings-count">{t("v2SkillCount", { n: skills.length, enabled: enabled.length, tokens })}</span><button disabled={!state} onClick={event => void (desktopAPI?.openExtensionPath ? desktopAPI.openExtensionPath({ clientId: getClientId(), cwd, id: "skills:user" }) : copyText(state?.paths.join("\n") ?? "", event.currentTarget.ownerDocument)).catch(e => setError(e.message))}>{t(desktopAPI?.openExtensionPath ? "v2OpenSkills" : "v2CopyPaths")}</button></header>
 		<p className="settings-intro">{t("v2SkillsIntro")}</p>
 		{error && <p className="settings-error" role="alert">{error} <button disabled={busy} onClick={() => void request("skills-list")}>{t("extRefresh")}</button></p>}
 		{changed && <p className="ext-notice" role="status">{t("v2SkillsChanged")} <button disabled={busy} onClick={() => { reload(); setChanged(false); }}>{t("extReload")}</button></p>}

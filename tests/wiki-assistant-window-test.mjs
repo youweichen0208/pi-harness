@@ -28,6 +28,7 @@ writeFileSync(join(agent, "models.json"), JSON.stringify({ providers: { local: {
 } } }));
 
 const replies = [];
+const copyCode = "SELECT 你好;\nSELECT 2;";
 const mock = createServer(async (req, res) => {
 	for await (const chunk of req) { /* Drain the local prompt. */ }
 	res.writeHead(200, { "content-type": "text/event-stream" });
@@ -40,7 +41,7 @@ const mock = createServer(async (req, res) => {
 		finish: () => { emit({}, "stop"); res.end("data: [DONE]\n\n"); },
 	});
 	// No blank line yet: the link starts in the active streaming tail.
-	emit({ role: "assistant", content: `[Open document](${target})` });
+	emit({ role: "assistant", content: `[Open document](${target})\n\n\x60\x60\x60sql\n${copyCode}\n\x60\x60\x60\n\n` });
 });
 let app, wiki;
 const errors = [];
@@ -139,10 +140,33 @@ try {
 	await floating.locator(".inputbar textarea").press("Enter");
 	for (let i = 0; i < 100 && replies.length === 0; i++) await sleep(100);
 	assert.equal(replies.length, 1, "detached composer sends through the existing Wiki session");
+	// Model Chromium refusing clipboard access from the unfocused portal owner.
+	await wiki.evaluate(() => { navigator.clipboard.writeText = async () => { throw new DOMException('Document is not focused.', 'NotAllowedError'); }; });
+	await app.evaluate(({ clipboard }) => clipboard.writeText('before-copy'));
+	await floating.bringToFront();
+	await floating.locator('.codeblock .copy-btn:visible').first().click();
+	await sleep(300);
+	assert.equal(await app.evaluate(({ clipboard }) => clipboard.readText()), `${copyCode}\n`, 'detached assistant copies complete code to the system clipboard');
+	await floating.evaluate(() => { navigator.clipboard.writeText = async () => { throw new DOMException('Clipboard unavailable', 'NotAllowedError'); }; });
+	await app.evaluate(({ clipboard }) => clipboard.writeText('before-fallback'));
+	await floating.locator('.codeblock .copy-btn:visible').first().click();
+	await sleep(300);
+	assert.equal(await app.evaluate(({ clipboard }) => clipboard.readText()), `${copyCode}\n`, 'focused-window selection fallback copies the whole code');
+	assert.equal(await floating.locator('.clipboard-copy-fallback').count(), 0, 'temporary selection target is removed');
+	await floating.evaluate(() => { globalThis.originalExecCommand = document.execCommand; document.execCommand = () => false; });
+	await floating.locator('.codeblock .copy-btn:visible').first().click();
+	await floating.getByRole('button', { name: '复制失败，请重试', exact: true }).waitFor();
+	await floating.evaluate(() => { document.execCommand = globalThis.originalExecCommand; });
+
 	await floating.getByRole("button", { name: "停止任务", exact: true }).click();
 	await floating.getByRole("button", { name: "停止任务", exact: true }).waitFor({ state: "detached" });
 	await wiki.waitForFunction(() => document.querySelector(".wiki-prose .fp-rich-document")?.getAttribute("contenteditable") === "true");
 	await floating.getByRole("link", { name: "Open document", exact: true }).waitFor();
+	await app.evaluate(({ clipboard }) => clipboard.writeText('before-reply-copy'));
+	await floating.locator('.reply-actions button').first().click();
+	await sleep(300);
+	assert((await app.evaluate(({ clipboard }) => clipboard.readText())).includes(copyCode), 'whole-reply copy also works in the detached window with clipboard fallback');
+
 	const nextContext = wiki.waitForResponse(response => response.url().includes("/api/wiki") && response.request().postDataJSON()?.action === "chat-context" && response.ok());
 	await floating.getByRole("link", { name: "Open document", exact: true }).click();
 	await wiki.waitForURL(url => url.searchParams.get("doc") === "other.md");

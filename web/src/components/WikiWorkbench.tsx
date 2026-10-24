@@ -78,9 +78,6 @@ export function WikiWorkbench({ coordinator, cwd, conversationId, streaming, act
 	const [statusHost, setStatusHost] = useState<HTMLElement | null>(null);
 	const article = useRef<HTMLElement>(null);
 	const alive = useRef(true), docSequence = useRef(0), stateSequence = useRef(0), referenceSequence = useRef(0);
-	const checkedEntries = useRef(state.entries);
-	const revisionRef = useRef(state.revisions), loadedPiRevision = useRef<string | undefined>(undefined);
-	revisionRef.current = state.revisions;
 	const docRef = useRef(doc), dirty = !!doc?.editable && doc.text !== undefined && draft !== doc.text;
 	docRef.current = doc;
 	const editorBusy = sending || restoring || loading || state.running || writingBlocked || (!!doc && doc.entry.path !== path);
@@ -183,7 +180,6 @@ export function WikiWorkbench({ coordinator, cwd, conversationId, streaming, act
 			const content = wikiRequest<WikiDocumentContent>(cwd, "document-content", { path: target });
 			const result = await content;
 			if (!alive.current || seq !== docSequence.current) return;
-			loadedPiRevision.current = revisionRef.current.find(r => r.author === "pi" && r.changes.some(c => c.path === target))?.id;
 			setDoc({ ...result, backlinks: [] }); setDraft(result.text ?? ""); setSelectionMenu(null);
 			void loadReferences(target, seq);
 			localStorage.setItem(`pi-wiki-file:${cwd}`, target);
@@ -195,20 +191,36 @@ export function WikiWorkbench({ coordinator, cwd, conversationId, streaming, act
 	useEffect(() => {
 		if (active && docRef.current?.entry.path === path && state.entries.length) void loadReferences(path, docSequence.current);
 	}, [state.entries, active, path, loadReferences]);
+	const syncStatus = useRef({ saving, loading });
+	syncStatus.current = { saving, loading };
 	useEffect(() => {
-		if (!doc || dirty || saving || loading || streaming || state.running || !active || checkedEntries.current === state.entries) return;
-		checkedEntries.current = state.entries;
-		const entry = state.entries.find(e => e.path === path);
-		const piRevision = state.revisions.find(r => r.author === "pi" && r.changes.some(c => c.path === path));
-		if (!entry || entry.modified === doc.entry.modified) { loadedPiRevision.current = piRevision?.id; return; }
-		if (!doc.editable || piRevision?.id !== loadedPiRevision.current) { void load(path); return; }
-		const before = doc, sequence = docSequence.current;
-		void wikiRequest<WikiDocumentContent>(cwd, "document-content", { path }).then(latest => {
-			if (!alive.current || sequence !== docSequence.current || docRef.current?.version !== before.version) return;
-			if (latest.version !== before.version) autosave.noteExternalChange();
-			else setDoc(current => current ? { ...current, entry: latest.entry } : current);
-		}).catch(e => { if (alive.current && sequence === docSequence.current) setError(e.message); });
-	}, [state.entries, doc, dirty, saving, loading, active, path, load, cwd, state.revisions, state.running, streaming, autosave.noteExternalChange]);
+		if (!active || !path) return;
+		let cancelled = false, pending = false;
+		const syncDocument = async () => {
+			const before = docRef.current;
+			if (pending || !before || before.entry.path !== path || syncStatus.current.saving || syncStatus.current.loading) return;
+			const sequence = docSequence.current;
+			pending = true;
+			try {
+				// Read the opened file directly: the index and pi history can lag behind writes.
+				const latest = await wikiRequest<WikiDocumentContent>(cwd, "document-content", { path });
+				if (cancelled || !alive.current || sequence !== docSequence.current || docRef.current?.version !== before.version || syncStatus.current.saving) return;
+				if (latest.version === before.version) return;
+				if (draftRef.current !== before.text && before.editable) { autosave.noteExternalChange(); return; }
+				const next = { ...latest, backlinks: before.backlinks };
+				docRef.current = next;
+				draftRef.current = latest.text ?? "";
+				setDoc(next); setDraft(draftRef.current);
+				void loadReferences(path, sequence);
+			} catch (e) {
+				if (!cancelled && alive.current && sequence === docSequence.current) setError((e as Error).message);
+			} finally { pending = false; }
+		};
+		void syncDocument();
+		const timer = setInterval(() => void syncDocument(), streaming || state.running ? 1000 : 30000);
+		return () => { cancelled = true; clearInterval(timer); };
+	}, [active, path, cwd, streaming, state.running, state.entries, loadReferences, autosave.noteExternalChange]);
+
 	useEffect(() => {
 		if (!nav) return;
 		const previous = document.activeElement;

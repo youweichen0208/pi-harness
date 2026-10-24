@@ -1,3 +1,4 @@
+import { copyText } from "../clipboard";
 import { getClientId } from "../use-chat";
 import type { WikiCoordinator } from "../wiki-coordinator";
 import { UiIcon } from "./UiIcon";
@@ -143,6 +144,11 @@ export const ChatInput = memo(function ChatInput({
 	const sendLease = useRef<ReturnType<WikiCoordinator["begin"]>>(null);
 	const pendingKey = `pi-pending-prompt:${getClientId()}`;
 	const [receiptWarning, setReceiptWarning] = useState<"unknown" | "acceptedElsewhere" | null>(null);
+	useEffect(() => {
+		if (receiptWarning !== "acceptedElsewhere") return;
+		const timeout = setTimeout(() => setReceiptWarning(current => current === "acceptedElsewhere" ? null : current), 5000);
+		return () => clearTimeout(timeout);
+	}, [receiptWarning]);
 	const mounted = useRef(true);
 	const [submissionEpoch, setSubmissionEpoch] = useState(0);
 	const pendingSubmit = useRef<{ id: string; sessionId?: string; conversation: string; text: string; queued: boolean; attachments: ChatInputProps["attachments"] } | null>(null);
@@ -330,7 +336,7 @@ export const ChatInput = memo(function ChatInput({
 			return;
 		}
 		try {
-			await navigator.clipboard.writeText(textToCopy);
+			await copyText(textToCopy, taRef.current?.ownerDocument ?? document);
 			onNotice("info", t("slashCopied"));
 		} catch {
 			onNotice("error", t("slashCopyFailed"));

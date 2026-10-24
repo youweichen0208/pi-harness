@@ -105,8 +105,7 @@ try {
 	await page.screenshot({ path: '/tmp/pi-wiki-edit-slash.png' });
 	await page.keyboard.type('dm');
 	assert.equal(await page.locator('.wiki-slash-menu').getByRole('option').count(), 1);
-	await page.keyboard.press('Enter'); await page.locator('.wiki-language-picker input').waitFor(); await page.keyboard.press('Enter'); await page.keyboard.type('public class Demo {');
-	await editor.locator('select[data-code-language]').last().selectOption('java');
+	await page.keyboard.press('Enter'); await page.keyboard.type('public class Demo {');
 	await page.keyboard.press('Enter'); await page.keyboard.type('int n = 1;');
 	assert((await editor.locator('pre code').last().innerText()).includes('Demo {\nint n = 1;'));
 	await page.keyboard.press('Meta+s'); await saved(); assert(disk().includes('```java'));

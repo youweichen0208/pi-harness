@@ -1,3 +1,4 @@
+import { copyText } from "../clipboard";
 import { UiIcon, type UiIconName } from "./UiIcon";
 import { ToolOutputDownload } from "./ToolOutputDownload";
 import { withToken } from "../auth-token";
@@ -337,6 +338,7 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true }: ToolCall
 	const nestedCalls = view.result?.nestedCalls ?? view.nestedCalls;
 	const t = useT();
 	const [open, setOpen] = useState(wrap);
+	const [copyError, setCopyError] = useState(false);
 	const [copied, setCopied] = useState(false);
 	const [lineWrap, setLineWrap] = useState(false);
 	const [bashView, setBashView] = useState<"steps" | "raw">("steps");
@@ -437,13 +439,14 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true }: ToolCall
 			? `exit ${nativeExitCode}`
 			: "";
 
-	const copyArgs = () => {
+	const copyArgs = (event: React.MouseEvent<HTMLButtonElement>) => {
 		if (block.argumentsText) {
 			let text = block.argumentsText;
 			try { if (block.name === "bash") text = JSON.parse(text).command ?? text; } catch {}
-			void navigator.clipboard.writeText(text);
-			setCopied(true);
-			setTimeout(() => setCopied(false), 1200);
+			setCopyError(false);
+			void copyText(text, event.currentTarget.ownerDocument).then(() => {
+				setCopied(true); setTimeout(() => setCopied(false), 1200);
+			}, () => { setCopied(false); setCopyError(true); });
 		}
 	};
 
@@ -532,7 +535,7 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true }: ToolCall
 				<button type="button" className="toolcall-wrap" aria-pressed={lineWrap} onClick={() => setLineWrap((value) => !value)}>{t("toolWrap")}</button>
 				<button type="button" className="toolcall-expand" onClick={() => setExpanded((value) => !value)}>{t(expanded ? "collapseCode" : "expandCode")}</button>
 				<button type="button" className="toolcall-expand" onClick={() => setZoomed(true)}>{t("zoomCode")}</button>
-				<button type="button" className="toolcall-copy" onClick={copyArgs}>{t(copied ? "copied" : "copy")}</button>
+				<button type="button" className="toolcall-copy" onClick={copyArgs}>{t(copyError ? "copyFailed" : copied ? "copied" : "copy")}</button>
 				<button type="button" className="toolcall-toggle" onClick={() => setOpen((value) => !value)}>{t(open ? "collapseCode" : "expandCode")}</button>
 			</BashCommandHeader> : (
 			<div className="toolcall-head">
@@ -581,11 +584,11 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true }: ToolCall
 				<button
 					type="button"
 					className="toolcall-copy"
-					title={t("copyArgs")}
-					aria-label={t(copied ? "copied" : "copyArgs")}
+					title={t(copyError ? "copyFailed" : "copyArgs")}
+					aria-label={t(copyError ? "copyFailed" : copied ? "copied" : "copyArgs")}
 					onClick={copyArgs}
 				>
-					{generic ? copied ? <FiCheck /> : <FiCopy /> : t(copied ? "copied" : "copy")}
+					{generic ? copied ? <FiCheck /> : <FiCopy /> : t(copyError ? "copyFailed" : copied ? "copied" : "copy")}
 				</button>
 				{(bashRun || bashDiagnostics.length > 0) && <details className="bash-card-more"><summary aria-label={t("more")}>⋯</summary><div><button type="button" onClick={() => setLineWrap((value) => !value)}>{t("toolWrap")}</button><button type="button" onClick={() => setZoomed(true)}>{t("zoomCode")}</button><button type="button" onClick={() => setOpen((value) => !value)}>{open ? t("collapseCode") : t("expandCode")}</button></div></details>}
 				{!bashRun && !bashDiagnostics.length && <button

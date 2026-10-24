@@ -1,3 +1,4 @@
+import { copyText } from "../clipboard";
 import { useEffect, useRef, useState } from "react";
 import { FiCheck, FiCopy, FiChevronDown, FiChevronRight } from "react-icons/fi";
 import { useT } from "../i18n";
@@ -44,7 +45,7 @@ export function SystemPromptPanel({cwd,conversationId}:{cwd:string;conversationI
 		if(!discard())return;
 		try{const next=await request("get");if(!alive.current)return;setState(next);const file=next.files.find(f=>f.id===edit?.file.id);if(file)setEdit({file,text:file.content,initial:file.content,confirmed:true});setError("");}catch(e){setError((e as Error).message);}
 	}
-	async function copy(){try{await navigator.clipboard.writeText(state?.raw??"");setCopied(true);}catch{setError(t("promptCopyFailed"));}}
+	async function copy(doc: Document){try{await copyText(state?.raw??"", doc);setCopied(true);}catch{setError(t("promptCopyFailed"));}}
 	function editor(kind:PromptFileView["kind"]) {
 		if(!edit||edit.file.kind!==kind)return null;
 		return <div className="prompt-editor" data-dirty={dirty}>
@@ -71,7 +72,7 @@ export function SystemPromptPanel({cwd,conversationId}:{cwd:string;conversationI
 	const shadowed=state.files.some(file=>file.id===savedId&&file.exists&&!file.active);
 	const muted=state.custom?" prompt-inactive":"";
 	return <section className="system-prompt-panel" aria-label={t("settingsSystemPrompt")}>
-		<header className="prompt-heading"><h2>{t("settingsSystemPrompt")}</h2><span className="prompt-token" title={t("promptTokenHint")}>{t("promptTokens",{n:state.tokens.toLocaleString()})} · {t("v2PromptHint")}</span><div className="prompt-heading-actions"><button className="prompt-link" disabled={!!edit} onClick={()=>setRaw(!raw)}>{t(raw?"promptViewSections":"promptViewRaw")}</button><button onClick={()=>void copy()}>{copied?<FiCheck/>:<FiCopy/>}{t(copied?"promptCopied":"promptCopy")}</button></div></header>
+		<header className="prompt-heading"><h2>{t("settingsSystemPrompt")}</h2><span className="prompt-token" title={t("promptTokenHint")}>{t("promptTokens",{n:state.tokens.toLocaleString()})} · {t("v2PromptHint")}</span><div className="prompt-heading-actions"><button className="prompt-link" disabled={!!edit} onClick={()=>setRaw(!raw)}>{t(raw?"promptViewSections":"promptViewRaw")}</button><button onClick={event=>void copy(event.currentTarget.ownerDocument)}>{copied?<FiCheck/>:<FiCopy/>}{t(copied?"promptCopied":"promptCopy")}</button></div></header>
 		{(saved||state.pending)&&!state.reloadError&&<p className="prompt-save-status" role="status"><FiCheck/>{t(state.pending?"promptSavedPending":shadowed?"promptSavedShadowed":"promptSavedNext")}</p>}
 		{error&&<p className="prompt-error" role="alert">{error}</p>}
 		{state.reloadError&&<div className="prompt-error" role="alert">{t("promptReloadFailed")} {state.reloadError}<button disabled={busy} onClick={()=>void mutate("retry")}>{t("promptRetry")}</button></div>}

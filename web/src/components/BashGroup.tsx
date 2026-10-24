@@ -1,3 +1,4 @@
+import { copyText } from "../clipboard";
 import { useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { FiChevronDown, FiChevronRight } from "react-icons/fi";
 import { commandReading, consecutiveAttempts } from "../command-reading";
@@ -90,6 +91,7 @@ function BashRow({ block, view, onKill, revealed, messageId, attempts, historica
 	// In a process group the group opens on failure; rows stay compact until clicked or revealed.
 	const [open, setOpen] = useState(state === "err" && !compact);
 	const [all, setAll] = useState(false);
+	const [copyError, setCopyError] = useState<"command" | "output" | null>(null);
 	const [copied, setCopied] = useState<"command" | "output" | null>(null);
 	const copyTimer = useRef<ReturnType<typeof setTimeout>>();
 	useEffect(() => () => clearTimeout(copyTimer.current), []);
@@ -115,8 +117,9 @@ function BashRow({ block, view, onKill, revealed, messageId, attempts, historica
 	const details = view.result?.details as { exitCode?: number; fullOutputPath?: string; truncation?: { truncated?: boolean } } | undefined;
 	const exitCode = details?.exitCode ?? view.status?.exitCode;
 	const truncated = details?.fullOutputPath || details?.truncation?.truncated || view.result?.content.some((part) => part.type === "text" && part.truncated);
-	const copy = async (kind: "command" | "output") => {
-		try { await navigator.clipboard.writeText(kind === "command" ? command : output); setCopied(kind); clearTimeout(copyTimer.current); copyTimer.current = setTimeout(() => setCopied(null), 1500); } catch { setCopied(null); }
+	const copy = async (kind: "command" | "output", doc: Document) => {
+		setCopyError(null);
+		try { await copyText(kind === "command" ? command : output, doc); setCopied(kind); clearTimeout(copyTimer.current); copyTimer.current = setTimeout(() => setCopied(null), 1500); } catch { setCopied(null); setCopyError(kind); }
 	};
 	return <div className={`bash-row ${state}`} data-tool-call-id={block.id} data-msg-id={messageId} onMouseEnter={() => window.dispatchEvent(new CustomEvent("pi:tool-hover", { detail: { toolCallId: block.id } }))} onMouseLeave={() => window.dispatchEvent(new CustomEvent("pi:tool-hover", { detail: { toolCallId: null } }))}>
 		<button type="button" className="bash-row-head" title={command} aria-expanded={open} onClick={() => setOpen(!open)}>
@@ -133,8 +136,8 @@ function BashRow({ block, view, onKill, revealed, messageId, attempts, historica
 			{lines.length > 0 && <div className="bash-numbered-output" data-msg-id={view.result?.id}>{shownLines.map((line, i) => <div key={lineOffset + i} className={`bash-numbered-line${isLikelyErrorLine(line) ? " error" : /(?:\bPASS\b|\bpassed\b|\bsummary\b)/i.test(line) ? " important" : ""}`}><span aria-hidden="true">{lineOffset + i + 1}</span><code>{line || " "}</code></div>)}</div>}
 			{lines.length > 6 && <button type="button" className="bash-group-more" onClick={() => setAll(!all)}>{all ? t("collapseCode") : t("bashRemainingLines", { n: lines.length - 6 })}</button>}
 			<div className="bash-row-actions">
-				<button type="button" onClick={() => void copy("command")}>{t(copied === "command" ? "copied" : "bashCopyCommand")}</button>
-				<button type="button" disabled={!output} onClick={() => void copy("output")}>{t(copied === "output" ? "copied" : "bashCopyOutput")}</button>
+				<button type="button" onClick={event => void copy("command", event.currentTarget.ownerDocument)}>{t(copyError === "command" ? "copyFailed" : copied === "command" ? "copied" : "bashCopyCommand")}</button>
+				<button type="button" disabled={!output} onClick={event => void copy("output", event.currentTarget.ownerDocument)}>{t(copyError === "output" ? "copyFailed" : copied === "output" ? "copied" : "bashCopyOutput")}</button>
 				{truncated && view.result?.toolOutputUrl && <ToolOutputDownload url={view.result.toolOutputUrl} />}
 				<button type="button" title={t("bashOpenTerminalHint")} onClick={() => window.dispatchEvent(new CustomEvent("pi-harness:plugin-run-command", { detail: { title: compactCommandLabel(commandLines[0]), command } }))}>{t("bashOpenTerminal")}</button>
 				{state === "run" && onKill && <button type="button" onClick={onKill}>{t("stopBash")}</button>}

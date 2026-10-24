@@ -8243,7 +8243,6 @@ html.pi-desktop .desktop-window-controls {
 /* Code language controls live inside each block, outside its editable text. */
 .fp-rich-document pre:has(> code) { position: relative; padding-top: 40px !important; }
 .fp-code-language { position: absolute; top: 7px; right: 10px; line-height: 1; user-select: none; }
-.fp-code-language select { max-width: 160px; padding: 3px 6px; border: 1px solid color-mix(in srgb, var(--accent-fg) 18.82%, transparent); border-radius: var(--r-sm); background: var(--code-bg); color: var(--code-fg); font: 11px var(--font-mono, monospace); cursor: pointer; }
 
 /* Table actions appear only while a cell is selected. */
 .fp-rich-editor { position: relative; }
@@ -8292,10 +8291,6 @@ html.pi-desktop .desktop-window-controls {
 	height: 32px; padding: 0 10px;
 	background: var(--bg-elev2); border-bottom: 1px solid var(--border);
 	border-radius: var(--r-sm) var(--r-sm) 0 0;
-}
-.fp-markdown .fp-code-language select {
-	border: 0; background: transparent; color: var(--text-dim);
-	font: 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 .fp-markdown .hljs { background: transparent; color: var(--code-fg); }
 .fp-markdown .hljs-comment, .fp-markdown .hljs-quote { color: #737373; }
@@ -10318,7 +10313,7 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { height: 44px;
 .wiki-prose .fp-rich-document { min-height: 120px; }
 
 .wiki-prose .fp-markdown .fp-code-language { top: 8px; right: 12px; left: auto; height: 26px; padding: 0; border: 0; background: transparent; gap: 8px; }
-.wiki-prose .fp-code-language :is(select, button) { color: var(--wiki-code-comment); background: transparent; font: 12px var(--mono); border: 0; }
+.wiki-prose .fp-code-language button { color: var(--wiki-code-comment); background: transparent; font: 12px var(--mono); border: 0; }
 .wiki-prose .fp-markdown .fp-rich-document pre.codeblock { margin: 24px 0; padding: 40px 24px 22px; border: 0; border-radius: var(--r-lg); background: var(--wiki-code-bg); color: var(--wiki-code-fg); font-size: 15px; line-height: 1.75; }
 @media (max-width: 760px) { .wiki-prose { font-size: 16px; } .wiki-prose.md h2 { font-size: 22px; } .wiki-document-meta { font-size: 12px; gap: 10px; } .wiki-prose .fp-markdown .fp-rich-document pre.codeblock { padding-inline: 16px; font-size: 13px; } }
 .wiki-prose .fp-markdown .hljs-comment { color: var(--wiki-code-comment); }
@@ -10939,7 +10934,6 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { height: 44px;
 .wiki-prose .fp-markdown .md :is(th, td) { border: 0; border-top: 1px solid var(--border-soft); padding: 10px 14px; }
 .wiki-prose .fp-markdown .md thead th { border-top: 0; }
 .wiki-prose .fp-markdown .md blockquote { border-left: 2px solid var(--border); background: transparent; padding: 2px 20px; color: var(--text-dim); }
-.wiki-prose .fp-markdown .fp-code-language select { border: 1px solid var(--border-soft); border-radius: var(--r-sm); padding: 3px 6px; }
 @media (max-width: 760px) {
 	.wiki-document-toolbar { padding: 7px 16px; gap: 8px; }
 	.wiki-document-location { font-size: 11px; }
@@ -11252,11 +11246,6 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { height: 44px;
 .wiki-table-picker footer { display: flex; justify-content: space-between; gap: 8px; margin-top: 12px; font-size: 12px; }
 .wiki-table-picker small { color: var(--text-dim); font-size: 11px; }
 .wiki-code-popover { width: 200px; padding: 6px; }
-.wiki-language-picker input { width: 100%; box-sizing: border-box; padding: 8px; margin-bottom: 4px; background: var(--bg); color: var(--text); border: 1px solid var(--border-soft); border-radius: var(--r-sm); font-size: 12px; }
-.wiki-language-picker button { display: flex; justify-content: space-between; align-items: center; width: 100%; border: 0; border-radius: var(--r-sm); padding: 8px; color: var(--text); background: transparent; text-align: left; }
-.wiki-language-picker button[aria-selected=true], .wiki-language-picker button:hover { background: var(--bg-elev2); }
-.wiki-language-picker code { font: 12px var(--mono); }
-.wiki-language-picker small { font-size: 11px; color: var(--text-dim); }
 .wiki-mermaid-preview { background: var(--bg); border-bottom: 1px solid var(--border-soft); margin-bottom: 12px; white-space: normal; }
 /* Mermaid source folds away by default; the diagram is the reading view. */
 pre.wiki-mermaid-source-hidden > code { display: none; }
@@ -12643,8 +12632,9 @@ html.pi-desktop .wiki-window-header .desktop-window-controls { -webkit-app-regio
 .wiki-toolbar-actions .wiki-source-toggle { min-height: 30px; padding: 4px 8px; border-color: transparent; border-radius: var(--r-sm); background: transparent; }
 .wiki-toolbar-actions .wiki-source-toggle:hover { border-color: transparent; background: var(--bg-elev2); color: var(--text); }
 .wiki-source-toggle svg, .wiki-insert-toolbar svg { width: 17px; height: 17px; stroke-width: 1.75; }
-.wiki-prose .fp-markdown .md table { table-layout: auto; margin: .75em 0; }
-.wiki-prose .fp-markdown .md :is(th, td) { text-align: left; padding: 6px 10px; min-width: 110px; line-height: 1.5; }
+.wiki-prose .fp-markdown .md .rich-block:has(> table) { max-width: 100%; overflow-x: auto; }
+.wiki-prose .fp-markdown .md table { display: table; width: 100%; table-layout: auto; margin: .75em 0; }
+.wiki-prose .fp-markdown .md :is(th, td) { text-align: center; padding: 10px 16px; min-width: 110px; line-height: 1.5; }
 .wiki-prose .fp-markdown .md .wiki-table-status { min-width: 0; width: 1%; text-align: center; white-space: nowrap; }
 .wiki-prose .fp-markdown .md table.rich-table-empty { table-layout: fixed; }
 .wiki-prose .fp-markdown .fp-rich-document pre.codeblock { margin: .75em 0; padding-inline: 16px; padding-bottom: 14px; font: 13px/1.6 var(--mono); white-space: normal; }
@@ -13296,8 +13286,6 @@ html.pi-desktop-darwin .compact-navigation .global-navigation { padding-top: 36p
 
 /* Whole-table selection fills empty cells as well as text. */
 .fp-rich-document.md table[data-table-selected] :is(th, td) { background: var(--accent-soft); }
-.fp-table-select-handle { position: fixed; z-index: 30; width: 24px; height: 24px; padding: 0; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--text-muted); cursor: pointer; font-size: 18px; }
-.fp-table-select-handle:hover, .fp-table-select-handle:focus-visible { background: var(--accent-soft); color: var(--accent); }
 
 /* ---------------------------------------------------------------------------
    Playground — the Run control on a Java code block and its result area.
@@ -13722,3 +13710,6 @@ html.pi-desktop .design-workspace .topbar { height: 48px; min-height: 48px; }
 @media (pointer: coarse) {
 	.node-workbench :is(button, summary) { min-height: 44px; }
 }
+
+/* Temporary selection target for clipboard fallback in detached windows. */
+.clipboard-copy-fallback { position: fixed; top: 0; left: 0; width: 1px; height: 1px; padding: 0; border: 0; opacity: 0; pointer-events: none; }

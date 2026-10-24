@@ -95,7 +95,7 @@ export function highlightLine(code: string, lang: string | null): string {
 /** Wiki's unlabelled fences use a bounded set of common languages. */
 export function highlightWikiCode(code: string, lang: string): string {
 	if (lang && lang !== "plaintext") return highlightLine(code, lang);
-	try { return hljs.highlightAuto(code, ["bash", "python", "typescript", "json", "yaml", "sql"]).value; }
+	try { return hljs.highlightAuto(code, ["bash", "python", "typescript", "json", "yaml", "sql", "java", "cpp", "go", "rust", "xml", "css"]).value; }
 	catch { return escapeHtml(code); }
 }
 
