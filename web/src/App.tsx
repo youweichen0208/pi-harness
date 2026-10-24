@@ -1543,7 +1543,7 @@ export function App() {
 						</TerminalViewBoundary>
 					</div>
 					<div className={`view-pane ${view === "nodes" ? "" : "hidden"}`}>
-						<Suspense fallback={null}>{visited.current.has("nodes") && <NodeWorkbench active={view === "nodes"} send={send} />}</Suspense>
+						<Suspense fallback={null}>{visited.current.has("nodes") && <NodeWorkbench active={view === "nodes"} send={send} dirBrowse={chat.dirBrowse} />}</Suspense>
 					</div>
 					<div className={`view-pane ${view === "git" ? "" : "hidden"}`}>
 						{visited.current.has("git") && <ScmPanel

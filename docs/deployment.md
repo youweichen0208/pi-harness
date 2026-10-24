@@ -130,7 +130,7 @@ npm run publish:electron       # 同 build，但 --publish always——本地跑
   创建/复用 Wiki 独立窗口（同一时刻一个，重复进入导航到新文档并聚焦），Wiki 窗口
   关闭时真正关闭（不隐藏到托盘），关闭守卫按窗口独立跟踪。文件的默认应用打开仍走已验证的专用 IPC。
   回归：`node tests/desktop-state-links-test.mjs` 与 `--links`（真实 Electron，临时数据目录，浏览器打开仅在系统调用边界替换）。
-- 关闭窗口 → 最小化到托盘（不退出）；托盘菜单可重新打开 / 退出。
+- 关闭窗口 → 最小化到托盘（不退出）；托盘菜单可重新打开 / 退出。macOS 全屏关闭时，保存守卫通过后先退出原生全屏，等待 `leave-full-screen` 再隐藏，避免留下黑色全屏空间；连续关闭合并处理。回归：`tests/desktop-fullscreen-close-test.mjs`。
 - 桌面主窗口与 Wiki 窗口都使用无边框外壳：macOS 隐藏系统标题栏、保留左侧原生红黄绿按钮；
   Windows/Linux 使用 `DesktopWindowControls` 自绘最小化、最大化、关闭按钮。主窗口拖动区
   覆盖整条顶栏背景（含窄窗口），按钮、输入框、链接和会话选择器为 `no-drag`；Wiki 的 Windows/Linux 窗口按钮在标题栏中占用独立 132px 空间，不继承主窗口的固定定位，避免覆盖搜索、历史与「问 pi」（#113）；整条文档标题栏与面包屑都可拖动，按钮、保存状态和菜单均为

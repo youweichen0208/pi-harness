@@ -1318,6 +1318,8 @@ export interface NodeProfile {
 export interface NodeSource {
 	id: string; kind: "xshell" | "ssh"; path: string; enabled: boolean;
 	lastSync?: number; error?: string; count: number; groups: number; changes?: string[];
+	/** Explicit import selection; omitted for legacy sources that sync all entries. */
+	selectedKeys?: string[];
 }
 
 /** Wiki HTTP API. Workspace and request identity are checked at the boundary. */

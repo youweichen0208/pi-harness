@@ -63,6 +63,11 @@ try {
 			assert.equal(await page.locator('.project-panel-toggle').evaluate(el => getComputedStyle(el).borderTopWidth), '0px');
 			assert.equal(await page.locator('.topbar-actions > .panel-toggle').evaluate(el => getComputedStyle(el).borderTopWidth), '0px');
 			if (platform === 'darwin') assert.equal((await page.locator('.project-panel-toggle').boundingBox()).x, 92);
+			if (width >= 1000) {
+				const nodes = await page.getByRole('tab', { name: '节点', exact: true }).boundingBox();
+				const tabs = await page.locator('.view-switch').boundingBox();
+				assert(nodes.x >= tabs.x && nodes.x + nodes.width <= tabs.x + tabs.width + 1, 'nodes icon and label must be fully visible without scrolling');
+			}
 			for (const view of ['chat', 'nodes']) {
 				if (view === 'nodes') await page.getByRole('tab', { name: '节点', exact: true }).click();
 				const actions = await page.locator('.topbar-actions').boundingBox();

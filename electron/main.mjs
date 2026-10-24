@@ -282,6 +282,19 @@ function windowShellOptions(overrides = {}) {
 function wireAppWindow(win, { hideOnClose }) {
 	windows.add(win);
 	closeGuards.set(win, { ready: false, approved: false, pending: null });
+	// A hidden fullscreen window can leave an empty macOS Space behind. Keep
+	// it visible until AppKit finishes leaving, including a close during entry.
+	let hideAfterFullscreen = false;
+	win.on("enter-full-screen", () => {
+		if (hideAfterFullscreen && !isQuitting) win.setFullScreen(false);
+	});
+	win.on("leave-full-screen", () => {
+		if (!hideAfterFullscreen) return;
+		hideAfterFullscreen = false;
+		// Let the rest of the fullscreen state listeners run before hiding.
+		setImmediate(() => { if (!win.isDestroyed() && !isQuitting) win.hide(); });
+	});
+
 
 	const publishWindowState = () => {
 		if (!win.isDestroyed()) win.webContents.send("pi-window-state", windowState(win));
@@ -354,6 +367,7 @@ function wireAppWindow(win, { hideOnClose }) {
 	// Give the editor a chance to flush before hiding or quitting. Keep the server
 	// alive until the matching main-frame acknowledgement; failure cancels closing.
 	win.on("close", (event) => {
+		if (hideAfterFullscreen && !isQuitting) { event.preventDefault(); return; }
 		const guard = closeGuards.get(win);
 		if (guard?.ready && !guard.approved) {
 			event.preventDefault();
@@ -367,7 +381,10 @@ function wireAppWindow(win, { hideOnClose }) {
 		if (guard) guard.approved = false;
 		if (hideOnClose && !isQuitting) {
 			event.preventDefault();
-			win.hide();
+			if (process.platform === "darwin" && win.isFullScreen()) {
+				hideAfterFullscreen = true;
+				win.setFullScreen(false);
+			} else win.hide();
 		}
 	});
 

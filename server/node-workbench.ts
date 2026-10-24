@@ -146,11 +146,22 @@ export class NodeWorkbench {
 			switch (req.action) {
 				case "state": this.emit(clientId, "state", this.state(clientId)); break;
 				case "source_detect": result = { sources: await detectSources() }; break;
+				case "source_preview": {
+					const path = sourcePath(field(p.path, "路径", 4096)), kind = p.kind === "xshell" ? "xshell" : "ssh";
+					result = { nodes: await scanSource({ kind, path }) }; break;
+				}
 				case "source_add": {
 					const path = sourcePath(field(p.path, "路径", 4096)), kind = p.kind === "xshell" ? "xshell" : "ssh";
+					let keys: string[] | undefined;
+					if (p.selectedKeys !== undefined) {
+						if (!Array.isArray(p.selectedKeys) || !p.selectedKeys.length || p.selectedKeys.length > 200 || p.selectedKeys.some(key => typeof key !== "string")) throw new Error("请选择要导入的节点");
+						const scanned = await scanSource({ kind, path });
+						keys = [...new Set(p.selectedKeys as string[])];
+						if (keys.some(key => !scanned.some(node => node.sourceKey === key && !node.unsupported?.some(reason => reason !== "key")))) throw new Error("来源已变化或包含不支持的节点，请重新预览");
+					}
 					let source = this.sources.find((s) => s.path === path && s.kind === kind);
-					if (!source) { if (this.sources.length >= 10) throw new Error("最多 10 个配置来源"); source = { id: randomUUID(), kind, path, enabled: p.enabled !== false, count: 0, groups: 0 }; this.sources.push(source); }
-					else source.enabled = p.enabled !== false;
+					if (!source) { if (this.sources.length >= 10) throw new Error("最多 10 个配置来源"); source = { id: randomUUID(), kind, path, enabled: p.enabled !== false, count: 0, groups: 0, selectedKeys: keys }; this.sources.push(source); }
+					else { source.enabled = p.enabled !== false; if (keys && source.selectedKeys) source.selectedKeys = [...new Set([...source.selectedKeys, ...keys])]; }
 					await this.syncSource(source); if (source.error) throw new Error(source.error); result = { sourceId: source.id }; break;
 				}
 				case "source_reveal": {
@@ -323,7 +334,7 @@ export class NodeWorkbench {
 		if (this.disposed || this.syncing.has(source.id)) return;
 		this.syncing.add(source.id);
 		try {
-			const scanned = await scanSource(source);
+			const scanned = (await scanSource(source)).filter(node => !source.selectedKeys || source.selectedKeys.includes(node.sourceKey));
 			if (this.disposed) return;
 			const changes: string[] = [];
 			for (const incoming of scanned) {

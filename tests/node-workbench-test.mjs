@@ -178,6 +178,26 @@ try {
 	assert.equal(passwordNode.localAuth, "key");
 	assert.equal((await call("credential_test", passwordNode.id, { auth: "password", secret: "secret123" })).event, "result");
 	assert.equal(passwordNode.localAuth, "password");
+	const selectedDir = join(dataDir, "selected-sessions"); mkdirSync(selectedDir);
+	const selectedText = "[CONNECTION]\nHost=example.invalid\nPort=22\nProtocol=SSH\n[CONNECTION:AUTHENTICATION]\nUserName=tester\nMethod=0\n";
+	writeFileSync(join(selectedDir, "one.xsh"), selectedText);
+	writeFileSync(join(selectedDir, "two.xsh"), selectedText);
+	writeFileSync(join(selectedDir, "blocked.xsh"), selectedText.replace("Protocol=SSH", "Protocol=TELNET"));
+	const beforePreview = service.nodes.length;
+	const preview = await call("source_preview", undefined, { kind: "xshell", path: selectedDir });
+	assert.equal(preview.data.nodes.length, 3);
+	assert.equal(service.nodes.length, beforePreview, "preview does not persist nodes");
+	assert.equal((await call("source_add", undefined, { kind: "xshell", path: selectedDir, selectedKeys: ["blocked.xsh"] })).event, "failure");
+	assert.equal((await call("source_add", undefined, { kind: "xshell", path: selectedDir, selectedKeys: ["gone.xsh"] })).event, "failure");
+	const selectedSource = await call("source_add", undefined, { kind: "xshell", path: selectedDir, selectedKeys: ["one.xsh"], enabled: false });
+	assert.equal(selectedSource.event, "result");
+	writeFileSync(join(selectedDir, "new.xsh"), selectedText);
+	await call("source_sync", undefined, { id: selectedSource.data.sourceId });
+	assert.deepEqual(service.nodes.filter(n => n.sourceId === selectedSource.data.sourceId).map(n => n.sourceKey), ["one.xsh"]);
+	const selectionRestored = new NodeWorkbench(dataDir);
+	assert.deepEqual(selectionRestored.sources.find(s => s.id === selectedSource.data.sourceId).selectedKeys, ["one.xsh"]);
+	selectionRestored.dispose();
+
 	console.log("✓ SSH trust, key change, authentication, terminal command/interrupt/truncation, SFTP and node isolation");
 } finally {
 	for (const c of [...service.connections.values()]) await call("disconnect", c.nodeId);
