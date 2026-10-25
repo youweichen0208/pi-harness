@@ -304,6 +304,8 @@ export class NodeWorkbench {
 				case "terminal_close": this.terminal(clientId, req).stream.end(); break;
 				case "interrupt": {
 					const t = this.terminal(clientId, req);
+					t.manualTyped = false;
+					t.promptReady = false;
 					t.stream.write("\x03");
 					if (t.pending) { const pending = t.pending; t.cancelledCapture = pending.capture; t.pending = undefined; pending.reject(new Error("命令已中断")); }
 					break;

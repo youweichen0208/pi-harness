@@ -183,7 +183,11 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 				const selected = !!range && range.compareBoundaryPoints(Range.START_TO_START, contents) <= 0 && range.compareBoundaryPoints(Range.END_TO_END, contents) >= 0;
 				table.toggleAttribute("data-table-selected", selected);
 			});
-
+			root.current?.querySelectorAll<HTMLElement>("pre > code").forEach(code => {
+				const contents = document.createRange(); contents.selectNodeContents(code);
+				const selected = !!range && !!code.textContent && range.compareBoundaryPoints(Range.START_TO_START, contents) <= 0 && range.compareBoundaryPoints(Range.END_TO_END, contents) >= 0;
+				code.parentElement?.toggleAttribute("data-code-selected", selected);
+			});
 		};
 		refresh();
 		document.addEventListener("selectionchange", refresh);
@@ -910,9 +914,11 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 						const block = target.closest<HTMLElement>("pre, table");
 						if (!block || !root.current?.contains(block)) return;
 						const rect = block.getBoundingClientRect(), x = event.clientX, y = event.clientY;
-						// Use a narrow inner edge so cell dividers and code text remain editable.
+						// Code gutters and header padding are part of the selectable frame.
 						if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) return;
-						if (Math.min(x - rect.left, rect.right - x, y - rect.top, rect.bottom - y) > 6) return;
+						const codeRect = block.tagName === "PRE" ? block.querySelector("code")?.getBoundingClientRect() : null;
+						const codeFrame = codeRect && (x < codeRect.left || x > codeRect.right || y < codeRect.top || y > codeRect.bottom);
+						if (!codeFrame && Math.min(x - rect.left, rect.right - x, y - rect.top, rect.bottom - y) > 6) return;
 						// Keep the native code-block resize grip usable.
 						if (block.tagName === "PRE" && rect.right - x < 16 && rect.bottom - y < 16) return;
 						event.preventDefault();

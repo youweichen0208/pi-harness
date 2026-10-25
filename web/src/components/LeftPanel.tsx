@@ -434,7 +434,7 @@ export const LeftPanel = memo(function LeftPanel({
 				</div>
 				{!notesOpen && selectedGroup && <label className="navigation-search"><FiSearch aria-hidden="true" /><input className="workspace-project-search" type="search" aria-label={t("workspaceSearch")} placeholder={t("workspaceSearch")} value={workspaceQuery} onChange={event => setWorkspaceQuery(event.target.value)} /></label>}
 				<nav className="global-entries">
-					<button title={t("notesChat")} className={!notesOpen && !scratchOpen ? "active" : ""} onClick={() => onNavigate("chat")}><FiMessageSquare /><span>{t("notesChat")}</span></button>
+					<div className="global-chat-entry"><button title={t("notesChat")} className={!notesOpen && !scratchOpen ? "active" : ""} onClick={() => onNavigate("chat")}><FiMessageSquare /><span>{t("notesChat")}</span></button><button type="button" className="global-new-chat" title={t("newChat")} aria-label={t("newChat")} disabled={!ready} onClick={onNewChat}><FiPlus /></button></div>
 					<button title={t("knowledgeLibrary")} onClick={() => onNavigate("knowledge")}><FiBookOpen /><span>{t("knowledgeLibrary")}</span></button>
 					<button title={t("notesPlayground")} className={scratchOpen ? "active" : ""} onClick={() => onNavigate("playground")}><FiCode /><span>{t("notesPlayground")}</span></button>
 					<button title={t("notesTitle")} className={notesOpen ? "active" : ""} onClick={() => { onNavigate("notes"); }}><FiFeather /><span>{t("notesTitle")}</span></button>
@@ -526,6 +526,7 @@ export const LeftPanel = memo(function LeftPanel({
 			{picking && selectedGroup && (
 				<FolderPickerModal
 					dirBrowse={dirBrowse}
+					initialPath={cwd || selectedGroup.paths[0]}
 					busy={workspaceBusy}
 					error={workspaceError}
 					pickLabel={t("workspaceAddProject")}

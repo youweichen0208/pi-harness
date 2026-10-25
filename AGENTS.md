@@ -91,7 +91,7 @@ pi-harness/
 │   ├── files-service.ts        # 文件服务（readDirForUI/readFile/searchFiles/watcher）
 │   ├── code-search.ts          # ripgrep 代码搜索（search_content 分批推送、取消、限额）与 rg --files 文件名搜索
 │   ├── sqlite-preview.ts       # SQLite 只读预览调度（sqlite-worker/query：隔离进程与分页查询）
-│   ├── scm.ts                  # SCM 只读 git 查询（execFile git status/branches/history/filediff/commit）
+│   ├── scm.ts                  # SCM 只读 git 查询（spawn、同 cwd 状态合并、进程树超时）
 │   ├── patch-node-pty.ts       # node-pty × Node --watch 兼容自愈补丁
 │   ├── ensure-bash.ts          # Windows 轻量 bash 兜底（busybox-w32）
 │   ├── control-socket.ts       # 本地控制 socket（status / quiesce / unquiesce）
@@ -200,7 +200,7 @@ pi SDK 和 pi-ai 精确锁定 1.4.0，使用原版 SDK，不应用本项目的 S
 | **附件** | `docs/architecture-attachments.md` | 三种模式（inline/reference/lines）；图片问答（base64 + 缩放）；文件上传（fileData 落盘） |
 | **文件预览** | `docs/architecture-attachments.md` | 修改右栏编辑、保存冲突或草稿离开保护时阅读；512KB 预览、媒体 HTTP Range、下载 |
 | **终端** | `docs/architecture-terminal.md` | 每 Conversation 一个 TerminalManager；spawn 统一准入；按键编码纯函数；输出微批合并；node-pty × --watch 兼容自愈 |
-| **SCM** | `docs/architecture-terminal.md` | 只读 git 查询走 execFile；未跟踪文件显示限量内容；git-dir watcher；写操作走可见终端 tab |
+| **SCM** | `docs/architecture-terminal.md` | 只读 git 查询走 spawn；同 cwd 状态合并与进程树超时；未跟踪文件限量预览；git-dir watcher；写操作走可见终端 tab |
 | **插件** | `docs/architecture-plugins.md` | <dataDir>/plugins/<id>/ 目录（manifest.json + index.mjs + client/entry.mjs）；attach 时热重扫；MCP 工具桥 |
 | **SSH 节点** | `docs/architecture-nodes.md` | 修改 Xshell/SSH config 同步、凭据、执行确认或终端引用时阅读；本机隔离 Agent 与 ssh2 节点工具 |
 | **工具结束实时状态** | `docs/architecture-core.md` | tool_status 先于快照落盘，浏览器卡片立即从「执行中」→「已结束」 |

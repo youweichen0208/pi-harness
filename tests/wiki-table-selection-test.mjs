@@ -83,10 +83,20 @@ try {
 			assert(!text.includes('Before table') && !text.includes('After table'));
 		}
 	}
+	// The visible frame includes a line-number gutter and blank header, not just a 6px edge.
+	const frame = await editor.locator('pre').boundingBox();
+	for (const [x, y] of [[frame.x + 24, frame.y + frame.height / 2], [frame.x + frame.width / 2, frame.y + 20]]) {
+		await page.mouse.click(x, y);
+		assert.equal((await page.evaluate(() => getSelection().toString())).trim(), 'SELECT * FROM accounts;\nSELECT * FROM scratch_accounts;', 'code gutter/header selects the entire block');
+		await page.waitForFunction(() => !!document.querySelector('pre[data-code-selected]'));
+		await page.keyboard.press('ControlOrMeta+c');
+		assert.equal((await page.evaluate(() => navigator.clipboard.readText())).trim(), 'SELECT * FROM accounts;\nSELECT * FROM scratch_accounts;');
+	}
 	await editor.locator('td').last().click();
 	assert(await page.evaluate(() => getSelection().isCollapsed), 'cell content click still places the caret');
 	await editor.locator('pre > code').click();
 	assert(await page.evaluate(() => getSelection().isCollapsed), 'code content click still places the caret');
+	await page.waitForFunction(() => !document.querySelector('pre[data-code-selected]'));
 	assert.equal(readFileSync(join(base, 'note.md'), 'utf8').includes('SELECT * FROM scratch_accounts;'), true, 'selection preserves source');
 
 	console.log('PASS linked table drag, scoped select-all, whole document select-all, toolbar and copy');

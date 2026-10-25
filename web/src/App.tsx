@@ -181,7 +181,8 @@ const EMPTY_MESSAGES: UiMessage[] = [];
 // ---- 可拖拽面板宽度（桌面端；≤768px 抽屉模式固定宽度不受影响）----
 const PANEL_MIN = 180;
 const PANEL_MAX = 520;
-const PANEL_DEFAULT = 252;
+const PANEL_DEFAULT = 240;
+const MIN_WORKSPACE_CHAT_WIDTH = 640;
 type PanelSide = "left" | "right" | "editor";
 const panelWidthKey = (side: PanelSide) => `pi-harness:${side}-panel-width`;
 function readPanelWidth(side: PanelSide): number {
@@ -768,15 +769,13 @@ export function App() {
 	const [filesCollapsed, setFilesCollapsed] = useState(false);
 
 	const [drawer, setDrawer] = useState<"left" | "right" | null>(null);
-	// Viewport class: ≤768px turns the side panels into sliding drawers
-	// (matches the CSS breakpoint) — used to lazy-load panel data only when
-	// a drawer is actually open on mobile.
 	const [isMobile, setIsMobile] = useState(
 		() => window.matchMedia("(max-width: 768px)").matches,
 	);
 	const [isNarrow, setIsNarrow] = useState(
 		() => window.matchMedia("(max-width: 900px)").matches,
 	);
+	const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth);
 	useEffect(() => {
 		const mq = window.matchMedia("(max-width: 900px)");
 		const onChange = (e: MediaQueryListEvent) => {
@@ -792,6 +791,16 @@ export function App() {
 		mq.addEventListener("change", onChange);
 		return () => mq.removeEventListener("change", onChange);
 	}, []);
+	useEffect(() => {
+		const onResize = () => setViewportWidth(window.innerWidth);
+		window.addEventListener("resize", onResize);
+		return () => window.removeEventListener("resize", onResize);
+	}, []);
+	const filesOverlayForChat = isNarrow || viewportWidth - (leftCollapsed ? 56 : leftWidth) - rightWidth <= MIN_WORKSPACE_CHAT_WIDTH;
+	const filesOverlay = !inlinePreview && filesOverlayForChat;
+	useEffect(() => {
+		setDrawer(current => current === "right" ? null : current);
+	}, [filesOverlayForChat]);
 	const attach = useCallback((
 		path: string,
 		name: string,
@@ -1007,7 +1016,7 @@ export function App() {
 			setPreviewFile(null);
 			setView("chat");
 			setFilesCollapsed(false);
-			setDrawer(isMobile || isNarrow ? "right" : null);
+			setDrawer(filesOverlayForChat ? "right" : null);
 			setTaskFocusRequest((value) => value + 1);
 		};
 		if (fileGuard.current) fileGuard.current(open); else open();
@@ -1361,7 +1370,7 @@ export function App() {
 							setDrawer(null);
 							changesLeftRestore.current = null;
 							setLeftCollapsed((value) => { localStorage.setItem("pi-left-collapsed", String(!value)); return !value; });
-						} else if (side === "right" && !isMobile && !isNarrow && !inlinePreview) setFilesCollapsed((value) => !value);
+						} else if (side === "right" && !filesOverlay && !inlinePreview) setFilesCollapsed((value) => !value);
 						else {
 							if (side === "right") setFilesCollapsed(false);
 							setDrawer((value) => value === side ? null : side);
@@ -1399,7 +1408,7 @@ export function App() {
 					className={`layout ${notesOpen || scratchOpen ? "notes-chat-hidden" : ""}`}
 					style={{ "--left-w": `${leftWidth}px`, "--right-w": `${rightWidth}px`, "--editor-share": editorShare } as CSSProperties}
 				>
-					{drawer && (isMobile || (isNarrow && !inlinePreview) || (drawer === "left" && !!previewFile)) && (
+					{drawer && ((drawer === "left" && (isNarrow || !!previewFile)) || (drawer === "right" && filesOverlay)) && (
 						<div className="drawer-backdrop" onClick={() => setDrawer(null)} />
 					)}
 					<div className={`view-pane ${inlinePreview ? "preview-open" : ""} ${view === "chat" ? "" : "hidden"}`}>
@@ -1477,16 +1486,16 @@ export function App() {
 							/>
 						</ChatDock>
 						<ChangesPanel key={conversationState?.conversationId ?? ""} cwd={conversationState?.cwd ?? ""} data={chat.scmDiffData} send={send} ready={chat.ready && !switching} notRepo={!workspaceScm.loaded || workspaceScm.notRepo} branch={workspaceScm.branch} defaultBase={workspaceScm.base} branches={workspaceScm.branches} dirty={chat.scmDirty} />
-						{!isMobile && (!isNarrow || inlinePreview) && (!filesCollapsed || inlinePreview) && (
+						{!isMobile && !filesOverlay && (!filesCollapsed || inlinePreview) && (
 							<ResizeHandle side={inlinePreview ? "editor" : "right"} width={inlinePreview ? 480 : rightWidth} onResize={inlinePreview ? resizeEditor : resizeRight} onReset={inlinePreview ? () => { setEditorShare(0.45); localStorage.setItem("pi-harness:editor-share", "0.45"); } : undefined} />
 						)}
-						<FluidDrawer side="right" onOpen={() => setDrawer("right")} open={drawer === "right"} overlay={isNarrow && !inlinePreview} label={t("workspaceFiles")} onClose={() => setDrawer(null)}
+						<FluidDrawer side="right" onOpen={() => setDrawer("right")} open={drawer === "right"} overlay={filesOverlay} label={t("workspaceFiles")} onClose={() => setDrawer(null)}
 							className={`panel-drawer drawer-right ${filesCollapsed && !inlinePreview ? "files-collapsed" : ""} ${drawer === "right" ? "open" : ""}`}
 						>
 							<div className="file-list-host" hidden={inlinePreview}>
 								<RightPanel
 									onSearchFiles={openFileSearch}
-									active={!filesCollapsed && !inlinePreview && !switching && view === "chat" && ((!isMobile && !isNarrow) || drawer === "right")}
+									active={!filesCollapsed && !inlinePreview && !switching && view === "chat" && (!filesOverlay || drawer === "right")}
 									send={send}
 									files={chat.files}
 									changed={workspaceScm.files}

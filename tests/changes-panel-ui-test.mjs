@@ -9,6 +9,7 @@ import { chromium } from 'playwright-core';
 import { CHROME_PATH } from './lib/chrome.mjs';
 import { portUp } from './lib/port-utils.mjs';
 import { testEnv } from "./lib/test-env.mjs";
+import { contrastRatios } from "./lib/contrast.mjs";
 const port = 8999;
 assert.equal(await portUp(port), false, `Port ${port} busy`);
 const root = mkdtempSync(join(tmpdir(), 'pi-changes-'));
@@ -71,7 +72,15 @@ try {
 			await page.screenshot({ path: `tests/scratch/redesign-${appearance}-${width}.png` });
 		}
 	}
-	await page.evaluate(() => document.documentElement.dataset.appearance = 'light');
+	for (const theme of ['warm', 'mist', 'sage', 'oat', 'graphite']) {
+		await page.evaluate(value => { document.documentElement.dataset.theme = value; document.documentElement.dataset.appearance = value === 'graphite' ? 'dark' : 'light'; }, theme);
+		for (const selector of ['.change-counts .add', '.change-counts .del', '.change-summary > header button']) {
+			const results = await contrastRatios(page, selector);
+			assert(results.length > 0, `missing contrast fixture: ${selector}`);
+			for (const result of results) assert(result.ratio >= 4.5, `${theme} ${selector}: ${JSON.stringify(result)}`);
+		}
+	}
+	await page.evaluate(() => { document.documentElement.dataset.theme = 'warm'; document.documentElement.dataset.appearance = 'light'; });
 	await page.setViewportSize({ width: 1440, height: 1000 });
 	await page.locator('.change-summary-file').click();
 	await page.locator('.changes-line mark').first().waitFor();

@@ -61,7 +61,9 @@ assert.equal(terminal.promptReady,true,'probe re-armed the marker after the PS1 
 await service.handle('fixture',{type:'node_request',action:'terminal_input',requestId:'partial',nodeId,terminalId:'term',conversationId:opened.conversationId,payload:{data:'echo partial'}});
 assert.equal(terminal.manualTyped,true);
 await assert.rejects(service.execute('fixture',nodeId,'term',root,'echo must-not-probe-partial',2),/手动终端正忙/);
-await service.handle('fixture',{type:'node_request',action:'terminal_input',requestId:'partial-cancel',nodeId,terminalId:'term',conversationId:opened.conversationId,payload:{data:'\x03'}});
+await service.handle('fixture',{type:'node_request',action:'interrupt',requestId:'partial-cancel',nodeId,terminalId:'term',conversationId:opened.conversationId,payload:{data:'\x03'}});
+await ready();
+assert.equal((await service.execute('fixture',nodeId,'term',root,'printf after-ctrl-c',5)).output,'after-ctrl-c');
 await ready();
 assert(!terminal.buffer.includes('must-not-probe-altscreen'));
 assert(!terminal.buffer.includes('must-not-probe-partial'));

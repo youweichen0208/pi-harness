@@ -2,14 +2,15 @@
  * Read-only git queries backing the source-control panel.
  *
  * Replaces the old hidden-PTY + text-scraping approach: every query is a
- * plain `execFile("git", …)` — no shell, no prompts, no echo, no sentinel
+ * plain `spawn("git", …)` — no shell, no prompts, no echo, no sentinel
  * parsing. Output is parsed into structured JSON on the server; the client
  * just renders it.
  */
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { lstat, open, realpath, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
+import { killPidTree } from "./process-utils.js";
 import { decodeText, looksLikeText } from "./text-sniff.js";
 
 const exec = promisify(execFile);
@@ -64,24 +65,39 @@ export interface ScmStatusData {
 
 /** Run one git command; throws Error with a readable message on failure. */
 async function git(cwd: string, args: string[]): Promise<string> {
-	try {
-		const command = exec("git", ["-c", "core.quotepath=false", ...args], {
-			cwd,
-			timeout: GIT_TIMEOUT_MS,
-			maxBuffer: MAX_GIT_OUTPUT,
-			windowsHide: true,
+	return new Promise((resolve, reject) => {
+		const child = spawn("git", ["-c", "core.quotepath=false", ...args], {
+			cwd, detached: process.platform !== "win32", windowsHide: true,
+			env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" }, stdio: ["ignore", "pipe", "pipe"],
 		});
-		command.child.stdin?.end();
-		const { stdout } = await command;
-		return stdout;
-	} catch (err) {
-		const e = err as { message?: string; stderr?: string; killed?: boolean; code?: string };
-		if (e.code === "ENOENT") throw new Error("未找到 git 命令——请确认已安装 Git 并在 PATH 中");
-		if (e.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER") throw new GitOutputTooLarge("git 输出超过 16 MiB");
-		if (e.killed) throw new Error("git 命令超时");
-		const detail = (e.stderr ?? e.message ?? "").trim().split("\n")[0];
-		throw new Error(detail || "git 命令失败");
-	}
+		const stdout: Buffer[] = [], stderr: Buffer[] = [];
+		let bytes = 0, failure: Error | undefined;
+		const stop = (error: Error) => {
+			if (failure) return;
+			failure = error;
+			if (child.pid) killPidTree(child.pid);
+		};
+		const timer = setTimeout(() => stop(new Error("git 命令超时")), GIT_TIMEOUT_MS);
+		const collect = (chunks: Buffer[]) => (chunk: Buffer) => {
+			if (failure) return;
+			bytes += chunk.length;
+			if (bytes > MAX_GIT_OUTPUT) stop(new GitOutputTooLarge("git 输出超过 16 MiB"));
+			else chunks.push(chunk);
+		};
+		child.stdout.on("data", collect(stdout));
+		child.stderr.on("data", collect(stderr));
+		child.on("error", (error: NodeJS.ErrnoException) => {
+			clearTimeout(timer);
+			reject(error.code === "ENOENT" ? new Error("未找到 git 命令——请确认已安装 Git 并在 PATH 中") : error);
+		});
+		// Keep the request in flight until the process tree has closed its pipes.
+		child.on("close", code => {
+			clearTimeout(timer);
+			if (failure) reject(failure);
+			else if (code !== 0) reject(new Error(Buffer.concat(stderr).toString("utf8").trim().split("\n")[0] || "git 命令失败"));
+			else resolve(Buffer.concat(stdout).toString("utf8"));
+		});
+	});
 }
 
 /** Absolute path of the repo's git dir (handles worktrees/submodules), or
@@ -293,22 +309,36 @@ export async function scmHistory(cwd: string): Promise<ScmCommitEntry[]> {
 	return parseCommitHistory(await git(cwd, HISTORY_ARGS));
 }
 
+// Shared across file panels, conversations and browser clients. Never retain a
+// settled result: an explicit refresh must observe new changes.
+const statusRequests = new Map<string, Promise<ScmStatusData>>();
+export function scmStatus(cwd: string): Promise<ScmStatusData> {
+	const key = resolve(cwd);
+	const existing = statusRequests.get(key);
+	if (existing) return existing;
+	const request = queryStatus(key).finally(() => { statusRequests.delete(key); });
+	statusRequests.set(key, request);
+	return request;
+}
+
 /** Status refresh payload (status + branches + numstat) — parallel. */
-export async function scmStatus(
+async function queryStatus(
 	cwd: string,
 ): Promise<Omit<ScmStatusData, "history">> {
-	const [statusText, branchText, statText, cachedStatText] =
-		await Promise.all([
-			git(cwd, ["status", "--porcelain=v1", "-b", "--find-renames"]),
-			git(cwd, [
-				"for-each-ref",
-				"refs/heads",
-				"refs/remotes",
-				"--format=%(refname)%09%(HEAD)",
-			]),
-			git(cwd, ["diff", "--numstat"]),
-			git(cwd, ["diff", "--cached", "--numstat"]),
-		]);
+	const results = await Promise.allSettled([
+		git(cwd, ["status", "--porcelain=v1", "-b", "--find-renames"]),
+		git(cwd, [
+			"for-each-ref",
+			"refs/heads",
+			"refs/remotes",
+			"--format=%(refname)%09%(HEAD)",
+		]),
+		git(cwd, ["diff", "--numstat"]),
+		git(cwd, ["diff", "--cached", "--numstat"]),
+	]);
+	const failure = results.find(result => result.status === "rejected");
+	if (failure?.status === "rejected") throw failure.reason;
+	const [statusText, branchText, statText, cachedStatText] = results.map(result => result.status === "fulfilled" ? result.value : "");
 	const header = parseStatusHeader(
 		statusText.split("\n").find((l) => l.startsWith("## "))?.slice(3) ?? "",
 	);

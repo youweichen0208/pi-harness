@@ -99,18 +99,25 @@ try {
 		await page.keyboard.press("Escape");
 		assert.equal(await page.locator(".workspace-picker").count(), 0);
 		assert.equal(await page.locator(".drawer-left").evaluate(el => el.getBoundingClientRect().width), 240);
-		await page.locator(".directory-toggle").click();
+		await page.locator(".project-panel-toggle").click();
 		await page.evaluate(() => document.activeElement?.blur());
 		await page.mouse.move(800, 400);
 		assert.equal(await page.locator(".drawer-left").evaluate(el => el.getBoundingClientRect().width), 56);
 		await page.mouse.move(24, 100);
 		assert.equal(await page.locator(".global-navigation").evaluate(el => el.getBoundingClientRect().width), 240);
 		assert.equal(await page.locator(".drawer-left").evaluate(el => el.getBoundingClientRect().width), 56);
-		await page.locator(".directory-toggle").click();
+		await page.mouse.move(800, 400);
+		await page.locator(".project-panel-toggle").click();
 
 		await page.locator(`.project-item[title="${projects[1]}"]`).waitFor();
 		assert.equal(await page.locator(`.project-item[title="${projects[0]}"]`).count(), 0);
 		assert.equal(switches(), before);
+		const newChatCount = outgoing.filter((m) => m.type === "new_chat").length;
+		await page.locator(".global-new-chat").click();
+		await page.locator(".empty-state .welcome-plain").waitFor();
+		assert.equal(outgoing.filter((m) => m.type === "new_chat").length, newChatCount + 1);
+		assert.equal(switches(), before, "new chat does not switch cwd when the current project is outside the selected Workspace");
+		assert.equal(await current(), "Work");
 		await page.reload();
 		await page.locator(".setup-modal .modal-close").waitFor(); await page.locator(".setup-modal .modal-close").click();
 		await page.locator(`.project-item[title="${projects[1]}"]`).waitFor();
@@ -155,6 +162,8 @@ try {
 		assert.equal(await page.locator(".drawer-left.open").count(), 1);
 		assert.equal(await page.locator(".project-item").count(), 0, "new workspaces start empty");
 		await page.locator(".lp-add-project").click();
+		await page.waitForFunction(path => document.querySelector(".fpk-path")?.textContent === path, projects[1]);
+		assert.equal(outgoing.filter(m => m.type === "browse_dirs").at(-1).path, projects[1], "add project starts in the current project, not the system drive");
 		await page.locator(".fpk-modal-foot input").fill(join(base, "missing"));
 		await page.locator(".fpk-open-btn").click();
 		await page.locator(".fpk-modal [role=alert]").waitFor();
@@ -162,6 +171,11 @@ try {
 		await page.locator(".fpk-open-btn").click();
 		await page.locator(".fpk-modal").waitFor({ state: "detached" });
 		assert.equal(await page.locator(".drawer-left.open").count(), 1);
+		assert.equal(switches(), before + 1);
+		const mobileNewChatCount = outgoing.filter((m) => m.type === "new_chat").length;
+		await page.locator(".global-new-chat").click();
+		await page.waitForFunction(() => document.querySelector(".drawer-left")?.inert);
+		assert.equal(outgoing.filter((m) => m.type === "new_chat").length, mobileNewChatCount + 1);
 		assert.equal(switches(), before + 1);
 		assert.equal(outgoing.filter((m) => m.type === "prompt").length, 0);
 		await page.screenshot({ path: join(tmpdir(), "pi-53-workspaces-mobile.png") });

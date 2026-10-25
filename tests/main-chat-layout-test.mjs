@@ -7,6 +7,7 @@ import { chromium } from 'playwright-core';
 import { CHROME_PATH } from './lib/chrome.mjs';
 import { portUp } from './lib/port-utils.mjs';
 import { testEnv } from "./lib/test-env.mjs";
+import { contrastRatios } from "./lib/contrast.mjs";
 const port = 9297, root = mkdtempSync(join(tmpdir(), 'pi-main-chat-'));
 execFileSync('git', ['init', '-q'], { cwd: root });
 writeFileSync(join(root, 'example.txt'), 'Preview content\n');
@@ -35,7 +36,7 @@ try {
 				const message = JSON.parse(String(wire));
 				if (message.type === 'snapshot') Object.assign(message.state, { piConfigured: true, taskProgress: null, messages: [
 					{ id: 'user', role: 'user', timestamp: Date.now(), content: [{ type: 'text', text: '检查主聊天页的导航与阅读体验' }] },
-					{ id: 'answer', role: 'assistant', timestamp: Date.now(), content: [{ type: 'text', text: '正文保留清晰的层级。\n\n第二段展示中文、English 和 `inline code`。\n\n- 导航入口按窗口宽度收纳\n- 文件预览和草稿保持可用\n\n```js\nconst message = "Hello";\n```' }] },
+					{ id: 'answer', role: 'assistant', timestamp: Date.now(), content: [{ type: 'text', text: '正文保留清晰的层级。\n\n第二段展示中文、English 和 `inline code`，链接为 **http://localhost:5173**。\n\n- 导航入口按窗口宽度收纳\n- 文件预览和草稿保持可用\n\n```js\nconst message = "Hello";\n```' }] },
 				] });
 				if (message.type === 'plugins') message.plugins = Array.from({ length: 12 }, (_, i) => ({ id: `demo-${i}`, name: `插件 ${i} · ${'长名称'.repeat(8)}`, description: 'layout fixture' }));
 				if (message.type === 'snapshot') snapshot = structuredClone(message);
@@ -44,13 +45,26 @@ try {
 		});
 		await page.goto(`http://127.0.0.1:${port}`);
 		await page.locator('.msg-assistant').waitFor();
+		const boldLink = page.locator('.msg-assistant strong a[href="http://localhost:5173"]');
+		await boldLink.waitFor();
+		assert.equal(await boldLink.textContent(), 'http://localhost:5173');
+		assert.equal(await boldLink.evaluate(el => el.parentElement?.textContent), 'http://localhost:5173');
+		for (const theme of ['warm', 'mist', 'sage', 'oat', 'graphite']) {
+			await page.evaluate(value => { document.documentElement.dataset.theme = value; document.documentElement.dataset.appearance = value === 'graphite' ? 'dark' : 'light'; }, theme);
+			for (const selector of ['.msg-assistant strong a', '.workspace-directory-label']) {
+				for (const result of await contrastRatios(page, selector)) assert(result.ratio >= 4.5, `${platform} ${theme} ${selector}: ${JSON.stringify(result)}`);
+			}
+		}
+		await page.evaluate(() => { document.documentElement.dataset.theme = 'warm'; document.documentElement.dataset.appearance = 'light'; });
 		const input = page.locator('.inputbox textarea:visible');
 		assert((await input.boundingBox()).height < 35);
 		assert.equal(await page.locator('.panel-lower').isVisible(), false);
 		await input.fill('保留这份草稿');
-		for (const width of [1440, 1280, 1079, 900, 768, 390]) {
+		for (const width of [1440, 1280, 1181, 1180, 1100, 1024, 901, 900, 768, 390]) {
 			await page.setViewportSize({ width, height: 900 });
 			await page.waitForTimeout(150);
+			assert.equal(await page.locator('.drawer-right').getAttribute('data-fluid-drawer'), width <= 1180 ? 'overlay' : null);
+			if (width === 901) assert((await page.locator('.inputbox').boundingBox()).width >= 560, 'the conversation keeps a useful width at 901px');
 			assert.equal(await page.locator('.navigation-more').count(), 0);
 			assert.equal(await page.getByRole('tab', { name: 'Wiki 模式', exact: true }).count(), 0);
 			await page.getByRole('tab', { name: '节点', exact: true }).scrollIntoViewIfNeeded();
@@ -69,6 +83,18 @@ try {
 				await page.evaluate(value => document.documentElement.dataset.appearance = value, appearance);
 				await page.waitForTimeout(200);
 				await page.screenshot({ path: `tests/scratch/main-chat-${platform}-${width}-${appearance}.png` });
+			}
+			if (width === 901) {
+				await page.locator('.topbar-actions > .panel-toggle').click();
+				const drawer = page.locator('.drawer-right.open');
+				await drawer.waitFor();
+				assert.equal(await page.getByRole('dialog', { name: '文件', exact: true }).count(), 1);
+				assert(await drawer.locator('.fluid-drawer-grip > span:first-child').isVisible());
+				assert.equal(await drawer.locator('.panel-title > span:first-child').isVisible(), false);
+				assert(await drawer.locator('.panel-title .tree-menu-trigger').first().isVisible());
+				await drawer.locator('.fluid-drawer-close').click();
+				await page.waitForFunction(() => document.querySelector('.drawer-right').inert);
+				assert.equal(await input.inputValue(), '保留这份草稿');
 			}
 		}
 		await page.setViewportSize({ width: 1440, height: 900 });
@@ -91,6 +117,16 @@ try {
 		assert.equal(Math.round((await page.locator('.drawer-right').boundingBox()).width), 316);
 		await handle.dblclick();
 		assert.equal(Math.round((await page.locator('.drawer-right').boundingBox()).width), 300);
+		await handle.focus();
+		for (let index = 0; index < 14; index++) await page.keyboard.press('ArrowLeft');
+		assert.equal(await page.evaluate(() => localStorage.getItem('pi-harness:right-panel-width')), '520');
+		await page.setViewportSize({ width: 1280, height: 900 });
+		await page.waitForFunction(() => document.querySelector('.drawer-right')?.getAttribute('data-fluid-drawer') === 'overlay');
+		await page.setViewportSize({ width: 1440, height: 900 });
+		await page.waitForFunction(() => !document.querySelector('.drawer-right')?.hasAttribute('data-fluid-drawer'));
+		assert.equal(Math.round((await page.locator('.drawer-right').boundingBox()).width), 520);
+		await handle.dblclick();
+		assert.equal(Math.round((await page.locator('.drawer-right').boundingBox()).width), 300);
 		assert.equal(await page.locator('.panel-right .tree-search').evaluate(el => el.getBoundingClientRect().height), 32);
 		snapshot.state.taskProgress = { id: 'layout-task', conversationId: snapshot.state.conversationId, sourceMessageId: 'user', title: '检查布局', status: 'running', startedAt: Date.now(), completed: 0, steps: [], plan: { revision: 1, items: [{ id: 'one', title: '验证任务进度', status: 'running' }] } };
 		snapshot.state.rev += 1;
@@ -106,6 +142,10 @@ try {
 		await file.hover();
 		await file.locator('.file-attach.inline').click();
 		assert(await page.locator('.inputbar').getByText('example.txt', { exact: false }).count() > 0);
+		await page.setViewportSize({ width: 901, height: 900 });
+		assert(await page.locator('.inputbar').getByText('example.txt', { exact: false }).count() > 0);
+		assert.equal(await input.inputValue(), '保留这份草稿');
+		await page.setViewportSize({ width: 1440, height: 900 });
 		await file.locator('.file-name').click();
 		await page.locator('.fp-embedded').waitFor();
 		assert.equal(await input.inputValue(), '保留这份草稿');
@@ -118,7 +158,7 @@ try {
 		assert.deepEqual(errors, []);
 		await page.close();
 	}
-	console.log('Main chat layout: Web/macOS/Windows, six widths, direct navigation, draft and screenshots passed');
+	console.log('Main chat layout: Web/macOS/Windows, ten widths, space-aware file drawer, Markdown links, contrast, draft and screenshots passed');
 } finally {
 	await browser?.close();
 	server?.kill('SIGTERM');

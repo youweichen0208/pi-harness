@@ -26,7 +26,7 @@ export function parseXshell(text: string, file: string): SourceNode {
 		}
 	}
 	if (Object.entries(a).some(([key, value]) => /AUTH.*PROFILE/.test(key) && value && !/^(0|false|none)$/i.test(value))) unsupported.push("authentication-profile");
-	const keyPath = a.USERKEY || a.PUBLICKEYFILE || a.PRIVATEKEY || undefined;
+	const keyPath = (a.PRIVATEKEY || a.PUBLICKEYFILE || a.USERKEY || "").replace(/^"(.*)"$/, "$1") || undefined;
 	const auth = a.METHOD === "1" || keyPath ? "key" : "password";
 	if (a.METHOD && !["0", "1"].includes(a.METHOD)) unsupported.push("authentication");
 	if (!a.USERNAME) unsupported.push("username");
@@ -82,6 +82,8 @@ export async function scanSource(source: Pick<NodeSource, "kind" | "path">): Pro
 				const node = parseXshell(await readBounded(path), relative(source.path, path));
 				if (node.keyPath) {
 					node.keyPath = node.keyPath.replace(/%([^%]+)%/g, (original, name: string) => process.env[name] ?? original);
+					// Resolve explicit relative file paths against the session, never the server cwd.
+					if (/^\.\.?[\\/]/.test(node.keyPath)) node.keyPath = resolve(dirname(path), node.keyPath.replace(/[\\/]/g, "/"));
 					if (!isAbsolute(node.keyPath) && !node.keyPath.startsWith("~/")) node.unsupported = [...node.unsupported ?? [], "key"];
 				}
 				nodes.push(node);

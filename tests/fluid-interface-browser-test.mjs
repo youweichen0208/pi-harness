@@ -8,6 +8,7 @@ import {chromium} from 'playwright-core';
 import {CHROME_PATH} from './lib/chrome.mjs';
 import {portUp} from './lib/port-utils.mjs';
 import { testEnv } from "./lib/test-env.mjs";
+import { contrastRatios } from "./lib/contrast.mjs";
 const port=9248, root=mkdtempSync(join(tmpdir(),'pi-fluid-'));
 const cwd=join(root,'pi-harness');mkdirSync(cwd);writeFileSync(join(cwd,'README.md'),'# Project\n');
 let server,browser;
@@ -18,14 +19,27 @@ try {
 	assert(await portUp(port));
 	browser=await chromium.launch({executablePath:CHROME_PATH});
 	mkdirSync('tests/scratch',{recursive:true});
-	const page=await browser.newPage({viewport:{width:1440,height:960}});
+	const page=await browser.newPage({viewport:{width:1440,height:960},hasTouch:true});
 	const errors=[];page.on('pageerror',e=>errors.push(String(e)));
 	await page.goto(`http://localhost:${port}`);
 	await page.locator('.setup-modal .modal-close').click();
-	await page.locator('.workspace-group-manager input').fill('Engineering');
-	await page.locator('.workspace-group-actions button[type=submit]').click();
-	await page.locator('.workspace-outside button').click();
+	await page.getByRole('button',{name:'新建 Workspace',exact:true}).first().click();
+	const workspaceDialog=page.getByRole('dialog',{name:'新建 Workspace',exact:true});
+	await workspaceDialog.getByRole('textbox').fill('Engineering');
+	await workspaceDialog.getByRole('button',{name:'创建 Workspace',exact:true}).click();
+	await page.locator('.panel-section-title').hover();
+	await page.locator('.lp-add-project').click();
+	await page.locator('.fpk-modal-foot input').fill(cwd);
+	await page.locator('.fpk-open-btn').click();
+	await page.locator('.fpk-modal').waitFor({state:'detached'});
 	await page.locator('.project-item.active').waitFor();
+	for(const theme of ['warm','mist','sage','oat','graphite']) {
+		await page.evaluate(value=>{document.documentElement.dataset.theme=value;document.documentElement.dataset.appearance=value==='graphite'?'dark':'light';},theme);
+		const results=await contrastRatios(page,'.workspace-project-search','::placeholder');
+		assert.equal(results.length,1);
+		assert(results[0].ratio>=4.5,`${theme} search placeholder: ${JSON.stringify(results[0])}`);
+	}
+	await page.evaluate(()=>{document.documentElement.dataset.theme='warm';document.documentElement.dataset.appearance='light';});
 	const resize=page.locator('.resize-left');
 	const before=await page.locator('.panel-left').evaluate(el=>el.getBoundingClientRect().width);
 	await resize.focus(); await page.keyboard.press('ArrowRight');
@@ -37,12 +51,20 @@ try {
 	await page.screenshot({path:'tests/scratch/fluid-web-dark.png'});
 	await page.evaluate(()=>document.documentElement.dataset.appearance='light');
 	await page.setViewportSize({width:390,height:844});
+	assert(await page.evaluate(()=>matchMedia('(pointer: coarse)').matches));
+	for(const button of await page.locator('.topbar button:visible').all()) {
+		const box=await button.boundingBox();assert(box.width>=44&&box.height>=44,`touch target too small: ${await button.getAttribute('title')} ${JSON.stringify(box)}`);
+	}
+	assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
 	const toggle=page.locator('.topbar .brand .panel-toggle');
 	const drawer=page.locator('.drawer-left');
 	await page.waitForFunction(()=>document.querySelector(".drawer-left").inert);
 	await toggle.click();
 	await page.waitForFunction(()=>Math.abs(document.querySelector('.drawer-left').getBoundingClientRect().x)<1);
 	assert.equal(await drawer.evaluate(el=>el.inert),false);
+	for(const button of [drawer.locator('.fluid-drawer-close'),drawer.locator('.global-new-chat')]) {
+		const box=await button.boundingBox();assert(box.width>=44&&box.height>=44,JSON.stringify(box));
+	}
 	assert(await drawer.locator('.fluid-drawer-close').evaluate(el=>el===document.activeElement));
 	// A real pointer drag follows the pointer, then release momentum dismisses.
 	const grip=await drawer.locator('.fluid-drawer-grip').boundingBox();
@@ -78,6 +100,17 @@ try {
 	assert(Math.abs((await drawer.boundingBox()).x)<1);
 	await page.emulateMedia({contrast:'more'});
 	assert.equal(await drawer.evaluate(el=>getComputedStyle(el).backdropFilter),'none');
+	await drawer.locator('.fluid-drawer-close').click();
+	await page.waitForFunction(()=>document.querySelector('.drawer-left').inert);
+	await page.locator('.topbar-actions > .panel-toggle').click();
+	const files=page.locator('.drawer-right.open');
+	await files.waitFor();
+	assert(await files.locator('.fluid-drawer-grip > span:first-child').isVisible());
+	assert.equal(await files.locator('.panel-title > span:first-child').isVisible(),false);
+	assert(await files.locator('.panel-title .tree-menu-trigger').first().isVisible());
+	const closeBox=await files.locator('.fluid-drawer-close').boundingBox();assert(closeBox.width>=44&&closeBox.height>=44);
+	await files.locator('.fluid-drawer-close').click();
+	await page.waitForFunction(()=>document.querySelector('.drawer-right').inert);
 	assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
 	assert.deepEqual(errors,[]);
 	await page.close();

@@ -93,6 +93,29 @@ describe("remarkCjkAutolink", () => {
 		expect(link.url).toBe("https://example.com/a?b=1");
 	});
 
+	it("成对 ** 包裹的裸链接不吞定界符，并恢复 strong 强调", () => {
+		const tree = run("**http://localhost:5173**");
+		expect(links(tree)).toEqual([
+			{ url: "http://localhost:5173", text: "http://localhost:5173" },
+		]);
+		expect(plainText(tree)).toBe("http://localhost:5173");
+		const paragraph = tree.children?.[0];
+		expect(paragraph?.type).toBe("paragraph");
+		expect(paragraph?.children?.map((child) => child.type)).toEqual(["strong"]);
+		expect(paragraph?.children?.[0]?.children?.map((child) => child.type)).toEqual(["link"]);
+	});
+
+	it("链接吞入成对 ** 时去掉定界符并重建 strong", () => {
+		const tree = run("**http://localhost:5173**。");
+		expect(links(tree)).toEqual([
+			{ url: "http://localhost:5173", text: "http://localhost:5173" },
+		]);
+		expect(plainText(tree)).toBe("http://localhost:5173。");
+		const paragraph = tree.children?.[0];
+		expect(paragraph?.children?.map((child) => child.type)).toEqual(["strong", "text"]);
+		expect(paragraph?.children?.[0]?.children?.map((child) => child.type)).toEqual(["link"]);
+	});
+
 	it("一段里有多个裸链接时逐个处理", () => {
 		const got = links(run("先 https://a.example，再 https://b.example。"));
 		expect(got.map((l) => l.url)).toEqual([
