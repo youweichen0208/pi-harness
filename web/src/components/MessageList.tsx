@@ -21,6 +21,7 @@ import type {
 	UiState,
 } from "../types";
 import type { PendingEcho, ReloadStatus } from "../use-chat";
+import type { LiveToolOutput } from "../live-tool-output";
 import { Message, asText } from "./Message";
 
 import { collectQuestionAttachments } from "../question-attachments";
@@ -72,7 +73,7 @@ interface MessageListProps {
 	connected?: boolean;
 	silenceNotified?: boolean;
 	state: UiState;
-	liveOutputs: ReadonlyMap<string, { toolName: string; text: string; codemode?: UiMessage["codemode"] }>;
+	liveOutputs: ReadonlyMap<string, LiveToolOutput>;
 	toolStatuses: ReadonlyMap<string, ToolStatus>;
 	/** Edit-and-re-ask handler (forwarded to user message bubbles). */
 	onEdit?: (

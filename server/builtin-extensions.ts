@@ -3,10 +3,13 @@ import type { AgentSession } from "@earendil-works/pi-coding-agent";
 import { nativeExtensionRegistry } from "./native-tools.js";
 import { getDocumentSettings, updateDocumentSettings } from "./document-extension-settings.js";
 import { planSettings } from "./plan/settings.js";
+import { subagentSettings, toggleSubagents } from "./subagents/settings.js";
+import { subagentDefaultActive } from "./subagents/extension.js";
 import type { BuiltinExtensionId, BuiltinExtensionsState, BuiltinExtensionState } from "./protocol.js";
 
 const expectedTools: Partial<Record<BuiltinExtensionId, string[]>> = {
 	"pi-harness-database": ["database_read"],
+	"pi-harness-subagents": ["subagent"],
 	"pi-harness-plan": ["plan"], codemode: ["codemode"], "tool-search": ["tool_search"],
 };
 const owns = (path: string, id: string) => path === `<inline:${id}>` || path === `builtin:${id}`;
@@ -14,6 +17,7 @@ export function documentSettingsVersion(): string {
 	return createHash("sha256").update(JSON.stringify(getDocumentSettings())).digest("hex");
 }
 export function toggleBuiltinDocument(id: unknown, enabled: unknown, version: unknown): void {
+	if (id === "pi-harness-subagents" && typeof enabled === "boolean" && typeof version === "string") { toggleSubagents(enabled, version); return; }
 	if (id !== "pi-harness-database" || typeof enabled !== "boolean") throw Error("Invalid built-in extension change");
 	if (version !== documentSettingsVersion()) throw Error("Document settings changed; refresh and retry");
 	updateDocumentSettings({ databaseEnabled: enabled });
@@ -45,8 +49,13 @@ export function builtinExtensionsState(session: AgentSession, conversationId: st
 			if (!documentSettings) return { ...item, status: "error", error: documentError };
 			item.enabled = documentSettings.databaseEnabled;
 		}
+		if (id === "pi-harness-subagents") {
+			try { const settings = subagentSettings(); item.enabled = settings.enabled; item.settingsVersion = settings.version; }
+			catch (error) { return { ...item, status: "error", error: String(error) }; }
+		}
 		if (conflict || !extension || expected.some(name => !ownedTools.some(tool => tool.name === name))) return { ...item, status: "unavailable", reason: conflict ? "conflict" : "missing" };
 		if (item.enabled === false) return { ...item, status: "disabled" };
+		if (id === "pi-harness-subagents" && !subagentDefaultActive(session.settingsManager.getSettings().defaultTools)) return { ...item, status: "disabled", reason: "filtered" };
 		if (item.enabled && ownedTools.some(tool => tool.exposure === "hidden")) return { ...item, status: "pending" };
 		if (expected.some(name => !callable.has(name))) return { ...item, status: "disabled", reason: "filtered" };
 		return item;

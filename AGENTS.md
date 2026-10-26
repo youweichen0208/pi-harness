@@ -46,6 +46,7 @@ Extensions：修改内置扩展清单/状态、包安装、启停、更新、作
 Codemode 卡片与 MCP/Codemode 设置遵循 15a/15b 设计；状态、项目覆盖、费用及输出限制读取 `docs/architecture-plugins.md`。
 Playground：修改 Java 代码块运行入口、草稿页 public 方法测试／用例保存、执行限制、JDK 探测或总开关时，读取 `docs/architecture-playground.md`；首次检测到可用 JDK 默认开启，保留已保存开关、明确非沙箱、结果不进模型上下文。
 工程上下文：修改跨仓来源、OpenViking 接入或本地评测时，读取 `docs/engineering-context.md`；先验证检索收益，再增加产品界面。
+Subagents：修改 Workspace 分工、来源简介、知识库来源、报告证据核验、子会话工具/取消/预算或排队范围时，读取 `docs/architecture-subagents.md`。内置 `subagent` 默认开启，由父模型按问题调用；`inspect` 提供有界本地简介，子会话只读调查并提交区分实现/文档/推断的报告，引用回读核对行号和指纹；不开后台任务、不递归、不改代码，沿用父模型并产生额外用量。
 
 发送回执：普通聊天与 Wiki 共用持久化请求去重和重连查询；修改发送确认或重试前读 `docs/architecture-core.md`「发送回执」。Wiki 切换与发送准入共用 `wiki-coordinator.ts`，修改时读 `docs/architecture-wiki.md`。
 
@@ -202,7 +203,7 @@ pi SDK 和 pi-ai 精确锁定 1.4.0，使用原版 SDK，不应用本项目的 S
 | **终端** | `docs/architecture-terminal.md` | 每 Conversation 一个 TerminalManager；spawn 统一准入；按键编码纯函数；输出微批合并；node-pty × --watch 兼容自愈 |
 | **SCM** | `docs/architecture-terminal.md` | 只读 git 查询走 spawn；同 cwd 状态合并与进程树超时；未跟踪文件限量预览；git-dir watcher；写操作走可见终端 tab |
 | **插件** | `docs/architecture-plugins.md` | <dataDir>/plugins/<id>/ 目录（manifest.json + index.mjs + client/entry.mjs）；attach 时热重扫；MCP 工具桥 |
-| **SSH 节点** | `docs/architecture-nodes.md` | 修改 Xshell/SSH config 同步、凭据、执行确认或终端引用时阅读；本机隔离 Agent 与 ssh2 节点工具 |
+| **SSH 节点** | `docs/architecture-nodes.md` | 修改 Xshell 7 全量同步、保存密码/主密码复用、本机认证覆盖、SSH config、执行确认或终端引用时阅读；本机隔离 Agent 与 ssh2 节点工具 |
 | **工具结束实时状态** | `docs/architecture-core.md` | tool_status 先于快照落盘，浏览器卡片立即从「执行中」→「已结束」 |
 | **运行静默状态** | `docs/architecture-core.md` | 改模型无响应或长时间工具运行提示时，使用 conversationId 绑定的 agent_silence；恢复响应即清除，重试只适用于本轮未调用工具的纯文本请求 |
 | **当前任务进度** | `docs/architecture-core.md`、`docs/ui-design.md` | 修改任务判定、提纲布局或计划触发时阅读：可选原生 `plan` 管理分支版本化计划，尊重用户／skill 的执行与等待规则；步骤按工具 ID 展开记录，暂停不自动完成，兼容历史 `task_plan`；历史任务列表尚未实现 |

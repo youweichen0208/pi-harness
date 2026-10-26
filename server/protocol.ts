@@ -89,6 +89,15 @@ export interface UiCodemodeDetails {
 	fullOutputPath?: string;
 }
 
+export interface UiSubagentProgress {
+	sourceId: string;
+	source: string;
+	root: string;
+	task: string;
+	phase: "queued" | "running" | "completed" | "failed" | "cancelled";
+	tool?: "source_list" | "source_search" | "source_read" | "source_report";
+}
+
 export interface UiNestedToolCall {
 	id: string;
 	name: string;
@@ -430,7 +439,7 @@ export type ClientMessage =
 	| { type: "query_prompt_receipt"; requestId: string }
 	| {
 			type: "prompt";
-			target?: { cwd: string; conversationId: string; sessionId: string };
+			target?: { cwd: string; conversationId: string; sessionId: string; workspaceId?: string };
 			requestId?: string;
 			text: string;
 			/**
@@ -1047,6 +1056,7 @@ export type ServerMessage =
 	| {
 			type: "tool_delta";
 			codemode?: UiCodemodeDetails;
+			subagents?: UiSubagentProgress[];
 			parentToolCallId?: string;
 			conversationId: string;
 			/** Per-conversation monotonic sequence, shared with message_delta —
@@ -1311,14 +1321,17 @@ export type ServerMessage =
 export type NodePolicy = "readonly" | "confirm" | "auto" | "off";
 export interface NodeProfile {
 	id: string; name: string; group: string; host: string; port: number; username: string;
-	auth: "password" | "key" | "agent"; keyPath?: string; localKeyPath?: string; localAuth?: "password" | "key" | "agent"; defaultDir: string; fingerprint?: string;
+	auth: "password" | "key" | "agent"; keyPath?: string; localKeyPath?: string; localAuth?: "password" | "key" | "agent"; localUsername?: string; defaultDir: string; fingerprint?: string;
+	/** Non-secret Xshell metadata and per-client effective authentication status. */
+	sourceCredential?: boolean; xshellVersion?: string;
+	authStatus?: "source" | "local" | "missing" | "locked" | "unsupported";
 	hasSecret?: boolean; sourceId?: string; sourceKey?: string; sourceMissing?: boolean;
 	unsupported?: string[]; policy?: NodePolicy; lastConnected?: number;
 }
 export interface NodeSource {
 	id: string; kind: "xshell" | "ssh"; path: string; enabled: boolean;
 	lastSync?: number; error?: string; count: number; groups: number; changes?: string[];
-	/** Explicit import selection; omitted for legacy sources that sync all entries. */
+	/** SSH config selection only; Xshell sources always sync all entries. */
 	selectedKeys?: string[];
 }
 
@@ -1412,9 +1425,10 @@ export interface ExtensionPackage {
 }
 export interface ExtensionsState { packages: ExtensionPackage[]; version: string; trusted: boolean; checkedAt?: number; autoCheck?: boolean; }
 
-export type BuiltinExtensionId = "pi-harness-database" | "pi-harness-plan" | "codemode" | "tool-search" | "mcp";
+export type BuiltinExtensionId = "pi-harness-database" | "pi-harness-plan" | "pi-harness-subagents" | "codemode" | "tool-search" | "mcp";
 export interface BuiltinExtensionState {
 	id: BuiltinExtensionId;
+	settingsVersion?: string;
 	status: "loaded" | "disabled" | "pending" | "unavailable" | "error";
 	enabled?: boolean;
 	reason?: "missing" | "conflict" | "filtered";
@@ -1430,7 +1444,7 @@ export interface BuiltinExtensionsState {
 }
 export type BuiltinExtensionsRequest =
 	| { action: "builtin-list"; conversationId: string }
-	| { action: "builtin-toggle"; conversationId: string; id: "pi-harness-database"; enabled: boolean; version: string };
+	| { action: "builtin-toggle"; conversationId: string; id: "pi-harness-database" | "pi-harness-subagents"; enabled: boolean; version: string };
 export interface ExtensionCatalogItem { name: string; description: string; descriptionZh?: string; version?: string; author?: string; downloads?: number; date?: number; types: string[]; image?: string; url: string; repository?: string; }
 export interface ExtensionCatalog { items: ExtensionCatalogItem[]; page: number; pages: number; total?: number; }
 export interface ExtensionPackageDetails { source: string; name: string; version?: string; description?: string; author?: string; repository?: string; license?: string; resources: Record<string, string[]>; canPin: boolean; }

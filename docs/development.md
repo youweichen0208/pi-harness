@@ -61,6 +61,8 @@ SSH 节点另有 macOS/Windows CI job：两平台分别构建服务端并运行 
 
 每个 `*-test.mjs` 用独立端口（≥8900，避开 8787/5173/3300），并在启动 server 前先 `lsof -ti :PORT -sTCP:LISTEN` 确认空闲；若被占，改端口而非硬杀。
 
+随机端口测试不能先开探测 socket 再释放后启动服务，这会产生占用竞态。`tests/lib/isolated-server.mjs` 提供直接绑定高端口的 `listenIsolated` 和 `startIsolatedHarness`：仅占用冲突换端口重试，启动必须核对自身绑定日志与健康响应 PID，失败/超时只清理本次子进程。子代理和内置扩展测试已使用该入口；`isolated-server-test.mjs` 确定性覆盖被占端口、非占用错误和超时清理。
+
 ### 精确清理自己起的进程
 
 spawn 后记录 `server.pid`，测试收尾（含异常 catch 路径）用 `process.kill(pid, 'SIGTERM')` 只杀自己启动的。多开几个 server 时用各自 PID 逐个杀，别用宽泛模式匹配。
@@ -113,6 +115,10 @@ Pi 1.0.4 起的专项（1.4.0 继续适用，文件名保留 `pi-104-`）：`pi-
 原生计划回归：`plan-sdk-test.mjs` 与 `plan-settings-test.mjs` 纳入零 token 冒烟；浏览器单独执行 `node tests/plan-chat-browser-test.mjs`。均使用隔离目录与本地模拟模型，不调用真实服务。
 
 内置扩展回归：`builtin-extensions-test.mjs` 纳入零 token 冒烟，验证清单、数据库开关、重载及转换／OKF 入口缺失。原生上下文基线关闭 plan 内置工具。
+
+子代理回归：`subagents-test.mjs` 使用真实 SDK 和本地模拟模型验证 Workspace 跨仓库、知识库分工及父取消，纳入零 token 冒烟；设置页 `builtin-extensions-test.mjs --browser` 覆盖六个内置条目和独立子代理开关。原生上下文基线同时关闭 subagents。
+
+进度和报告界面先 `npm run build`，再运行 `node tests/subagents-test.mjs --browser`：检查三个来源的真实 `tool_delta.subagents` 进度、工具结束动作清除、按来源展开报告和引用原文、键盘操作、原始 JSON 保留，以及中英文、深色、390px、200% 缩放等效视口和减少动态效果。`subagent-wire.test.ts` 覆盖服务端白名单与限额，`subagent-ui-presentation.test.ts` 覆盖运行参数／实时进度合并、最终报告和非法数据回退。截图写入 `tests/scratch/subagents-*.png`，须实际查看而非只验证文件存在。
 
 
 ### 数据库工作台回归

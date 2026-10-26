@@ -1,4 +1,6 @@
-/** Read-only source adapters. Never read saved passwords or execute SSH config commands. */
+/** Read-only metadata adapters. Credential material never leaves this module in a SourceNode. */
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve, isAbsolute } from "node:path";
 import { homedir, userInfo } from "node:os";
@@ -6,7 +8,7 @@ import type { NodeProfile, NodeSource } from "./protocol.js";
 import { decodeText } from "./text-sniff.js";
 
 export type SourceNode = Omit<NodeProfile, "id"> & { sourceKey: string };
-export function parseXshell(text: string, file: string): SourceNode {
+export function parseXshellIni(text: string): Record<string, Record<string, string>> {
 	const sections: Record<string, Record<string, string>> = {};
 	let section = "";
 	for (const line of text.replace(/^\uFEFF/, "").split(/\r?\n/)) {
@@ -15,6 +17,11 @@ export function parseXshell(text: string, file: string): SourceNode {
 		const pair = line.match(/^\s*([^=;#]+?)\s*=(.*)$/);
 		if (pair) (sections[section] ??= {})[pair[1].toUpperCase()] = pair[2].trim();
 	}
+	return sections;
+}
+
+export function parseXshell(text: string, file: string): SourceNode {
+	const sections = parseXshellIni(text);
 	const c = sections.CONNECTION ?? {}, a = sections["CONNECTION:AUTHENTICATION"] ?? {};
 	const host = c.HOST ?? "", port = Number(c.PORT || 22);
 	if (!host || /[\r\n\0]/.test(host) || !Number.isInteger(port) || port < 1 || port > 65535) throw new Error(`${file}: 地址或端口无效`);
@@ -29,9 +36,9 @@ export function parseXshell(text: string, file: string): SourceNode {
 	const keyPath = (a.PRIVATEKEY || a.PUBLICKEYFILE || a.USERKEY || "").replace(/^"(.*)"$/, "$1") || undefined;
 	const auth = a.METHOD === "1" || keyPath ? "key" : "password";
 	if (a.METHOD && !["0", "1"].includes(a.METHOD)) unsupported.push("authentication");
-	if (!a.USERNAME) unsupported.push("username");
+
 	if (auth === "key" && !keyPath) unsupported.push("key");
-	return { name: basename(file).replace(/\.xsh$/i, ""), group: dirname(file) === "." ? "Xshell" : dirname(file), host, port, username: a.USERNAME || "", auth, keyPath, defaultDir: "/", sourceKey: file, unsupported: [...new Set(unsupported)] };
+	return { name: basename(file).replace(/\.xsh$/i, ""), group: dirname(file) === "." ? "Xshell" : dirname(file), host, port, username: a.USERNAME || "", auth, keyPath, defaultDir: "/", sourceKey: file, sourceCredential: Boolean(auth === "key" ? a.PASSPHRASE : a.PASSWORD), xshellVersion: sections.SESSIONINFO?.VERSION, unsupported: [...new Set(unsupported)] };
 }
 
 /** First obtained value wins, matching OpenSSH's Host ordering. Complex directives are blocked. */
@@ -62,7 +69,7 @@ export function parseSshConfig(text: string): SourceNode[] {
 	});
 }
 
-async function readBounded(path: string): Promise<string> {
+export async function readBounded(path: string): Promise<string> {
 	if ((await stat(path)).size > 1024 * 1024) throw new Error("配置文件超过 1 MiB");
 	const bytes = await readFile(path);
 	if (bytes[0] === 0xff && bytes[1] === 0xfe) return bytes.subarray(2).toString("utf16le");
@@ -79,13 +86,7 @@ export async function scanSource(source: Pick<NodeSource, "kind" | "path">): Pro
 			const path = join(dir, entry.name);
 			if (entry.isDirectory()) await walk(path, depth + 1);
 			else if (entry.isFile() && /\.xsh$/i.test(entry.name)) {
-				const node = parseXshell(await readBounded(path), relative(source.path, path));
-				if (node.keyPath) {
-					node.keyPath = node.keyPath.replace(/%([^%]+)%/g, (original, name: string) => process.env[name] ?? original);
-					// Resolve explicit relative file paths against the session, never the server cwd.
-					if (/^\.\.?[\\/]/.test(node.keyPath)) node.keyPath = resolve(dirname(path), node.keyPath.replace(/[\\/]/g, "/"));
-					if (!isAbsolute(node.keyPath) && !node.keyPath.startsWith("~/")) node.unsupported = [...node.unsupported ?? [], "key"];
-				}
+				const node = resolveXshellNode(await readBounded(path), source.path, path);
 				nodes.push(node);
 				if (nodes.length > 200) throw new Error("每个来源最多 200 个节点");
 			}
@@ -94,10 +95,28 @@ export async function scanSource(source: Pick<NodeSource, "kind" | "path">): Pro
 	await walk(source.path, 0);
 	return nodes;
 }
+/** Resolve only metadata paths; do not load private keys while scanning. */
+export function resolveXshellNode(text: string, root: string, path: string): SourceNode {
+	const node = parseXshell(text, relative(root, path));
+	if (node.keyPath) {
+		node.keyPath = node.keyPath.replace(/%([^%]+)%/g, (original, name: string) => process.env[name] ?? original);
+		if (/^\.\.?[\\/]/.test(node.keyPath)) node.keyPath = resolve(dirname(path), node.keyPath.replace(/[\\/]/g, "/"));
+		if (!isAbsolute(node.keyPath) && !node.keyPath.startsWith("~/")) node.unsupported = [...node.unsupported ?? [], "key"];
+	}
+	return node;
+}
+
 export async function detectSources(): Promise<Pick<NodeSource, "kind" | "path" | "count" | "groups">[]> {
 	const home = homedir();
 	const candidates: Pick<NodeSource, "kind" | "path">[] = [{ kind: "ssh", path: join(home, ".ssh", "config") }];
-	if (process.platform === "win32") for (const base of [join(home, "Documents"), ...(process.env.OneDrive ? [join(process.env.OneDrive, "Documents")] : [])]) candidates.unshift({ kind: "xshell", path: join(base, "NetSarang Computer", "8", "Xshell", "Sessions") });
+	if (process.platform === "win32") {
+		const bases = new Set([join(home, "Documents"), ...[process.env.OneDrive, process.env.OneDriveConsumer, process.env.OneDriveCommercial].filter((path): path is string => !!path).map(path => join(path, "Documents"))]);
+		try {
+			const { stdout } = await promisify(execFile)("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; [Environment]::GetFolderPath("MyDocuments")'], { windowsHide: true, timeout: 5000, maxBuffer: 16384 });
+			const documents = stdout.replace(/^\uFEFF/, "").trim(); if (documents) bases.add(documents);
+		} catch { /* Default paths and the manual folder picker remain available. */ }
+		for (const base of bases) candidates.unshift({ kind: "xshell", path: join(base, "NetSarang Computer", "7", "Xshell", "Sessions") });
+	}
 	const found = await Promise.all(candidates.map(async (source) => { try { const nodes = await scanSource(source); return { ...source, count: nodes.length, groups: new Set(nodes.map((n) => n.group)).size }; } catch { return null; } }));
 	return found.filter((s) => s !== null);
 }

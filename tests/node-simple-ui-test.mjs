@@ -47,7 +47,7 @@ try {
 
 	await page.getByRole('button', { name: '添加节点', exact: true }).click();
 	await entries.getByRole('button', { name: /Xshell/ }).click();
-	await page.getByRole('dialog').getByRole('heading', { name: 'Xshell 导入' }).waitFor();
+	await page.getByRole('dialog').getByRole('heading', { name: 'Xshell 7 导入' }).waitFor();
 	assert.equal(await page.getByRole('dialog').locator('button[type=submit]').count(), 1);
 	const sessions = join(root, 'xshell'); mkdirSync(sessions);
 	const text = '[CONNECTION]\nHost=example.invalid\nPort=22\nProtocol=SSH\n[CONNECTION:AUTHENTICATION]\nUserName=tester\nMethod=0\n';
@@ -55,13 +55,13 @@ try {
 	writeFileSync(join(sessions, 'second.xsh'), text);
 	writeFileSync(join(sessions, 'unsupported.xsh'), text.replace('Protocol=SSH', 'Protocol=TELNET'));
 	await page.getByRole('dialog').getByLabel('运行服务的机器上的配置路径').fill(sessions);
-	await page.getByText('共 3 个会话 · 已选 2 个', { exact: true }).waitFor();
-	await page.locator('.node-preview-list label').filter({ hasText: 'second' }).getByRole('checkbox').uncheck();
+	await page.getByText('共 3 个会话 · 已选 3 个', { exact: true }).waitFor();
+	assert(await page.locator('.node-preview-list label').filter({ hasText: 'second' }).getByRole('checkbox').isChecked());
 	assert(await page.locator('.node-preview-list label').filter({ hasText: 'unsupported' }).getByRole('checkbox').isDisabled());
 	await page.screenshot({ path: '/tmp/pi-nodes-xshell-preview.png' });
-	await page.getByRole('dialog').getByRole('button', { name: '导入 1 项', exact: true }).click();
+	await page.getByRole('dialog').getByRole('button', { name: '接入全部节点', exact: true }).click();
 	await page.locator('.node-item', { hasText: 'first' }).waitFor();
-	assert.equal(await page.locator('.node-item', { hasText: 'second' }).count(), 0);
+	assert.equal(await page.locator('.node-item', { hasText: 'second' }).count(), 1);
 	await page.getByRole('button', { name: '添加节点', exact: true }).click();
 	const beforeExpand = await entries.boundingBox();
 	await page.locator('.node-simple-start > details > summary').click();

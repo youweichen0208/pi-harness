@@ -24,7 +24,7 @@ import type {
 	ClientMessage,
 	SessionSummary,
 } from "../types";
-import { workspaceProjects } from "../project-workspaces";
+import { workspaceProjects, selectedProjectWorkspace, selectProjectWorkspace } from "../project-workspaces";
 import { useDialogFocus } from "../use-dialog-focus";
 import { randomUuid } from "../uuid";
 import { FolderPickerModal } from "./FolderPickerModal";
@@ -98,9 +98,7 @@ function WorkspaceBook() {
 export const LeftPanel = memo(function LeftPanel({
 	directoryCollapsed, onToggleDirectory, notesOpen, scratchOpen, onNavigate, notesList, onOpenSettings, onNewChat, ready, status, cwd, sessionFile, conversations, sessions, projects, projectWorkspaces, projectWorkspaceResult, dirBrowse, activeConversationId, send, active }: LeftPanelProps) {
 	const { t, locale } = useI18n();
-	const [selectedWorkspace, setSelectedWorkspace] = useState(() => {
-		try { return localStorage.getItem("pi-harness:project-workspace") ?? ""; } catch { return ""; }
-	});
+	const [selectedWorkspace, setSelectedWorkspace] = useState(selectedProjectWorkspace);
 	const [workspaceForm, setWorkspaceForm] = useState<"create" | string | null>(null);
 	const [workspaceOpen, setWorkspaceOpen] = useState(false);
 	const [groupQuery, setGroupQuery] = useState("");
@@ -124,7 +122,7 @@ export const LeftPanel = memo(function LeftPanel({
 
 	const chooseWorkspace = (id: string) => {
 		setSelectedWorkspace(id); setWorkspaceQuery(""); setWorkspaceError(""); setWorkspaceOpen(false);
-		try { localStorage.setItem("pi-harness:project-workspace", id); } catch { /* optional preference */ }
+		selectProjectWorkspace(id);
 	};
 	useEffect(() => {
 		if (projectWorkspaces && !selectedGroup) {

@@ -29,6 +29,25 @@ await assert.rejects(service.execute('fixture',nodeId,'term',root,'exit 7',5),/e
 const terminal=conn.terminals.get('term');
 const ready=async()=>{for(let i=0;i<200;i++){if(terminal.promptReady)return;await new Promise(r=>setTimeout(r,10));}throw new Error('prompt not restored');};
 await ready();
+// xterm sends focus reports when switching from the manual terminal to Agent Chat.
+const manualInput = async data => service.handle('fixture',{type:'node_request',action:'terminal_input',requestId:crypto.randomUUID(),nodeId,terminalId:'term',conversationId:opened.conversationId,payload:{data}});
+await manualInput('pwd\r');
+await ready();
+await manualInput('\x1b[I');
+await manualInput('\x1b[O');
+assert.equal(terminal.manualTyped,false,'focus reports are not an unsubmitted command');
+assert.equal(terminal.promptReady,true,'focus reports preserve the confirmed prompt');
+assert.equal((await service.execute('fixture',nodeId,'term',root,'pwd',5)).output,root);
+await ready();
+// A real foreground reader consumes the reply, as a terminal-aware program does.
+await manualInput('printf "\\033[6n"; IFS= read -rs -d R reply\r');
+for(let i=0;i<200 && !terminal.buffer.includes('\x1b[6n');i++) await new Promise(r=>setTimeout(r,10));
+assert(terminal.buffer.includes('\x1b[6n'),'the remote program requested cursor position');
+await manualInput('\x1b[1;1R');
+assert.equal(terminal.manualTyped,false,'a requested cursor report is not keyboard input');
+await ready();
+assert.equal((await service.execute('fixture',nodeId,'term',root,'pwd',5)).output,root);
+await ready();
 // #96: hand off immediately after manual input, before Bash emits its next prompt.
 // Do not call ready() here: execute must wait for the manual command to finish itself.
 await service.handle('fixture',{type:'node_request',action:'terminal_input',requestId:'manual-short',nodeId,terminalId:'term',conversationId:opened.conversationId,payload:{data:'sleep 0.2; printf "manual-finished\\n"\n'}});
@@ -60,6 +79,8 @@ assert.equal(terminal.promptReady,true,'probe re-armed the marker after the PS1 
 // An unsubmitted manual line must not receive probe text either.
 await service.handle('fixture',{type:'node_request',action:'terminal_input',requestId:'partial',nodeId,terminalId:'term',conversationId:opened.conversationId,payload:{data:'echo partial'}});
 assert.equal(terminal.manualTyped,true);
+await manualInput('\x1b[O');
+assert.equal(terminal.manualTyped,true,'focus reports must preserve an existing partial line');
 await assert.rejects(service.execute('fixture',nodeId,'term',root,'echo must-not-probe-partial',2),/手动终端正忙/);
 await service.handle('fixture',{type:'node_request',action:'interrupt',requestId:'partial-cancel',nodeId,terminalId:'term',conversationId:opened.conversationId,payload:{data:'\x03'}});
 await ready();

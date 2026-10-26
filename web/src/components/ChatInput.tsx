@@ -1,4 +1,5 @@
 import { copyText } from "../clipboard";
+import { selectedProjectWorkspace } from "../project-workspaces";
 import { getClientId } from "../use-chat";
 import type { WikiCoordinator } from "../wiki-coordinator";
 import { UiIcon } from "./UiIcon";
@@ -458,6 +459,7 @@ export const ChatInput = memo(function ChatInput({
 		// which the server delivers as followUp instead — the prompt is sent
 		// only after the WHOLE run finishes ("AI 生成结束才发送").
 		const selectedProject = wikiProject;
+		const analysisWorkspaceId = selectedProjectWorkspace();
 		const selectedReferences = wikiReferences ? [...wikiReferences] : [];
 		const deliverPrompt = () => {
 			if (!mounted.current || (coordinator && !sendLease.current?.current())) return;
@@ -478,7 +480,7 @@ export const ChatInput = memo(function ChatInput({
 				outgoing = mergeCurrentFile(outgoing, snapshot);
 			}
 			const requestId = randomUuid();
-			if (send({ type: "prompt", target: sessionId ? { cwd, conversationId: activeConversationId, sessionId } : undefined, text: selectedProject && !trimmed.startsWith("/") ? `${trimmed}
+			if (send({ type: "prompt", target: sessionId ? { cwd, conversationId: activeConversationId, sessionId, workspaceId: analysisWorkspaceId } : undefined, text: selectedProject && !trimmed.startsWith("/") ? `${trimmed}
 
 ${t("wikiProjectPrompt", { workspace: selectedProject.workspaceName, path: JSON.stringify(selectedProject.path) })}` : trimmed, queue, requestId, attachments: outgoing })) {
 				pendingSubmit.current = { id: requestId, sessionId, conversation: activeConversationId, text, queued: streaming, attachments };

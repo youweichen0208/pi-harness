@@ -8,7 +8,7 @@
 
 ## 内置扩展清单
 
-已安装页按内置扩展、安装包、单文件分组。五个内置条目由 `nativeExtensionRegistry` 与会话资源共同投影；包页签数量只统计安装包。内置清单独立请求，即使包 worker 失败仍能展示；不提供包更新、卸载或源码编辑。
+已安装页按内置扩展、安装包、单文件分组。六个内置条目由 `nativeExtensionRegistry` 与会话资源共同投影；包页签数量只统计安装包。内置清单独立请求，即使包 worker 失败仍能展示；不提供包更新、卸载或源码编辑。Workspace 子代理默认开启，独立全局开关与只读分工规则见 [子代理架构](architecture-subagents.md)，工具可被用户同名扩展替换。
 
 `/api/extensions` 的 `builtin-list`、`builtin-toggle` 都绑定活动 conversationId，并沿用 cwd/clientId、同源与 quiesce 校验。清单读取已有资源，不执行工厂、不加载包。工具来源必须匹配具名 inline/builtin 路径；第三方同名工具显示冲突。状态区分加载、关闭、待生效、不可用和配置/加载失败，MCP 的加载状态不代表服务器连接成功。查看设置跳转已有 MCP/Codemode 页。
 

@@ -3,6 +3,8 @@ import { UiIcon, type UiIconName } from "./UiIcon";
 import { ToolOutputDownload } from "./ToolOutputDownload";
 import { withToken } from "../auth-token";
 import { CodemodeCard } from "./CodemodeCard";
+import { SubagentToolOutput } from "./SubagentToolOutput";
+import { subagentPresentation } from "../subagent-presentation";
 
 
 import { commandPresentation, gitStatusLine, gitStatusSummary, numberedOutputLine, differentCommandDirectory, searchOutputKind, isLikelyErrorLine, selectVisibleOutputLines, displayBashCommand } from "../bash-presentation";
@@ -19,7 +21,7 @@ import {
 	FiTerminal,
 	FiX,
 } from "react-icons/fi";
-import type { ToolStatus, UiMessage, UiToolCallBlock } from "../types";
+import type { ToolStatus, UiMessage, UiSubagentProgress, UiToolCallBlock } from "../types";
 import { useT } from "../i18n";
 import { Markdown } from "./Markdown";
 import { highlightLine, langFromPath } from "../hljs-lite";
@@ -28,6 +30,7 @@ import { bashCommand, parseBashDiagnostics, parseLabeledBashSteps, type BashStep
 
 export interface ToolView {
 	codemode?: UiMessage["codemode"];
+	subagents?: UiSubagentProgress[];
 	nestedCalls?: UiMessage["nestedCalls"];
 	/** Tool result message if the tool already finished. */
 	result?: UiMessage;
@@ -414,8 +417,10 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true }: ToolCall
 	const visibleOutput = limitedOutput ? outputLines.slice(0, 10).join("\n") : output;
 	const markdownRead = isMarkdown && markdownPreview && !isError ? splitFrontmatter(visibleOutput) : null;
 	const targetPath = block.name === "read" ? readPath(block.argumentsText) : null;
+	const subagent = block.name === "subagent" ? subagentPresentation(block.argumentsText ?? "", output, view.subagents) : undefined;
+	const subagentFailed = subagent?.items.filter(item => item.phase === "failed" || item.phase === "cancelled").length ?? 0;
 
-	const statusClass = bashRun?.status === "partial" ? "partial" : bashRun?.status === "no-match" ? "idle" : isError ? "err" : done || waitingModel ? "ok" : running ? "run" : "idle";
+	let statusClass = bashRun?.status === "partial" ? "partial" : bashRun?.status === "no-match" ? "idle" : isError ? "err" : done || waitingModel ? "ok" : running ? "run" : "idle";
 	let statusLabel = isError
 		? t("error")
 		: done
@@ -432,6 +437,14 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true }: ToolCall
 	if (duration) statusLabel = `${statusLabel} · ${duration}`;
 	if (bashRun) statusLabel = bashRun.status === "partial" ? t("bashPartial", { ok: bashRun.completed, total: bashRun.steps.length }) : bashRun.status === "failed" ? t("bashFailed") : bashRun.status === "no-match" ? t("bashNoMatch") : bashRun.status === "running" ? `${t("bashRunning")}${elapsed ? ` · ${elapsed}s` : ""}` : `${t("done")}${duration ? ` · ${duration}` : ""}`;
 	else if (block.name === "bash" && isError) statusLabel = `${t("bashFailed")}${Number.isFinite(bashExit) ? ` · exit ${bashExit}` : ""}${bashDiagnostics.length ? ` · ${t("bashErrorCount", { n: bashDiagnostics.length })}` : ""}`;
+	if (subagent && !isError) {
+		const finished = subagent.items.filter(item => item.phase !== "queued" && item.phase !== "running").length;
+		statusLabel = subagent.final
+			? subagentFailed ? t("subagentBatchPartial", { failed: subagentFailed, total: subagent.items.length }) : t("subagentBatchReports", { count: subagent.items.length })
+			: t("subagentBatchProgress", { done: finished, total: subagent.items.length });
+		if (duration) statusLabel = `${statusLabel} · ${duration}`;
+		if (subagent.final && subagentFailed) statusClass = "partial";
+	}
 
 	// Live and historical results share the native exit-code projection.
 	const exitHint =
@@ -454,7 +467,8 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true }: ToolCall
 	// the two views can never drift apart.
 	const bodyContent = (
 		<>
-			{block.argumentsText && (!compactBash || fullCommand || zoomed) && (
+			{subagent && <SubagentToolOutput model={subagent} argumentsText={block.argumentsText ?? ""} outputText={output} />}
+			{block.argumentsText && !subagent && (!compactBash || fullCommand || zoomed) && (
 				<div className="toolcall-args">
 					{generic ? <ToolArguments text={block.argumentsText} /> : targetPath ? (
 						<button type="button" className="toolcall-read-path" title={targetPath} onClick={() => setZoomed(true)}>{displayReadPath(targetPath)}</button>
@@ -484,7 +498,7 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true }: ToolCall
 			</details>}
 			{!generic && view.result?.toolOutputUrl && <ToolOutputDownload url={view.result.toolOutputUrl} />}
 			{view.result?.content.flatMap(block => block.type === "image" && "dataUrl" in block && typeof block.dataUrl === "string" ? [block.dataUrl] : []).map((url, index) => <div key={index}><a href={url} target="_blank" rel="noreferrer" className="tool-result-image"><img src={url} alt={t("toolResultImage")} loading="lazy" /></a><a href={url} download={`generated-${index}.png`}>{t("downloadImage")}</a></div>)}
-			{output.length > 0 && (block.name === "bash" ? bashRun && bashView === "steps" ? <BashSteps run={bashRun} wrap={lineWrap} /> : bashDiagnostics.length > 0 ? <BashFailure diagnostics={bashDiagnostics} output={output} wrap={lineWrap} /> : <BashOutput output={output} wrap={lineWrap} cwd={differentCommandDirectory(block.argumentsText, cwd) ?? ""} searchOutput={searchOutputKind(block.argumentsText)} command={commandDisplay?.command ?? ""} /> : (
+			{output.length > 0 && !subagent && (block.name === "bash" ? bashRun && bashView === "steps" ? <BashSteps run={bashRun} wrap={lineWrap} /> : bashDiagnostics.length > 0 ? <BashFailure diagnostics={bashDiagnostics} output={output} wrap={lineWrap} /> : <BashOutput output={output} wrap={lineWrap} cwd={differentCommandDirectory(block.argumentsText, cwd) ?? ""} searchOutput={searchOutputKind(block.argumentsText)} command={commandDisplay?.command ?? ""} /> : (
 				<div className="toolcall-output">
 					<div className="toolcall-output-label">
 						{isError ? t("errorOutput") : block.name === "read" ? t("modelReadOnly") : t("output")}
@@ -529,7 +543,7 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true }: ToolCall
 	);
 
 	return (
-		<div className={`toolcall ${generic ? "toolcall-generic" : ""} ${statusClass} ${block.name === "bash" ? "toolcall-bash" : ""} ${bashRun ? "toolcall-steps" : ""} ${bashDiagnostics.length ? "toolcall-diagnostics" : ""}`} onMouseEnter={() => notifyToolHover(block.id)} onMouseLeave={() => notifyToolHover(null)}>
+		<div className={`toolcall ${generic ? "toolcall-generic" : ""} ${statusClass} ${block.name === "bash" ? "toolcall-bash" : ""} ${bashRun ? "toolcall-steps" : ""} ${bashDiagnostics.length ? "toolcall-diagnostics" : ""} ${subagent ? "toolcall-subagents" : ""}`} onMouseEnter={() => notifyToolHover(block.id)} onMouseLeave={() => notifyToolHover(null)}>
 			{commandDisplay ? <BashCommandHeader command={commandDisplay.command} original={command!} directory={commandDisplay.directory ?? differentCommandDirectory(block.argumentsText, cwd)} running={isBashRunning} elapsed={elapsed} status={statusLabel} full={fullCommand} onFull={() => { setFullCommand((value) => !value); setOpen(true); }} onKill={onKillBash}>
 				{bashRun && <span className="bash-view-switch"><button type="button" className={bashView === "steps" ? "active" : ""} onClick={() => setBashView("steps")}>{t("bashSteps")}</button><button type="button" className={bashView === "raw" ? "active" : ""} onClick={() => setBashView("raw")}>{t("bashRaw")}</button></span>}
 				<button type="button" className="toolcall-wrap" aria-pressed={lineWrap} onClick={() => setLineWrap((value) => !value)}>{t("toolWrap")}</button>

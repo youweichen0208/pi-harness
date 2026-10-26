@@ -1,9 +1,10 @@
 import { useT } from "./i18n";
+import { promptWorkspaceTarget, selectedProjectWorkspace } from "./project-workspaces";
 import { localRecoveryClock } from "./recovery-clock";
 import { emitTreeResponse, queueTreeDraft } from "./tree-events";
 import { discardExtensionEditor, queueExtensionEditor } from "./extension-editor";
 import type { UiMessage } from "./types";
-import { mergeLiveToolOutput } from "./live-tool-output";
+import { mergeLiveToolOutput, type LiveToolOutput } from "./live-tool-output";
 import { useCallback, useEffect, useReducer, useRef, useState, useMemo } from "react";
 import { ProjectCache } from "./project-cache";
 import { desktopAPI } from "./desktop";
@@ -73,7 +74,7 @@ export interface ChatState {
 	ready: boolean;
 	state: UiState | null;
 	/** Live tool output accumulated from tool_delta messages, keyed by toolCallId. */
-	liveOutputs: Map<string, { toolName: string; text: string; codemode?: UiMessage["codemode"] }>;
+	liveOutputs: Map<string, LiveToolOutput>;
 	/**
 	 * Tools that FINISHED executing (tool_status from tool_execution_end), keyed
 	 * by toolCallId. Lets the card show "done · waiting for the model" even
@@ -225,7 +226,7 @@ type Action =
 	| { type: "snapshot"; state: UiState }
 	| { type: "snapshot_delta"; msg: Extract<ServerMessage, { type: "snapshot_delta" }> }
 	| { type: "protocol_mismatch" }
-	| { type: "tool_delta"; toolCallId: string; toolName: string; delta: string; replace?: boolean; codemode?: UiMessage["codemode"] }
+	| { type: "tool_delta"; toolCallId: string; toolName: string; delta: string; replace?: boolean; codemode?: UiMessage["codemode"]; subagents?: LiveToolOutput["subagents"] }
 	| { type: "message_delta"; msg: MessageDeltaMsg }
 	| { type: "tool_status"; status: ToolStatus }
 	| { type: "notice"; notice: Notice }
@@ -377,9 +378,9 @@ function makeTerminalBridge() {
 }
 
 function pruneLiveOutputs(
-	live: Map<string, { toolName: string; text: string; codemode?: UiMessage["codemode"] }>,
+	live: Map<string, LiveToolOutput>,
 	state: UiState,
-): Map<string, { toolName: string; text: string; codemode?: UiMessage["codemode"] }> {
+): Map<string, LiveToolOutput> {
 	const completed = new Set<string>();
 	for (const m of state.messages) {
 		if (m.role === "toolResult" && m.toolCallId) completed.add(m.toolCallId);
@@ -502,6 +503,7 @@ function reducer(state: ChatState, action: Action): ChatState {
 				toolName: action.toolName,
 				text: capped,
 				codemode: action.codemode ?? prev?.codemode,
+				subagents: action.subagents ?? prev?.subagents,
 			});
 			return { ...state, liveOutputs };
 		}
@@ -896,7 +898,8 @@ export function useChat() {
 			if (msg.type === "prompt") {
 				const state = authoritative.current.state;
 				if (!state?.sessionId) return false;
-				msg = { ...msg, target: msg.target ?? { cwd: state.cwd, conversationId: state.conversationId, sessionId: state.sessionId } };
+				const target = msg.target ?? { cwd: state.cwd, conversationId: state.conversationId, sessionId: state.sessionId, workspaceId: selectedProjectWorkspace() };
+				msg = { ...msg, target: promptWorkspaceTarget(target, authoritative.current.projectWorkspaces) };
 			}
 			ws.send(JSON.stringify(msg));
 			return true;
@@ -1019,6 +1022,7 @@ export function useChat() {
 						delta: msg.delta,
 						replace: msg.replace,
 						codemode: msg.codemode,
+						subagents: msg.subagents,
 					});
 					break;
 				case "tool_status":

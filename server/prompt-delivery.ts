@@ -1,10 +1,11 @@
 import { expandNativeTemplate } from "./native-prompt-template.js";
 import type { AgentSession } from "@earendil-works/pi-coding-agent";
 import type { ImageContent } from "@earendil-works/pi-ai";
+import { createSubagentPromptScope } from "./subagents/scope.js";
 
 type Aside = { message: Parameters<AgentSession["sendCustomMessage"]>[0] };
 type Pending = { text: string; images: ImageContent[] };
-const imagesBySession = new WeakMap<AgentSession, { steering: Pending[]; followUp: Pending[] }>();
+const pendingPromptsBySession = new WeakMap<AgentSession, { steering: Pending[]; followUp: Pending[]; scope: ReturnType<typeof createSubagentPromptScope> }>();
 
 /** A question and its attachments occupy ONE native queue item. Never override
  * the user's queue modes or enqueue context that could reach another prompt. */
@@ -19,7 +20,7 @@ export function promptWithAttachments(text: string, asides: Aside[]) {
 	};
 }
 
-export async function deliverPrompt(session: AgentSession, text: string, asides: Aside[], queue: boolean, acknowledge: (ok: boolean, commandExecuted?: boolean) => void): Promise<void> {
+export async function deliverPrompt(session: AgentSession, text: string, asides: Aside[], queue: boolean, acknowledge: (ok: boolean, commandExecuted?: boolean) => void, workspaceId?: string): Promise<void> {
 	// Extension commands run immediately and own their input/turn. Preserve the
 	// original command text instead of turning attachments into command arguments.
 	const command = text.startsWith("/") ? session.extensionRunner.getCommand(text.slice(1).split(" ", 1)[0]) : undefined;
@@ -31,11 +32,15 @@ export async function deliverPrompt(session: AgentSession, text: string, asides:
 		return;
 	}
 	const input = promptWithAttachments(template ? await expandNativeTemplate(text, session.promptTemplates) : text, command ? [] : asides);
-	let pending = imagesBySession.get(session);
+	let pending = pendingPromptsBySession.get(session);
 	if (!pending) {
-		pending = { steering: [], followUp: [] }; imagesBySession.set(session, pending);
+		pending = { steering: [], followUp: [], scope: createSubagentPromptScope(session.sessionManager) }; pendingPromptsBySession.set(session, pending);
 		const records = pending;
 		const unsubscribe = session.subscribe(event => {
+			if (event.type === "message_start" && event.message.role === "user") {
+				const content = event.message.content;
+				records.scope.consume(typeof content === "string" ? content : content.filter(block => block.type === "text").map(block => block.text).join(""));
+			}
 			if (event.type === "queue_update") {
 				// SDK consumes the first matching text. Keep the remaining suffix
 				// for duplicate prompts, including prompts without image attachments.
@@ -47,18 +52,22 @@ export async function deliverPrompt(session: AgentSession, text: string, asides:
 					}).reverse();
 				}
 			}
-			if (event.type === "agent_settled") { imagesBySession.delete(session); unsubscribe(); }
+			if (event.type === "agent_settled") { records.scope.clearPending(); pendingPromptsBySession.delete(session); unsubscribe(); }
 		});
 	}
 	await session.prompt(input.text, {
 		expandPromptTemplates: !template,
 		images: input.images, streamingBehavior: queue ? "followUp" : "steer",
 		preflightResult: disposition => {
+			if (disposition === "started") pending!.scope.started(workspaceId);
 			if (disposition === "queued") {
 				const lane = queue ? "followUp" : "steering";
 				const native = queue ? session.getFollowUpMessages() : session.getSteeringMessages();
 				const accepted = native.at(-1);
-				if (accepted !== undefined) pending![lane].push({ text: accepted, images: input.images });
+				if (accepted !== undefined) {
+					pending![lane].push({ text: accepted, images: input.images });
+					pending!.scope.queued(lane, accepted, workspaceId);
+				}
 			}
 			acknowledge(disposition !== "handled");
 		},
@@ -67,7 +76,8 @@ export async function deliverPrompt(session: AgentSession, text: string, asides:
 
 /** Snapshot attachments before clearQueue emits the empty native queue. */
 export function recallPending(session: AgentSession) {
-	const pending = imagesBySession.get(session);
+	const pending = pendingPromptsBySession.get(session);
 	const images = pending ? [...pending.steering, ...pending.followUp].flatMap(record => record.images) : [];
+	pending?.scope.clearPending();
 	return { ...session.clearQueue(), images };
 }

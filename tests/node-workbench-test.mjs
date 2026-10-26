@@ -1,4 +1,4 @@
-import { generateKeyPairSync } from "node:crypto";
+import { createPrivateKey, generateKeyPairSync } from "node:crypto";
 import ssh2 from "ssh2";
 const { utils } = ssh2;
 import assert from "node:assert/strict";
@@ -7,13 +7,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startMockSsh } from "./lib/mock-ssh.mjs";
 import { NodeWorkbench } from "../dist/server/node-workbench.js";
+import { XshellCredentials } from "../dist/server/xshell-credentials.js";
 import { PluginSecrets } from "../dist/server/plugin-facilities.js";
 
 const dataDir = mkdtempSync(join(tmpdir(), "pi-node-test-"));
 const port = 8938;
 const privateKey = generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey.export({ type: "pkcs1", format: "pem" });
 const mock = await startMockSsh(process.cwd(), port, [utils.parseKey(privateKey)]);
-const service = new NodeWorkbench(dataDir);
+const cryptoFixture = JSON.parse(readFileSync(new URL("./fixtures/xshell7-credentials.json", import.meta.url), "utf8"));
+const service = new NodeWorkbench(dataDir, new XshellCredentials(async () => cryptoFixture.identity));
 const events = [];
 const detach = service.attach("client-a", (event) => events.push(event));
 async function call(action, nodeId, payload = {}, terminalId, conversationId) {
@@ -130,6 +132,67 @@ try {
 	const restored = new NodeWorkbench(dataDir);
 	assert.equal(restored.sources.find((s) => s.id === sourceId).enabled, false);
 	restored.dispose();
+	// Saved Xshell 7 passwords: real SSH auth, with a synthetic Windows identity.
+	const autoDir = join(dataDir, "auto", "Xshell", "Sessions"); mkdirSync(autoDir, { recursive: true });
+	const autoFile = join(autoDir, "auto.xsh");
+	const autoText = `[SESSIONINFO]\nVersion=7.0\n${xsh(port)}`.replace("encrypted-secret", cryptoFixture.vectors[0].ciphertext);
+	writeFileSync(autoFile, autoText);
+	const autoSource = await call("source_add", undefined, { kind: "xshell", path: autoDir, enabled: false });
+	const autoNode = service.nodes.find(n => n.sourceId === autoSource.data.sourceId);
+	assert.equal((await call("connect", autoNode.id)).event, "failure");
+	const autoTrust = events.findLast(e => e.event === "trust_required" && e.nodeId === autoNode.id);
+	assert(autoTrust, "saved password should reach host verification without manual credentials");
+	assert.equal((await call("trust", autoNode.id, { fingerprint: autoTrust.data.fingerprint })).event, "result");
+	assert(!service.secrets.has(`node:${autoNode.id}:secret`), "source password must not be duplicated into local storage");
+	const originalConnection = service.connections.get(JSON.stringify(["client-a", autoNode.id]));
+	writeFileSync(autoFile, autoText.replace(cryptoFixture.vectors[0].ciphertext, cryptoFixture.vectors[1].ciphertext));
+	await call("source_sync", undefined, { id: autoSource.data.sourceId });
+	assert.equal(service.connections.get(JSON.stringify(["client-a", autoNode.id])), originalConnection, "source password update must not interrupt a live terminal");
+	await call("disconnect", autoNode.id);
+	const changedPassword = await call("connect", autoNode.id);
+	assert.equal(changedPassword.data.credentialRequired, true, "next connection must use the changed source password");
+	assert.equal((await call("credential_test", autoNode.id, { username: "tester", secret: "secret123" })).event, "result");
+	assert.equal((await call("connect", autoNode.id)).event, "result", "explicit local credential takes precedence");
+
+	const masterDir = join(dataDir, "master", "Xshell", "Sessions"); mkdirSync(masterDir, { recursive: true });
+	mkdirSync(join(dataDir, "master", "Common"));
+	writeFileSync(join(dataDir, "master", "Common", "MasterPassword.mpw"), "[MasterPassword]\nEnblMasterPasswd=1");
+	writeFileSync(join(masterDir, "master.xsh"), autoText.replace(cryptoFixture.vectors[0].ciphertext, cryptoFixture.vectors[2].ciphertext));
+	const masterSource = await call("source_add", undefined, { kind: "xshell", path: masterDir, enabled: false });
+	const masterNode = service.nodes.find(n => n.sourceId === masterSource.data.sourceId);
+	assert.equal((await call("connect", masterNode.id)).data.credentialReason, "locked");
+	assert.equal((await call("xshell_unlock", masterNode.id, { masterPassword: "wrong" })).event, "failure");
+	assert.equal((await call("xshell_unlock", masterNode.id, { masterPassword: "master-fixture" })).event, "result");
+	await call("connect", masterNode.id);
+	const masterTrust = events.findLast(e => e.event === "trust_required" && e.nodeId === masterNode.id);
+	assert(masterTrust);
+	assert.equal((await call("trust", masterNode.id, { fingerprint: masterTrust.data.fingerprint })).event, "result");
+	const masterEventsB = []; const stopB = service.attach("master-client-b", event => masterEventsB.push(event));
+	await service.handle("master-client-b", { type: "node_request", requestId: "locked-b", action: "connect", nodeId: masterNode.id });
+	assert.equal(masterEventsB.findLast(e => e.requestId === "locked-b").data.credentialReason, "locked"); stopB();
+	const restarted = new NodeWorkbench(dataDir, new XshellCredentials(async () => cryptoFixture.identity));
+	const restartedEvents = []; restarted.attach("client-a", event => restartedEvents.push(event));
+	await restarted.handle("client-a", { type: "node_request", requestId: "restart-lock", action: "connect", nodeId: masterNode.id });
+	assert.equal(restartedEvents.findLast(e => e.requestId === "restart-lock").data.credentialReason, "locked"); restarted.dispose();
+
+	const encryptedKeyPath = join(dataDir, "encrypted-key");
+	writeFileSync(encryptedKeyPath, createPrivateKey(privateKey).export({ type: "pkcs1", format: "pem", cipher: "aes-256-cbc", passphrase: "key-passphrase" }));
+	writeFileSync(join(masterDir, "saved-key.xsh"), autoText.replace("Method=0", `Method=1\nPrivateKey=${encryptedKeyPath}`).replace(`Password=${cryptoFixture.vectors[0].ciphertext}`, `Passphrase=${cryptoFixture.vectors[3].ciphertext}`));
+	await call("source_sync", undefined, { id: masterSource.data.sourceId });
+	const savedKeyNode = service.nodes.find(n => n.sourceId === masterSource.data.sourceId && n.sourceKey === "saved-key.xsh");
+	const savedKeyConnect = await call("connect", savedKeyNode.id);
+	const savedKeyTrust = events.findLast(e => e.event === "trust_required" && e.nodeId === savedKeyNode.id);
+	assert(savedKeyTrust, `saved key passphrase must unlock the private key: ${JSON.stringify(savedKeyConnect)}`);
+	assert.equal((await call("trust", savedKeyNode.id, { fingerprint: savedKeyTrust.data.fingerprint })).event, "result");
+	assert(!service.secrets.has(`node:${savedKeyNode.id}:secret`));
+	const browse = await call("local_key_browse", undefined, { path: dataDir });
+	assert(browse.data.entries.some(entry => entry.path === encryptedKeyPath && !entry.directory));
+	assert(!JSON.stringify(browse).includes("PRIVATE KEY"));
+	for (const value of ["master-fixture", cryptoFixture.vectors[0].ciphertext, cryptoFixture.vectors[2].ciphertext, cryptoFixture.vectors[3].ciphertext]) {
+		assert(!JSON.stringify(events).includes(value), "credentials must not appear in protocol responses");
+		assert(!readFileSync(join(dataDir, "nodes.json"), "utf8").includes(value));
+	}
+
 	// Xshell key-manager names need a local private-key binding, not a password.
 	const keyDir = join(dataDir, "key-sessions"); mkdirSync(keyDir);
 	writeFileSync(join(keyDir, "key.xsh"), xsh(port).replace("Method=0", "Method=1\nUserKey=xshell-key-name"));
@@ -178,6 +241,18 @@ try {
 	assert.equal(passwordNode.localAuth, "key");
 	assert.equal((await call("credential_test", passwordNode.id, { auth: "password", secret: "secret123" })).event, "result");
 	assert.equal(passwordNode.localAuth, "password");
+	writeFileSync(join(keyDir, "no-user.xsh"), xsh(port, ""));
+	await call("source_sync", undefined, { id: keySource.data.sourceId });
+	const noUser = service.nodes.find(n => n.sourceKey === "no-user.xsh");
+	assert.equal((await call("connect", noUser.id)).data.credentialRequired, true);
+	await call("credential_test", noUser.id, { username: "tester", secret: "secret123" });
+	const noUserTrust = events.findLast(e => e.event === "trust_required" && e.nodeId === noUser.id);
+	assert(noUserTrust);
+	assert.equal((await call("credential_test", noUser.id, { username: "tester", secret: "secret123", fingerprint: noUserTrust.data.fingerprint })).event, "result");
+	assert.equal(noUser.username, ""); assert.equal(noUser.localUsername, "tester");
+	await call("source_sync", undefined, { id: keySource.data.sourceId });
+	assert.equal((await call("connect", noUser.id)).event, "result");
+
 	const selectedDir = join(dataDir, "selected-sessions"); mkdirSync(selectedDir);
 	const selectedText = "[CONNECTION]\nHost=example.invalid\nPort=22\nProtocol=SSH\n[CONNECTION:AUTHENTICATION]\nUserName=tester\nMethod=0\n";
 	writeFileSync(join(selectedDir, "one.xsh"), selectedText);
@@ -187,15 +262,15 @@ try {
 	const preview = await call("source_preview", undefined, { kind: "xshell", path: selectedDir });
 	assert.equal(preview.data.nodes.length, 3);
 	assert.equal(service.nodes.length, beforePreview, "preview does not persist nodes");
-	assert.equal((await call("source_add", undefined, { kind: "xshell", path: selectedDir, selectedKeys: ["blocked.xsh"] })).event, "failure");
-	assert.equal((await call("source_add", undefined, { kind: "xshell", path: selectedDir, selectedKeys: ["gone.xsh"] })).event, "failure");
+	assert.equal((await call("source_add", undefined, { kind: "xshell", path: selectedDir, selectedKeys: ["blocked.xsh"] })).event, "result");
+	assert.equal((await call("source_add", undefined, { kind: "xshell", path: selectedDir, selectedKeys: ["gone.xsh"] })).event, "result");
 	const selectedSource = await call("source_add", undefined, { kind: "xshell", path: selectedDir, selectedKeys: ["one.xsh"], enabled: false });
 	assert.equal(selectedSource.event, "result");
 	writeFileSync(join(selectedDir, "new.xsh"), selectedText);
 	await call("source_sync", undefined, { id: selectedSource.data.sourceId });
-	assert.deepEqual(service.nodes.filter(n => n.sourceId === selectedSource.data.sourceId).map(n => n.sourceKey), ["one.xsh"]);
+	assert.deepEqual(service.nodes.filter(n => n.sourceId === selectedSource.data.sourceId).map(n => n.sourceKey).sort(), ["blocked.xsh", "new.xsh", "one.xsh", "two.xsh"]);
 	const selectionRestored = new NodeWorkbench(dataDir);
-	assert.deepEqual(selectionRestored.sources.find(s => s.id === selectedSource.data.sourceId).selectedKeys, ["one.xsh"]);
+	assert.deepEqual(selectionRestored.sources.find(s => s.id === selectedSource.data.sourceId).selectedKeys, undefined);
 	selectionRestored.dispose();
 
 	console.log("✓ SSH trust, key change, authentication, terminal command/interrupt/truncation, SFTP and node isolation");

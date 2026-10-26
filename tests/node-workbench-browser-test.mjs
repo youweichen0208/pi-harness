@@ -1,10 +1,11 @@
+import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
 import ssh2 from "ssh2";
 import { CHROME_PATH } from "./lib/chrome.mjs";
 import { startMockSsh } from "./lib/mock-ssh.mjs";
 import { chromium } from "playwright-core";
 import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -120,14 +121,20 @@ try {
 	await page.getByRole("button", { name: "打开工作台", exact: true }).click();
 	await page.locator(".node-modal").getByRole("combobox").selectOption("key");
 	const importedKeyPath = join(dataDir, "imported_id_rsa"); writeFileSync(importedKeyPath, privateKey, { mode: 0o600 });
-	await page.locator(".node-modal").getByLabel("本机私钥路径").fill(importedKeyPath);
+	await page.locator(".node-credential-modal").getByRole("button", { name: "浏览文件", exact: true }).click();
+	const picker = page.locator(".node-key-picker");
+	await picker.getByLabel("本机目录").fill(dataDir);
+	await picker.getByRole("button", { name: "浏览文件", exact: true }).click();
+	await picker.getByRole("button", { name: "imported_id_rsa", exact: true }).click();
+	assert.equal(await page.locator(".node-credential-modal").getByLabel("用户密钥", { exact: true }).inputValue(), importedKeyPath);
+	await page.screenshot({ path: join(root, "tests/scratch/node-xshell7-auth.png") });
 	await page.locator(".node-modal").getByRole("button", { name: "测试并保存" }).click();
 	await page.locator(".node-connection-tabs button", { hasText: "断开" }).waitFor({ timeout: 10000 });
 	assert(await page.locator(".node-modal").count() === 0, "credential modal stayed open");
 	await page.getByRole("button", { name: "‹ 节点", exact: true }).click();
 	writeFileSync(join(sourceDir, "added.xsh"), sourceText);
 	await page.waitForTimeout(5500);
-	assert(await page.locator(".node-item", { hasText: "added" }).count() === 0, "unselected new sessions must not import automatically");
+	assert(await page.locator(".node-item", { hasText: "added" }).count() === 1, "new Xshell sessions must import automatically");
 	writeFileSync(join(sourceDir, "public-key.xsh"), sourceText.replace("Method=0", "Method=1\nUserKey=xshell-key"));
 	const keyPath = join(dataDir, "id_rsa"); writeFileSync(keyPath, privateKey, { mode: 0o600 });
 	await page.getByRole("button", { name: "管理来源", exact: true }).click();
@@ -137,11 +144,41 @@ try {
 	await page.locator(".node-import-modal button[type=submit]").click();
 	await page.locator(".node-item", { hasText: "public-key" }).getByRole("button").first().click({ timeout: 10000 });
 	await page.getByRole("button", { name: "打开工作台", exact: true }).click();
-	await page.locator(".node-modal").getByLabel("本机私钥路径").fill(keyPath);
+	await page.locator(".node-modal").getByLabel("用户密钥", { exact: true }).fill(keyPath);
 	assert(!(await page.locator(".node-modal input[type=password]").evaluate((input) => input.required)), "key passphrase must be optional");
 	await page.locator(".node-modal").getByRole("button", { name: "测试并保存" }).click();
 	await page.locator(".node-connection-tabs button", { hasText: "断开" }).waitFor({ timeout: 10000 });
 	await page.getByRole("button", { name: "‹ 节点", exact: true }).click();
+	const fixture = JSON.parse(readFileSync(new URL("./fixtures/xshell7-credentials.json", import.meta.url), "utf8"));
+	mkdirSync(join(dataDir, "Common"));
+	writeFileSync(join(dataDir, "Common", "MasterPassword.mpw"), "[MasterPassword]\nEnblMasterPasswd=1");
+	writeFileSync(join(sourceDir, "locked.xsh"), `[SESSIONINFO]\nVersion=7.0\n${sourceText}Password=${fixture.vectors[2].ciphertext}\n`);
+	await page.locator(".node-item", { hasText: "locked" }).getByRole("button").first().click({ timeout: 10000 });
+	await page.getByRole("button", { name: "打开工作台", exact: true }).click();
+	const authDialog = page.locator(".node-credential-modal");
+	await authDialog.getByRole("heading", { name: "解锁 Xshell 主密码" }).waitFor();
+	await authDialog.getByLabel("主密码", { exact: true }).fill("wrong");
+	await authDialog.getByRole("button", { name: "解锁并连接" }).click();
+	await authDialog.getByRole("alert").waitFor();
+	await authDialog.getByLabel("主密码", { exact: true }).fill("master-fixture");
+	await page.screenshot({ path: join(root, "tests/scratch/node-xshell7-unlock.png") });
+	await authDialog.getByRole("button", { name: "解锁并连接" }).click();
+	await page.locator(".node-connection-tabs button", { hasText: "断开" }).waitFor({ timeout: 10000 });
+	assert.equal(await authDialog.count(), 0, "unlock should continue into the workbench");
+	await page.getByRole("button", { name: "‹ 节点", exact: true }).click();
+	writeFileSync(join(sourceDir, "missing-user.xsh"), sourceText.replace("UserName=tester", "UserName="));
+	await page.locator(".node-item", { hasText: "missing-user" }).getByRole("button").first().click({ timeout: 10000 });
+	await page.getByRole("button", { name: "打开工作台", exact: true }).click();
+	await authDialog.getByLabel("用户名", { exact: true }).fill("tester");
+	await authDialog.getByLabel("密码", { exact: true }).fill("secret123");
+	await authDialog.getByRole("button", { name: "测试并保存" }).click();
+	await page.locator(".node-connection-tabs button", { hasText: "断开" }).waitFor({ timeout: 10000 });
+	await page.getByRole("button", { name: "‹ 节点", exact: true }).click();
+	await page.locator(".node-item", { hasText: "added" }).getByRole("button").first().click();
+	await page.getByRole("button", { name: "打开工作台", exact: true }).click();
+	await authDialog.getByRole("button", { name: "取消", exact: true }).click();
+	assert.equal(await authDialog.count(), 0);
+	assert.equal(await page.locator(".node-connected").count(), 0, "cancelling authentication must not enter the workbench");
 	await page.getByRole("button", { name: "管理来源", exact: true }).click();
 	await page.screenshot({ path: join(root, "tests/scratch/node-sources.png") });
 	await page.setViewportSize({ width: 390, height: 844 });
@@ -149,7 +186,10 @@ try {
 	await page.screenshot({ path: join(root, "tests/scratch/node-mobile.png") });
 	assert(!errors.length, errors.join("\n"));
 	console.log("✓ browser node groups, trust, terminals, SFTP and node switching isolation");
+} catch (error) {
+	const page = browser?.contexts()[0]?.pages()[0];
+	if (page) { await page.screenshot({ path: join(root, "tests/scratch/node-xshell7-failure.png") }); }
+	throw error;
 } finally {
 	await browser?.close(); server.kill(); mock.close(); rmSync(dataDir, { recursive: true, force: true });
 }
-function assert(ok, message) { if (!ok) throw new Error(message); }

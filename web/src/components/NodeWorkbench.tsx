@@ -1,4 +1,5 @@
 import { copyText } from "../clipboard";
+import { NodeKeyPicker } from "./NodeKeyPicker";
 import { FolderPickerModal } from "./FolderPickerModal";
 import { FiTerminal, FiFolder, FiPlus, FiArrowRight, FiSearch, FiX, FiEye, FiEyeOff } from "react-icons/fi";
 import { useDialogFocus } from "../use-dialog-focus";
@@ -13,6 +14,8 @@ import type { NodeAgentState, NodeProfile, NodeSource,   ClientMessage, ServerMe
 type Event = Extract<ServerMessage, { type: "node_event" }>;
 type Node = NodeProfile;
 type Tab = { id: string; conversationId: string; busy: boolean; closed?: boolean; output?: string };
+
+const hardUnsupported = (node: NodeProfile) => node.unsupported?.some(reason => !["key", "username", "authentication", "authentication-profile"].includes(reason));
 
 const draftNode = (): Partial<Node> => ({ name: "", group: "默认", host: "", port: 22, username: "root", auth: "password", defaultDir: "/" });
 
@@ -43,6 +46,10 @@ export function NodeWorkbench({ send, active, dirBrowse }: { send: (msg: ClientM
 	const consumedAgentEditors = useRef<Record<string, string>>({});
 	const [agents, setAgents] = useState<Record<string, NodeAgentState>>({});
 
+	const [credentialUsername, setCredentialUsername] = useState("");
+	const [credentialMode, setCredentialMode] = useState<"credentials" | "unlock">("credentials");
+	const [masterPassword, setMasterPassword] = useState("");
+	const [browseKey, setBrowseKey] = useState(false);
 	const [credentialAuth, setCredentialAuth] = useState<"password" | "key">("password");
 	const [credentialKeyPath, setCredentialKeyPath] = useState("");
 	const [credential, setCredential] = useState<string | null>(null);
@@ -54,6 +61,7 @@ export function NodeWorkbench({ send, active, dirBrowse }: { send: (msg: ClientM
 	const awaitingTrust = useRef(new Set<string>());
 	const [notice, setNotice] = useState("");
 	const [nodes, setNodes] = useState<Node[]>([]);
+	const nodesRef = useRef(nodes); nodesRef.current = nodes;
 	const [timings, setTimings] = useState<Record<string, { connectedAt?: number; latencyMs?: number }>>({});
 	const [now, setNow] = useState(Date.now());
 	const [connections, setConnections] = useState<Record<string, string>>({});
@@ -76,6 +84,12 @@ export function NodeWorkbench({ send, active, dirBrowse }: { send: (msg: ClientM
 		const requestId = randomUuid();
 		return send({ type: "node_request", requestId, action, nodeId, terminalId, conversationId, payload }) ? requestId : null;
 	}, [send]);
+	const showCredential = useCallback((target: Node, unlock = false) => {
+		setCredentialAuth(target.auth === "key" ? "key" : "password");
+		setCredentialUsername(target.username); setCredentialKeyPath(target.localKeyPath || target.keyPath || "");
+		setCredentialMode(unlock ? "unlock" : "credentials"); setMasterPassword("");
+		setCredential(target.id); setSecret(""); setSameGroup(false); setTesting(false);
+	}, []);
 	useEffect(() => {
 		setPreview(null); setChosenKeys([]); setPreviewError(""); previewRequest.current = null;
 		if (!sourceDraft?.path.trim()) return;
@@ -145,12 +159,19 @@ export function NodeWorkbench({ send, active, dirBrowse }: { send: (msg: ClientM
 				return;
 			}
 
+			if (msg.data?.action === "local_key_browse") return;
 			if (msg.event === "failure" && String(msg.data?.action ?? "").startsWith("agent_")) return;
 			if (msg.event === "failure" && msg.data?.action === "source_preview") { if (msg.requestId === previewRequest.current) { setPreviewError(String(msg.data?.message ?? "")); setPreview(null); } return; }
 			if (msg.event === "failure" && msg.requestId === sourceRequest.current) { setSourceBusy(false); setPreviewError(String(msg.data?.message ?? "")); return; }
 			if (msg.event === "failure" && msg.data?.action === "save") setSaveBusy(false);
 			if (msg.event === "failure") { if (msg.requestId === pendingWrite.current) pendingWrite.current = null; const text = String(msg.data?.message ?? "");
-				if (!(msg.requestId && awaitingTrust.current.delete(msg.requestId))) { setError(text); setTesting(false); if (msg.data?.action === "credential_test") credentialAttempt.current = null; opening.current.delete(id); }
+				if (!(msg.requestId && awaitingTrust.current.delete(msg.requestId))) {
+					setError(text); setTesting(false);
+					if (msg.data?.action === "credential_test") credentialAttempt.current = null;
+					const target = nodesRef.current.find(node => node.id === id);
+					if (msg.data?.credentialRequired && target && msg.data?.action !== "credential_test" && msg.data?.action !== "xshell_unlock") showCredential(target, msg.data?.credentialReason === "locked");
+					else if (msg.data?.action !== "credential_test" && msg.data?.action !== "xshell_unlock") opening.current.delete(id);
+				}
 				return; }
 
 			if (msg.event === "terminal_welcome") { setTabs(all => ({ ...all, [id]: (all[id] ?? []).map(tab => tab.id === msg.terminalId ? { ...tab, welcome: String(msg.data?.text ?? "") } : tab) })); return; }
@@ -159,10 +180,11 @@ export function NodeWorkbench({ send, active, dirBrowse }: { send: (msg: ClientM
 			if (msg.event !== "result") return;
 			const action = msg.data?.action;
 			if (action === "source_detect") { setDetected((msg.data?.sources ?? []) as Partial<NodeSource>[]); setDetectedDone(true); }
-			if (action === "source_preview" && msg.requestId === previewRequest.current) { const list = (msg.data?.nodes ?? []) as (Omit<Node, "id"> & { sourceKey: string })[]; setPreview(list); setChosenKeys(list.filter(n => !n.unsupported?.some(reason => reason !== "key")).map(n => n.sourceKey)); }
+			if (action === "source_preview" && msg.requestId === previewRequest.current) { const list = (msg.data?.nodes ?? []) as (Omit<Node, "id"> & { sourceKey: string })[]; setPreview(list); setChosenKeys(list.filter(n => !hardUnsupported(n as Node)).map(n => n.sourceKey)); }
 			if (action === "source_add" && msg.requestId === sourceRequest.current) { setSourceBusy(false); setSourceDraft(null); setSourceView(false); }
+			if (action === "xshell_unlock") { setTesting(false); setMasterPassword(""); setCredential(null); setError(""); opening.current.add(id); request("connect", id); }
 			if (action === "credential_test") { credentialAttempt.current = null; setTesting(false); setCredential(null); setSecret(""); setNotice(t("nodeCredentialsSaved", { n: Number(msg.data?.count ?? 1) })); }
-			if ((action === "connect" || action === "trust" || action === "credential_test") && opening.current.has(id)) { opening.current.delete(id); request("terminal_open", id, {}, randomUuid()); setWorkspace(true); }
+			if ((action === "connect" || action === "trust" || action === "credential_test") && opening.current.has(id)) { opening.current.delete(id); setSelected(id); request("terminal_open", id, {}, randomUuid()); setWorkspace(true); setSourceView(false); }
 			if (action === "terminal_open") { const t: Tab = { id: String(msg.data?.terminalId), conversationId: String(msg.data?.conversationId), busy: false }; setTabs((all) => ({ ...all, [id]: (all[id] ?? []).some((x) => x.id === t.id) ? all[id] : [...(all[id] ?? []), t] })); setActiveTabs((all) => ({ ...all, [id]: t.id })); }
 			if (action === "list" && msg.requestId === latestList.current.get(id)) setListings((all) => ({ ...all, [id]: { path: String(msg.data?.path ?? ""), entries: (msg.data?.entries ?? []) as { name: string; type: string }[] } }));
 			if (action === "read" && msg.requestId === latestRead.current.get(id)) setFile({ nodeId: id, path: String(msg.data?.path ?? ""), text: String(msg.data?.text ?? "") });
@@ -173,7 +195,7 @@ export function NodeWorkbench({ send, active, dirBrowse }: { send: (msg: ClientM
 		};
 		window.addEventListener("pi-node-event", listener);
 		return () => window.removeEventListener("pi-node-event", listener);
-	}, [request, t]);
+	}, [request, t, showCredential]);
 	const filtered = useMemo(() => nodes.filter((n) => `${n.name} ${n.host} ${n.username}`.toLowerCase().includes(search.toLowerCase())), [nodes, search]);
 	const groups = useMemo(() => [...new Set(filtered.map((n) => n.group))], [filtered]);
 	const listFiles = (target: string) => { const id = request("list", selected, { path: target }, activeTab?.id, activeTab?.conversationId); if (id) latestList.current.set(selected, id); };
@@ -182,9 +204,8 @@ export function NodeWorkbench({ send, active, dirBrowse }: { send: (msg: ClientM
 
 	const openNode = (target: Node) => {
 		setSelected(target.id); setError("");
-		if ((target.auth === "password" && !target.hasSecret) || (target.auth === "key" && (!target.keyPath || target.unsupported?.includes("key")) && !target.localKeyPath)) { setCredentialAuth(target.auth === "key" ? "key" : "password"); setCredentialKeyPath(target.localKeyPath || target.keyPath || ""); setCredential(target.id); setSecret(""); setSameGroup(false); opening.current.add(target.id); return; }
-		setWorkspace(true); setSourceView(false);
-		if (connections[target.id] === "connected") { if (!(tabs[target.id] ?? []).some((tab) => !tab.closed)) request("terminal_open", target.id, {}, randomUuid()); }
+		setSourceView(false);
+		if (connections[target.id] === "connected") { setWorkspace(true); if (!(tabs[target.id] ?? []).some((tab) => !tab.closed)) request("terminal_open", target.id, {}, randomUuid()); }
 		else { opening.current.add(target.id); request("connect", target.id); }
 	};
 
@@ -207,19 +228,19 @@ export function NodeWorkbench({ send, active, dirBrowse }: { send: (msg: ClientM
 		</details>
 	</div>;
 	return <div className={`node-workbench node-agent-open ${workspace && node ? "node-workspace-open" : ""}`}>
-		{error && <div className="node-global-message node-error" role="alert">{error}<button aria-label={t("close")} onClick={() => setError("")}>×</button></div>}
-		{notice && <div className="node-global-message node-notice" role="status">{notice}<button aria-label={t("close")} onClick={() => setNotice("")}>×</button></div>}
+		{error && !credentialNode && <div className="node-global-message node-error" role="alert">{error}<button aria-label={t("close")} onClick={() => setError("")}>×</button></div>}
+		{notice && !error && !credentialNode && <div className="node-global-message node-notice" role="status">{notice}<button aria-label={t("close")} onClick={() => setNotice("")}>×</button></div>}
 		{!workspace && <aside className="node-sidebar"><header><strong>{t("nodeWorkbench")}</strong>{addButton}</header><div className="node-search-field"><FiSearch aria-hidden="true" /><input aria-label={t("nodeSearch")} placeholder={t("nodeSearch")} value={search} onChange={(e) => setSearch(e.target.value)} /></div>
 			{sources.map((s) => <button className={`node-source-status ${s.enabled && !s.error ? "enabled" : ""}`} key={s.id} onClick={() => { setSourceView(true); setManageOpen(true); }}><span className={`node-dot ${s.error ? "connecting" : s.enabled ? "connected" : "offline"}`} />{s.kind === "xshell" ? "Xshell" : "SSH config"}<small>{s.error || (s.lastSync ? new Date(s.lastSync).toLocaleTimeString() : "…")}</small></button>)}
-			<div className="node-list">{!filtered.length && <p className="node-list-empty" role="status">{t(search.trim() ? "nodeSearchEmpty" : "nodeListEmpty")}</p>}{groups.map((group) => <section key={group}><h3>{group}<span>{filtered.filter((n) => n.group === group).length}</span></h3>{filtered.filter((n) => n.group === group).map((n) => <div className={`node-item ${selected === n.id ? "selected" : ""}`} key={n.id}><button aria-current={selected === n.id && !sourceView ? "true" : undefined} title={`${n.name} · ${n.username}@${n.host}:${n.port}`} onClick={() => { setSelected(n.id); setSourceView(false); }}><span className={`node-dot ${connections[n.id] ?? "offline"}`} />{n.name}<small>{n.username}@{n.host}:{n.port}</small></button>{(n.sourceMissing || n.unsupported?.length || n.auth === "password" && !n.hasSecret) && <span className="node-badge">{t(n.sourceMissing ? "nodeSourceMissing" : n.unsupported?.length ? "nodeUnsupported" : "nodeMissingSecret")}</span>}{!n.sourceId && <button title={t("nodeEdit")} onClick={() => { setDraft(n); setSecret(""); }}>⋯</button>}</div>)}</section>)}</div>
+			<div className="node-list">{!filtered.length && <p className="node-list-empty" role="status">{t(search.trim() ? "nodeSearchEmpty" : "nodeListEmpty")}</p>}{groups.map((group) => <section key={group}><h3>{group}<span>{filtered.filter((n) => n.group === group).length}</span></h3>{filtered.filter((n) => n.group === group).map((n) => <div className={`node-item ${selected === n.id ? "selected" : ""}`} key={n.id}><button aria-current={selected === n.id && !sourceView ? "true" : undefined} title={`${n.name} · ${n.username}@${n.host}:${n.port}`} onClick={() => { setSelected(n.id); setSourceView(false); }}><span className={`node-dot ${connections[n.id] ?? "offline"}`} />{n.name}<small>{n.username}@{n.host}:{n.port}</small></button>{(n.sourceMissing || n.authStatus || n.unsupported?.length || n.auth === "password" && !n.hasSecret) && <span className="node-badge">{t(n.sourceMissing ? "nodeSourceMissing" : hardUnsupported(n) ? "nodeUnsupported" : n.authStatus === "source" ? "nodeAuthSource" : n.authStatus === "locked" ? "nodeAuthLocked" : n.authStatus === "local" ? "nodeAuthLocal" : "nodeMissingSecret")}</span>}{!n.sourceId && <button title={t("nodeEdit")} onClick={() => { setDraft(n); setSecret(""); }}>⋯</button>}</div>)}</section>)}</div>
 			<footer><button onClick={() => { setSourceView(true); setManageOpen(true); }}>{t("nodeSourceManage")}</button><details><summary aria-label={t("nodeMoreActions")}>⋯</summary>{importButton}<button onClick={() => request("import_legacy")}>{t("nodeImportLegacy")}</button><button onClick={() => { const clean = nodes.map(({ hasSecret, fingerprint, sourceId, sourceKey, sourceMissing, ...rest }) => rest); const url = URL.createObjectURL(new Blob([JSON.stringify({ nodes: clean }, null, 2)], { type: "application/json" })); const a = document.createElement("a"); a.href = url; a.download = "pi-nodes.json"; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }}>{t("nodeExport")}</button></details></footer>
 		</aside>}
 		{!workspace && (sourceView || !node ? sourceCards : <section className="node-detail">
-			<header className="node-detail-head"><div><div className="node-eyebrow">{node.group}</div><h2>{node.name}</h2><code>{node.username}@{node.host}:{node.port}</code></div><div className="node-actions"><button className="node-primary" disabled={!!node.unsupported?.some((reason) => reason !== "key") || node.sourceMissing || connections[node.id] === "connecting"} onClick={() => openNode(node)}>{t("nodeOpenWorkbench")}</button></div></header>
+			<header className="node-detail-head"><div><div className="node-eyebrow">{node.group}</div><h2>{node.name}</h2><code>{node.username}@{node.host}:{node.port}</code></div><div className="node-actions"><button className="node-primary" disabled={hardUnsupported(node) || node.sourceMissing || connections[node.id] === "connecting"} onClick={() => openNode(node)}>{t("nodeOpenWorkbench")}</button></div></header>
 			<div className="node-detail-summary"><div><span>{t("nodeConnectionStatus")}</span><strong><i className={`node-dot ${connections[node.id] ?? "offline"}`} />{t(connections[node.id] === "connected" ? "nodeConnected" : connections[node.id] === "connecting" ? "nodeConnecting" : "nodeDisconnected")}</strong></div><div><span>{t("nodeAuth")}</span><strong>{t(node.auth === "key" ? "nodeKey" : node.auth === "agent" ? "nodeAgentAuth" : "nodePassword")}</strong></div><div><span>{t("nodeDefaultDir")}</span><code>{node.defaultDir}</code></div></div>
 			{node.sourceMissing && <p className="node-warning">{t("nodeSourceMissing")}</p>}{!!node.unsupported?.length && <p className="node-warning">{t("nodeUnsupported")}: {node.unsupported.join(", ")}</p>}
 			<details className="node-advanced" key={node.id}><summary>{t("nodeConnectionSettings")}</summary><div className="node-actions">{source && <button onClick={() => request("source_reveal", undefined, { id: source.id })}>{t("nodeRevealSource")}</button>}{!node.sourceId && <button onClick={() => { setDraft(node); setSecret(""); }}>{t("nodeEdit")}</button>}</div>
-			{<div className={node.hasSecret ? "node-credential-note" : "node-warning"}><div><strong>{t(node.auth === "agent" ? "nodeAgentAuth" : node.auth === "password" ? "nodePassword" : "nodePassphrase")}{!node.hasSecret && node.auth === "password" && ` · ${t("nodeMissingSecret")}`}</strong><p>{t("nodeCredentialHint")}</p></div><button onClick={() => { setCredentialAuth(node.auth === "key" ? "key" : "password"); setCredentialKeyPath(node.localKeyPath || node.keyPath || ""); setCredential(node.id); setSecret(""); setSameGroup(false); }}>{t("nodeFillSecret")}</button></div>}
+			{<div className={node.hasSecret ? "node-credential-note" : "node-warning"}><div><strong>{t(node.auth === "agent" ? "nodeAgentAuth" : node.auth === "password" ? "nodePassword" : "nodePassphrase")}{node.authStatus === "source" ? ` · ${t("nodeAuthSource")}` : !node.hasSecret && node.auth === "password" && ` · ${t("nodeMissingSecret")}`}</strong><p>{t("nodeCredentialHint")}</p></div><button onClick={() => { setError(""); showCredential(node); }}>{t("nodeFillSecret")}</button></div>}
 			<dl><dt>{t("nodeAuth")}</dt><dd>{t(node.auth === "key" ? "nodeKey" : node.auth === "agent" ? "nodeAgentAuth" : "nodePassword")}</dd>{(node.localKeyPath || node.keyPath) && <><dt>{t("nodeKeyPath")}</dt><dd><code>{node.localKeyPath || node.keyPath}</code></dd></>}{source && <><dt>{t("nodeSourceLocation")}</dt><dd><code>{source.path}{source.kind === "xshell" ? `/${node.sourceKey}` : ` · ${node.sourceKey}`}</code><small>{t("nodeSourceReadonly")}</small><button title={t("nodeSourceOpenHint")} onClick={event => void copyText(source.kind === "xshell" ? `${source.path}/${node.sourceKey}` : source.path, event.currentTarget.ownerDocument).then(() => setNotice(t("nodeCopied"))).catch((e) => setError(String(e)))}>{t("nodeCopy")}</button></dd></>}<dt>{t("nodeLastConnected")}</dt><dd>{node.lastConnected ? new Date(node.lastConnected).toLocaleString() : t("nodeNever")}</dd><dt>{t("nodeDefaultDir")}</dt><dd><code>{node.defaultDir}</code></dd></dl>
 			</details>
 
@@ -240,19 +261,50 @@ export function NodeWorkbench({ send, active, dirBrowse }: { send: (msg: ClientM
 			</div>
 		</section></div>
 		</div>}
-		{sourceDraft && <div className="node-modal-backdrop"><form className="node-modal node-import-modal" ref={sourceDialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={t("nodeAddSource")} onSubmit={e => { e.preventDefault(); if (!preview || !chosenKeys.length || sourceBusy) return; setSourceBusy(true); sourceRequest.current = request("source_add", undefined, { ...sourceDraft, enabled: sourceSync, selectedKeys: chosenKeys }); if (!sourceRequest.current) { setSourceBusy(false); setPreviewError(t("nodeOffline")); } }}>
+		{sourceDraft && <div className="node-modal-backdrop"><form className="node-modal node-import-modal" ref={sourceDialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={t("nodeAddSource")} onSubmit={e => { e.preventDefault(); if (!preview || (sourceDraft.kind !== "xshell" && !chosenKeys.length) || sourceBusy) return; setSourceBusy(true); sourceRequest.current = request("source_add", undefined, { ...sourceDraft, enabled: sourceSync, ...(sourceDraft.kind === "ssh" ? { selectedKeys: chosenKeys } : {}) }); if (!sourceRequest.current) { setSourceBusy(false); setPreviewError(t("nodeOffline")); } }}>
 			<header className="node-modal-heading"><h2>{t(sourceDraft.kind === "xshell" ? "nodeXshellEntry" : "nodeSshConfig")}</h2><button type="button" disabled={sourceBusy} aria-label={t("close")} onClick={() => setSourceDraft(null)}><FiX /></button></header>
-			<p className="node-muted">{t("nodePreviewIntro")}</p>
+			<p className="node-muted">{t(sourceDraft.kind === "xshell" ? "nodeXshellAll" : "nodePreviewIntro")}</p>
 			<div className="node-source-path"><label>{t("nodeSourcePath")}<input required autoFocus disabled={sourceBusy} value={sourceDraft.path} onChange={e => { setPreview(null); setChosenKeys([]); previewRequest.current = null; setSourceDraft({ ...sourceDraft, path: e.target.value }); }} /></label>{sourceDraft.kind === "xshell" && <button type="button" disabled={sourceBusy} onClick={() => setBrowseSource(true)}>{t("nodeBrowse")}</button>}</div>
 			{previewError && <p className="node-error" role="alert">{previewError}</p>}
 			{!preview && !previewError && <p className="node-muted" role="status">{t(sourceDraft.path.trim() ? "nodePreviewLoading" : "nodeSourcePathHint")}</p>}
-			{preview && <><div className="node-preview-heading"><span>{t("nodePreviewCount", { n: preview.length, selected: chosenKeys.length })}</span><button type="button" disabled={sourceBusy} onClick={() => setChosenKeys(chosenKeys.length === preview.filter(n => !n.unsupported?.some(reason => reason !== "key")).length ? [] : preview.filter(n => !n.unsupported?.some(reason => reason !== "key")).map(n => n.sourceKey))}>{t(chosenKeys.length === preview.filter(n => !n.unsupported?.some(reason => reason !== "key")).length ? "nodeSelectNone" : "nodeSelectAll")}</button></div><div className="node-preview-list">{preview.map(n => { const blocked = !!n.unsupported?.some(reason => reason !== "key"); return <label key={n.sourceKey}><input type="checkbox" disabled={blocked || sourceBusy} checked={chosenKeys.includes(n.sourceKey)} onChange={e => setChosenKeys(keys => e.target.checked ? [...keys, n.sourceKey] : keys.filter(key => key !== n.sourceKey))} /><span><strong>{n.name}</strong><small>{n.username}@{n.host}:{n.port}</small></span><em className={blocked ? "unsupported" : "supported"} title={n.unsupported?.join(", ")}>{t(blocked ? "nodeImportSkipped" : "nodeImportReady")}</em></label>; })}</div></>}
+			{preview && <><div className="node-preview-heading"><span>{t("nodePreviewCount", { n: preview.length, selected: sourceDraft.kind === "xshell" ? preview.length : chosenKeys.length })}</span>{sourceDraft.kind === "ssh" && <button type="button" disabled={sourceBusy} onClick={() => setChosenKeys(chosenKeys.length === preview.filter(n => !n.unsupported?.some(reason => reason !== "key")).length ? [] : preview.filter(n => !n.unsupported?.some(reason => reason !== "key")).map(n => n.sourceKey))}>{t(chosenKeys.length === preview.filter(n => !n.unsupported?.some(reason => reason !== "key")).length ? "nodeSelectNone" : "nodeSelectAll")}</button>}</div><div className="node-preview-list">{preview.map(n => { const blocked = hardUnsupported(n as Node); return <label key={n.sourceKey}><input type="checkbox" disabled={sourceDraft.kind === "xshell" || blocked || sourceBusy} checked={sourceDraft.kind === "xshell" || chosenKeys.includes(n.sourceKey)} onChange={e => setChosenKeys(keys => e.target.checked ? [...keys, n.sourceKey] : keys.filter(key => key !== n.sourceKey))} /><span><strong>{n.name}</strong><small>{n.username}@{n.host}:{n.port}</small></span><em className={blocked ? "unsupported" : "supported"} title={n.unsupported?.join(", ")}>{t(blocked ? "nodeUnsupported" : "nodeImportReady")}</em></label>; })}</div></>}
 			<p className="node-muted">{t("nodeSyncPassword")}</p><label className="node-checkbox"><input type="checkbox" disabled={sourceBusy} checked={sourceSync} onChange={e => setSourceSync(e.target.checked)} />{t("nodeAutoSync")}</label>
-			<div className="node-modal-actions"><button type="button" disabled={sourceBusy} onClick={() => setSourceDraft(null)}>{t("cancel")}</button><button type="submit" disabled={sourceBusy || !preview || !chosenKeys.length} className="node-primary">{t(sourceBusy ? "nodeImporting" : "nodeImportSelected", { n: chosenKeys.length })}</button></div>
+			<div className="node-modal-actions"><button type="button" disabled={sourceBusy} onClick={() => setSourceDraft(null)}>{t("cancel")}</button><button type="submit" disabled={sourceBusy || !preview || (sourceDraft.kind === "ssh" && !chosenKeys.length)} className="node-primary">{t(sourceBusy ? "nodeImporting" : sourceDraft.kind === "xshell" ? "nodeImportAll" : "nodeImportSelected", { n: chosenKeys.length })}</button></div>
 		</form></div>}
 		{browseSource && <FolderPickerModal dirBrowse={dirBrowse} initialPath={sourceDraft?.path || undefined} onBrowse={path => { send({ type: "browse_dirs", path }); }} onPick={path => { setSourceDraft(current => current ? { ...current, path } : null); setBrowseSource(false); }} onClose={() => setBrowseSource(false)} />}
 
-		{credentialNode && <div className="node-modal-backdrop"><form className="node-modal node-credential-modal" ref={credentialDialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={t("nodeAuth")} onSubmit={(e) => { e.preventDefault(); const payload = { auth: credentialAuth, secret, persist: persistSecret, sameGroup, ...(credentialAuth === "key" ? { keyPath: credentialKeyPath } : {}) }; credentialAttempt.current = { nodeId: credentialNode.id, payload }; setTesting(true); request("credential_test", credentialNode.id, payload); }}><header className="node-modal-heading"><h2>{credentialNode.name}</h2><button type="button" disabled={testing} aria-label={t("close")} onClick={() => { opening.current.delete(credentialNode.id); setCredential(null); setSecret(""); credentialAttempt.current = null; }}><FiX /></button></header><code>{credentialNode.username}@{credentialNode.host}:{credentialNode.port}</code><label>{t("nodeAuth")}<select disabled={testing} value={credentialAuth} onChange={(e) => { setCredentialAuth(e.target.value as "password" | "key"); setSecret(""); setSameGroup(false); }}><option value="password">{t("nodePassword")}</option><option value="key">{t("nodeKey")}</option></select></label><p className="node-muted">{t("nodeLocalAuthHint")}</p><>{credentialAuth === "key" && <><label>{t("nodeKeyPath")}<input disabled={testing} required value={credentialKeyPath} onChange={(e) => setCredentialKeyPath(e.target.value)} /></label><p className="node-muted">{t("nodePrivateKeyHint")}</p></>}</><label>{t(credentialAuth === "key" ? "nodePassphrase" : "nodePassword")}<input disabled={testing} autoFocus type="password" autoComplete="new-password" required={credentialAuth === "password"} value={secret} onChange={(e) => setSecret(e.target.value)} /></label><label className="node-checkbox"><input type="checkbox" disabled={testing} checked={persistSecret} onChange={(e) => setPersistSecret(e.target.checked)} />{t("nodePersistSecret")}</label>{credentialAuth === "password" && <label className="node-checkbox"><input type="checkbox" disabled={testing} checked={sameGroup} onChange={(e) => setSameGroup(e.target.checked)} />{t("nodeGroupSecret")}</label>}{sameGroup && <p className="node-muted">{t("nodeGroupHint")}</p>}<p className="node-muted">{t("nodeCredentialHint")}</p><div className="node-modal-actions"><button type="button" disabled={testing} onClick={() => { opening.current.delete(credentialNode.id); setCredential(null); setSecret(""); credentialAttempt.current = null; }}>{t("cancel")}</button><button disabled={testing} className="node-primary">{t(testing ? "nodeTesting" : "nodeTestSave")}</button></div></form></div>}
+		{credentialNode && <div className="node-modal-backdrop"><form className="node-modal node-credential-modal" ref={credentialDialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={t(credentialMode === "unlock" ? "nodeUnlockTitle" : "nodeAuthenticationTitle")} onSubmit={event => {
+			event.preventDefault(); setError(""); setTesting(true);
+			if (credentialMode === "unlock") {
+				if (!request("xshell_unlock", credentialNode.id, { masterPassword })) { setTesting(false); setError(t("nodeOffline")); }
+				setMasterPassword(""); return;
+			}
+			const payload = { auth: credentialAuth, username: credentialUsername, secret, persist: persistSecret, sameGroup, ...(credentialAuth === "key" ? { keyPath: credentialKeyPath } : {}) };
+			credentialAttempt.current = { nodeId: credentialNode.id, payload };
+			if (!request("credential_test", credentialNode.id, payload)) { setTesting(false); credentialAttempt.current = null; setError(t("nodeOffline")); }
+		}}>
+			<header className="node-modal-heading"><h2>{t(credentialMode === "unlock" ? "nodeUnlockTitle" : "nodeAuthenticationTitle")}</h2><button type="button" disabled={testing} aria-label={t("close")} onClick={() => { opening.current.delete(credentialNode.id); setCredential(null); setSecret(""); setMasterPassword(""); credentialAttempt.current = null; }}><FiX /></button></header>
+			<strong>{credentialNode.name}</strong><code>{credentialNode.host}:{credentialNode.port}</code>
+			{credentialMode === "unlock" ? <>
+				<p className="node-muted">{t("nodeUnlockHint")}</p>
+				<label>{t("nodeMasterPassword")}<input autoFocus required disabled={testing} type="password" autoComplete="off" value={masterPassword} onChange={event => setMasterPassword(event.target.value)} /></label>
+				<button type="button" disabled={testing} onClick={() => { setCredentialMode("credentials"); setMasterPassword(""); setError(""); }}>{t("nodeEnterManually")}</button>
+			</> : <>
+				<label>{t("nodeAuth")}<select disabled={testing} value={credentialAuth} onChange={event => { setCredentialAuth(event.target.value as "password" | "key"); setSecret(""); setSameGroup(false); setError(""); }}><option value="password">{t("nodePassword")}</option><option value="key">{t("nodeKey")}</option></select></label>
+				<label>{t("nodeUsername")}<input required autoComplete="username" disabled={testing} value={credentialUsername} onChange={event => setCredentialUsername(event.target.value)} /></label>
+				{credentialAuth === "key" && <><div className="node-source-path"><label>{t("nodeUserKey")}<input required disabled={testing} value={credentialKeyPath} onChange={event => setCredentialKeyPath(event.target.value)} /></label><button type="button" disabled={testing} onClick={() => setBrowseKey(true)}>{t("nodeBrowse")}</button></div><p className="node-muted">{t("nodePrivateKeyHint")}</p></>}
+				<label>{t(credentialAuth === "key" ? "nodePassphrase" : "nodePassword")}<input disabled={testing} autoFocus type="password" autoComplete="new-password" required={credentialAuth === "password"} value={secret} onChange={event => setSecret(event.target.value)} /></label>
+				<label className="node-checkbox"><input type="checkbox" disabled={testing} checked={persistSecret} onChange={event => setPersistSecret(event.target.checked)} />{t("nodePersistSecret")}</label>
+				{credentialAuth === "password" && <label className="node-checkbox"><input type="checkbox" disabled={testing} checked={sameGroup} onChange={event => setSameGroup(event.target.checked)} />{t("nodeGroupSecret")}</label>}
+				{sameGroup && <p className="node-muted">{t("nodeGroupHint")}</p>}
+				<p className="node-muted">{t("nodeLocalAuthHint")}</p>
+				{credentialNode.sourceCredential && <button type="button" disabled={testing} onClick={() => { setCredentialMode("unlock"); setSecret(""); setError(""); }}>{t("nodeUnlockTitle")}</button>}
+			</>}
+			{error && <p className="node-error" role="alert">{error}</p>}
+			<div className="node-modal-actions"><button type="button" disabled={testing} onClick={() => { opening.current.delete(credentialNode.id); setCredential(null); setSecret(""); setMasterPassword(""); credentialAttempt.current = null; }}>{t("cancel")}</button><button disabled={testing} className="node-primary">{t(testing ? "nodeTesting" : credentialMode === "unlock" ? "nodeUnlockConnect" : "nodeTestSave")}</button></div>
+		</form></div>}
+		{browseKey && credentialNode && <NodeKeyPicker request={request} onPick={path => { setCredentialKeyPath(path); setBrowseKey(false); }} onClose={() => setBrowseKey(false)} />}
+
 
 		{draft && <div className="node-modal-backdrop"><form className="node-modal node-ssh-modal" ref={nodeDialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={t("nodeAdd")} onSubmit={e => { e.preventDefault(); if (saveBusy) return; setError(""); setSaveBusy(true); const id = request("save", draft.id, { ...draft, secret: secret || undefined }); saveRequest.current = draft.id ? null : id; if (!id) { setSaveBusy(false); setError(t("nodeOffline")); } }}>
 			<header className="node-modal-heading"><h2>{t(draft.id ? "nodeEdit" : "nodeSshEntry")}</h2><button type="button" disabled={saveBusy} aria-label={t("close")} onClick={() => setDraft(null)}><FiX /></button></header>

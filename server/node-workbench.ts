@@ -1,15 +1,18 @@
 /** Built-in SSH node workbench. All remote operations are scoped by node and client. */
+import { XshellCredentials, NodeCredentialError } from "./xshell-credentials.js";
+import { readdir } from "node:fs/promises";
 import { nodeCommand } from "./node-command.js";
 import { NodeTerminalOutput } from "./node-terminal-output.js";
+import { NodeTerminalInput } from "./node-terminal-input.js";
 import { stripVTControlCharacters } from "node:util";
 import { StringDecoder } from "node:string_decoder";
 import { NodeAgent } from "./node-agent.js";
 import { execFile } from "node:child_process";
 import { randomUUID, createHash } from "node:crypto";
-import { readFileSync, writeFileSync, mkdirSync, renameSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, renameSync, statSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
 import { homedir } from "node:os";
-import { Client, type ClientChannel, type SFTPWrapper } from "ssh2";
+import ssh2, { Client, type ClientChannel, type SFTPWrapper } from "ssh2";
 
 import { PluginSecrets } from "./plugin-facilities.js";
 import { scanSource, detectSources, sourcePath,  } from "./node-sources.js";
@@ -19,9 +22,14 @@ type Request = Extract<ClientMessage, { type: "node_request" }>;
 type Sink = (msg: ServerMessage) => void;
 type Node = NodeProfile;
 function unsupportedOptions(node: Node): string[] {
-	return (node.unsupported ?? []).filter((reason) => reason !== "key" || ((node.localAuth ?? node.auth) === "key" && !node.localKeyPath));
+	return (node.unsupported ?? []).filter(reason => {
+		if (reason === "username") return false;
+		if (reason === "key") return (node.localAuth ?? node.auth) === "key" && !node.localKeyPath;
+		if (reason === "authentication" || reason === "authentication-profile") return !node.localAuth;
+		return true;
+	});
 }
-type Terminal = { id: string; conversationId: string; stream: ClientChannel; busy: boolean; buffer: string; promptMarker: string; promptReady: boolean; welcome: string; initializing: boolean; initScript: string; scan: string; manualTyped: boolean; altScreen: boolean; cancelledCapture?: NodeTerminalOutput; pending?: { marker: string; capture: NodeTerminalOutput; resolve: (value: { output: string; code: number }) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> } };
+type Terminal = { id: string; conversationId: string; stream: ClientChannel; busy: boolean; buffer: string; promptMarker: string; promptReady: boolean; welcome: string; initializing: boolean; initScript: string; scan: string; input: NodeTerminalInput; manualTyped: boolean; altScreen: boolean; cancelledCapture?: NodeTerminalOutput; pending?: { marker: string; capture: NodeTerminalOutput; resolve: (value: { output: string; code: number }) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> } };
 type Connection = { client: Client; nodeId: string; clientId: string; terminals: Map<string, Terminal>; agent?: NodeAgent; agentStarting?: boolean; selectedTerminalId?: string; sftp?: SFTPWrapper; ready: boolean; startedAt: number; connectedAt?: number };
 
 const MAX_OUTPUT = 64 * 1024;
@@ -59,17 +67,20 @@ export class NodeWorkbench {
 	private syncing = new Set<string>();
 	private timer: ReturnType<typeof setInterval>;
 	private disposed = false;
+	private pendingConnections = new Map<string, symbol>();
+	private authStates = new Map<string, Node["authStatus"]>();
 	private transientSecrets = new Map<string, string>();
 	private observedKeys = new Map<string, string>();
 
 	private readonly sinks = new Map<string, Set<Sink>>();
 	private readonly connections = new Map<string, Connection>();
 
-	constructor(private readonly dataDir: string) {
+	constructor(private readonly dataDir: string, private readonly xshellCredentials = new XshellCredentials()) {
 		this.file = join(dataDir, "nodes.json");
 		this.secrets = new PluginSecrets(dataDir, join(dataDir, "node-workbench"));
 		try { const saved = JSON.parse(readFileSync(this.file, "utf8")); this.nodes = saved.nodes ?? []; this.sources = saved.sources ?? []; } catch { this.nodes = []; }
 		this.nodes = this.nodes.filter((node) => node && /^[0-9a-f-]{36}$/i.test(node.id) && typeof node.host === "string");
+		for (const source of this.sources) if (source.kind === "xshell") delete source.selectedKeys;
 		this.timer = setInterval(() => { for (const source of this.sources) if (source.enabled) void this.syncSource(source); }, 5000);
 		this.timer.unref();
 	}
@@ -84,8 +95,16 @@ export class NodeWorkbench {
 		for (const sink of this.sinks.get(clientId) ?? []) sink(msg);
 	}
 	activeAgents(): number { return [...this.connections.values()].filter(connection => connection.agentStarting || connection.agent?.busy).length; }
+	private authStatus(clientId: string, node: Node): Node["authStatus"] {
+		if (unsupportedOptions(node).some(reason => !["key", "authentication", "authentication-profile"].includes(reason))) return "unsupported";
+		if (this.authStates.has(identity(clientId, node.id))) return this.authStates.get(identity(clientId, node.id));
+		if (!this.sources.some(source => source.id === node.sourceId && source.kind === "xshell")) return undefined;
+		if (this.secrets.has(`node:${node.id}:secret`) || this.transientSecrets.has(identity(clientId, node.id))) return "local";
+		if (!(node.localUsername ?? node.username) || unsupportedOptions(node).length) return "missing";
+		return node.sourceCredential || (node.auth === "key" && node.keyPath) ? "source" : "missing";
+	}
 	private state(clientId: string): Record<string, unknown> {
-		return { sources: this.sources,   nodes: this.nodes.map((node) => ({ ...node, auth: node.localAuth ?? node.auth, unsupported: unsupportedOptions(node), hasSecret: this.secrets.has(`node:${node.id}:secret`) || this.transientSecrets.has(identity(clientId, node.id)), fingerprint: node.fingerprint })), connections: [...this.connections.values()].filter((c) => c.clientId === clientId).map((c) => ({ nodeId: c.nodeId, connectedAt: c.connectedAt, latencyMs: c.connectedAt ? c.connectedAt - c.startedAt : undefined, status: c.ready ? "connected" : "connecting", agent: c.agent?.snapshot(), terminals: [...c.terminals.values()].map((t) => ({ id: t.id, conversationId: t.conversationId, busy: t.busy || t.initializing, output: t.buffer, welcome: t.welcome })) })) };
+		return { sources: this.sources,   nodes: this.nodes.map((node) => ({ ...node, username: node.localUsername ?? node.username, authStatus: this.authStatus(clientId, node), auth: node.localAuth ?? node.auth, unsupported: unsupportedOptions(node), hasSecret: this.secrets.has(`node:${node.id}:secret`) || this.transientSecrets.has(identity(clientId, node.id)), fingerprint: node.fingerprint })), connections: [...this.connections.values()].filter((c) => c.clientId === clientId).map((c) => ({ nodeId: c.nodeId, connectedAt: c.connectedAt, latencyMs: c.connectedAt ? c.connectedAt - c.startedAt : undefined, status: c.ready ? "connected" : "connecting", agent: c.agent?.snapshot(), terminals: [...c.terminals.values()].map((t) => ({ id: t.id, conversationId: t.conversationId, busy: t.busy || t.initializing, output: t.buffer, welcome: t.welcome })) })) };
 	}
 	attach(clientId: string, sink: Sink): () => void {
 		let set = this.sinks.get(clientId);
@@ -153,7 +172,7 @@ export class NodeWorkbench {
 				case "source_add": {
 					const path = sourcePath(field(p.path, "路径", 4096)), kind = p.kind === "xshell" ? "xshell" : "ssh";
 					let keys: string[] | undefined;
-					if (p.selectedKeys !== undefined) {
+					if (kind !== "xshell" && p.selectedKeys !== undefined) {
 						if (!Array.isArray(p.selectedKeys) || !p.selectedKeys.length || p.selectedKeys.length > 200 || p.selectedKeys.some(key => typeof key !== "string")) throw new Error("请选择要导入的节点");
 						const scanned = await scanSource({ kind, path });
 						keys = [...new Set(p.selectedKeys as string[])];
@@ -161,7 +180,7 @@ export class NodeWorkbench {
 					}
 					let source = this.sources.find((s) => s.path === path && s.kind === kind);
 					if (!source) { if (this.sources.length >= 10) throw new Error("最多 10 个配置来源"); source = { id: randomUUID(), kind, path, enabled: p.enabled !== false, count: 0, groups: 0, selectedKeys: keys }; this.sources.push(source); }
-					else { source.enabled = p.enabled !== false; if (keys && source.selectedKeys) source.selectedKeys = [...new Set([...source.selectedKeys, ...keys])]; }
+					else { if (kind === "xshell") delete source.selectedKeys; source.enabled = p.enabled !== false; if (keys && source.selectedKeys) source.selectedKeys = [...new Set([...source.selectedKeys, ...keys])]; }
 					await this.syncSource(source); if (source.error) throw new Error(source.error); result = { sourceId: source.id }; break;
 				}
 				case "source_reveal": {
@@ -179,6 +198,22 @@ export class NodeWorkbench {
 					break;
 				}
 
+				case "local_key_browse": {
+					const path = typeof p.path === "string" && p.path ? sourcePath(field(p.path, "路径", 4096)) : homedir();
+					const entries = await readdir(path, { withFileTypes: true });
+					result = { path, parent: dirname(path), entries: entries.filter(entry => entry.isDirectory() || entry.isFile()).sort((a, b) => Number(b.isDirectory()) - Number(a.isDirectory()) || a.name.localeCompare(b.name)).slice(0, 500).map(entry => ({ name: entry.name, path: join(path, entry.name), directory: entry.isDirectory() })), truncated: entries.length > 500 };
+					break;
+				}
+				case "xshell_unlock": {
+					const node = this.node(req.nodeId);
+					const source = this.sources.find(source => source.id === node.sourceId && source.kind === "xshell");
+					if (!source || typeof p.masterPassword !== "string" || p.masterPassword.length > 10000) throw new Error("主密码请求无效");
+					if (node.sourceMissing) throw new Error("来源已移除，请先同步。");
+					if (await this.xshellCredentials.read(clientId, source, node, p.masterPassword) === undefined) throw new NodeCredentialError("此会话未保存凭据，请单独填写节点认证信息。");
+					for (const other of this.nodes) if (other.sourceId === source.id) this.authStates.delete(identity(clientId, other.id));
+					this.broadcastState();
+					break;
+				}
 				case "credential_test": {
 					const node = this.node(req.nodeId);
 					if (p.auth !== undefined && p.auth !== "password" && p.auth !== "key") throw new Error("认证方式无效");
@@ -186,7 +221,8 @@ export class NodeWorkbench {
 					if (typeof p.secret !== "string" || (auth === "password" && !p.secret) || p.secret.length > 10000) throw new Error("凭据无效");
 					const secret = p.secret;
 					const originalAuth = node.localAuth;
-					const candidate = { ...node, localAuth: auth };
+					const originalUsername = node.localUsername;
+					const candidate = { ...node, localAuth: auth, ...(p.username !== undefined ? { localUsername: field(p.username, "用户名") } : {}) };
 					if (auth === "key" && typeof p.keyPath === "string") candidate.localKeyPath = field(p.keyPath, "私钥路径", 4096);
 					if (p.fingerprint) {
 						if (p.fingerprint !== this.observedKeys.get(identity(clientId, node.id))) throw new Error("主机指纹已过期");
@@ -194,14 +230,16 @@ export class NodeWorkbench {
 					}
 					candidate.fingerprint = node.fingerprint;
 					await this.connect(clientId, candidate, secret, req);
-					if (this.node(node.id) !== node || node.host !== candidate.host || node.port !== candidate.port || node.username !== candidate.username || node.keyPath !== candidate.keyPath || node.auth !== candidate.auth || node.localAuth !== originalAuth || node.sourceMissing) { this.disconnect(clientId, node.id); throw new Error("节点配置已变化，请重试"); }
-					if (auth !== (node.localAuth ?? node.auth)) {
+					if (this.node(node.id) !== node || node.host !== candidate.host || node.port !== candidate.port || node.username !== candidate.username || node.keyPath !== candidate.keyPath || node.auth !== candidate.auth || node.localAuth !== originalAuth || node.localUsername !== originalUsername || node.sourceMissing) { this.disconnect(clientId, node.id); throw new Error("节点配置已变化，请重试"); }
+					if (auth !== (node.localAuth ?? node.auth) || candidate.localUsername !== node.localUsername || candidate.localKeyPath !== node.localKeyPath) {
 
 						for (const c of [...this.connections.values()]) if (c.nodeId === node.id && c.clientId !== clientId) this.drop(c);
 						this.secrets.delete(`node:${node.id}:secret`);
 						for (const key of this.transientSecrets.keys()) if (JSON.parse(key)[1] === node.id) this.transientSecrets.delete(key);
 					}
 					node.localAuth = auth;
+					node.localUsername = candidate.localUsername;
+					this.authStates.delete(identity(clientId, node.id));
 					if (auth === "key" && candidate.localKeyPath) node.localKeyPath = candidate.localKeyPath;
 					else if (auth !== "key") delete node.localKeyPath;
 					node.lastConnected = candidate.lastConnected;
@@ -280,7 +318,7 @@ export class NodeWorkbench {
 					if (node.fingerprint && node.fingerprint !== fp) throw new Error("主机密钥已变化；请重新核实节点身份");
 					node.fingerprint = fp; this.save(); await this.connect(clientId, node, undefined, req); break;
 				}
-				case "disconnect": this.disconnect(clientId, req.nodeId); break;
+				case "disconnect": this.pendingConnections.delete(identity(clientId, req.nodeId ?? "")); this.disconnect(clientId, req.nodeId); break;
 				case "agent_start": result = { agent: await this.startAgent(clientId, req) }; break;
 				case "agent_prompt": await this.agent(clientId, req).prompt(field(p.text, "消息", 200000), p.queue === "steer" || p.queue === "followUp" ? p.queue : undefined); break;
 				case "agent_abort": await this.agent(clientId, req).abort(); break;
@@ -293,10 +331,13 @@ export class NodeWorkbench {
 				case "terminal_input": {
 					const t = this.terminal(clientId, req);
 					if (t.busy || t.initializing) throw new Error("Agent 正在使用该终端或终端正在初始化");
-					t.promptReady = false;
 					// 行未提交（用户在输入或粘贴未回车）时不能安全探测空闲；回车/Ctrl+C/Ctrl+D 后行缓冲为空。
 					const text = String(p.data ?? "").slice(0, 8192);
-					t.manualTyped = !/[\r\n\x03\x04]$/.test(text);
+					const input = t.input.userInput(text);
+					if (input) {
+						t.promptReady = false;
+						t.manualTyped = !/[\r\n\x03\x04]$/.test(input);
+					}
 					t.stream.write(text); break;
 				}
 				case "terminal_select": { const terminal = this.terminal(clientId, req); this.connection(clientId, req.nodeId).selectedTerminalId = terminal.id; break; }
@@ -329,7 +370,13 @@ export class NodeWorkbench {
 				default: throw new Error("未知节点操作");
 			}
 			this.emit(clientId, "result", { action: req.action, ...result }, req);
-		} catch (error) { this.emit(clientId, "failure", { action: req.action, message: (error as Error).message }, req); }
+		} catch (error) {
+			if (error instanceof NodeCredentialError && req.nodeId) {
+				this.authStates.set(identity(clientId, req.nodeId), error.reason === "locked" ? "locked" : "missing");
+				this.broadcastState();
+			}
+			this.emit(clientId, "failure", { action: req.action, message: (error as Error).message, ...(error instanceof NodeCredentialError ? { credentialRequired: true, credentialReason: error.reason } : {}) }, req);
+		}
 	}
 	/** In-flight scans are serialized per source. Failures leave the previous snapshot intact. */
 	private async syncSource(source: NodeSource): Promise<void> {
@@ -342,16 +389,19 @@ export class NodeWorkbench {
 			for (const incoming of scanned) {
 				const old = this.nodes.find((n) => n.sourceId === source.id && n.sourceKey === incoming.sourceKey);
 				if (!old) { this.nodes.push({ ...incoming, id: randomUUID(), sourceId: source.id,  }); changes.push(`+ ${incoming.name}`); continue; }
-				const changed = Object.keys(incoming).some((k) => JSON.stringify(old[k as keyof Node]) !== JSON.stringify(incoming[k as keyof typeof incoming])) || old.sourceMissing;
+				const metadataChanged = Object.keys(incoming).some(k => !["sourceCredential", "xshellVersion"].includes(k) && JSON.stringify(old[k as keyof Node]) !== JSON.stringify(incoming[k as keyof typeof incoming]));
+				const changed = metadataChanged || old.sourceMissing || old.sourceCredential !== incoming.sourceCredential || old.xshellVersion !== incoming.xshellVersion;
 				if (!changed) continue;
+				for (const key of this.authStates.keys()) if (JSON.parse(key)[1] === old.id) this.authStates.delete(key);
 				const endpoint = old.host !== incoming.host || old.port !== incoming.port;
 				const credentials = old.username !== incoming.username || old.auth !== incoming.auth || old.keyPath !== incoming.keyPath;
 
-				for (const c of [...this.connections.values()]) if (c.nodeId === old.id) this.drop(c);
+				if (metadataChanged || old.sourceMissing) for (const c of [...this.connections.values()]) if (c.nodeId === old.id) this.drop(c);
 				if (endpoint) delete old.fingerprint;
 				if (old.host !== incoming.host || credentials) {
 					delete old.localKeyPath;
 					delete old.localAuth;
+					delete old.localUsername;
 					this.secrets.delete(`node:${old.id}:secret`);
 					for (const key of this.transientSecrets.keys()) if (JSON.parse(key)[1] === old.id) this.transientSecrets.delete(key);
 				}
@@ -371,6 +421,7 @@ export class NodeWorkbench {
 
 	dispose(): void {
 		this.disposed = true;
+		this.xshellCredentials.clear(); this.pendingConnections.clear(); this.authStates.clear();
 		clearInterval(this.timer);
 
 		for (const c of [...this.connections.values()]) this.drop(c);
@@ -406,10 +457,20 @@ export class NodeWorkbench {
 	}
 	private async connect(clientId: string, node: Node, overrideSecret?: string, req?: Request): Promise<void> {
 		const auth = node.localAuth ?? node.auth;
-		if (node.sourceMissing || unsupportedOptions(node).length) throw new Error("来源已移除或配置包含暂不支持的选项，请检查节点详情");
-		const secret = overrideSecret ?? this.transientSecrets.get(identity(clientId, node.id)) ?? this.secrets.get(`node:${node.id}:secret`);
+		const unsupported = unsupportedOptions(node);
+		if (node.sourceMissing || unsupported.some(reason => !["key", "authentication", "authentication-profile"].includes(reason))) throw new Error("来源已移除或配置包含暂不支持的选项，请检查节点详情");
+		if (unsupported.length) throw new NodeCredentialError("Xshell 的认证资料尚不能直接使用，请选择密码或公钥并补填认证信息。");
+		if (!(node.localUsername ?? node.username)) throw new NodeCredentialError("请填写登录用户名。");
+		const connectionKey = identity(clientId, node.id), token = Symbol();
+		this.pendingConnections.set(connectionKey, token);
+		const revision = JSON.stringify(node);
+		let secret = overrideSecret ?? this.transientSecrets.get(connectionKey) ?? this.secrets.get(`node:${node.id}:secret`);
+		const source = this.sources.find(source => source.id === node.sourceId && source.kind === "xshell");
+		if (secret === undefined && source && !node.localAuth && !node.localUsername) secret = await this.xshellCredentials.read(clientId, source, node);
+		if (this.disposed || this.pendingConnections.get(connectionKey) !== token || revision !== JSON.stringify(node) || this.node(node.id).sourceMissing) throw new Error("节点配置或连接请求已变化，请重试。");
+		if (auth === "password" && secret === undefined) throw new NodeCredentialError("请填写登录密码。");
 		let keyChanged = false;
-		const opts: Parameters<Client["connect"]>[0] = { host: node.host, port: node.port, username: node.username, readyTimeout: 15000, keepaliveInterval: 10000,
+		const opts: Parameters<Client["connect"]>[0] = { host: node.host, port: node.port, username: node.localUsername ?? node.username, readyTimeout: 15000, keepaliveInterval: 10000,
 			hostHash: "sha256", hostVerifier: (hash: string) => {
 				const fp = `SHA256:${hash}`;
 				this.observedKeys.set(identity(clientId, node.id), fp);
@@ -422,7 +483,14 @@ export class NodeWorkbench {
 			if (!process.env.SSH_AUTH_SOCK) throw new Error("本机 SSH Agent 未就绪");
 			opts.agent = process.env.SSH_AUTH_SOCK;
 		}
-		else { const keyPath = node.localKeyPath || node.keyPath; const path = keyPath?.startsWith("~/") ? join(homedir(), keyPath.slice(2)) : keyPath; if (!path) throw new Error("需要私钥路径"); opts.privateKey = readFileSync(resolve(path)); if (secret) opts.passphrase = secret; }
+		else {
+			const keyPath = node.localKeyPath || node.keyPath;
+			if (!keyPath) throw new NodeCredentialError("请选择用户密钥文件。");
+			try { const path = sourcePath(keyPath), info = statSync(path); if (!info.isFile() || info.size > 1024 * 1024) throw new Error(); opts.privateKey = readFileSync(path); }
+			catch { throw new NodeCredentialError("无法读取用户密钥，请选择本机可访问的私钥文件。"); }
+			if (ssh2.utils.parseKey(opts.privateKey, secret) instanceof Error) throw new NodeCredentialError("用户密钥格式不支持或口令不正确，请选择 OpenSSH 私钥并填写正确口令。");
+			if (secret) opts.passphrase = secret;
+		}
 		this.disconnect(clientId, node.id);
 		const client = new Client();
 		const c: Connection = { client, clientId, nodeId: node.id, terminals: new Map(), ready: false, startedAt: Date.now() };
@@ -439,12 +507,13 @@ export class NodeWorkbench {
 				client.connect(opts);
 			});
 			if (this.connections.get(key) !== c) throw new Error("连接已被新的请求替代");
+			this.pendingConnections.delete(connectionKey); this.authStates.delete(connectionKey);
 			c.ready = true; c.connectedAt = Date.now(); node.lastConnected = c.connectedAt; this.save(); this.broadcastState();
 			// Preparing the local SDK session performs no model request. An Agent
 			// configuration failure must leave SSH and the manual terminal usable.
 			try { await this.startAgent(clientId, { type: "node_request", action: "agent_start", requestId: randomUUID(), nodeId: node.id }); }
 			catch (error) { this.ensureCurrent(c); this.emit(clientId, "failure", { action: "agent_start", message: (error as Error).message }, { nodeId: node.id }); }
-		} catch (e) { this.drop(c); client.end(); if (keyChanged) throw new Error("主机密钥已变化，连接已阻止；请核实节点身份"); throw e; }
+		} catch (e) { this.drop(c); client.end(); if (keyChanged) throw new Error("主机密钥已变化，连接已阻止；请核实节点身份"); if ((e as { level?: string }).level === "client-authentication") throw new NodeCredentialError("身份验证失败，请检查用户名、密码或用户密钥。"); throw e; }
 	}
 	private drop(c: Connection): void {
 		if (this.connections.get(identity(c.clientId, c.nodeId)) !== c) return;
@@ -467,12 +536,13 @@ export class NodeWorkbench {
 		const encoded = promptMarker.replace("\x1b", "\\033").replace("\x07", "\\007");
 		const directory = this.node(c.nodeId).defaultDir;
 		const initScript = `${promptSetup(encoded)}; cd '${directory.replaceAll("'", "'\\''")}'\n`;
-		const t: Terminal = { id, conversationId, stream, busy: false, buffer: "", promptMarker, promptReady: false, welcome: "", initializing: true, initScript, scan: "", manualTyped: false, altScreen: false };
+		const t: Terminal = { id, conversationId, stream, busy: false, buffer: "", promptMarker, promptReady: false, welcome: "", initializing: true, initScript, scan: "", input: new NodeTerminalInput(), manualTyped: false, altScreen: false };
 		c.terminals.set(id, t);
 		c.selectedTerminalId ??= id;
 		const decoder = new StringDecoder("utf8");
 		stream.on("data", (chunk: Buffer) => {
 			let data = decoder.write(chunk);
+			t.input.observeOutput(data);
 			t.scan = (t.scan + data).slice(-MAX_OUTPUT);
 			const atPrompt = t.scan.includes(t.promptMarker);
 			if (atPrompt) { t.promptReady = true; t.scan = ""; }

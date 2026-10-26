@@ -64,7 +64,10 @@ try{
  await page.waitForFunction(()=>JSON.parse(sessionStorage.getItem('pi-wiki-view'))?.path==='other.md');
  await input.fill('Only this document');await page.locator('.wiki-assistant .composer-action.send').click();
  await page.waitForFunction(()=>document.querySelector('.wiki-assistant .messages')?.textContent.includes('Local answer with evidence.'));
- assert(!JSON.stringify(requests.at(-1)).includes('knowledge'),'previous project and transcript must not enter another document chat');
+ const secondMessages=JSON.stringify(requests.at(-1).messages),previousProject=JSON.stringify(knowledge).slice(1,-1);
+ assert(!secondMessages.includes(previousProject),'previous project path must not enter another document chat');
+ assert(!secondMessages.includes('Reference evidence'),'previous project content must not enter another document chat');
+ assert(!secondMessages.includes('Analyze the project with this document'),'previous document transcript must not enter another document chat');
  assert(JSON.stringify(requests.at(-1)).includes('other.md'));
  assert.equal((await api('chat-list',{path:'note.md'})).body.length,1);
  assert.equal((await api('chat-list',{path:'other.md'})).body.length,1);

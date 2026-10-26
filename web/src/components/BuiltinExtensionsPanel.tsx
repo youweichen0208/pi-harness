@@ -7,6 +7,7 @@ import type { BuiltinExtensionsRequest, BuiltinExtensionsState, PlanSettingsStat
 const labels = {
 	"pi-harness-database": ["dbTitle", "dbExtensionHint"],
 	"pi-harness-plan": ["builtinPlan", "builtinPlanHint"],
+	"pi-harness-subagents": ["builtinSubagents", "builtinSubagentsHint"],
 	mcp: ["builtinMcp", "builtinMcpHint"],
 	codemode: ["builtinCodemode", "builtinCodemodeHint"],
 	"tool-search": ["builtinSearch", "builtinSearchHint"],
@@ -60,11 +61,12 @@ export function BuiltinExtensionsPanel({ cwd, conversationId, ready, canReload, 
 			const [title, description] = labels[item.id];
 			const planItem = item.id === "pi-harness-plan" ? plan : undefined;
 			const status = planItem ? !planItem.available ? "unavailable" : planItem.pending ? "pending" : planItem.effective ? "loaded" : "disabled" : item.status;
-			const documentItem = item.id === "pi-harness-database";
+			const documentItem = item.id === "pi-harness-database" || item.id === "pi-harness-subagents";
+			const version = item.settingsVersion ?? state.documentVersion;
 			return <article className="ext-row builtin-row" key={item.id} data-builtin-id={item.id}>
 				<div className="builtin-row-head"><div><strong>{t(title)}</strong><p className="settings-description">{t(description)}</p></div>
 					<span className="builtin-status" data-status={status}>{t(({ loaded: "builtinLoaded", disabled: "builtinDisabled", pending: "builtinPending", unavailable: "builtinUnavailable", error: "builtinError" } as const)[status])}</span>
-					{documentItem ? <input className="ext-switch" type="checkbox" role="switch" aria-label={`${t("extEnable")} ${t(title)}`} checked={item.enabled ?? false} disabled={busy || !ready || !state.documentVersion || item.enabled === undefined} onChange={event => void change({ action: "builtin-toggle", conversationId, id: "pi-harness-database", enabled: event.target.checked, version: state.documentVersion! })} />
+					{documentItem ? <input className="ext-switch" type="checkbox" role="switch" aria-label={`${t("extEnable")} ${t(title)}`} checked={item.enabled ?? false} disabled={busy || !ready || !version || item.enabled === undefined} onChange={event => void change({ action: "builtin-toggle", conversationId, id: item.id as "pi-harness-database" | "pi-harness-subagents", enabled: event.target.checked, version: version! })} />
 						: planItem ? <input className="ext-switch" type="checkbox" role="switch" aria-label={t("planEnabled")} checked={planItem.enabled} disabled={!ready} onChange={event => togglePlan(event.target.checked)} />
 						: item.id !== "pi-harness-plan" && <button onClick={openNative}>{t("builtinSettings")}</button>}
 				</div>

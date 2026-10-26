@@ -27,6 +27,7 @@ import type {
 	UiToolCallBlock,
 } from "../types";
 
+import type { LiveToolOutput } from "../live-tool-output";
 import { LeakedThinkingBlock } from "./LeakedThinkingBlock";
 import { Markdown } from "./Markdown";
 import { StreamMarkdown } from "./StreamMarkdown";
@@ -132,7 +133,7 @@ interface MessageProps {
 	/** toolResult messages by toolCallId (precomputed in MessageList, memoized). */
 	toolResults: ReadonlyMap<string, UiMessage>;
 	retriedEditIds?: ReadonlySet<string>;
-	liveOutputs: ReadonlyMap<string, { toolName: string; text: string; codemode?: UiMessage["codemode"] }>;
+	liveOutputs: ReadonlyMap<string, LiveToolOutput>;
 	/** tool_status entries (tool_execution_end) by toolCallId. */
 	toolStatuses: ReadonlyMap<string, ToolStatus>;
 	streaming: boolean;
@@ -891,7 +892,7 @@ function Block({
 	suppressLeak?: boolean;
 	user?: boolean;
 	toolResults: ReadonlyMap<string, UiMessage>;
-	liveOutputs: ReadonlyMap<string, { toolName: string; text: string; codemode?: UiMessage["codemode"] }>;
+	liveOutputs: ReadonlyMap<string, LiveToolOutput>;
 	toolStatuses: ReadonlyMap<string, ToolStatus>;
 	streaming: boolean;
 	/** Owning assistant message ended aborted/error (issue #66). */
@@ -958,6 +959,7 @@ function Block({
 			result,
 			liveOutput: live?.text,
 			codemode: live?.codemode,
+			subagents: live?.subagents,
 			streaming,
 			...(abandoned ? { abandoned: true } : {}),
 			status: toolStatuses.get(toolCall.id),

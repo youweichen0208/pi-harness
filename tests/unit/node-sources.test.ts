@@ -15,7 +15,7 @@ describe("node source adapters", () => {
 		expect(JSON.stringify(node)).not.toContain("NEVER_IMPORT");
 	});
 	it("blocks proxies, non-SSH sessions and unknown authentication", () => {
-		expect(parseXshell("[CONNECTION]\nHost=host\nProtocol=TELNET\nProxy=jump\n[CONNECTION:AUTHENTICATION]\nMethod=4", "host.xsh").unsupported).toEqual(expect.arrayContaining(["protocol", "proxy", "authentication", "username"]));
+		expect(parseXshell("[CONNECTION]\nHost=host\nProtocol=TELNET\nProxy=jump\n[CONNECTION:AUTHENTICATION]\nMethod=4", "host.xsh").unsupported).toEqual(expect.arrayContaining(["protocol", "proxy", "authentication"]));
 	});
 	it("merges SSH wildcard defaults in first-value order and blocks executable directives", () => {
 		const nodes = parseSshConfig('Host api other\n HostName 10.0.0.2\n User deploy\n Port 2222\n IdentityFile "~/.ssh/id_ed25519"\nHost * !other\n User fallback\n ProxyCommand nc proxy 22\n');
@@ -37,4 +37,11 @@ it("resolves session-relative key files without reading private key material", a
 		expect(node.keyPath).toBe(join(root, "keys", "id_ed25519"));
 		expect(node.unsupported).toEqual([]);
 	} finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+
+it("keeps missing usernames importable without exposing credential material", () => {
+	const node = parseXshell("[SESSIONINFO]\nVersion=7.0\n[CONNECTION]\nHost=host\nProtocol=SSH\n[CONNECTION:AUTHENTICATION]\nMethod=0\nPassword=SECRET", "node.xsh");
+	expect(node).toMatchObject({ username: "", sourceCredential: true, xshellVersion: "7.0", unsupported: [] });
+	expect(JSON.stringify(node)).not.toContain("SECRET");
 });

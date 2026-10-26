@@ -18,7 +18,7 @@ export interface NodeAgentOperations {
 export class NodeAgent {
 	readonly id = randomUUID();
 	private state: NodeAgentState;
-	private readonly approvals = new NodeCommandApprovals(pending => this.set({ dialogs: pending.map(item => ({ id: item.id, method: "confirm", title: "请求执行 · 写入或未识别的操作", message: item.command, commandFamily: item.family })) }, true));
+	private readonly approvals = new NodeCommandApprovals(pending => this.set({ dialogs: pending.map(item => ({ id: item.id, method: "confirm", title: "请求执行 · 写入或未识别的操作", message: item.command })) }, true));
 	private session?: AgentSession;
 	private unsubscribe?: () => void;
 	private timer?: ReturnType<typeof setTimeout>;
@@ -47,7 +47,7 @@ export class NodeAgent {
 		const writeParams = Type.Object({ path: Type.String(), text: Type.String() });
 		const command: ToolDefinition<typeof commandParams> = {
 			name: "remote_command", label: "SSH command",
-			description: `Execute a shell command on this SSH node. Each command starts in ${JSON.stringify(this.state.cwd)}; use cd explicitly within a command to change directories. Commands run visibly in the shared interactive terminal; manual input is locked until completion. Writes and unclassified commands require user confirmation. Output is limited to 64 KiB.`,
+			description: `Execute a shell command on this SSH node. Each command starts in ${JSON.stringify(this.state.cwd)}; use cd explicitly within a command to change directories. Commands run visibly in the shared interactive terminal; manual input is locked until completion. Read-only Linux queries run without confirmation. Deletions, writes, state changes and unclassified commands require confirmation for each operation. Output is limited to 64 KiB.`,
 			parameters: commandParams,
 			execute: async (_id, p, signal) => {
 				const cancel = signalFor(signal);
@@ -73,7 +73,7 @@ export class NodeAgent {
 		const agentDir = getAgentDir();
 		const settings = SettingsManager.create(this.sessionDir, agentDir);
 		const loader = new DefaultResourceLoader({ cwd: this.sessionDir, agentDir, settingsManager: settings, noExtensions: true, noSkills: true, noPromptTemplates: true, noContextFiles: true,
-			systemPrompt: `You are the assistant for one connected SSH node. All provided tools operate only on that node. Remote working directory: ${JSON.stringify(this.state.cwd)}. Use remote_command, remote_read and remote_write for node tasks. Commands run with the SSH user's permissions. You have no local filesystem or local shell tools. Ask before destructive operations when the user has not authorized them. Never assume a previous command's cd persists.`, appendSystemPrompt: [] });
+			systemPrompt: `You are the assistant for one connected SSH node. All provided tools operate only on that node. Remote working directory: ${JSON.stringify(this.state.cwd)}. Use remote_command, remote_read and remote_write for node tasks. Commands run with the SSH user's permissions. You have no local filesystem or local shell tools. Run read-only Linux queries directly using the provided tools. Every deletion, write or state-changing operation requires the tool approval dialog; never treat a previous approval as authorization for another operation. Prefer simple read-only commands over shell scripts for diagnostics. Never assume a previous command's cd persists.`, appendSystemPrompt: [] });
 		await loader.reload();
 		const { session } = await createAgentSession({ cwd: this.sessionDir, agentDir, resourceLoader: loader, settingsManager: settings,
 			sessionManager: typeof fresh === "string" ? SessionManager.open(fresh, this.sessionDir, this.sessionDir) : fresh ? SessionManager.create(this.sessionDir, this.sessionDir) : SessionManager.continueRecent(this.sessionDir, this.sessionDir),

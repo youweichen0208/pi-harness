@@ -40,6 +40,7 @@ const model = createServer(async (req, res) => {
 	const last = payload.messages.at(-1), text = JSON.stringify(last.content);
 	let tool;
 	if (last.role === "user" && text.includes("remote diagnostics")) tool = { name: "remote_command", arguments: { command: "create-proof" } };
+	if (last.role === "user" && text.includes("remote status")) tool = { name: "remote_command", arguments: { command: "systemctl status nginx --no-pager" } };
 	if (last.role === "user" && text.includes("remote write")) tool = { name: "remote_write", arguments: { path: "/srv/ops/proof.txt", text: "written on SSH node" } };
 	if (last.role === "user" && text.includes("remote read")) tool = { name: "remote_read", arguments: { path: "/srv/ops/proof.txt" } };
 	if (last.role === "user" && text.includes("blocked read")) tool = { name: "remote_read", arguments: { path: "/srv/ops/blocked" } };
@@ -54,7 +55,7 @@ const model = createServer(async (req, res) => {
 });
 await new Promise(resolve => model.listen(modelPort, "127.0.0.1", resolve));
 const key = generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey.export({ type: "pkcs1", format: "pem" });
-const clients = new Set(), commands = [], stopped = [], children = new Set();
+const clients = new Set(), commands = [], stopped = [], children = new Set(), focusReports = [];
 const remoteFiles = new Map();
 const ssh = new ssh2.Server({ hostKeys: [key] }, client => {
 	clients.add(client); client.on("error", () => {}); client.on("close", () => clients.delete(client));
@@ -63,15 +64,20 @@ const ssh = new ssh2.Server({ hostKeys: [key] }, client => {
 		const session = accept(); let execStream, child;
 		session.on("pty", acceptPty => acceptPty());
 		session.on("shell", acceptShell => {
-			const stream = acceptShell(); let marker = "", waiting = false;
+			const stream = acceptShell(); let marker = "", waiting = false, manualLine = "";
 			stream.write("SSH fixture (no pi installed)\r\n77 updates can be applied\r\n");
 			stream.on("data", data => {
-				const input = data.toString();
-				if (input.includes("__pi_prompt=")) { marker = "\x1b]133;A;" + input.match(/133;A;([a-f0-9-]+)/)[1] + "\x07"; stream.write(`tester$ ${marker}`); return; }
+				const input = data.toString().replace(/\x1b\[[IO]/g, report => { focusReports.push(report); return ""; });
+				if (!input) return;
+				if (input.includes("__pi_prompt=")) { marker = "\x1b]133;A;" + input.match(/133;A;([a-f0-9-]+)/)[1] + "\x07"; stream.write(`tester$ ${marker}\x1b[?1004h`); return; }
 				if (input === "\x03") { stopped.push("INT"); waiting = false; stream.write(`^C\r\ntester$ ${marker}`); return; }
 				if (waiting) return;
 				const end = input.match(/(__PI_DONE_[a-f0-9]+__)/)?.[1];
-				if (!end) { stream.write(input + marker); return; }
+				if (!end) {
+					manualLine += input; stream.write(input);
+					if (/[\r\n]$/.test(manualLine)) { stream.write(`\r\nmanual-pwd-done\r\ntester$ ${marker}`); manualLine = ""; }
+					return;
+				}
 				commands.push(input);
 				stream.write(`\r\n${input.match(/__PI_BEGIN_[a-f0-9]+__/)[0]}\r\n`);
 				if (input.includes("wait-until-aborted")) { waiting = true; return; }
@@ -154,10 +160,23 @@ try {
 		assert.equal((await call("agent_prompt", nodeId, { text }, agentId)).event, "result");
 		if (text !== "remote read") {
 			await waitFor(() => agent.snapshot().dialogs.length > 0);
-			assert.equal((await call("agent_dialog", nodeId, { id: agent.snapshot().dialogs[0].id, confirmed: true }, agentId)).event, "result");
+			assert.equal((await call("agent_dialog", nodeId, { id: agent.snapshot().dialogs[0].id, confirmed: true, remember: true }, agentId)).event, "result");
 		}
 		await waitFor(() => !agent.snapshot().running);
 	}
+	const beforeRead = wire.length;
+	assert.equal((await call("agent_prompt", nodeId, { text: "remote status" }, agentId)).event, "result");
+	await waitFor(() => !agent.snapshot().running);
+	assert(commands.some(command => command.includes("systemctl status nginx --no-pager")));
+	assert(!wire.slice(beforeRead).some(message => message.data?.agent?.dialogs?.length), "read-only status must not ask for approval");
+	const beforeRepeat = commands.length;
+	assert.equal((await call("agent_prompt", nodeId, { text: "remote diagnostics" }, agentId)).event, "result");
+	await waitFor(() => agent.snapshot().dialogs.length > 0);
+	assert.equal(commands.length, beforeRepeat, "a previous remember request cannot authorize another mutation");
+	assert.equal(agent.snapshot().dialogs[0].commandFamily, undefined);
+	await call("agent_dialog", nodeId, { id: agent.snapshot().dialogs[0].id, cancelled: true }, agentId);
+	await waitFor(() => !agent.snapshot().running);
+	assert.equal(commands.length, beforeRepeat, "denied operation must not reach SSH");
 	assert.equal(readFileSync(join(remoteDir, "remote-command-proof.txt"), "utf8"), "SSH process executed");
 	assert.equal(remoteFiles.get("/srv/ops/proof.txt").toString(), "written on SSH node");
 	assert(agent.snapshot().messages.some(m => m.role === "toolResult" && m.toolName === "remote_read" && JSON.stringify(m.content).includes("written on SSH node")));
@@ -238,10 +257,21 @@ try {
 		await page.locator(".node-agent-input .dropdown", { hasText: "Local fixture" }).waitFor();
 		assert.equal(requests, before, "connecting must not make a model request");
 		assert.equal(await page.getByText("npm install -g @earendil-works/pi-coding-agent@1.0.4", { exact: true }).count(), 0);
+		// Actual xterm focus reporting must not leave a completed manual command busy.
+		await page.locator(".node-xterm:visible").click();
+		await page.keyboard.type("pwd"); await page.keyboard.press("Enter");
+		await page.locator(".node-xterm .xterm-rows", { hasText: "manual-pwd-done" }).waitFor();
+		const reportCount = focusReports.length;
+		await input.click();
+		await waitFor(() => focusReports.slice(reportCount).includes("\x1b[O"));
+		const commandCount = commands.length;
 		await input.fill("remote diagnostics"); await input.press("Enter");
 		await page.locator(".node-agent-dialog pre", { hasText: "create-proof" }).waitFor();
+		assert.equal(await page.locator('.node-agent-dialog input[type="checkbox"]').count(), 0, "state-changing commands cannot grant a command family");
 		await page.locator('.node-agent-dialog button[type="submit"]').click();
 		await page.locator(".node-agent-message.assistant", { hasText: "agent reply" }).waitFor();
+		await waitFor(() => commands.length > commandCount);
+		assert(!await page.locator(".node-agent-container").innerText().then(text => text.includes("手动终端正忙")));
 		assert.equal(await input.inputValue(), "");
 		await page.getByRole("button", { name: "在终端中查看" }).click();
 		assert.equal(await page.locator(".node-terminal-welcome[open]").count(), 0);

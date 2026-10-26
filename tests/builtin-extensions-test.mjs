@@ -1,18 +1,17 @@
 /** Real Web chat transport + SDK + local fixture model. --browser adds the settings UI. */
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { spawn } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import WebSocket from "ws";
-import { testEnv } from "./lib/test-env.mjs";
+import { listenIsolated, startIsolatedHarness } from "./lib/isolated-server.mjs";
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), "pi-builtin-chat-"))), agent = join(root, "agent"), data = join(root, "data");
 mkdirSync(agent); mkdirSync(data);
 writeFileSync(join(agent, "auth.json"), JSON.stringify({ fixture: { type: "api_key", key: "fixture" } }));
 writeFileSync(join(agent, "webui-extensions.json"), JSON.stringify({ autoCheck: false }));
-let child, browser, logs = "", nextCode, calls = 0, port, holdNext = false, release;
+let child, harness, browser, logs = "", nextCode, calls = 0, port, holdNext = false, release;
 const clients = [];
 const model = createServer(async (req, res) => {
 	for await (const _part of req) { /* Consume the local request, never log prompt contents. */ }
@@ -50,7 +49,7 @@ async function request(client, action, extra = {}, expectedStatus = 200) {
 const item = (state, id) => state.items.find(item => item.id === id);
 async function toggle(client, id, enabled) {
 	const state = await request(client, "builtin-list");
-	return request(client, "builtin-toggle", { id, enabled, version: state.documentVersion });
+	return request(client, "builtin-toggle", { id, enabled, version: item(state, id)?.settingsVersion ?? state.documentVersion });
 }
 async function prompt(client, text, code) {
 	nextCode = code; const before = calls;
@@ -66,15 +65,18 @@ async function reload(client) {
 }
 
 try {
-	await new Promise((resolve, reject) => { model.once("error", reject); model.listen(0, "127.0.0.1", resolve); }); assert(model.address().port >= 8900);
+	await listenIsolated(model);
 	writeFileSync(join(agent, "models.json"), JSON.stringify({ providers: { fixture: { api: "openai-completions", baseUrl: `http://127.0.0.1:${model.address().port}`, apiKey: "fixture", models: [{ id: "fixture", input: ["text"], contextWindow: 64000, maxTokens: 8000 }] } } }));
 	writeFileSync(join(agent, "settings.json"), JSON.stringify({ defaultProvider: "fixture", defaultModel: "fixture", defaultTools: ["+codemode", "+tool_search"], retry: { enabled: false }, compaction: { enabled: false } }));
-	const probe = createServer(); await new Promise((resolve, reject) => { probe.once("error", reject); probe.listen(0, "127.0.0.1", resolve); }); port = probe.address().port; assert(port >= 8900); await new Promise(resolve => probe.close(resolve));
-	child = spawn(process.execPath, ["dist/server/index.js"], { env: { ...testEnv(), PORT: String(port), PI_WEB_HOST: "127.0.0.1", PI_WEB_TOKEN: "", PI_WEB_CWD: root, PI_WEB_DATA_DIR: data, PI_CODING_AGENT_DIR: agent }, stdio: ["ignore", "pipe", "pipe"] });
-	child.stdout.on("data", value => logs += value); child.stderr.on("data", value => logs += value);
-	await wait(async () => { try { return (await (await fetch(`http://127.0.0.1:${port}/api/health`)).json()).pid === child.pid; } catch { return false; } }, "server health");
+	harness = await startIsolatedHarness({ env: { PI_WEB_TOKEN: "", PI_WEB_CWD: root, PI_WEB_DATA_DIR: data, PI_CODING_AGENT_DIR: agent }, onOutput: value => { logs = (logs + value).slice(-16000); } });
+	child = harness.child; port = harness.port;
 	const a = await connect("builtin-a"), b = await connect("builtin-b");
-	const state = await request(a, "builtin-list"); assert.equal(state.items.length, 5);
+	const state = await request(a, "builtin-list"); assert.equal(state.items.length, 6);
+	assert.equal(item(state, "pi-harness-subagents").status, "loaded");
+	await toggle(a, "pi-harness-subagents", false);
+	assert.equal(item(await request(b, "builtin-list"), "pi-harness-subagents").status, "disabled");
+	assert.match((await request(a, "builtin-toggle", { id: "pi-harness-subagents", enabled: true, version: item(state, "pi-harness-subagents").settingsVersion }, 400)).error, /changed/);
+	await toggle(a, "pi-harness-subagents", true);
 	assert.equal(item(state, "pi-harness-pdf-markdown"), undefined);
 	assert.match((await request(a, "builtin-toggle", { id: "pi-harness-pdf-markdown", enabled: true, version: state.documentVersion }, 400)).error, /Invalid/);
 	assert.equal(item(state, "pi-harness-database").status, "loaded");
@@ -112,7 +114,7 @@ try {
 	const c = await connect("builtin-c"); assert.equal(item(await request(c, "builtin-list"), "pi-harness-database").status, "loaded");
 	const saved = readFileSync(join(data, "document-extensions.json"), "utf8");
 	writeFileSync(join(data, "document-extensions.json"), "broken-json");
-	const broken = await request(a, "builtin-list"); assert.equal(broken.items.length, 5); assert.equal(item(broken, "pi-harness-database").status, "error"); assert.equal(item(broken, "codemode").status, "loaded");
+	const broken = await request(a, "builtin-list"); assert.equal(broken.items.length, 6); assert.equal(item(broken, "pi-harness-database").status, "error"); assert.equal(item(broken, "codemode").status, "loaded");
 	writeFileSync(join(data, "document-extensions.json"), saved);
 	console.log("PASS built-in inventory, removed conversion/OKF, version conflicts, cross-client settings, disabled calls and new chat/reload");
 
@@ -132,7 +134,10 @@ try {
 		}
 		await openSettings();
 		const panel = page.locator(".builtin-extensions"), database = panel.locator('[data-builtin-id="pi-harness-database"]');
-		assert.equal(await panel.locator(".builtin-row").count(), 5);
+		assert.equal(await panel.locator(".builtin-row").count(), 6);
+		const subagents = panel.locator('[data-builtin-id="pi-harness-subagents"]');
+		await subagents.getByRole("switch").click(); await wait(() => JSON.parse(readFileSync(join(data, "subagents.json"), "utf8")).enabled === false, "subagents off");
+		await subagents.getByRole("switch").click(); await wait(() => JSON.parse(readFileSync(join(data, "subagents.json"), "utf8")).enabled === true, "subagents on");
 		await page.getByRole("tab", { name: "已安装 · 0", exact: true }).waitFor();
 		await database.getByRole("switch").click(); await wait(() => JSON.parse(readFileSync(join(data, "document-extensions.json"), "utf8")).databaseEnabled === false, "browser toggle off");
 		await database.getByRole("switch").click(); await wait(() => JSON.parse(readFileSync(join(data, "document-extensions.json"), "utf8")).databaseEnabled === true, "browser toggle on");
@@ -145,7 +150,7 @@ try {
 			if (route.request().postDataJSON()?.action === "list") return route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "Package fixture unavailable" }) });
 			await route.continue();
 		});
-		await page.reload(); await openSettings(); assert.equal(await panel.locator(".builtin-row").count(), 5);
+		await page.reload(); await openSettings(); assert.equal(await panel.locator(".builtin-row").count(), 6);
 		await page.getByText("Package fixture unavailable", { exact: false }).waitFor();
 		await page.unroute("**/api/extensions"); await page.reload(); await openSettings();
 		mkdirSync("tests/scratch", { recursive: true });
@@ -159,11 +164,11 @@ try {
 		assert.equal(await panel.getByText("Document to Markdown", { exact: true }).count(), 0);
 		await page.screenshot({ path: "tests/scratch/builtin-extensions-en.png", fullPage: true });
 		assert.deepEqual(errors, []); assert(!existsSync(join(data, "runtimes")));
-		console.log("PASS built-in browser: five entries, toggles, settings links, package failure isolation, Chinese/English and narrow layout");
+		console.log("PASS built-in browser: six entries, toggles, settings links, package failure isolation, Chinese/English and narrow layout");
 	}
 } finally {
 	release?.();
 	await browser?.close(); for (const client of clients) client.ws.terminate();
-	if (child?.exitCode === null) { const exited = new Promise(resolve => child.once("exit", resolve)); child.kill(); await exited; }
-	model.closeAllConnections(); await new Promise(resolve => model.close(resolve)); rmSync(root, { recursive: true, force: true });
+	await harness?.stop();
+	model.closeAllConnections(); if (model.listening) await new Promise(resolve => model.close(resolve)); rmSync(root, { recursive: true, force: true });
 }

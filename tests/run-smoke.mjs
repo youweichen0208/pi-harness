@@ -29,12 +29,14 @@ const here = dirname(fileURLToPath(import.meta.url));
 const WIN32_KNOWN_ENV_FAIL = new Set(["terminal-smoke-test", "restart-handoff-test"]);
 
 const ALL = [
+	"isolated-server-test",
 	"notes-test",
 	"playground-test",
 	"playground-methods-test",
 	"project-workspaces-test",
 	"shared-workspaces-test",
 	"builtin-extensions-test",
+	"subagents-test",
 	"context-corpus-test",
 	"context-eval-test",
 	"context-session-test",

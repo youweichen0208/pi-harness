@@ -26,6 +26,7 @@ mkdirSync(workdir, { recursive: true });
 mkdirSync(dataDir, { recursive: true });
 // Compare the unextended native baseline; optional built-ins have separate SDK tests.
 writeFileSync(join(dataDir, "plan-settings.json"), JSON.stringify({ enabled: false }));
+writeFileSync(join(dataDir, "subagents.json"), JSON.stringify({ enabled: false }));
 mkdirSync(agentDir, { recursive: true });
 mkdirSync(join(agentDir, "extensions"));
 writeFileSync(join(agentDir, "extensions", "cancel-new.ts"), `import { existsSync } from "node:fs"; import { join } from "node:path";
