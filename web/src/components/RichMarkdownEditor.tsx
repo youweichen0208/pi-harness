@@ -284,7 +284,7 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 			}
 			const detected = code.className.match(/language-([^\s]+)/)?.[1] ?? "";
 			const language = detected === "plaintext" ? "" : detected;
-			const canRun = !readOnly && !!host?.runCode && language === "java";
+			const canRun = !readOnly && !!host?.runCode && ["python", "py", "python3"].includes(language);
 			let runButton = chrome.querySelector<HTMLButtonElement>("button[data-code-run]");
 			if (canRun && !runButton) {
 				runButton = document.createElement("button");

@@ -1,28 +1,15 @@
-/**
- * Running one Java source on the host JDK.
- *
- * A Run is a bare child process, not a sandbox: it has the server user's
- * permissions, it can reach the network, and it is documented as such. What
- * this module does provide is containment of the *accident* — a fresh temp
- * directory per Run, a wall-clock deadline, an output cap that kills rather
- * than truncates, and a process-tree kill on every exit path, so a runaway
- * program cannot outlive its Run or fill the disk.
- *
- * The workspace is never mounted and never used as a classpath: a Run compiles
- * one self-contained file against nothing.
- */
-
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync, readFileSync, statSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import type { PlaygroundEvent, PlaygroundLimits, PlaygroundTests, PlaygroundCaseResult } from "./protocol.js";
 import { killPidTree } from "./process-utils.js";
-import { OutputBudget, introspectJavaSource, looksLikeMissingProjectDependency, wrapBareStatements } from "./playground-source.js";
-import { discoverJavaMethods, validateCases } from "./playground-methods.js";
-import { methodRunnerSource } from "./playground-method-runner.js";
-import type { JdkCommands } from "./playground-jdk.js";
+import { OutputBudget, looksLikeMissingProjectDependency } from "./playground-source.js";
+import { discoverPythonMethods, validateCases } from "./playground-methods.js";
+import { PYTHON_RUNNER } from "./playground-python-scripts.js";
+import type { PythonCommand } from "./playground-python.js";
+import { StringDecoder } from "node:string_decoder";
 
 /**
  * Admission control for Runs. Limits are passed per call rather than captured,
@@ -55,11 +42,11 @@ export class ConcurrencyGate {
 	}
 }
 
-export interface RunJavaOptions {
+export interface RunPythonOptions {
 	code: string;
 	tests?: PlaygroundTests;
 	limits: PlaygroundLimits;
-	jdk: JdkCommands;
+	python: PythonCommand;
 	onEvent: (event: PlaygroundEvent) => void;
 	/** Aborted when the client goes away; kills the process tree. */
 	signal: AbortSignal;
@@ -78,7 +65,7 @@ export interface RunSummary {
 }
 
 /** Enough of the tail of stderr to classify a compiler failure, not to keep it.
- *  Counted in characters, not bytes — the classification only needs javac's
+ *  Counted in characters, not bytes — the classification only needs Python's
  *  summary, which lands at the end, so an approximate bound is fine. */
 const STDERR_TAIL = 16_384;
 
@@ -97,7 +84,7 @@ function spawnPhase(
 		try {
 			// `detached` puts the child in its own process group so killPidTree can
 			// take the whole tree down, including anything the program spawned.
-			// stdin is /dev/null, which is what makes System.in read EOF at once.
+			// stdin is /dev/null, which is what makes Python stdin read EOF at once.
 			child = spawn(command, args, { cwd: options.cwd, stdio: ["ignore", "pipe", "pipe"], detached: true, windowsHide: true });
 		} catch {
 			resolve(null);
@@ -110,8 +97,9 @@ function spawnPhase(
 			settled = true;
 			resolve(code);
 		};
+		const decoders = { stdout: new StringDecoder("utf8"), stderr: new StringDecoder("utf8") };
 		const feed = (stream: "stdout" | "stderr") => (data: Buffer) => {
-			options.forward(stream, data.toString("utf8"));
+			options.forward(stream, decoders[stream].write(data));
 			if (options.shouldStop() && child.pid) killPidTree(child.pid);
 		};
 		child.stdout?.on("data", feed("stdout"));
@@ -120,11 +108,11 @@ function spawnPhase(
 		// Detached descendants belong to this execution even if the parent exits
 		// successfully. On POSIX the process group survives its leader.
 		child.on("exit", () => { if (child.pid && process.platform !== "win32") killPidTree(child.pid); });
-		child.on("close", code => finish(code));
+		child.on("close", code => { for (const stream of ["stdout", "stderr"] as const) options.forward(stream, decoders[stream].end()); finish(code); });
 	});
 }
 
-export async function runJava(options: RunJavaOptions): Promise<RunSummary> {
+export async function runPython(options: RunPythonOptions): Promise<RunSummary> {
 	const runId = randomUUID();
 	const directory = mkdtempSync(join(tmpdir(), "pi-playground-"));
 	const budget = new OutputBudget(options.limits.maxOutputBytes);
@@ -135,7 +123,7 @@ export async function runJava(options: RunJavaOptions): Promise<RunSummary> {
 	let compileError = false;
 	let exitCode: number | null = null;
 	let current: ChildProcess | undefined;
-	// javac puts its summary last, so the tail is what identifies a failure that
+	// Python puts its summary last, so the tail is what identifies a failure that
 	// needs the rest of the project rather than a mistake in the snippet.
 	let stderrTail = "";
 
@@ -162,68 +150,49 @@ export async function runJava(options: RunJavaOptions): Promise<RunSummary> {
 	options.signal.addEventListener("abort", onAbort, { once: true });
 
 	try {
-		// Bare statements (`System.out.println("hi");`) get a Main scaffold so a
-		// scratchpad line compiles; a source that declares any type is untouched.
-		const discovered = options.tests ? discoverJavaMethods(options.code) : undefined;
-		const method = discovered?.methods.find(m => m.id === options.tests?.methodId);
+		const method = options.tests ? discoverPythonMethods(options.code).methods.find(m => m.id === options.tests?.methodId) : undefined;
 		if (options.tests) {
-			if (!method) throw new Error("The selected method no longer exists");
+			if (!method) throw new Error("The selected function no longer exists");
 			validateCases(method, options.tests.cases);
 		}
-		const code = discovered?.code ?? wrapBareStatements(options.code);
-		const source = discovered ? { fileName: discovered.fileName, mainClass: "" } : introspectJavaSource(code);
-		const file = join(directory, source.fileName);
-		mkdirSync(dirname(file), { recursive: true });
-		writeFileSync(file, code);
-
-		const register = (child: ChildProcess) => {
-			current = child;
-			if (shouldStop()) stop();
-		};
-		const runnerName = `PiTest_${runId.replace(/-/g, "")}`;
-		const sources = [file];
-		if (method && options.tests) {
-			const runnerFile = join(dirname(file), `${runnerName}.java`);
-			writeFileSync(runnerFile, methodRunnerSource(runnerName, method, options.tests.cases, options.limits.maxOutputBytes));
-			sources.push(runnerFile);
-		}
-		// javac's diagnostics are parsed (`looksLikeMissingProjectDependency`) and shown
-		// verbatim, so they must not change with the host locale: a Chinese macOS
-		// emits `错误: 需要<标识符>`, which would silently disable that detection.
-		const compiled = shouldStop() ? null : await spawnPhase(options.jdk.javac, ["-J-Duser.language=en", "-J-Duser.country=US", "-proc:none", "-cp", directory, "-sourcepath", directory, "-d", directory, ...sources], { cwd: directory, forward, shouldStop, register });
+		const file = join(directory, "scratch.py");
+		writeFileSync(file, options.code);
+		const register = (child: ChildProcess) => { current = child; if (shouldStop()) stop(); };
+		const execute = (mode: string, extra: string[] = []) => spawnPhase(options.python.command, [...options.python.args, "-I", "-X", "utf8", "-u", "-c", PYTHON_RUNNER, file, mode, ...extra], { cwd: directory, forward, shouldStop, register });
+		const compiled = shouldStop() ? null : await execute("check");
 		if (!shouldStop()) {
-			if (compiled !== 0) compileError = true;
+			if (compiled !== 0) { compileError = true; exitCode = compiled; }
 			else if (method && options.tests) {
 				let failed = false;
-				const packagePrefix = method.className.includes(".") ? method.className.slice(0, method.className.lastIndexOf(".") + 1) : "";
 				for (const [index, test] of options.tests.cases.entries()) {
 					if (shouldStop()) break;
 					options.onEvent({ type: "case_start", id: test.id });
 					const began = Date.now();
-					const resultFile = join(directory, `result-${index}`);
-					const code = await spawnPhase(options.jdk.java, [`-Xmx${options.limits.maxHeapMb}m`, "-cp", directory, packagePrefix + runnerName, String(index), resultFile], { cwd: directory, forward, shouldStop, register });
+					const resultFile = join(directory, `result-${index}.json`);
+					const configFile = join(directory, `case-${index}.json`);
+					writeFileSync(configFile, JSON.stringify({ method, case: test }));
+					const code = await execute("test", [configFile, resultFile, String(options.limits.maxOutputBytes)]);
 					if (shouldStop()) break;
 					let result: PlaygroundCaseResult = { id: test.id, status: "error", error: `Process exited without a result (exit ${code})`, durationMs: Date.now() - began };
 					try {
 						if (statSync(resultFile).size > options.limits.maxOutputBytes) budget.push(" ".repeat(options.limits.maxOutputBytes + 1));
 						else {
 							const raw = readFileSync(resultFile, "utf8");
-							if (raw.startsWith("overflow")) budget.push(" ".repeat(options.limits.maxOutputBytes + 1));
+							if (raw === "overflow") budget.push(" ".repeat(options.limits.maxOutputBytes + 1));
 							else {
 								budget.push(raw);
-								const [status, actual, expected, error] = raw.split("\n");
-								if (code === 0 && ["passed", "failed", "error", "unasserted"].includes(status) && error !== undefined) result = { id: test.id, status: status as PlaygroundCaseResult["status"], actual: Buffer.from(actual, "base64").toString("utf8"), expected: test.expected ? Buffer.from(expected, "base64").toString("utf8") : undefined, error: error ? Buffer.from(error, "base64").toString("utf8") : undefined, durationMs: Date.now() - began };
+								const parsed = JSON.parse(raw);
+								if (code === 0 && ["passed", "failed", "error", "unasserted"].includes(parsed.status)) result = { ...parsed, id: test.id, durationMs: Date.now() - began };
 							}
 						}
-					} catch { /* Missing output (System.exit, VM failure) is a case error. */ }
+					} catch { /* A process that exits without its internal result is a case error. */ }
 					if (shouldStop()) break;
 					failed ||= result.status === "failed" || result.status === "error";
 					completedCases.add(test.id);
 					options.onEvent({ type: "case_result", result });
 				}
 				exitCode = shouldStop() ? null : failed ? 1 : 0;
-			}
-			else exitCode = await spawnPhase(options.jdk.java, [`-Xmx${options.limits.maxHeapMb}m`, "-cp", directory, source.mainClass], { cwd: directory, forward, shouldStop, register });
+			} else exitCode = await execute("program");
 		}
 	} catch (error) {
 		options.onEvent({ type: "error", message: error instanceof Error ? error.message : "Run failed" });
@@ -239,7 +208,7 @@ export async function runJava(options: RunJavaOptions): Promise<RunSummary> {
 		for (const test of options.tests?.cases ?? []) {
 			if (!completedCases.has(test.id)) options.onEvent({ type: "case_result", result: { id: test.id, status: "skipped", durationMs: 0 } });
 		}
-		const summary: RunSummary = { runId, durationMs: Date.now() - startedAt, exitCode, compileError, needsProject: compileError && looksLikeMissingProjectDependency(stderrTail), timedOut, truncated: budget.exceeded, aborted };
+		const summary: RunSummary = { runId, durationMs: Date.now() - startedAt, exitCode, compileError, needsProject: looksLikeMissingProjectDependency(stderrTail), timedOut, truncated: budget.exceeded, aborted };
 		options.onEvent({ type: "end", exitCode: summary.exitCode, durationMs: summary.durationMs, truncated: summary.truncated, timedOut: summary.timedOut, compileError: summary.compileError, needsProject: summary.needsProject });
 		return summary;
 	}

@@ -11,7 +11,7 @@
  * buffer the event stream.
  */
 
-import { JavaLanguageSession } from "./playground-java-language.js";
+import { analyzePython } from "./playground-python-language.js";
 import { readFileSync } from "node:fs";
 import { writeFileAtomic } from "./private-file.js";
 import { join } from "node:path";
@@ -19,9 +19,9 @@ import type { Express } from "express";
 import type { IncomingMessage } from "node:http";
 import type { PlaygroundConfigPatch, PlaygroundEvent, PlaygroundScratch, PlaygroundStatus, PlaygroundTests, PlaygroundTestConfig } from "./protocol.js";
 import { PlaygroundConfigStore, playgroundEnvLock } from "./playground-config.js";
-import { createJdkProbe, resolveHostJdk, type JdkProbe } from "./playground-jdk.js";
-import { discoverJavaMethods, isCaseList, isTestConfig, validateCases } from "./playground-methods.js";
-import { ConcurrencyGate, runJava } from "./playground-run.js";
+import { createPythonProbe, type PythonProbe } from "./playground-python.js";
+import { discoverPythonMethods, isCaseList, isTestConfig, validateCases } from "./playground-methods.js";
+import { ConcurrencyGate, runPython } from "./playground-run.js";
 
 /** Source larger than this is refused before anything is written to disk. */
 const MAX_SOURCE_BYTES = 262_144;
@@ -51,7 +51,7 @@ class PlaygroundScratchStore {
 }
 
 /** Accepted keys of a config write, and the exact type each one must have. */
-const FIELD_TYPES = { enabled: "boolean", timeoutMs: "number", maxOutputBytes: "number", maxHeapMb: "number", maxConcurrent: "number" } as const;
+const FIELD_TYPES = { enabled: "boolean", timeoutMs: "number", maxOutputBytes: "number", maxConcurrent: "number" } as const;
 
 export interface PlaygroundRouteOptions {
 	/** Data directory; the global switch lives at `<dataDir>/playground.json`. */
@@ -60,56 +60,53 @@ export interface PlaygroundRouteOptions {
 	allowed: (req: IncomingMessage) => boolean;
 	env?: Readonly<Record<string, string | undefined>>;
 	/** Injectable for tests; defaults to a real probe against `env`. */
-	probe?: JdkProbe;
+	probe?: PythonProbe;
 }
 
 export function installPlaygroundRoutes(app: Express, options: PlaygroundRouteOptions): () => Promise<void> {
 	const { dataDir, allowed } = options;
 	const env = options.env ?? process.env;
 	const store = new PlaygroundConfigStore(join(dataDir, "playground.json"));
-	const scratchStore = new PlaygroundScratchStore(join(dataDir, "playground-scratch.json"));
-	const probe = options.probe ?? createJdkProbe(env);
+	const scratchStore = new PlaygroundScratchStore(join(dataDir, "playground-python-scratch.json"));
+	const probe = options.probe ?? createPythonProbe(env);
 	const gate = new ConcurrencyGate();
 
-	const languageSessions = new Map<string, { session: JavaLanguageSession; touched: number }>();
-	const languageCleanup = setInterval(() => {
-		for (const [id, entry] of languageSessions) if (Date.now() - entry.touched > 300_000) { entry.session.close(); languageSessions.delete(id); }
-	}, 30_000);
-	languageCleanup.unref();
-	app.post("/api/playground/language", async (req, res) => {
+	const analysisGate = new ConcurrencyGate();
+	const controllers = new Set<AbortController>();
+	const tasks = new Set<Promise<unknown>>();
+	async function analysis(req: import("express").Request, res: import("express").Response, format = false) {
 		res.setHeader("Cache-Control", "no-store");
 		if (!allowed(req) || !req.is("application/json")) { res.sendStatus(403); return; }
 		const body = req.body;
-		if (!body || typeof body.id !== "string" || !/^[a-zA-Z0-9-]{1,64}$/.test(body.id) || !["completion", "diagnostics", "signature", "close"].includes(body.action)) { res.sendStatus(400); return; }
-		if (body.action === "close") { languageSessions.get(body.id)?.session.close(); languageSessions.delete(body.id); res.json({}); return; }
-		if (typeof body.code !== "string" || Buffer.byteLength(body.code) > MAX_SOURCE_BYTES || !Number.isInteger(body.offset) || body.offset < 0 || body.offset > body.code.length) { res.sendStatus(400); return; }
-		try {
-			let entry = languageSessions.get(body.id);
-			if (!entry) {
-				if (languageSessions.size >= 3) { res.status(429).json({ error: "Java language service busy" }); return; }
-				entry = { session: new JavaLanguageSession(env.PI_WEB_JDTLS_HOME || join(dataDir, "jdtls"), env), touched: Date.now() };
-				languageSessions.set(body.id, entry);
-			}
-			entry.touched = Date.now();
-			res.json(await entry.session.analyze(body.code, body.offset, body.action));
-		} catch (error) {
-			if (error instanceof Error && error.message === "Java language service busy") { res.status(429).json({ error: error.message }); return; }
-			languageSessions.get(body.id)?.session.close(); languageSessions.delete(body.id);
-			res.status(503).json({ error: error instanceof Error ? error.message : "Java language service unavailable" });
-		}
-	});
+		if (!format && body?.action === "close") { res.json({}); return; }
+		if (!body || typeof body.code !== "string" || (format && Object.keys(body).some(key => key !== "code")) || Buffer.byteLength(body.code) > MAX_SOURCE_BYTES || (!format && (!Number.isInteger(body.offset) || body.offset < 0 || body.offset > body.code.length || !["completion", "diagnostics", "signature"].includes(body.action)))) { res.sendStatus(400); return; }
+		const python = await probe.get();
+		if (!python.available || !python.command) { res.status(503).json({ error: python.reason ?? "Python unavailable" }); return; }
+		const release = analysisGate.acquire(undefined, 3, 1);
+		if (!release) { res.status(429).json({ error: "Python analysis busy" }); return; }
+		const controller = new AbortController(); controllers.add(controller);
+		res.on("close", () => { if (!res.writableEnded) controller.abort(); });
+		if (res.destroyed) controller.abort();
+		const task = analyzePython({ command: python.command, args: python.args ?? [] }, body.code, body.offset ?? 0, format ? "format" : body.action, controller.signal);
+		tasks.add(task);
+		try { res.json(await task); }
+		catch (error) { if (!res.destroyed) res.status(format ? 422 : 503).json({ error: error instanceof Error ? error.message : "Python analysis failed" }); }
+		finally { release(); controllers.delete(controller); tasks.delete(task); }
+	}
+	app.post("/api/playground/language", (req, res) => { void analysis(req, res); });
+	app.post("/api/playground/format", (req, res) => { void analysis(req, res, true); });
 
 	async function currentStatus(force: boolean): Promise<PlaygroundStatus> {
-		const jdk = await probe.get(force);
-		const config = store.read(jdk.available);
+		const python = await probe.get(force);
+		const config = store.read(python.available);
 		const locked = playgroundEnvLock(env);
 		return {
 			// The environment switch wins over the file, and the UI reports it as
 			// locked so the setting reads as read-only rather than mysteriously off.
 			enabled: locked ? false : config.enabled,
 			locked,
-			jdk,
-			limits: { timeoutMs: config.timeoutMs, maxOutputBytes: config.maxOutputBytes, maxHeapMb: config.maxHeapMb },
+			python,
+			limits: { timeoutMs: config.timeoutMs, maxOutputBytes: config.maxOutputBytes },
 		};
 	}
 
@@ -124,7 +121,7 @@ export function installPlaygroundRoutes(app: Express, options: PlaygroundRouteOp
 			return;
 		}
 		try {
-			// `?refresh=1` is the "re-detect" action: users install a JDK while the
+			// `?refresh=1` is the "re-detect" action: users install a Python 3 while the
 			// server is already running and must not have to restart it.
 			res.json(await currentStatus(req.query.refresh !== undefined));
 		} catch {
@@ -202,22 +199,6 @@ export function installPlaygroundRoutes(app: Express, options: PlaygroundRouteOp
 		}
 	});
 
-	// Formatting is editing, so it remains available with execution disabled.
-	app.post("/api/playground/format", async (req, res) => {
-		res.setHeader("Cache-Control", "no-store");
-		if (!allowed(req) || !req.is("application/json")) { res.sendStatus(403); return; }
-		const body = req.body;
-		if (!body || typeof body.code !== "string" || Object.keys(body).some(key => key !== "code") || Buffer.byteLength(body.code, "utf8") > MAX_SOURCE_BYTES) {
-			res.status(400).json({ error: "Invalid code" }); return;
-		}
-		try {
-			const [{ format }, { default: java }] = await Promise.all([import("prettier"), import("prettier-plugin-java")]);
-			const code = await format(body.code, { parser: "java", plugins: [java], useTabs: true, tabWidth: 4 });
-			res.json({ code });
-		} catch {
-			res.status(422).json({ error: "Java formatting failed" });
-		}
-	});
 
 	app.post("/api/playground/run", async (req, res) => {
 		if (!allowed(req) || !req.is("application/json")) {
@@ -225,15 +206,15 @@ export function installPlaygroundRoutes(app: Express, options: PlaygroundRouteOp
 			return;
 		}
 		// The gate is the file plus the environment lock, never a client preference.
-		const jdk = await probe.get();
-		const config = store.read(jdk.available);
+		const python = await probe.get();
+		const config = store.read(python.available);
 		if (playgroundEnvLock(env) || !config.enabled) {
 			res.status(403).json({ error: "Playground is disabled" });
 			return;
 		}
 		const code = (req.body as { code?: unknown } | undefined)?.code;
 		// Validate the request before reporting a capability problem: a malformed
-		// body is a 400 regardless of whether this machine has a JDK.
+		// body is a 400 regardless of whether this machine has a Python 3.
 		if (typeof code !== "string" || !code.trim() || Buffer.byteLength(code, "utf8") > MAX_SOURCE_BYTES) {
 			res.status(400).json({ error: "Invalid code" });
 			return;
@@ -242,7 +223,7 @@ export function installPlaygroundRoutes(app: Express, options: PlaygroundRouteOp
 		if (tests !== undefined) {
 			try {
 				if (!tests || typeof tests !== "object" || typeof tests.methodId !== "string" || !isCaseList(tests.cases) || Buffer.byteLength(JSON.stringify(tests)) > MAX_SOURCE_BYTES) throw new Error("Invalid test cases");
-				const method = discoverJavaMethods(code).methods.find(m => m.id === tests.methodId);
+				const method = discoverPythonMethods(code).methods.find(m => m.id === tests.methodId);
 				if (!method) throw new Error("The selected method no longer exists");
 				validateCases(method, tests.cases);
 			} catch (error) {
@@ -250,13 +231,13 @@ export function installPlaygroundRoutes(app: Express, options: PlaygroundRouteOp
 				return;
 			}
 		}
-		if (!jdk.available) {
-			res.status(503).json({ error: jdk.reason ?? "No JDK found" });
+		if (!python.available) {
+			res.status(503).json({ error: python.reason ?? "No Python 3 found" });
 			return;
 		}
-		const commands = resolveHostJdk(env);
+		const commands = python.command ? { command: python.command, args: python.args ?? [] } : undefined;
 		if (!commands) {
-			res.status(503).json({ error: jdk.reason ?? "No JDK found" });
+			res.status(503).json({ error: python.reason ?? "No Python 3 found" });
 			return;
 		}
 		// Best-effort per-client key: it only shapes fairness, so a client that
@@ -276,7 +257,8 @@ export function installPlaygroundRoutes(app: Express, options: PlaygroundRouteOp
 		});
 		res.flushHeaders();
 
-		const controller = new AbortController();
+		const controller = new AbortController(); controllers.add(controller);
+		if (res.destroyed) controller.abort();
 		// The response, not the request: `express.json()` has already consumed the
 		// request stream by now, so its `close` fires before this handler runs. A
 		// premature response close is the actual "client went away" signal.
@@ -285,23 +267,25 @@ export function installPlaygroundRoutes(app: Express, options: PlaygroundRouteOp
 			if (!res.writableEnded) res.write(`data: ${JSON.stringify(event)}\n\n`);
 		};
 
-		try {
-			const summary = await runJava({
+		const task = runPython({
 				code,
 				tests,
-				limits: { timeoutMs: config.timeoutMs, maxOutputBytes: config.maxOutputBytes, maxHeapMb: config.maxHeapMb },
-				jdk: commands,
+				limits: { timeoutMs: config.timeoutMs, maxOutputBytes: config.maxOutputBytes },
+				python: commands,
 				onEvent: send,
 				signal: controller.signal,
-			});
+		});
+		tasks.add(task);
+		try {
+			const summary = await task;
 			// Never the code itself: a Run's source is the user's, not a log line.
 			console.log(`[playground] run ${summary.runId} exit=${summary.exitCode} ${summary.durationMs}ms compileError=${summary.compileError} timedOut=${summary.timedOut} truncated=${summary.truncated} aborted=${summary.aborted}`);
 		} catch (error) {
 			send({ type: "error", message: error instanceof Error ? error.message : "Run failed" });
 		} finally {
-			release();
+			release(); controllers.delete(controller); tasks.delete(task);
 			if (!res.writableEnded) res.end();
 		}
 	});
-	return async () => { clearInterval(languageCleanup); const closing = [...languageSessions.values()].map(entry => entry.session.close()); languageSessions.clear(); await Promise.all(closing); };
+	return async () => { for (const controller of controllers) controller.abort(); await Promise.allSettled([...tasks]); };
 }

@@ -20,7 +20,7 @@ _Avoid_: 完成回执、任务结果
 
 ## Playground
 
-挂在对话消息或小记代码块上的 Java 运行入口：把该代码块的内容交给宿主机器的 JDK 编译执行，并把输出展示回同一界面。它默认关闭、不是沙箱、结果不进入模型上下文。
+用于编辑、运行 Python 脚本和测试函数的工作台，也提供对话与小记代码块的运行入口。结果展示在界面中，不自动进入模型上下文。
 _Avoid_: 沙箱、REPL、在线运行器、代码小记
 
 ## Run
@@ -30,7 +30,7 @@ _Avoid_: 任务、会话、进程
 
 ## Playground 草稿（Playground scratch draft）
 
-Playground 草稿页中保存的 Java 代码及其 public 方法测试用例。每个安装共享一份，离开草稿页后仍可继续编辑；Run 的输出不属于草稿。
+Playground 草稿页中保存的 Python 代码、运行模式及函数测试用例。每个安装共享一份，离开草稿页后仍可继续编辑；Run 的输出不属于草稿。
 _Avoid_: Run 历史、项目源文件
 
 ## 本地知识库（local knowledge base）

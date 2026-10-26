@@ -1,3 +1,5 @@
+import { activeTool } from "../agent-activity";
+import { AgentExpression } from "./AgentExpression";
 import type { UiState, ToolStatus } from "../types";
 import { useEffect, useRef, useState } from "react";
 import { useT } from "../i18n";
@@ -17,6 +19,7 @@ function WaitingIndicator({ stage, onStop }: { stage: WaitStage; onStop?: () => 
 	if (elapsed < stage.delay) return null;
 	const seconds = Math.floor(elapsed / 1000);
 	return <div className="waiting-indicator" role="status">
+		<AgentExpression pose={stage.label === "waitTests" || stage.label === "waitBuild" ? "running" : "waiting"} active />
 		<span className="waiting-brand" aria-hidden="true"><i /><i /><i /></span>
 		<span className="waiting-label">{t(stage.label)}</span>
 		{seconds >= 4 && <span className="waiting-duration" aria-live="off">{seconds < 60 ? t("waitSeconds", { n: seconds }) : t("waitMinutes", { m: Math.floor(seconds / 60), s: String(seconds % 60).padStart(2, "0") })}</span>}
@@ -48,5 +51,9 @@ export function ConversationWorkingStatus({ state, connected, silenceNotified, t
 	const stage = conversationWait(messages, completed, steeredUser);
 	if (!state.isStreaming || silenceNotified || state.recovery && Object.values(state.recovery).some(Boolean)) return null;
 	if (!connected) return <div className="agent-working disconnected" role="status">{t("workDisconnected")}</div>;
-	return stage && <WaitingIndicator key={`${state.conversationId}:${stage.key}:${stage.label}`} stage={stage} onStop={onStop} />;
+	if (!stage) {
+		const pose = activeTool(messages, completed) ? "running" : messages.at(-1)?.content.at(-1)?.type === "thinking" ? "waiting" : "review";
+		return <div className="agent-expression-activity"><AgentExpression pose={pose} active /></div>;
+	}
+	return <WaitingIndicator key={`${state.conversationId}:${stage.key}:${stage.label}`} stage={stage} onStop={onStop} />;
 }

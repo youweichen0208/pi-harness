@@ -9,21 +9,19 @@ function fixture() { const root = mkdtempSync(join(tmpdir(), "pi-playground-conf
 afterEach(() => { roots.splice(0).forEach(root => rmSync(root, { recursive: true, force: true })); });
 
 it("defaults the playground to off with the documented limits", () => {
-	expect(PLAYGROUND_DEFAULTS).toEqual({ enabled: false, timeoutMs: 10000, maxOutputBytes: 262144, maxHeapMb: 256, maxConcurrent: 2 });
+	expect(PLAYGROUND_DEFAULTS).toEqual({ enabled: false, timeoutMs: 10000, maxOutputBytes: 262144, maxConcurrent: 2 });
 	expect(normalizePlaygroundConfig(undefined)).toEqual(PLAYGROUND_DEFAULTS);
 	expect(normalizePlaygroundConfig({})).toEqual(PLAYGROUND_DEFAULTS);
 });
 
 it("keeps valid stored values", () => {
-	expect(normalizePlaygroundConfig({ enabled: true, timeoutMs: 30000, maxOutputBytes: 4096, maxHeapMb: 512, maxConcurrent: 1 }))
-		.toEqual({ enabled: true, timeoutMs: 30000, maxOutputBytes: 4096, maxHeapMb: 512, maxConcurrent: 1 });
+	expect(normalizePlaygroundConfig({ enabled: true, timeoutMs: 30000, maxOutputBytes: 4096, maxConcurrent: 1 }))
+		.toEqual({ enabled: true, timeoutMs: 30000, maxOutputBytes: 4096, maxConcurrent: 1 });
 });
 
 it("clamps out-of-range numbers to the documented bounds", () => {
 	expect(normalizePlaygroundConfig({ timeoutMs: 0 }).timeoutMs).toBe(1000);
 	expect(normalizePlaygroundConfig({ timeoutMs: 999999 }).timeoutMs).toBe(60000);
-	expect(normalizePlaygroundConfig({ maxHeapMb: 1 }).maxHeapMb).toBe(16);
-	expect(normalizePlaygroundConfig({ maxHeapMb: 99999 }).maxHeapMb).toBe(4096);
 	expect(normalizePlaygroundConfig({ maxOutputBytes: 1 }).maxOutputBytes).toBe(1024);
 	expect(normalizePlaygroundConfig({ maxConcurrent: 0 }).maxConcurrent).toBe(1);
 	expect(normalizePlaygroundConfig({ maxConcurrent: 99 }).maxConcurrent).toBe(8);

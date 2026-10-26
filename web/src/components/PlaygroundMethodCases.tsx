@@ -10,27 +10,12 @@ export function methodErrorText(message: string, t: ReturnType<typeof useT>): st
 	const casePrefix = /^Case (\d+): (.*)$/.exec(message);
 	if (casePrefix) return `${t("pgCase")} ${casePrefix[1]}: ${methodErrorText(casePrefix[2], t)}`;
 	const exact = {
-		"Only primitive types, boxed types, String, arrays and Lists of boxed types, String or Lists are supported.": "pgTypesOnly",
-		"Generic methods and classes are not supported.": "pgNoGenerics",
-		"Instance methods require a concrete class with a default or non-private no-argument constructor.": "pgConstructor",
-		"The method must have an implementation.": "pgImplementation",
 		"Provide between 1 and 50 test cases": "pgCaseCount",
 		"Parameter count does not match the method": "pgParamCount",
-		"Large integers in arrays or Lists must be quoted decimal strings": "pgLargeInteger",
-		"char requires exactly one UTF-16 character": "pgChar",
-		"boolean requires true or false": "pgBoolean",
-		"Unsupported type: void": "pgVoidExpected",
+		"Variadic and keyword-only parameters are not supported in function tests; use Run script.": "pgUnsupportedParameters",
 	} as const;
 	if (Object.hasOwn(exact, message)) return t(exact[message as keyof typeof exact]);
-	for (const [pattern, key] of [
-		[/^(.*?) cannot be null$/, "pgNotNull"], [/^(.*?) is out of range$/, "pgRange"],
-		[/^(.*?) requires an integer$/, "pgInteger"], [/^(.*?) requires a finite number$/, "pgNumber"],
-		[/^(.*?) requires text$/, "pgText"], [/^(.*?) requires a JSON array$/, "pgArray"],
-		[/^Invalid (.*?) value$/, "pgInvalidValue"],
-	] as const) {
-		const match = pattern.exec(message);
-		if (match) return t(key, { type: match[1] });
-	}
+
 	if (/JSON|Unexpected|Unterminated|Expected|unterminated/i.test(message)) return t("pgJson");
 	return message;
 }
@@ -39,7 +24,7 @@ function ValueInput({ type, value, onChange, label }: { type: string; value: Pla
 	const t = useT();
 	return <div className="method-value">
 		<label><span>{label} <code>{type}</code></span>
-			<input aria-label={label} value={value.text} disabled={value.isNull} onChange={event => onChange({ ...value, text: event.target.value })} spellCheck={false} placeholder={isJsonType(type) ? valuePlaceholder(type) : type === "boolean" || type === "Boolean" ? "true / false" : ""} />
+			<input aria-label={label} value={value.text} disabled={value.isNull} onChange={event => onChange({ ...value, text: event.target.value })} spellCheck={false} placeholder={isJsonType(type) ? valuePlaceholder(type) : ""} />
 		</label>
 		{isReferenceType(type) && <label className="method-check"><input type="checkbox" checked={!!value.isNull} onChange={event => onChange({ ...value, isNull: event.target.checked })} />{t("pgNull")}</label>}
 	</div>;
@@ -89,12 +74,12 @@ export function PlaygroundMethodCases({ methods, selected, cases, results, stale
 					<span className={`method-case-status ${stale && result ? "stale" : result?.status ?? ""}`}>{stale && result ? t("pgPreviousResult") : statusLabel}</span>
 				</button>
 				{expanded && <div className="method-case-body" id={`case-${test.id}`}>
-				{method?.parameters.some(parameter => parameter.type === "String" || isJsonType(parameter.type)) && <p className="playground-hint">{t("pgInputHint")}</p>}
+				{method?.parameters.some(parameter => parameter.type === "str" || isJsonType(parameter.type)) && <p className="playground-hint">{t("pgInputHint")}</p>}
 				<div className="method-parameters">
-					{test.args.map((value, i) => <ValueInput key={i} type={method?.parameters[i]?.type ?? "String"} label={method?.parameters[i]?.name || `arg${i + 1}`} value={value} onChange={next => update(index, { ...test, args: test.args.map((v, j) => j === i ? next : v) })} />)}
-					{method?.returnType !== "void" && <div className="method-expected">
+					{test.args.map((value, i) => <ValueInput key={i} type={method?.parameters[i]?.type ?? "JSON"} label={method?.parameters[i]?.name || `arg${i + 1}`} value={value} onChange={next => update(index, { ...test, args: test.args.map((v, j) => j === i ? next : v) })} />)}
+					{<div className="method-expected">
 						<label className="method-check"><input type="checkbox" checked={!!test.expected} onChange={event => update(index, { ...test, expected: event.target.checked ? { text: "" } : undefined })} />{t("pgExpected")}</label>
-						{test.expected && <ValueInput type={method?.returnType ?? "String"} label={t("pgExpectedValue")} value={test.expected} onChange={expected => update(index, { ...test, expected })} />}
+						{test.expected && <ValueInput type={method?.returnType ?? "JSON"} label={t("pgExpectedValue")} value={test.expected} onChange={expected => update(index, { ...test, expected })} />}
 					</div>}
 				</div>
 				<div className="method-case-actions">

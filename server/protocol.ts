@@ -1531,14 +1531,14 @@ export interface NoteDeleteResponse { ok: true }
 export interface NoteErrorResponse { error: string }
 
 /**
- * Playground HTTP API: running a Java code block on the host JDK. Deliberately
+ * Playground HTTP API: running a Python code block on the host Python 3. Deliberately
  * independent of agent sessions — a Run never enters the model context and
  * never changes cwd. Server-sent events carry one Run; see `PlaygroundEvent`.
  */
-export interface PlaygroundJdkStatus { available: boolean; version?: string; path?: string; reason?: string }
-export interface PlaygroundLimits { timeoutMs: number; maxOutputBytes: number; maxHeapMb: number }
-export interface PlaygroundStatus { enabled: boolean; locked: boolean; jdk: PlaygroundJdkStatus; limits: PlaygroundLimits }
-export interface PlaygroundConfigInput { enabled: boolean; timeoutMs: number; maxOutputBytes: number; maxHeapMb: number; maxConcurrent: number }
+export interface PlaygroundPythonStatus { available: boolean; command?: string; args?: string[]; version?: string; path?: string; reason?: string }
+export interface PlaygroundLimits { timeoutMs: number; maxOutputBytes: number }
+export interface PlaygroundStatus { enabled: boolean; locked: boolean; python: PlaygroundPythonStatus; limits: PlaygroundLimits }
+export interface PlaygroundConfigInput { enabled: boolean; timeoutMs: number; maxOutputBytes: number; maxConcurrent: number }
 /** Partial write to the global switch; absent fields keep their stored value. */
 export type PlaygroundConfigPatch = Partial<PlaygroundConfigInput>;
 export interface PlaygroundErrorResponse { error: string }
@@ -1547,11 +1547,9 @@ export interface PlaygroundValue { text: string; isNull?: boolean }
 export interface PlaygroundCase { id: string; args: PlaygroundValue[]; expected?: PlaygroundValue }
 export interface PlaygroundMethod {
 	id: string;
-	className: string;
 	name: string;
 	returnType: string;
 	parameters: { name: string; type: string }[];
-	isStatic: boolean;
 	unsupported?: string;
 }
 export interface PlaygroundTests { methodId: string; cases: PlaygroundCase[] }
@@ -1586,9 +1584,9 @@ export interface LinkPreview { url: string; title: string; description: string; 
 export interface PlaygroundFormatResult { code: string }
 
 /** Playground language assistance uses HTTP, never arbitrary client-supplied LSP methods. */
-export interface JavaTextEdit { from: number; to: number; text: string }
-export interface JavaLanguageResult {
-	items?: { label: string; detail?: string; info?: string; kind?: number; edit: JavaTextEdit; additionalEdits: JavaTextEdit[] }[];
+export interface PythonTextEdit { from: number; to: number; text: string }
+export interface PythonLanguageResult {
+	items?: { label: string; detail?: string; info?: string; kind?: number; edit: PythonTextEdit; additionalEdits: PythonTextEdit[] }[];
 	diagnostics?: { from: number; to: number; severity: "error" | "warning" | "info"; message: string }[];
 	signatures?: string[];
 }

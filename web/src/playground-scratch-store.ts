@@ -1,9 +1,13 @@
 import type { PlaygroundScratch, PlaygroundTestConfig } from "../../server/protocol.js";
 
-export const SCRATCH_EXAMPLE = `public int add(int a, int b) {
-	return a + b;
-}`;
-export const EMPTY_SCRATCH_TESTS: PlaygroundTestConfig = { mode: "methods", selectedMethod: "", casesByMethod: {} };
+export const SCRATCH_EXAMPLE = `def add(a: int, b: int) -> int:
+    return a + b
+
+
+if __name__ == "__main__":
+    print(add(2, 3))
+`;
+export const EMPTY_SCRATCH_TESTS: PlaygroundTestConfig = { mode: "program", selectedMethod: "", casesByMethod: {} };
 export type ScratchDraft = { content: string; tests: PlaygroundTestConfig };
 export interface ScratchTransport {
 	read(): Promise<PlaygroundScratch>;
@@ -69,7 +73,7 @@ export class PlaygroundScratchStore {
 			this.queued = null;
 			const doc: ScratchDraft = {
 				content: stored.updatedAt === 0 && !stored.content ? SCRATCH_EXAMPLE : stored.content,
-				tests: { ...(stored.tests ?? EMPTY_SCRATCH_TESTS), mode: "methods" },
+				tests: { ...(stored.tests ?? EMPTY_SCRATCH_TESTS), mode: stored.tests?.mode ?? "program" },
 			};
 			this.publish({ doc, loadFailed: false, savedAt: null, saveState: "saved" });
 			this.schedule();

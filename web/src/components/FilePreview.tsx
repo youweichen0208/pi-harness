@@ -273,7 +273,7 @@ export const FilePreviewContent = memo(function FilePreviewContent({
 	const { status: playground } = usePlaygroundHost();
 	const [lastRun, setLastRun] = useState<{ code: string; key: string } | null>(null);
 	useEffect(() => { setLastRun(null); }, [file.cwd, file.path]);
-	const canRunFile = kind === "text" && /\.java$/i.test(file.path) && !!playground?.enabled && !!playground.jdk.available;
+	const canRunFile = kind === "text" && /\.py$/i.test(file.path) && !!playground?.enabled && !!playground.python.available;
 	const runEditorBuffer = () => {
 		const code = draft;
 		const key = runKey(`file:${file.cwd}:${file.path}`, code);

@@ -68,12 +68,12 @@ export function PlaygroundPanel({ playground }: { playground: PlaygroundControls
 			/>
 		</label>
 
-		<div className="playground-jdk">
-			<span className="playground-jdk-label">{t("playgroundJdk")}</span>
-			<span role="status">
-				{status.jdk.available
-					? t("playgroundJdkFound", { version: status.jdk.version ?? "" })
-					: [t("playgroundNoJdk"), status.jdk.reason].filter(Boolean).join(" — ")}
+		<div className="playground-python">
+			<span className="playground-python-label">{t("playgroundPython")}</span>
+			<span role="status" title={status.python.path}>
+				{status.python.available
+					? t("playgroundPythonFound", { version: status.python.version ?? "" })
+					: [t("playgroundNoPython"), status.python.reason].filter(Boolean).join(" — ")}
 			</span>
 			<button type="button" className="btn" disabled={probing} onClick={() => { setProbing(true); void redetect().finally(() => setProbing(false)); }}>
 				{t("playgroundRedetect")}

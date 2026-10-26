@@ -1,5 +1,9 @@
 # 发布流程
 
+## 1.9.0：Python Playground 与 Workspace 协作
+
+发布全部本地改动：Playground 从 Java 切换至 Python，加入脚本／函数用例、注释按钮及可选 Jedi／Black；Workspace 研究按代码仓与知识库分配子代理并支持分批覆盖；加入草地牛眼珠动画与外观开关。版本同步为 1.9.0，SDK / pi-ai 1.4.0、协议 v47 不变。仅发布 GitHub 三平台桌面 Release，同一提交 CI、三平台打包回归及附件检查通过后公开。说明见 `.github/release-notes/v1.9.0.md`。
+
 ## 1.8.0：Workspace 子代理与 SSH 工作台改进
 
 发布全部本地改动：内置只读子代理按问题需要协作读取 Workspace 代码仓和知识库，提供文件证据、结构化报告与执行状态；改进 Xshell 7 凭据复用、私钥选择、SSH 命令确认与终端输入。修复 Workspace 归属、结果证据预算、Codemode 工具契约与测试端口隔离。版本同步为 1.8.0，SDK / pi-ai 保持 1.4.0，协议升级为 v47。仅发布 GitHub 三平台桌面 Release，同一提交 CI、三平台打包回归及附件检查通过后公开。说明见 `.github/release-notes/v1.8.0.md`。

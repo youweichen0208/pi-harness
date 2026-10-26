@@ -56,7 +56,7 @@ macOS 服务的 launchd 标识为 `com.youweichen.pi-harness`（`--name` 自定�
 
 compose 默认只把端口映射到 `127.0.0.1`，并设置 `PI_WEB_ALLOW_HOSTS=localhost,127.0.0.1`：容器内必须监听 `0.0.0.0`，这会关闭默认的 loopback Host 白名单，显式白名单用来防 DNS rebinding。智能体可以在容器内执行命令；对局域网或公网开放前，先设置 `PI_WEB_TOKEN`，把访问用的主机名加入 `PI_WEB_ALLOW_HOSTS`，再修改端口映射。
 
-镜像**不含 JDK**（见下文「Java 代码运行与 JDK」）。
+镜像**不捆绑 Python**（见下文「Python 代码运行」）。
 
 ### 旧容器迁移
 
@@ -198,10 +198,6 @@ Extensions 包管理的 `extensions-worker` 与服务端一起编译打包，在
 
 Wiki 的「问 pi」浮动模式使用独立无边框助手窗口，可拖动到其他屏幕，固定按钮返回 Wiki 右栏。助手不继承 Wiki 的全屏状态，保持可缩放的小窗；助手关闭仅收起；Wiki 关闭时一并销毁助手，继续使用原有保存保护。
 
-### Java 代码运行与 JDK
+### Python 代码运行
 
-Playground（对话消息、小记与右栏文件预览里的 Java 代码块运行按钮）**不在任何发布产物里打包 JVM 运行时**：Docker 镜像与 Electron 安装包都不含 JDK。它探测宿主已安装的 `javac`/`java`（`JAVA_HOME` 优先，否则 PATH），探测不到就把功能显示为不可用，并在设置页说明原因——不会影响服务启动。
-
-功能默认关闭，由 `<PI_WEB_DATA_DIR>/playground.json` 的 `enabled` 控制；部署层可用 `PI_WEB_PLAYGROUND=off` 硬关闭并在设置页锁定为不可修改（Docker / 共享部署推荐，因为配置文件本身可以被页面改写）。它**不是沙箱**，执行的是宿主机器上的任意 Java 代码，且不挂载工作区。
-
-回归：`node tests/playground-test.mjs`（无 `javac` 时自动跳过，因此 CI 与 Docker 构建机不装 JDK）。决策背景见 [ADR-0004](adr/0004-playground-execution-model.md)，完整规范见 [Playground 架构](architecture-playground.md)。
+Playground 使用宿主 Python 3.9+，安装包不捆绑解释器。`PI_WEB_PYTHON` 可指定虚拟环境，Jedi 补全与 Black 格式化需安装到同一环境。首次检测到可用 Python 默认开启，保留已保存选择；`PI_WEB_PLAYGROUND=off` 强制关闭。执行不是沙箱，仍拥有服务用户权限。详见 [Playground 架构](architecture-playground.md)。

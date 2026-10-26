@@ -44,9 +44,9 @@ SDK 与 pi-ai 精确锁定 1.4.0，不应用本项目的 SDK 补丁。升级契�
 系统提示词：修改分段来源、原生文件编辑或重载时，读取 `docs/architecture-system-prompt.md`。
 Extensions：修改内置扩展清单/状态、包安装、启停、更新、作用域迁移、目录浏览或单文件编辑时，读取 `docs/architecture-extensions.md`。
 Codemode 卡片与 MCP/Codemode 设置遵循 15a/15b 设计；状态、项目覆盖、费用及输出限制读取 `docs/architecture-plugins.md`。
-Playground：修改 Java 代码块运行入口、草稿页 public 方法测试／用例保存、执行限制、JDK 探测或总开关时，读取 `docs/architecture-playground.md`；首次检测到可用 JDK 默认开启，保留已保存开关、明确非沙箱、结果不进模型上下文。
+Playground：修改 Python 代码块运行入口、草稿页脚本／函数测试／用例保存、执行限制、Python 探测或总开关时，读取 `docs/architecture-playground.md`；首次检测到可用 Python 默认开启，保留已保存开关、明确非沙箱、结果不进模型上下文。
 工程上下文：修改跨仓来源、OpenViking 接入或本地评测时，读取 `docs/engineering-context.md`；先验证检索收益，再增加产品界面。
-Subagents：修改 Workspace 分工、来源简介、知识库来源、报告证据核验、子会话工具/取消/预算或排队范围时，读取 `docs/architecture-subagents.md`。内置 `subagent` 默认开启，由父模型按问题调用；`inspect` 提供有界本地简介，子会话只读调查并提交区分实现/文档/推断的报告，引用回读核对行号和指纹；不开后台任务、不递归、不改代码，沿用父模型并产生额外用量。
+Subagents：修改 Workspace 分工、来源简介、知识库来源、报告证据核验、子会话工具/取消/预算或排队范围时，读取 `docs/architecture-subagents.md`。内置 `subagent` 默认开启，由父模型按问题调用；深入调查默认每个 Workspace 仓库一个子代理，另加已配置知识库，重复来源任务合并、超 8 个来源分批覆盖；限定范围与补查使用 `scope=selected`；`inspect` 提供有界本地简介，子会话只读调查并提交区分实现/文档/推断的报告，引用回读核对行号和指纹；不开后台任务、不递归、不改代码，沿用父模型并产生额外用量。
 
 发送回执：普通聊天与 Wiki 共用持久化请求去重和重连查询；修改发送确认或重试前读 `docs/architecture-core.md`「发送回执」。Wiki 切换与发送准入共用 `wiki-coordinator.ts`，修改时读 `docs/architecture-wiki.md`。
 
@@ -69,9 +69,9 @@ pi-harness/
 │   ├── uploads.ts              # 文件对话上传 + 保留期清理
 │   ├── playground.ts           # Playground 路由：status/config/run（HTTP+SSE）；见 docs/architecture-playground.md
 │   ├── playground-config.ts    # Playground 全局开关：归一化、环境锁与 <dataDir>/playground.json 存储
-│   ├── playground-jdk.ts       # JDK 探测：命令解析（JAVA_HOME 优先）、懒探测 + TTL、失败只降级不崩服务
-│   ├── playground-run.ts       # Run 执行：两步编译运行、临时目录、超时/超输出杀进程树、并发闸门
-│   ├── playground-source.ts    # 纯函数：public 类型/package 解析、输出限额、needs-the-project 判定
+│   ├── playground-python.ts       # Python 探测：命令解析（PI_WEB_PYTHON 优先）、懒探测 + TTL、失败只降级不崩服务
+│   ├── playground-run.ts       # Run 执行：语法检查后运行、临时目录、超时/超输出杀进程树、并发闸门
+│   ├── playground-source.ts    # 纯函数：Python 导入错误判定、输出限额、needs-the-project 判定
 │   ├── component-updates.ts    # pi Agent / 扩展版本检查、来源校验与包更新
 │   ├── extension-module-cache.ts # /restart、/reload 与扩展重载刷新扩展模块缓存（registerHooks 代数 + require.cache 清理，issue #64）
 │   ├── system-prompt-view.ts / system-prompt-files.ts / system-prompt-routes.ts # 原生提示词分段、文件编辑与 reload
@@ -145,7 +145,7 @@ pi-harness/
 │   ├── architecture-attachments.md  # 附件、图片、文件上传/预览/下载
 │   ├── architecture-terminal.md    # 终端架构：PTY 管理、SCM 查询
 │   ├── architecture-plugins.md     # 插件系统：形态、协议、宿主扩展点、MCP 桥
-│   ├── architecture-playground.md  # Java 代码块运行（Playground）：首次检测到可用 JDK 默认开启，保留已保存开关、非沙箱、JDK 探测与执行限制
+│   ├── architecture-playground.md  # Python 代码块运行（Playground）：首次检测到可用 Python 默认开启，保留已保存开关、非沙箱、Python 探测与执行限制
 │   ├── development.md          # 开发工作流、CI、编码约定、测试规范
 │   ├── release.md              # 发布流程（GitHub + npm）
 │   ├── deployment.md           # 部署（CLI / Docker）
@@ -181,7 +181,7 @@ pi-harness/
 | `CollapsedMessage.tsx` / `LazyMount.tsx` | 消息折叠摘要行 / 消息级惰性挂载包装 |
 | `SearchBar.tsx` | 会话内搜索栏（Ctrl+F，CSS Custom Highlight API 高亮） |
 | `Markdown.tsx` / `Dropdown.tsx` / `copy-button.tsx` / `SoundSettings.tsx` | 通用件 |
-| `PlaygroundRun.tsx` / `PlaygroundPanel.tsx` / `PlaygroundScratch.tsx` | Java 代码块运行控件与结果区、代码运行设置页、左栏极简草稿页；Run 状态在 `playground-run-store.ts`（组件重挂载不丢）；详见 `docs/architecture-playground.md` |
+| `PlaygroundRun.tsx` / `PlaygroundPanel.tsx` / `PlaygroundScratch.tsx` | Python 代码块运行控件与结果区、代码运行设置页、左栏极简草稿页；Run 状态在 `playground-run-store.ts`（组件重挂载不丢）；详见 `docs/architecture-playground.md` |
 
 ## 原生代理边界
 
@@ -208,7 +208,7 @@ pi SDK 和 pi-ai 精确锁定 1.4.0，使用原版 SDK，不应用本项目的 S
 | **运行静默状态** | `docs/architecture-core.md` | 改模型无响应或长时间工具运行提示时，使用 conversationId 绑定的 agent_silence；恢复响应即清除，重试只适用于本轮未调用工具的纯文本请求 |
 | **当前任务进度** | `docs/architecture-core.md`、`docs/ui-design.md` | 修改任务判定、提纲布局或计划触发时阅读：可选原生 `plan` 管理分支版本化计划，尊重用户／skill 的执行与等待规则；步骤按工具 ID 展开记录，暂停不自动完成，兼容历史 `task_plan`；历史任务列表尚未实现 |
 | **扩展 UI 桥** | `docs/architecture-core.md` | setWidget/setStatus/notify/select/confirm/input → 浏览器消息；dialog_response 回传 |
-| **Playground（Java 运行）** | `docs/architecture-playground.md` | 修改代码块运行入口、限制或开关时阅读：宿主自备 JDK、裸子进程（非沙箱）、首次检测到可用 JDK 默认开启，保留已保存开关、HTTP+SSE、结果不持久化、不进模型上下文 |
+| **Playground（Python 运行）** | `docs/architecture-playground.md` | 修改代码块运行入口、限制或开关时阅读：宿主自备 Python 3.9+、裸子进程（非沙箱）、首次检测到可用 Python 默认开启，保留已保存开关、HTTP+SSE、结果不持久化、不进模型上下文 |
 
 Wiki：左栏「知识库」配置一个本地文件夹，在**独立窗口**打开 Wiki mode（Web 弹窗 / 桌面第二 BrowserWindow，URL 契约 `?wiki-window=1&cwd=&doc=&client=&model=&thinking=`（后两项可选），见 ADR-0003），主窗口留在 normal 对话并行工作；新窗口先通过现有 `set_model`／`set_thinking` 继承打开方的模型与思考档位，再创建会话；Wiki 对话按工作区保存在独立目录，每篇 Markdown 恢复自己的 chat，切换文档清空所选 Workspace 项目／知识库，支持新建与历史恢复／重命名／删除；媒体／代码等非文档文件只切换只读预览、沿用当前会话（不绑定、不清项目、不需中断确认）；退出即关窗，运行实例可清理、历史保留，运行中切换先确认中断。修改视图布局、左侧目录栏「打开文件夹」跨目录切换、Wiki 历史与运行实例生命周期、中断确认、刷新恢复、发送前保存、选区「问 pi」回填、保存与关闭保护、正文读取、索引／双链／搜索、改动记录或桌面默认应用打开时，读取 `docs/architecture-wiki.md`。专用窗口壳为 `WikiWindowShell.tsx`：不再渲染主 TopBar／FooterBar，文档标题栏与面包屑是桌面连续拖动区（控件 `no-drag`），右栏默认显示正文目录，「问 pi」默认浮动（Desktop 为独立窗口）、可固定替换目录，在当前文档基础上可追加一个 Workspace 项目／知识库进行分析，最近改动为覆盖抽屉；34a 工具栏为 `WikiToolbar.tsx`，正文排版见 `docs/wiki-doc-v2-design.md`。入口为 `App.tsx`（wiki view）+ `WikiWindowShell.tsx`、`WikiAssistantWindow.tsx`、`WikiProjectPicker.tsx`、`WikiWorkbench.tsx`、`wiki-window.ts`、`wiki-routes.ts`、`wiki-chat-store.ts` 与 `wiki-service.ts`；`WikiDocumentModal.tsx` 共用于数据库和普通 Markdown 单文件弹窗；普通文件入口使用主聊天，当前文件自动引用随弹窗关闭清除。知识库打开与恢复由 `wiki-window-session.ts` 管理，`use-wiki-window-session.ts` 连接窗口与传输；修改知识库配置与恢复时读取 `docs/architecture-wiki.md`，修改单文件自动保存与聊天归属时读取 `docs/architecture-attachments.md`。
 

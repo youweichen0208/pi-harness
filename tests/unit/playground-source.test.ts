@@ -1,45 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { OutputBudget, introspectJavaSource, looksLikeMissingProjectDependency, wrapBareStatements } from "../../server/playground-source.js";
-
-it("names the file after the first public top-level type", () => {
-	expect(introspectJavaSource("public class Foo { }"))
-		.toEqual({ typeName: "Foo", packageName: undefined, fileName: "Foo.java", mainClass: "Foo" });
-	expect(introspectJavaSource("public final class Bar {}").typeName).toBe("Bar");
-	expect(introspectJavaSource("public abstract class Baz {}").typeName).toBe("Baz");
-	expect(introspectJavaSource("public record Point(int x, int y) {}").typeName).toBe("Point");
-	expect(introspectJavaSource("public enum Color { RED, GREEN }").typeName).toBe("Color");
-	expect(introspectJavaSource("public interface Greeter { void greet(); }").typeName).toBe("Greeter");
-	expect(introspectJavaSource("public sealed interface Shape permits Circle {}").typeName).toBe("Shape");
-});
-
-it("falls back to Main when nothing is public", () => {
-	const expected = { typeName: "Main", packageName: undefined, fileName: "Main.java", mainClass: "Main" };
-	expect(introspectJavaSource("class Foo { }")).toEqual(expected);
-	expect(introspectJavaSource("void main() { System.out.println(1); }")).toEqual(expected);
-	expect(introspectJavaSource("")).toEqual(expected);
-});
-
-it("honours a package declaration", () => {
-	expect(introspectJavaSource("package com.example;\npublic class Foo {}"))
-		.toEqual({ typeName: "Foo", packageName: "com.example", fileName: "com/example/Foo.java", mainClass: "com.example.Foo" });
-	expect(introspectJavaSource("package  com.example ;\nclass Foo {}").fileName).toBe("com/example/Main.java");
-	expect(introspectJavaSource("package com.example;\nclass Foo {}").mainClass).toBe("com.example.Main");
-});
-
-it("takes the first public type when several are declared", () => {
-	expect(introspectJavaSource("public class First {}\npublic class Second {}").typeName).toBe("First");
-});
-
-it("ignores declarations hidden in comments and string literals", () => {
-	expect(introspectJavaSource("// public class Fake {}\npublic class Real {}").typeName).toBe("Real");
-	expect(introspectJavaSource("/* public class Fake {} */\npublic class Real {}").typeName).toBe("Real");
-	expect(introspectJavaSource('String s = "public class Fake {}";\npublic class Real {}').typeName).toBe("Real");
-	expect(introspectJavaSource('String s = """\npublic class Fake {}\n""";\npublic class Real {}').typeName).toBe("Real");
-	expect(introspectJavaSource("char quote = '\\'';\npublic class Real {}").typeName).toBe("Real");
-	expect(introspectJavaSource("// package fake;\npackage real;\npublic class Real {}").packageName).toBe("real");
-	expect(introspectJavaSource("/* package fake; */\npublic class Real {}").packageName).toBeUndefined();
-});
-
+import { expect, it } from "vitest";
+import { OutputBudget, looksLikeMissingProjectDependency } from "../../server/playground-source.js";
 it("forwards everything under the cap", () => {
 	const budget = new OutputBudget(100);
 	expect(budget.push("hello ")).toBe("hello ");
@@ -72,46 +32,7 @@ it("never emits a partial character when the cap lands mid-character", () => {
 	expect(budget.bytes).toBe(3);
 });
 
-it("recognises compile errors that need the rest of the project", () => {
-	expect(looksLikeMissingProjectDependency("Main.java:3: error: package org.example does not exist")).toBe(true);
-	expect(looksLikeMissingProjectDependency("Main.java:5: error: cannot find symbol\n  symbol:   class Helper\n  location: class Main")).toBe(true);
-	expect(looksLikeMissingProjectDependency("Main.java:5: error: cannot find symbol\n  symbol:   variable total")).toBe(false);
-	expect(looksLikeMissingProjectDependency("Main.java:1: error: ';' expected")).toBe(false);
-	expect(looksLikeMissingProjectDependency("")).toBe(false);
-});
-
-describe("wrapBareStatements", () => {
-	it("wraps bare statements in a Main scaffold", () => {
-		const wrapped = wrapBareStatements('System.out.println("hello");');
-		expect(wrapped).toContain("public class Main {");
-		expect(wrapped).toContain("public static void main(String[] args) throws Exception {");
-		expect(wrapped).toContain('System.out.println("hello");');
-	});
-
-	it("hoists imports above the scaffold", () => {
-		const wrapped = wrapBareStatements("import java.util.List;\nimport static java.lang.Math.max;\n\nList.of(1);");
-		expect(wrapped.indexOf("import java.util.List;")).toBeLessThan(wrapped.indexOf("public class Main"));
-		expect(wrapped).toContain("import static java.lang.Math.max;");
-		expect(wrapped).not.toContain("List.of(1);\n\nList");
-	});
-
-	it("leaves any real type declaration untouched, public or not", () => {
-		const source = "class Foo { public static void main(String[] a) { System.out.println(1); } }";
-		expect(wrapBareStatements(source)).toBe(source);
-		const pub = "public record Point(int x, int y) {}";
-		expect(wrapBareStatements(pub)).toBe(pub);
-	});
-
-	it("is not fooled by type words in comments or strings", () => {
-		const wrapped = wrapBareStatements('// class RedHerring\nSystem.out.println("interface NotReal");');
-		expect(wrapped).toContain("public class Main {");
-		const textBlock = 'System.out.println("""\nclass AlsoFake\n""");';
-		expect(wrapBareStatements(textBlock)).toContain("public class Main {");
-	});
-
-	it("returns the source unchanged when it declares a type after statements-in-strings only", () => {
-		// `record` used as a plain identifier must not look like a declaration.
-		const wrapped = wrapBareStatements("int record = 1;\nSystem.out.println(record);");
-		expect(wrapped).toContain("public class Main {");
-	});
+it("recognises missing Python imports", () => {
+ expect(looksLikeMissingProjectDependency("ModuleNotFoundError: No module named 'custom'")).toBe(true);
+ expect(looksLikeMissingProjectDependency("SyntaxError: invalid syntax")).toBe(false);
 });

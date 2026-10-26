@@ -4,7 +4,7 @@ import { StateEffect, StateField } from "@codemirror/state";
 import { EditorView, ViewPlugin, showTooltip, type Tooltip, type ViewUpdate } from "@codemirror/view";
 import { withToken } from "./auth-token";
 import { randomUuid } from "./uuid";
-import type { JavaLanguageResult } from "./types";
+import type { PythonLanguageResult } from "./types";
 
 const signatureEffect = StateEffect.define<Tooltip | null>();
 const signatureField = StateField.define<Tooltip | null>({
@@ -14,17 +14,17 @@ const signatureField = StateField.define<Tooltip | null>({
 });
 
 /** One isolated language document per editor mount; stale responses never edit newer text. */
-export function javaLanguageSupport(onStatus: (state: "loading" | "ready" | "error", reason?: string) => void) {
+export function pythonLanguageSupport(onStatus: (state: "loading" | "ready" | "error", reason?: string) => void) {
 	const id = randomUuid();
 	let closed = false;
 	const controllers = new Set<AbortController>();
-	async function request(code: string, offset: number, action: string): Promise<JavaLanguageResult> {
+	async function request(code: string, offset: number, action: string): Promise<PythonLanguageResult> {
 		const controller = new AbortController(); controllers.add(controller);
 		const timer = setTimeout(() => controller.abort(), 90_000);
 		try {
 			const response = await fetch(withToken("/api/playground/language"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, code, offset, action }), signal: controller.signal });
 			const data = await response.json();
-			if (!response.ok) throw new Error(data.error || "Java language service unavailable");
+			if (!response.ok) throw new Error(data.error || "Python language service unavailable");
 			if (!closed) onStatus("ready"); return data;
 		} catch (error) { if (!closed) onStatus("error", error instanceof Error ? error.message : String(error)); throw error; }
 		finally { clearTimeout(timer); controllers.delete(controller); }

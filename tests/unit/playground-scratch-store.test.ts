@@ -107,11 +107,12 @@ it("old failures do not replace newer pending or saved status", async () => {
 	expect(store.getSnapshot()).toMatchObject({ doc: { content: "second" }, saveState: "saved" });
 });
 
-it("normalizes legacy program drafts and persists their cases without replacing code", async () => {
+it("preserves the selected run mode and cases without rewriting saved drafts", async () => {
 	const { store, transport } = fixture();
-	vi.mocked(transport.read).mockResolvedValueOnce({ content: "legacy", tests: { ...EMPTY_SCRATCH_TESTS, mode: "program", selectedMethod: "Main#f()", casesByMethod: { "Main#f()": [{ id: "one", args: [] }] } }, updatedAt: 1 });
+	vi.mocked(transport.read).mockResolvedValueOnce({ content: "legacy", tests: { ...EMPTY_SCRATCH_TESTS, mode: "program", selectedMethod: "f()", casesByMethod: { "f()": [{ id: "one", args: [] }] } }, updatedAt: 1 });
 	store.connect(); await vi.advanceTimersByTimeAsync(600);
-	expect(transport.write).toHaveBeenCalledWith({ content: "legacy", tests: { mode: "methods", selectedMethod: "Main#f()", casesByMethod: { "Main#f()": [{ id: "one", args: [] }] } } });
+	expect(transport.write).not.toHaveBeenCalled();
+	expect(store.getSnapshot().doc?.tests.mode).toBe("program");
 });
 
 it("retries the same failed payload explicitly without an endless background retry", async () => {

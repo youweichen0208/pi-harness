@@ -60,10 +60,10 @@ export function PlaygroundResult({ runKey: key, onSendToPi, stale = false, showC
 }
 
 /**
- * The Run control on a Java code block, with its result below it.
+ * The Run control on a Python code block, with its result below it.
  *
  * A Run is not a sandbox, so the control is deliberately loud about *why* it is
- * unavailable rather than hidden: a missing JDK, the setting being off and the
+ * unavailable rather than hidden: a missing Python 3, the setting being off and the
  * environment lock are three different problems with three different fixes.
  * Nothing here enters the model context — handing a result to pi is an explicit
  * click that only fills the composer.
@@ -81,13 +81,13 @@ export function PlaygroundRun({ code, pre }: { code: string; pre?: ReactNode }) 
 			? t("playgroundLocked")
 			: !status.enabled
 				? t("playgroundDisabled")
-				: !status.jdk.available
-					? [t("playgroundNoJdk"), status.jdk.reason].filter(Boolean).join(" — ")
+				: !status.python.available
+					? [t("playgroundNoPython"), status.python.reason].filter(Boolean).join(" — ")
 					: "";
 
 	return <>
 		<div className="codeblock-bar">
-			<span>java</span>
+			<span>python</span>
 			{running ? (
 				<button type="button" className="playground-action" title={t("playgroundStop")} onClick={() => stopRun(key)}>
 					<FiSquare aria-hidden="true" /><span>{t("playgroundStop")}</span>

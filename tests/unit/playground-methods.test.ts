@@ -1,123 +1,25 @@
-import { describe, expect, it } from "vitest";
-import { discoverJavaMethods, isCaseList, isTestConfig, validateCases, valueLiteral, supportedType, reflectionType, valuePlaceholder } from "../../server/playground-methods.js";
-
-it("discovers fragments, overloads, arrays and public static methods without main", () => {
-	const found = discoverJavaMethods(`import java.util.*;
-public int add(int a, int b) { return a+b; }
-public static long add(long a, long b) { return a+b; }
-public String[] echo(String... a) { return a; }
-private int hidden() { return 1; }
-public static void main(String[] args) {}`);
-	expect(found.methods.map(m => m.id)).toEqual(["Main#add(int,int)", "Main#add(long,long)", "Main#echo(String[])"]);
-	expect(found.methods[1].isStatic).toBe(true);
-	expect(found.code.indexOf("import")).toBeLessThan(found.code.indexOf("class Main"));
+import { expect, it } from "vitest";
+import { discoverPythonMethods, isCaseList, isTestConfig, validateCases } from "../../server/playground-methods.js";
+it("discovers only top-level Python functions, ignoring strings, nested functions and class methods", () => {
+	const { methods } = discoverPythonMethods('"def fake(x): pass"\n# def comment(x): pass\ndef add(a: int, b: int = 2) -> int:\n    def nested(): pass\n    return a+b\nclass C:\n    def f(self): pass\nasync def label(value: str) -> str:\n    return value\n');
+	expect(methods.map(m => m.id)).toEqual(["add(a,b)", "label(value)"]);
+	expect(methods[1].parameters[0].type).toBe("str");
+	expect(methods[1].returnType).toBe("str");
 });
-
-it("preserves complete source and excludes nested/private methods and fake declarations", () => {
-	const source = `package com /* comment */ . example;
-public class Demo {
-// public int fake() {}
-String s = "public int fake() {}";
-public int[] echo(final int xs[])[] { return null; }
-class Nested { public int hidden() { return 0; } }
-}`;
-	const found = discoverJavaMethods(source);
-	expect(found.code).toBe(source);
-	expect(found.fileName).toBe("com/example/Demo.java");
-	expect(found.methods).toHaveLength(1);
-	expect(found.methods[0]).toMatchObject({ id: "com.example.Demo#echo(int[])", returnType: "int[][]" });
+it("rejects variadic and keyword-only tests explicitly", () => {
+	for (const code of ["def f(*args): pass", "def f(**kwargs): pass", "def f(x, *, y=1): pass"]) expect(discoverPythonMethods(code).methods[0].unsupported).toBeTruthy();
 });
-
-it("handles incomplete edits and non-class top-level declarations", () => {
-	for (const source of ["", "public class", "public class Main", "public class Main { public int", "public int f(", "public interface A {}", "public record A(int n) {}"])
-		expect(() => discoverJavaMethods(source)).not.toThrow();
+it("supports JSON objects, nested arrays, nullable values and unannotated functions", () => {
+	const method = discoverPythonMethods("def f(value): return value").methods[0];
+	expect(() => validateCases(method, [{ id: "a", args: [{ text: '{"items":[1,true,null]}' }], expected: { text: "null" } }])).not.toThrow();
+	expect(() => validateCases(method, [{ id: "a", args: [{ text: "invalid" }] }])).toThrow(/Case 1/);
+	expect(() => validateCases(method, [{ id: "a", args: [] }])).toThrow(/Parameter count/);
+	expect(() => validateCases(method, [])).toThrow(/1 and 50/);
 });
-
-it("explains unsupported construction and types, while permitting static methods", () => {
-	const methods = discoverJavaMethods("public class A { public A(int a) {} public int f() {return 1;} public static int g(){return 1;} public java.util.Map<String, String> h(){return null;} }").methods;
-	expect(methods[0].unsupported).toMatch(/constructor/);
-	expect(methods[1].unsupported).toBeUndefined();
-	expect(methods[2].unsupported).toMatch(/types/);
-});
-
-it("validates integer precision and bounds without rounding long", () => {
-	expect(valueLiteral("long", { text: "9223372036854775807" })).toBe("9223372036854775807L");
-	expect(valueLiteral("long[]", { text: '["9223372036854775807"]' })).toContain("9223372036854775807L");
-	for (const [type, text] of [["byte", "128"], ["int", "2147483648"], ["long", "9223372036854775808"], ["long[]", "[9223372036854775807]"], ["int[]", "[[1]]"], ["int", "1);System.exit(0)"]])
-		expect(() => valueLiteral(type, { text })).toThrow();
-});
-
-it("distinguishes null, empty text and a missing assertion", () => {
-	expect(valueLiteral("String", { text: "" })).toContain("new char[]{}");
-	expect(valueLiteral("String", { text: "", isNull: true })).toBe("(String)null");
-	expect(() => valueLiteral("int", { text: "", isNull: true })).toThrow();
-	const method = discoverJavaMethods("public String f(){ return null; }").methods[0];
-	expect(() => validateCases(method, [{ id: "a", args: [] }])).not.toThrow();
-	expect(() => validateCases(method, [{ id: "a", args: [], expected: { text: "" } }])).not.toThrow();
-});
-
-it("validates draft shape and duplicate case IDs", () => {
-	expect(isCaseList([{ id: "a", args: [] }, { id: "a", args: [] }])).toBe(false);
-	expect(isCaseList([{ id: "a", args: [{ text: 1 }] }])).toBe(false);
-	expect(isTestConfig({ mode: "methods", selectedMethod: "A#f()", casesByMethod: { "A#f()": [{ id: "a", args: [] }] } })).toBe(true);
-});
-
-describe("typed input", () => {
-	it.each(["boolean", "char", "float", "double", "Integer", "Boolean", "String[][]"])("accepts %s", type => {
-		const values: Record<string, string> = { boolean: "true", char: "中", float: "1.2", double: "1e3", Integer: "42", Boolean: "false", "String[][]": '[["a"],null]' };
-		expect(valueLiteral(type, { text: values[type] })).toBeTruthy();
-	});
-});
-
-describe("List method inputs", () => {
-	it("discovers qualified and nested lists while keeping private helpers internal", () => {
-		const found = discoverJavaMethods(`import java.util.List;
-public int add(List<Integer> list) { return calculate(list); }
-private int calculate(List<Integer> list) { return list.size(); }
-public java.util.List<java.util.List<java.lang.String>> echo(java.util.List<java.util.List<java.lang.String>> xs) { return xs; }`);
-		expect(found.methods).toHaveLength(2);
-		expect(found.methods[0]).toMatchObject({ id: "Main#add(List<Integer>)", parameters: [{ name: "list", type: "List<Integer>" }] });
-		expect(found.methods[1]).toMatchObject({ returnType: "List<List<String>>" });
-		expect(found.methods.every(method => !method.unsupported)).toBe(true);
-		expect(reflectionType("List<List<String>>")).toBe("java.util.List");
-		expect(valuePlaceholder("List<List<String>>")).toBe('[["a"]]');
-	});
-	it("bounds nesting and handles unsupported types in input hints", () => {
-		const nested = (depth: number) => "List<".repeat(depth) + "Integer" + ">".repeat(depth);
-		expect(supportedType(nested(64))).toBe(true);
-		expect(supportedType(nested(65))).toBe(false);
-		expect(valuePlaceholder(nested(1000))).toBe("");
-		expect(valuePlaceholder("java.util.List<java.lang.String>")).toBe('["a"]');
-	});
-	it("constructs mutable lists with typed nulls and exact long values", () => {
-		expect(valueLiteral("List<Integer>", { text: "[]" })).toContain("new java.util.ArrayList<Integer>");
-		expect(valueLiteral("List<List<Long>>", { text: '[["9223372036854775807",null],[],null]' })).toContain("9223372036854775807L");
-		expect(valueLiteral("java.util.List<java.lang.String>", { text: "", isNull: true })).toBe("(java.util.List<String>)null");
-		expect(valueLiteral("List<String>", { text: '["\\n\\\"中",null]' })).toContain("new String(new char[]");
-	});
-	it.each(["List", "List<int>", "List<?>", "List<? extends Number>", "List<Object>", "List<Integer[]>", "List<Integer>[]", "Map<String,Integer>", "List<List<int>>"])("rejects unsupported %s", type => {
-		expect(supportedType(type)).toBe(false);
-	});
-	it.each([
-		["List<Integer>", "{}"], ["List<Integer>", "["], ["List<Integer>", "[2147483648]"],
-		["List<Long>", "[9223372036854775807]"], ["List<String>", "[1]"],
-		["List<List<Integer>>", "[1]"], ["List<Integer>", "[[1]]"],
-	])("rejects invalid %s input %s", (type, text) => {
-		expect(() => valueLiteral(type, { text })).toThrow();
-	});
-	it.each(["Byte", "Short", "Integer", "Long", "Float", "Double", "Boolean", "Character", "String"])("accepts List<%s>", element => {
-		const text = element === "Boolean" ? "[true,null]" : element === "Character" || element === "String" ? '["a",null]' : "[1,null]";
-		expect(() => valueLiteral(`List<${element}>`, { text })).not.toThrow();
-	});
-});
-
-
-it("discovers package-access methods from issue #127 in fragments and classes", () => {
-	const method = 'List<String> regularID(List<String> cardIds) { return List.of(); }';
-	for (const code of [`import java.util.List; ${method}`, `import java.util.List; class Solution { ${method} }`]) {
-		const found = discoverJavaMethods(code);
-		expect(found.methods).toHaveLength(1);
-		expect(found.methods[0]).toMatchObject({ name: "regularID", returnType: "List<String>", parameters: [{ name: "cardIds", type: "List<String>" }] });
-		expect(found.methods[0].unsupported).toBeUndefined();
-	}
+it("preserves raw str and validates persisted case configuration", () => {
+	const method = discoverPythonMethods("def f(value: str) -> str: return value").methods[0];
+	const cases = [{ id: "one", args: [{ text: "not JSON" }], expected: { text: "" } }];
+	expect(() => validateCases(method, cases)).not.toThrow();
+	expect(isCaseList([...cases, ...cases])).toBe(false);
+	expect(isTestConfig({ mode: "program", selectedMethod: "f(value)", casesByMethod: { "f(value)": cases } })).toBe(true);
 });

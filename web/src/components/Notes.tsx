@@ -37,7 +37,7 @@ export function NotesEditor({ notes: n }: { notes: NotesController }) {
 	const { status } = usePlaygroundHost();
 	const [lastRun, setLastRun] = useState<{ code: string; key: string } | null>(null);
 	useEffect(() => { setLastRun(null); }, [n.selected]);
-	const canRun = !!status?.enabled && status.jdk.available;
+	const canRun = !!status?.enabled && status.python.available;
 	// Only the Notes host offers a Run control; the Wiki host does not, so its code
 	// blocks get no button at all.
 	const host = useMemo<RichEditorHost>(() => canRun

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { APPEARANCE_EVENT, THEMES, getAppearanceState, lightThemeOf, setAppearanceState, type AppearanceState, type Theme } from "../appearance";
+import { APPEARANCE_EVENT, getAgentExpressions, setAgentExpressions, THEMES, getAppearanceState, lightThemeOf, setAppearanceState, type AppearanceState, type Theme } from "../appearance";
+import { AgentExpression } from "./AgentExpression";
 import { useT } from "../i18n";
 
 const LABELS = {
@@ -12,9 +13,10 @@ const LABELS = {
 
 export function AppearancePanel() {
 	const t = useT();
+	const [expressions, setExpressions] = useState(getAgentExpressions);
 	const [state, setState] = useState<AppearanceState>(getAppearanceState);
 	useEffect(() => {
-		const sync = () => setState(getAppearanceState());
+		const sync = () => { setState(getAppearanceState()); setExpressions(getAgentExpressions()); };
 		window.addEventListener(APPEARANCE_EVENT, sync);
 		return () => window.removeEventListener(APPEARANCE_EVENT, sync);
 	}, []);
@@ -41,6 +43,11 @@ export function AppearancePanel() {
 		<div className="appearance-follow">
 			<div><span>{t("themeFollowSystem")}</span><small>{t("themeFollowDesc")} <b>{LABELS[lightKey][0]} {t(LABELS[lightKey][1])}</b></small></div>
 			<button type="button" role="switch" aria-checked={state.follow} aria-label={t("themeFollowSystem")} className="appearance-switch" onClick={() => update({ ...state, follow: !state.follow, theme: state.follow || state.theme !== "graphite" ? state.theme : "warm" })}><span /></button>
+		</div>
+		<div className="appearance-follow expression-setting">
+			<AgentExpression pose="waving" active />
+			<div><span>{t("agentExpressions")}</span><small>{t("agentExpressionsHint")} <a href="/pets/grass-cow/ATTRIBUTION.md" target="_blank" rel="noreferrer">{t("agentExpressionsCredit")}</a></small></div>
+			<button type="button" role="switch" aria-checked={expressions} aria-label={t("agentExpressions")} className="appearance-switch" onClick={() => setAgentExpressions(!expressions)}><span /></button>
 		</div>
 	</div>;
 }

@@ -32,7 +32,7 @@ async function register() {
 
 beforeEach(async () => {
 	enabled = true;
-	sources = { workspace: { id: "team", name: "Team" }, workspaces: [{ id: "team", name: "Team" }], sources: [repository] };
+	sources = { workspace: { id: "team", name: "Team" }, workspaces: [{ id: "team", name: "Team" }], sources: Array.from({ length: 8 }, (_, index) => ({ ...repository, id: index ? `repository:fixture-${index}` : repository.id, root: index ? join(cwd, String(index)) : cwd })) };
 	readSubagentSources.mockReset().mockImplementation(() => sources);
 	subagentSettings.mockReset().mockImplementation(() => ({ enabled, version: "fixture" }));
 	runSubagents.mockReset().mockImplementation(async (jobs: SubagentJob[]) => jobs.map(job => ({ sourceId: job.source.id, source: job.source.name, root: job.source.root, task: job.task, status: "completed", text: "README.md:1 fixture evidence", evidenceStatus: "unverified", durationMs: 1, truncated: false })));
@@ -44,7 +44,10 @@ beforeEach(async () => {
 	await register();
 });
 
-function tasks(count: number) { return Array.from({ length: count }, (_, index) => ({ sourceId: repository.id, task: `Investigate area ${index}` })); }
+function tasks(count: number) { return Array.from({ length: count }, (_, index) => {
+	const source = { ...repository, id: index ? `repository:fixture-${index}` : repository.id, root: index ? join(cwd, String(index)) : cwd };
+	return { sourceId: source.id, task: `Investigate area ${index}` };
+}); }
 
 function execute(args: Record<string, unknown>, signal?: AbortSignal, update?: Parameters<ToolDefinition["execute"]>[3]) {
 	return tool.execute("test", args, signal, update, { cwd, sessionManager } as unknown as ExtensionToolContext);
@@ -79,15 +82,15 @@ describe("subagent extension admission and request lifecycle", () => {
 		await execute({ action: "inspect", sourceIds: [repository.id] }, controller.signal);
 		const signal = inspectSubagentSources.mock.calls[0][1] as AbortSignal;
 		controller.abort(); expect(signal.aborted).toBe(true);
-		await execute({ action: "run", tasks: tasks(8) });
-		await execute({ action: "run", tasks: tasks(4) });
+		await execute({ action: "run", scope: "selected", tasks: tasks(8) });
+		await execute({ action: "run", scope: "selected", tasks: tasks(4) });
 		expect(runSubagents).toHaveBeenCalledTimes(2);
 	});
 
 	test("refreshes source membership and rejects stale or ambiguous workspace selections", async () => {
 		await execute({ action: "sources" });
 		sources = { ...sources, sources: [] };
-		await expect(execute({ action: "run", tasks: tasks(1) })).rejects.toThrow(/no longer available/);
+		await expect(execute({ action: "run", scope: "selected", tasks: tasks(1) })).rejects.toThrow(/no longer available/);
 		sources = { ...sources, issue: "workspace_mismatch", sources: [repository] };
 		await expect(execute({ action: "run", workspaceId: "unrelated", tasks: tasks(1) })).rejects.toThrow(/workspace_mismatch/);
 		expect(readSubagentSources).toHaveBeenLastCalledWith(cwd, "unrelated");
@@ -95,29 +98,29 @@ describe("subagent extension admission and request lifecycle", () => {
 	});
 
 	test("rejects batches above eight without consuming the twelve-child request budget", async () => {
-		await expect(execute({ action: "run", tasks: tasks(9) })).rejects.toThrow(/batch limit.*8/);
-		await expect(execute({ action: "run", tasks: [{ sourceId: repository.id, task: "  " }] })).rejects.toThrow(/concrete task/);
+		await expect(execute({ action: "run", scope: "selected", tasks: tasks(9) })).rejects.toThrow(/batch limit.*8/);
+		await expect(execute({ action: "run", scope: "selected", tasks: [{ sourceId: repository.id, task: "  " }] })).rejects.toThrow(/concrete task/);
 		expect(runSubagents).not.toHaveBeenCalled();
-		await execute({ action: "run", tasks: tasks(8) });
-		await execute({ action: "run", tasks: tasks(4) });
-		await expect(execute({ action: "run", tasks: tasks(1) })).rejects.toThrow(/request budget.*12/);
+		await execute({ action: "run", scope: "selected", tasks: tasks(8) });
+		await execute({ action: "run", scope: "selected", tasks: tasks(4) });
+		await expect(execute({ action: "run", scope: "selected", tasks: tasks(1) })).rejects.toThrow(/request budget.*12/);
 		expect(runSubagents).toHaveBeenCalledTimes(2);
 	});
 
 	test("automatic continuation does not reset the request budget, while the next real user entry does", async () => {
-		await execute({ action: "run", tasks: tasks(8) });
-		await execute({ action: "run", tasks: tasks(4) });
+		await execute({ action: "run", scope: "selected", tasks: tasks(8) });
+		await execute({ action: "run", scope: "selected", tasks: tasks(4) });
 		sessionManager.appendMessage({ role: "user", content: [{ type: "text", text: TOOL_TEXT_CONTINUE_PROMPT }], timestamp: Date.now() });
-		await expect(execute({ action: "run", tasks: tasks(1) })).rejects.toThrow(/request budget/);
+		await expect(execute({ action: "run", scope: "selected", tasks: tasks(1) })).rejects.toThrow(/request budget/);
 		sessionManager.appendMessage({ role: "user", content: "Now investigate invoicing", timestamp: Date.now() });
-		await execute({ action: "run", tasks: tasks(8) });
+		await execute({ action: "run", scope: "selected", tasks: tasks(8) });
 		expect(runSubagents).toHaveBeenCalledTimes(3);
 	});
 
 	test("disabled execution is rejected immediately and registration hides the tool", async () => {
 		enabled = false;
 		await expect(execute({ action: "sources" })).rejects.toThrow(/disabled/);
-		await expect(execute({ action: "run", tasks: tasks(1) })).rejects.toThrow(/disabled/);
+		await expect(execute({ action: "run", scope: "selected", tasks: tasks(1) })).rejects.toThrow(/disabled/);
 		expect(readSubagentSources).not.toHaveBeenCalled();
 		expect(runSubagents).not.toHaveBeenCalled();
 		expect((await register()).exposure).toBe("hidden");
@@ -133,16 +136,39 @@ describe("subagent extension admission and request lifecycle", () => {
 			return [];
 		});
 		const abort = new AbortController(), update = vi.fn();
-		await execute({ action: "run", tasks: tasks(1) }, abort.signal, update);
+		await execute({ action: "run", scope: "selected", tasks: tasks(1) }, abort.signal, update);
 		expect(update).toHaveBeenCalledWith(expect.objectContaining({
 			content: [{ type: "text", text: expect.stringContaining("Orders: running · source_search") }],
-			details: { subagents: [{ sourceId: repository.id, source: "Orders", root: cwd, task: "Investigate area 0", phase: "running", tool: "source_search" }] },
+			details: { subagents: [{ sourceId: repository.id, source: "Orders", root: cwd, task: expect.stringContaining("Investigate area 0"), phase: "running", tool: "source_search" }] },
 		}));
 		abort.abort(); expect(signals[0].aborted).toBe(true);
-		await execute({ action: "run", tasks: tasks(1) });
+		await execute({ action: "run", scope: "selected", tasks: tasks(1) });
 		events.get("session_shutdown")!(); expect(signals[1].aborted).toBe(true);
 		events.get("session_start")!();
-		await execute({ action: "run", tasks: tasks(1) });
+		await execute({ action: "run", scope: "selected", tasks: tasks(1) });
 		expect(signals[2].aborted).toBe(false);
 	});
+});
+
+test("issue #135 defaults to one child per workspace source, merging repeated repository tasks", async () => {
+	const payment = { ...repository, id: "repository:payments", name: "Payments", root: join(cwd, "payments") };
+	const library = { ...repository, id: "knowledge:library", kind: "knowledge" as const, name: "Library", root: join(cwd, "library") };
+	sources.sources = [repository, payment, library];
+	await execute({ action: "run", tasks: Array.from({ length: 5 }, (_, i) => ({ sourceId: repository.id, task: `Investigate area ${i}` })) });
+	const jobs = runSubagents.mock.calls[0][0] as SubagentJob[];
+	expect(jobs.map(job => job.source.id)).toEqual([repository.id, payment.id, library.id]);
+});
+
+test("workspace paging covers more than twelve sources and resets for a new user question", async () => {
+	sources.sources = Array.from({ length: 17 }, (_, i) => ({ ...repository, id: `repository:${i}`, root: join(cwd, String(i)) }));
+	for (let page = 0; page < 3; page++) {
+		const result = await execute({ action: "run", question: "Investigate all sources" });
+		const output = JSON.parse(String(result.content[0].type === "text" && result.content[0].text));
+		expect(output.remainingSourceIds).toHaveLength(Math.max(0, 17 - (page + 1) * 8));
+	}
+	const ids = runSubagents.mock.calls.flatMap(call => (call[0] as SubagentJob[]).map(job => job.source.id));
+	expect(ids).toHaveLength(17); expect(new Set(ids).size).toBe(17);
+	sessionManager.appendMessage({ role: "user", content: "Another question", timestamp: Date.now() });
+	await execute({ action: "run" });
+	expect(runSubagents.mock.calls.at(-1)![0]).toHaveLength(8);
 });

@@ -20,16 +20,17 @@ const expectedRoots = [repoA, repoB, library];
 const workspaceId = "business-workspace";
 const browserWorkspaceId = "unrelated-workspace";
 const naturalQuestions = { happy: "退款流程是怎样的？", browser: "退款从发起到完成，经过哪些模块？", direct: "什么是幂等？" };
-const rootsFor = scenario => scenario === "browser" ? [repoA, other, library] : expectedRoots;
+const rootsFor = scenario => scenario === "browser" ? [repoA, other, library] : scenario === "workspace" ? [...expectedRoots, archive] : expectedRoots;
 const registeredRootsFor = scenario => scenario === "browser" ? rootsFor(scenario) : [...expectedRoots, archive];
 const businessEvidence = new Map([
+	[archive, "Historical visual assets; no refund implementation or policy."],
 	[repoA, "refundOrder(orderId) calls POST /refund and rejects partial refunds."],
 	[repoB, "POST /refund accepts a refund amount and emits RefundCompleted(orderId)."],
 	[other, "The refund reconciliation module joins RefundCompleted with orderId."],
 	[library, "The refund policy permits partial refunds tied to orderId."],
 ]);
 for (const dir of [agentDir, dataDir, repoA, repoB, other, library, archive, join(agentDir, "extensions")]) mkdirSync(dir, { recursive: true });
-for (const dir of [...expectedRoots, other]) {
+for (const dir of [...expectedRoots, other, archive]) {
 	writeFileSync(join(dir, "evidence.md"), `# ${basename(dir)}\nEVIDENCE_${basename(dir)}: ${businessEvidence.get(dir)}\n`);
 	writeFileSync(join(dir, "README.md"), `# ${basename(dir)}\n${businessEvidence.get(dir)} See evidence.md for this fixture's implementation or policy.\n`);
 }
@@ -161,7 +162,11 @@ async function handleModel(req, res) {
 		}
 		// Deterministic selection verifies transport and scope, not model relevance judgment.
 		const selected = seenSources.get(scenario).sources.filter(source => roots.includes(source.root));
-		respond(res, body.model, undefined, { name: "subagent", args: { action: "run", tasks: selected.map(source => ({ sourceId: source.id, task: `CASE:${scenario} Investigate evidence.md and cite the business interface.` })) } });
+		if (scenario === "workspace") {
+			respond(res, body.model, undefined, { name: "subagent", args: { action: "run", question: "CASE:workspace Explain the refund flow", tasks: Array.from({ length: 5 }, (_, i) => ({ sourceId: selected[0].id, task: `Investigate aspect ${i}` })) } });
+			return;
+		}
+		respond(res, body.model, undefined, { name: "subagent", args: { action: "run", scope: "selected", tasks: selected.map(source => ({ sourceId: source.id, task: `CASE:${scenario} Investigate evidence.md and cite the business interface.` })) } });
 		return;
 	}
 	assert(Array.isArray(output.results), "parent receives the child result group");
@@ -224,7 +229,7 @@ async function finished(client, scenario) {
 	const output = resultOnWire(client);
 	assert(output, "child result JSON crosses the standard tool-result wire format");
 	assert.equal(output.workspace.id, workspaceId);
-	assert.equal(output.results.length, 3);
+	assert.equal(output.results.length, rootsFor(scenario).length);
 	assert(client.wire.some(message => message.type === "tool_delta" && message.toolName === "subagent"), "child progress streams through the existing tool card channel");
 	assert(client.wire.some(message => message.type === "tool_status" && message.toolName === "subagent" && !message.isError), "group completion reaches the tool status channel");
 	return output.results;
@@ -259,6 +264,14 @@ try {
 	assert(!requests.some(request => request.source === archive), "an inspected but unselected source starts no child model");
 	assert.equal(seenResults.get("happy").results.length, 3);
 	console.log("PASS subagents: overlapping Workspace scope, repositories plus knowledge, parallel reads, fresh restricted context, selected model/thinking, citations and usage over real WebSocket");
+
+	const workspace = await connect("subagents-workspace"); await sendPrompt(workspace, "workspace");
+	const all = await finished(workspace, "workspace");
+	assert.deepEqual(all.map(result => result.root).sort(), [...expectedRoots, archive].sort());
+	assert.equal(new Set(all.map(result => result.sourceId)).size, 4);
+	assert.deepEqual(seenResults.get("workspace").remainingSourceIds, []);
+	assert.equal(requests.filter(request => request.scenario === "workspace" && request.isChild).length, 12, "five duplicate tasks become one child; all other sources are still covered");
+	console.log("PASS issue #135: default workspace run merges same-repository tasks and covers every repository plus knowledge exactly once");
 
 	const direct = await connect("subagents-direct"); await sendPrompt(direct, "direct");
 	await wait(() => !direct.state.isStreaming && direct.state.messages.some(message => message.role === "assistant" && text(message.content).includes("幂等指")), "direct answer settles");
@@ -364,15 +377,28 @@ try {
 		if (await runningCard.locator('.toolcall-name[aria-expanded="false"]').count()) await runningCard.locator(".toolcall-name").click();
 		await runningCard.locator('.subagent-view[data-final="false"]').waitFor();
 		assert.equal(await runningCard.locator(".subagent-source").count(), 3);
-		assert.equal(await runningCard.getByText("CASE:browser Investigate evidence.md and cite the business interface.", { exact: true }).count(), 3);
+		assert.equal(await runningCard.locator(".subagent-source-task").filter({ hasText: "CASE:browser Investigate evidence.md and cite the business interface." }).count(), 3);
 		for (const source of ["repo-a", "other-repo", "knowledge"]) await runningCard.locator(".subagent-source-head strong", { hasText: source }).waitFor();
 		assert.match(await runningCard.locator(".toolcall-status").innerText(), /0\/3 subagents finished/);
 		assert(received.some(message => message.type === "tool_delta" && message.toolName === "subagent" && message.subagents?.length === 3), "browser receives structured per-source progress");
 		mkdirSync("tests/scratch", { recursive: true });
+		const pet = page.locator('.trailing-working .agent-expression[data-pose="running"]').last();
+		await pet.scrollIntoViewIfNeeded();
+		await page.waitForFunction(() => [...document.querySelectorAll('.agent-expression[data-pose="running"]')].some(el => el.getAttribute('data-animate') === 'true'));
+		assert.equal(await pet.evaluate(el => getComputedStyle(el, '::before').animationName), 'agent-expression-eyes');
+		assert.equal(await page.locator('.msg-assistant .msg-role').first().evaluate(el => getComputedStyle(el, '::before').display), 'none', "pet replaces the reply icon without duplication");
+		const positions = new Set();
+		for (let i = 0; i < 5; i++) { positions.add(await pet.evaluate(el => getComputedStyle(el, '::before').backgroundPositionX)); await sleep(150); }
+		assert(positions.size > 1, "the sprite actually advances frames");
+		await page.emulateMedia({ reducedMotion: 'reduce' });
+		assert.equal(await pet.evaluate(el => getComputedStyle(el, '::before').animationName), 'none');
+		await page.emulateMedia({ reducedMotion: 'no-preference' });
+		await pet.screenshot({ path: "tests/scratch/grass-cow-running.png" });
 		await runningCard.screenshot({ path: "tests/scratch/subagents-running.png" });
 		for (const item of gates.get("browser")) item.sendRead();
 		await wait(() => seenResults.has("browser"), "browser final results");
 		await page.getByText(/SYNTHESIS browser:/).last().waitFor();
+		await page.waitForFunction(() => !document.querySelector('.trailing-working .agent-expression'));
 		const reports = seenResults.get("browser").results;
 		assert.deepEqual(reports.map(result => result.root).sort(), rootsFor("browser").sort());
 		assert(reports.every(result => result.status === "completed"));

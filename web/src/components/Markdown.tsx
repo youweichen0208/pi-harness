@@ -98,7 +98,7 @@ export function PreWithCopy({ children, fileLinks, showLanguage, runnable, ...pr
 	const language = child && typeof child === "object" && "props" in child ? /language-([\w+-]+)/.exec(String(child.props.className ?? ""))?.[1] : undefined;
 	// A Java block is code, never box-drawing art, and it is the only block a Run
 	// control attaches to.
-	if (runnable && language === "java") {
+	if (runnable && ["python", "py", "python3"].includes(language ?? "")) {
 		return (
 			<div className="codeblock">
 				<PlaygroundRun code={code} pre={<pre {...props}>{children}</pre>} />

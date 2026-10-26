@@ -1,10 +1,10 @@
-import { useEffect, useRef } from "react";
-import { javaLanguageSupport } from "../playground-java-language";
+import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
+import { pythonLanguageSupport } from "../playground-python-language";
 import { acceptCompletion } from "@codemirror/autocomplete";
-import { indentWithTab } from "@codemirror/commands";
-import { java } from "@codemirror/lang-java";
+import { indentWithTab, isolateHistory, toggleComment } from "@codemirror/commands";
+import { python } from "@codemirror/lang-python";
 import { tags as t } from "@lezer/highlight";
-import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
+import { HighlightStyle, syntaxHighlighting, indentUnit } from "@codemirror/language";
 import { Compartment, EditorState, Prec, type Extension } from "@codemirror/state";
 import { EditorView, keymap, placeholder as cmPlaceholder } from "@codemirror/view";
 import { basicSetup } from "codemirror";
@@ -49,7 +49,16 @@ const highlightStyle = HighlightStyle.define([
 	{ tag: t.variableName, color: "var(--text)" },
 ]);
 
-export function ScratchEditor({ value, onChange, onRun, onFormat, onSave, onLanguageStatus, placeholder }: {
+function toggleEditorComment(view: EditorView): boolean {
+	return toggleComment({ state: view.state, dispatch: transaction => view.dispatch({
+		changes: transaction.changes, selection: transaction.selection, effects: transaction.effects,
+		annotations: isolateHistory.of("full"),
+	}) });
+}
+
+export interface ScratchEditorHandle { toggleComment(): void }
+
+export const ScratchEditor = forwardRef<ScratchEditorHandle, {
 	value: string;
 	onChange: (value: string) => void;
 	/** ⌘/Ctrl+Enter always runs — the completion popup must not swallow it. */
@@ -58,7 +67,9 @@ export function ScratchEditor({ value, onChange, onRun, onFormat, onSave, onLang
 	onSave: () => void;
 	onLanguageStatus: (state: "loading" | "ready" | "error", reason?: string) => void;
 	placeholder: string;
-}) {
+}>(function ScratchEditor({ value, onChange, onRun, onFormat, onSave, onLanguageStatus, placeholder }, ref) {
+	const editor = useRef<EditorView | null>(null);
+	useImperativeHandle(ref, () => ({ toggleComment() { if (editor.current) { toggleEditorComment(editor.current); editor.current.focus(); } } }), []);
 	const holder = useRef<HTMLDivElement>(null);
 	const runRef = useRef(onRun);
 	runRef.current = onRun;
@@ -75,9 +86,11 @@ export function ScratchEditor({ value, onChange, onRun, onFormat, onSave, onLang
 				doc: value,
 				extensions: [
 					basicSetup,
-					java(),
+					python(),
+					indentUnit.of("    "),
+					EditorState.tabSize.of(4),
 					syntaxHighlighting(highlightStyle),
-					javaLanguageSupport(onLanguageStatus),
+					pythonLanguageSupport(onLanguageStatus),
 					theme.of(buildEditorTheme()),
 					cmPlaceholder(placeholder),
 					Prec.highest(keymap.of([
@@ -88,6 +101,7 @@ export function ScratchEditor({ value, onChange, onRun, onFormat, onSave, onLang
 								return true;
 							},
 						},
+						{ key: "Mod-/", run: toggleEditorComment },
 						{ key: "Mod-s", run: () => { saveRef.current(); return true; } },
 						{ key: "Alt-Shift-f", run: () => { formatRef.current(); return true; } },
 						{ key: "Tab", run: acceptCompletion },
@@ -100,6 +114,8 @@ export function ScratchEditor({ value, onChange, onRun, onFormat, onSave, onLang
 			}),
 		});
 
+		editor.current = view;
+
 		// Rebuild the theme when the app appearance changes; the CSS variables
 		// have already been swapped by the time this event fires.
 		const onThemeChange = () => {
@@ -109,6 +125,7 @@ export function ScratchEditor({ value, onChange, onRun, onFormat, onSave, onLang
 
 		return () => {
 			window.removeEventListener(THEME_CHANGE_EVENT, onThemeChange);
+			editor.current = null;
 			view.destroy();
 		};
 		// The editor is created once; external value changes are synced below.
@@ -126,5 +143,5 @@ export function ScratchEditor({ value, onChange, onRun, onFormat, onSave, onLang
 		}
 	}, [value]);
 
-	return <div className="scratch-editor-cm" ref={holder} aria-label="Java" />;
-}
+	return <div className="scratch-editor-cm" ref={holder} aria-label="Python" />;
+});

@@ -2,7 +2,7 @@
  * Playground configuration — one global, server-side switch plus the Run limits.
  *
  * One server-side setting applies to all clients. Before a choice is saved,
- * the default follows detected JDK availability. PI_WEB_PLAYGROUND=off takes
+ * the default follows detected Python 3 availability. PI_WEB_PLAYGROUND=off takes
  * precedence over both the detected default and saved preferences.
  *
  * Pure: no I/O, no environment reads beyond the map handed in. The store at the
@@ -17,7 +17,6 @@ export interface PlaygroundConfig {
 	enabled: boolean;
 	timeoutMs: number;
 	maxOutputBytes: number;
-	maxHeapMb: number;
 	maxConcurrent: number;
 }
 
@@ -25,15 +24,13 @@ export const PLAYGROUND_DEFAULTS: Readonly<PlaygroundConfig> = Object.freeze({
 	enabled: false,
 	timeoutMs: 10000,
 	maxOutputBytes: 262144,
-	maxHeapMb: 256,
 	maxConcurrent: 2,
 });
 
 /** Inclusive bounds for every numeric field; out-of-range values are clamped, not rejected. */
-const BOUNDS: Readonly<Record<"timeoutMs" | "maxOutputBytes" | "maxHeapMb" | "maxConcurrent", readonly [number, number]>> = {
+const BOUNDS: Readonly<Record<"timeoutMs" | "maxOutputBytes" | "maxConcurrent", readonly [number, number]>> = {
 	timeoutMs: [1000, 60000],
 	maxOutputBytes: [1024, 16 * 1024 * 1024],
-	maxHeapMb: [16, 4096],
 	maxConcurrent: [1, 8],
 };
 
@@ -52,7 +49,6 @@ export function normalizePlaygroundConfig(value: unknown): PlaygroundConfig {
 		enabled: raw.enabled === true,
 		timeoutMs: bounded(raw.timeoutMs, BOUNDS.timeoutMs, PLAYGROUND_DEFAULTS.timeoutMs),
 		maxOutputBytes: bounded(raw.maxOutputBytes, BOUNDS.maxOutputBytes, PLAYGROUND_DEFAULTS.maxOutputBytes),
-		maxHeapMb: bounded(raw.maxHeapMb, BOUNDS.maxHeapMb, PLAYGROUND_DEFAULTS.maxHeapMb),
 		maxConcurrent: bounded(raw.maxConcurrent, BOUNDS.maxConcurrent, PLAYGROUND_DEFAULTS.maxConcurrent),
 	};
 }
@@ -64,18 +60,18 @@ export function playgroundEnvLock(env: Readonly<Record<string, string | undefine
 }
 
 /**
- * Explicit saved choices win. Only a missing file uses the detected JDK default;
+ * Explicit saved choices win. Only a missing file uses the detected Python 3 default;
  * unreadable or corrupt configuration stays disabled.
  */
 export class PlaygroundConfigStore {
 	constructor(private readonly file: string) {}
 
-	read(jdkAvailable = false): PlaygroundConfig {
+	read(pythonAvailable = false): PlaygroundConfig {
 		try {
 			return normalizePlaygroundConfig(JSON.parse(readFileSync(this.file, "utf8")));
 		} catch (error) {
 			const missing = (error as NodeJS.ErrnoException).code === "ENOENT";
-			return { ...PLAYGROUND_DEFAULTS, enabled: missing && jdkAvailable };
+			return { ...PLAYGROUND_DEFAULTS, enabled: missing && pythonAvailable };
 		}
 	}
 
