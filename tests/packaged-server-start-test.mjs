@@ -22,12 +22,25 @@ assert(!JSON.parse(readFileSync(join(appRoot, "package.json"), "utf8")).pi?.exte
 // A checkout-local package can otherwise hide missing runtime dependencies by
 // resolving them from the repository's parent node_modules directory.
 const packagedRequire = createRequire(join(appRoot, "package.json"));
-for (const name of ["unified", "remark-parse", "@vscode/ripgrep", "@lezer/python", "web-tree-sitter"]) {
+for (const name of ["unified", "remark-parse", "@vscode/ripgrep", "@lezer/python"]) {
 	const resolved = packagedRequire.resolve(name);
 	const inside = relative(appRoot, resolved);
 	assert(!isAbsolute(inside) && inside !== ".." && !inside.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`), `${name} must resolve inside the packaged app: ${resolved}`);
 }
-console.log("PASS Markdown parser dependencies resolve inside the packaged app");
+console.log("PASS runtime parser dependencies resolve inside the packaged app");
+const playgroundMethods = pathToFileURL(join(appRoot, "dist/server/playground-methods.js")).href;
+execFileSync(executable, ["--input-type=module", "--eval", `
+	import assert from 'node:assert/strict';
+	const { discoverPythonMethods } = await import(${JSON.stringify(playgroundMethods)});
+	const { methods } = discoverPythonMethods('def add(a: int, b: int):\\n    return a + b\\n');
+	assert.equal(methods.length, 1);
+	assert.equal(methods[0].id, 'add(a,b)');
+`], {
+	env: { ...testEnv(), ELECTRON_RUN_AS_NODE: "1", NODE_PATH: "", NODE_OPTIONS: "" },
+	timeout: 30000,
+	stdio: "pipe",
+});
+console.log("PASS packaged Python function discovery runs in the shipped runtime");
 const { rgPath } = packagedRequire("@vscode/ripgrep");
 const rgRelative = relative(appRoot, rgPath);
 assert(existsSync(rgPath) && !isAbsolute(rgRelative) && !rgRelative.startsWith(".."), "ripgrep binary must be shipped inside the app");
@@ -114,6 +127,8 @@ const child = fork(join(appRoot, "dist/server/index.js"), [], {
 		PI_CODING_AGENT_DIR: join(temp, "agent"),
 		PI_WEB_PKG_ROOT: appRoot,
 		PI_WEB_NO_BROWSER: "1",
+		// Python is supplied by the host, not bundled with the desktop app.
+		PI_WEB_PYTHON: join(temp, "missing-python"),
 	},
 	stdio: ["ignore", "pipe", "pipe", "ipc"],
 	serialization: "json",
@@ -142,12 +157,12 @@ try {
 	assert.match(await page.text(), /<div id="root">/);
 	const formatted = await fetch(`http://127.0.0.1:${port}/api/playground/format`, {
 		method: "POST", headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({ code: "int add(int a,int b){return a+b;}" }),
+		body: JSON.stringify({ code: "def add(a, b):\n    return a + b\n" }),
 		signal: AbortSignal.timeout(15000),
 	});
-	assert.equal(formatted.status, 200, "packaged Java formatter and WASM assets must load");
-	assert.match((await formatted.json()).code, /return a \+ b;/);
-	console.log("PASS packaged Java formatting with execution disabled");
+	assert.equal(formatted.status, 503, "missing host Python must report unavailability without crashing the packaged server");
+	assert.equal(typeof (await formatted.json()).error, "string");
+	console.log("PASS packaged Python formatter reports missing host runtime");
 	const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`);
 	try {
 		await new Promise((resolve, reject) => {
