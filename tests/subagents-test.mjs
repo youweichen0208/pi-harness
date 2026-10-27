@@ -382,23 +382,10 @@ try {
 		assert.match(await runningCard.locator(".toolcall-status").innerText(), /0\/3 subagents finished/);
 		assert(received.some(message => message.type === "tool_delta" && message.toolName === "subagent" && message.subagents?.length === 3), "browser receives structured per-source progress");
 		mkdirSync("tests/scratch", { recursive: true });
-		const pet = page.locator('.trailing-working .agent-expression[data-pose="running"]').last();
-		await pet.scrollIntoViewIfNeeded();
-		await page.waitForFunction(() => [...document.querySelectorAll('.agent-expression[data-pose="running"]')].some(el => el.getAttribute('data-animate') === 'true'));
-		assert.equal(await pet.evaluate(el => getComputedStyle(el, '::before').animationName), 'agent-expression-eyes');
-		assert.equal(await page.locator('.msg-assistant .msg-role').first().evaluate(el => getComputedStyle(el, '::before').display), 'none', "pet replaces the reply icon without duplication");
-		const positions = new Set();
-		for (let i = 0; i < 5; i++) { positions.add(await pet.evaluate(el => getComputedStyle(el, '::before').backgroundPositionX)); await sleep(150); }
-		assert(positions.size > 1, "the sprite actually advances frames");
-		await page.emulateMedia({ reducedMotion: 'reduce' });
-		assert.equal(await pet.evaluate(el => getComputedStyle(el, '::before').animationName), 'none');
-		await page.emulateMedia({ reducedMotion: 'no-preference' });
-		await pet.screenshot({ path: "tests/scratch/grass-cow-running.png" });
 		await runningCard.screenshot({ path: "tests/scratch/subagents-running.png" });
 		for (const item of gates.get("browser")) item.sendRead();
 		await wait(() => seenResults.has("browser"), "browser final results");
 		await page.getByText(/SYNTHESIS browser:/).last().waitFor();
-		await page.waitForFunction(() => !document.querySelector('.trailing-working .agent-expression'));
 		const reports = seenResults.get("browser").results;
 		assert.deepEqual(reports.map(result => result.root).sort(), rootsFor("browser").sort());
 		assert(reports.every(result => result.status === "completed"));

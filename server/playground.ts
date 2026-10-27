@@ -11,6 +11,7 @@
  * buffer the event stream.
  */
 
+import { PythonTools } from "./playground-python-tools.js";
 import { analyzePython } from "./playground-python-language.js";
 import { readFileSync } from "node:fs";
 import { writeFileAtomic } from "./private-file.js";
@@ -72,6 +73,7 @@ export function installPlaygroundRoutes(app: Express, options: PlaygroundRouteOp
 	const gate = new ConcurrencyGate();
 
 	const analysisGate = new ConcurrencyGate();
+	const pythonTools = new PythonTools(dataDir);
 	const controllers = new Set<AbortController>();
 	const tasks = new Set<Promise<unknown>>();
 	async function analysis(req: import("express").Request, res: import("express").Response, format = false) {
@@ -87,12 +89,27 @@ export function installPlaygroundRoutes(app: Express, options: PlaygroundRouteOp
 		const controller = new AbortController(); controllers.add(controller);
 		res.on("close", () => { if (!res.writableEnded) controller.abort(); });
 		if (res.destroyed) controller.abort();
-		const task = analyzePython({ command: python.command, args: python.args ?? [] }, body.code, body.offset ?? 0, format ? "format" : body.action, controller.signal);
+		const task = analyzePython({ command: python.command, args: python.args ?? [] }, body.code, body.offset ?? 0, format ? "format" : body.action, controller.signal, pythonTools.path({ command: python.command, args: python.args ?? [] }));
 		tasks.add(task);
 		try { res.json(await task); }
 		catch (error) { if (!res.destroyed) res.status(format ? 422 : 503).json({ error: error instanceof Error ? error.message : "Python analysis failed" }); }
 		finally { release(); controllers.delete(controller); tasks.delete(task); }
 	}
+	app.post("/api/playground/tools/install", async (req, res) => {
+		res.setHeader("Cache-Control", "no-store");
+		if (!allowed(req) || !req.is("application/json")) { res.sendStatus(403); return; }
+		if (!req.body || typeof req.body !== "object" || Array.isArray(req.body) || Object.keys(req.body).length) { res.sendStatus(400); return; }
+		const python = await probe.get();
+		if (!python.available || !python.command) { res.status(503).json({ error: python.reason ?? "Python unavailable" }); return; }
+		const controller = new AbortController(); controllers.add(controller);
+		res.on("close", () => { if (!res.writableEnded) controller.abort(); });
+		if (res.destroyed) controller.abort();
+		const task = pythonTools.install({ command: python.command, args: python.args ?? [] }, controller.signal);
+		tasks.add(task);
+		try { await task; if (!res.destroyed) res.json({ installed: true }); }
+		catch (error) { if (!res.destroyed) res.status(503).json({ error: error instanceof Error ? error.message : "Installation failed" }); }
+		finally { controllers.delete(controller); tasks.delete(task); }
+	});
 	app.post("/api/playground/language", (req, res) => { void analysis(req, res); });
 	app.post("/api/playground/format", (req, res) => { void analysis(req, res, true); });
 

@@ -5,7 +5,7 @@ Playground 使用宿主 Python 3.9+ 运行聊天、小记中的 `python` / `py` 
 ## 运行环境
 
 - 不捆绑解释器。`PI_WEB_PYTHON` 指定解释器可执行文件路径（不是 shell 命令）；未指定时按 `VIRTUAL_ENV`、PATH 的 `python3` / `python`、Windows `py -3` 顺序探测。显式路径失败不偷偷回退。探测验证版本与实际 `sys.executable`，缓存 60 秒，支持重新检测。
-- 执行与语言辅助共用选中的解释器。推荐虚拟环境；第三方库在该环境中安装，Playground 不自动下载或安装依赖。运行使用 `-I -X utf8 -u`，忽略 `PYTHONPATH` 和用户 site-packages，虚拟环境自身的包仍可用。规则依据 [Python 命令行文档](https://docs.python.org/3/using/cmdline.html)。
+- 执行与语言辅助共用选中的解释器。推荐虚拟环境；第三方库在该环境中安装，Playground 不隐式安装依赖；用户可通过按钮安装可选编辑工具。运行使用 `-I -X utf8 -u`，忽略 `PYTHONPATH` 和用户 site-packages，虚拟环境自身的包仍可用。规则依据 [Python 命令行文档](https://docs.python.org/3/using/cmdline.html)。
 - **不是沙箱**。临时目录不自动加入项目路径，但代码仍有服务用户的文件、网络和进程权限，不能宣称无法访问工作区。
 - 超时、输出预算、并发限制沿用原配置。移除 Java 专属 `maxHeapMb`；旧配置中的该字段读取时忽略，API 不再接受它。Python 内存没有跨平台硬限制。
 
@@ -33,7 +33,7 @@ Playground 使用宿主 Python 3.9+ 运行聊天、小记中的 `python` / `py` 
 
 ## 编辑器、补全和格式化
 
-CodeMirror Python 高亮、Tab 接受补全／缩进，Shift+Tab 反缩进，⌘/Ctrl+Enter 运行；源码栏「注释」按钮或 ⌘/Ctrl+/ 切换当前行／所选行的 `#` 注释，支持撤销、自动保存，无需语言服务。实时补全、签名与语法诊断通过选中解释器中的 **Jedi**，格式化通过 **Black**；都只分析代码，不执行提交源码。可选依赖缺失时显示安装提示，输入、自动保存与运行仍可用。
+CodeMirror Python 高亮、Tab 接受补全／缩进，Shift+Tab 反缩进，⌘/Ctrl+Enter 运行；源码栏「注释」按钮或 ⌘/Ctrl+/ 切换当前行／所选行的 `#` 注释，支持撤销、自动保存，无需语言服务。实时补全、签名与语法诊断通过选中解释器中的 **Jedi**，格式化通过 **Black**；都只分析代码，不执行提交源码。可选依赖缺失时显示「安装补全与格式化工具」按钮，设置页也提供此入口；点击下载 Jedi / Black 到应用数据目录，输入、自动保存与运行仍可用。
 
 ```sh
 # 在用于 Playground 的虚拟环境中安装可选编辑辅助
@@ -51,3 +51,9 @@ export PI_WEB_PYTHON=/path/to/venv/bin/python
 聊天只为 Python 围栏提供运行，工具输出／流式片段仍不提供入口。小记不改正文，文件预览运行未保存缓冲区、不自动保存；Java 围栏／文件不再显示运行。结果维持 stdout/stderr 分离、过期标记、取消和复制。
 
 回归：`npm run typecheck && npm run build && npm test`；`node tests/playground-test.mjs` 验证真实 Python 与 HTTP 边界，`node tests/playground-methods-test.mjs --browser` 验证函数用例、脚本模式和草稿保存。无 Python 时执行测试明确 skip，浏览器模式要求 Python。`tests/playground-python-language-test.mjs` 需选择装有 Jedi / Black 的解释器，验证真实分析与格式化。
+
+## 一键安装编辑工具
+
+`POST /api/playground/tools/install` 仅接受空 JSON 对象，复用鉴权和来源校验；不接受包名、命令或路径。使用选定解释器的 `-I -m pip install --target` 安装固定的 Jedi / Black，不使用 sudo、`--user` 或 `--break-system-packages`，不修改宿主环境。工具按解释器命令分目录存放于 `<dataDir>/python-tools/`；每次安装独立代数目录，真实导入验证通过后原子更新 current 指针，失败删除未完成目录，旧代数保留供进行中的分析使用。仅分析／格式化子进程添加此目录，代码执行环境不变。
+
+同一服务最多一个安装，180 秒超时、1 MiB 输出上限；断开与服务关闭杀进程树，失败可重试。界面显示安装中和失败原因，成功后自动重试语言诊断。Python 或 pip 本身缺失时返回错误，不下载解释器、不隐式引导 pip。

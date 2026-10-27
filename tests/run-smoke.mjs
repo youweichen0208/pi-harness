@@ -33,6 +33,7 @@ const ALL = [
 	"notes-test",
 	"playground-test",
 	"playground-methods-test",
+	"playground-python-tools-test",
 	"project-workspaces-test",
 	"shared-workspaces-test",
 	"builtin-extensions-test",

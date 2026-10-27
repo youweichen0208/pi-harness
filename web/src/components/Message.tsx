@@ -1,4 +1,3 @@
-import { AgentExpression } from "./AgentExpression";
 import { UiIcon } from "./UiIcon";
 import { useChangesAvailable } from "../changes-context";
 import { ToolRecoveryCard, type ToolRecoveryActions } from "./ToolRecoveryCard";
@@ -494,7 +493,6 @@ export const Message = memo(function Message({
 		>
 			<div className="msg-meta">
 				<span className="msg-role">
-					{message.role === "assistant" && <AgentExpression pose={message.stopReason === "error" || message.stopReason === "aborted" ? "failed" : "idle"} active={streaming} />}
 					{message.role === "custom"
 						? isGoalWizard
 							? t("goalWizardCard")

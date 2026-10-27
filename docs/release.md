@@ -1,12 +1,16 @@
 # 发布流程
 
+## 1.10.0：Python 编辑工具一键安装
+
+新增 Jedi / Black 一键安装、安装状态与失败重试，工具保存在应用数据目录，安装成功自动刷新语言服务；恢复原头像与等待圆点，清理动态表情组件及素材。版本同步为 1.10.0，SDK / pi-ai 1.4.0、协议 v47 不变。仅发布 GitHub 三平台桌面 Release，同一提交 CI、三平台打包回归及附件检查通过后公开。说明见 `.github/release-notes/v1.10.0.md`。
+
 ## 1.9.1：修复桌面发布依赖检查
 
 v1.9.0 三平台构建因打包测试残留 Java 插件的 `web-tree-sitter` 断言而失败，未公开。移除废弃依赖断言，保留产物内依赖归属检查，并使用包内 Electron 实际运行 Python 函数发现。以新标签 v1.9.1 重新执行同提交 CI 和三平台发布验证，不改写原标签。说明见 `.github/release-notes/v1.9.1.md`。
 
 ## 1.9.0：Python Playground 与 Workspace 协作
 
-发布全部本地改动：Playground 从 Java 切换至 Python，加入脚本／函数用例、注释按钮及可选 Jedi／Black；Workspace 研究按代码仓与知识库分配子代理并支持分批覆盖；加入草地牛眼珠动画与外观开关。版本同步为 1.9.0，SDK / pi-ai 1.4.0、协议 v47 不变。仅发布 GitHub 三平台桌面 Release，同一提交 CI、三平台打包回归及附件检查通过后公开。说明见 `.github/release-notes/v1.9.0.md`。
+发布全部本地改动：Playground 从 Java 切换至 Python，加入脚本／函数用例、注释按钮及可选 Jedi／Black；Workspace 研究按代码仓与知识库分配子代理并支持分批覆盖。版本同步为 1.9.0，SDK / pi-ai 1.4.0、协议 v47 不变。仅发布 GitHub 三平台桌面 Release，同一提交 CI、三平台打包回归及附件检查通过后公开。说明见 `.github/release-notes/v1.9.0.md`。
 
 ## 1.8.0：Workspace 子代理与 SSH 工作台改进
 

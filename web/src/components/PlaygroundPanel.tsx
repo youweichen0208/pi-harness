@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { PlaygroundToolsInstall } from "./PlaygroundToolsInstall";
 import { useT } from "../i18n";
 import type { PlaygroundConfigPatch, PlaygroundStatus } from "../types";
 
@@ -79,6 +80,8 @@ export function PlaygroundPanel({ playground }: { playground: PlaygroundControls
 				{t("playgroundRedetect")}
 			</button>
 		</div>
+
+		<PlaygroundToolsInstall available={status.python.available} />
 
 		{error && <p className="playground-error" role="alert">{t("playgroundSaveFailed", { error })}</p>}
 	</div>;

@@ -44,6 +44,8 @@ sys.stdout.reconfigure(encoding="utf-8")
 request = json.load(sys.stdin)
 code = request["code"]
 action = request["action"]
+if request.get("toolsPath"):
+    sys.path.insert(0, request["toolsPath"])
 def utf16(s):
     return len(s.encode("utf-16-le")) // 2
 if action == "format":

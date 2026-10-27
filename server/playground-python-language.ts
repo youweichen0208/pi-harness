@@ -7,7 +7,7 @@ import { killPidTree } from "./process-utils.js";
 import { PYTHON_ANALYSIS } from "./playground-python-scripts.js";
 import type { PythonCommand } from "./playground-python.js";
 import type { PythonLanguageResult, PlaygroundFormatResult } from "./protocol.js";
-export async function analyzePython(python: PythonCommand, code: string, offset: number, action: string, signal: AbortSignal): Promise<PythonLanguageResult & Partial<PlaygroundFormatResult>> {
+export async function analyzePython(python: PythonCommand, code: string, offset: number, action: string, signal: AbortSignal, toolsPath?: string): Promise<PythonLanguageResult & Partial<PlaygroundFormatResult>> {
 	const directory = mkdtempSync(join(tmpdir(), "pi-python-analysis-"));
 	try {
 		return await new Promise((resolve, reject) => {
@@ -29,7 +29,7 @@ export async function analyzePython(python: PythonCommand, code: string, offset:
 				if (stopped || status !== 0) { reject(new Error(stopped ? "Python analysis cancelled, timed out or exceeded output limit" : error.includes("No module named") ? `Install ${action === "format" ? "black" : "jedi"} in the selected Python environment.` : error || "Python analysis failed")); return; }
 				try { resolve(JSON.parse(out)); } catch { reject(new Error("Invalid Python analysis result")); }
 			});
-			child.stdin.end(JSON.stringify({ code, offset, action }));
+			child.stdin.end(JSON.stringify({ code, offset, action, toolsPath }));
 		});
 	} finally { rmSync(directory, { recursive: true, force: true }); }
 }

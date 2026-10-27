@@ -8,6 +8,7 @@ import { usePlaygroundScratch } from "../use-playground-scratch";
 import { SCRATCH_EXAMPLE as EXAMPLE, EMPTY_SCRATCH_TESTS as EMPTY_TESTS } from "../playground-scratch-store";
 import type { PlaygroundTestConfig, PlaygroundCase, PlaygroundFormatResult } from "../types";
 import { discoverPythonMethods } from "../../../server/playground-methods";
+import { PlaygroundToolsInstall } from "./PlaygroundToolsInstall";
 import { PlaygroundResult } from "./PlaygroundRun";
 import { PlaygroundMethodCases, caseError, methodErrorText } from "./PlaygroundMethodCases";
 
@@ -90,6 +91,7 @@ export function PlaygroundScratch() {
 		<div className="scratch-workspace">
 			<section className="scratch-code-pane" aria-label={t("pgSource")}>
 				<div className="scratch-pane-head"><strong>{t("pgSource")}</strong><span className="scratch-language-status" title={language.reason} role="status">{t(language.state === "ready" ? "pgLanguageReady" : language.state === "error" ? "pgLanguageError" : "pgLanguageLoading")}</span><button type="button" className="btn" disabled={!doc} title={t("pgCommentHint")} onClick={() => editor.current?.toggleComment()}>{t("pgComment")}</button><button type="button" className="btn" disabled={!doc || formatting} title="Shift+Alt+F" onClick={() => void formatCode()}>{t(formatting ? "pgFormatting" : "pgFormat")}</button></div>
+				{(language.state === "error" || formatError) && <PlaygroundToolsInstall available={!!status?.python.available} />}
 				{formatError && <p className="playground-notice" role="alert">{t("pgFormatFailed")} {formatError}</p>}
 				{doc && !doc.content.trim() && <button type="button" className="btn scratch-example" onClick={() => setDoc({ ...doc, content: EXAMPLE })}>{t("pgExample")}</button>}
 				<Suspense fallback={<div className="scratch-editor-cm loading" aria-busy="true" />}>

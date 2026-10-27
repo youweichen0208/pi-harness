@@ -52,7 +52,8 @@ export function pythonLanguageSupport(onStatus: (state: "loading" | "ready" | "e
 		private timer: ReturnType<typeof setTimeout> | undefined;
 		private revision = 0;
 		private busy = false;
-		constructor(private view: EditorView) { onStatus("loading"); this.schedule(); }
+		private retry = () => { onStatus("loading"); this.revision++; this.schedule(); };
+		constructor(private view: EditorView) { onStatus("loading"); this.schedule(); window.addEventListener("pi-harness:python-tools-installed", this.retry); }
 		update(update: ViewUpdate) { if (update.docChanged || update.selectionSet) { this.revision++; this.schedule(); } }
 		private schedule() { clearTimeout(this.timer); this.timer = setTimeout(() => void this.analyze(), 700); }
 		private async analyze() {
@@ -74,6 +75,7 @@ export function pythonLanguageSupport(onStatus: (state: "loading" | "ready" | "e
 			finally { this.busy = false; }
 		}
 		destroy() {
+			window.removeEventListener("pi-harness:python-tools-installed", this.retry);
 			closed = true; clearTimeout(this.timer); for (const controller of controllers) controller.abort();
 			void fetch(withToken("/api/playground/language"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, action: "close" }), keepalive: true }).catch(() => {});
 		}
