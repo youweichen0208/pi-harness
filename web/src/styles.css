@@ -14088,3 +14088,12 @@ html.pi-desktop .design-workspace .topbar { height: 48px; min-height: 48px; }
 .playground-tools-install { padding: 8px; border-bottom: 1px solid var(--border); }
 .playground-tools-install > [role="status"] { margin-left: 8px; font-size: 12px; color: var(--text-muted); }
 .playground-tools-install .playground-error { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* ---- Third-party delegate notifications ---- */
+.delegate-notification { margin: 12px 0; color: var(--text-dim); font: 12px/1.6 var(--sans); }
+.delegate-notification > summary { cursor: pointer; overflow-wrap: anywhere; }
+.delegate-notification > summary > span, .delegate-notification > summary > code { margin-inline-end: 8px; }
+.delegate-notification > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.delegate-notification-failed { color: var(--red); }
+.delegate-notification-completed { color: var(--green); }
+.delegate-notification > pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 320px; overflow: auto; padding: 12px; background: var(--output-bg); border-radius: var(--r-sm); }

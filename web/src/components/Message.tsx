@@ -1,4 +1,5 @@
 import { UiIcon } from "./UiIcon";
+import { DelegateNotification } from "./DelegateNotification";
 import { useChangesAvailable } from "../changes-context";
 import { ToolRecoveryCard, type ToolRecoveryActions } from "./ToolRecoveryCard";
 import { isProcessNarration } from "../command-reading";
@@ -260,6 +261,7 @@ export const Message = memo(function Message({
 	// toolResult content is rendered inside its toolCall card — never standalone
 	// (otherwise the same output shows twice: formatted card + plain text).
 	if (message.role === "toolResult") return null;
+	if (message.role === "custom" && message.customType === "acp-delegate") return <DelegateNotification message={message} />;
 	if (message.origin === "auto-reminder") return <div className="tool-reminder-event" data-msg-id={message.id} title={message.content.map(b => b.type === "text" ? b.text : "").join("\n")}><span>↻ {t(message.role === "custom" ? "planReminderEvent" : "toolReminderEvent")}{message.timestamp ? ` · ${formatTime(message.timestamp)}` : ""}</span></div>;
 	// SDK system messages are system-prompt snapshots: one quiet divider, not a chat row (3a).
 	if (message.role === "system") return <SystemEvent message={message} />;

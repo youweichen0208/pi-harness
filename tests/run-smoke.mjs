@@ -62,6 +62,7 @@ const ALL = [
 	"extensions-test",
 	"extensions-worker-test",
 	"extension-ui-test",
+	"delegate-notification-test",
 	"session-tree-test",
 	"tool-output-test",
 	"recovery-service-test",

@@ -1,4 +1,5 @@
 import { codemodeDetails } from "./codemode-presentation.js";
+import { parseDelegateNotification } from "./delegate-notification.js";
 import { createHash } from "node:crypto";
 /**
  * Serializes pi SDK AgentMessage[] into the browser-friendly UiMessage[] shape
@@ -141,13 +142,18 @@ export function serializeMessage(
 	seq: number,
 ): UiMessage | null {
 	switch (m.role) {
-		case "user":
+		case "user": {
+			const content = serializeUserContent(m.content);
+			const notification = content.every(block => block.type === "text")
+				? parseDelegateNotification(content.map(block => block.type === "text" ? block.text : "").join("\n")) : undefined;
 			return {
 				id: `u-${m.timestamp}-${seq}`,
-				role: "user",
-				content: serializeUserContent(m.content),
+				role: notification ? "custom" : "user",
+				...(notification ? { customType: "acp-delegate", details: notification } : {}),
+				content,
 				timestamp: m.timestamp,
 			};
+		}
 
 		case "assistant":
 			return {

@@ -115,6 +115,8 @@ SDK `tool_execution_update.partialResult` 是累计输出快照，服务端发�
 
 断线不解决服务端请求。重连重放仍有效的弹窗、widget、status 和标题；浏览器重建展示状态。reload、会话替换及 Wiki/普通对话释放时取消旧弹窗、释放 widget 并使旧上下文失效。原生 reload 使用公开 beforeSessionStart/runner.setUIContext 接口绑定新上下文。
 
+ACP 第三方扩展的固定 `acp_delegate` 通知通过 `sendUserMessage` 注入时，`delegate-notification.ts` 仅在界面序列化层识别完整通知标记与运行 ID，投影为 `custom/acp-delegate`。失败／完成状态常显，原文可展开；不修改原生消息、模型输入或触发新的模型调用。回归：`delegate-notification-test.mjs`，`--browser` 核对真实扩展注入、键盘展开、窄屏与刷新。
+
 ### 原生恢复状态
 
 SDK 用 `context_edit replacement:null` 移除失败回复时，`session-errors.ts` 从当前分支补充仅供界面显示的错误消息（issue #121）。保留错误文本及原顺序，去重且不跨分支，不恢复被移除的正文／工具内容，不写回 SDK 模型上下文。投影按 SessionManager 与 leaf 缓存。回归：`tests/gateway-error-test.mjs`。
