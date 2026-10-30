@@ -34,6 +34,17 @@ describe("bounded parent subagent results", () => {
 		expect(output[0].report).not.toBe(original.report);
 	});
 
+	test("clipping an echoed task does not claim the failed report was truncated", () => {
+		const original: SubagentResult = { ...result(), task: "调查任务".repeat(150), status: "failed", text: "Error: This operation was aborted", report: undefined, evidenceStatus: "unverified" };
+		const [output] = projectSubagentResults([original]);
+		expect(Array.from(output.task)).toHaveLength(240);
+		expect(output.text).toBe(original.text);
+		expect(output.truncated).toBe(false);
+		expect(output.outputTruncated).toBeUndefined();
+		expect(output.evidenceWarning).toBeUndefined();
+		expect(original.task).toHaveLength(600);
+	});
+
 	test("preserves a near-limit structured report when the whole batch fits", () => {
 		const original = evidenceHeavyResult();
 		original.text = "Refunds follow the documented order and payment flow. ".repeat(24);

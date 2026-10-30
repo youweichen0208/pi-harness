@@ -89,12 +89,11 @@ export function projectSubagentResults(results: SubagentResult[]): ProjectedSuba
 	if (results.length > SUBAGENT_RESULT_LIMITS.sources) throw new Error("Project at most 8 subagent results per batch.");
 	const projected: ProjectedSubagentResult[] = structuredClone(results);
 	const originals = results.map(result => result.evidenceWarning);
-	for (const [index, result] of projected.entries()) {
+	for (const result of projected) {
 		const task = Array.from(result.task);
 		if (task.length > SUBAGENT_RESULT_LIMITS.taskChars) {
 			result.task = `${task.slice(0, SUBAGENT_RESULT_LIMITS.taskChars - 1).join("")}…`;
-			mark(result);
-			warning(result, originals[index]);
+			// This is only an echoed task preview, not missing research output.
 		}
 	}
 	while (bytes({ results: projected }) > SUBAGENT_RESULT_LIMITS.outputBytes) {
