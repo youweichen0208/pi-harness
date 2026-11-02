@@ -7,6 +7,8 @@ import { navigateSibling } from "../tree-events";
 import { isValidElement, memo, useContext, useLayoutEffect, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { parseReplySegments } from "../question-cards";
 import { registerQuestions } from "../question-answers";
+import { AnswerSummary } from "./AnswerSummary";
+import { parseAnswerSummary } from "../answer-history";
 import { QuestionCards } from "./QuestionCards";
 import {
 	FiChevronDown,
@@ -127,6 +129,7 @@ interface MessageProps {
 	toolsRunning?: boolean;
 	bashActive?: boolean;
 	toolMessageIds?: ReadonlyMap<string, string>;
+	phaseLabels?: ReadonlyMap<string, string>;
 	planViews?: ReadonlyMap<string, PlanPresentation>;
 	continuation?: boolean;
 	conversationId?: string;
@@ -182,6 +185,7 @@ export const Message = memo(function Message({
 	toolsRunning,
 	bashActive,
 	toolMessageIds,
+	phaseLabels,
 	planViews,
 	continuation,
 	conversationId,
@@ -230,7 +234,8 @@ export const Message = memo(function Message({
 	// Transient inline notice for the editor (oversized/unreadable dropped
 	// files) — Message has no toast access, so it renders under the chips.
 	const [editNotice, setEditNotice] = useState<string | null>(null);
-	const foldableUser = message.role === "user" && message.content.length > 0 && message.content.every((block) => block.type === "text");
+	const answerSummary = message.role === "user" ? parseAnswerSummary(message.questionText ?? message.content.map(block => block.type === "text" ? block.text : "").join("\n")) : null;
+	const foldableUser = !answerSummary && message.role === "user" && message.content.length > 0 && message.content.every((block) => block.type === "text");
 	const userContentRef = useRef<HTMLDivElement>(null);
 	const [userExpanded, setUserExpanded] = useState(false);
 	const [userOverflow, setUserOverflow] = useState(false);
@@ -482,7 +487,7 @@ export const Message = memo(function Message({
 			// Key by the first row so appending rows during streaming never remounts the list.
 			const key = `process-${isValidElement(run[0]) ? run[0].key : start}`;
 			// Thinking alone needs no summary header; any tool turns the run into a collapsible group.
-			grouped.push(stats.commands + stats.reads + stats.searches > 0 ? <ProcessGroup key={key} stats={stats}>{run}</ProcessGroup> : <div className="process-list" key={key}>{run}</div>);
+			grouped.push(stats.commands + stats.reads + stats.searches > 0 ? <ProcessGroup key={key} stats={stats} label={phaseLabels?.get(stats.toolIds[0])}>{run}</ProcessGroup> : <div className="process-list" key={key}>{run}</div>);
 		}
 		return grouped;
 	};
@@ -506,7 +511,7 @@ export const Message = memo(function Message({
 						: roleLabel(message.role, t)}
 				</span>
 
-				{message.role === "assistant" && message.model && <span className="msg-model" title={message.model}>· {message.model}</span>}
+				{message.role === "assistant" && message.model && <span className="msg-model" title={message.model}>{message.model}</span>}
 
 				{message.timestamp && (
 					<span className="msg-time" title={[message.model, new Date(message.timestamp).toLocaleString()].filter(Boolean).join(" · ")}>{formatTime(message.timestamp)}</span>
@@ -677,7 +682,7 @@ export const Message = memo(function Message({
 								{renderContentBlocks(true)}
 							</>
 						) : message.role === "user" ? (
-							<div ref={userContentRef} className={`user-message-content${foldableUser && !userExpanded ? " collapsed" : ""}`}>{message.questionText !== undefined ? <><Markdown text={preserveUserTree(message.questionText)} fileLinks />{message.content.filter(b => b.type === "image").map((b, i) => <Block key={i} block={b} user toolResults={toolResults} liveOutputs={liveOutputs} toolStatuses={toolStatuses} streaming={streaming} isLast={false} />)}</> : renderContentBlocks(false)}</div>
+							<div ref={userContentRef} className={`user-message-content${foldableUser && !userExpanded ? " collapsed" : ""}`}>{answerSummary ? <><AnswerSummary summary={answerSummary} />{message.content.filter(b => b.type === "image").map((b, i) => <Block key={i} block={b} user toolResults={toolResults} liveOutputs={liveOutputs} toolStatuses={toolStatuses} streaming={streaming} isLast={false} />)}</> : message.questionText !== undefined ? <><Markdown text={preserveUserTree(message.questionText)} fileLinks />{message.content.filter(b => b.type === "image").map((b, i) => <Block key={i} block={b} user toolResults={toolResults} liveOutputs={liveOutputs} toolStatuses={toolStatuses} streaming={streaming} isLast={false} />)}</> : renderContentBlocks(false)}</div>
 						) : (
 							renderContentBlocks(false)
 						)}

@@ -100,8 +100,9 @@ export function TopBar({
 	const interrupted = incident?.state === "stopped";
 	const reminding = incident?.state === "reminding";
 	const task = chat.state?.conversationId === chat.activeConversationId ? chat.state?.taskProgress : null;
-	const planItems = (task?.status === "running" || task?.status === "waiting") ? task.plan?.items.filter((item) => item.status !== "removed") ?? [] : [];
+	const planItems = task?.plan?.items.filter((item) => item.status !== "removed") ?? task?.steps ?? [];
 	const currentStep = planItems.findIndex((item) => item.status === "running");
+	const completedSteps = planItems.filter(item => item.status === "done").length;
 
 	const session = chat.sessions.find((item) => item.path === chat.state?.sessionFile);
 	const conversation = chat.conversations.find((item) => item.id === chat.activeConversationId);
@@ -198,7 +199,7 @@ export function TopBar({
 			</div>
 
 			{view !== "nodes" && <button type="button" className="project-panel-toggle" title={t(leftCollapsed ? "expandProjects" : "collapseProjects")} aria-label={t(leftCollapsed ? "expandProjects" : "collapseProjects")} aria-expanded={!leftCollapsed} onClick={() => onOpenPanel("left")}><FiSidebar /></button>}
-			<div className="header-location"><span title={chat.state?.cwd}>{projectName || t("desktopWorkspace")}</span><i>/</i><button className="conversation-title-button" title={t("treeTitle")} onClick={() => openSessionTree()}><strong title={conversationTitle}>{conversationTitle}</strong><span aria-hidden="true">⌄</span></button>{(interrupted || reminding || currentStep >= 0 || !!task?.plan?.awaitingConfirmation) && <button type="button" className={`header-task-progress${interrupted ? " interrupted" : reminding ? " reminding" : ""}`} title={t("taskProgress")} onClick={onOpenTask}><span aria-hidden="true">●</span>{interrupted ? t("toolRecoveryInterrupted") : reminding ? t("working") : task?.plan?.awaitingConfirmation ? t("taskProgress") : t("taskPlanPosition", { current: currentStep + 1, total: planItems.length })}</button>}</div>
+			<div className="header-location"><span title={chat.state?.cwd}>{projectName || t("desktopWorkspace")}</span><i>/</i><button className="conversation-title-button" title={t("treeTitle")} onClick={() => openSessionTree()}><strong title={conversationTitle}>{conversationTitle}</strong><span aria-hidden="true">⌄</span></button>{(interrupted || reminding || planItems.length > 0 || !!task?.plan?.awaitingConfirmation) && <button type="button" className={`header-task-progress${interrupted ? " interrupted" : reminding ? " reminding" : ""}`} title={t("taskProgress")} onClick={onOpenTask}>{interrupted ? t("toolRecoveryInterrupted") : reminding ? t("working") : task?.plan?.awaitingConfirmation ? t("taskProgress") : t("taskPlanPosition", { current: currentStep >= 0 ? currentStep + 1 : completedSteps, total: planItems.length })}{planItems.length > 0 && <span className="header-task-segments" aria-hidden="true">{planItems.map(item => <i key={item.id} className={item.status} />)}</span>}</button>}</div>
 			<div className="topbar-actions">
 				<div className="panel-tab-bar">
 				<div className="view-switch" role="tablist" aria-label={t("viewSwitch")}>

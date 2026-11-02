@@ -1,3 +1,5 @@
+import { taskDetail, recoverTaskSummaries, taskSummaries } from "./subagents/tasks.js";
+import type { SubagentRequest } from "./protocol.js";
 import { WikiConversations } from "./wiki-conversations.js";
 import { promptReceiptsFor } from "./prompt-receipts.js";
 import type { PromptResult } from "./protocol.js";
@@ -632,6 +634,7 @@ export class ClientSession {
 			if (refreshResources) { await services.resourceLoader.reload(); refreshResources = false; }
 			const created = await createAgentSessionFromServices({ services, sessionManager, model: state?.model, thinkingLevel: state?.thinkingLevel });
 			subagentParent = created.session;
+			await recoverTaskSummaries(created.session.sessionManager.getSessionId());
 			return { ...created, services, diagnostics: services.diagnostics };
 		};
 	}
@@ -1236,6 +1239,7 @@ export class ClientSession {
 			// it here is what makes thinking + text stream into the browser at
 			// ~60ms granularity instead of appearing only when the turn finishes.
 			streamingMessage,
+			subagentTasks: taskSummaries(conv.session.sessionManager.getSessionId(), new Set(messages.flatMap(message => message.content.flatMap(block => block.type === "toolCall" && block.name === "subagent" ? [block.id as string] : []))), new Set(messages.flatMap(message => message.role === "toolResult" && message.toolCallId ? [message.toolCallId] : []))),
 			taskProgress: deriveTaskProgress(conv.id, taskHistoryFromSession(conv.session.sessionManager, (message, entryId) => this.serializeCached(message, entryId)) ?? messages, streamingMessage, conv.session.isStreaming, conv.lastTaskEndedAt),
 			isStreaming: this.session.isStreaming,
 			wiki: !!conv.wiki,
@@ -1331,6 +1335,23 @@ export class ClientSession {
 		else if (compaction?.id === operationId) conv.session.abortCompaction();
 		else if (retry?.id === operationId) conv.session.abortRetry();
 	}
+	async subagentRequest(message: SubagentRequest): Promise<void> {
+		try {
+			const conv = this.convs.get(message.conversationId);
+			if (!conv) throw Error("Conversation is not available");
+			const session = conv.session;
+			const allowed = new Set(session.messages.flatMap(entry => entry.role === "assistant" ? entry.content.flatMap(block => block.type === "toolCall" && block.name === "subagent" ? [block.id] : []) : []));
+			if (message.action !== "detail" && message.action !== "stop") throw Error("Invalid subagent action");
+			let detail = await taskDetail(session.sessionManager.getSessionId(), message.taskId, allowed, message.cursor);
+			const currentCalls = new Set(session.messages.flatMap(entry => entry.role === "assistant" ? entry.content.flatMap(block => block.type === "toolCall" && block.name === "subagent" ? [block.id] : []) : []));
+			if (this.convs.get(message.conversationId)?.session !== session || [...allowed].some(id => !currentCalls.has(id))) throw Error("Conversation changed");
+			if (message.action === "stop") detail = await taskDetail(session.sessionManager.getSessionId(), message.taskId, currentCalls, message.cursor, true);
+			this.emit({ type: "subagent_response", requestId: message.requestId, conversationId: message.conversationId, taskId: message.taskId, detail });
+		} catch (error) {
+			this.emit({ type: "subagent_response", requestId: message.requestId, conversationId: message.conversationId, taskId: message.taskId, error: String(error) });
+		}
+	}
+
 	async treeRequest(message: TreeRequest): Promise<void> {
 		const conv = this.convs.get(message.conversationId);
 		if (!conv?.tree || conv.id !== this.activeId) {

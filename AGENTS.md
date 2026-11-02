@@ -46,7 +46,7 @@ Extensions：修改内置扩展清单/状态、包安装、启停、更新、作
 Codemode 卡片与 MCP/Codemode 设置遵循 15a/15b 设计；状态、项目覆盖、费用及输出限制读取 `docs/architecture-plugins.md`。
 Playground：修改 Python 代码块运行入口、草稿页脚本／函数测试／用例保存、执行限制、Python 探测、编辑工具安装或总开关时，读取 `docs/architecture-playground.md`；首次检测到可用 Python 默认开启，保留已保存开关、明确非沙箱、结果不进模型上下文。
 工程上下文：修改跨仓来源、OpenViking 接入或本地评测时，读取 `docs/engineering-context.md`；先验证检索收益，再增加产品界面。
-Subagents：修改 Workspace 分工、来源简介、知识库来源、报告证据核验、子会话工具/取消/预算或排队范围时，读取 `docs/architecture-subagents.md`。内置 `subagent` 默认开启，由父模型按问题调用；深入调查默认每个 Workspace 仓库一个子代理，另加已配置知识库，重复来源任务合并、超 8 个来源分批覆盖；限定范围与补查使用 `scope=selected`；`inspect` 提供有界本地简介，子会话只读调查并提交区分实现/文档/推断的报告，引用回读核对行号和指纹；不开后台任务、不递归、不改代码，沿用父模型并产生额外用量。
+Subagents：修改 Workspace 分工、来源简介、知识库来源、报告证据核验、子会话工具/取消/预算或排队范围时，读取 `docs/architecture-subagents.md`。内置 `subagent` 默认开启，由父模型按问题调用；按显式任务分派，每项含 title/task/sourceIds；同仓任务不合并，一个任务可读取最多 8 个指定来源，不默认遍历全部仓库；支持独立停止、持久化执行记录与任务详情抽屉；`inspect` 提供有界本地简介，子会话只读调查并提交区分实现/文档/推断的报告，引用回读核对行号和指纹；不开后台任务、不递归、不改代码，沿用父模型并产生额外用量。
 
 发送回执：普通聊天与 Wiki 共用持久化请求去重和重连查询；修改发送确认或重试前读 `docs/architecture-core.md`「发送回执」。Wiki 切换与发送准入共用 `wiki-coordinator.ts`，修改时读 `docs/architecture-wiki.md`。
 

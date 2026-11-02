@@ -6,7 +6,7 @@ import { FluidDrawer } from "./components/FluidDrawer";
 import { UiIcon } from "./components/UiIcon";
 import { DatabaseWorkbench } from "./components/DatabaseWorkbench";
 import { databaseRequest } from "./database-api";
-import { isLegacyMcpNotice } from "./notices";
+import { isLegacyMcpNotice, isMissingWorkingDirectoryNotice } from "./notices";
 import { ChangesProvider } from "./changes-context";
 import { taskChanges } from "./changes";
 import { ChangesPanel } from "./components/ChangesPanel";
@@ -128,13 +128,16 @@ function NoticeToast({
 	notice,
 	onDismiss,
 	onOpenExtensions,
+	onSelectDirectory,
 }: {
 	notice: Notice;
 	onDismiss: (id: number) => void;
 	onOpenExtensions: () => void;
+	onSelectDirectory: () => void;
 }) {
 	const t = useT();
 	const [paused, setPaused] = useState(false);
+	const missingDirectory = notice.level === "error" && isMissingWorkingDirectoryNotice(notice.text);
 	useEffect(() => {
 		if (paused || notice.level !== "info") return;
 		const t = setTimeout(
@@ -153,15 +156,19 @@ function NoticeToast({
 		<div
 			className={`notice notice-${notice.level}${paused ? " paused" : ""}`}
 			role="status"
-			onMouseEnter={() => setPaused(true)}
+			onMouseEnter={() => setPaused(notice.level === "info")}
 			onMouseLeave={() => setPaused(false)}
 		>
 			<Icon className="notice-icon" />
-			<span className="notice-text">{isLegacyMcpNotice(notice.text) ? <>
+			<div className="notice-text">{missingDirectory ? <div className="notice-directory">
+				<div className="notice-directory-copy"><strong>{t("cwdMissingTitle")}</strong><p>{t("cwdMissingHint")}</p></div>
+				<details className="notice-technical"><summary>{t("noticeTechnicalDetails")}</summary><pre>{notice.text}</pre></details>
+				<button type="button" className="notice-directory-action" onClick={onSelectDirectory}>{t("cwdSelectAgain")}</button>
+			</div> : isLegacyMcpNotice(notice.text) ? <>
 				<strong>{t("mcpAdapterNoticeTitle")}</strong><p>{t("mcpAdapterNoticeNative")}</p><p>{t("mcpAdapterNoticeSeparate")}</p>
 				<button onClick={onOpenExtensions}>{t("settingsExtensions")}</button>
 				<details><summary>{t("mcpAdapterNoticeOriginal")}</summary><LinkedText text={notice.text} /></details>
-			</> : <LinkedText text={notice.text} />}</span>
+			</> : <LinkedText text={notice.text} />}</div>
 			{(notice.count ?? 1) > 1 && <span className="notice-count">×{notice.count}</span>}
 			<button
 				type="button"
@@ -413,6 +420,7 @@ export function App() {
 	// 进入 Wiki mode 前的普通对话锚点：退出时切回它（Q16）。
 	const wikiNormalAnchor = useRef<{ cwd: string; conversationId: string } | null>(null);
 	// 运行中任务的中断确认（Q13：取消 / 中断并继续）。
+	const [cwdNoticePicker, setCwdNoticePicker] = useState<number | null>(null);
 	const [wikiFolderPicker, setWikiFolderPicker] = useState(false);
 	const [wikiFolderError, setWikiFolderError] = useState<string>();
 	const [wikiFolderPending, setWikiFolderPending] = useState<{ path: string } | null>(null);
@@ -1021,12 +1029,7 @@ export function App() {
 		};
 		if (fileGuard.current) fileGuard.current(open); else open();
 	};
-	useEffect(() => {
-		if (!taskFocusRequest) return;
-		const panel = document.querySelector<HTMLElement>(".view-pane:not(.hidden) .task-progress");
-		panel?.focus({ preventScroll: true });
-		panel?.querySelector(".task-plan-step.running")?.scrollIntoView({ block: "nearest" });
-	}, [taskFocusRequest]);
+
 	const attachPreviewLines = useCallback((path: string, name: string, start: number, end: number) => {
 		attach(path, name, "lines", false, { start, end });
 	}, [attach]);
@@ -1384,12 +1387,13 @@ export function App() {
 					onSoundPreview={(kind: SoundKind) => playSound(kind, sound)}
 				/>}
 				<RecoveryStatus state={conversationState} send={send} connected={chat.ready} />
-				{chat.pendingDialogs.filter(d => d.conversationId !== chat.activeConversationId).map(d => <button className="protocol-banner" key={d.id} onClick={() => {
+				<div className="app-banners">
+				{chat.pendingDialogs.filter(d => d.conversationId !== chat.activeConversationId).map(d => <button className="protocol-banner background-request-banner" title={`${t("pluginRequest")} · ${d.source} · ${d.title}`} key={d.id} onClick={() => {
 					const navigate = () => { if (rawSend({ type: "switch_conversation", id: d.conversationId })) setView("chat"); };
 					if (wikiGuard.current) wikiGuard.current(navigate);
 					else if (fileGuard.current) fileGuard.current(navigate);
 					else navigate();
-				}}>{t("pluginRequest")} · {d.source} · {d.title}</button>)}
+				}}><span>{t("pluginRequest")} · {d.source} · {d.title}</span></button>)}
 				{switchError && <div className="protocol-banner" role="alert"><button onClick={() => send({ type: "set_cwd", path: switchError, source: "ui" })}>{t("retryProjectSwitch")}</button> {switchError}</div>}
 				{switching && <div className="protocol-banner" role="status">{t("switchingProject")} {switching}</div>}
 				{chat.protocolMismatch && (
@@ -1397,8 +1401,9 @@ export function App() {
 						<UiIcon name="warning" /> {t("protocolMismatch")}
 					</div>
 				)}
+				</div>
 				{view !== "chat" && view !== "wiki" && chat.notices.length > 0 && <div className="notices notices-overlay">
-					{chat.notices.map((n) => <NoticeToast key={n.id} notice={n} onDismiss={dismissNotice} onOpenExtensions={openExtensionSettings} />)}
+					{chat.notices.map((n) => <NoticeToast key={n.id} notice={n} onDismiss={dismissNotice} onOpenExtensions={openExtensionSettings} onSelectDirectory={() => setCwdNoticePicker(n.id)} />)}
 				</div>}
 				{notesOpen && drawer && isNarrow && <div className="drawer-backdrop" onClick={() => setDrawer(null)} />}
 				{scratchOpen && drawer && isNarrow && <div className="drawer-backdrop" onClick={() => setDrawer(null)} />}
@@ -1439,7 +1444,7 @@ export function App() {
 							{/* 扩展问卷：非模态内联面板，插在输入框上方，对话内容保持可见 */}
 							{chat.dialog && <Dialog dialog={chat.dialog} send={send} />}
 							{view !== "wiki" && chat.notices.length > 0 && <div className="notices">
-								{chat.notices.map((n) => <NoticeToast key={n.id} notice={n} onDismiss={dismissNotice} onOpenExtensions={openExtensionSettings} />)}
+								{chat.notices.map((n) => <NoticeToast key={n.id} notice={n} onDismiss={dismissNotice} onOpenExtensions={openExtensionSettings} onSelectDirectory={() => setCwdNoticePicker(n.id)} />)}
 							</div>}
 							<ChatInput
 								key={wikiFileRequest ? chat.state?.sessionId : "main"}
@@ -1494,6 +1499,7 @@ export function App() {
 						>
 							<div className="file-list-host" hidden={inlinePreview}>
 								<RightPanel
+									taskFocusRequest={taskFocusRequest}
 									onSearchFiles={openFileSearch}
 									active={!filesCollapsed && !inlinePreview && !switching && view === "chat" && (!filesOverlay || drawer === "right")}
 									send={send}
@@ -1533,7 +1539,7 @@ export function App() {
 							onChatAction={wikiChatAction}
 							empty={!conversationState?.messages.some(message => message.role === "user") && !conversationState?.isStreaming}
 							modelControls={<ModelThinking state={modelState} models={chat.models} modelsLoading={chat.modelsLoading} send={send} onManageModels={openManageModels} />}
-							notices={chat.notices.length > 0 && <div className="notices wiki-status-notices">{chat.notices.map(n => <NoticeToast key={n.id} notice={n} onDismiss={dismissNotice} onOpenExtensions={openExtensionSettings} />)}</div>}
+							notices={chat.notices.length > 0 && <div className="notices wiki-status-notices">{chat.notices.map(n => <NoticeToast key={n.id} notice={n} onDismiss={dismissNotice} onOpenExtensions={openExtensionSettings} onSelectDirectory={() => setCwdNoticePicker(n.id)} />)}</div>}
 							chatOpen={wikiChatOpen}
 							chatWidth={wikiChatWidth}
 							onChatOpen={setWikiChatOpen}
@@ -1542,7 +1548,7 @@ export function App() {
 							chatHost={setWikiChatHost}
 						>
 							{wikiFileRequest.cwd === chat.state?.cwd && wikiFileRequest.conversationId === chat.activeConversationId ? <WikiWorkbench coordinator={wikiCoordinator} key={wikiFileRequest.cwd} cwd={wikiFileRequest.cwd} conversationId={wikiFileRequest.conversationId} fileRequest={wikiFileRequest} streaming={!!conversationState?.isStreaming} active={view === "wiki"} ready={chat.ready && !switching} writingBlocked={!!switching || !!conversationState?.isStreaming} openDocument={openWikiDocument} onOpenFolder={() => { setWikiFolderError(undefined); setWikiFolderPicker(true); }} folderBusy={!chat.ready || !!switching || !!wikiFolderPending || wikiBusy} connected={chat.ready} guard={wikiGuard} saveBeforePrompt={wikiSave} contextReader={wikiContextReader} contextSaver={wikiContextSaver} onContextChange={setWikiCurrentFile} onAttach={(path, name, isDir) => { attach(path, name, "reference", isDir); setWikiChatOpen(true); }} onReference={receiveWikiReference} /> : <div className="boot-wait">{chat.ready ? t("loadingSession") : t("connectingServer")}</div>}
-						</WikiWindowShell> : <WikiWindowShell notices={chat.notices.length > 0 && <div className="notices wiki-status-notices">{chat.notices.map(n => <NoticeToast key={n.id} notice={n} onDismiss={dismissNotice} onOpenExtensions={openExtensionSettings} />)}</div>} documentPath={wikiWindowParams().doc ?? ""} loading chatOpen={false} chatWidth={wikiChatWidth} onChatOpen={setWikiChatOpen} onChatResize={resizeWikiChat} onClose={exitWiki} chatHost={setWikiChatHost}><div className="boot-wait" role="status">{chat.ready ? t("loadingSession") : t("connectingServer")}</div></WikiWindowShell>)}
+						</WikiWindowShell> : <WikiWindowShell notices={chat.notices.length > 0 && <div className="notices wiki-status-notices">{chat.notices.map(n => <NoticeToast key={n.id} notice={n} onDismiss={dismissNotice} onOpenExtensions={openExtensionSettings} onSelectDirectory={() => setCwdNoticePicker(n.id)} />)}</div>} documentPath={wikiWindowParams().doc ?? ""} loading chatOpen={false} chatWidth={wikiChatWidth} onChatOpen={setWikiChatOpen} onChatResize={resizeWikiChat} onClose={exitWiki} chatHost={setWikiChatHost}><div className="boot-wait" role="status">{chat.ready ? t("loadingSession") : t("connectingServer")}</div></WikiWindowShell>)}
 					</div>
 					<div className={`view-pane ${view === "terminal" ? "" : "hidden"}`}>
 						<TerminalViewBoundary onBack={() => setView("chat")}>
@@ -1581,6 +1587,13 @@ export function App() {
 			{databaseOpen && !documentPreview && chat.state?.cwd && <WikiDocumentModal title={t("dbTitle")} onClose={() => setDatabaseOpen(false)} chatHost={setWikiChatHost} chatOpen={wikiChatOpen} onChatOpen={setWikiChatOpen}>
 				<DatabaseWorkbench cwd={chat.state.cwd} conversationId={chat.activeConversationId} onReference={receiveWikiReference} onRevoke={revokeDatabase} />
 			</WikiDocumentModal>}
+			{cwdNoticePicker !== null && <FolderPickerModal dirBrowse={chat.dirBrowse}
+				onBrowse={path => { rawSend({ type: "browse_dirs", path }); }}
+				onPick={path => {
+					setCwdNoticePicker(null);
+					if (send({ type: "set_cwd", path, source: "ui" })) dismissNotice(cwdNoticePicker);
+				}}
+				onClose={() => setCwdNoticePicker(null)} busy={!chat.ready || !!switching} pickLabel={t("cwdSelectAgain")} />}
 			{(wikiFolderPicker || library.needsFolder) && <FolderPickerModal dirBrowse={chat.dirBrowse} initialPath={chat.state?.cwd}
 				onBrowse={path => { rawSend({ type: "browse_dirs", path }); }} onPick={isKnowledgeLibraryWindow ? library.session.chooseFolder : pickWikiFolder}
 				onClose={() => { if (librarySaving || wikiFolderPending) return; if (isKnowledgeLibraryWindow && !libraryReady) window.close(); else { setWikiFolderPicker(false); library.session.dismissFolder(); } }}

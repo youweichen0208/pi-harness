@@ -83,7 +83,7 @@ export function TaskProgressPanel({ task, silence, cwd, messages, onPreview, str
 						const shown = items.slice(0, 4);
 						const duration = phase.status !== "running" && phase.endedAt && phase.startedAt ? phase.endedAt - phase.startedAt : undefined;
 						return <li key={phase.id} className={`task-step ${phase.status}`}>
-							<span className="task-step-mark" aria-hidden="true">{phase.status === "done" ? "✓" : phase.status === "failed" ? "×" : <i className="thinking-spinner" />}</span>
+							<span className="task-step-mark" aria-hidden="true">{phase.status === "done" ? "✓" : phase.status === "failed" ? "×" : <svg className="task-step-spinner" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeDasharray="29 9" /></svg>}</span>
 							<button type="button" className="task-step-title task-step-toggle" title={phaseHeadline(phase, locale)} aria-expanded={expandedPhase === phase.id} onClick={() => setExpandedPhase(value => value === phase.id ? null : phase.id)}><span>{phaseHeadline(phase, locale, true)}</span><FiChevronRight className={expandedPhase === phase.id ? "open" : ""} /></button>
 							{phase.status === "running" && <span className="task-step-current">{t("taskStepCurrent")}</span>}
 							{duration !== undefined && duration >= 100 && <span className="task-step-time">{duration < 60_000 ? commandDuration(duration) : elapsedLabel(duration / 1000)}</span>}

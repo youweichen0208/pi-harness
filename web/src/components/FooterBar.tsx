@@ -1,6 +1,6 @@
 import { compactWorkspacePath } from "../display-path";
 import { useEffect, useRef, useState } from "react";
-import { FiFile, FiFolder } from "react-icons/fi";
+import { FiFile, FiFolder, FiGitBranch } from "react-icons/fi";
 import type { ChatState } from "../use-chat";
 import { useT } from "../i18n";
 
@@ -134,10 +134,7 @@ export function FooterBar({ chat, send }: FooterBarProps) {
 			<span className="status-sep">·</span>
 
 
-			<span className="status-item status-branch" title={git?.notRepo ? branchLabel : `${t("scmCurrentBranch")}: ${branchLabel}`}>
-				{!git?.notRepo && <span className="workspace-stat-label">{t("workspaceBranch")}</span>}
-				<span className="status-branch-name">{branchLabel}</span>
-			</span>
+
 
 			{chat.statuses.length > 0 && (
 				<>
@@ -193,10 +190,10 @@ export function FooterBar({ chat, send }: FooterBarProps) {
 				<button
 					type="button"
 					className="status-item status-cwd"
-					title={t("cwdTip", { path: state.cwd })}
+					title={`${t("cwdTip", { path: state.cwd })} · ${branchLabel}`}
 					onClick={startEdit}
 				>
-					<span className="workspace-stat-label">{t("workspacePath")}</span><span className="workspace-stat-path">{compactWorkspacePath(state.cwd)}</span>
+					<FiFolder aria-hidden="true" /><span className="workspace-stat-path">{compactWorkspacePath(state.cwd)}</span><span className="status-branch" title={branchLabel}><FiGitBranch aria-hidden="true" /><span className="status-branch-name">{branchLabel}</span></span>
 				</button>
 			)}
 		</footer>

@@ -13,6 +13,12 @@ vi.mock("../../server/subagents/runner.js", () => ({ runSubagents }));
 vi.mock("../../server/subagents/settings.js", () => ({ subagentSettings }));
 vi.mock("../../server/subagents/inspect.js", () => ({ inspectSubagentSources }));
 
+vi.mock("../../server/subagents/tasks.js", () => ({ TaskRecord: class {
+	controller = new AbortController(); id = "fixture-task"; data: { task: unknown };
+	constructor(_session: string, _call: string, _turn: string, task: unknown, private notify: (task: unknown) => void) { this.data = { task }; }
+	update(patch: object) { this.data.task = { ...(this.data.task as object), ...patch }; this.notify(this.data.task); }
+} }));
+
 const cwd = join(tmpdir(), "subagent-extension-fixture");
 const repository = { id: "repository:fixture", name: "Orders", kind: "repository" as const, root: cwd };
 let sources: SubagentSources;
@@ -138,8 +144,8 @@ describe("subagent extension admission and request lifecycle", () => {
 		const abort = new AbortController(), update = vi.fn();
 		await execute({ action: "run", scope: "selected", tasks: tasks(1) }, abort.signal, update);
 		expect(update).toHaveBeenCalledWith(expect.objectContaining({
-			content: [{ type: "text", text: expect.stringContaining("Orders: running · source_search") }],
-			details: { subagents: [{ sourceId: repository.id, source: "Orders", root: cwd, task: expect.stringContaining("Investigate area 0"), phase: "running", tool: "source_search" }] },
+			content: [{ type: "text", text: expect.stringContaining("Investigate area 0: running · source_search") }],
+			details: { subagents: [expect.objectContaining({ sourceId: repository.id, source: "Orders", root: cwd, task: expect.stringContaining("Investigate area 0"), phase: "running", tool: "source_search" })] },
 		}));
 		abort.abort(); expect(signals[0].aborted).toBe(true);
 		await execute({ action: "run", scope: "selected", tasks: tasks(1) });
@@ -150,25 +156,20 @@ describe("subagent extension admission and request lifecycle", () => {
 	});
 });
 
-test("issue #135 defaults to one child per workspace source, merging repeated repository tasks", async () => {
+test("explicit tasks remain separate even when they share the same repository", async () => {
 	const payment = { ...repository, id: "repository:payments", name: "Payments", root: join(cwd, "payments") };
 	const library = { ...repository, id: "knowledge:library", kind: "knowledge" as const, name: "Library", root: join(cwd, "library") };
 	sources.sources = [repository, payment, library];
 	await execute({ action: "run", tasks: Array.from({ length: 5 }, (_, i) => ({ sourceId: repository.id, task: `Investigate area ${i}` })) });
 	const jobs = runSubagents.mock.calls[0][0] as SubagentJob[];
-	expect(jobs.map(job => job.source.id)).toEqual([repository.id, payment.id, library.id]);
+	expect(jobs.map(job => job.source.id)).toEqual(Array(5).fill(repository.id));
 });
 
-test("workspace paging covers more than twelve sources and resets for a new user question", async () => {
+test("explicit batches cover large workspaces and the task budget resets for new questions", async () => {
 	sources.sources = Array.from({ length: 17 }, (_, i) => ({ ...repository, id: `repository:${i}`, root: join(cwd, String(i)) }));
-	for (let page = 0; page < 3; page++) {
-		const result = await execute({ action: "run", question: "Investigate all sources" });
-		const output = JSON.parse(String(result.content[0].type === "text" && result.content[0].text));
-		expect(output.remainingSourceIds).toHaveLength(Math.max(0, 17 - (page + 1) * 8));
-	}
-	const ids = runSubagents.mock.calls.flatMap(call => (call[0] as SubagentJob[]).map(job => job.source.id));
-	expect(ids).toHaveLength(17); expect(new Set(ids).size).toBe(17);
+	for (let page = 0; page < 3; page++) await execute({ action: "run", tasks: sources.sources.slice(page * 8, page * 8 + 8).map(source => ({ sourceIds: [source.id], task: "Investigate" })) });
+	expect(runSubagents.mock.calls.flatMap(call => call[0])).toHaveLength(17);
 	sessionManager.appendMessage({ role: "user", content: "Another question", timestamp: Date.now() });
-	await execute({ action: "run" });
-	expect(runSubagents.mock.calls.at(-1)![0]).toHaveLength(8);
+	await execute({ action: "run", tasks: [{ sourceIds: [sources.sources[0].id], task: "Follow up" }] });
+	expect(runSubagents.mock.calls.at(-1)![0]).toHaveLength(1);
 });

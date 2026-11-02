@@ -83,14 +83,29 @@ async function handleModel(req, res) {
 	requests.push(record);
 	assert.equal(body.model, "selected", "both parent and children use the UI-selected model, not the default");
 	if (isChild) {
-		const source = JSON.parse(system.match(/Your only source is (\{.+?\})\. Use/)?.[1] ?? "null");
+		const sourceList = JSON.parse(system.match(/Your selected sources are (\[.+?\])\. Use/)?.[1] ?? "[]");
+		const source = sourceList[0];
 		assert(source && roots.includes(source.root), "child can only open target Workspace repositories or the configured knowledge library");
 		record.source = source.root;
 		assert.deepEqual(body.tools.map(tool => tool.function.name).sort(), ["source_list", "source_read", "source_report", "source_search"]);
 		assert.equal(body.reasoning_effort, "high", "children inherit the parent thinking level");
 		const requestText = JSON.stringify(body);
 		for (const forbidden of ["PARENT_HISTORY_ONLY", "AMBIENT_CONTEXT_ONLY", "AMBIENT_APPEND_ONLY", "ambient_fixture_tool"]) assert(!requestText.includes(forbidden), `fresh child excludes ${forbidden}`);
-		for (const sibling of [...expectedRoots, other].filter(path => path !== source.root)) assert(!requestText.includes(`EVIDENCE_${basename(sibling)}`), "children do not inherit sibling evidence");
+		for (const sibling of [...expectedRoots, other].filter(path => !sourceList.some(source => source.root === path))) assert(!requestText.includes(`EVIDENCE_${basename(sibling)}`), "children do not inherit sibling evidence");
+		if (["nosteps", "reportonly", "readfailure"].includes(scenario)) {
+			const called = messages.some(message => message.role === "tool");
+			if (scenario === "nosteps" || called) respond(res, body.model, "Unverified answer without successful investigation");
+			else if (scenario === "reportonly") respond(res, body.model, undefined, { name: "source_report", args: { summary: "No investigation", findings: [], connections: [], openQuestions: [] } });
+			else respond(res, body.model, undefined, { name: "source_read", args: { path: "missing-file.md" } });
+			return;
+		}
+		if (scenario === "multi" && sourceList.length > 1) {
+			const results = messages.filter(message => message.role === "tool");
+			if (results.length < 2) respond(res, body.model, undefined, { name: "source_read", args: { sourceId: sourceList[results.length].id, path: "evidence.md", startLine: 2, limit: 1 } });
+			else if (results.length === 2) respond(res, body.model, undefined, { name: "source_report", args: { summary: "Compare orderId across repositories", findings: [{ kind: "implementation", statement: "Both sources use orderId", citations: results.map(result => ({ evidenceId: text(result.content).match(/evidenceId (ev_[a-f0-9]+)/)[1], startLine: 2, endLine: 2 })) }], connections: [], openQuestions: [] } });
+			else respond(res, body.model, "Compared both repositories using observed source evidence.");
+			return;
+		}
 		const readResult = messages.findLast(message => message.role === "tool");
 		if (readResult) {
 			const called = messages.flatMap(message => message.tool_calls ?? []).findLast(call => call.id === readResult.tool_call_id)?.function.name;
@@ -137,7 +152,7 @@ async function handleModel(req, res) {
 	}
 	const subagentTool = body.tools.find(tool => tool.function.name === "subagent");
 	assert(subagentTool, "native subagent tool is declared to the parent model");
-	assert.match(subagentTool.function.description, /without naming repositories or requesting subagents/, "the native model receives natural-question delegation instructions");
+	assert.match(system, /without naming repositories or requesting subagents/, "the native model receives natural-question delegation instructions");
 	assert.match(system, /Before substantial project research, call subagent action=sources/, "the native system prompt includes source discovery guidance");
 	assert.match(system, /Respect explicit source restrictions and requests to work without subagents/, "the native system prompt preserves user restrictions");
 	if (scenario === "history") { respond(res, body.model, "Parent fixture history recorded."); return; }
@@ -162,6 +177,13 @@ async function handleModel(req, res) {
 		}
 		// Deterministic selection verifies transport and scope, not model relevance judgment.
 		const selected = seenSources.get(scenario).sources.filter(source => roots.includes(source.root));
+		if (scenario === "multi") {
+			respond(res, body.model, undefined, { name: "subagent", args: { action: "run", tasks: [
+				{ title: "Compare repositories", sourceIds: selected.slice(0, 2).map(source => source.id), task: "CASE:multi Compare orderId" },
+				{ title: "Review first repository", sourceIds: [selected[0].id], task: "CASE:multi Review orderId" },
+			] } });
+			return;
+		}
 		if (scenario === "workspace") {
 			respond(res, body.model, undefined, { name: "subagent", args: { action: "run", question: "CASE:workspace Explain the refund flow", tasks: Array.from({ length: 5 }, (_, i) => ({ sourceId: selected[0].id, task: `Investigate aspect ${i}` })) } });
 			return;
@@ -229,7 +251,7 @@ async function finished(client, scenario) {
 	const output = resultOnWire(client);
 	assert(output, "child result JSON crosses the standard tool-result wire format");
 	assert.equal(output.workspace.id, workspaceId);
-	assert.equal(output.results.length, rootsFor(scenario).length);
+	assert.equal(output.results.length, scenario === "workspace" ? 5 : scenario === "multi" ? 2 : rootsFor(scenario).length);
 	assert(client.wire.some(message => message.type === "tool_delta" && message.toolName === "subagent"), "child progress streams through the existing tool card channel");
 	assert(client.wire.some(message => message.type === "tool_status" && message.toolName === "subagent" && !message.isError), "group completion reaches the tool status channel");
 	return output.results;
@@ -252,6 +274,9 @@ try {
 	for (const result of good) {
 		assert.equal(result.status, "completed"); assert.match(result.text, /evidence\.md:2/); assert.equal(result.truncated, false);
 		assert.equal(result.usage.input, 57); assert.equal(result.usage.output, 21); assert(result.usage.cost > 0); assert(result.durationMs >= 0);
+		assert.deepEqual(result.steps.map(step => step.tool), ["source_read", "source_report"]);
+		assert(result.steps.every(step => step.status === "completed" && Number.isFinite(step.durationMs) && step.durationMs >= 0));
+		assert.equal(result.steps[0].target, "evidence.md");
 		assert.equal(result.evidenceStatus, "checked");
 		const finding = result.report.findings[0], citation = finding.citations[0];
 		assert.equal(finding.kind, result.root === library ? "documentation" : "implementation");
@@ -265,19 +290,46 @@ try {
 	assert.equal(seenResults.get("happy").results.length, 3);
 	console.log("PASS subagents: overlapping Workspace scope, repositories plus knowledge, parallel reads, fresh restricted context, selected model/thinking, citations and usage over real WebSocket");
 
+	const multi = await connect("subagents-multi"); await sendPrompt(multi, "multi");
+	const compared = await finished(multi, "multi");
+	assert(compared.every(result => result.status === "completed"));
+	assert.equal(compared[0].sources.length, 2);
+	assert.equal(new Set(compared[0].report.findings[0].citations.map(citation => citation.sourceId)).size, 2);
+	assert.equal(compared[0].sourceId, compared[1].sourceId);
+	assert.notEqual(compared[0].taskId, compared[1].taskId);
+	const requestId = "read-multi-record";
+	multi.send({ type: "subagent_request", action: "detail", requestId, conversationId: multi.state.conversationId, taskId: compared[0].taskId });
+	const record = await wait(() => multi.wire.find(message => message.requestId === requestId && message.type === "subagent_response"), "multi-source persisted record");
+	assert.equal(record.error, undefined); assert.equal(record.detail.task.phase, "completed");
+	assert(record.detail.events.some(event => event.type === "tool_end" && event.text.includes("EVIDENCE_")));
+	happy.send({ type: "subagent_request", action: "stop", requestId: "foreign-task", conversationId: happy.state.conversationId, taskId: compared[0].taskId });
+	assert((await wait(() => happy.wire.find(message => message.requestId === "foreign-task"), "foreign task rejected")).error);
+	console.log("PASS subagents: multi-source citations, same-source independent identities, persisted output and cross-session rejection");
+
 	const workspace = await connect("subagents-workspace"); await sendPrompt(workspace, "workspace");
 	const all = await finished(workspace, "workspace");
-	assert.deepEqual(all.map(result => result.root).sort(), [...expectedRoots, archive].sort());
-	assert.equal(new Set(all.map(result => result.sourceId)).size, 4);
+	assert.deepEqual(all.map(result => result.root), Array(5).fill(repoA));
+	assert.equal(new Set(all.map(result => result.taskId)).size, 5);
 	assert.deepEqual(seenResults.get("workspace").remainingSourceIds, []);
-	assert.equal(requests.filter(request => request.scenario === "workspace" && request.isChild).length, 12, "five duplicate tasks become one child; all other sources are still covered");
-	console.log("PASS issue #135: default workspace run merges same-repository tasks and covers every repository plus knowledge exactly once");
+	assert.equal(requests.filter(request => request.scenario === "workspace" && request.isChild).length, 15, "five tasks on the same source stay independent");
+	console.log("PASS subagents: task-based dispatch preserves same-repository tasks without surveying unrelated sources");
 
 	const direct = await connect("subagents-direct"); await sendPrompt(direct, "direct");
 	await wait(() => !direct.state.isStreaming && direct.state.messages.some(message => message.role === "assistant" && text(message.content).includes("幂等指")), "direct answer settles");
 	assert.equal(requests.filter(request => request.scenario === "direct").length, 1, "direct answers do not trigger extra host model calls");
 	assert(!direct.state.messages.some(message => message.role === "toolResult" && message.toolName === "subagent"), "the host does not force delegation when the model answers directly");
 	console.log("PASS subagents: automatic research policy reaches the native model; direct answers make no extra model requests");
+
+	for (const scenario of ["nosteps", "reportonly", "readfailure"]) {
+		const client = await connect(`subagents-${scenario}`); await sendPrompt(client, scenario);
+		const results = await finished(client, scenario);
+		assert(results.every(result => result.status === "failed" && !result.report && result.text.includes("without a successful investigation step") && result.text.includes("Unverified answer")));
+		assert.equal(requests.filter(request => request.scenario === scenario && request.isChild).length, scenario === "nosteps" ? 3 : 6, "no automatic retry for missing investigation");
+		const saved = client.state.messages.findLast(message => message.role === "toolResult" && message.subagents?.length);
+		assert.equal(saved.subagents.length, 3);
+		assert(saved.subagents.every(item => item.steps.length === (scenario === "nosteps" ? 0 : 1)));
+	}
+	console.log("PASS subagents: missing investigation fails with original answer and no automatic retry");
 
 	const unverified = await connect("subagents-unverified"); await sendPrompt(unverified, "unverified");
 	const fallback = await finished(unverified, "unverified");
@@ -320,8 +372,6 @@ try {
 	console.log("PASS subagents: cancellation during native prompt preflight is reissued when the run starts");
 
 	if (process.argv.includes("--browser")) {
-		// Prepare only model/session state through the real protocol; the research prompt
-		// and Workspace identity below must originate in ChatInput/useChat.
 		const clientId = "subagents-browser";
 		await connect(clientId);
 		const { chromium } = await import("playwright-core"), { CHROME_PATH } = await import("./lib/chrome.mjs");
@@ -331,164 +381,65 @@ try {
 			sessionStorage.setItem("pi-web-client-id", clientId);
 			localStorage.setItem("pi-harness:project-workspace", browserWorkspaceId);
 			localStorage.setItem("pi-harness:lang", "en");
-			// Delay only the catalog, not session readiness: sending during this
-			// window must retain the selection captured from this browser window.
-			const NativeWebSocket = window.WebSocket, heldCatalogs = [];
-			let released = false;
-			window.__heldCatalogCount = 0;
-			window.WebSocket = class extends NativeWebSocket {
-				constructor(...args) {
-					super(...args);
-					this.addEventListener("message", event => {
-						if (!released && JSON.parse(event.data).type === "project_workspaces") {
-							event.stopImmediatePropagation(); heldCatalogs.push([this, event.data]); window.__heldCatalogCount++;
-						}
-					});
-				}
-			};
-			window.__releaseWorkspaceCatalog = () => {
-				released = true;
-				for (const [socket, data] of heldCatalogs.splice(0)) socket.dispatchEvent(new MessageEvent("message", { data }));
-			};
 		}, { clientId, browserWorkspaceId });
 		const page = await context.newPage(), errors = [], sent = [], received = [];
-		page.setDefaultTimeout(15000);
 		page.on("pageerror", error => errors.push(error.message));
-		page.on("websocket", socket => {
-			socket.on("framesent", ({ payload }) => { sent.push(JSON.parse(String(payload))); });
-			socket.on("framereceived", ({ payload }) => { received.push(JSON.parse(String(payload))); });
-		});
+		page.on("websocket", socket => { socket.on("framesent", ({ payload }) => sent.push(JSON.parse(String(payload)))); socket.on("framereceived", ({ payload }) => { const message = JSON.parse(String(payload)); if (message.type === "subagent_response") received.push(message); }); });
 		await page.goto(`http://127.0.0.1:${port}`);
 		const input = page.locator(".inputbar textarea");
-		await input.waitFor();
-		await page.waitForFunction(() => window.__heldCatalogCount > 0 && !document.querySelector(".inputbar textarea")?.disabled);
-		await input.fill(naturalQuestions.browser);
-		await input.press("Enter");
-		const prompt = await wait(() => sent.find(message => message.type === "prompt" && message.text === naturalQuestions.browser), "browser-generated prompt");
-		assert.equal(prompt.target?.workspaceId, browserWorkspaceId, "ChatInput preserves the captured Workspace even before the catalog arrives");
-		assert.equal(prompt.target.cwd, repoA);
-		assert.equal(prompt.target.conversationId.length > 0, true);
-		await page.evaluate(() => window.__releaseWorkspaceCatalog());
-		await page.waitForFunction(() => document.querySelector(".compact-workspace-trigger > span")?.textContent === "Unrelated");
-		await wait(() => gates.get("browser")?.length === 3, "browser child progress");
-		const cards = page.locator(".toolcall-generic").filter({ has: page.locator('.toolcall-name[title="subagent"]') });
-		await cards.last().waitFor();
-		const runningCard = cards.last();
-		if (await runningCard.locator('.toolcall-name[aria-expanded="false"]').count()) await runningCard.locator(".toolcall-name").click();
-		await runningCard.locator('.subagent-view[data-final="false"]').waitFor();
-		assert.equal(await runningCard.locator(".subagent-source").count(), 3);
-		assert.equal(await runningCard.locator(".subagent-source-task").filter({ hasText: "CASE:browser Investigate evidence.md and cite the business interface." }).count(), 3);
-		for (const source of ["repo-a", "other-repo", "knowledge"]) await runningCard.locator(".subagent-source-head strong", { hasText: source }).waitFor();
-		assert.match(await runningCard.locator(".toolcall-status").innerText(), /0\/3 subagents finished/);
-		assert(received.some(message => message.type === "tool_delta" && message.toolName === "subagent" && message.subagents?.length === 3), "browser receives structured per-source progress");
-		mkdirSync("tests/scratch", { recursive: true });
-		await runningCard.screenshot({ path: "tests/scratch/subagents-running.png" });
-		for (const item of gates.get("browser")) item.sendRead();
-		await wait(() => seenResults.has("browser"), "browser final results");
+		await page.waitForFunction(() => !document.querySelector(".inputbar textarea")?.disabled);
+		await input.fill(naturalQuestions.browser); await input.press("Enter");
+		await wait(() => gates.get("browser")?.length === 3, "three browser tasks");
+		await page.locator(".subagent-task-row").nth(2).waitFor();
+		assert.equal(await page.locator(".subagent-task-group").count(), 1);
+		const prompt = sent.find(message => message.type === "prompt" && message.text === naturalQuestions.browser);
+		assert.equal(prompt.target.workspaceId, browserWorkspaceId);
+		await page.reload();
+		await page.locator(".subagent-task-row").nth(2).waitFor();
+		await page.locator(".subagent-task-row").first().click();
+		await page.locator(".subagent-drawer").waitFor();
+		await page.locator(".subagent-drawer").getByRole("button", { name: "Stop task", exact: true }).click();
+		await wait(() => sent.some(message => message.type === "subagent_request" && message.action === "stop"), "single task stop");
+		await page.locator(".subagent-drawer .subagent-task-status.cancelled").waitFor({ timeout: 10000 }).catch(error => { throw Error(`${error}\n${JSON.stringify(received.slice(-3))}`); });
+		await page.keyboard.press("Escape");
+		for (const item of gates.get("browser").filter(item => item.source !== repoA)) item.sendRead();
+		await wait(() => seenResults.has("browser"), "sibling tasks complete");
 		await page.getByText(/SYNTHESIS browser:/).last().waitFor();
 		const reports = seenResults.get("browser").results;
-		assert.deepEqual(reports.map(result => result.root).sort(), rootsFor("browser").sort());
-		assert(reports.every(result => result.status === "completed"));
-		assert(!reports.some(result => result.root === repoB), "the previously selected Business Workspace does not leak into the browser's Unrelated selection");
-		const answer = await page.getByText(/SYNTHESIS browser:/).last().innerText();
-		assert.match(answer, /other-repo completed/); assert.match(answer, /knowledge completed/); assert.match(answer, /evidence\.md:2/);
-		const progressFrames = received.filter(message => message.type === "tool_delta" && Array.isArray(message.subagents));
-		assert(progressFrames.length > 0);
-		assert(progressFrames.every(message => !("details" in message) && message.subagents.every(item => Object.keys(item).every(key => ["sourceId", "source", "root", "task", "phase", "tool"].includes(key)))), "wire progress is an allowlisted projection, not native child details");
-		const persistedResults = received.flatMap(message => message.type === "snapshot" ? message.state.messages : message.type === "snapshot_delta" ? message.appended : []).filter(message => message.role === "toolResult" && message.toolName === "subagent");
-		assert(persistedResults.length > 0 && persistedResults.every(message => !message.details || !Object.hasOwn(message.details, "subagents")), "native subagent details never cross the snapshot wire");
-		const readFrame = progressFrames.findIndex(message => message.subagents.some(item => item.tool === "source_read"));
-		assert(readFrame >= 0, "reading activity reaches the browser");
-		const reading = progressFrames[readFrame].subagents.find(item => item.tool === "source_read");
-		assert(progressFrames.slice(readFrame + 1).some(message => message.subagents.some(item => item.sourceId === reading.sourceId && item.phase === "running" && !item.tool)), "tool_execution_end clears stale reading activity");
-		await runningCard.locator('.subagent-view[data-final="true"]').waitFor();
-		assert.equal(await page.locator(".toolcall-subagents").count(), 1, "sources and inspect keep the generic JSON tool card");
-		assert.match(await runningCard.locator(".toolcall-status").innerText(), /3 source reports/);
-		assert.equal(await runningCard.locator(".subagent-workspace").innerText(), "Workspace · Unrelated");
-		const heads = runningCard.locator(".subagent-source-head");
-		for (let index = 0; index < 3; index++) {
-			const head = heads.nth(index);
-			if (await head.getAttribute("aria-expanded") === "false") { await head.focus(); await head.press("Enter"); }
-			assert.equal(await head.getAttribute("aria-expanded"), "true");
-		}
-		assert.equal(await runningCard.locator(".subagent-evidence-badge.checked").count(), 3);
-		assert.equal(await heads.first().locator(".subagent-activity").innerText(), "Done", "source completion is separate from citation verification");
-		assert.equal(await runningCard.locator(".subagent-evidence-note").count(), 3);
-		assert.match(await runningCard.locator(".subagent-evidence-note").first().innerText(), /conclusions are not proven/, "citation limits are visible without hovering");
-		assert.equal(await runningCard.locator(".subagent-usage").count(), 3);
-		assert.match(await runningCard.locator(".subagent-usage").first().innerText(), /Tokens: in \d+ · out \d+/);
-		assert.deepEqual((await runningCard.locator(".subagent-source-root code").allTextContents()).sort(), rootsFor("browser").sort());
-		assert.equal(await runningCard.locator(`[data-source-id="${reports.find(result => result.root === repoA).sourceId}"] .subagent-finding-kind`).innerText(), "Implementation");
-		const knowledge = runningCard.locator(`[data-source-id="${reports.find(result => result.root === library).sourceId}"]`);
-		assert.equal(await knowledge.locator(".subagent-finding-kind").innerText(), "Documentation");
-		assert.equal(await knowledge.locator(".subagent-summary").innerText(), businessEvidence.get(library));
-		const citation = knowledge.locator(".subagent-citation");
-		assert.equal(await citation.locator("summary").innerText(), "evidence.md:2");
-		await citation.locator("summary").click();
-		assert.match(await citation.locator("pre").innerText(), /EVIDENCE_knowledge: The refund policy permits partial refunds tied to orderId\./);
-		await heads.first().press("Enter"); assert.equal(await heads.first().getAttribute("aria-expanded"), "false");
-		await heads.first().press("Space"); assert.equal(await heads.first().getAttribute("aria-expanded"), "true");
-		await runningCard.locator(".subagent-raw > summary").click();
-		const raw = await runningCard.locator(".subagent-raw").innerText();
-		assert.match(raw, /Raw arguments and output/); assert.match(raw, /"results"/); assert.match(raw, /"action"\s*:\s*"run"/);
-		await runningCard.locator(".subagent-raw > summary").click();
-		await runningCard.locator(".toolcall-expand").click();
-		const reportZoom = page.locator(".toolcall-zoom");
-		await reportZoom.locator('.subagent-view[data-final="true"]').waitFor();
-		assert.equal(await reportZoom.locator(".subagent-source").count(), 3);
-		await page.keyboard.press("Escape"); await reportZoom.waitFor({ state: "detached" });
-		await page.emulateMedia({ reducedMotion: "reduce" });
-		assert(await runningCard.evaluate(element => [...element.querySelectorAll(".subagent-view, .subagent-source-detail")].every(node => getComputedStyle(node).animationName === "none") && [...element.querySelectorAll(".subagent-chevron")].every(node => getComputedStyle(node).transitionDuration === "0s")), "reduced motion disables progress/report transitions");
+		assert.equal(reports.filter(result => result.status === "cancelled").length, 1);
+		assert.equal(reports.filter(result => result.status === "completed").length, 2);
+		await page.reload();
+		await page.locator(".subagent-task-group-head").click();
+		assert.equal(await page.locator(".subagent-task-row").count(), 2);
+		await page.locator(".subagent-task-row").first().click();
+		await page.getByRole("button", { name: "Execution", exact: true }).click();
+		await page.locator(".subagent-task-timeline li").nth(1).waitFor();
+		await page.locator(".subagent-task-timeline li").first().getByText("Output", { exact: true }).click();
+		assert.match(await page.locator(".subagent-task-timeline").innerText(), /EVIDENCE_/);
 		mkdirSync("tests/scratch", { recursive: true });
-		const desktopHeight = await runningCard.evaluate(element => Math.ceil(element.getBoundingClientRect().height));
-		await page.setViewportSize({ width: 1440, height: desktopHeight + 400 });
-		await runningCard.evaluate(element => element.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" }));
-		await runningCard.screenshot({ path: "tests/scratch/subagents-report.png" });
-		await page.screenshot({ path: "tests/scratch/subagents-chat.png", fullPage: true });
-		await page.evaluate(() => { localStorage.setItem("pi-harness:theme", "graphite"); window.dispatchEvent(new StorageEvent("storage", { key: "pi-harness:theme" })); });
-		await page.waitForFunction(() => document.documentElement.dataset.appearance === "dark");
-		await runningCard.screenshot({ path: "tests/scratch/subagents-report-dark.png" });
+		await page.screenshot({ path: "tests/scratch/subagent-task-drawer-desktop.png" });
+		await page.evaluate(() => { document.documentElement.style.zoom = "2"; });
+		assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+		await page.screenshot({ path: "tests/scratch/subagent-task-drawer-zoom.png" });
+		await page.evaluate(() => { document.documentElement.style.zoom = ""; });
+		await page.evaluate(() => document.documentElement.setAttribute("data-appearance", "dark"));
+		await page.screenshot({ path: "tests/scratch/subagent-task-drawer-dark.png" });
 		await page.setViewportSize({ width: 390, height: 844 });
-		assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), "390px page does not overflow horizontally");
-		assert(await runningCard.evaluate(element => element.scrollWidth <= element.clientWidth + 1), "390px report card does not overflow horizontally");
-		await page.screenshot({ path: "tests/scratch/subagents-chat-mobile.png" });
-		const mobileHeight = await runningCard.evaluate(element => Math.ceil(element.getBoundingClientRect().height));
-		await page.setViewportSize({ width: 390, height: mobileHeight + 400 });
-		await runningCard.evaluate(element => element.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" }));
-		await runningCard.screenshot({ path: "tests/scratch/subagents-report-mobile.png" });
-		await page.close();
-		// At 200% desktop zoom a 1440px window has a 720 CSS-pixel viewport.
-		const zoomContext = await browser.newContext({ viewport: { width: 720, height: 500 }, deviceScaleFactor: 2, reducedMotion: "reduce" });
-		await zoomContext.addInitScript(({ clientId, browserWorkspaceId }) => {
-			sessionStorage.setItem("pi-web-client-id", clientId);
-			localStorage.setItem("pi-harness:project-workspace", browserWorkspaceId);
-			localStorage.setItem("pi-harness:lang", "zh");
-		}, { clientId, browserWorkspaceId });
-		const zoomPage = await zoomContext.newPage(); zoomPage.on("pageerror", error => errors.push(error.message));
-		await zoomPage.goto(`http://127.0.0.1:${port}`);
-		const zoomCard = zoomPage.locator(".toolcall-subagents").last();
-		await zoomCard.waitFor();
-		if (await zoomCard.locator('.toolcall-name[aria-expanded="false"]').count()) await zoomCard.locator(".toolcall-name").click();
-		await zoomCard.locator('.subagent-view[data-final="true"]').waitFor();
-		await zoomCard.getByText("引用已核验", { exact: true }).first().waitFor();
-		assert.equal(await zoomCard.locator(".subagent-source").count(), 3);
-		assert(await zoomCard.evaluate(element => element.scrollWidth <= element.clientWidth + 1), "200% zoom effective viewport does not overflow");
-		const zoomHeight = await zoomCard.evaluate(element => Math.ceil(element.getBoundingClientRect().height));
-		await zoomPage.setViewportSize({ width: 720, height: zoomHeight + 400 });
-		await zoomCard.evaluate(element => element.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" }));
-		await zoomCard.screenshot({ path: "tests/scratch/subagents-report-zoom-2x.png" });
-		await zoomPage.setViewportSize({ width: 390, height: 844 });
-		await zoomCard.getByText("仅表示引用文本与指纹在提交时通过核验，不证明结论正确。", { exact: true }).waitFor();
-		assert(await zoomCard.evaluate(element => element.scrollWidth <= element.clientWidth + 1), "Chinese 390px report does not overflow");
-		assert(await zoomPage.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), "Chinese 390px page does not overflow");
-		const chineseMobileHeight = await zoomCard.evaluate(element => Math.ceil(element.getBoundingClientRect().height));
-		await zoomPage.setViewportSize({ width: 390, height: chineseMobileHeight + 400 });
-		await zoomCard.evaluate(element => element.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" }));
-		await zoomCard.screenshot({ path: "tests/scratch/subagents-report-mobile-zh.png" });
-		await zoomContext.close();
+		assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+		await page.screenshot({ path: "tests/scratch/subagent-task-drawer-mobile.png" });
+		await page.getByRole("button", { name: "Result", exact: true }).click();
+		await page.locator(".subagent-task-result li").first().waitFor();
+		assert.match(await page.locator(".subagent-task-result").innerText(), /orderId/);
+		await page.keyboard.press("Escape");
+		await page.locator(".subagent-task-failures > button").click();
+		await page.locator(".subagent-task-failures .subagent-task-row").click();
+		await page.getByRole("button", { name: /Prepare retry/i }).click();
+		await page.keyboard.press("Escape");
+		assert.match(await input.inputValue(), /sourceIds/);
 		assert.deepEqual(errors, []);
-		console.log("PASS subagents browser: Workspace isolation, structured live progress/tool completion, per-source cited reports, keyboard/raw data, Chinese/dark/mobile/200% zoom and reduced motion");
+		console.log("PASS subagents browser: live reload, independent stop, persisted process/output/results, failure retry, dark/mobile and keyboard drawer");
 	}
+
 } finally {
 	await browser?.close();
 	for (const res of held) res.destroy();

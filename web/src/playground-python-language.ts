@@ -36,7 +36,7 @@ export function pythonLanguageSupport(onStatus: (state: "loading" | "ready" | "e
 		try {
 			const result = await request(code, context.pos, "completion");
 			if (closed || context.aborted) return null;
-			return { from: word?.from ?? context.pos, options: (result.items ?? []).map(item => ({
+			return { from: word?.from ?? context.pos, options: (result.items ?? []).filter(item => !item.label.startsWith("_")).map(item => ({
 				label: item.label, detail: item.detail?.endsWith(item.label) ? undefined : item.detail, info: item.info, type: item.kind === 2 || item.kind === 3 ? "function" : item.kind === 7 ? "class" : "variable",
 				apply(view: EditorView) {
 					if (view.state.doc.toString() !== code) return;

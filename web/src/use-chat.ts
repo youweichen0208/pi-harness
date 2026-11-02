@@ -907,6 +907,18 @@ export function useChat() {
 		return false;
 	}, []);
 
+	useEffect(() => {
+		const request = (event: Event) => {
+			const detail = (event as CustomEvent<{ requestId: string; taskId: string; action: "detail" | "stop"; cursor?: number }>).detail;
+			const conversationId = authoritative.current.state?.conversationId;
+			if (!conversationId || !send({ type: "subagent_request", conversationId, ...detail })) {
+				window.dispatchEvent(new CustomEvent("pi:subagent-response", { detail: { ...detail, conversationId, error: "Connection unavailable" } }));
+			}
+		};
+		window.addEventListener("pi:subagent-request", request);
+		return () => window.removeEventListener("pi:subagent-request", request);
+	}, [send]);
+
 	/** Stable across renders — the reconnect loop lives entirely inside this closure. */
 	const connect = useCallback(() => {
 		if (!aliveRef.current) return;
@@ -938,6 +950,9 @@ export function useChat() {
 				return;
 			}
 			switch (msg.type) {
+				case "subagent_response":
+					window.dispatchEvent(new CustomEvent("pi:subagent-response", { detail: msg }));
+					break;
 				case "node_event":
 					window.dispatchEvent(new CustomEvent("pi-node-event", { detail: msg }));
 					break;

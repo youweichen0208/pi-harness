@@ -211,3 +211,18 @@ describe("structured research evidence", () => {
 		expect(research.getReportError()).toBeUndefined();
 	});
 });
+
+test("multi-source tools isolate identical paths, require explicit routing and verify both sources", async () => {
+	const other = join(fixture, "other"); mkdirSync(other); writeFileSync(join(other, "refund.ts"), "Other implementation\n");
+	research = await createSubagentResearchTools(root, [{ id: "first", name: "First", root, kind: "repository" }, { id: "second", name: "Second", root: other, kind: "repository" }]);
+	await expect(run("source_read", { path: "refund.ts" })).rejects.toThrow(/sourceId/);
+	await expect(run("source_read", { sourceId: "outside", path: "refund.ts" })).rejects.toThrow(/sourceId/);
+	const reads = await Promise.all(["first", "second"].map(sourceId => run("source_read", { sourceId, path: "refund.ts", startLine: 1, limit: 1 })));
+	const ids = reads.map(result => text(result).match(/evidenceId (ev_[a-f0-9]{24})/)![1]);
+	expect(ids[0]).not.toBe(ids[1]);
+	const params = submission(ids[0]); params.findings[0].citations.push({ evidenceId: ids[1], startLine: 1, endLine: 1 });
+	expect((await run("source_report", params)).details).toMatchObject({ accepted: true });
+	expect(research.getReport()!.findings[0].citations.map(citation => citation.sourceId)).toEqual(["first", "second"]);
+	writeFileSync(join(other, "refund.ts"), "Changed implementation\n");
+	await expectRejected(params, /changed/i);
+});

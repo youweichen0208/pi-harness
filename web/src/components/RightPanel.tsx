@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useId, useCallback, useEffect, useRef, useState } from "react";
 import { FiChevronRight, FiFolder, FiFile, FiSearch, FiMaximize2, FiMoreHorizontal, FiPlus, FiRefreshCw, FiX } from "react-icons/fi";
 import type { FileEntry, FileListing, ScmFileEntry, ServerMessage, TaskProgress, UiMessage } from "../types";
 import { useT } from "../i18n";
@@ -8,6 +8,7 @@ import { TaskProgressPanel } from "./TaskProgressPanel";
 
 type AttachMode = "inline";
 interface RightPanelProps {
+	taskFocusRequest?: number;
 	active: boolean;
 	onSearchFiles: () => void;
 	files: FileListing | null;
@@ -27,8 +28,22 @@ interface RightPanelProps {
 	onPreview: (path: string, name: string) => void;
 }
 
-export const RightPanel = memo(function RightPanel({ onSearchFiles, active, files, fileChanged, changed, notRepo, widgets, messages, streamingMessage, isStreaming, taskProgress, conversationId, agentSilence, cwd, send, onAttach, onPreview }: RightPanelProps) {
+export const RightPanel = memo(function RightPanel({ taskFocusRequest = 0, onSearchFiles, active, files, fileChanged, changed, notRepo, widgets, messages, streamingMessage, isStreaming, taskProgress, conversationId, agentSilence, cwd, send, onAttach, onPreview }: RightPanelProps) {
 	const t = useT();
+	const tabId = useId();
+	const [tab, setTab] = useState<"files" | "task">("files");
+	const focusedRequest = useRef(0);
+	useEffect(() => {
+		if (!taskFocusRequest || focusedRequest.current === taskFocusRequest) return;
+		if (tab !== "task") { setTab("task"); return; }
+		const frame = requestAnimationFrame(() => {
+			focusedRequest.current = taskFocusRequest;
+			const panel = document.getElementById(`${tabId}-task`)?.querySelector<HTMLElement>(".task-progress");
+			panel?.focus({ preventScroll: true });
+			panel?.querySelector(".task-plan-step.running, .task-step.running")?.scrollIntoView({ block: "nearest" });
+		});
+		return () => cancelAnimationFrame(frame);
+	}, [taskFocusRequest, tabId, tab]);
 	const [rootOpen, setRootOpen] = useState(true);
 	useEffect(() => setRootOpen(true), [cwd]);
 	const [creating, setCreating] = useState(false);
@@ -39,7 +54,7 @@ export const RightPanel = memo(function RightPanel({ onSearchFiles, active, file
 	const [showOtherDirectories, setShowOtherDirectories] = useState(false);
 	useEffect(() => setShowOtherDirectories(false), [cwd, taskProgress?.id]);
 	const compactTree = taskProgress?.status === "running" && !notRepo && changed.length > 0 && !showOtherDirectories;
-	const [showHidden, setShowHidden] = useState(true);
+	const [showHidden, setShowHidden] = useState(false);
 	const [controlsOpen, setControlsOpen] = useState(false);
 	const controlsRef = useRef<HTMLDivElement>(null);
 	useEffect(() => {
@@ -156,8 +171,18 @@ export const RightPanel = memo(function RightPanel({ onSearchFiles, active, file
 		</div> : directoryEntries(path).map(({ entry, virtual }) => renderEntry(entry, depth, virtual))}
 		{directories[path]?.truncated && <div className="panel-empty files-truncated">{t("filesTruncated")}</div>}
 	</>;
+	const hiddenRootEntries = directoryEntries("").filter(({ entry }) => entry.name.startsWith(".") && !(entry.type === "dir" && hiddenMentioned.has(entry.name)));
 	const otherDirectories = directoryEntries("").filter(({ entry }) => entry.type === "dir" && !changed.some((change) => change.path === entry.path || change.path.startsWith(`${entry.path}/`)) && (showHidden || !entry.name.startsWith("."))).length;
 	return <aside className="panel panel-right has-task-progress">
+		<div className="right-panel-tabs" role="tablist" aria-label={t("rightPanelTabs")} onKeyDown={event => {
+			if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+			event.preventDefault();
+			const next = event.key === "Home" ? "files" : event.key === "End" ? "task" : tab === "files" ? "task" : "files";
+			setTab(next); document.getElementById(`${tabId}-${next}-tab`)?.focus();
+		}}>
+			{(["files", "task"] as const).map(value => <button type="button" key={value} id={`${tabId}-${value}-tab`} role="tab" aria-selected={tab === value} aria-controls={`${tabId}-${value}`} tabIndex={tab === value ? 0 : -1} onClick={() => setTab(value)}>{t(value === "files" ? "workspaceFiles" : "rightPanelTask")}</button>)}
+		</div>
+		<div className="right-files-pane" role="tabpanel" id={`${tabId}-files`} aria-labelledby={`${tabId}-files-tab`} hidden={tab !== "files"}>
 		<div className="panel-title"><span>{t("workspaceFiles")}</span><button type="button" className="tree-menu-trigger" aria-label={t("newWorkspaceFile")} title={t("newWorkspaceFile")} disabled={isStreaming || !cwd} onClick={() => setCreating(value => !value)}><FiPlus /></button><button type="button" className="tree-menu-trigger" aria-label={t("refreshWorkspaceFiles")} title={t("refreshWorkspaceFiles")} onClick={refreshFiles}><FiRefreshCw /></button><div className="tree-controls" ref={controlsRef}><button type="button" className="tree-menu-trigger" aria-label={t("more")} aria-expanded={controlsOpen} onClick={() => setControlsOpen(value => !value)}><FiMoreHorizontal /></button>{controlsOpen && <div className="tree-controls-menu"><button type="button" className="tree-hidden-toggle" role="switch" aria-checked={showHidden} onClick={() => setShowHidden(value => !value)}><span>{t("showHiddenFiles")}</span><span className="tree-switch-track" /></button></div>}</div></div>
 		{creating && <CreateFileForm key={`${cwd}:${conversationId}`} cwd={cwd} conversationId={conversationId} disabled={isStreaming} onCancel={() => setCreating(false)} onCreated={path => { setCreating(false); refreshFiles(); onPreview(path, path.split("/").at(-1)!); }} />}
 		<button type="button" className="tree-search" onClick={onSearchFiles}><FiSearch aria-hidden="true" /><span>{t("treeSearchFiles")}</span><kbd>{/Mac|iPhone|iPad/.test(navigator.platform) ? "⌘ P" : "Ctrl P"}</kbd></button>
@@ -188,11 +213,13 @@ export const RightPanel = memo(function RightPanel({ onSearchFiles, active, file
 			<button type="button" className="tree-root file-dir-main" data-tree-node="" title={cwd} onClick={() => setRootOpen(value => !value)}><span className={`tree-caret ${rootOpen ? "open" : ""}`}><FiChevronRight /></span><FiFolder className="tree-entry-icon" aria-hidden="true" /><strong>{cwd.replace(/[\\/]+$/, "").split(/[\\/]/).at(-1) || cwd}</strong></button>
 			{rootOpen && <div role="group">
 			{directories[""] ? renderDirectory("", 0) : <div className="panel-empty">{t("loading")}</div>}
+			{!showHidden && hiddenRootEntries.length > 0 && <button type="button" className="tree-hidden-summary" onClick={() => { setShowHidden(true); setShowOtherDirectories(true); }} title={hiddenRootEntries.map(({ entry }) => entry.name).join(", ")}>{t("showHiddenCount", { n: hiddenRootEntries.length })}<span>{hiddenRootEntries.slice(0, 3).map(({ entry }) => entry.name).join(", ")}{hiddenRootEntries.length > 3 ? "…" : ""}</span></button>}
 			{compactTree && otherDirectories > 0 && <button type="button" className="tree-other-directories" onClick={() => setShowOtherDirectories(true)}>{t("otherDirectories", { n: otherDirectories })}</button>}
 			</div>}
 			</div>
 		</div>
-		<div className="panel-lower"><TaskProgressPanel key={conversationId} task={taskProgress} streaming={isStreaming} live={streamingMessage} silence={agentSilence ?? null} cwd={cwd} messages={messages} onPreview={onPreview} /></div>
+		</div>
+		<div className="panel-lower" role="tabpanel" id={`${tabId}-task`} aria-labelledby={`${tabId}-task-tab`} hidden={tab !== "task"}><TaskProgressPanel key={conversationId} task={taskProgress} streaming={isStreaming} live={streamingMessage} silence={agentSilence ?? null} cwd={cwd} messages={messages} onPreview={onPreview} /></div>
 			{widgets.filter((w) => w.lines.length > 0).length > 0 && (
 				<div className="panel-widgets">
 					{widgets

@@ -48,7 +48,67 @@ if request.get("toolsPath"):
     sys.path.insert(0, request["toolsPath"])
 def utf16(s):
     return len(s.encode("utf-16-le")) // 2
-if action == "format":
+if action == "indent":
+    import io, tokenize
+    lines = code.splitlines(keepends=True)
+    first, last = request.get("fromLine", 1), request.get("toLine", len(lines))
+    def leading(text):
+        return text[:len(text) - len(text.lstrip(" \t"))]
+    def check(source):
+        return compile(source, "scratch.py", "exec", flags=ast.PyCF_ONLY_AST)
+    # Only repair a local indentation gap whose neighbours agree. Never execute source.
+    for attempt in range(16):
+        try:
+            tree = check("".join(lines))
+            break
+        except IndentationError as error:
+            row = (error.lineno or 1) - 1
+            if error.msg != "unexpected indent" or row < 2:
+                raise
+            previous = row - 1
+            while previous >= 0 and (not lines[previous].strip() or lines[previous].lstrip().startswith("#")):
+                previous -= 1
+            before = previous - 1
+            while before >= 0 and (not lines[before].strip() or lines[before].lstrip().startswith("#")):
+                before -= 1
+            target = leading(lines[row])
+            if before < 0 or not first <= previous + 1 <= last or leading(lines[before]) != target or len(leading(lines[previous]).expandtabs(8)) >= len(target.expandtabs(8)):
+                raise
+            # A compound statement can introduce a different scope: don't guess it.
+            if lines[previous].rstrip().endswith(":"):
+                raise
+            # Never turn literal contents into an indentation repair.
+            for token in tokenize.generate_tokens(io.StringIO("".join(lines)).readline):
+                if token.type == tokenize.STRING and token.start[0] <= previous + 1 <= token.end[0]:
+                    raise error
+                if token.end[0] >= previous + 1:
+                    break
+            lines[previous] = target + lines[previous].lstrip(" \t")
+    else:
+        raise ValueError("Too many indentation errors; select a smaller block and correct its structure first")
+    # Normalize logical statement indentation, leaving continuation lines and literal contents alone.
+    repaired = "".join(lines)
+    # compile validates return/break placement too (AST-only compilation does not).
+    compile(repaired, "scratch.py", "exec")
+    depth, statement = 0, True
+    for token in tokenize.generate_tokens(io.StringIO(repaired).readline):
+        if token.type == tokenize.INDENT:
+            depth += 1
+        elif token.type == tokenize.DEDENT:
+            depth -= 1
+        elif token.type == tokenize.NEWLINE:
+            statement = True
+        elif token.type not in (tokenize.NL, tokenize.COMMENT, tokenize.ENDMARKER, tokenize.ENCODING) and statement:
+            row = token.start[0] - 1
+            if first <= row + 1 <= last:
+                lines[row] = " " * (depth * 4) + lines[row].lstrip(" \t")
+            statement = False
+    result = "".join(lines)
+    compile(result, "scratch.py", "exec")
+    if ast.dump(check(result), include_attributes=False) != ast.dump(tree, include_attributes=False):
+        raise ValueError("Indentation would change code structure; original source retained")
+    print(json.dumps({"code": result}))
+elif action == "format":
     import black
     print(json.dumps({"code": black.format_str(code, mode=black.Mode())}))
 else:

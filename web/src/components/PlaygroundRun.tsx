@@ -16,7 +16,7 @@ import { CopyButton } from "./copy-button";
  * component is re-mounted when its message moves from the in-flight slot into
  * the settled list, and a Run must survive that.
  */
-export function PlaygroundResult({ runKey: key, onSendToPi, stale = false, showCases = true }: { runKey: string; onSendToPi?: (text: string) => void; stale?: boolean; showCases?: boolean }) {
+export function PlaygroundResult({ runKey: key, onSendToPi, stale = false, showCases = true, variant, pythonVersion }: { variant?: "scratch"; pythonVersion?: string; runKey: string; onSendToPi?: (text: string) => void; stale?: boolean; showCases?: boolean }) {
 	const t = useT();
 	const [expanded, setExpanded] = useState(true);
 	const run = usePlaygroundRun(key);
@@ -24,14 +24,14 @@ export function PlaygroundResult({ runKey: key, onSendToPi, stale = false, showC
 	const output = `${run.cases.length ? JSON.stringify(run.cases, null, 2) + "\n" : ""}${run.stdout}${run.stderr}`;
 	const failed = run.cases.some(result => result.status === "failed" || result.status === "error") || !!run.error || run.timedOut || run.truncated || run.compileError || (run.exitCode !== null && run.exitCode !== 0);
 
-	return <div className="playground-result" role="region" aria-label={t("playgroundRun")}>
+	return <div className={`playground-result${variant === "scratch" ? " scratch-result" : ""}`} role="region" aria-label={t("playgroundRun")}>
 		<button type="button" className="playground-result-head" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>
-			<span className={`playground-dot ${running ? "running" : failed ? "failed" : "ok"}`} aria-hidden="true" />
-			<strong>{t(running ? "playgroundRunning" : run.stopped ? "pgRunStopped" : failed ? "pgRunFailed" : "pgRunFinished")}</strong>
+			<span className={`playground-dot ${running ? "running" : run.stopped ? "stopped" : failed ? "failed" : "ok"}`} aria-hidden="true" />
+			<strong>{t(running ? "playgroundRunning" : run.stopped ? "pgRunStopped" : failed ? variant === "scratch" ? "pgRunError" : "pgRunFailed" : "pgRunFinished")}</strong>
 			{stale && <span className="playground-badge stale">{t(run.cases.length ? "pgChanged" : "playgroundCodeChanged")}</span>}
 			{run.timedOut && <span className="playground-badge">{t("playgroundTimedOut")}</span>}
 			{run.truncated && <span className="playground-badge">{t("playgroundTruncated")}</span>}
-			{!running && !run.error && <span className="playground-meta">{t("playgroundExitCode")} {run.exitCode ?? "-"} · {t("playgroundDuration")} {run.durationMs}ms</span>}
+			{!running && !run.error && <span className="playground-meta">{t("playgroundExitCode")} {run.exitCode ?? "-"} · {t("playgroundDuration")} {variant === "scratch" ? `${(run.durationMs / 1000).toFixed(3)}s` : `${run.durationMs}ms`}</span>}
 		</button>
 		{!showCases && run.cases.length > 0 && <div className="method-summary scratch-run-summary" aria-live="polite">{t("pgPassed")} {run.cases.filter(c => c.status === "passed").length} · {t("pgFailed")} {run.cases.filter(c => c.status === "failed").length} · {t("pgError")} {run.cases.filter(c => c.status === "error").length} · {t("pgUnasserted")} {run.cases.filter(c => c.status === "unasserted").length}</div>}
 		{expanded && <>
@@ -47,8 +47,10 @@ export function PlaygroundResult({ runKey: key, onSendToPi, stale = false, showC
 					{"error" in result && result.error && <pre>{result.error}</pre>}
 				</div>)}
 			</section>}
-			{run.stdout && <section className="playground-stream"><h4>{t("playgroundStdout")}</h4><pre>{run.stdout}</pre></section>}
-			{run.stderr && <section className="playground-stream stderr"><h4>{t("playgroundStderr")}</h4><pre>{run.stderr}</pre></section>}
+			{variant === "scratch" && run.stderr && <section className="playground-stream stderr"><h4>{t("playgroundStderr")}</h4><pre>{run.stderr}</pre></section>}
+			{(run.stdout || (variant === "scratch" && !running)) && <section className="playground-stream"><h4>{t("playgroundStdout")}</h4><pre className={run.stdout ? undefined : "empty-output"}>{run.stdout || t("pgNoOutput")}</pre></section>}
+			{variant !== "scratch" && run.stderr && <section className="playground-stream stderr"><h4>{t("playgroundStderr")}</h4><pre>{run.stderr}</pre></section>}
+			{variant === "scratch" && <dl className="scratch-run-details">{pythonVersion && <><dt>{t("pgInterpreter")}</dt><dd>Python {pythonVersion}</dd></>}<dt>{t("pgEntry")}</dt><dd>scratch.py</dd></dl>}
 			{!running && !run.error && (
 				<div className="playground-result-foot">
 					<CopyButton text={output} label />

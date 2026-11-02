@@ -659,6 +659,9 @@ wss.on("connection", (ws) => {
 			case "prompt":
 				void cs.prompt(msg.text, msg.attachments, msg.queue, msg.requestId, undefined, msg.target);
 				break;
+			case "subagent_request":
+				void cs.subagentRequest(msg);
+				break;
 			case "abort":
 				void cs.abort();
 				break;

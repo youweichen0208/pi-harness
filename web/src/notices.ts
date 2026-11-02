@@ -19,3 +19,8 @@ export function appendNotice(notices: Notice[], incoming: Notice): Notice[] {
 export function isLegacyMcpNotice(text: string): boolean {
 	return /^pi-mcp-adapter no longer reads [^\r\n]+[\\/]mcp\.json\. (?:Move it with:|Merge )/.test(text);
 }
+
+/** Legacy server notice envelope: only missing-directory stat failures. */
+export function isMissingWorkingDirectoryNotice(text: string): boolean {
+	return /^切换工作目录失败：ENOENT: no such file or directory, stat ['"]/u.test(text);
+}

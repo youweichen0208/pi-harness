@@ -58,8 +58,8 @@ try {
 			assert.equal(await page.locator('.inputbox').evaluate(el => getComputedStyle(el).boxShadow), 'none');
 			await input.fill('');
 			await page.keyboard.press('Escape');
-			assert.equal(await page.locator('.header-task-progress').textContent(), '●第 2 / 5 步');
-			assert.equal(await page.locator('.view-switch').evaluate(el => getComputedStyle(el).backgroundColor), 'rgba(0, 0, 0, 0)');
+			assert.equal(await page.locator('.header-task-progress').textContent(), '第 2 / 5 步');
+			assert.equal(await page.locator('.view-switch').evaluate(el => getComputedStyle(el).borderTopWidth), '1px');
 			assert.equal(await page.locator('.project-panel-toggle').evaluate(el => getComputedStyle(el).borderTopWidth), '0px');
 			assert.equal(await page.locator('.topbar-actions > .panel-toggle').evaluate(el => getComputedStyle(el).borderTopWidth), '0px');
 			if (platform === 'darwin') assert.equal((await page.locator('.project-panel-toggle').boundingBox()).x, 92);
@@ -92,8 +92,8 @@ try {
 			}
 			await page.locator('.header-task-progress').click();
 			await page.locator('.task-progress:visible').waitFor();
-			assert(await page.locator('.task-progress').evaluate(el => document.activeElement === el));
-			assert.equal(await page.locator('.panel-right > .panel-title').evaluate(el => el.getBoundingClientRect().height), 40);
+			await page.waitForFunction(() => document.activeElement === document.querySelector('.task-progress')).catch(async error => { console.error(platform, width, await page.evaluate(() => ({ active: document.activeElement?.outerHTML, panel: document.querySelector('.task-progress')?.getBoundingClientRect().toJSON() }))); throw error; });
+			assert.equal(await page.locator('.right-panel-tabs [aria-selected="true"]').textContent(), '任务');
 			assert.equal(await page.locator('.tree-filter, .tree-modified-count').count(), 0);
 			if (width === 1500) {
 				await page.locator('.topbar-actions > .panel-toggle').click();

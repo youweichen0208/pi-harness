@@ -1,3 +1,4 @@
+import type { SubagentSource } from "./sources.js";
 import { Type } from "typebox";
 import { Check, Errors } from "typebox/value";
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
@@ -12,6 +13,7 @@ export const SUBAGENT_REPORT_LIMITS = {
 } as const;
 
 export interface SubagentReportCitation {
+	sourceId?: string;
 	evidenceId: string;
 	path: string;
 	startLine: number;
@@ -50,13 +52,14 @@ const paramsSchema = Type.Object({
 }, { additionalProperties: false });
 
 interface EvidenceFile {
+	sourceId?: string;
 	path: string;
 	sha256: string;
 	lines: Map<number, { text: string; complete: boolean }>;
 }
 
 /** Keep only lines actually returned to the child, not all bytes loaded by a file read. */
-export async function createSubagentResearchTools(root: string): Promise<{
+export async function createSubagentResearchTools(root: string, sources?: SubagentSource[]): Promise<{
 	tools: ToolDefinition[];
 	getReport: () => SubagentResearchReport | undefined;
 	getReportError: () => string | undefined;
@@ -70,7 +73,7 @@ export async function createSubagentResearchTools(root: string): Promise<{
 		report = undefined;
 		reportError = reason?.slice(0, 2000);
 	};
-	const observe = (item: SourceObservation) => {
+	const observe = (item: SourceObservation, sourceId?: string) => {
 		let file = evidence.get(item.evidenceId);
 		const previous = file?.lines.get(item.line);
 		if (previous?.complete) return;
@@ -79,14 +82,26 @@ export async function createSubagentResearchTools(root: string): Promise<{
 		const fileBytes = file ? 0 : Buffer.byteLength(item.path) + 160;
 		if ((!file && evidence.size >= SUBAGENT_REPORT_LIMITS.evidenceFiles) || (!previous && evidenceLines >= SUBAGENT_REPORT_LIMITS.evidenceLines) || evidenceBytes + bytes - previousBytes + fileBytes > SUBAGENT_REPORT_LIMITS.evidenceBytes) return;
 		if (!file) {
-			file = { path: item.path, sha256: item.sha256, lines: new Map() };
+			file = { sourceId, path: item.path, sha256: item.sha256, lines: new Map() };
 			evidence.set(item.evidenceId, file);
 		}
 		file.lines.set(item.line, { text: item.text, complete: item.complete });
 		evidenceBytes += bytes - previousBytes + fileBytes;
 		if (!previous) evidenceLines++;
 	};
-	const reader = await createSourceReader(root, observe);
+	const selected = sources ?? [{ id: "", root }];
+	const readers = await Promise.all(selected.map(source => createSourceReader(source.root, item => observe(item, source.id || undefined))));
+	const tools = readers[0].tools.map((tool, index) => ({
+		...tool,
+		parameters: sources ? Type.Object({ ...(tool.parameters as import("typebox").TObject).properties, sourceId: Type.Optional(Type.String({ description: "Selected source ID; required when this task has multiple sources." })) }) : tool.parameters,
+		execute: async (...args: Parameters<typeof tool.execute>) => {
+			const params = args[1] as Record<string, unknown>;
+			const sourceIndex = params.sourceId === undefined && selected.length === 1 ? 0 : selected.findIndex(source => source.id === params.sourceId);
+			if (sourceIndex < 0) throw Error("Choose a sourceId from this task's selected sources");
+			const { sourceId: _sourceId, ...local } = params;
+			return readers[sourceIndex].tools[index].execute(args[0], local, args[2], args[3], args[4]);
+		},
+	}));
 	const submit: ToolDefinition<typeof paramsSchema> = {
 		name: "source_report",
 		label: "Submit source report",
@@ -117,12 +132,12 @@ export async function createSubagentResearchTools(root: string): Promise<{
 							lines.push(observed.text);
 						}
 						citedFiles.set(citation.evidenceId, file);
-						return { ...citation, path: file.path, sha256: file.sha256, excerpt: lines.join("\n") };
+						return { ...citation, ...(file.sourceId ? { sourceId: file.sourceId } : {}), path: file.path, sha256: file.sha256, excerpt: lines.join("\n") };
 					}),
 				}));
 				const candidate: SubagentResearchReport = { summary: params.summary, findings, connections: [...params.connections], openQuestions: [...params.openQuestions], checkedAt: new Date().toISOString() };
 				if (Buffer.byteLength(JSON.stringify(candidate)) > SUBAGENT_REPORT_LIMITS.outputBytes) throw new Error("Report exceeds 24 KiB including cited excerpts. Shorten statements or use smaller citation ranges.");
-				for (const file of citedFiles.values()) await reader.verify(file.path, file.sha256, signal);
+				for (const file of citedFiles.values()) await readers[selected.findIndex(source => (source.id || undefined) === file.sourceId)].verify(file.path, file.sha256, signal);
 				signal?.throwIfAborted();
 				candidate.checkedAt = new Date().toISOString();
 				report = candidate;
@@ -134,5 +149,5 @@ export async function createSubagentResearchTools(root: string): Promise<{
 			}
 		},
 	};
-	return { tools: [...reader.tools, submit], getReport: () => report ? structuredClone(report) : undefined, getReportError: () => reportError, invalidateReport };
+	return { tools: [...tools, submit], getReport: () => report ? structuredClone(report) : undefined, getReportError: () => reportError, invalidateReport };
 }

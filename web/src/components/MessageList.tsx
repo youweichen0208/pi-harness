@@ -1,3 +1,8 @@
+import { subagentTurns } from "../subagent-turns";
+import { SubagentTurnContext, type SubagentTurnCall } from "./SubagentTurnPanel";
+import { commandPhaseLabels, commandTurnSummaries } from "../command-turns";
+import { CommandTurnSummary } from "./CommandTurnSummary";
+import { answerHistory } from "../answer-history";
 import { WelcomeMotto } from "./WelcomeMotto";
 import { UiIcon } from "./UiIcon";
 import { ReplyActions } from "./ReplyActions";
@@ -193,6 +198,29 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 		}
 		return m;
 	}, [state.messages]);
+	const subagentGroups = useMemo(() => {
+		const all = state.streamingMessage ? [...state.messages, state.streamingMessage] : state.messages;
+		const groups = subagentTurns(all);
+		const result = new Map<string, SubagentTurnCall[]>();
+		const currentTurn = all.findLastIndex(message => message.role === "user" && message.origin !== "auto-reminder");
+		const currentIds = new Set(all.slice(currentTurn + 1).flatMap(message => message.content.flatMap(block => block.type === "toolCall" ? [block.id] : [])));
+		for (const blocks of new Set(groups.values())) {
+			const calls = blocks.map(block => ({ block, view: {
+				result: toolResults.get(block.id), status: toolStatuses.get(block.id),
+				liveOutput: liveOutputs.get(block.id)?.text, subagents: state.subagentTasks?.find(entry => entry.toolCallId === block.id)?.tasks ?? liveOutputs.get(block.id)?.subagents,
+				streaming: state.isStreaming && currentIds.has(block.id),
+			} }));
+			for (const block of blocks) result.set(block.id, calls);
+		}
+		return result;
+	}, [state.messages, state.streamingMessage, state.isStreaming, state.subagentTasks, toolResults, toolStatuses, liveOutputs]);
+	const subagentDonorMessages = new Set((state.streamingMessage ? [...state.messages, state.streamingMessage] : state.messages)
+		.filter(message => message.role === "assistant" && message.content.length > 0 && message.content.every(block => {
+			if (block.type === "text") return typeof block.text === "string" && !block.text.trim();
+			if (block.type !== "toolCall" || typeof block.id !== "string") return false;
+			const group = subagentGroups.get(block.id);
+			return group && group.length > 1 && group[0].block.id !== block.id;
+		})).map(message => message.id));
 	const retriedEditIds = useMemo(() => findRetriedEditIds(state.messages, toolResults), [state.messages, toolResults]);
 	// Most streaming frames only add text or arguments; keep the shared map stable
 	// so those frames do not force every historical Message to render again.
@@ -224,12 +252,39 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 	const lastId = messages.length > 0 ? messages[messages.length - 1].id : null;
 	// Only the last KEEP_RECENT persisted messages are fully rendered; older
 	// ones collapse to summary rows (unless the user expanded them).
-	const recentStart =
+	const answerRounds = useMemo(() => answerHistory(state.messages), [state.messages]);
+	const historyExpanded = useMemo(() => new Set([...expanded, ...answerRounds.protectedIds]), [expanded, answerRounds]);
+	const foldedAnswers = useMemo(() => {
+		const heads = new Map<string, { ids: string[]; count: number }>();
+		const hidden = new Set<string>();
+		for (const group of answerRounds.groups) {
+			if (group.ids.some(id => expanded.has(id))) continue;
+			heads.set(group.ids[0], group);
+			for (const id of group.ids.slice(1)) hidden.add(id);
+		}
+		return { heads, hidden };
+	}, [answerRounds, expanded]);
+	let recentStart =
 		state.messages.length > COLLAPSE_MIN
 			? Math.max(0, state.messages.length - KEEP_RECENT)
 			: 0;
+	// Keep the owner visible whenever a later invocation is in the recent window.
+	for (const calls of new Set(subagentGroups.values())) {
+		if (calls.length < 2) continue;
+		const indices = calls.map(call => state.messages.findIndex(message => message.content.some(block => block.type === "toolCall" && block.id === call.block.id))).filter(index => index >= 0);
+		if (indices.some(index => index >= recentStart)) recentStart = Math.min(recentStart, ...indices);
+	}
 	const settledGroups = useMemo(() => groupBashMessages(state.messages, recentStart, new Set(timeGaps.keys())), [state.messages, recentStart, timeGaps]);
 	const bashGroups = useMemo(() => withStreamingMessage(settledGroups, state.messages, state.streamingMessage), [settledGroups, state.messages, state.streamingMessage]);
+	const phaseLabels = useMemo(() => commandPhaseLabels(state.streamingMessage ? [...state.messages, state.streamingMessage] : state.messages), [state.messages, state.streamingMessage]);
+	const commandSummaries = useMemo(() => {
+		const summaries = commandTurnSummaries(state.messages, state.isStreaming);
+		for (const [id, summary] of [...summaries]) {
+			const owner = bashGroups.owners.get(id);
+			if (owner) { summaries.delete(id); summaries.set(owner, summary); }
+		}
+		return summaries;
+	}, [state.messages, state.isStreaming, bashGroups]);
 	/** Replies after which the agent kept going in the same turn — their failed steps count as recovered. */
 	const turnContinues = useMemo(() => {
 		const continues = new Set<string>();
@@ -247,8 +302,8 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 	// transcript 里是 8 条 assistant 消息，一条一行会把历史区堆成 8 条长得一模
 	// 一样的条带。纯逻辑在 collapsed-groups.ts（有单测）。
 	const collapsed = useMemo(
-		() => buildCollapsedGroups(state.messages, recentStart, expanded, new Set(timeGaps.keys()), new Set([...emptyReplies, ...repeatedUsers.hidden.keys()])),
-		[state.messages, recentStart, expanded, timeGaps, emptyReplies, repeatedUsers],
+		() => buildCollapsedGroups(state.messages, recentStart, historyExpanded, new Set(timeGaps.keys()), new Set([...emptyReplies, ...repeatedUsers.hidden.keys()])),
+		[state.messages, recentStart, historyExpanded, timeGaps, emptyReplies, repeatedUsers],
 	);
 
 	// ---- 惰性窗口化（lazy windowing，纯函数见 lazy-window.ts）----------------
@@ -483,16 +538,17 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 		(id: string) => {
 			const source = state.messages.find((message) => message.id === id);
 			const sourceId = source?.role === "toolResult" && source.toolCallId ? bashGroups.sources.get(source.toolCallId) ?? id : id;
-			const owner = bashGroups.owners.get(sourceId) ?? sourceId;
+			const subagentOwner = source?.toolCallId ? subagentGroups.get(source.toolCallId)?.[0].block.id : undefined;
+			const owner = (subagentOwner ? state.messages.find(message => message.content.some(block => block.type === "toolCall" && block.id === subagentOwner))?.id : undefined) ?? bashGroups.owners.get(sourceId) ?? sourceId;
 			const idx = state.messages.findIndex((message) => message.id === owner);
 			flushSync(() => {
-				if (idx >= 0 && idx < recentStart && !expanded.has(owner)) expand(owner);
+				if (idx >= 0 && !expanded.has(owner)) expand(owner);
 				setPinned((prev) => prev.has(owner) ? prev : new Set(prev).add(owner));
 			});
 			const toolIds = source?.toolCallId ? [source.toolCallId] : source?.content.flatMap((block) => block.type === "toolCall" && block.name === "bash" && typeof block.id === "string" ? [block.id] : []) ?? [];
 			for (const toolCallId of toolIds) flushSync(() => window.dispatchEvent(new CustomEvent("pi:reveal-tool", { detail: { toolCallId, search: true } })));
 		},
-		[state.messages, recentStart, expanded, expand, bashGroups],
+		[state.messages, recentStart, expanded, expand, bashGroups, subagentGroups],
 	);
 
 	// Ctrl+F / Cmd+F 打开搜索（可编辑元素内不抢占）
@@ -531,7 +587,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 			// 占位中的目标先同步恢复真实渲染（折叠行同步展开），再滚动定位——
 			// flushSync 保证本轮 commit 后 DOM 即为最终形态。
 			flushSync(() => {
-				if (idx >= 0 && idx < recentStart && !expanded.has(id)) expand(id);
+				if (idx >= 0 && !expanded.has(id)) expand(id);
 				setPinned((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
 			});
 			const qIdx = questionsRef.current.findIndex((q) => q.id === id);
@@ -556,7 +612,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 				}
 			});
 		},
-		[state.messages, recentStart, expanded, expand, bashGroups],
+		[state.messages, recentStart, expanded, expand, bashGroups, subagentGroups],
 	);
 	useEffect(() => {
 		const onTaskJump = (event: Event) => {
@@ -567,6 +623,8 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 			let { messageId, toolCallId, todoItemIds } = (event as CustomEvent<{ messageId?: string; toolCallId?: string; todoItemIds?: string[] }>).detail ?? {};
 			const todo = toolCallId ? planViews.get(toolCallId) : undefined;
 			if (todo?.target) ({ messageId, toolCallId } = todo.target);
+			const group = toolCallId ? subagentGroups.get(toolCallId) : undefined;
+			if (group && group.length > 1) messageId = messages.find(message => message.content.some(block => block.type === "toolCall" && block.id === group[0].block.id))?.id ?? messageId;
 			if (!messageId || !toolCallId || !messages.some((message) => message.id === messageId)) return;
 			jumpTo(messageId);
 			requestAnimationFrame(() => {
@@ -596,7 +654,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 		window.addEventListener("pi:jump-message", onTaskJump);
 		window.addEventListener("pi:jump-tool", onToolJump);
 		return () => { window.removeEventListener("pi:jump-message", onTaskJump); window.removeEventListener("pi:jump-tool", onToolJump); };
-	}, [jumpTo, messages, planViews]);
+	}, [jumpTo, messages, planViews, subagentGroups]);
 
 	const onScroll = useCallback(() => {
 		const el = scrollRef.current;
@@ -712,7 +770,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 	const many = markerGroups.some((group) => group.ids.length > 1);
 
 	return (
-		<div className="messages-wrap">
+		<SubagentTurnContext.Provider key={state.conversationId} value={subagentGroups}><div className="messages-wrap">
 			<div className="messages" ref={scrollRef} onScroll={onScroll}>
 				{timeline.length === 0 && !state.streamingMessage && (
 					<div className="empty-state">
@@ -724,6 +782,10 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 					if (item.kind === "reload") return <ReloadEvent key={`reload-${item.event.requestId}`} event={item.event} />;
 					if (item.kind === "cwd") return <div key={`cwd-${item.event.timestamp}`} className="goal-event cwd-event" role="status"><UiIcon name="turn" /><span>{t("cwdSwitchEvent", { path: item.event.cwd.replace(/^\/(?:Users|home)\/[^/]+(?=\/|$)/, "~") })}</span></div>;
 					const { message: m, index: i } = item;
+					if (subagentDonorMessages.has(m.id)) return <span key={m.id} data-msg-id={m.id} hidden />;
+					if (foldedAnswers.hidden.has(m.id)) return null;
+					const answerGroup = foldedAnswers.heads.get(m.id);
+					if (answerGroup) return <button type="button" className="answer-history-expand" key={m.id} data-msg-id={m.id} aria-expanded={false} onClick={() => expandGroup(answerGroup.ids)}>{t("answerHistoryExpand", { n: answerGroup.count })}</button>;
 					if (goalEvents.absorbed.has(m.id)) return null;
 					if (m.origin === "auto-reminder") return <Message key={m.id} message={m} toolResults={toolResults} liveOutputs={EMPTY_LIVE} toolStatuses={toolStatuses} streaming={false} isLast={false} />;
 					const withGap = (content: ReactNode) => {
@@ -737,7 +799,8 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 						{event.kind === "complete" && <details className="goal-event-details"><summary>{t("goalReviewDetails")}</summary><pre>{m.content.map(block => block.type === "text" ? block.text : "").join("\n")}</pre></details>}
 						{event.ids.slice(1).map((id) => <span key={id} data-msg-id={id} />)}
 					</div>);
-					const isOld = i < recentStart;
+
+					const isOld = i < recentStart && !answerRounds.protectedIds.has(m.id);
 					const isExpandedOld = isOld && expanded.has(m.id);
 					if (isOld && !isExpandedOld) {
 						// Folded into an earlier group's summary row (or a toolResult,
@@ -784,12 +847,13 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 							key={m.id}
 							message={bashGroups.projected.get(m.id) ?? m}
 							toolMessageIds={bashGroups.sources}
+							phaseLabels={phaseLabels}
 							// A folded or lazily hidden predecessor still shows the pi header for this turn.
 							continuation={(() => {
 								const previous = predecessors.get(m.id);
 								if (!previous || emptyReplies.has(previous)) return false;
 								// The predecessor folded into a summary row no longer shows a pi header above this turn.
-								return !((messageIndex.get(previous) ?? -1) < recentStart && !expanded.has(previous));
+								return !((messageIndex.get(previous) ?? -1) < recentStart && !historyExpanded.has(previous));
 							})()}
 							qnIndex={qIdx}
 							qnActive={qIdx !== undefined ? qIdx === activeIdx : undefined}
@@ -814,6 +878,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 							turnContinues={turnContinues.has(m.id)}
 							onCollapse={isExpandedOld ? collapse : undefined}
 						/>
+						{commandSummaries.has(m.id) && <CommandTurnSummary summary={commandSummaries.get(m.id)!} />}
 						{changeSummaries.has(m.id) && <ChangeSummaryCard files={changeSummaries.get(m.id)!} />}
 						{m.role === "assistant" && <ReplyActions message={m} last={m.id === state.messages.findLast(message => message.role === "assistant")?.id} regenerate={!state.isStreaming && connected && !state.tree?.verifying && onEdit ? () => {
 							const user = state.messages.slice(0, i).findLast(message => message.role === "user" && message.origin !== "auto-reminder");
@@ -825,10 +890,11 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 						</LazyMount>
 					);
 				})}
-				{state.streamingMessage && streamingHasContent && !bashGroups.owners.has(state.streamingMessage.id) && (
+				{state.streamingMessage && streamingHasContent && !subagentDonorMessages.has(state.streamingMessage.id) && !bashGroups.owners.has(state.streamingMessage.id) && (
 					<Message recovery={recovery} incident={incidentFor.get(state.streamingMessage.id)}
 						key={state.streamingMessage.id}
 						message={bashGroups.projected.get(state.streamingMessage.id) ?? state.streamingMessage}
+						phaseLabels={phaseLabels}
 						continuation={!!predecessors.get(state.streamingMessage.id)}
 						toolResults={toolResults}
 						planViews={planViews}
@@ -922,7 +988,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 					)}
 				</div>
 			)}
-		</div>
+		</div></SubagentTurnContext.Provider>
 	);
 } , (prev, next) => {
 	if (prev.active === false && next.active === false && prev.state.conversationId === next.state.conversationId) return true;

@@ -44,7 +44,7 @@ export PI_WEB_PYTHON=/path/to/venv/bin/python
 
 `POST /api/playground/language` 只允许 completion / diagnostics / signature / close，UTF-16 offset 与浏览器一致；`POST /api/playground/format` 接受 `{code}`。每次请求独立临时分析目录，最多 3 个并发、20 秒超时、1 MiB 输出上限；断开中止，结束清理。Jedi 使用显式临时项目与解释器路径，不扫描 Workspace。API 依据 [Jedi Script 文档](https://jedi.readthedocs.io/en/latest/docs/api.html)。
 
-格式化可撤销，迟到结果不覆盖新输入；⌘/Ctrl+S 尝试格式化后保存，即使格式化失败也保存原文。关闭运行不禁止分析和格式化，但仍需解释器及相应可选依赖。
+格式化可撤销，迟到结果不覆盖新输入；⌘/Ctrl+S 先尝试自动缩进全文，再格式化并保存；缩进失败保存原文，格式化失败保存已缩进的代码。关闭运行不禁止分析和格式化，但仍需解释器及相应可选依赖。
 
 ## 界面与验证
 
@@ -57,3 +57,7 @@ export PI_WEB_PYTHON=/path/to/venv/bin/python
 `POST /api/playground/tools/install` 仅接受空 JSON 对象，复用鉴权和来源校验；不接受包名、命令或路径。使用选定解释器的 `-I -m pip install --target` 安装固定的 Jedi / Black，不使用 sudo、`--user` 或 `--break-system-packages`，不修改宿主环境。工具按解释器命令分目录存放于 `<dataDir>/python-tools/`；每次安装独立代数目录，真实导入验证通过后原子更新 current 指针，失败删除未完成目录，旧代数保留供进行中的分析使用。仅分析／格式化子进程添加此目录，代码执行环境不变。
 
 同一服务最多一个安装，180 秒超时、1 MiB 输出上限；断开与服务关闭杀进程树，失败可重试。界面显示安装中和失败原因，成功后自动重试语言诊断。Python 或 pip 本身缺失时返回错误，不下载解释器、不隐式引导 pip。
+
+## 自动缩进
+
+`POST /api/playground/indent` 接受 `{code, fromLine?, toLine?}`（1 起始，包含末行，未传为全文），返回 `{code}`，共用分析的大小、鉴权、并发、超时与取消限制。使用 Python 标准库，不依赖 Jedi/Black、不执行源码。仅尝试修复 unexpected indent 前一条语句的局部缩进断裂，要求前后缩进一致、不猜测复合语句；最多 16 次。校验后以 tokenize 归一化逻辑语句为 4 空格，保留续行和字符串内容，再验证编译与 AST 一致。失败返回 422；前端只修改行首空白、保留选区、可撤销，源文变化则丢弃迟到结果。

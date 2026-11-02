@@ -2,37 +2,22 @@ import { expect, test } from "vitest";
 import { planSubagentJobs } from "../../server/subagents/planning.js";
 import type { SubagentSource } from "../../server/subagents/sources.js";
 const repo = (id: number): SubagentSource => ({ id: `repository:${id}`, kind: "repository", root: `/repo-${id}`, name: `repo-${id}` });
-const library: SubagentSource = { id: "knowledge:library", kind: "knowledge", root: "/library", name: "library" };
-test("default research covers each workspace repository and the knowledge library exactly once", () => {
-	const planned = planSubagentJobs([repo(1), repo(2), library], { question: "Explain refunds", tasks: [{ sourceId: repo(1).id, task: "Find entry" }, { sourceId: repo(1).id, task: "Find callbacks" }] }, new Set());
-	expect(planned.jobs.map(j => j.source.id)).toEqual([repo(1).id, repo(2).id, library.id]);
-	expect(planned.jobs[0].task).toContain("Find entry"); expect(planned.jobs[0].task).toContain("Find callbacks");
-	expect(planned.jobs.every(j => j.task.includes("Explain refunds"))).toBe(true);
-	expect(planned.remainingSourceIds).toEqual([]);
+test("tasks sharing a repository remain independent and do not survey unrelated sources", () => {
+	const result = planSubagentJobs([repo(1), repo(2)], { question: "Explain refunds", tasks: [{ sourceId: repo(1).id, task: "Find entry" }, { sourceId: repo(1).id, task: "Find callbacks" }] });
+	expect(result.jobs).toHaveLength(2);
+	expect(result.jobs.map(job => job.sources?.map(source => source.id))).toEqual([[repo(1).id], [repo(1).id]]);
+	expect(result.jobs[0].task).not.toContain("Find callbacks");
 });
-test("large workspaces paginate without omitting or repeating sources", () => {
-	const sources = [...Array.from({ length: 15 }, (_, i) => repo(i)), library], covered = new Set<string>();
-	const first = planSubagentJobs(sources, { question: "Investigate" }, covered);
-	expect(first.jobs).toHaveLength(8); expect(first.remainingSourceIds).toHaveLength(8);
-	first.jobs.forEach(j => covered.add(j.source.id));
-	const second = planSubagentJobs(sources, { question: "Investigate" }, covered);
-	expect(second.jobs).toHaveLength(8); expect(second.remainingSourceIds).toEqual([]);
-	expect(new Set([...first.jobs, ...second.jobs].map(j => j.source.id)).size).toBe(16);
+test("one task can select multiple sources and deduplicates only its source list", () => {
+	const result = planSubagentJobs([repo(1), repo(2)], { question: "Compare", tasks: [{ title: "API comparison", sourceIds: [repo(2).id, repo(1).id, repo(2).id], task: "Compare endpoints" }] });
+	expect(result.jobs[0].title).toBe("API comparison");
+	expect(result.jobs[0].sources).toEqual([repo(2), repo(1)]);
 });
-test("explicit selected scope respects restrictions and permits follow-up on a covered source", () => {
-	const planned = planSubagentJobs([repo(1), repo(2), library], { scope: "selected", question: "Investigate", tasks: [{ sourceId: repo(1).id, task: "Follow up" }, { sourceId: repo(1).id, task: "Check docs" }] }, new Set([repo(1).id]));
-	expect(planned.jobs).toHaveLength(1); expect(planned.jobs[0].source.id).toBe(repo(1).id);
-	expect(planned.remainingSourceIds).toEqual([]);
+test("legacy question-only invocation creates one bounded multi-source task", () => {
+	expect(planSubagentJobs([repo(1), repo(2)], { question: "Investigate" }).jobs).toHaveLength(1);
+	expect(() => planSubagentJobs(Array.from({ length: 9 }, (_, i) => repo(i)), { question: "Investigate" })).toThrow(/1 to 8 sources/);
 });
-test("rejects stale source IDs and empty scope before any child starts", () => {
-	expect(() => planSubagentJobs([repo(1)], { question: "q", tasks: [{ sourceId: "other", task: "task" }] }, new Set())).toThrow(/no longer available/);
-	expect(() => planSubagentJobs([repo(1)], { scope: "selected", question: "q" }, new Set())).toThrow(/requires tasks/);
-});
-
-test("instructions for later sources run in the first page rather than being lost", () => {
-	const sources = Array.from({ length: 16 }, (_, i) => repo(i));
-	const first = planSubagentJobs(sources, { question: "Investigate", tasks: [{ sourceId: repo(15).id, task: "Check a specific callback" }] }, new Set());
-	expect(first.jobs[0].source.id).toBe(repo(15).id);
-	expect(first.jobs[0].task).toContain("Check a specific callback");
-	expect(first.remainingSourceIds).not.toContain(repo(15).id);
+test("rejects invalid scope and sources before starting children", () => {
+	for (const task of [{ sourceIds: ["other"], task: "task" }, { sourceIds: [], task: "task" }, { sourceId: repo(1).id, task: " " }]) expect(() => planSubagentJobs([repo(1)], { question: "q", tasks: [task] })).toThrow();
+	expect(() => planSubagentJobs([repo(1)], { scope: "selected", question: "q" })).toThrow(/requires tasks/);
 });

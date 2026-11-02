@@ -19,11 +19,11 @@ function buildEditorTheme(): Extension {
 	const [r, g, b] = [0, 2, 4].map(i => parseInt(v("--bg").slice(1 + i * 2, 3 + i * 2), 16) || 0);
 	const dark = 0.299 * r + 0.587 * g + 0.114 * b < 128;
 	return EditorView.theme({
-		"&": { backgroundColor: v("--output-bg"), color: v("--text") },
+		"&": { backgroundColor: v("--bg-elev"), color: v("--text") },
 		".cm-content": { caretColor: v("--text") },
 		".cm-cursor, .cm-dropCursor": { borderLeftColor: v("--text") },
 		"&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection": { backgroundColor: v("--code-chip-bg") },
-		".cm-gutters": { backgroundColor: v("--output-bg"), color: v("--text-faint"), border: "none" },
+		".cm-gutters": { backgroundColor: v("--bg-elev"), color: v("--text-faint"), border: "none" },
 		".cm-activeLine": { backgroundColor: v("--row-hover") },
 		".cm-activeLineGutter": { backgroundColor: v("--row-hover"), color: v("--text") },
 		".cm-selectionMatch": { backgroundColor: v("--code-chip-bg") },
@@ -56,21 +56,51 @@ function toggleEditorComment(view: EditorView): boolean {
 	}) });
 }
 
-export interface ScratchEditorHandle { toggleComment(): void }
+export interface ScratchEditorHandle {
+	toggleComment(): void;
+	indentRange(): { fromLine: number; toLine: number };
+	applyIndent(source: string, result: string): void;
+}
 
 export const ScratchEditor = forwardRef<ScratchEditorHandle, {
 	value: string;
 	onChange: (value: string) => void;
+	onCursorChange: (position: { line: number; column: number }) => void;
 	/** ⌘/Ctrl+Enter always runs — the completion popup must not swallow it. */
 	onRun: () => void;
 	onFormat: () => void;
 	onSave: () => void;
 	onLanguageStatus: (state: "loading" | "ready" | "error", reason?: string) => void;
 	placeholder: string;
-}>(function ScratchEditor({ value, onChange, onRun, onFormat, onSave, onLanguageStatus, placeholder }, ref) {
+}>(function ScratchEditor({ value, onChange, onRun, onFormat, onSave, onLanguageStatus, onCursorChange, placeholder }, ref) {
 	const editor = useRef<EditorView | null>(null);
-	useImperativeHandle(ref, () => ({ toggleComment() { if (editor.current) { toggleEditorComment(editor.current); editor.current.focus(); } } }), []);
+	useImperativeHandle(ref, () => ({
+		toggleComment() { if (editor.current) { toggleEditorComment(editor.current); editor.current.focus(); } },
+		indentRange() {
+			const state = editor.current?.state;
+			if (!state) return { fromLine: 1, toLine: 1 };
+			const { from, to, empty } = state.selection.main;
+			return empty ? { fromLine: 1, toLine: state.doc.lines } : { fromLine: state.doc.lineAt(from).number, toLine: state.doc.lineAt(Math.max(from, to - 1)).number };
+		},
+		applyIndent(source, result) {
+			const view = editor.current;
+			if (!view || view.state.doc.toString() !== source) return;
+			const lines = result.split("\n");
+			if (lines.length !== view.state.doc.lines) return;
+			const changes = [];
+			for (let n = 1; n <= lines.length; n++) {
+				const line = view.state.doc.line(n);
+				const before = /^\s*/.exec(line.text)![0], after = /^\s*/.exec(lines[n - 1])![0];
+				if (line.text.slice(before.length) !== lines[n - 1].slice(after.length)) return;
+				if (before !== after) changes.push({ from: line.from, to: line.from + before.length, insert: after });
+			}
+			view.dispatch({ changes, annotations: isolateHistory.of("full"), userEvent: "input.indent" });
+			view.focus();
+		},
+	}), []);
 	const holder = useRef<HTMLDivElement>(null);
+	const cursorRef = useRef(onCursorChange);
+	cursorRef.current = onCursorChange;
 	const runRef = useRef(onRun);
 	runRef.current = onRun;
 	const formatRef = useRef(onFormat);
@@ -109,6 +139,11 @@ export const ScratchEditor = forwardRef<ScratchEditorHandle, {
 					])),
 					EditorView.updateListener.of(update => {
 						if (update.docChanged) onChange(update.state.doc.toString());
+						if (update.docChanged || update.selectionSet) {
+							const head = update.state.selection.main.head;
+							const line = update.state.doc.lineAt(head);
+							cursorRef.current({ line: line.number, column: head - line.from + 1 });
+						}
 					}),
 				],
 			}),

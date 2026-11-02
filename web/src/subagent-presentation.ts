@@ -1,6 +1,9 @@
+import { subagentProgressDetails } from "../../server/subagent-presentation.js";
+import { subagentSteps } from "../../server/subagent-steps.js";
 import type { UiSubagentProgress } from "../../server/protocol.js";
 
 export interface SubagentCitationView {
+	sourceId?: string;
 	path: string;
 	startLine: number;
 	endLine: number;
@@ -58,16 +61,7 @@ function number(value: unknown): value is number {
 }
 
 function progress(value: unknown): UiSubagentProgress | undefined {
-	const raw = object(value);
-	if (!raw || !text(raw.sourceId) || !text(raw.source) || !text(raw.root) || !text(raw.task) || !["queued", "running", "completed", "failed", "cancelled"].includes(String(raw.phase))) return;
-	return {
-		sourceId: raw.sourceId,
-		source: raw.source,
-		root: raw.root,
-		task: raw.task,
-		phase: raw.phase as UiSubagentProgress["phase"],
-		...(typeof raw.tool === "string" && ["source_list", "source_search", "source_read", "source_report"].includes(raw.tool) ? { tool: raw.tool as UiSubagentProgress["tool"] } : {}),
-	};
+	return subagentProgressDetails({ subagents: [value] })?.[0];
 }
 
 function report(value: unknown): SubagentReportView | undefined {
@@ -82,7 +76,7 @@ function report(value: unknown): SubagentReportView | undefined {
 		for (const value of finding.citations) {
 			const citation = object(value);
 			if (!citation || !text(citation.path) || !number(citation.startLine) || !number(citation.endLine) || !text(citation.excerpt)) return;
-			citations.push({ path: citation.path, startLine: citation.startLine, endLine: citation.endLine, excerpt: citation.excerpt });
+			citations.push({ ...(text(citation.sourceId) ? { sourceId: citation.sourceId } : {}), path: citation.path, startLine: citation.startLine, endLine: citation.endLine, excerpt: citation.excerpt });
 		}
 		findings.push({ kind: finding.kind as SubagentFindingView["kind"], statement: finding.statement, citations });
 	}
@@ -116,14 +110,16 @@ function result(value: unknown): SubagentItemView | undefined {
 	return item;
 }
 
-export function subagentPresentation(argumentsText: string, outputText: string, live?: UiSubagentProgress[]): SubagentPresentation | undefined {
+export function subagentPresentation(argumentsText: string, outputText: string, live?: UiSubagentProgress[], persisted?: UiSubagentProgress[]): SubagentPresentation | undefined {
 	const args = object(json(argumentsText));
-	if (!args || args.action !== "run" || !Array.isArray(args.tasks)) return;
+	if (!args || args.action !== "run" || (args.tasks !== undefined && !Array.isArray(args.tasks))) return;
 	const tasks: UiSubagentProgress[] = [];
-	for (const value of args.tasks.slice(0, 8)) {
+	for (const value of (Array.isArray(args.tasks) ? args.tasks : []).slice(0, 8)) {
 		const task = object(value);
-		if (!task || !text(task.sourceId) || !text(task.task)) return;
-		tasks.push({ sourceId: task.sourceId, source: task.sourceId, root: "", task: task.task, phase: "queued" });
+		if (!task || !text(task.task)) return;
+		const ids = Array.isArray(task.sourceIds) ? task.sourceIds.filter(text) : text(task.sourceId) ? [task.sourceId] : [];
+		if (!ids.length) return;
+		tasks.push({ sourceId: ids[0], source: ids.join(", "), root: "", task: task.task, ...(text(task.title) ? { title: task.title } : {}), phase: "queued" });
 	}
 	const finalValue = object(json(outputText));
 	let finalItems: SubagentItemView[] | undefined;
@@ -140,7 +136,12 @@ export function subagentPresentation(argumentsText: string, outputText: string, 
 	}
 	const liveItems = live?.slice(0, 8).map(progress).filter((item): item is UiSubagentProgress => !!item);
 	const progressItems = liveItems?.length ? Array.from({ length: Math.max(tasks.length, liveItems.length) }, (_, index) => ({ ...tasks[index], ...liveItems[index] })) : tasks;
-	const items = finalItems ?? progressItems;
+	const savedItems = persisted?.slice(0, 8).map(progress).filter((item): item is UiSubagentProgress => !!item);
+	const items = finalItems?.map(item => {
+		const savedIndex = savedItems?.findIndex(saved => item.taskId ? saved.taskId === item.taskId : saved.sourceId === item.sourceId) ?? -1;
+		const saved = savedIndex >= 0 ? savedItems?.splice(savedIndex, 1)[0] : undefined;
+		return saved ? { ...item, ...saved, task: item.task } : item;
+	}) ?? progressItems;
 	if (!items.length) return;
 	return { ...(workspace ? { workspace } : {}), items, final: finalItems !== undefined };
 }

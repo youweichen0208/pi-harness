@@ -76,12 +76,13 @@ export function installPlaygroundRoutes(app: Express, options: PlaygroundRouteOp
 	const pythonTools = new PythonTools(dataDir);
 	const controllers = new Set<AbortController>();
 	const tasks = new Set<Promise<unknown>>();
-	async function analysis(req: import("express").Request, res: import("express").Response, format = false) {
+	async function analysis(req: import("express").Request, res: import("express").Response, format: false | "format" | "indent" = false) {
 		res.setHeader("Cache-Control", "no-store");
 		if (!allowed(req) || !req.is("application/json")) { res.sendStatus(403); return; }
 		const body = req.body;
 		if (!format && body?.action === "close") { res.json({}); return; }
-		if (!body || typeof body.code !== "string" || (format && Object.keys(body).some(key => key !== "code")) || Buffer.byteLength(body.code) > MAX_SOURCE_BYTES || (!format && (!Number.isInteger(body.offset) || body.offset < 0 || body.offset > body.code.length || !["completion", "diagnostics", "signature"].includes(body.action)))) { res.sendStatus(400); return; }
+		if (!body || typeof body.code !== "string" || (format && Object.keys(body).some(key => !["code", ...(format === "indent" ? ["fromLine", "toLine"] : [])].includes(key))) || Buffer.byteLength(body.code) > MAX_SOURCE_BYTES || (!format && (!Number.isInteger(body.offset) || body.offset < 0 || body.offset > body.code.length || !["completion", "diagnostics", "signature"].includes(body.action)))) { res.sendStatus(400); return; }
+		if (format === "indent" && ((body.fromLine !== undefined && (!Number.isInteger(body.fromLine) || body.fromLine < 1 || body.fromLine > body.code.split("\n").length)) || (body.toLine !== undefined && (!Number.isInteger(body.toLine) || body.toLine < (body.fromLine ?? 1) || body.toLine > body.code.split("\n").length)))) { res.sendStatus(400); return; }
 		const python = await probe.get();
 		if (!python.available || !python.command) { res.status(503).json({ error: python.reason ?? "Python unavailable" }); return; }
 		const release = analysisGate.acquire(undefined, 3, 1);
@@ -89,7 +90,7 @@ export function installPlaygroundRoutes(app: Express, options: PlaygroundRouteOp
 		const controller = new AbortController(); controllers.add(controller);
 		res.on("close", () => { if (!res.writableEnded) controller.abort(); });
 		if (res.destroyed) controller.abort();
-		const task = analyzePython({ command: python.command, args: python.args ?? [] }, body.code, body.offset ?? 0, format ? "format" : body.action, controller.signal, pythonTools.path({ command: python.command, args: python.args ?? [] }));
+		const task = analyzePython({ command: python.command, args: python.args ?? [] }, body.code, body.offset ?? 0, format || body.action, controller.signal, pythonTools.path({ command: python.command, args: python.args ?? [] }), format === "indent" ? { fromLine: body.fromLine, toLine: body.toLine } : undefined);
 		tasks.add(task);
 		try { res.json(await task); }
 		catch (error) { if (!res.destroyed) res.status(format ? 422 : 503).json({ error: error instanceof Error ? error.message : "Python analysis failed" }); }
@@ -111,7 +112,8 @@ export function installPlaygroundRoutes(app: Express, options: PlaygroundRouteOp
 		finally { controllers.delete(controller); tasks.delete(task); }
 	});
 	app.post("/api/playground/language", (req, res) => { void analysis(req, res); });
-	app.post("/api/playground/format", (req, res) => { void analysis(req, res, true); });
+	app.post("/api/playground/indent", (req, res) => { void analysis(req, res, "indent"); });
+	app.post("/api/playground/format", (req, res) => { void analysis(req, res, "format"); });
 
 	async function currentStatus(force: boolean): Promise<PlaygroundStatus> {
 		const python = await probe.get(force);

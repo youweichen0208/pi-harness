@@ -89,14 +89,51 @@ export interface UiCodemodeDetails {
 	fullOutputPath?: string;
 }
 
+export interface UiSubagentStep {
+	sourceId?: string;
+	id: string;
+	tool: "source_list" | "source_search" | "source_read" | "source_report";
+	target?: string;
+	status: "running" | "completed" | "failed" | "cancelled";
+	durationMs?: number;
+}
+
 export interface UiSubagentProgress {
+	taskIndex?: number;
+	taskId?: string;
+	title?: string;
+	sources?: { id: string; name: string; root: string; kind: "repository" | "knowledge" }[];
+	startedAt?: number;
+	durationMs?: number;
+	steps?: UiSubagentStep[];
 	sourceId: string;
 	source: string;
 	root: string;
 	task: string;
-	phase: "queued" | "running" | "completed" | "failed" | "cancelled";
+	phase: "queued" | "running" | "stopping" | "completed" | "failed" | "cancelled";
 	tool?: "source_list" | "source_search" | "source_read" | "source_report";
 }
+
+export interface UiSubagentEvent {
+	seq: number;
+	type: "tool_start" | "tool_end" | "answer";
+	at: number;
+	toolCallId?: string;
+	tool?: string;
+	text: string;
+	isError?: boolean;
+	truncated?: boolean;
+}
+export interface UiSubagentTaskDetail {
+	task: UiSubagentProgress;
+	events: UiSubagentEvent[];
+	nextCursor?: number;
+	truncated: boolean;
+	/** Bounded final report, fetched only on demand. */
+	resultText?: string;
+}
+export type SubagentRequest = { type: "subagent_request"; requestId: string; conversationId: string; taskId: string; action: "detail" | "stop"; cursor?: number };
+export type SubagentResponse = { type: "subagent_response"; requestId: string; conversationId: string; taskId: string; detail?: UiSubagentTaskDetail; error?: string };
 
 export interface UiNestedToolCall {
 	id: string;
@@ -162,6 +199,8 @@ export type TreeResponse =
 	| { type: "tree_navigate_result"; conversationId: string; reqId: string; status: "ok" | "cancelled" | "aborted" | "busy" | "error"; editorText?: string; restoredQueue?: { steering: string[]; followUp: string[]; images?: { data: string; mimeType: string }[] }; error?: string };
 
 export interface UiMessage {
+	/** Bounded persisted subagent execution metadata, independent of report text truncation. */
+	subagents?: UiSubagentProgress[];
 	origin?: "auto-reminder";
 	toolText?: { incidentId: string; attempt: number };
 	questionText?: string;
@@ -256,6 +295,7 @@ export interface UiRecovery {
 }
 
 export interface UiState {
+	subagentTasks?: { toolCallId: string; tasks: UiSubagentProgress[] }[];
 	planSettings?: PlanSettingsState;
 	tree?: UiTreeState;
 	recovery?: UiRecovery;
@@ -428,6 +468,7 @@ export interface NativeMcpConfigState { path: string; paths?: { global: string; 
 export type PromptResult = { type: "prompt_result"; requestId: string; ok: boolean; conversationId?: string; sessionId?: string; commandExecuted?: boolean; attachmentsConsumed?: boolean; receipt?: "processing" | "accepted" | "rejected" | "unknown" | "missing" | "expired" | "conflict" };
 
 export type ClientMessage =
+	| SubagentRequest
 	| { type: "recall_queue"; conversationId: string; requestId: string }
 	| { type: "queue_recall_ack"; conversationId: string; requestId: string }
 	| TreeRequest
@@ -1011,6 +1052,7 @@ export interface UiSettingsState {
 	extensions: UiExtensionInfo[];
 }
 export type ServerMessage =
+	| SubagentResponse
 	| { type: "queue_recalled"; conversationId: string; requestId: string; text: string; images: { data: string; mimeType: string }[] }
 	| TreeResponse
 	| { type: "native_mcp_result"; requestId: string; cwd: string; state?: NativeMcpConfigState; error?: string; pending?: boolean; tools?: string[]; toolInfo?: NativeMcpTool[]; servers?: NativeMcpServerStatus[]; statusText?: string; codemode?: NativeCodemodeSettings; log?: string }

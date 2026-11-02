@@ -14,7 +14,7 @@ import type { CurrentFileContext, ReadCurrentFile, SaveCurrentFile } from "../cu
 import { mergeCurrentFile } from "../current-file";
 import { randomUuid } from "../uuid";
 import { memo, useCallback, useLayoutEffect, useEffect, useRef, useState } from "react";
-import { FiCornerUpLeft, FiPlus, FiPaperclip, FiArrowUp } from "react-icons/fi";
+import { FiInfo, FiCornerUpLeft, FiPlus, FiPaperclip, FiArrowUp } from "react-icons/fi";
 import type { ClientMessage, WikiProjectReference, PromptAttachment, ServerMessage, ModelInfo, SlashCommandInfo, UiMessage, UiState } from "../types";
 import { useT, useI18n } from "../i18n";
 import { isRasterImage } from "../image-paste";
@@ -250,6 +250,21 @@ export const ChatInput = memo(function ChatInput({
 	 *  the whole viewport, so it must measure the chat column to match. */
 	const [helpWidth, setHelpWidth] = useState<number | undefined>(undefined);
 	const taRef = useRef<HTMLTextAreaElement>(null);
+	useEffect(() => {
+		const prepareRetry = (event: Event) => {
+			if (!active || !taRef.current?.getClientRects().length) return;
+			const value = (event as CustomEvent<{ text?: string }>).detail?.text;
+			if (typeof value !== "string" || !value.trim()) return;
+			setText(previous => previous ? `${previous}\n\n${value}` : value);
+			taRef.current.focus({ preventScroll: true });
+		};
+		window.addEventListener("pi-harness:prepare-subagent-retry", prepareRetry);
+		window.addEventListener("pi-harness:prepare-subagent-question", prepareRetry);
+		return () => {
+			window.removeEventListener("pi-harness:prepare-subagent-retry", prepareRetry);
+			window.removeEventListener("pi-harness:prepare-subagent-question", prepareRetry);
+		};
+	}, [active, activeConversationId]);
 	const consumedReferences = useRef(new Set<string>());
 	useEffect(() => {
 		const request = takeChatReference(referenceRequest, cwd, activeConversationId, consumedReferences.current);
@@ -692,7 +707,7 @@ ${t("wikiProjectPrompt", { workspace: selectedProject.workspaceName, path: JSON.
 			{wikiProject && <div className="wiki-reference-chips"><button title={wikiProject.path} onClick={onRemoveWikiProject}><span>{wikiProject.workspaceName} / {wikiProject.name}</span><span aria-hidden="true">×</span></button></div>}
 			{wikiReferences && wikiReferences.length > 0 && <div className="wiki-reference-chips">{wikiReferences.filter(path => path !== autoFile?.path).map(path => <button key={path} title={path} aria-label={`${t("removeAttachment")} ${path}`} onClick={() => onRemoveWikiReference?.(path)}><span>{path.split("/").at(-1)}</span><span aria-hidden="true">×</span></button>)}</div>}
 			<div className={`inputbox${text.length > 0 ? " has-draft" : ""}`}>
-			{receiptWarning && <div role="status">{t(receiptWarning === "unknown" ? "promptReceiptUnknown" : "promptReceiptAcceptedElsewhere")}</div>}
+			{receiptWarning && <div className="composer-receipt-status" role="status"><FiInfo aria-hidden="true" /> {t(receiptWarning === "unknown" ? "promptReceiptUnknown" : "promptReceiptAcceptedElsewhere")}</div>}
 			{promptResult?.commandExecuted && promptResult.conversationId === activeConversationId && attachments.length > 0 && <div role="status">{t("commandAttachmentsRetained")}</div>}
 			{(attachments.length > 0 || databaseReferences.length > 0 || autoFile) && (
 				<div className="attach-row">

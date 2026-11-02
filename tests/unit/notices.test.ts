@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { appendNotice, isLegacyMcpNotice } from "../../web/src/notices.js";
+import { appendNotice, isLegacyMcpNotice, isMissingWorkingDirectoryNotice } from "../../web/src/notices.js";
 import type { Notice } from "../../web/src/notices.js";
 
 const warning: Notice = { id: 1, level: "error", text: "目录不可读：ENOENT: scandir 'D:\\knowledge-base\\raw'", conversationId: "a" };
@@ -40,5 +40,16 @@ describe("legacy MCP adapter notice", () => {
 		expect(isLegacyMcpNotice("pi-mcp-adapter no longer reads /home/user/.pi/agent/mcp.json. Merge source into target.")).toBe(true);
 		expect(isLegacyMcpNotice("MCP connection failed")).toBe(false);
 		expect(isLegacyMcpNotice("pi-mcp-adapter no longer reads /home/user/another.json. Move it with: mv ...")).toBe(false);
+	});
+});
+
+
+describe("missing working directory notice", () => {
+	it("matches only the directory-switch stat error and preserves other failures", () => {
+		expect(isMissingWorkingDirectoryNotice("切换工作目录失败：ENOENT: no such file or directory, stat '/missing/project'")).toBe(true);
+		expect(isMissingWorkingDirectoryNotice(String.raw`切换工作目录失败：ENOENT: no such file or directory, stat 'C:\missing\project'`)).toBe(true);
+		for (const text of ["读取文件失败：ENOENT: no such file or directory, stat '/missing/file'", "切换工作目录失败：EACCES: permission denied, stat '/private'", "切换工作目录失败：ENOENT: no such file or directory, open '/missing/config'", "切换工作目录失败：路径不是目录"]) {
+			expect(isMissingWorkingDirectoryNotice(text)).toBe(false);
+		}
 	});
 });

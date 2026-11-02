@@ -66,14 +66,42 @@ try {
 	await page.locator('.btn.send').first().waitFor({ state: 'attached' });
 	await new Promise(r => setTimeout(r, 500));
 
+	const openCard = async card => {
+		const toggle = card.locator('.question-heading-toggle');
+		if (await toggle.getAttribute('aria-expanded') !== 'true') await toggle.click();
+	};
+	const clickOption = async option => {
+		await openCard(option.locator('xpath=ancestor::section[contains(@class,"question-card")]'));
+		await option.click();
+	};
+	assert.equal(await page.locator('.question-heading-toggle[aria-expanded="true"]').count(), 1, 'only the first question starts expanded across markdown segments');
+	await page.locator('.question-card').first().getByRole('radio').nth(1).click();
+	assert.equal(await page.locator('.question-card').nth(1).locator('.question-heading-toggle').getAttribute('aria-expanded'), 'true', 'answering advances to the next question');
+	await openCard(page.locator('.question-card').first());
+	mkdirSync('tests/scratch', { recursive: true });
+	await page.screenshot({ path: 'tests/scratch/question-hierarchy-desktop.png' });
+	await page.evaluate(() => document.documentElement.setAttribute('data-appearance', 'dark'));
+	await page.waitForTimeout(350);
+	await page.screenshot({ path: 'tests/scratch/question-hierarchy-dark.png' });
+	await page.evaluate(() => document.documentElement.setAttribute('data-appearance', 'light'));
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.waitForTimeout(500);
+	await page.screenshot({ path: 'tests/scratch/question-hierarchy-mobile.png' });
+	assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'no viewport overflow');
+	await page.setViewportSize({ width: 1440, height: 1000 });
 	// Deselect both preselected recommendations, then 全部采纳推荐 must restore them.
-	while (await page.locator('.question-option.selected[role="radio"]:not(.question-other-radio)').count()) await page.locator('.question-option.selected[role="radio"]:not(.question-other-radio)').first().click();
+	while (await page.locator('.question-option.selected[role="radio"]:not(.question-other-radio)').count()) await clickOption(page.locator('.question-option.selected[role="radio"]:not(.question-other-radio)').first());
 	assert.equal(await page.locator('.question-option.selected[role="radio"]:not(.question-other-radio)').count(), 0, 'recommendations start preselected and can be deselected');
 	const bar = page.locator('.question-answer-bar');
 	await bar.getByRole('button', { name: '全部采纳推荐', exact: true }).click();
 	await page.waitForFunction(() => document.querySelectorAll('.question-option.selected[role="radio"]:not(.question-other-radio)').length === 2);
 	// A written 其他 answer is overridden back to its recommendation as well.
+	await openCard(page.locator('.question-card').first());
 	await page.locator('.question-card').first().locator('textarea').fill('自建裸机');
+	await page.locator('.inputbox textarea').focus();
+	assert.equal(await page.locator('.question-card').nth(1).locator('.question-heading-toggle').getAttribute('aria-expanded'), 'true', 'custom answer advances on blur');
+	await openCard(page.locator('.question-card').first());
+	assert.equal(await page.locator('.question-card').first().locator('textarea').inputValue(), '自建裸机', 'reopening retains custom answer');
 	await bar.getByRole('button', { name: '全部采纳推荐', exact: true }).click();
 	await page.waitForFunction(() => document.querySelectorAll('.question-option.selected[role="radio"]:not(.question-other-radio)').length === 2);
 	assert.equal(await page.locator('.question-card').first().locator('.question-other.selected').count(), 0);
@@ -93,7 +121,7 @@ try {
 	await new Promise(r => setTimeout(r, 500));
 	const live = page.locator('.question-option.selected[role="radio"]:not(.question-other-radio):not([disabled])');
 	assert.equal(await live.count(), 2, 'round 2 recommendations start preselected');
-	while (await live.count()) await live.first().click();
+	while (await live.count()) await clickOption(live.first());
 	assert.equal((await bar.innerText()).includes('待回答'), true);
 	console.log('bar before accept:', (await bar.innerText()).replace(/\n+/g, ' | '));
 	await bar.getByRole('button', { name: '全部采纳推荐', exact: true }).waitFor();

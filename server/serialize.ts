@@ -1,3 +1,4 @@
+import { subagentResultDetails } from "./subagent-presentation.js";
 import { codemodeDetails } from "./codemode-presentation.js";
 import { parseDelegateNotification } from "./delegate-notification.js";
 import { createHash } from "node:crypto";
@@ -190,6 +191,7 @@ export function serializeMessage(
 				toolCallId: m.toolCallId,
 				toolName: m.toolName,
 				details: nativeToolDetails(m.toolName, m),
+				...(m.toolName === "subagent" ? { subagents: subagentResultDetails(m.details) } : {}),
 				...(m.toolName === "codemode" ? { codemode: codemodeDetails(m.details) } : {}),
 				isError: m.isError,
 				...(typeof m.durationMs === "number" && Number.isFinite(m.durationMs) ? { durationMs: m.durationMs } : {}),

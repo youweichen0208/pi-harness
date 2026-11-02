@@ -124,6 +124,8 @@ function BashRow({ block, view, onKill, revealed, messageId, attempts, historica
 	return <div className={`bash-row ${state}`} data-tool-call-id={block.id} data-msg-id={messageId} onMouseEnter={() => window.dispatchEvent(new CustomEvent("pi:tool-hover", { detail: { toolCallId: block.id } }))} onMouseLeave={() => window.dispatchEvent(new CustomEvent("pi:tool-hover", { detail: { toolCallId: null } }))}>
 		<button type="button" className="bash-row-head" title={command} aria-expanded={open} onClick={() => setOpen(!open)}>
 			<span className={`bash-state ${state}`} aria-label={t(state === "run" ? "running" : state === "err" ? "error" : state === "empty" && view.abandoned ? "toolNotExecuted" : "done")}>{state === "run" ? <i className="thinking-spinner" /> : state === "err" ? "✗" : state === "empty" ? "−" : "✓"}</span>
+			<code className="bash-inline-command"><span aria-hidden="true">$ </span>{command}</code>
+			<span className="bash-inline-result">{state === "ok" ? t("done") : ""}</span>
 			<span className="bash-readable-title">{reading.title}</span>{attempts && <span className="bash-attempt-count">{t("commandAttempts", { n: attempts })}</span>}{reading.title !== compactCommandLabel(reading.command) && <code className="bash-command-secondary">{reading.command}</code>}
 			{commandLines.length > 1 && <span className="bash-extra-lines">{t("bashExtraLines", { n: commandLines.length - 1 })}</span>}
 			{liveLine && <span className="bash-live-line" title={liveLine}>{liveLine}</span>}

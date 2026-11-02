@@ -49,7 +49,9 @@ function warning(result: ProjectedSubagentResult, original?: string): void {
 /** Shrink prose across the entire batch before removing any cited findings. */
 function shrinkProse(result: ProjectedSubagentResult): boolean {
 	const report = result.report;
-	if (shorten(result, "text", report ? 800 : 6 * 1024)) {
+	if (result.steps?.length) {
+		delete result.steps; mark(result); return true;
+	} else if (shorten(result, "text", report ? 800 : 6 * 1024)) {
 		return true;
 	} else if (!result.outputTruncated && result.evidenceWarning && Buffer.byteLength(result.evidenceWarning) > 1024) {
 		// warning() clips the original warning after this projection step.
