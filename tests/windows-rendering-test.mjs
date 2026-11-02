@@ -85,6 +85,7 @@ try {
 		const rendered = await platformFonts('.msg-text h2');
 		assert(rendered.fonts.some(font => font.glyphCount > 0), JSON.stringify(rendered));
 		assert(await page.locator('.msg-text h2').evaluate(el => getComputedStyle(el).fontFamily.includes('PingFang SC')), 'prose uses the documented Chinese/system font fallback');
+		await page.locator('.tree-hidden-summary').click();
 		await page.locator('[data-tree-node=".ruff_cache"] .file-name').waitFor();
 		const monoFonts = await platformFonts('.msg-text pre code');
 		assert(monoFonts.fonts.some(font => font.familyName === 'JetBrains Mono' && font.isCustomFont), JSON.stringify(monoFonts));
@@ -95,7 +96,7 @@ try {
 		assert.equal(metrics.width, 1440); assert.equal(metrics.height, 900); assert.equal(metrics.dpr, scale);
 		for (const selector of ['.panel-right > .panel-title > span:first-child', '.bash-group-head > span']) for (const item of await page.locator(selector).all()) assert.equal(await item.evaluate(el => getComputedStyle(el).whiteSpace), 'nowrap');
 		await page.mouse.move(720, 880); await page.screenshot({ path: join(output, `${prefix}-conversation.png`) });
-		const scroll = page.locator('.panel-right > .panel-body');
+		const scroll = page.locator('.right-files-pane > .panel-body');
 		await scroll.waitFor();
 		assert(await scroll.evaluate(el => el.scrollHeight > el.clientHeight), 'fixture must exercise a real scroll container');
 		const scrollbarState = () => scroll.evaluate(el => { const track = getComputedStyle(el, '::-webkit-scrollbar'), thumb = getComputedStyle(el, '::-webkit-scrollbar-thumb'); return { width: track.width, border: thumb.borderLeftWidth, radius: thumb.borderRadius, background: thumb.backgroundColor, scrollTop: el.scrollTop }; });
@@ -107,7 +108,7 @@ try {
 			return page.evaluate(async ({ png, scale, bounds }) => { const img = new Image(); img.src = `data:image/png;base64,${png}`; await img.decode(); const canvas = document.createElement('canvas'); canvas.width = img.width; canvas.height = img.height; const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0); const bytes = ctx.getImageData(Math.round((bounds.x + bounds.width - 4) * scale), Math.round(bounds.y * scale), 1, Math.floor(bounds.height * scale)).data; return Array.from({ length: Math.floor(bounds.height * scale) }, (_, y) => [...bytes.slice(y * 4, y * 4 + 4)]); }, { png, scale, bounds });
 		};
 		await page.mouse.move(720, 880);
-		await page.waitForFunction(() => !document.querySelector('.panel-right > .panel-body').matches(':hover'));
+		await page.waitForFunction(() => !document.querySelector('.right-files-pane > .panel-body').matches(':hover'));
 		await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 		const baseline = await thumbRaster();
 		const paintedThumb = pixels => {
@@ -124,7 +125,7 @@ try {
 		const resting = { ...await scrollbarState(), pixel: baseline[Math.round(12 * scale)] };
 		assert.equal(resting.width, '8px'); assert.equal(parseFloat(resting.border), Math.floor(2 * scale) / scale, '2 CSS px borders are snapped to whole device pixels'); assert.equal(resting.radius, '4px'); assert.equal(resting.background, 'rgba(0, 0, 0, 0)');
 		await scroll.hover();
-		await page.waitForFunction(() => document.querySelector('.panel-right > .panel-body').matches(':hover'));
+		await page.waitForFunction(() => document.querySelector('.right-files-pane > .panel-body').matches(':hover'));
 		await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 		const hovered = { ...await scrollbarState(), ...paintedThumb(await thumbRaster()) };
 		await page.screenshot({ path: join(output, `${prefix}-scrollbar.png`) });
