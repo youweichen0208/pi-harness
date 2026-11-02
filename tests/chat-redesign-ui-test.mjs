@@ -59,6 +59,8 @@ try {
 	assert.match(await page.locator('.question-answer-bar').innerText(), /2 \/ 3/);
 	assert.equal(await page.locator('.design-tree').count(), 1);
 	assert.match(await page.locator('.question-note').innerText(), /保留原有数据/);
+	assert.equal(await page.locator('.question-heading-toggle[aria-expanded="true"]').count(), 1);
+	await page.locator('.question-card').nth(2).locator('.question-heading-toggle').click();
 	await page.locator('.question-card').nth(2).getByRole('radio').nth(1).click();
 	await page.getByRole('button', {name:'全部采纳推荐',exact:true}).click();
 	assert.match(await page.locator('.question-answer-bar').innerText(), /3 \/ 3/);
@@ -68,6 +70,7 @@ try {
 	await page.setViewportSize({width:390,height:900});
 	assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
 	await page.screenshot({path:'/tmp/pi-v160-chat-4a-mobile.png'});
+	if (await page.locator('.question-card').nth(2).locator('.question-heading-toggle').getAttribute('aria-expanded') !== 'true') await page.locator('.question-card').nth(2).locator('.question-heading-toggle').click();
 	await page.getByRole('textbox', {name:'Q3 其他',exact:true}).fill('使用现有测试集群');
 	assert.match(await page.locator('.question-answer-bar').innerText(), /3 \/ 3/);
 	await page.getByRole('button', {name:'发送回答',exact:true}).click();

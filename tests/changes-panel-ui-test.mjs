@@ -52,10 +52,8 @@ try {
 	await page.locator('.change-summary').waitFor();
 	assert.equal(await page.locator('.change-card').count(),0);
 	assert.equal(await page.locator('.bash-group.historical-step').count(),1);
-	const groupHead = await page.locator('.process-group-head').textContent();
-	assert.doesNotMatch(groupHead,/先检查应用配置/,'a folded group does not repeat the narration shown above it');
-	assert.match(groupHead,/Ran 1 command/i,'a folded process group summarises its command count');
-	await page.locator('.process-group-head').click();
+	assert.equal(await page.locator('.process-group-head, .bash-group-head').count(), 0, 'a single successful command does not add a redundant group toggle');
+	assert.match(await page.locator('.command-turn-summary').innerText(), /本轮共 1 commands/, 'the turn summary includes the command count');
 	await page.locator('.bash-row').waitFor({state:'visible'});
 	assert.match(await page.locator('.bash-row').textContent(), /git status/);
 	// Reference redesign: both appearances and compact layouts keep real content reachable.
