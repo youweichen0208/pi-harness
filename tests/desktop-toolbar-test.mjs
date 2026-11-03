@@ -47,7 +47,7 @@ try {
 			assert.equal(await page.locator('.topbar').evaluate(el => getComputedStyle(el).getPropertyValue('-webkit-app-region')), 'drag', 'restored desktop windows retain a continuous titlebar drag region');
 			assert.equal(await page.locator('.conversation-title-button').evaluate(el => getComputedStyle(el).getPropertyValue('-webkit-app-region')), 'no-drag', 'session selector remains clickable');
 			assert.equal(await page.locator('.status-messages').count(), 0);
-			assert.equal(await page.evaluate(() => getComputedStyle(document.body).fontSize), platform === 'win32' ? '14.5px' : '14px');
+			assert.equal(await page.evaluate(() => getComputedStyle(document.body).fontSize), '14px');
 			assert.equal(await page.locator('.topbar-actions > .icon-btn').count(), 0);
 			const input = page.locator('.inputbox textarea'), sendButton = page.locator('.inputbox .btn.send:visible');
 			assert(await sendButton.isDisabled());

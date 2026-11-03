@@ -1,4 +1,4 @@
-/** Actual Electron/OS rendering; CI runs this on macOS and Windows at 100%/125%. */
+/** Actual Electron/OS rendering; CI runs this on macOS and Windows at 100%/125%/150%. */
 import assert from 'node:assert/strict';
 import { _electron as electron } from 'playwright-core';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
@@ -22,7 +22,7 @@ const transcript = [
 ];
 let app;
 try {
-	for (const scale of process.platform === 'win32' ? [1, 1.25] : [1]) {
+	for (const scale of process.platform === 'win32' ? [1, 1.25, 1.5] : [1]) {
 		app = await electron.launch({ ...(process.argv[2] ? { executablePath: resolve(process.argv[2]) } : {}), args: [...(process.argv[2] ? [] : ['.']), `--force-device-scale-factor=${scale}`, `--user-data-dir=${join(base, `profile-${scale}`)}`], env: { ...process.env, PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(base, `data-${scale}`), PI_CODING_AGENT_DIR: agent } });
 		let page;
 		for (let i = 0; i < 200; i++) { page = app.windows().find(p => p.url().startsWith('http://127.0.0.1:')); if (page) break; await sleep(100); }
@@ -83,16 +83,16 @@ try {
 			assert.fail(`No stable rendered node for ${selector}`);
 		};
 		const rendered = await platformFonts('.msg-text h2');
-		assert(rendered.fonts.some(font => font.glyphCount > 0), JSON.stringify(rendered));
-		assert(await page.locator('.msg-text h2').evaluate(el => getComputedStyle(el).fontFamily.includes('PingFang SC')), 'prose uses the documented Chinese/system font fallback');
+		assert(rendered.fonts.some(font => font.familyName === 'UI SC' && font.isCustomFont && font.glyphCount > 0), JSON.stringify(rendered));
+		assert(await page.locator('.msg-text h2').evaluate(el => getComputedStyle(el).fontFamily.startsWith('"UI SC"')), 'prose prioritizes the bundled cross-platform UI font');
 		await page.locator('.tree-hidden-summary').click();
 		await page.locator('[data-tree-node=".ruff_cache"] .file-name').waitFor();
 		const monoFonts = await platformFonts('.msg-text pre code');
 		assert(monoFonts.fonts.some(font => font.familyName === 'JetBrains Mono' && font.isCustomFont), JSON.stringify(monoFonts));
 		assert(await page.locator('[data-tree-node=".ruff_cache"] .file-name').evaluate(el => getComputedStyle(el).fontFamily === getComputedStyle(el.closest('[data-tree-node]')).fontFamily), 'tree labels use the reference UI font');
 		const metrics = await page.evaluate(() => ({ width: innerWidth, height: innerHeight, dpr: devicePixelRatio, platform: document.documentElement.dataset.platform, appearance: document.documentElement.dataset.appearance, bodySize: getComputedStyle(document.body).fontSize, fontSmoothing: getComputedStyle(document.body).webkitFontSmoothing, treeLabelWidth: (() => { const range = document.createRange(); range.selectNodeContents(document.querySelector('[data-tree-node=".ruff_cache"] .file-name')); return range.getBoundingClientRect().width; })() }));
-		if (process.platform === 'win32') assert.equal(metrics.fontSmoothing, 'auto');
-		assert.equal(metrics.bodySize, process.platform === 'win32' ? '14.5px' : '14px');
+		assert.equal(metrics.fontSmoothing, 'antialiased');
+		assert.equal(metrics.bodySize, '14px');
 		assert.equal(metrics.width, 1440); assert.equal(metrics.height, 900); assert.equal(metrics.dpr, scale);
 		for (const selector of ['.panel-right > .panel-title > span:first-child', '.bash-group-head > span']) for (const item of await page.locator(selector).all()) assert.equal(await item.evaluate(el => getComputedStyle(el).whiteSpace), 'nowrap');
 		await page.mouse.move(720, 880); await page.screenshot({ path: join(output, `${prefix}-conversation.png`) });
@@ -140,7 +140,29 @@ try {
 		await page.mouse.up(); assert(dragged.scrollTop > 0, 'scrollbar thumb can be dragged');
 		assert(dragged.pixel[0] < hovered.pixel[0], `dragging darkens the thumb: ${JSON.stringify({ hovered, dragged })}`);
 
-		writeFileSync(join(output, `${prefix}-metrics.json`), JSON.stringify({ ...metrics, nativeWindow, fonts, renderedFonts: rendered.fonts, monoFonts: monoFonts.fonts, scrollbar: { resting, hovered, dragged } }, null, 2));
+
+		const typography = {};
+		for (const appearance of ['light', 'dark']) {
+			await page.evaluate(appearance => { document.documentElement.dataset.appearance = appearance; }, appearance);
+			typography[appearance] = await page.evaluate(async () => {
+				await document.fonts.ready;
+				const samples = [];
+				for (const weight of [400, 500, 600, 700]) for (const text of ['项目对话：检查文件与任务进度。', 'Workspace pi-harness 0123456789', '中文 English 混排：运行完成 123']) {
+					const probe = document.createElement('div');
+					probe.style.cssText = `position:fixed;left:0;top:0;width:180px;font-family:var(--sans);font-size:14px;font-weight:${weight};line-height:22px;visibility:hidden`;
+					probe.textContent = text; document.body.append(probe);
+					const range = document.createRange(); range.selectNodeContents(probe);
+					const style = getComputedStyle(probe);
+					samples.push({ text, weight, family: style.fontFamily, size: style.fontSize, color: style.color, lines: [...range.getClientRects()].map(rect => ({ width: rect.width, height: rect.height })) });
+					probe.remove();
+				}
+				return samples;
+			});
+			await page.mouse.move(720, 880);
+			await page.screenshot({ path: join(output, `${prefix}-${appearance}.png`) });
+		}
+
+		writeFileSync(join(output, `${prefix}-metrics.json`), JSON.stringify({ ...metrics, typography, nativeWindow, fonts, renderedFonts: rendered.fonts, monoFonts: monoFonts.fonts, scrollbar: { resting, hovered, dragged } }, null, 2));
 		await app.close(); app = undefined;
 		console.log(`PASS actual ${prefix} Electron: platform, fonts, SVG icons, labels, 1440x900 screenshots`);
 	}

@@ -24,6 +24,8 @@ npm run test:freeze  # 冻结/重连回归测试（Playwright，需要本机 chr
 
 GitHub Actions ubuntu-latest（`.github/workflows/ci.yml`，push/PR → main 或 develop 触发）：`check:lockfile → npm ci → check:protocol → typecheck → build → npm test（设计检查 + vitest）→ test:smoke`。
 
+桌面字体另有 macOS/Windows Electron CI job：`windows-rendering-test.mjs` 在 Mac 100% 和 Windows 100%／125%／150% 缩放下生成浅深色截图与字体测量，`compare-rendering-metrics.mjs` 比较包内字体文件、字号、字重、颜色、换行及字宽（容差 1 CSS px）。这是开发构建回归，正式发布仍执行安装包回归；不声称系统栅格化或屏幕显示像素完全一致。
+
 SSH 节点另有 macOS/Windows CI job：两平台分别构建服务端并运行 `node-workbench-test.mjs` 的 mock SSH 测试。浏览器工作台交互可在 macOS 本地运行 `node tests/node-workbench-browser-test.mjs`（先 `npm run build`）。
 
 冒烟清单（tests/run-smoke.mjs 的 ALL）只收**自包含、零 token、跨平台**的测试；attach 型（需外部 server）、需真模型、平台相关的脚本不进 CI，本地手动跑（分类见 run-smoke.mjs 头部注释）。

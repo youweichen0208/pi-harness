@@ -63,3 +63,44 @@ jobs:
       - run: npm ci
       - run: npm run build:server
       - run: node tests/node-workbench-test.mjs
+
+  desktop-rendering:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm run check:lockfile
+      - run: npm ci
+      - run: npm run build
+      - run: npx electron-builder install-app-deps
+      - name: Actual Electron typography and DPI regression
+        run: node tests/windows-rendering-test.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: desktop-rendering-${{ matrix.os }}
+          path: tests/scratch/rendering/
+          if-no-files-found: error
+
+  typography-parity:
+    needs: desktop-rendering
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: desktop-rendering-*
+          merge-multiple: true
+          path: tests/scratch/rendering/
+      - run: node tests/compare-rendering-metrics.mjs

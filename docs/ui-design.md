@@ -31,7 +31,7 @@ Workspace 新建／重命名使用 400px 弹窗，带名称标签与全宽 38px 
 
 本节替代下文旧的暖灰、MiSans 和浮起导航样式。Web 与 Electron 共用：默认纯白正文、浅灰侧栏、中性灰选中行、细分隔线。浅色令牌为正文 #FFFFFF、侧栏 #FAFAFA、选中行 #EFEFEF、边框 #ECECEC、正文文字 #333333、标题 #262626。主操作使用独立 action 绿色 #00875A，链接与计数保留蓝色。默认主题显示名改为「简白」，存储键仍为 warm；其他色调与深色选择保留。
 
-- 字体采用 2026-10-20 实测语雀页面 https://www.yuque.com/yuque/ng1qth/about 的回退顺序。界面依次使用 Chinese Quote、-apple-system、system-ui、Segoe UI、Roboto、PingFang SC、Hiragino Sans GB、Microsoft YaHei、Helvetica Neue、Helvetica、Arial、sans-serif；文档正文不插入 -apple-system、system-ui 或 Roboto，文档标题在 Segoe UI 后保留 Roboto。Chinese Quote 仅覆盖四个中文弯引号，使用本地 PingFang SC／SimSun。Windows、macOS 各自按语雀选择系统字体，不强制两端字形相同。代码字体独立。
+- 字体采用 2026-10-20 实测语雀页面 https://www.yuque.com/yuque/ng1qth/about 的回退顺序。界面依次使用 Chinese Quote、-apple-system、system-ui、Segoe UI、Roboto、PingFang SC、Hiragino Sans GB、Microsoft YaHei、Helvetica Neue、Helvetica、Arial、sans-serif；文档正文不插入 -apple-system、system-ui 或 Roboto，文档标题在 Segoe UI 后保留 Roboto。Chinese Quote 仅覆盖四个中文弯引号，使用本地 PingFang SC／SimSun。当前界面及文档字体均在此回退顺序之前优先使用内置 UI SC，统一 Windows／macOS 常用中英文字形。代码字体独立。
 - 主界面保留贴边三栏、窗口按钮避让、拖动区及功能入口；导航改为小圆角平面按钮，文件、项目、会话选中项使用灰底，不使用浮起阴影。
 - Wiki、小记和聊天 Markdown 正文采用 15px / 26.1px、0.12px 字间距、400 字重，强调文字 700。文档标题 36px / 50.004px、700；正文 H1 28px / 36px、H2 24px / 32px、H3 20px / 28px，均为 700。标题不使用负字间距；窄屏保持同一文字尺度，通过换行适配。Markdown 段落间距 12px，不移植语雀页面的目录预留空间。小记源码输入采用正文比例字体，代码块保持等宽。
 - Wiki 正文和右侧大纲为白色，文件栏为浅灰色。大纲单行省略并保留完整标题提示；目录与问 pi 页签、键盘切换和草稿继续保留。
@@ -126,7 +126,7 @@ Workspace 新建／重命名使用 400px 弹窗，带名称标签与全宽 38px 
 
 ---
 
-Windows 浅色界面在 React 渲染前设置 data-platform，正文字号按原基准增加 0.5px，次要文字使用 Windows 专用根令牌。浅色非终端滚动区默认隐藏滑块，悬停显示 8px 轨道中的 4px 滑块；拖动颜色加深。xterm 与深色模式沿用原样式。Electron 启动背景与暖白窗口一致。
+Windows 与 macOS 统一优先使用内置 UI SC（Noto Sans SC 子集）及 400／500／600 实际字重，正文基准均为 14px，文字颜色共用主题令牌；移除 Windows 额外 0.5px 字号及次要文字颜色覆盖。不在子集中的字符继续回退到系统字体。浅色非终端滚动区默认隐藏滑块，悬停显示 8px 轨道中的 4px 滑块；拖动颜色加深。xterm 与深色模式沿用原样式。Electron 启动背景与暖白窗口一致。
 
 ### 1.5 主界面外壳
 
@@ -596,3 +596,5 @@ Workspace 切换器与品牌图标分行：品牌图标与 pi-harness 名称占�
 主窗口顶栏移除最右侧文件栏折叠图标及其分隔线；右侧文件／任务面板保留。文件列表入口移至设置菜单的快捷操作，窄窗口通过该入口打开覆盖式文件抽屉。
 
 顶栏项目／对话区域使用紧凑层级：项目名为 12px 次级文字，浅色线性右箭头分隔，当前对话为较深半粗文字与统一线性下箭头；标题按钮有悬停底色和键盘焦点环。长项目名先收缩，对话标题保留更多空间，点击仍打开会话树查看完整名称；沿用窄屏隐藏项目上下文和桌面拖动区规则。
+
+跨平台字体以本次统一规则为准，替代旧的系统字体／MiSans 优先说明：界面、聊天正文与文档预览使用 `--sans` 的内置 UI SC 优先顺序。代码沿用内置 JetBrains Mono，首页衬线标语保持原样。字体来自包内，不请求外部字体服务；系统栅格化与屏幕缩放仍可能带来细微差异。

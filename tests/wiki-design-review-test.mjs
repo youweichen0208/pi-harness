@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { chromium } from 'playwright-core';
 import { CHROME_PATH } from './lib/chrome.mjs';
 import { portUp } from './lib/port-utils.mjs';
+import { openKnowledge } from "./lib/open-knowledge.mjs";
 import { testEnv } from "./lib/test-env.mjs";
 
 const port = 9318;
@@ -34,7 +35,7 @@ try {
 	await page.goto(`http://127.0.0.1:${port}`);
 	await page.locator('.conn-dot.ok').first().waitFor({ state: 'attached' });
 	const popup = page.context().waitForEvent('page');
-	await page.locator('.file-name', { hasText: 'note.md' }).click();
+	await openKnowledge(page, base, 'note.md');
 	page = await popup;
 	page.setDefaultTimeout(10000);
 	const editor = page.locator('.wiki-prose .fp-rich-document');
@@ -60,7 +61,7 @@ try {
 	const titleFont = await page.locator('.wiki-document-heading h1').evaluate(el => getComputedStyle(el).fontFamily);
 	assert(titleFont.includes('Roboto'), titleFont);
 	const bodyFont = await editor.evaluate(el => getComputedStyle(el).fontFamily);
-	assert(bodyFont.startsWith('"Chinese Quote", "Segoe UI"'), bodyFont);
+	assert(bodyFont.startsWith('"UI SC", "Chinese Quote"'), bodyFont);
 	assert(!bodyFont.includes('Roboto') && !bodyFont.includes('-apple-system'), bodyFont);
 	assert.equal(await editor.evaluate(el => getComputedStyle(el).fontSize), '15px');
 	assert.equal(await editor.evaluate(el => getComputedStyle(el).lineHeight), '26.1px');
