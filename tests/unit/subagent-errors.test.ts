@@ -6,7 +6,11 @@ const failed = (text: string): SubagentItemView => ({ sourceId: "repo:one", sour
 describe("subagent error recovery", () => {
 	it("groups known reasons without merging unrelated unknown errors", () => {
 		const groups = subagentErrorGroups([failed("operation aborted"), failed("timeout"), failed("opaque A"), failed("opaque B"), failed("opaque A")]);
-		expect(groups.map(group => group.items.length)).toEqual([2, 2, 1]);
+		expect(groups.map(group => group.items.length)).toEqual([1, 1, 2, 1]);
+	});
+	it("distinguishes explicit timeouts from unclassified interruption", () => {
+		expect(subagentErrorKind(failed("This operation was aborted"))).toBe("interrupted");
+		expect(subagentErrorKind(failed("Request timed out"))).toBe("timeout");
 	});
 	it("recognizes connection, rate, access and missing resource failures", () => {
 		expect(["ECONNREFUSED 127.0.0.1", "429 Too Many Requests", "EACCES", "ENOENT"].map(text => subagentErrorKind(failed(text)))).toEqual(["connection", "rate", "permission", "missing"]);

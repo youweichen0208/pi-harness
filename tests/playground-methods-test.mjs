@@ -46,8 +46,12 @@ try {
 		await page.locator(".setup-modal .modal-close").click();
 		await page.getByRole("button", { name: "Playground", exact: true }).click();
 		await page.locator('.scratch-editor-cm .cm-content').waitFor();
+		assert.equal(await page.locator('.method-case input[type="checkbox"], .method-expected').count(), 0);
+		assert.equal(await page.locator('.method-case-body .playground-hint').count(), 0);
+		const request = page.waitForRequest(r => new URL(r.url()).pathname === '/api/playground/run' && r.method() === 'POST');
 		await page.locator('.scratch-head .primary').click();
-		await page.waitForFunction(() => document.querySelector('.method-case')?.getAttribute('data-status') === 'passed');
+		assert((await request).postDataJSON().tests.cases.every(c => !Object.hasOwn(c, 'expected')), 'hidden legacy assertions must not run');
+		await page.waitForFunction(() => document.querySelector('.method-case')?.getAttribute('data-status') === 'unasserted');
 		await page.locator('.scratch-head select').selectOption('program');
 		const editor = page.locator('.scratch-editor-cm .cm-content');
 		await editor.fill('print("Python browser works")');

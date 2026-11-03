@@ -52,7 +52,7 @@ export function PlaygroundScratch() {
 	const inputError = tests.mode === "program" ? "" : !method ? t("pgNoMethods") : caseError(method, cases);
 	const start = useCallback((selectedCases?: PlaygroundCase[]) => {
 		if (!doc || reason || running || !doc.content.trim()) return;
-		const requested = tests.mode === "methods" || selectedCases ? { methodId: tests.selectedMethod, cases: selectedCases ?? cases } : undefined;
+		const requested = tests.mode === "methods" || selectedCases ? { methodId: tests.selectedMethod, cases: (selectedCases ?? cases).map(({ id, args }) => ({ id, args })) } : undefined;
 		if (requested && (!method || caseError(method, requested.cases))) return;
 		const key = runKey("scratch", JSON.stringify({ code: doc.content, tests: requested }));
 		lastScratchRun = { key, snapshot: JSON.stringify(doc), methodId: requested?.methodId, pythonVersion: status?.python.version };

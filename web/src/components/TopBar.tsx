@@ -4,6 +4,8 @@ import { createPortal } from "react-dom";
 import { useEffect, useState } from "react";
 import {
 	FiSidebar,
+	FiChevronRight,
+	FiChevronDown,
 	FiDatabase,
 	FiGitBranch,
 	FiGlobe,
@@ -149,6 +151,7 @@ export function TopBar({
 							<FiSettings aria-hidden="true" /><span className="workspace-menu-label">{t("allSettings")}</span>
 						</DropdownItem>
 						<div className="dd-header workspace-menu-section">{t("quickActions")}</div>
+						<DropdownItem onClick={() => { setMoreOpen(false); onOpenPanel("right"); }}><FiSidebar aria-hidden="true" /><span className="workspace-menu-label">{t("openFiles")}</span></DropdownItem>
 						<DropdownItem onClick={() => { setMoreOpen(false); openSessionTree(); }}><FiGitBranch aria-hidden="true" /><span className="workspace-menu-label">{t("treeTitle")}</span></DropdownItem>
 						<DropdownItem
 							onClick={() => {
@@ -199,7 +202,7 @@ export function TopBar({
 			</div>
 
 			{view !== "nodes" && <button type="button" className="project-panel-toggle" title={t(leftCollapsed ? "expandProjects" : "collapseProjects")} aria-label={t(leftCollapsed ? "expandProjects" : "collapseProjects")} aria-expanded={!leftCollapsed} onClick={() => onOpenPanel("left")}><FiSidebar /></button>}
-			<div className="header-location"><span title={chat.state?.cwd}>{projectName || t("desktopWorkspace")}</span><i>/</i><button className="conversation-title-button" title={t("treeTitle")} onClick={() => openSessionTree()}><strong title={conversationTitle}>{conversationTitle}</strong><span aria-hidden="true">⌄</span></button>{(interrupted || reminding || planItems.length > 0 || !!task?.plan?.awaitingConfirmation) && <button type="button" className={`header-task-progress${interrupted ? " interrupted" : reminding ? " reminding" : ""}`} title={t("taskProgress")} onClick={onOpenTask}>{interrupted ? t("toolRecoveryInterrupted") : reminding ? t("working") : task?.plan?.awaitingConfirmation ? t("taskProgress") : t("taskPlanPosition", { current: currentStep >= 0 ? currentStep + 1 : completedSteps, total: planItems.length })}{planItems.length > 0 && <span className="header-task-segments" aria-hidden="true">{planItems.map(item => <i key={item.id} className={item.status} />)}</span>}</button>}</div>
+			<div className="header-location"><span title={chat.state?.cwd}>{projectName || t("desktopWorkspace")}</span><i className="header-location-separator" aria-hidden="true"><FiChevronRight /></i><button type="button" className="conversation-title-button" title={t("treeTitle")} aria-label={`${conversationTitle} · ${t("treeTitle")}`} onClick={() => openSessionTree()}><strong title={conversationTitle}>{conversationTitle}</strong><FiChevronDown className="conversation-title-chevron" aria-hidden="true" /></button>{(interrupted || reminding || planItems.length > 0 || !!task?.plan?.awaitingConfirmation) && <button type="button" className={`header-task-progress${interrupted ? " interrupted" : reminding ? " reminding" : ""}`} title={t("taskProgress")} onClick={onOpenTask}>{interrupted ? t("toolRecoveryInterrupted") : reminding ? t("working") : task?.plan?.awaitingConfirmation ? t("taskProgress") : t("taskPlanPosition", { current: currentStep >= 0 ? currentStep + 1 : completedSteps, total: planItems.length })}{planItems.length > 0 && <span className="header-task-segments" aria-hidden="true">{planItems.map(item => <i key={item.id} className={item.status} />)}</span>}</button>}</div>
 			<div className="topbar-actions">
 				<div className="panel-tab-bar">
 				<div className="view-switch" role="tablist" aria-label={t("viewSwitch")}>
@@ -281,14 +284,6 @@ export function TopBar({
 				{/* Mobile "⋯" panel — folds sound / language. */}
 				{view !== "nodes" && (menuHost ? createPortal(settingsMenu, menuHost) : settingsMenu)}
 
-				<button
-					type="button"
-					className="panel-toggle"
-					title={t("openFiles")}
-					onClick={() => onOpenPanel("right")}
-				>
-					<FiSidebar />
-				</button>
 			</div>
 			<DesktopWindowControls />
 		</header>

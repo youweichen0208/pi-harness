@@ -5,7 +5,7 @@ import { commandReading, consecutiveAttempts } from "../command-reading";
 import { useT, useI18n } from "../i18n";
 import { WorkspacePathContext } from "../workspace-context";
 import { bashCommand } from "../bash-steps";
-import { commandPresentation, isLikelyErrorLine, compactCommandLabel, commandDuration, elapsedLabel } from "../bash-presentation";
+import { commandPresentation, commandPreview, isLikelyErrorLine, compactCommandLabel, commandDuration, elapsedLabel } from "../bash-presentation";
 import { latestOutputLine } from "../live-tool-output";
 import type { UiToolCallBlock } from "../types";
 import { toolDuration, type ToolView } from "./ToolCallBlock";
@@ -110,7 +110,7 @@ function BashRow({ block, view, onKill, revealed, messageId, attempts, historica
 	// issue #106: a running command shows its elapsed time and latest output
 	// line right on the row, and tails (not heads) the output when expanded.
 	const liveSeconds = useLiveSeconds(state === "run");
-	const runningStats = liveSeconds > 0 ? `${t("running")} ${elapsedLabel(liveSeconds)}` : t("running");
+	const runningStats = liveSeconds > 0 ? `${t("processRunning")} ${elapsedLabel(liveSeconds)}` : t("processRunning");
 	const liveLine = state === "run" && !open ? latestOutputLine(view.liveOutput ?? "") : "";
 	const shownLines = all ? lines : state === "run" ? lines.slice(-6) : lines.slice(0, 6);
 	const lineOffset = !all && state === "run" ? lines.length - shownLines.length : 0;
@@ -124,8 +124,8 @@ function BashRow({ block, view, onKill, revealed, messageId, attempts, historica
 	return <div className={`bash-row ${state}`} data-tool-call-id={block.id} data-msg-id={messageId} onMouseEnter={() => window.dispatchEvent(new CustomEvent("pi:tool-hover", { detail: { toolCallId: block.id } }))} onMouseLeave={() => window.dispatchEvent(new CustomEvent("pi:tool-hover", { detail: { toolCallId: null } }))}>
 		<button type="button" className="bash-row-head" title={command} aria-expanded={open} onClick={() => setOpen(!open)}>
 			<span className={`bash-state ${state}`} aria-label={t(state === "run" ? "running" : state === "err" ? "error" : state === "empty" && view.abandoned ? "toolNotExecuted" : "done")}>{state === "run" ? <i className="thinking-spinner" /> : state === "err" ? "✗" : state === "empty" ? "−" : "✓"}</span>
-			<code className="bash-inline-command"><span aria-hidden="true">$ </span>{command}</code>
-			<span className="bash-inline-result">{state === "ok" ? t("done") : ""}</span>
+			<code className="bash-inline-command"><span aria-hidden="true">$ </span>{commandPreview(command, cwd)}</code>
+			<span className="bash-inline-result">{state === "ok" ? t("executionCompleted") : ""}</span>
 			<span className="bash-readable-title">{reading.title}</span>{attempts && <span className="bash-attempt-count">{t("commandAttempts", { n: attempts })}</span>}{reading.title !== compactCommandLabel(reading.command) && <code className="bash-command-secondary">{reading.command}</code>}
 			{commandLines.length > 1 && <span className="bash-extra-lines">{t("bashExtraLines", { n: commandLines.length - 1 })}</span>}
 			{liveLine && <span className="bash-live-line" title={liveLine}>{liveLine}</span>}

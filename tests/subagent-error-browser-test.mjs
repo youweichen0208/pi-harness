@@ -26,6 +26,10 @@ try {
 		{ id: 'a', role: 'assistant', model: 'test-model', timestamp: stamp + 1, content: [{ type: 'toolCall', id: 'sub', name: 'subagent', argumentsText: args }] },
 		{ id: 'result', role: 'toolResult', toolCallId: 'sub', toolName: 'subagent', durationMs: 3200, timestamp: stamp + 2, content: [{ type: 'text', text: JSON.stringify({ results }) }] },
 	];
+	messages.push(
+		{ id: 'sources-call', role: 'assistant', model: 'test-model', content: [{ type: 'toolCall', id: 'sources', name: 'subagent', argumentsText: '{"action":"sources"}' }] },
+		{ id: 'sources-result', role: 'toolResult', toolCallId: 'sources', toolName: 'subagent', durationMs: 25, content: [{ type: 'text', text: '{"sources":[{"name":"pi-web-ui"}]}' }] },
+	);
 	let base;
 	await page.routeWebSocket(/\/ws(?:\?|$)/, route => {
 		const upstream = route.connectToServer();
@@ -42,13 +46,35 @@ try {
 			const message = JSON.parse(String(w));
 			if (message.type === 'snapshot' || message.type === 'snapshot_delta') {
 				base = { ...base, ...message.state };
-				route.send(JSON.stringify({ type: 'snapshot', state: { ...base, piConfigured: true, isStreaming: false, messages, streamingMessage: null, taskProgress: null } }));
+				route.send(JSON.stringify({ type: 'snapshot', state: { ...base, piConfigured: true, model: { id: "fixture-model", name: "Fixture model", provider: "fixture", vision: false }, isStreaming: false, messages, streamingMessage: null, taskProgress: null } }));
 			} else route.send(w);
 		});
 	});
 	await page.goto(`${fixture.base}/?token=${fixture.token}`);
-	await page.locator('.subagent-task-group-head').click();
+	await page.locator('.subagent-task-group-head').waitFor();
+	assert.equal(await page.locator('.subagent-task-group-head').getAttribute('aria-expanded'), 'true');
+	assert.match(await page.locator('.subagent-task-counts .unsuccessful').innerText(), /未成功 2/);
+	assert.match(await page.locator('.subagent-task-failures > button').innerText(), /任务已中止/);
+	assert.doesNotMatch(await page.locator('.subagent-task-failures > button').innerText(), /超时/);
 	assert.equal(await page.locator('.subagent-task-row').count(), 1, 'successful task stays visible');
+	assert.equal(await page.locator('.msg-model').count(), 0);
+	assert.equal(await page.locator('.header-model-label').count(), 0);
+	const sourcesCard = page.locator('.toolcall-subagent-quiet').filter({ has: page.locator('.toolcall-action', { hasText: 'sources' }) });
+	assert.equal(await sourcesCard.locator('.toolcall-head button').count(), 1, 'only the named expand control remains in the header');
+	assert.match(await sourcesCard.locator('.toolcall-status').innerText(), /已完成/);
+	assert.equal(await sourcesCard.locator('.toolcall-body').count(), 0);
+	await sourcesCard.locator('.toolcall-name-toggle').click();
+	assert.equal(await sourcesCard.locator('.subagent-tool-actions button').count(), 2, 'copy and zoom remain in details');
+	await sourcesCard.locator('.subagent-tool-actions button').last().click();
+	await page.locator('.toolcall-zoom').waitFor();
+	await page.keyboard.press('Escape');
+	await sourcesCard.locator('.toolcall-name-toggle').click();
+	mkdirSync('tests/scratch', { recursive: true });
+	for (const appearance of ['light', 'dark']) {
+		await page.evaluate(value => document.documentElement.dataset.appearance = value, appearance);
+		await page.screenshot({ path: `tests/scratch/subagent-design-${appearance}.png` });
+	}
+	await page.evaluate(() => document.documentElement.dataset.appearance = 'light');
 	await page.locator('.subagent-task-failures > button').click();
 	assert.equal(await page.locator('.subagent-task-failures .subagent-task-row').count(), 2);
 	assert.match(await page.locator('.subagent-task-failures').innerText(), /任务已中止/);
@@ -99,6 +125,12 @@ try {
 	assert.match(await native.locator('.toolcall-args').textContent(), /Investigate/);
 	await page.setViewportSize({ width: 390, height: 844 });
 	assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+	await page.screenshot({ path: 'tests/scratch/subagent-design-mobile.png' });
+	await page.evaluate(() => localStorage.setItem('pi-harness:lang', 'en'));
+	await page.reload();
+	await page.locator('.subagent-task-counts .unsuccessful').first().waitFor();
+	assert.match(await page.locator('.subagent-task-counts .unsuccessful').first().innerText(), /3 unsuccessful/);
+	assert.match(await page.locator('.subagent-task-all-failed').first().innerText(), /Task interrupted/);
 	assert.deepEqual(errors, []);
 	console.log('PASS current subagent failures, retry round-trip, raw native errors, terminal polling, tool reveal and mobile');
 } finally { await browser?.close(); await fixture.stop(); }

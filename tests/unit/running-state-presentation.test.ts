@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { commandPresentation, gitStatusLine, gitStatusSummary } from "../../web/src/bash-presentation.js";
+import { commandPresentation, commandPreview, gitStatusLine, gitStatusSummary } from "../../web/src/bash-presentation.js";
 import { planStepPresentation } from "../../web/src/task-progress-view.js";
 
 describe("running state presentation", () => {
@@ -21,4 +21,13 @@ describe("running state presentation", () => {
 		expect(planStepPresentation("agent-runtime: 实现子进程入口（stdin → stdout）").tag).toBe("runtime");
 		expect(planStepPresentation("修复 foo(a(b)) 的错误").title).toBe("修复 foo(a(b)) 的错误");
 	});
+});
+
+it("command previews expose the executable while preserving complex shell setup", () => {
+	const cwd = "/Users/example/project";
+	expect(commandPreview('cd /Users/example/project && export PATH="/opt/bin:$PATH" && export MODE=test && pytest -q --require-postgres', cwd)).toBe("pytest -q --require-postgres");
+	expect(commandPreview('MODE=test pytest -q', cwd)).toBe("pytest -q");
+	expect(commandPreview('export A="one; two"; grep -rn readiness services', cwd)).toBe("grep -rn readiness services");
+	for (const command of ['export A=$(fetch) && pytest', 'cd "$TARGET" && pytest', 'echo "export A=x && pytest"']) expect(commandPreview(command, cwd)).toBe(command);
+	expect(commandPreview("export MODE=test", cwd)).toBe("export MODE=test");
 });

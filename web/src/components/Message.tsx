@@ -129,7 +129,6 @@ interface MessageProps {
 	toolsRunning?: boolean;
 	bashActive?: boolean;
 	toolMessageIds?: ReadonlyMap<string, string>;
-	phaseLabels?: ReadonlyMap<string, string>;
 	planViews?: ReadonlyMap<string, PlanPresentation>;
 	continuation?: boolean;
 	conversationId?: string;
@@ -185,7 +184,6 @@ export const Message = memo(function Message({
 	toolsRunning,
 	bashActive,
 	toolMessageIds,
-	phaseLabels,
 	planViews,
 	continuation,
 	conversationId,
@@ -487,7 +485,7 @@ export const Message = memo(function Message({
 			// Key by the first row so appending rows during streaming never remounts the list.
 			const key = `process-${isValidElement(run[0]) ? run[0].key : start}`;
 			// Thinking alone needs no summary header; any tool turns the run into a collapsible group.
-			grouped.push(stats.commands + stats.reads + stats.searches > 0 ? <ProcessGroup key={key} stats={stats} label={phaseLabels?.get(stats.toolIds[0])}>{run}</ProcessGroup> : <div className="process-list" key={key}>{run}</div>);
+			grouped.push(stats.commands + stats.reads + stats.searches > 0 ? <ProcessGroup key={key} stats={stats}>{run}</ProcessGroup> : <div className="process-list" key={key}>{run}</div>);
 		}
 		return grouped;
 	};
@@ -499,7 +497,7 @@ export const Message = memo(function Message({
 			data-msg-id={message.id}
 		>
 			<div className="msg-meta">
-				<span className="msg-role">
+				<span className="msg-role" title={message.role === "assistant" ? message.model : undefined}>
 					{message.role === "custom"
 						? isGoalWizard
 							? t("goalWizardCard")
@@ -511,9 +509,9 @@ export const Message = memo(function Message({
 						: roleLabel(message.role, t)}
 				</span>
 
-				{message.role === "assistant" && message.model && <span className="msg-model" title={message.model}>{message.model}</span>}
+				{/* The selected model is shown once in the toolbar; retain reply provenance on hover. */}
 
-				{message.timestamp && (
+				{message.role === "custom" && message.timestamp && (
 					<span className="msg-time" title={[message.model, new Date(message.timestamp).toLocaleString()].filter(Boolean).join(" · ")}>{formatTime(message.timestamp)}</span>
 				)}
 				{onCollapse && (
@@ -693,9 +691,8 @@ export const Message = memo(function Message({
 					</>
 				)}
 			</div>
-			{message.role === "user" && !editing && (message.timestamp || repeatCount > 1) && <div className="msg-user-foot">
+			{message.role === "user" && !editing && repeatCount > 1 && <div className="msg-user-foot">
 				{repeatCount > 1 && <span className="msg-repeat">{t("repeatedMessage", { n: repeatCount - 1 })}</span>}
-				{message.timestamp && <span className="msg-time" title={new Date(message.timestamp).toLocaleString()}>{formatTime(message.timestamp)}</span>}
 			</div>}
 			{canEdit && !editing && (
 				<div className="msg-actions">

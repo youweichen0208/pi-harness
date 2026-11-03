@@ -355,7 +355,8 @@ function BashCommandHeader({ command, original, directory, running, elapsed, sta
 function RegularToolCallBlock({ block, view, onKillBash, wrap = true, rawSubagent = false }: ToolCallBlockProps) {
 	const nestedCalls = view.result?.nestedCalls ?? view.nestedCalls;
 	const t = useT();
-	const [open, setOpen] = useState(wrap);
+	const quietSubagent = block.name === "subagent";
+	const [open, setOpen] = useState(quietSubagent && !rawSubagent && !view.result?.isError ? false : wrap);
 	const [copyError, setCopyError] = useState(false);
 	const [copied, setCopied] = useState(false);
 	const [lineWrap, setLineWrap] = useState(false);
@@ -442,13 +443,13 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true, rawSubagen
 	let statusLabel = isError
 		? t("error")
 		: done
-			? t("done")
+			? t(quietSubagent ? "executionCompleted" : "done")
 			: abandoned
 				? t("toolNotExecuted")
 				: running
-					? t("running")
+					? t(quietSubagent ? "processRunning" : "running")
 					: waitingModel
-						? t("done")
+						? t(quietSubagent ? "executionCompleted" : "done")
 						: t("toolQueued");
 	const recorded = toolDuration(view);
 	const duration = recorded !== undefined ? formatDuration(recorded) : "";
@@ -562,7 +563,7 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true, rawSubagen
 	);
 
 	return (
-		<div className={`toolcall ${generic ? "toolcall-generic" : ""} ${structured ? "toolcall-structured" : ""} ${statusClass} ${block.name === "bash" ? "toolcall-bash" : ""} ${bashRun ? "toolcall-steps" : ""} ${bashDiagnostics.length ? "toolcall-diagnostics" : ""} ${subagent ? "toolcall-subagents" : ""}`} onMouseEnter={() => notifyToolHover(block.id)} onMouseLeave={() => notifyToolHover(null)}>
+		<div className={`toolcall ${generic ? "toolcall-generic" : ""} ${structured ? "toolcall-structured" : ""} ${statusClass} ${block.name === "bash" ? "toolcall-bash" : ""} ${bashRun ? "toolcall-steps" : ""} ${bashDiagnostics.length ? "toolcall-diagnostics" : ""} ${subagent ? "toolcall-subagents" : ""} ${quietSubagent ? "toolcall-subagent-quiet" : ""}`} onMouseEnter={() => notifyToolHover(block.id)} onMouseLeave={() => notifyToolHover(null)}>
 			{commandDisplay ? <BashCommandHeader command={commandDisplay.command} original={command!} directory={commandDisplay.directory ?? differentCommandDirectory(block.argumentsText, cwd)} running={isBashRunning} elapsed={elapsed} status={statusLabel} full={fullCommand} onFull={() => { setFullCommand((value) => !value); setOpen(true); }} onKill={onKillBash}>
 				{bashRun && <span className="bash-view-switch"><button type="button" className={bashView === "steps" ? "active" : ""} onClick={() => setBashView("steps")}>{t("bashSteps")}</button><button type="button" className={bashView === "raw" ? "active" : ""} onClick={() => setBashView("raw")}>{t("bashRaw")}</button></span>}
 				<button type="button" className="toolcall-wrap" aria-pressed={lineWrap} onClick={() => setLineWrap((value) => !value)}>{t("toolWrap")}</button>
@@ -576,6 +577,7 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true, rawSubagen
 				{compactBash ? <code className="bash-head-command" title={command ?? ""}>$ {displayBashCommand(command!, cwd)}</code> : generic ? <button type="button" className="toolcall-name toolcall-name-toggle" title={block.name} aria-expanded={open} onClick={() => setOpen(v => !v)}><span>{block.name}</span>{action && <small className="toolcall-action" title={action}>action: {action}</small>}</button> : <span className="toolcall-name">{block.name}</span>}
 				{compactBash && output && <span className="bash-head-count">{t("toolLineCount", { n: outputLines.length })}</span>}
 				<span className="toolcall-status">
+					{quietSubagent && (statusClass === "ok" ? <FiCheck aria-hidden="true" /> : statusClass === "run" ? <i className="thinking-spinner" aria-hidden="true" /> : statusClass === "err" ? <FiX aria-hidden="true" /> : null)}
 					{statusLabel}
 					{running && block.name === "bash" && <span className="working-dots" aria-hidden="true"><i /><i /><i /></span>}
 					{exitHint && <em className="toolcall-exit">{exitHint}</em>}
@@ -605,7 +607,7 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true, rawSubagen
 						{expanded ? t("collapseCode") : t("expandCode")}
 					</button>
 				)}
-				{!bashRun && !bashDiagnostics.length && <button
+				{!quietSubagent && !bashRun && !bashDiagnostics.length && <button
 					type="button"
 					className="toolcall-expand"
 					title={t("zoomCode")}
@@ -614,7 +616,7 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true, rawSubagen
 				>
 				{generic ? <FiMaximize2 /> : t("zoomCode")}
 				</button>}
-				<button
+				{!quietSubagent && <button
 					type="button"
 					className="toolcall-copy"
 					title={t(copyError ? "copyFailed" : "copyArgs")}
@@ -622,9 +624,9 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true, rawSubagen
 					onClick={copyArgs}
 				>
 					{generic ? copied ? <FiCheck /> : <FiCopy /> : t(copyError ? "copyFailed" : copied ? "copied" : "copy")}
-				</button>
+				</button>}
 				{(bashRun || bashDiagnostics.length > 0) && <details className="bash-card-more"><summary aria-label={t("more")}>⋯</summary><div><button type="button" onClick={() => setLineWrap((value) => !value)}>{t("toolWrap")}</button><button type="button" onClick={() => setZoomed(true)}>{t("zoomCode")}</button><button type="button" onClick={() => setOpen((value) => !value)}>{open ? t("collapseCode") : t("expandCode")}</button></div></details>}
-				{!bashRun && !bashDiagnostics.length && <button
+				{!quietSubagent && !bashRun && !bashDiagnostics.length && <button
 					type="button"
 					className="toolcall-toggle"
 					aria-label={open ? t("collapseCode") : t("expandCode")}
@@ -636,6 +638,7 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true, rawSubagen
 			)}
 			{open && (
 				<div className={`toolcall-body ${expanded ? "expanded" : ""}`}>
+					{quietSubagent && <div className="subagent-tool-actions"><button type="button" onClick={copyArgs}><FiCopy />{t(copyError ? "copyFailed" : copied ? "copied" : "copyArgs")}</button><button type="button" onClick={() => setZoomed(true)}><FiMaximize2 />{t("zoomCode")}</button></div>}
 					{bodyContent}
 				</div>
 			)}

@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+import { FiChevronDown } from "react-icons/fi";
 import { useT, type Translate } from "../i18n";
 import type { PlanChange } from "../types";
 import type { PlanPresentation } from "../plan-presentation";
@@ -9,13 +11,28 @@ function changeLabel(change: PlanChange, t: Translate): string {
 }
 export function PlanChecklist({ view, toolCallId }: { view: PlanPresentation; toolCallId: string }) {
 	const t = useT();
+	const [open, setOpen] = useState(false);
+	useEffect(() => {
+		const reveal = (event: Event) => {
+			if ((event as CustomEvent<{ toolCallId?: string }>).detail?.toolCallId === toolCallId) setOpen(true);
+		};
+		window.addEventListener("pi:reveal-tool", reveal);
+		return () => window.removeEventListener("pi:reveal-tool", reveal);
+	}, [toolCallId]);
 	const changes = view.changes.map(change => changeLabel(change, t)).join(t("todoChangeSeparator"));
-	if (view.kind === "update") return <div className="todo-update" data-tool-call-id={toolCallId}>
+	if (view.kind === "update") return <details className="todo-update plan-change-details" data-tool-call-id={toolCallId}><summary>{t("planUpdateDetails")}</summary><div>
 		<span className="todo-update-dot" aria-hidden="true" /><span>{changes || t("planRecorded")}</span>
 		<button type="button" onClick={() => window.dispatchEvent(new CustomEvent("pi:jump-tool", { detail: { ...view.target, todoItemIds: view.changes.flatMap(change => "stepId" in change ? [change.stepId] : []) } }))}>{t("todoView")}</button>
-	</div>;
+	</div></details>;
 	const plan = view.snapshot;
 	return <section className="todo-checklist" data-tool-call-id={toolCallId} aria-label={t("taskPlanSource")}>
+		<button type="button" className="plan-progress-toggle" aria-expanded={open} onClick={() => setOpen(value => !value)}>
+			<span className="plan-progress-segments" aria-hidden="true">{plan.steps.map(step => <i key={step.id} className={plan.completedStepIds.includes(step.id) ? "done" : plan.status === "active" && plan.currentStepId === step.id ? "current" : ""} />)}</span>
+			<span>{t("planProgressCount", { total: plan.steps.length, completed: plan.completedStepIds.length })}</span>
+			{plan.status !== "active" && plan.status !== "completed" && <span>{t(plan.status === "failed" ? "error" : "cancelled")}</span>}
+			<span className="plan-progress-action">{t(open ? "planCollapseDetails" : "planExpandDetails")}<FiChevronDown /></span>
+		</button>
+		<div className="plan-progress-details" hidden={!open}>
 		<header className="todo-checklist-head"><strong>{plan.title}</strong><span>{t("todoCounts", { total: plan.steps.length, completed: plan.completedStepIds.length })}</span><span className="todo-checklist-state">{t(plan.status === "active" ? "planActive" : plan.status === "completed" ? "done" : plan.status === "failed" ? "error" : "cancelled")}</span></header>
 		<ol className="todo-checklist-items">{plan.steps.map(step => {
 			const status = plan.completedStepIds.includes(step.id) ? "completed" : plan.currentStepId === step.id ? "in_progress" : "pending";
@@ -23,5 +40,6 @@ export function PlanChecklist({ view, toolCallId }: { view: PlanPresentation; to
 		})}</ol>
 		{plan.completionCriteria && <p className="task-outline-criteria">{t("taskCompletionCriteria")}：{plan.completionCriteria}</p>}
 		{changes && <p className="todo-update">{changes}</p>}
+		</div>
 	</section>;
 }

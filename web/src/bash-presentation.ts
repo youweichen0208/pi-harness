@@ -70,6 +70,27 @@ export function commandPresentation(command: string, cwd: string): { command: st
 	return { command: displayBashCommand(command.slice(prefix[0].length), cwd), directory: differentCommandDirectory(JSON.stringify({ command }), cwd) };
 }
 
+/** Display only: fold simple setup prefixes, keeping the executable and its arguments visible. */
+export function commandPreview(command: string, cwd: string): string {
+	let preview = commandPresentation(command, cwd).command;
+	// Quoted values may contain spaces or $PATH, but substitutions/control syntax stay visible.
+	const assignment = String.raw`[A-Za-z_][A-Za-z0-9_]*=(?:"[^"\x60\n]*"|'[^'\n]*'|[^\s;&|<>\x60]+)`;
+	const setup = new RegExp(`^(?:export\\s+)?(?:${assignment})(?:\\s+${assignment})*\\s*(?:&&|;)\\s*`);
+	for (;;) {
+		const prefix = setup.exec(preview);
+		if (!prefix || /\$\(|`/.test(prefix[0])) break;
+		const rest = preview.slice(prefix[0].length).trimStart();
+		if (!rest) break;
+		preview = commandPresentation(rest, cwd).command;
+	}
+	const inline = new RegExp(`^(?:${assignment}\\s+)+`).exec(preview);
+	if (inline && !/\$\(|`/.test(inline[0])) {
+		const rest = preview.slice(inline[0].length).trimStart();
+		if (rest && !/^[;&|<>]/.test(rest)) preview = rest;
+	}
+	return compactCommandLabel(preview);
+}
+
 export function gitStatusLine(line: string): { status: string; path: string; kind: "added" | "modified" | "deleted" | "untracked" | "conflict" } | null {
 	const match = /^([ MADRCUT?!]{2}) (.+)$/.exec(line);
 	if (!match || !match[1].trim()) return null;

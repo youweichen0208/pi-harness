@@ -11,6 +11,7 @@ export function subagentErrorKind(item: SubagentItemView) {
 	if (/429|too many requests|rate.?limit/i.test(text)) return "rate";
 	if (/ENOENT|no such file|not found|不存在/i.test(text)) return "missing";
 	if (/EACCES|permission denied|无权|权限/i.test(text)) return "permission";
+	if (/timeout|timed out|超时/i.test(text)) return "timeout";
 	if (item.phase === "cancelled" || /abort|cancel|timeout|timed out|超时|取消/i.test(text)) return "interrupted";
 	return "unknown";
 }

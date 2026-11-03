@@ -78,10 +78,12 @@ try {
 			localStorage.setItem("pi-harness:lang", lang);
 		}, { platform, lang });
 		await page.goto(`http://127.0.0.1:${port}`);
+		await page.locator(".plan-progress-toggle").click();
 		await page.locator(".todo-checklist-item").last().waitFor();
 		assert.equal(await page.locator(".todo-checklist-item").count(), 5);
 		assert.equal(await page.locator(".todo-checklist").count(), 1);
 		fixture = updates; send();
+		await page.locator(".plan-change-details > summary").click();
 		await page.locator(".todo-update button").waitFor();
 		assert.match(await page.locator(".todo-update").textContent(), lang === "en" ? /Item 1 started/ : /第 1 项开始/);
 		assert.equal(await page.locator(".todo-checklist").count(), 1);
@@ -102,7 +104,7 @@ try {
 		assert.doesNotMatch(await page.locator('.task-progress').textContent(), /等待确认|awaiting confirmation/);
 		running = false; fixture = updates; send();
 		const headings = page.locator('.task-section-heading');
-		assert.deepEqual(await headings.allTextContents(), lang === 'en' ? ['Progress', 'Outputs'] : ['进度', '输出']);
+		assert.deepEqual(await headings.allTextContents(), lang === 'en' ? ['Progress', 'Files this turn0 files'] : ['进度', '本轮文件0 个文件']);
 		assert.equal(await page.locator('.task-progress-meta').count(), 0);
 		await headings.first().focus(); await page.keyboard.press('Enter');
 		assert.equal(await headings.first().getAttribute('aria-expanded'), 'false');
@@ -112,9 +114,7 @@ try {
 		assert.equal(await headings.last().getAttribute('aria-expanded'), 'true');
 		await headings.first().click();
 		fixture = []; send();
-		await page.locator('.task-progress.empty').waitFor();
-		assert.equal(await page.locator('.task-section-empty').count(), 2);
-		assert.match(await page.locator('.task-section-empty').first().textContent(), lang === 'en' ? /longer tasks/ : /较长任务/);
+		await page.locator('.task-progress').waitFor({ state: 'hidden' });
 		fixture = updates; send();
 		await page.locator('.task-plan-step').last().waitFor();
 		// A short sidebar with many output files must not crush the plan.
@@ -152,6 +152,7 @@ try {
 		fixture = [...updates];
 		for (let i = 0; i < 35; i++) fixture.push(text(`history-${i}`, `历史记录 ${i}\n\n${"核实记录。".repeat(30)}`, i % 2 ? "assistant" : "user"));
 		fixture.push(...pair("finish", transition({ ...started, action: "update", expectedRevision: 2, currentStepId: "2", completedStepIds: ["1"] }, started))); send();
+		await page.locator('.todo-update[data-tool-call-id="finish"] > summary').click();
 		await page.locator('.todo-update[data-tool-call-id="finish"] button').waitFor();
 		await page.locator('.todo-update[data-tool-call-id="finish"] button').click();
 		await page.locator('.todo-checklist-item[data-todo-item-id="1"].todo-item-flash.completed').waitFor();
@@ -163,6 +164,7 @@ try {
 		// A replacement records cancellation and never merges its card into the old plan.
 		const replacement = transition({ ...first, action: 'create', title: '新的任务', currentStepId: '1' }, started, () => 'new-plan');
 		fixture = [...updates, ...pair('new', replacement), ...pair('new-start', transition({ ...replacement, action: 'update', expectedRevision: 1, currentStepId: '2', completedStepIds: ['1'] }, replacement))]; send();
+		await page.locator('.todo-update[data-tool-call-id="new-start"] > summary').click();
 		await page.locator('.todo-update[data-tool-call-id="new-start"] button').waitFor();
 		await page.locator('.todo-update[data-tool-call-id="new-start"] button').click();
 		await page.locator('.todo-checklist[data-tool-call-id="new"] .todo-item-flash').first().waitFor();

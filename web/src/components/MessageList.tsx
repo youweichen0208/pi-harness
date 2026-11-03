@@ -1,6 +1,6 @@
 import { subagentTurns } from "../subagent-turns";
 import { SubagentTurnContext, type SubagentTurnCall } from "./SubagentTurnPanel";
-import { commandPhaseLabels, commandTurnSummaries } from "../command-turns";
+import { commandTurnSummaries } from "../command-turns";
 import { CommandTurnSummary } from "./CommandTurnSummary";
 import { answerHistory } from "../answer-history";
 import { WelcomeMotto } from "./WelcomeMotto";
@@ -276,7 +276,6 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 	}
 	const settledGroups = useMemo(() => groupBashMessages(state.messages, recentStart, new Set(timeGaps.keys())), [state.messages, recentStart, timeGaps]);
 	const bashGroups = useMemo(() => withStreamingMessage(settledGroups, state.messages, state.streamingMessage), [settledGroups, state.messages, state.streamingMessage]);
-	const phaseLabels = useMemo(() => commandPhaseLabels(state.streamingMessage ? [...state.messages, state.streamingMessage] : state.messages), [state.messages, state.streamingMessage]);
 	const commandSummaries = useMemo(() => {
 		const summaries = commandTurnSummaries(state.messages, state.isStreaming);
 		for (const [id, summary] of [...summaries]) {
@@ -847,7 +846,6 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 							key={m.id}
 							message={bashGroups.projected.get(m.id) ?? m}
 							toolMessageIds={bashGroups.sources}
-							phaseLabels={phaseLabels}
 							// A folded or lazily hidden predecessor still shows the pi header for this turn.
 							continuation={(() => {
 								const previous = predecessors.get(m.id);
@@ -894,7 +892,6 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 					<Message recovery={recovery} incident={incidentFor.get(state.streamingMessage.id)}
 						key={state.streamingMessage.id}
 						message={bashGroups.projected.get(state.streamingMessage.id) ?? state.streamingMessage}
-						phaseLabels={phaseLabels}
 						continuation={!!predecessors.get(state.streamingMessage.id)}
 						toolResults={toolResults}
 						planViews={planViews}

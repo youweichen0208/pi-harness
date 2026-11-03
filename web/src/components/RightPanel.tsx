@@ -6,6 +6,17 @@ import { mentionedHiddenDirs } from "../conversation-files";
 import { CreateFileForm } from "./CreateFileForm";
 import { TaskProgressPanel } from "./TaskProgressPanel";
 
+// Icon accents are file categories; filenames and Git status retain their own styling.
+function fileIconCategory(name: string): string {
+	const lower = name.toLowerCase();
+	const extension = lower.split(".").pop() ?? "";
+	if (["md", "mdx", "txt", "rst", "pdf"].includes(extension)) return "document";
+	if (["json", "jsonc", "yaml", "yml", "toml", "ini", "xml", "env", "lock"].includes(extension) || lower.startsWith(".env.") || ["dockerfile", "makefile", ".gitignore", ".npmrc", ".editorconfig"].includes(lower)) return "config";
+	if (["ts", "tsx", "js", "jsx", "mjs", "cjs", "py", "go", "rs", "java", "c", "h", "cpp", "cs", "rb", "php", "sh", "bash", "zsh", "sql", "html", "css", "scss", "vue", "svelte"].includes(extension)) return "code";
+	if (["png", "jpg", "jpeg", "gif", "webp", "svg", "ico", "avif", "mp3", "wav", "mp4", "mov", "webm"].includes(extension)) return "media";
+	return "default";
+}
+
 type AttachMode = "inline";
 interface RightPanelProps {
 	taskFocusRequest?: number;
@@ -154,7 +165,7 @@ export const RightPanel = memo(function RightPanel({ taskFocusRequest = 0, onSea
 			<div className={`file-item ${dir ? "dir" : "file"}`} style={{ paddingLeft: 26 + depth * 18 }}>
 				<button type="button" data-tree-node={entry.path} className={dir ? "file-dir-main" : "file-name"} title={entry.path} disabled={virtual && !dir} onClick={() => dir ? virtual ? setExpanded((previous) => { const next = new Set(previous); if (next.has(entry.path)) next.delete(entry.path); else next.add(entry.path); return next; }) : toggle(entry.path) : onPreview(entry.path, entry.name)}>
 					<span className={`tree-caret ${open ? "open" : ""}`}>{dir && <FiChevronRight />}</span>
-					{dir ? <FiFolder className="tree-entry-icon" aria-hidden="true" /> : <FiFile className="tree-entry-icon" aria-hidden="true" />}
+					{dir ? <FiFolder className="tree-entry-icon tree-icon-folder" aria-hidden="true" /> : <FiFile className={`tree-entry-icon tree-icon-${fileIconCategory(entry.name)}`} aria-hidden="true" />}
 					<span className={dir ? "file-name" : "file-name-text"}>{entry.name}</span>
 				</button>
 				{changeKind && <span className={`tree-change-badge ${changeKind.toLowerCase()}`} title={changeKind === "A" ? "Added" : changeKind === "D" ? "Deleted" : "Modified"}>{changeKind}</span>}
@@ -210,7 +221,7 @@ export const RightPanel = memo(function RightPanel({ taskFocusRequest = 0, onSea
 			}
 		}}>
 			<div role="treeitem" aria-expanded={rootOpen}>
-			<button type="button" className="tree-root file-dir-main" data-tree-node="" title={cwd} onClick={() => setRootOpen(value => !value)}><span className={`tree-caret ${rootOpen ? "open" : ""}`}><FiChevronRight /></span><FiFolder className="tree-entry-icon" aria-hidden="true" /><strong>{cwd.replace(/[\\/]+$/, "").split(/[\\/]/).at(-1) || cwd}</strong></button>
+			<button type="button" className="tree-root file-dir-main" data-tree-node="" title={cwd} onClick={() => setRootOpen(value => !value)}><span className={`tree-caret ${rootOpen ? "open" : ""}`}><FiChevronRight /></span><FiFolder className="tree-entry-icon tree-icon-folder" aria-hidden="true" /><strong>{cwd.replace(/[\\/]+$/, "").split(/[\\/]/).at(-1) || cwd}</strong></button>
 			{rootOpen && <div role="group">
 			{directories[""] ? renderDirectory("", 0) : <div className="panel-empty">{t("loading")}</div>}
 			{!showHidden && hiddenRootEntries.length > 0 && <button type="button" className="tree-hidden-summary" onClick={() => { setShowHidden(true); setShowOtherDirectories(true); }} title={hiddenRootEntries.map(({ entry }) => entry.name).join(", ")}>{t("showHiddenCount", { n: hiddenRootEntries.length })}<span>{hiddenRootEntries.slice(0, 3).map(({ entry }) => entry.name).join(", ")}{hiddenRootEntries.length > 3 ? "…" : ""}</span></button>}

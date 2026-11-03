@@ -409,7 +409,8 @@ try {
 		assert.equal(reports.filter(result => result.status === "cancelled").length, 1);
 		assert.equal(reports.filter(result => result.status === "completed").length, 2);
 		await page.reload();
-		await page.locator(".subagent-task-group-head").click();
+		await page.locator(".subagent-task-group-head").waitFor();
+		assert.equal(await page.locator(".subagent-task-group-head").getAttribute("aria-expanded"), "true");
 		assert.equal(await page.locator(".subagent-task-row").count(), 2);
 		await page.locator(".subagent-task-row").first().click();
 		await page.getByRole("button", { name: "Execution", exact: true }).click();

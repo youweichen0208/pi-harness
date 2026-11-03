@@ -40,13 +40,13 @@ try {
 	};
 	await page.goto(`http://127.0.0.1:${harness.port}`);
 	const working = page.locator(".trailing-working .waiting-indicator");
-	await working.filter({ hasText: "Working" }).waitFor();
+	await working.filter({ hasText: "工作中" }).waitFor();
 	assert.equal(await working.locator(".waiting-brand i").count(), 3);
 	// A persisted paragraph and an actively streaming paragraph both retain the cue.
 	emit({ messages: [user], streamingMessage: answer });
-	await working.filter({ hasText: "Working" }).waitFor();
+	await working.filter({ hasText: "工作中" }).waitFor();
 	emit({ streamingMessage: { ...answer, content: [{ type: "text", text: "Now updating the domain model." }] } });
-	await working.filter({ hasText: "Working" }).waitFor();
+	await working.filter({ hasText: "工作中" }).waitFor();
 	mkdirSync("tests/scratch", { recursive: true });
 	await page.screenshot({ path: "tests/scratch/working-after-text.png" });
 	await page.setViewportSize({ width: 390, height: 844 });

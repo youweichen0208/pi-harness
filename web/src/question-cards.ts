@@ -78,7 +78,32 @@ function applyRecommendation(options: QuestionOption[], text: string): QuestionO
 	return answer ? [{ text: answer, recommended: true, ...(why ? { reason: why } : {}) }] : [];
 }
 
-/** Numbered questions render individually; casual unnumbered questions require a group. */
+/** Only turn an explicit final offer into choices; explanatory A/B lists stay prose. */
+function trailingOffer(text: string): ReplySegment[] | undefined {
+	const trimmed = text.trimEnd();
+	const lines = trimmed.split("\n");
+	let fence: { char: string; length: number } | undefined;
+	for (const line of lines) {
+		const marker = /^\s{0,3}(`{3,}|~{3,})/.exec(line)?.[1];
+		if (!marker) continue;
+		if (!fence) fence = { char: marker[0], length: marker.length };
+		else if (marker[0] === fence.char && marker.length >= fence.length && line.trim() === marker) fence = undefined;
+	}
+	const last = lines.at(-1) ?? "";
+	if (fence || /^\s*(?:>|[-*#]|\d+[.)])/.test(last) || /^\s{4}/.test(last)) return;
+	const match = /(?:^|[。！？])\s*((?:要我|需要我|你希望我)([^？?\n]+?)[，,]\s*还是([^？?\n]+)[？?])$/.exec(last)
+		?? /(?:^|[.!?]\s+)\s*((?:Would you like me to|Do you want me to)\s+([^?\n]+?),\s+or\s+([^?\n]+)\?)$/i.exec(last);
+	if (!match || /还是|\bor\b/i.test(match[2] + match[3])) return;
+	const options = [match[2], match[3]].map((value, index) => ({ key: index === 0 ? "a" : "b", text: plain(value) }));
+	if (options.some(option => !option.text) || options[0].text === options[1].text) return;
+	const prefix = trimmed.slice(0, trimmed.length - last.length + last.lastIndexOf(match[1])).trimEnd();
+	return [
+		...(prefix ? [{ kind: "markdown" as const, text: prefix }] : []),
+		{ kind: "questions", questions: [{ id: "Q1", title: "", prompt: plain(match[1]), options }] },
+	];
+}
+
+/** Numbered questions and explicit final offers render individually; other casual questions require a group. */
 export function parseReplySegments(text: string): ReplySegment[] {
 	const lines = text.split("\n");
 	let fence: { char: string; length: number } | undefined;
@@ -92,7 +117,7 @@ export function parseReplySegments(text: string): ReplySegment[] {
 		return !fence && QUESTION.test(line);
 	});
 	const hasNumberedQuestion = lines.some((line, index) => eligible[index] && /^\s*\*{0,2}Q\d+[a-z]?\b/.test(line.replace(QUESTION, "")));
-	if (eligible.filter(Boolean).length < 2 && !hasNumberedQuestion) return [{ kind: "markdown", text }];
+	if (eligible.filter(Boolean).length < 2 && !hasNumberedQuestion) return trailingOffer(text) ?? [{ kind: "markdown", text }];
 	const segments: ReplySegment[] = [];
 	let markdown: string[] = [];
 	let questions: QuestionCard[] = [];

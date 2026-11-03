@@ -104,3 +104,28 @@ test("warning notes stay with their question instead of becoming recommendation 
 	expect(questions[0].note).toBe("注意共享记忆的代价。");
 	expect(questions[0].options[2].reason).toBe("文档定边界，骨架能跑通 P0。");
 });
+
+test("final execution offer becomes choices without repurposing the preceding A/B routes", () => {
+	const prefix = "## 周一的两条路\n\nA. 直接用 LIVE_UNVERIFIED\n\nB. 补齐资格证据\n\n你之前选的是 A。";
+	const text = prefix + "要我现在把环境切到 `LIVE_UNVERIFIED` 并启动采集器验证一次链路，还是留到周一？";
+	const segments = parseReplySegments(text);
+	expect(segments[0]).toEqual({ kind: "markdown", text: prefix });
+	const questions = segments.flatMap(segment => segment.kind === "questions" ? segment.questions : []);
+	expect(questions[0].options).toEqual([{ key: "a", text: "现在把环境切到 LIVE_UNVERIFIED 并启动采集器验证一次链路" }, { key: "b", text: "留到周一" }]);
+	expect(recommendedAnswers(questions)).toEqual({});
+	expect(composeAnswers(questions, { Q1: 1 })).toBe("Q1：(b) 留到周一");
+	expect(composeAnswers(questions, { Q1: OTHER_ANSWER }, "", { Q1: "只检查配置，不启动" })).toBe("Q1：其他 · 只检查配置，不启动");
+});
+
+test("English explicit offers use the same unselected card", () => {
+	const segments = parseReplySegments("Would you like me to start the collector now, or wait until Monday?");
+	expect(segments[0]).toMatchObject({ kind: "questions", questions: [{ options: [{ key: "a", text: "start the collector now" }, { key: "b", text: "wait until Monday" }] }] });
+});
+
+test("ordinary prose, quoted offers, fenced examples and ambiguous alternatives stay unchanged", () => {
+	for (const text of [
+		"A. 现在执行\nB. 留到周一", "你觉得怎么样？", "❓ 要我执行，还是等待？", "> 要我执行，还是等待？",
+		"    要我执行，还是等待？", "```text\n要我执行，还是等待？\n```", "~~~\n要我执行，还是等待？",
+		"要我执行，还是等待，还是取消？", "要我执行，还是等待？\n后面还有说明。",
+	]) expect(parseReplySegments(text)).toEqual([{ kind: "markdown", text }]);
+});

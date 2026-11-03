@@ -139,10 +139,24 @@ try {
 	assert.equal(await single.getByRole('radio').count(), 4, 'three choices plus Other, no empty or duplicate choice');
 	assert.match(await single.getByRole('radio').nth(2).innerText(), /\(b\) \+ 额外检查/);
 	assert.match(await single.locator('.question-option.selected').innerText(), /新增中间态 degraded/);
-	reply = '已收到回答。';
+	reply = '## 周一的两条路\n\nA. 直接用 LIVE_UNVERIFIED\n\nB. 补齐资格证据\n\n你之前选的是 A。要我现在把环境切到 LIVE_UNVERIFIED 并启动采集器验证一次链路，还是留到周一？';
 	await bar.getByRole('button', { name: '发送回答', exact: true }).click();
 	await page.getByText('Q25：(b) 新增中间态 degraded', { exact: true }).waitFor();
 	console.log('PASS single numbered question renders and submits the recommended answer');
+	const offer = page.locator('.question-card').filter({ hasText: '还是留到周一？' });
+	await offer.getByRole('radio').first().waitFor();
+	await page.waitForFunction(() => [...document.querySelectorAll('.question-card')].find(el => el.textContent.includes('还是留到周一？'))?.querySelector('button[role="radio"]')?.disabled === false);
+	assert.equal(await offer.getByRole('radio').count(), 3, 'two literal choices plus Other');
+	assert.equal(await offer.locator('.selected').count(), 0, 'an inferred recommendation is never preselected');
+	assert(await bar.getByRole('button', { name: '发送回答', exact: true }).isDisabled());
+	await offer.locator('textarea').fill('先检查配置');
+	assert.equal(await offer.locator('.question-other.selected').count(), 1);
+	await offer.getByRole('radio').nth(1).click();
+	await page.screenshot({ path: 'tests/scratch/question-final-offer.png' });
+	reply = '已收到回答。';
+	await bar.getByRole('button', { name: '发送回答', exact: true }).click();
+	await page.getByText('Q1：(b) 留到周一', { exact: true }).waitFor();
+	console.log('PASS final offer preserves A/B prose, starts unselected, supports Other and submits only on Send');
 } catch (error) {
 	console.error('FAIL', error);
 	process.exitCode = 1;

@@ -7,7 +7,7 @@ import { elapsedLabel } from "../bash-presentation";
 
 /** One collapsible list per stretch of thinking/commands/reads between paragraphs.
  * Open while its turn is still on it or after a failure; rows stay mounted so jumps and search can reveal them. */
-export function ProcessGroup({ stats, label, children }: { stats: ProcessStats; label?: string; children: ReactNode }) {
+export function ProcessGroup({ stats, children }: { stats: ProcessStats; children: ReactNode }) {
 	const t = useT();
 	const [manual, setManual] = useState<boolean | null>(null);
 	const recovered = failureRecovered(stats);
@@ -33,12 +33,12 @@ export function ProcessGroup({ stats, label, children }: { stats: ProcessStats; 
 	return <section className={`process-group ${state}${open ? " open" : ""}${single ? " single-command" : ""}`}>
 		{!single && <button type="button" className="process-group-head" aria-expanded={open} onClick={() => setManual(!open)}>
 			<FiChevronRight className="process-group-chevron" aria-hidden="true" />
-			<span className="process-group-summary" title={label}>{label && <span className="process-group-phase">{label}</span>}<span>{parts.join(" · ")}</span></span>
+			<span className="process-group-summary"><span>{parts.join(" · ")}</span></span>
 			{thought && <><span className="process-group-dot" aria-hidden="true">·</span><span className="process-group-thought">{thought}</span></>}
 			<span className="process-group-status" aria-label={state === "ok" ? t("processAllPassed") : undefined} title={state === "ok" ? t("processAllPassed") : undefined}>
 				{stats.running ? <><i className="thinking-spinner" aria-hidden="true" />{t("processRunning")}</>
 					: stats.failed ? t(recovered ? "processFailedRecovered" : "processFailed", { n: stats.failed })
-						: stats.skipped ? t("toolNotExecuted") : <FiCheck aria-hidden="true" />}
+						: stats.skipped ? t("toolNotExecuted") : <><FiCheck aria-hidden="true" />{t("executionCompleted")}</>}
 			</span>
 		</button>}
 		<div className="process-list process-group-rows" hidden={!open}>{children}</div>

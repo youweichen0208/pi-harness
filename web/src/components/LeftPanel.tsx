@@ -403,6 +403,7 @@ export const LeftPanel = memo(function LeftPanel({
 	return (
 		<aside className={`panel panel-left workspace-navigation compact-navigation ${directoryCollapsed ? "directory-collapsed" : ""}`}>
 			<div className="global-navigation">
+				<div className="compact-brand"><img src="/icon/1a-mark.svg" alt="" /><span>pi-harness</span></div>
 				<div className="compact-workspace-switcher" ref={switcherRef} onKeyDown={event => {
 					if (event.key === "Escape") { setWorkspaceOpen(false); switcherButton.current?.focus(); }
 					if (workspaceOpen && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
@@ -411,7 +412,7 @@ export const LeftPanel = memo(function LeftPanel({
 					}
 				}}>
 					<button ref={switcherButton} className="compact-workspace-trigger" title={selectedGroup?.name ?? t("workspaceSelect")} aria-label={t("workspaceSelect")} aria-expanded={workspaceOpen} aria-haspopup="dialog" onClick={() => { setGroupQuery(""); setWorkspaceOpen(value => !value); }}>
-						<img src="/icon/1a-mark.svg" alt="pi-harness" /><span>{selectedGroup?.name ?? t("workspaceNoneSelected")}</span><FiChevronDown />
+						<WorkspaceBook /><span>{selectedGroup?.name ?? t("workspaceNoneSelected")}</span><FiChevronDown />
 					</button>
 					{workspaceOpen && <div className="workspace-picker" role="dialog" aria-label={t("workspaceSelect")}>
 						<input autoFocus type="search" aria-label={t("workspaceFilter")} placeholder={t("workspaceFilter")} value={groupQuery} onChange={event => setGroupQuery(event.target.value)} />

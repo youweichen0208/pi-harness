@@ -3,7 +3,7 @@ import { FiChevronRight, FiPlus, FiPlay, FiTrash2 } from "react-icons/fi";
 import type { PlaygroundRunState } from "../playground-run-store";
 import { useT } from "../i18n";
 import type { PlaygroundCase, PlaygroundMethod, PlaygroundValue } from "../types";
-import { isJsonType, isReferenceType, validateCases, valuePlaceholder } from "../../../server/playground-methods";
+import { isJsonType, validateCases, valuePlaceholder } from "../../../server/playground-methods";
 import { randomUuid } from "../uuid";
 
 export function methodErrorText(message: string, t: ReturnType<typeof useT>): string {
@@ -21,17 +21,15 @@ export function methodErrorText(message: string, t: ReturnType<typeof useT>): st
 }
 
 function ValueInput({ type, value, onChange, label }: { type: string; value: PlaygroundValue; onChange: (value: PlaygroundValue) => void; label: string }) {
-	const t = useT();
 	return <div className="method-value">
 		<label><span>{label} <code>{type}</code></span>
-			<input aria-label={label} value={value.text} disabled={value.isNull} onChange={event => onChange({ ...value, text: event.target.value })} spellCheck={false} placeholder={isJsonType(type) ? valuePlaceholder(type) : ""} />
+			<input aria-label={label} value={value.isNull ? "null" : value.text} onChange={event => onChange({ text: event.target.value })} spellCheck={false} placeholder={isJsonType(type) ? valuePlaceholder(type) : ""} />
 		</label>
-		{isReferenceType(type) && <label className="method-check"><input type="checkbox" checked={!!value.isNull} onChange={event => onChange({ ...value, isNull: event.target.checked })} />{t("pgNull")}</label>}
 	</div>;
 }
 export function caseError(method: PlaygroundMethod | undefined, cases: PlaygroundCase[]): string {
 	if (!method) return "";
-	try { validateCases(method, cases); return ""; } catch (error) { return error instanceof Error ? error.message : String(error); }
+	try { validateCases(method, cases.map(({ id, args }) => ({ id, args }))); return ""; } catch (error) { return error instanceof Error ? error.message : String(error); }
 }
 export function PlaygroundMethodCases({ methods, selected, cases, results, stale, onSelect, onChange, onRun, disabled }: {
 	methods: PlaygroundMethod[]; selected: string; cases: PlaygroundCase[];
@@ -74,13 +72,8 @@ export function PlaygroundMethodCases({ methods, selected, cases, results, stale
 					<span className={`method-case-status ${stale && result ? "stale" : result?.status ?? ""}`}>{stale && result ? t("pgPreviousResult") : statusLabel}</span>
 				</button>
 				{expanded && <div className="method-case-body" id={`case-${test.id}`}>
-				{method?.parameters.some(parameter => parameter.type === "str" || isJsonType(parameter.type)) && <p className="playground-hint">{t("pgInputHint")}</p>}
 				<div className="method-parameters">
 					{test.args.map((value, i) => <ValueInput key={i} type={method?.parameters[i]?.type ?? "JSON"} label={method?.parameters[i]?.name || `arg${i + 1}`} value={value} onChange={next => update(index, { ...test, args: test.args.map((v, j) => j === i ? next : v) })} />)}
-					{<div className="method-expected">
-						<label className="method-check"><input type="checkbox" checked={!!test.expected} onChange={event => update(index, { ...test, expected: event.target.checked ? { text: "" } : undefined })} />{t("pgExpected")}</label>
-						{test.expected && <ValueInput type={method?.returnType ?? "JSON"} label={t("pgExpectedValue")} value={test.expected} onChange={expected => update(index, { ...test, expected })} />}
-					</div>}
 				</div>
 				<div className="method-case-actions">
 					{error && <span className="method-validation" role="status">{methodErrorText(error, t)}</span>}

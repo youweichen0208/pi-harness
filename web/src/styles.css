@@ -11427,6 +11427,9 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { height: 44px;
 .wiki-composer-pill .wiki-pill-send.stop { background: var(--bg-elev); color: var(--text); }
 .task-sections .task-plan-step.running { color: var(--accent); border-color: var(--accent); }
 .task-sections .task-plan-step.running .task-plan-mark { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.task-sections.running .task-plan-step.running .task-plan-mark { animation: task-plan-pulse 1.4s ease-in-out infinite; }
+@keyframes task-plan-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .55; transform: scale(.82); } }
+@media (prefers-reduced-motion: reduce) { .task-sections.running .task-plan-step.running .task-plan-mark { animation: none; } }
 .header-task-progress.interrupted, .task-progress-status.interrupted, .task-sections .task-plan-step.interrupted { color: var(--red); }
 .task-sections .task-plan-step.interrupted .task-plan-mark { color: var(--red); border-color: var(--red); background: var(--red-soft); }
 /* Phase rows (no plan) have no .task-plan-step-head button, so the row lays
@@ -12092,6 +12095,13 @@ pre.wiki-mermaid-source-hidden > .wiki-mermaid-preview { border-bottom: 0; margi
 .design-workspace .panel-right .file-dir-main > .file-name { color: inherit; font: inherit; }
 .design-workspace .panel-right .tree-root { color: var(--text); }
 .tree-entry-icon { width: 16px; height: 16px; flex: none; stroke-width: 1.7; }
+.tree-entry-icon.tree-icon-folder { color: color-mix(in srgb, var(--yellow) 75%, var(--yellow-fg)); fill: color-mix(in srgb, var(--yellow) 18%, transparent); }
+.tree-entry-icon.tree-icon-document { color: var(--accent); }
+.tree-entry-icon.tree-icon-code { color: var(--green); }
+.tree-entry-icon.tree-icon-config { color: var(--yellow-fg); }
+.tree-entry-icon.tree-icon-media { color: var(--waiting-coral); }
+.tree-entry-icon.tree-icon-default { color: var(--text-dim); }
+
 .design-workspace .panel-right .tree-caret { display: grid; place-items: center; width: 12px; height: 16px; color: var(--text-faint); }
 .design-workspace .panel-right .tree-caret svg { width: 12px; height: 14px; }
 .design-workspace .panel-right .tree-root .tree-caret { color: var(--text); }
@@ -13342,7 +13352,10 @@ html.pi-desktop .wiki-window-header .desktop-window-controls { -webkit-app-regio
 	.design-workspace.dual-navigation > .drawer-left[data-fluid-drawer="overlay"] { display: flex; flex-direction: column; }
 	.design-workspace.dual-navigation > .drawer-left .workspace-navigation { flex: 1; min-height: 0; height: auto; }
 }
-html.pi-desktop-darwin .design-workspace.dual-navigation.left-collapsed .topbar { padding-left: 20px; }
+/* In overlay navigation, reserve the fixed macOS window and project controls. */
+@media (min-width: 769px) and (max-width: 900px) {
+	html.pi-desktop-darwin .design-workspace.dual-navigation .topbar { padding-left: 132px; }
+}
 
 /* ---- Yuque typography: measured from /yuque/ng1qth/about, 2026-10-20 ---- */
 @font-face {
@@ -13437,7 +13450,13 @@ html.pi-desktop-darwin .design-workspace.dual-navigation.left-collapsed .topbar 
 .compact-navigation .global-navigation { position: relative; width: var(--left-w, 240px); height: 100%; padding: 12px 8px 8px; background: var(--sidebar-bg); border-right: 1px solid var(--border-soft); font-size: 13px; }
 .compact-workspace-switcher { position: relative; flex: none; margin-bottom: 12px; }
 .compact-workspace-trigger { display: flex; align-items: center; gap: 10px; width: 100%; height: 34px; padding: 4px 8px; border: 0; background: transparent; color: var(--text); font: inherit; cursor: pointer; }
-.compact-workspace-trigger img { width: 20px; height: 20px; flex: none; }
+.compact-brand { display: flex; align-items: center; gap: 10px; height: 34px; padding: 4px 8px; margin-bottom: 8px; flex: none; }
+.compact-brand img { width: 20px; height: 20px; flex: none; }
+.compact-brand > span { font-size: 14px; font-weight: 600; color: var(--text); white-space: nowrap; }
+.compact-navigation.directory-collapsed:not(:hover):not(:focus-within) .compact-brand > span { display: none; }
+@media (max-width: 900px) {
+	.drawer-left.open .compact-navigation.directory-collapsed .compact-brand > span { display: inline; }
+}
 .compact-workspace-trigger > span { flex: 1; min-width: 0; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .compact-workspace-trigger > svg { width: 14px; height: 14px; color: var(--text-faint); }
 .workspace-picker { position: absolute; top: calc(100% + 6px); left: 0; z-index: 70; width: 280px; max-width: calc(100vw - 24px); padding: 12px; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--bg-elev); box-shadow: var(--card-shadow); }
@@ -13466,6 +13485,8 @@ html.pi-desktop-darwin .design-workspace.dual-navigation.left-collapsed .topbar 
 .compact-navigation .lp-add-project { opacity: 0; width: 24px; height: 24px; }
 .compact-navigation .panel-section-title:hover .lp-add-project, .compact-navigation .panel-section-title:focus-within .lp-add-project { opacity: 1; }
 .design-workspace .compact-navigation .project-item { min-height: 30px; padding: 5px 30px 5px 8px; font-size: 13px; border-radius: var(--r-md); }
+/* Active projects have both New chat and More actions; reserve their full width. */
+.design-workspace .compact-navigation .project-item.active { padding-right: 66px; }
 .compact-navigation .project-time { display: none; }
 .compact-navigation .lp-row > .project-item + .lp-menu-zone { top: 2px; }
 .compact-navigation .sidebar-footer { flex: none; margin-top: auto; padding: 8px; }
@@ -13477,7 +13498,7 @@ html.pi-desktop-darwin .design-workspace.dual-navigation.left-collapsed .topbar 
 .compact-navigation.directory-collapsed .global-navigation { width: 56px; }
 .compact-navigation.directory-collapsed:not(:hover):not(:focus-within) .compact-workspace-trigger { justify-content: center; padding: 4px; }
 .compact-navigation.directory-collapsed:not(:hover):not(:focus-within) .compact-workspace-trigger > span,
-.compact-navigation.directory-collapsed:not(:hover):not(:focus-within) .compact-workspace-trigger > svg,
+.compact-navigation.directory-collapsed:not(:hover):not(:focus-within) .compact-workspace-trigger > svg:not(.workspace-book),
 .compact-navigation.directory-collapsed:not(:hover):not(:focus-within) .navigation-search,
 .compact-navigation.directory-collapsed:not(:hover):not(:focus-within) .global-entries span,
 .compact-navigation.directory-collapsed:not(:hover):not(:focus-within) .sidebar-footer span span,
@@ -14663,4 +14684,92 @@ html.pi-desktop .design-workspace .topbar { height: 48px; min-height: 48px; }
 	.subagent-task-time { display: none; }
 	.subagent-task-group-head { flex-wrap: wrap; }
 	.subagent-task-group-head > span { order: 2; flex-basis: 100%; }
+}
+
+/* Agent conversation refinement: quiet cards, one execution summary, readable command bodies. */
+:root .design-workspace .process-group,
+:root .design-workspace .process-group.single-command,
+:root .design-workspace .process-group.ok:not(.single-command).open,
+:root .design-workspace .todo-checklist { background: var(--bg-elev); border: 1px solid var(--border-soft); border-radius: var(--r-lg); margin-block: 12px 18px; overflow: hidden; }
+:root .design-workspace .process-group > .process-group-head,
+:root .design-workspace .process-group.ok:not(.single-command) > .process-group-head { background: transparent; border: 0; border-radius: 0; padding: 12px 16px; min-height: 48px; }
+:root .design-workspace .process-group > .process-group-rows { margin: 0 16px; padding: 8px 0; border-top: 1px solid var(--border-soft); }
+:root .design-workspace .process-group.single-command > .process-group-rows { margin: 0; padding: 0; border: 0; }
+:root .design-workspace .process-group .bash-row,
+:root .design-workspace .process-group.single-command .process-list .bash-group-items > .bash-row.run { border: 0; background: transparent; padding: 0; }
+:root .design-workspace .process-group .bash-row-head,
+:root .design-workspace .process-group.single-command .bash-row-head { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; padding: 10px 0; min-height: 44px; }
+:root .design-workspace .process-group.single-command .bash-row-head { padding: 14px 16px; min-height: 52px; }
+:root .design-workspace .process-group .bash-row .bash-inline-command,
+:root .design-workspace .process-group.single-command .bash-row.ok .bash-inline-command,
+:root .design-workspace .process-group.ok:not(.single-command).open .bash-row.ok .bash-inline-command { display: block; flex: 1; min-width: 0; max-width: none; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--text); font: 12px/1.7 var(--mono); order: 0; text-align: left; }
+:root .design-workspace .process-group .bash-row :is(.bash-readable-title, .bash-command-secondary, .bash-extra-lines, .bash-live-line) { display: none; }
+:root .design-workspace .process-group .bash-row.ok .bash-inline-result { display: inline; color: var(--green); font: 12px/1.5 var(--sans); white-space: nowrap; }
+:root .design-workspace .process-group .bash-row.ok .bash-state { color: var(--green); }
+:root .design-workspace .process-group .bash-row.run .bash-state,
+:root .design-workspace .process-group .bash-row.run .bash-row-stats,
+:root .design-workspace .process-group.run .process-group-status { color: var(--accent); }
+:root .design-workspace .process-group .bash-row-stats { flex: none; margin-left: 0; font: 11px/1.5 var(--mono); white-space: nowrap; }
+:root .design-workspace .process-group.single-command .bash-row-body { margin: 0 16px 12px; }
+:root .design-workspace .process-group-status { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; white-space: nowrap; }
+.plan-progress-toggle { display: flex; align-items: center; gap: 14px; width: 100%; padding: 16px; border: 0; background: transparent; color: var(--text-muted); font: 13px/1.5 var(--sans); text-align: left; cursor: pointer; }
+.plan-progress-segments { display: flex; gap: 4px; flex: 0 1 144px; min-width: 60px; }
+.plan-progress-segments i { flex: 1; min-width: 0; height: 6px; border-radius: var(--r-sm); background: var(--border); }
+.plan-progress-segments i.done { background: var(--green); }
+.plan-progress-segments i.current { background: var(--accent); }
+.plan-progress-action { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; white-space: nowrap; font-size: 12px; color: var(--text-faint); }
+.plan-progress-toggle[aria-expanded="true"] .plan-progress-action svg { transform: rotate(180deg); }
+.plan-progress-toggle:focus-visible, .plan-change-details > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+.plan-progress-details { border-top: 1px solid var(--border-soft); }
+.todo-update.plan-change-details { display: block; margin: 8px 0; }
+.plan-change-details > summary { cursor: pointer; color: var(--text-faint); font: 12px/1.6 var(--sans); }
+.plan-change-details > div { display: flex; align-items: baseline; gap: 8px; padding: 8px 0; }
+@media (max-width: 600px) {
+	.plan-progress-toggle { flex-wrap: wrap; gap: 8px; padding: 12px; }
+	.plan-progress-segments { flex-basis: 80px; }
+	.plan-progress-action { font-size: 11px; }
+	:root .design-workspace .process-group .bash-row-head { flex-wrap: wrap; }
+	:root .design-workspace .process-group .bash-row .bash-inline-command { flex-basis: calc(100% - 34px); }
+	:root .design-workspace .process-group .bash-row-stats { margin-left: auto; }
+}
+@media (prefers-reduced-motion: reduce) {
+	.process-group .thinking-spinner { animation: none; }
+}
+
+/* Subagent conversation cards: concise summaries, visible unsuccessful attempts. */
+:root .design-workspace :is(.subagent-task-group, .toolcall-subagent-quiet) { background: var(--bg-elev); border: 1px solid var(--border-soft); border-radius: var(--r-lg); }
+.subagent-task-group-head, .subagent-task-row { background: transparent; }
+.subagent-task-counts .completed { color: var(--green); }
+.subagent-task-counts .running, .subagent-task-status.running { color: var(--accent); }
+.subagent-task-counts .unsuccessful, .subagent-task-status.failed, .subagent-task-status.cancelled { color: var(--yellow-fg); }
+.subagent-task-label strong { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+.subagent-task-failures { border-top: 1px solid var(--border-soft); }
+.subagent-task-failures > button { width: 100%; align-items: center; text-align: left; color: var(--yellow-fg); font-size: 12px; line-height: 1.6; }
+.subagent-task-failures > button > svg { flex: none; }
+.subagent-failure-action { margin-left: auto; color: var(--text-muted); white-space: nowrap; }
+:root .design-workspace .toolcall-subagent-quiet > .toolcall-head { padding: 16px; gap: 12px; }
+:root .design-workspace .toolcall-subagent-quiet .toolcall-status::before { display: none; }
+:root .design-workspace .toolcall-subagent-quiet .toolcall-status { display: inline-flex; gap: 6px; align-items: center; margin-left: auto; }
+:root .design-workspace .toolcall-subagent-quiet .toolcall-spacer { display: none; }
+.subagent-tool-actions { display: flex; flex-wrap: wrap; gap: 12px; padding: 8px 0; }
+.subagent-tool-actions button { display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent; color: var(--text-muted); font: inherit; cursor: pointer; }
+@media (max-width: 600px) { .subagent-failure-action { display: none; } }
+@media (prefers-reduced-motion: reduce) { .subagent-task-group .thinking-spinner, .toolcall-subagent-quiet .thinking-spinner { animation: none; } }
+:root .design-workspace .toolcall-subagent-quiet.ok .toolcall-status { color: var(--green); }
+:root .design-workspace .toolcall-subagent-quiet.run .toolcall-status { color: var(--accent); }
+.subagent-task-all-failed > p { color: var(--yellow-fg); }
+.subagent-task-source { display: inline-block; padding: 2px 8px; border-radius: var(--r-switch); background: var(--bg-elev2); color: var(--text-muted); }
+
+/* Project context stays secondary to the active conversation. */
+.design-workspace .header-location { gap: 6px; }
+.design-workspace .header-location > span:first-child { flex: 0 2 auto; max-width: min(180px, 34%); font-size: 12px; color: var(--text-dim); }
+.header-location-separator { display: flex; align-items: center; flex: none; }
+.header-location-separator svg { width: 12px; height: 12px; }
+.design-workspace .header-location > .conversation-title-button { flex: 0 1 auto; min-height: 30px; gap: 6px; padding: 4px 7px; border-radius: var(--r-sm); color: var(--text); }
+.conversation-title-button:hover { background: var(--row-hover); }
+.conversation-title-button:active { background: var(--row-active); }
+.conversation-title-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.conversation-title-chevron { width: 13px; height: 13px; flex: none; color: var(--text-dim); }
+@media (pointer: coarse) {
+	.design-workspace .header-location > .conversation-title-button { min-height: 44px; }
 }

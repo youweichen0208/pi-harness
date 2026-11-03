@@ -61,7 +61,7 @@ try {
 			assert.equal(await page.locator('.header-task-progress').textContent(), '第 2 / 5 步');
 			assert.equal(await page.locator('.view-switch').evaluate(el => getComputedStyle(el).borderTopWidth), '1px');
 			assert.equal(await page.locator('.project-panel-toggle').evaluate(el => getComputedStyle(el).borderTopWidth), '0px');
-			assert.equal(await page.locator('.topbar-actions > .panel-toggle').evaluate(el => getComputedStyle(el).borderTopWidth), '0px');
+			assert.equal(await page.locator('.topbar-actions > .panel-toggle').count(), 0);
 			if (platform === 'darwin') assert.equal((await page.locator('.project-panel-toggle').boundingBox()).x, 92);
 			if (width >= 1000) {
 				const nodes = await page.getByRole('tab', { name: '节点', exact: true }).boundingBox();
@@ -84,8 +84,6 @@ try {
 				const box = await menu.boundingBox();
 				const hit = await menu.evaluate(el => { const b = el.getBoundingClientRect(); return el.contains(document.elementFromPoint(b.x + b.width / 2, b.y + b.height / 2)); });
 				assert(hit && box.width >= 60, `${platform}/${width}/${view}: settings is clipped or covered`);
-				const file = await page.locator('.topbar-actions > .panel-toggle').boundingBox();
-				assert(box.x + box.width <= file.x + 1, 'settings overlaps file toggle');
 				await menu.click();
 				await page.locator('.topbar-actions .dd-menu').waitFor();
 				await page.keyboard.press('Escape');
@@ -96,13 +94,15 @@ try {
 			assert.equal(await page.locator('.right-panel-tabs [aria-selected="true"]').textContent(), '任务');
 			assert.equal(await page.locator('.tree-filter, .tree-modified-count').count(), 0);
 			if (width === 1500) {
-				await page.locator('.topbar-actions > .panel-toggle').click();
+				await page.locator('.topbar-more .chip').click();
+				await page.locator('.workspace-settings-menu .dd-item').filter({ hasText: '文件列表' }).click();
 				changeCount++;
 				socket.send(JSON.stringify({ type: 'scm_changed' }));
 			await page.locator('.tab-change-count', { hasText: String(changeCount) }).waitFor();
 			await page.keyboard.press('Escape');
 			await page.locator('.view-switch button.active').waitFor();
-				await page.locator('.topbar-actions > .panel-toggle').click();
+				await page.locator('.topbar-more .chip').click();
+				await page.locator('.workspace-settings-menu .dd-item').filter({ hasText: '文件列表' }).click();
 				await page.locator('.panel-right').waitFor({ state: 'visible' });
 				assert.equal(await page.locator('.tree-filter, .tree-modified-count').count(), 0);
 				await page.locator('.project-panel-toggle').click();
