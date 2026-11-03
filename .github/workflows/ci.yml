@@ -80,6 +80,10 @@ jobs:
       - run: npm run check:lockfile
       - run: npm ci
       - run: npm run build
+      - name: Desktop toolbar with expanded and collapsed sidebar
+        run: |
+          npx playwright-core install chromium
+          node tests/desktop-toolbar-test.mjs
       - run: npx electron-builder install-app-deps
       - name: Actual Electron typography and DPI regression
         run: node tests/windows-rendering-test.mjs

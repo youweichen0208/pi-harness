@@ -110,6 +110,13 @@ try {
 				await page.screenshot({ path: `tests/scratch/toolbar-${platform}-expanded.png` });
 			}
 		}
+		await page.setViewportSize({ width: 1193, height: 850 });
+		await page.locator('.conversation-title-button strong').evaluate(el => { el.textContent = '可以帮我把 https://online.example.com 的问题逐一处理吗'; });
+		await page.locator('.header-location > span:first-child').evaluate(el => { el.textContent = 'really-long-project-name'; });
+		await page.locator('.topbar').screenshot({ path: `tests/scratch/toolbar-${platform}-crowded.png` });
+		assert((await page.locator('.conversation-title-button').boundingBox()).width >= 220, 'expanded sidebar at 1193px leaves a readable conversation title');
+		if (platform === 'win32') assert.equal(await page.locator('.header-location-separator').isVisible(), false, 'no orphan project separator in a compact titlebar');
+		assert(await page.locator('.header-task-progress').isVisible(), 'task progress remains accessible');
 		await page.locator('.topbar-more .chip').click();
 		await page.locator('.workspace-settings-menu').screenshot({ path: `tests/scratch/settings-menu-${platform}.png` });
 		await page.locator('.sound-menu-summary').click();
@@ -127,7 +134,7 @@ try {
 
 		await page.close();
 	}
-	console.log('PASS Windows/macOS toolbar bounds and settings at 800/900/1000/1500px');
+	console.log('PASS Windows/macOS toolbar bounds and settings at 800/900/1000/1193/1500px');
 } finally {
 	await browser?.close();
 	const stopped = new Promise(resolve => server.once('exit', resolve)); server.kill(); await stopped;

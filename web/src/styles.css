@@ -14771,3 +14771,12 @@ html.pi-desktop .design-workspace .topbar { height: 48px; min-height: 48px; }
 @media (pointer: coarse) {
 	.design-workspace .header-location > .conversation-title-button { min-height: 44px; }
 }
+
+/* Adapt to the titlebar's usable width, including an expanded sidebar (#142). */
+.design-workspace .topbar { container-name: workspace-titlebar; container-type: inline-size; }
+@container workspace-titlebar (max-width: 900px) {
+	.design-workspace .header-location > span:first-child,
+	.design-workspace .header-location > .header-location-separator,
+	.design-workspace .header-task-segments { display: none; }
+	.design-workspace .header-location > .conversation-title-button { flex: 1; }
+}
