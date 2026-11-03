@@ -63,6 +63,30 @@ if action == "indent":
             break
         except IndentationError as error:
             row = (error.lineno or 1) - 1
+            if error.msg.startswith("expected an indented block"):
+                # Supply only the first simple statement of a missing suite. Never
+                # infer where a run of flattened statements or nested blocks ends.
+                statements, current = [], []
+                for token in tokenize.generate_tokens(io.StringIO("".join(lines)).readline):
+                    if token.type == tokenize.NEWLINE:
+                        if current:
+                            statements.append(current)
+                            if current[0].start[0] == row + 1:
+                                break
+                        current = []
+                    elif token.type not in (tokenize.INDENT, tokenize.DEDENT, tokenize.NL, tokenize.COMMENT, tokenize.ENDMARKER, tokenize.ENCODING):
+                        current.append(token)
+                if len(statements) < 2 or statements[-1][0].start[0] != row + 1:
+                    raise
+                header, body = statements[-2], statements[-1]
+                compound = {"def", "class", "if", "elif", "else", "for", "while", "try", "except", "finally", "with", "async", "match", "case"}
+                if header[0].string not in compound or header[-1].string != ":" or body[0].string in compound:
+                    raise
+                target = leading(lines[header[0].start[0] - 1])
+                if not first <= row + 1 <= last or leading(lines[row]) != target:
+                    raise
+                lines[row] = target + "    " + lines[row].lstrip(" \t")
+                continue
             if error.msg != "unexpected indent" or row < 2:
                 raise
             previous = row - 1

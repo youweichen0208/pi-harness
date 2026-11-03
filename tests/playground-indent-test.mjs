@@ -13,6 +13,13 @@ try {
 		assert.equal(response.status, 200, response.ok ? '' : await response.text());
 		return (await response.json()).code;
 	};
+	const missingBody = '# issue 141\n\ndef hello():\nprint("hello")\n';
+	assert.equal(await indent(missingBody), missingBody.replace('\nprint', '\n    print'));
+	assert.equal(await indent('def f():\nprint(\n    "hello"\n)\nprint("outside")'), 'def f():\n    print(\n    "hello"\n)\nprint("outside")', 'only the missing first statement moves, continuations and following scope stay intact');
+	assert.equal(await indent('if True:\n    def f():\n    print("hello")'), 'if True:\n    def f():\n        print("hello")');
+	assert.equal(await indent('def f():\n# keep comment\nraise RuntimeError("must not execute")'), 'def f():\n# keep comment\n    raise RuntimeError("must not execute")');
+	assert.equal((await fixture.api('indent', { code: missingBody, fromLine: 1, toLine: 3 })).status, 422, 'missing body outside selection remains unchanged');
+	assert.equal((await fixture.api('indent', { code: 'def f():\nif True:\nprint("ambiguous")' })).status, 422, 'do not guess flattened nested blocks');
 	assert.equal(await indent(broken), fixed);
 	assert.equal(await indent(fixed), fixed, 'repeat is idempotent');
 	const literal = 'def f():\n  value = """first\n    preserve these spaces\nlast"""\n  return value\nraise RuntimeError("must not execute")';
@@ -44,6 +51,11 @@ try {
 	await page.waitForFunction(() => document.querySelector('.cm-content')?.innerText.includes('\n    b = 2'));
 	await page.waitForFunction(() => document.querySelector('.scratch-save-status')?.textContent.includes('已保存'));
 	assert.equal((await (await fixture.api('scratch')).json()).content, fixed);
+	await editor.fill(missingBody);
+	await button.click();
+	await page.waitForFunction(() => document.querySelector('.cm-content')?.innerText.includes('    print("hello")'));
+	await editor.press('ControlOrMeta+z');
+	assert.equal(await editorText(), missingBody, 'missing-suite repair is undoable');
 	await editor.fill(scoped);
 	await editor.press('ControlOrMeta+Home');
 	await editor.press('Shift+ArrowDown');

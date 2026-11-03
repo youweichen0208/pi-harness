@@ -60,6 +60,6 @@ export PI_WEB_PYTHON=/path/to/venv/bin/python
 
 ## 自动缩进
 
-`POST /api/playground/indent` 接受 `{code, fromLine?, toLine?}`（1 起始，包含末行，未传为全文），返回 `{code}`，共用分析的大小、鉴权、并发、超时与取消限制。使用 Python 标准库，不依赖 Jedi/Black、不执行源码。仅尝试修复 unexpected indent 前一条语句的局部缩进断裂，要求前后缩进一致、不猜测复合语句；最多 16 次。校验后以 tokenize 归一化逻辑语句为 4 空格，保留续行和字符串内容，再验证编译与 AST 一致。失败返回 422；前端只修改行首空白、保留选区、可撤销，源文变化则丢弃迟到结果。
+`POST /api/playground/indent` 接受 `{code, fromLine?, toLine?}`（1 起始，包含末行，未传为全文），返回 `{code}`，共用分析的大小、鉴权、并发、超时与取消限制。使用 Python 标准库，不依赖 Jedi/Black、不执行源码。支持两类局部修复：unexpected indent 前一条语句的缩进断裂（要求前后缩进一致），以及 expected an indented block 时紧随块头的首条简单语句缺少缩进。后者只移动首条逻辑语句，不猜测后续语句归属或拍平的嵌套复合语句；不修改选区外的行。最多 16 次。校验后以 tokenize 归一化逻辑语句为 4 空格，保留续行和字符串内容，再验证编译与 AST 一致。失败返回 422；前端只修改行首空白、保留选区、可撤销，源文变化则丢弃迟到结果。
 
 函数用例编辑区仅展示参数输入与运行操作，移除空值复选框、预期值断言编辑和格式说明段落。JSON 参数可直接输入 null；历史 isNull 参数以 null 显示且允许直接修改。运行单条及整批用例均只提交 id/args，不执行历史保存的预期值断言，不改写已有草稿中的历史字段；结果与用例增删保留。
