@@ -66,6 +66,25 @@ test("a reply with one question mark stays ordinary markdown", () => {
 	expect(parseReplySegments("❓ 你确定吗？\n(a) 是;(b) 否")).toEqual([{ kind: "markdown", text: "❓ 你确定吗？\n(a) 是;(b) 否" }]);
 });
 
+test("a single numbered question uses cards and keeps its recommendation", () => {
+	const segments = parseReplySegments("背景说明。\n\n❓ Q25 — `LIVE_UNVERIFIED` 下 readiness 怎么报？\n- (a) 保持 not_ready\n- (b) 新增中间态 degraded\n- (c) 直接算 ready\n\n➡️ (b). 链路可用但资格未验收。\n\n后续说明。");
+	expect(segments.map(segment => segment.kind)).toEqual(["markdown", "questions", "markdown"]);
+	const questions = segments.flatMap(segment => segment.kind === "questions" ? segment.questions : []);
+	expect(questions[0]).toMatchObject({ id: "Q25", prompt: "LIVE_UNVERIFIED 下 readiness 怎么报？" });
+	expect(questions[0].options).toHaveLength(3);
+	expect(questions[0].options[1]).toMatchObject({ key: "b", recommended: true, reason: "链路可用但资格未验收。" });
+	expect(composeAnswers(questions, recommendedAnswers(questions))).toBe("Q25：(b) 新增中间态 degraded");
+});
+
+test("inline option references do not create empty or duplicate choices", () => {
+	const segments = parseReplySegments("❓ **Q18** - **占位哈希拒绝怎么定义？**\n(a) 只拒绝全零;(b) 拒绝全零 + 单一重复字符;(c) (b) + 拒绝明显占位模式如 deadbeef 重复\n➡️ (b). (c) 开始猜测，容易误伤真实哈希。\n\n❓ **Q19** - **下一题**\n(a) 是;(b) 否");
+	const questions = segments.flatMap(segment => segment.kind === "questions" ? segment.questions : []);
+	expect(questions[0].options.map(option => [option.key, option.text])).toEqual([
+		["a", "只拒绝全零"], ["b", "拒绝全零 + 单一重复字符"], ["c", "(b) + 拒绝明显占位模式如 deadbeef 重复"],
+	]);
+	expect(questions[0].options[1].reason).toBe("(c) 开始猜测，容易误伤真实哈希。");
+});
+
 
 test("lettered suffixes keep distinct question ids", () => {
 	const segments = parseReplySegments("❓ **Q1a** - **部署**: (a) Docker;(b) systemd\n\n➡️ 推荐 (a)。隔离\n\n---\n\n❓ **Q1b** - **数据库**: (a) SQLite;(b) PostgreSQL\n\n➡️ 推荐 (b)。并发");

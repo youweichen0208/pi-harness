@@ -2,7 +2,7 @@
 
 文档转 Markdown 与 OKF 知识蒸馏扩展均已移除，不再提供聊天工具、命令或设置条目；实现、Python 资源和打包支持也已删除。
 
-设置 › Extensions 对接 Pi 1.4.0 的 `DefaultPackageManager`、`SettingsManager` 和 `ProjectTrustStore`。安装、移除、更新与资源发现运行在独立 Node worker；浏览页面不执行扩展入口，缺失依赖采用 `resolve(() => "skip")`，不会因浏览自动安装。包变更在新会话生效，当前会话仅在用户点击重载时通过已有 `extensions_reload` 生效。宿主不向模型注册工具、注入消息或系统提示词。
+设置 › Extensions 对接 Pi 1.5.0 的 `DefaultPackageManager`、`SettingsManager` 和 `ProjectTrustStore`。安装、移除、更新与资源发现运行在独立 Node worker；浏览页面不执行扩展入口，缺失依赖采用 `resolve(() => "skip")`，不会因浏览自动安装。包变更在新会话生效，当前会话仅在用户点击重载时通过已有 `extensions_reload` 生效。宿主不向模型注册工具、注入消息或系统提示词。
 
 扩展代码刷新（issue #64）：jiti 对原生 .js/.mjs 走 Node import()/require()，进程内缓存会让 `/restart`、`/reload` 和 `extensions_reload` 重建扩展工厂后仍命中旧代码——扩展内的 MCP 连接等顶层状态也随之遗留。`server/extension-module-cache.ts` 在每次创建 runtime 前注册受控目录（agentDir/extensions、agentDir/npm、cwd/.pi/extensions、cwd/.pi/npm，realpath 双形式匹配），并仅在用户显式触发的重建前（restartSession、`/reload` 命令、`reloadExtensions`）bump 代数——ESM 缓存不可释放，每次刷新多留一份模块实例，所以设置、提示词、MCP 保存共用的 `session.reload()` 不刷新；代数进程全局，刷新后其他对话懒加载受控模块也拿到新实例。bump 机制：resolve 钩子给受控模块 URL 追加 `?piextgen=<代数>` 绕开 ESM loader 永久缓存（CJS 的 require 会剥掉 search，无副作用），同时清空受控目录下的 require.cache 条目刷新 CJS 本体；`module.registerHooks` 不可用时 ESM 优雅降级为旧行为。.ts 由 jiti 每次实例化重新转译，天然新鲜。回归：`tests/restart-extension-cache-test.mjs` 覆盖 .ts 文件、npm CJS 包、npm ESM 包在 /restart、二次重启与 reloadExtensions() 下拿到新代码与新状态，普通 session.reload() 保持旧代码。
 
@@ -70,3 +70,5 @@ pi.dev 当前通过服务端 HTML 提供目录，没有依赖未公开 JSON API�
 #46 回归：`tests/extensions-worker-test.mjs` 在真实 npm 卸载后的 SettingsManager.reload 注入无活跃句柄的异步等待，证明 IPC 不会提前退出；这用于生命周期故障注入，不表示已还原用户原始机器的具体触发条件。另有普通 Node / Electron 原生卸载和并发 HTTP 列表测试。
 
 数据库查询由原生内置扩展 `pi-harness-database` 提供 `database_read`，权限绑定显式附加连接的当前会话；连接与只读执行见 [数据库工作台](architecture-database.md)。
+
+Pi 1.5 的包安装失败会出现在原生资源加载器 warnings 中。会话首次绑定和重载后，WebUI 将 warnings/errors 发送到带 conversationId 的通知；首次 socket attach 前暂存通知。兼容入口仍支持用户扩展从 pi-ai 导入 Type/StringEnum，迁移限制见 [升级说明](pi-1.5-upgrade.md)。

@@ -2,10 +2,10 @@ import type { UiMessage } from "../../server/protocol.js";
 import { splitCommandChain } from "./bash-steps.js";
 import { activeTool } from "./agent-activity.js";
 
-export type WaitLabel = "waitUnderstanding" | "waitResults" | "waitFile" | "waitThinking" | "waitTests" | "waitBuild" | "waitSteer";
+export type WaitLabel = "waitWorking" | "waitUnderstanding" | "waitResults" | "waitFile" | "waitThinking" | "waitTests" | "waitBuild" | "waitSteer";
 export interface WaitStage { key: string; label: WaitLabel; delay: number }
 
-/** Presentation only: visible content wins; a completed tool starts a new wait. */
+/** Presentation only: text does not settle a run; the caller gates this on native lifecycle. */
 export function conversationWait(messages: readonly UiMessage[], completed: ReadonlyMap<string, unknown>, steeredUserId?: string): WaitStage | null {
 	const userIndex = messages.findLastIndex(m => m.role === "user");
 	const turn = messages.slice(userIndex + 1);
@@ -26,10 +26,11 @@ export function conversationWait(messages: readonly UiMessage[], completed: Read
 		if (message.role !== "assistant") continue;
 		for (const block of [...message.content].reverse()) {
 			if (block.type === "toolCall" && typeof block.id === "string") return completed.has(block.id) ? { key: block.id, label: block.name === "read" ? "waitFile" : "waitResults", delay: 300 } : null;
-			if (block.type === "text" && ((typeof block.text === "string" && block.text.trim()) || block.truncated)) return null;
+			if (block.type === "text" && ((typeof block.text === "string" && block.text.trim()) || block.truncated)) return { key: message.id, label: "waitWorking", delay: 300 };
 			if (block.type === "thinking") {
 				if (typeof block.thinking === "string" && block.thinking.trim()) return null;
-				if (message.content.some(b => b.type === "text" && (typeof b.text === "string" && b.text.trim() || b.truncated) || b.type === "thinking" && typeof b.thinking === "string" && b.thinking.trim())) return null;
+				if (message.content.some(b => b.type === "text" && (typeof b.text === "string" && b.text.trim() || b.truncated))) return { key: message.id, label: "waitWorking", delay: 300 };
+				if (message.content.some(b => b.type === "thinking" && typeof b.thinking === "string" && b.thinking.trim())) return null;
 				return { key: message.id, label: "waitThinking", delay: 300 };
 			}
 		}

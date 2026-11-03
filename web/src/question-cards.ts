@@ -31,7 +31,7 @@ const plain = (text: string) => text.replace(/\*\*([^*]+)\*\*/g, "$1").replace(/
 function parseHead(line: string, index: number) {
 	const body = line.replace(QUESTION, "");
 	const id = /\*{0,2}(Q\d+[a-z]?)\*{0,2}/.exec(body)?.[1] ?? `Q${index + 1}`;
-	const rest = body.replace(/^\*{0,2}Q\d+\*{0,2}\s*[-–—:：.]?\s*/, "");
+	const rest = body.replace(/^\*{0,2}Q\d+[a-z]?\*{0,2}\s*[-–—:：.]?\s*/, "");
 	const titled = /^\*\*([^*]+)\*\*\s*[:：]?\s*(.*)$/.exec(rest);
 	return titled ? { id, title: plain(titled[1]), prompt: titled[2] } : { id, title: "", prompt: rest };
 }
@@ -41,7 +41,15 @@ const LIST_OPTION = /^\s*(?:[-–—*]\s*)?(?:[(（]([A-Ha-h])[)）]|([A-Ha-h])[
 
 /** Split `(a) x;(b) y;(c) z。trailing` into options; text before (a) and after the last option's sentence stays prompt. */
 function parseOptions(text: string) {
-	const parts = text.split(/[(（]([A-Ha-h])[)）]\s*/);
+	// Inline choices are separated by semicolons. Parenthesized letters inside
+	// an option (for example `(c) (b) + …`) are references, not new choices.
+	const markers = [...text.matchAll(/[(（]([A-Ha-h])[)）]\s*/g)]
+		.filter((match, index) => index === 0 || /[;；]\s*$/.test(text.slice(0, match.index)));
+	const parts = [text.slice(0, markers[0]?.index ?? text.length)];
+	for (let i = 0; i < markers.length; i++) {
+		const marker = markers[i];
+		parts.push(marker[1], text.slice(marker.index + marker[0].length, markers[i + 1]?.index));
+	}
 	if (parts.length < 5) return { prompt: text, options: [] as QuestionOption[] };
 	const options: QuestionOption[] = [];
 	let trailing = "";
@@ -70,7 +78,7 @@ function applyRecommendation(options: QuestionOption[], text: string): QuestionO
 	return answer ? [{ text: answer, recommended: true, ...(why ? { reason: why } : {}) }] : [];
 }
 
-/** Returns a single markdown segment when the reply holds fewer than two questions. */
+/** Numbered questions render individually; casual unnumbered questions require a group. */
 export function parseReplySegments(text: string): ReplySegment[] {
 	const lines = text.split("\n");
 	let fence: { char: string; length: number } | undefined;
@@ -83,7 +91,8 @@ export function parseReplySegments(text: string): ReplySegment[] {
 		}
 		return !fence && QUESTION.test(line);
 	});
-	if (eligible.filter(Boolean).length < 2) return [{ kind: "markdown", text }];
+	const hasNumberedQuestion = lines.some((line, index) => eligible[index] && /^\s*\*{0,2}Q\d+[a-z]?\b/.test(line.replace(QUESTION, "")));
+	if (eligible.filter(Boolean).length < 2 && !hasNumberedQuestion) return [{ kind: "markdown", text }];
 	const segments: ReplySegment[] = [];
 	let markdown: string[] = [];
 	let questions: QuestionCard[] = [];

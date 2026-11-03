@@ -954,6 +954,8 @@ export interface ProviderAuthState {
 	phase: "pending" | "success" | "cancelled" | "error";
 	url?: string;
 	code?: string;
+	openBrowserOnConfirm?: boolean;
+	copyCodeOnConfirm?: boolean;
 	message?: string;
 	prompt?: { id: string; kind: "text" | "secret" | "select" | "manual_code"; message: string; placeholder?: string; options?: { id: string; label: string }[] };
 }

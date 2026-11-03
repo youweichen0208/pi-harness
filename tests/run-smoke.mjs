@@ -93,6 +93,8 @@ const ALL = [
 	"pi-104-prompt-contract-test",
 	"pi-104-upstream-fixes-test",
 	"pi-140-sdk-test",
+	"pi-150-sdk-test",
+	"extension-diagnostics-test",
 	"codemode-mcp-test",
 	"provider-auth-test",
 	"openai-proxy-test",

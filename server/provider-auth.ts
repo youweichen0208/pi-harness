@@ -29,15 +29,17 @@ export class ProviderAuthService {
 		this.controller = controller;
 		const signal = controller.signal;
 		const current = () => this.state?.requestId === requestId;
+		const clearDevice = { code: undefined, openBrowserOnConfirm: undefined, copyCodeOnConfirm: undefined };
 		const update = (partial: Partial<ProviderAuthState>) => { if (current()) this.publish({ ...this.state!, ...partial }); };
 		this.publish({ requestId, provider, phase: "pending" });
 		const deadline = setTimeout(() => controller.abort(), 10 * 60_000); deadline.unref();
 		const interaction: Interaction = {
 			signal,
 			notify: event => {
-				if (event.type === "auth_url") update({ url: event.url, message: event.instructions });
-				else if (event.type === "device_code") update({ url: event.verificationUri, code: event.userCode });
-				else update({ message: event.message, ...(event.type === "info" && event.links?.length ? { url: event.links[0].url } : {}) });
+				if (signal.aborted) return;
+				if (event.type === "auth_url") update({ ...clearDevice, url: event.url, message: event.instructions });
+				else if (event.type === "device_code") update({ url: event.verificationUri, code: event.userCode, openBrowserOnConfirm: event.openBrowserOnConfirm, copyCodeOnConfirm: event.copyCodeOnConfirm, message: undefined });
+				else update({ ...clearDevice, url: undefined, message: event.message, ...(event.type === "info" && event.links?.length ? { url: event.links[0].url } : {}) });
 			},
 			prompt: prompt => new Promise((resolve, reject) => {
 				const promptId = randomUUID();
@@ -52,16 +54,16 @@ export class ProviderAuthService {
 				if (combined.aborted) { abort(); return; }
 				this.pending = { id: promptId, resolve: value => finish(value) };
 				combined.addEventListener("abort", abort, { once: true });
-				update({ prompt: { id: promptId, kind: prompt.type, message: prompt.message, ...(prompt.type === "select" ? { options: prompt.options.map(({ id, label }) => ({ id, label })) } : { placeholder: prompt.placeholder }) } });
+				update({ ...clearDevice, prompt: { id: promptId, kind: prompt.type, message: prompt.message, ...(prompt.type === "select" ? { options: prompt.options.map(({ id, label }) => ({ id, label })) } : { placeholder: prompt.placeholder }) } });
 			}),
 		};
 		try {
 			if (!this.runtime().getProvider(provider)?.auth.oauth) throw new Error("Provider does not support OAuth login");
 			await this.runtime().login(provider, "oauth", interaction, { getDeviceId: this.getDeviceId });
 			await this.changed();
-			update({ phase: "success", url: undefined, code: undefined, prompt: undefined, message: undefined });
+			update({ ...clearDevice, phase: "success", url: undefined, code: undefined, prompt: undefined, message: undefined });
 		} catch (error) {
-			update({ phase: signal.aborted ? "cancelled" : "error", message: signal.aborted ? undefined : error instanceof Error ? error.message : "Login failed", url: undefined, code: undefined, prompt: undefined });
+			update({ ...clearDevice, phase: signal.aborted ? "cancelled" : "error", message: signal.aborted ? undefined : error instanceof Error ? error.message : "Login failed", url: undefined, code: undefined, prompt: undefined });
 		} finally { clearTimeout(deadline); if (this.controller === controller) this.controller = undefined; }
 	}
 }

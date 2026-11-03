@@ -7,6 +7,18 @@ import type { ServerMessage } from "../../server/protocol.js";
 
 function fixture() { return realpathSync(mkdtempSync(join(tmpdir(),"pi-one-services-"))); }
 describe("native MCP configuration", () => {
+	it("preserves auto/dcr/cimd and omitted OAuth registration policies", () => {
+		const root = fixture();
+		try {
+			const service = new NativeMcpConfigService();
+			for (const clientRegistration of [undefined, "auto", "dcr", "cimd"]) {
+				const oauth = clientRegistration === undefined ? {} : { clientRegistration };
+				const state = service.get(root, "project");
+				service.save(root, "project", state.version, { mcpServers: { remote: { url: "https://example.invalid/mcp", oauth } } });
+				expect(JSON.parse(readFileSync(join(root, ".pi", "mcp.json"), "utf8")).mcpServers.remote.oauth).toEqual(oauth);
+			}
+		} finally { rmSync(root, {recursive:true, force:true}); }
+	});
 	it("preserves unknown fields, keeps/replaces/removes secrets and rejects stale saves and project provider auth", () => {
 		const root = fixture();
 		try {

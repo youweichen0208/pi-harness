@@ -786,6 +786,17 @@ export class ClientSession {
 		for (const sink of [...this.sinks]) sink(msg);
 	}
 
+	private notifyExtensionDiagnostics(conv: Conversation): void {
+		const result = conv.session.resourceLoader.getExtensions();
+		const notices: ServerMessage[] = [
+			...result.errors.map(({ path, error }) => ({ type: "notice" as const, conversationId: conv.id, level: "error" as const, text: `${path}: ${error}` })),
+			...(result.warnings ?? []).map(({ path, warning }) => ({ type: "notice" as const, conversationId: conv.id, level: "warning" as const, text: `${path}: ${warning}` })),
+		];
+		for (const notice of notices) {
+			if (this.sinks.size) this.emit(notice); else this.pendingNotices.push(notice);
+		}
+	}
+
 	/** (Re)attach event plumbing to the ACTIVE conversation's session. */
 	private boundUiSessions = new WeakSet<AgentSession>();
 	private async bindSession(conv = this.conv): Promise<void> {
@@ -810,6 +821,7 @@ export class ClientSession {
 
 		if (!this.boundUiSessions.has(conv.session)) {
 			this.boundUiSessions.add(conv.session);
+			this.notifyExtensionDiagnostics(conv);
 			const session = conv.session;
 			const reload = session.reload.bind(session);
 			session.reload = async options => {
@@ -819,6 +831,7 @@ export class ClientSession {
 					session.extensionRunner.setUIContext(conv.webUi, "rpc");
 					await options?.beforeSessionStart?.();
 				} });
+				this.notifyExtensionDiagnostics(conv);
 				this.coordinatePlan(conv);
 			};
 		}

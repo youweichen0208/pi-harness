@@ -11,10 +11,17 @@ it("waits for a user request, distinguishes delivered steering, and ignores old 
 	expect(conversationWait([tool, result, user], empty)?.label).toBe("waitUnderstanding");
 	expect(conversationWait([], empty)).toBeNull();
 });
-it("visible text and thinking end a wait, even while the turn continues", () => {
-	for (const block of [{ type: "text", text: "Result" }, { type: "thinking", thinking: "Reasoning" }]) {
-		expect(conversationWait([user, tool, result, { id: "next", role: "assistant", content: [block] }], empty)).toBeNull();
+it("keeps a working stage after visible text while native lifecycle still runs", () => {
+	for (const content of [
+		[{ type: "text", text: "Now I will update the domain model." }],
+		[{ type: "text", text: "Next step" }, { type: "thinking", thinking: "" }],
+		[{ type: "text", text: "", truncated: true }],
+	]) {
+		expect(conversationWait([user, tool, result, { id: "next", role: "assistant", content }], empty)).toEqual({ key: "next", label: "waitWorking", delay: 300 });
 	}
+});
+it("visible thinking retains its own indicator, empty thinking gets a waiting stage", () => {
+	expect(conversationWait([user, { id: "next", role: "assistant", content: [{ type: "thinking", thinking: "Reasoning" }] }], empty)).toBeNull();
 	expect(conversationWait([user, { id: "next", role: "assistant", content: [{ type: "thinking", thinking: "" }] }], empty)?.label).toBe("waitThinking");
 });
 it("transitions from a long tool to reading its result without reviving old calls", () => {

@@ -128,6 +128,21 @@ try {
 	await bar.getByRole('button', { name: '全部采纳推荐', exact: true }).click();
 	await page.waitForFunction(() => document.querySelectorAll('.question-option.selected[role="radio"]:not(.question-other-radio):not([disabled])').length === 2);
 	console.log('PASS multi-round grill: accept-all restores round 2 after answering round 1');
+
+	// A single numbered follow-up uses the same cards and answer submission.
+	reply = '背景说明。\n\n❓ Q25 — LIVE_UNVERIFIED 下 readiness 怎么报？\n(a) 保持 not_ready;(b) 新增中间态 degraded;(c) (b) + 额外检查\n\n➡️ (b). 链路可用但资格未验收。';
+	await bar.getByRole('button', { name: '发送回答', exact: true }).click();
+	const single = page.locator('.question-card').filter({ hasText: 'Q25' });
+	await single.waitFor();
+	await page.locator('.btn.send').first().waitFor({ state: 'attached' });
+	await single.locator('.question-option.selected:not([disabled])').waitFor();
+	assert.equal(await single.getByRole('radio').count(), 4, 'three choices plus Other, no empty or duplicate choice');
+	assert.match(await single.getByRole('radio').nth(2).innerText(), /\(b\) \+ 额外检查/);
+	assert.match(await single.locator('.question-option.selected').innerText(), /新增中间态 degraded/);
+	reply = '已收到回答。';
+	await bar.getByRole('button', { name: '发送回答', exact: true }).click();
+	await page.getByText('Q25：(b) 新增中间态 degraded', { exact: true }).waitFor();
+	console.log('PASS single numbered question renders and submits the recommended answer');
 } catch (error) {
 	console.error('FAIL', error);
 	process.exitCode = 1;

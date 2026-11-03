@@ -13858,7 +13858,6 @@ html.pi-desktop .design-workspace .topbar :is(button, input, select, a, [role="b
 .task-sections .task-file-result > button > span { display: block; overflow-wrap: anywhere; }
 .task-sections .task-file-result small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .task-sections .task-file-counts { padding-top: 1px; color: var(--text-dim); font: 11px/1.5 var(--sans); font-variant-numeric: tabular-nums; }
-.task-sections .task-file-counts > span { color: inherit; }
 .task-files-empty { margin: 0; padding: 0 12px 4px; color: var(--text-dim); font: 12px/1.6 var(--sans); }
 
 /* Single-document editing shares the main conversation through ChatDock. */
@@ -13882,7 +13881,7 @@ html.pi-desktop .design-workspace .topbar { height: 48px; min-height: 48px; }
 :root .design-workspace .panel-tab-bar .view-switch > button > span { display: inline; }
 :root .design-workspace .panel-tab-bar .view-switch > button:hover { color: var(--text); background: color-mix(in srgb, var(--bg-elev) 65%, transparent); }
 :root .design-workspace .panel-tab-bar .view-switch > button.active { color: var(--text); background: var(--bg-elev); font-weight: 600; box-shadow: 0 1px 3px var(--shadow-soft); }
-:root .design-workspace .panel-tab-bar .tab-change-count { min-width: 20px; padding: 1px 5px; border-radius: var(--r-switch); color: var(--bg-elev); background: var(--text); font: 11px/1.4 var(--sans); font-variant-numeric: tabular-nums; }
+:root .design-workspace .panel-tab-bar .tab-change-count { min-width: 20px; padding: 1px 5px; border-radius: var(--r-switch); color: var(--green); background: var(--green-soft); font: 11px/1.4 var(--sans); font-variant-numeric: tabular-nums; }
 .design-workspace .topbar .newchat { display: none; }
 @media (max-width: 1100px) {
 	.design-workspace .panel-tab-bar { padding-inline: 6px; gap: 6px; }
@@ -14329,13 +14328,13 @@ html.pi-desktop .design-workspace .topbar { height: 48px; min-height: 48px; }
 :root .design-workspace .topbar-actions .panel-tab-bar > .view-switch { gap: 2px; padding: 3px; height: auto; border: 1px solid var(--border-soft); border-radius: var(--r-md); background: var(--bg-elev2); }
 :root .design-workspace .topbar-actions .panel-tab-bar .view-switch > button { border-radius: var(--r-sm); }
 :root .design-workspace .topbar-actions .panel-tab-bar .view-switch > button.active { color: var(--accent); background: var(--accent-soft); box-shadow: none; font-weight: 500; }
-:root .design-workspace .tab-change-count { color: var(--text-muted); background: var(--bg-elev); border: 1px solid var(--border-soft); }
+:root .design-workspace .tab-change-count { color: var(--green); background: var(--green-soft); border: 0; }
 .design-workspace .header-task-progress { display: inline-flex; align-items: center; gap: 8px; background: transparent; color: var(--accent); border: 0; border-radius: var(--r-sm); }
 .header-task-segments { display: flex; gap: 3px; max-width: 140px; min-width: 60px; flex: 1; }
 .header-task-segments i { flex: 1; height: 4px; min-width: 2px; border-radius: var(--r-sm); background: var(--border-soft); }
 .header-task-segments i:is(.done, .running) { background: var(--accent); }
 .header-task-segments i:is(.failed, .blocked) { background: var(--red); }
-.design-workspace .task-step-log .task-step.running, .design-workspace .task-sections .task-plan-step.running { background: var(--accent-soft); border: 0; border-left: 4px solid var(--accent); box-shadow: none; border-radius: var(--r-sm); }
+.design-workspace .task-step-log .task-step.running, .design-workspace .task-sections .task-plan-step.running { background: var(--accent-soft); border: 0; box-shadow: none; border-radius: var(--r-sm); }
 .design-workspace .task-step-log .task-step.done .task-step-mark, .design-workspace .task-plan-step.done .task-plan-mark { color: var(--green) !important; }
 .design-workspace .task-plan-step.done .task-plan-step-title { color: var(--text-muted); }
 .design-workspace .usage-meter { width: 80px; height: 6px; border-radius: var(--r-switch); }

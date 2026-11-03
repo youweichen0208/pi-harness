@@ -61,6 +61,9 @@ if (!process.env.PI_NATIVE_TOOLS_WORKER) {
 	assert(readFileSync(join(getExamplesPath(), 'extensions/README.md'), 'utf8').length > 100, 'native extension examples index is readable');
 	assert.match(readFileSync(join(getExamplesPath(), 'extensions/hello.ts'), 'utf8'), /registerTool/);
 	const cwd = process.env.PI_NATIVE_TOOLS_WORKER, agentDir = process.env.PI_CODING_AGENT_DIR;
+	const extensionDir = join(agentDir, 'extensions'); mkdirSync(extensionDir, {recursive:true});
+	writeFileSync(join(extensionDir, 'legacy.ts'), `import { Type, StringEnum } from '@earendil-works/pi-ai';
+export default function(pi) { pi.registerTool({name:'legacy_fixture', label:'Legacy', description:'Legacy import compatibility', parameters:Type.Object({mode:StringEnum(['ok'])}), execute:async()=>({content:[{type:'text',text:'legacy loaded'}],details:{}})}); }`);
 	const settingsManager = SettingsManager.create(cwd, agentDir);
 	const resourceLoader = new DefaultResourceLoader({ cwd, agentDir, settingsManager, extensionFactories: nativeToolExtensions() });
 	await resourceLoader.reload(); assert.deepEqual(resourceLoader.getExtensions().errors, []);
@@ -68,6 +71,7 @@ if (!process.env.PI_NATIVE_TOOLS_WORKER) {
 	const errors = [], events = [];
 	await session.bindExtensions({ mode: 'rpc', onError: error => errors.push(error) });
 	assert(session.getActiveToolNames().includes('codemode'));
+	assert(session.getToolDefinition('legacy_fixture'), 'legacy Type/StringEnum imports load at startup and reload');
 	assert(session.extensionRunner.getRegisteredCommands().some(command => command.invocationName === 'mcp'));
 	const imageModel = {type:"image",id:"fixture",name:"Fixture",provider:"image-fixture",api:"fixture-images",baseUrl:"http://127.0.0.1",input:["text"],output:["image"],cost:{input:0,output:0,cacheRead:0,cacheWrite:0}};
 	const classifierModel = {...imageModel,type:"classifier",id:"classifier",api:"fixture-classify",input:["text","image"]};
@@ -105,6 +109,7 @@ if (!process.env.PI_NATIVE_TOOLS_WORKER) {
 		assert(session.getActiveToolNames().includes('find'), 'reload activates newly configured default tool');
 		assert(!session.getActiveToolNames().includes('edit'), 'reload retains tools disabled during the session');
 		assert(session.getActiveToolNames().includes('codemode'));
+	assert(session.getToolDefinition('legacy_fixture'), 'legacy Type/StringEnum imports load at startup and reload');
 		assert(session.getActiveToolNames().includes('mcp__echo__add'), 'reload restores discovered deferred MCP tools');
 		assert.deepEqual(resourceLoader.getExtensions().errors, []);
 		await session.prompt("Record the changed tool loadout before resume.");

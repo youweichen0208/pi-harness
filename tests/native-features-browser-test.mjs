@@ -67,6 +67,39 @@ try {
 		socket.send(JSON.stringify({ type: 'snapshot', state: baseState }));
 		await page.waitForFunction(() => document.querySelector('.codemode-body')?.textContent.includes('mcp__echo__add'));
 		assert.equal(await page.locator('.codemode-call').count(), 1);
+		await page.evaluate(() => {
+			window.deviceActions = [];
+			window.open = url => { window.deviceActions.push(['open', url]); return null; };
+			Object.defineProperty(navigator, 'clipboard', {configurable:true, value:{writeText:async code => {
+				window.deviceActions.push(['copy',code]);
+				if (window.failCopy) throw new Error('clipboard denied');
+			}}});
+		});
+		for (const [index, flags] of [{}, {openBrowserOnConfirm:false,copyCodeOnConfirm:false}, {openBrowserOnConfirm:false,copyCodeOnConfirm:true}, {openBrowserOnConfirm:true,copyCodeOnConfirm:false}, {openBrowserOnConfirm:true,copyCodeOnConfirm:true}].entries()) {
+			const device = {requestId:`device-${index}`,provider:'fixture',phase:'pending',url:'https://example.invalid/device',code:'ABCD',...flags};
+			await page.evaluate(() => { window.deviceActions = []; window.failCopy = true; });
+			socket.send(JSON.stringify({type:'provider_auth',state:device}));
+			await page.locator('.provider-auth-modal code').waitFor();
+			socket.send(JSON.stringify({type:'provider_auth',state:device})); // reconnect replay
+			await page.waitForTimeout(60);
+			assert.deepEqual(await page.evaluate(() => window.deviceActions), []);
+			const button = page.locator('.provider-auth-device-confirm');
+			if (flags.openBrowserOnConfirm === false && flags.copyCodeOnConfirm === false) assert.equal(await button.count(),0);
+			else {
+				await button.click();
+				const expected = [];
+				if (flags.copyCodeOnConfirm !== false) expected.push(['copy','ABCD']);
+				if (flags.openBrowserOnConfirm !== false) expected.push(['open',device.url]);
+				assert.deepEqual(await page.evaluate(() => window.deviceActions),expected);
+				if (flags.copyCodeOnConfirm !== false) {
+					await page.getByRole('status').filter({hasText:language === 'zh' ? '复制失败' : 'Copy failed'}).waitFor();
+					assert.equal(await page.locator('.provider-auth-modal code').textContent(),'ABCD');
+					await page.evaluate(() => { window.failCopy = false; });
+					await button.click();
+					await page.getByRole('status').filter({hasText:language === 'zh' ? '授权码已复制' : 'Authorization code copied'}).waitFor();
+				}
+			}
+		}
 		const state = { requestId: 'auth-fixture', provider: 'openai', phase: 'pending', url: 'https://example.invalid/authorize', prompt: { id: 'code', kind: 'manual_code', message: 'Fixture authorization code' } };
 		socket.send(JSON.stringify({ type: 'provider_auth', state }));
 		await page.locator('.provider-auth-modal').waitFor();

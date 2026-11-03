@@ -22,12 +22,24 @@ assert(!JSON.parse(readFileSync(join(appRoot, "package.json"), "utf8")).pi?.exte
 // A checkout-local package can otherwise hide missing runtime dependencies by
 // resolving them from the repository's parent node_modules directory.
 const packagedRequire = createRequire(join(appRoot, "package.json"));
-for (const name of ["unified", "remark-parse", "@vscode/ripgrep", "@lezer/python"]) {
+for (const name of ["undici", "unified", "remark-parse", "@vscode/ripgrep", "@lezer/python"]) {
 	const resolved = packagedRequire.resolve(name);
 	const inside = relative(appRoot, resolved);
 	assert(!isAbsolute(inside) && inside !== ".." && !inside.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`), `${name} must resolve inside the packaged app: ${resolved}`);
 }
-console.log("PASS runtime parser dependencies resolve inside the packaged app");
+// Pi packages expose import-only entry points; resolve them with the shipped ESM loader.
+execFileSync(executable, ["--input-type=module", "--eval", `
+	import assert from 'node:assert/strict';
+	import {relative, isAbsolute, sep} from 'node:path';
+	import {fileURLToPath} from 'node:url';
+	for (const name of ['@earendil-works/pi-schema','@earendil-works/pi-ai','@earendil-works/pi-coding-agent']) {
+		const resolved = import.meta.resolve(name);
+		const inside = relative(process.cwd(), fileURLToPath(resolved));
+		assert(!isAbsolute(inside) && inside !== '..' && !inside.startsWith('..' + sep), name + ' escaped the package');
+		await import(resolved);
+	}
+`], {cwd:appRoot,env:{...testEnv(),ELECTRON_RUN_AS_NODE:"1",NODE_PATH:"",NODE_OPTIONS:""},timeout:30000,stdio:"pipe"});
+console.log("PASS runtime dependencies resolve inside the packaged app");
 const playgroundMethods = pathToFileURL(join(appRoot, "dist/server/playground-methods.js")).href;
 execFileSync(executable, ["--input-type=module", "--eval", `
 	import assert from 'node:assert/strict';

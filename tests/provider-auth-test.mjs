@@ -18,8 +18,16 @@ try {
 		assert.match(options.getDeviceId(), /^[0-9a-f-]{36}$/);
 		const method = await interaction.prompt({ type: 'select', message: 'Fixture login method', options: [{id:'copy-code',label:'Copy code'},{id:'browser',label:'Browser'}], signal: interaction.signal });
 		assert.equal(method, 'copy-code');
-		interaction.notify({ type: 'device_code', verificationUri: 'https://example.invalid/device', userCode: 'FIXTURE-DEVICE-CODE' });
+		for (const flags of [{}, {openBrowserOnConfirm:false,copyCodeOnConfirm:false}, {openBrowserOnConfirm:false,copyCodeOnConfirm:true}, {openBrowserOnConfirm:true,copyCodeOnConfirm:false}, {openBrowserOnConfirm:true,copyCodeOnConfirm:true}]) {
+			interaction.notify({ type: 'device_code', verificationUri: 'https://example.invalid/device', userCode: 'FIXTURE-DEVICE-CODE', ...flags });
+			assert.equal(wire.at(-1).state.openBrowserOnConfirm, flags.openBrowserOnConfirm);
+			assert.equal(wire.at(-1).state.copyCodeOnConfirm, flags.copyCodeOnConfirm);
+			const before = wire.at(-1).state; service.replay(); assert.deepEqual(wire.at(-1).state, before);
+		}
 		interaction.notify({ type: 'auth_url', url: 'https://example.invalid/fixture-authorize' });
+		assert.equal(wire.at(-1).state.code, undefined);
+		assert.equal(wire.at(-1).state.copyCodeOnConfirm, undefined);
+		assert.equal(wire.at(-1).state.openBrowserOnConfirm, undefined);
 		const value = await interaction.prompt({ type: 'manual_code', message: 'Fixture code', signal: interaction.signal });
 		assert.equal(value, 'fixture-code');
 		return { type: 'oauth', refresh: 'FIXTURE_REFRESH_SECRET', access: 'FIXTURE_ACCESS_SECRET', expires: Date.now() + 3600000 };
