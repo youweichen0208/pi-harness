@@ -1,5 +1,9 @@
 # 发布流程
 
+## 1.13.1：统一桌面字体
+
+界面与文档优先使用内置 UI SC，统一 Windows／macOS 字号和文字颜色，并增加真实 Electron 的跨平台字体及 Windows 100%／125%／150% 缩放回归。SDK / pi-ai 1.5.0、协议 v50 保持不变。仅发布 GitHub 三平台桌面 Release；同提交 CI、打包与升级验证及附件核对通过后公开。说明见 `.github/release-notes/v1.13.1.md`。
+
 ## 1.13.0：聊天与导航体验优化
 
 发布当前本地界面改动：精简命令和计划卡、改善子代理状态与最终选择题、调整 Workspace 与顶栏、按类型着色文件图标，并简化 Python 函数用例。SDK / pi-ai 保持 1.5.0，协议 v50 不变。仅发布 GitHub 三平台桌面 Release，同提交 CI、打包与升级验证及附件核对通过后公开。说明见 `.github/release-notes/v1.13.0.md`。
