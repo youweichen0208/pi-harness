@@ -1,3 +1,5 @@
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 /**
  * test-env — 测试自起 server 的环境基线。
  *
@@ -23,16 +25,24 @@
  */
 
 let scrubbed = false;
+// Automatic model discovery must never read the developer's other agents.
+function isolateModelSources(env) {
+	const root = join(tmpdir(), `pi-test-no-external-sources-${process.pid}`);
+	for (const key of ["CLAUDE_CONFIG_DIR", "CODEX_HOME", "OPENCODE_CONFIG_DIR", "OPENCODE_CONFIG", "XDG_CONFIG_HOME", "XDG_DATA_HOME"]) env[key] = join(root, key);
+}
+
 
 /** 就地剥掉本进程 env 里的全部宿主 PI_*；此后 PI_* 命名空间归测试所有。 */
 export function scrubHostEnv() {
 	for (const key of Object.keys(process.env)) if (key.startsWith("PI_")) delete process.env[key];
+	isolateModelSources(process.env);
 	scrubbed = true;
 }
 
 /** env 快照：未 scrub 时先剥宿主 PI_*；PKG_ROOT 钉到仓库根；overrides 最后套。 */
 export function testEnv(overrides = {}) {
 	const env = { ...process.env };
+	if (!scrubbed) isolateModelSources(env);
 	if (!scrubbed) for (const key of Object.keys(env)) if (key.startsWith("PI_")) delete env[key];
 	env.PI_WEB_PKG_ROOT = process.cwd();
 	return { ...env, ...overrides };

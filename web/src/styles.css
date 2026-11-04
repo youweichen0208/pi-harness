@@ -14758,11 +14758,8 @@ html.pi-desktop .design-workspace .topbar { height: 48px; min-height: 48px; }
 .subagent-task-all-failed > p { color: var(--yellow-fg); }
 .subagent-task-source { display: inline-block; padding: 2px 8px; border-radius: var(--r-switch); background: var(--bg-elev2); color: var(--text-muted); }
 
-/* Project context stays secondary to the active conversation. */
+/* A compact, stable entry to the current conversation tree. */
 .design-workspace .header-location { gap: 6px; }
-.design-workspace .header-location > span:first-child { flex: 0 2 auto; max-width: min(180px, 34%); font-size: 12px; color: var(--text-dim); }
-.header-location-separator { display: flex; align-items: center; flex: none; }
-.header-location-separator svg { width: 12px; height: 12px; }
 .design-workspace .header-location > .conversation-title-button { flex: 0 1 auto; min-height: 30px; gap: 6px; padding: 4px 7px; border-radius: var(--r-sm); color: var(--text); }
 .conversation-title-button:hover { background: var(--row-hover); }
 .conversation-title-button:active { background: var(--row-active); }
@@ -14775,8 +14772,5 @@ html.pi-desktop .design-workspace .topbar { height: 48px; min-height: 48px; }
 /* Adapt to the titlebar's usable width, including an expanded sidebar (#142). */
 .design-workspace .topbar { container-name: workspace-titlebar; container-type: inline-size; }
 @container workspace-titlebar (max-width: 900px) {
-	.design-workspace .header-location > span:first-child,
-	.design-workspace .header-location > .header-location-separator,
 	.design-workspace .header-task-segments { display: none; }
-	.design-workspace .header-location > .conversation-title-button { flex: 1; }
 }

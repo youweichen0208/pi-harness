@@ -1,5 +1,9 @@
 # 发布流程
 
+## 1.14.0：多 Agent 模型同步与会话归属修复
+
+自动导入 Pi、Claude Code、Codex 和 OpenCode 的用户级 API 模型配置，支持严格去重、能力补全、单项错误隔离及本地独立编辑；修复切换项目后新建会话误复用其他项目空白会话的问题，并更新当前会话标题展示。SDK / pi-ai 保持 1.5.0，协议升至 v51。仅发布 GitHub 三平台桌面 Release；同提交 CI、打包与升级验证及附件核对通过后公开。说明见 `.github/release-notes/v1.14.0.md`。
+
 ## 1.13.2：自动缩进与 Windows 顶栏修复
 
 修复 #141 块头后首条简单语句缺少缩进时的自动缩进失败，以及 #142 展开侧栏时 Windows 顶栏拥挤。SDK / pi-ai 1.5.0、协议 v50 不变。仅发布 GitHub 三平台桌面 Release；同提交 CI、打包与升级验证及附件核对通过后公开。说明见 `.github/release-notes/v1.13.2.md`。

@@ -1,3 +1,4 @@
+import { modelConfigurationChanged, modelSourcesFor, type ModelSourceSync } from "./model-source-sync.js";
 import { taskDetail, recoverTaskSummaries, taskSummaries } from "./subagents/tasks.js";
 import type { SubagentRequest } from "./protocol.js";
 import { WikiConversations } from "./wiki-conversations.js";
@@ -247,6 +248,8 @@ export class ClientSession {
 	/** One ModelRuntime shared by all conversations — the model chosen in the
 	 *  top bar applies to every chat, not just the one that set it. Seeded by
 	 *  the first conversation and reused by later ones. */
+	private sourceUnbind?: () => void;
+	private sources?: ModelSourceSync;
 	private sharedModelRuntime:
 		| Awaited<ReturnType<typeof createAgentSessionServices>>["modelRuntime"]
 		| undefined;
@@ -559,6 +562,7 @@ export class ClientSession {
 			flushSnapshot: () => this.flushSnapshot(),
 			isDisposed: () => this.disposed,
 			modelRuntime: () => this.runtime.services.modelRuntime,
+			sources: () => this.sources,
 			invalidatePiConfig: () => {
 				this.piConfig.invalidate();
 			},
@@ -630,6 +634,12 @@ export class ClientSession {
 				settingsManager: settings,
 				resourceLoaderOptions: { extensionFactories: nativeToolExtensions(() => databaseScope(this.clientId, cwd, sessionManager), () => subagentParent ? { session: subagentParent, agentDir: this.agentDir, workspaceId: getSubagentWorkspace(sessionManager) } : undefined, () => settings.getSettings().defaultTools) },
 			});
+			if (!this.sources) {
+				this.sources = modelSourcesFor(this.stateStore.dataDir, this.agentDir);
+				this.sourceUnbind = await this.sources.bind(services.modelRuntime,
+					() => [...this.convs.values()].some(c => c.session.isStreaming || isRecovering(c.recovery)),
+					() => { if (this.convs.size && !this.disposed) { void this.listModels(); void this.modelAdmin.listModelsConfig(); this.flushSnapshot(); } });
+			}
 			// A second native reload invalidates the process-wide extension factory cache.
 			if (refreshResources) { await services.resourceLoader.reload(); refreshResources = false; }
 			const created = await createAgentSessionFromServices({ services, sessionManager, model: state?.model, thinkingLevel: state?.thinkingLevel });
@@ -994,6 +1004,7 @@ export class ClientSession {
 			// A run finished or a new entry was persisted — keep the session list fresh
 			// (new chat + first message, completed turns, compaction, etc.).
 			case "agent_settled": {
+				void this.sources?.ready(conv.session.modelRuntime).then(() => this.listModels()).catch(() => {});
 				this.coordinatePlan(conv);
 				if (this.pendingMcpReload.delete(conv.id)) void this.reloadMcpConversation(conv).catch(error => this.emit({ type: "notice", level: "error", text: `MCP reload failed: ${error.message}` }));
 
@@ -1430,9 +1441,9 @@ export class ClientSession {
 		this.convs.get(conversationId)?.webUi.resolveDialog(id, value);
 	}
 
-	/** Whether the pi agent config looks ready (cached for 2s). */
+	/** Setup is ready only when the effective catalog has a selectable authenticated model. */
 	isPiConfigured(): boolean {
-		return this.piConfig.isConfigured();
+		return this.runtime.services.modelRuntime.getAvailableSnapshot().some(m => this.sources?.visible(m.provider) ?? isSelectableProvider(m.provider));
 	}
 
 	/** Set by index.ts: called when /pi-harness:quit is invoked. */
@@ -1512,6 +1523,7 @@ export class ClientSession {
 	/** Slash-command catalog + native command execution — 自包含模块，见
 	 *  slash-commands.ts（内置命令拦截 + 扩展/模板/技能目录推送）。 */
 	private readonly slash = new SlashCommandsService({
+		isModelVisible: provider => this.sources?.visible(provider) ?? isSelectableProvider(provider),
 		emit: (msg) => this.emit(msg),
 		cwd: () => this.cwd,
 		getSession: () => this.session,
@@ -1711,6 +1723,7 @@ export class ClientSession {
 	): Promise<void> {
 		const conv = this.conv;
 		const receiptSessionId = conv.session.sessionId;
+		let releaseModels: (() => void) | undefined;
 		let sideEffectsStarted = false;
 		let acknowledged = false;
 		const acknowledge = (ok: boolean, commandExecuted?: boolean) => {
@@ -1759,6 +1772,13 @@ export class ClientSession {
 			// even while quiesced. Everything that reaches the SDK is NEW work and
 			// is refused until admission reopens.
 			if (this.quiesceBlocked()) throw new Error("服务暂停接收消息");
+			releaseModels = await this.sources?.acquire(s.modelRuntime);
+			if (s.model && this.sources && !this.sources.accepts(s.modelRuntime, s.model.provider, s.model.id)) throw new Error("当前模型来源不可用，请选择其他模型");
+			if (!s.isStreaming && s.model) {
+				const updated = s.modelRuntime.getModel(s.model.provider, s.model.id);
+				if (!updated && this.sources?.owns(s.model.provider)) throw new Error("当前模型已移除，请选择其他模型");
+				if (updated && modelConfigurationChanged(updated, s.model)) await s.setModel(updated);
+			}
 			if (conv.title === DEFAULT_CONV_TITLE && text.trim()) {
 				const temporary = skillAwareTitleText(text).trim().replace(/\s+/g, " ");
 				conv.title = temporary.length > 30 ? `${temporary.slice(0, 30)}…` : temporary;
@@ -1791,6 +1811,7 @@ export class ClientSession {
 				text: `提示发送失败：${(err as Error).message}`,
 			});
 		}
+		releaseModels?.();
 		// The active conversation has been continued since it was opened — it
 		// must not be dismissed when the user switches away. (Also bumps the
 		// per-project "most recently active" order used by set_cwd.)
@@ -2117,10 +2138,9 @@ export class ClientSession {
 		this.invalidateLists();
 		if (this.quiesceBlocked()) return;
 		// Reuse an already-open blank conversation instead of piling up new ones
-		// on every click: if the active chat has no messages it IS the new chat
-		// (focus already on it); otherwise switch to the first blank one (under
-		// the per-project running-list model displaced blanks are disposed, so
-		// this branch normally can't exist — kept as a safety net).
+		// on every click: if the active chat has no messages it IS the new chat.
+		// Project switching retains warm runtimes, including blank conversations;
+		// only a blank belonging to the current project may be reused.
 		const isBlank = (c: Conversation): boolean => {
 			try {
 				return c.session.getSessionStats().totalMessages === 0 && c.terminals.list().length === 0;
@@ -2136,7 +2156,7 @@ export class ClientSession {
 		}
 		for (const conv of this.convs.values()) {
 			if (conv.id === this.activeId) continue;
-			if (!fresh && !conv.wiki && isBlank(conv)) {
+			if (!fresh && !conv.wiki && conv.cwd === active.cwd && isBlank(conv)) {
 				await this.switchConversation(conv.id);
 				this.flushSnapshot();
 				return;
@@ -2971,13 +2991,20 @@ export class ClientSession {
 		this.flushSnapshot(true);
 	}
 
+	async syncModelSources(source?: import("./protocol.js").ModelSourceId, enabled?: boolean, restore?: boolean) {
+		try { await this.sources?.sync(source, enabled, restore); await this.modelAdmin.listModelsConfig(); await this.listModels(); this.flushSnapshot(); }
+		catch { this.emit({ type: "notice", level: "error", text: "模型来源同步失败，请检查同步存储和来源配置" }); }
+	}
+
 	/** List models that have valid authentication configured. */
 	async listModels(): Promise<void> {
 		try {
 			const mr = this.runtime.services.modelRuntime;
+			await this.sources?.ready(mr);
 			const available = await mr.getAvailable();
-			const models = available.filter(m => isSelectableProvider(m.provider)).map((m) => ({
+			const models = available.filter(m => this.sources?.visible(m.provider) ?? isSelectableProvider(m.provider)).map((m) => ({
 				id: `${m.provider}/${m.id}`,
+				origin: this.sources?.origin(m.provider),
 				name: m.name,
 				provider: m.provider,
 				reasoning: m.reasoning,
@@ -3011,6 +3038,8 @@ export class ClientSession {
 			}
 			const provider = modelId.slice(0, slash);
 			const id = modelId.slice(slash + 1);
+			await this.sources?.ready(mr);
+			if (this.sources && !this.sources.selectable(provider)) throw new Error("模型来源不可用，请选择其他模型");
 			const model = mr.getModel(provider, id);
 			if (!model) throw new Error(`模型不存在：${modelId}`);
 			await this.session.setModel(model);
@@ -3078,6 +3107,7 @@ export class ClientSession {
 	}
 
 	async dispose(): Promise<void> {
+		this.sourceUnbind?.();
 
 		ClientSession.liveClients.delete(this.clientId);
 		this.disposed = true;

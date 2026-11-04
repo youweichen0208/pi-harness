@@ -95,6 +95,7 @@ jobs:
           node tests/native-tools-desktop-test.mjs
           node tests/provider-auth-test.mjs
           node tests/model-config-preservation-test.mjs
+          node tests/model-sources-test.mjs
 
       - name: Build Electron (macOS)
         run: npx electron-builder build --mac --arm64 --publish never
@@ -107,6 +108,7 @@ jobs:
           node tests/packaged-server-start-test.mjs "$executable" "$root"
           node tests/native-tools-desktop-test.mjs "$executable" "$root"
           ELECTRON_RUN_AS_NODE=1 "$executable" tests/provider-auth-test.mjs "$PWD/$root"
+          ELECTRON_RUN_AS_NODE=1 "$executable" tests/model-sources-test.mjs "$PWD/$root"
           codesign --verify --deep --strict "$app"
 
       - name: Verify packaged extension worker and rendering
@@ -190,6 +192,7 @@ jobs:
           node tests/native-tools-desktop-test.mjs
           node tests/provider-auth-test.mjs
           node tests/model-config-preservation-test.mjs
+          node tests/model-sources-test.mjs
 
       - name: Install browser for toolbar regression
         run: npx playwright-core install chromium
@@ -211,6 +214,8 @@ jobs:
           # Electron is a GUI executable: a pipeline makes PowerShell wait and set LASTEXITCODE.
           & ./release/win-unpacked/pi.exe tests/provider-auth-test.mjs "$PWD/release/win-unpacked/resources/app" | Out-Host
           if ($LASTEXITCODE -ne 0) { throw "Packaged OAuth failed" }
+          & ./release/win-unpacked/pi.exe tests/model-sources-test.mjs "$PWD/release/win-unpacked/resources/app" | Out-Host
+          if ($LASTEXITCODE -ne 0) { throw "Packaged model discovery failed" }
           Remove-Item Env:ELECTRON_RUN_AS_NODE
           $portable = Get-ChildItem release/*win-x64.exe | Select-Object -First 1
           ./tests/portable-relaunch-test.ps1 -PortableExe $portable.FullName
@@ -308,6 +313,7 @@ jobs:
           node tests/native-tools-desktop-test.mjs
           node tests/provider-auth-test.mjs
           node tests/model-config-preservation-test.mjs
+          node tests/model-sources-test.mjs
 
       - name: Build Electron (Linux)
         run: npx electron-builder build --linux --x64 --publish never
@@ -319,6 +325,7 @@ jobs:
           node tests/packaged-server-start-test.mjs "$executable" "$root"
           node tests/native-tools-desktop-test.mjs "$executable" "$root"
           ELECTRON_RUN_AS_NODE=1 "$executable" tests/provider-auth-test.mjs "$root"
+          ELECTRON_RUN_AS_NODE=1 "$executable" tests/model-sources-test.mjs "$root"
 
       - name: Verify deb installation and previous-version data
         env:

@@ -152,7 +152,7 @@ export class NodeWorkbench {
 				write: async (path, text, signal) => { check(signal); await this.write(connection, safePath(path), text, signal); check(signal); },
 			}, state => {
 				if (connection.agent?.id === state.id && this.connections.get(identity(clientId, connection.nodeId)) === connection) this.emit(clientId, "agent_state", { agent: state }, { nodeId: connection.nodeId, conversationId: state.id });
-			});
+			}, this.dataDir);
 			connection.agent = agent; this.broadcastState();
 			await agent.start(); this.ensureCurrent(connection); return agent.snapshot();
 		} finally { connection.agentStarting = false; }

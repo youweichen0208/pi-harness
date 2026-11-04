@@ -1,3 +1,4 @@
+import type { ModelSourceSync } from "./model-source-sync.js";
 import { isSelectableProvider } from "./provider-catalog.js";
 import { updateAuthFile } from "./auth-file.js";
 import { isChatModelConfig, mergeChatProvider } from "./model-config-merge.js";
@@ -23,6 +24,7 @@ import type { ServerMessage, UiModelConfigEntry, UiProviderConfig } from "./prot
 /** ClientSession 提供给本服务的宿主能力（窄接口）。 */
 export interface ModelAdminHost {
 	agentDir: string;
+	sources?: () => ModelSourceSync | undefined;
 	emit: (msg: ServerMessage) => void;
 	flushSnapshot: () => void;
 	isDisposed: () => boolean;
@@ -344,7 +346,7 @@ export class ModelAdminService {
 		const mr = this.host.modelRuntime();
 		let providers;
 		try {
-			providers = mr.getProviders().filter(p => isSelectableProvider(p.id)).map((p) => {
+			providers = mr.getProviders().filter(p => isSelectableProvider(p.id) && !this.host.sources?.()?.owns(p.id)).map((p) => {
 				try {
 					const st = mr.getProviderAuthStatus(p.id);
 					return {
@@ -462,6 +464,7 @@ export class ModelAdminService {
 					: [];
 				return {
 					providerId,
+					origin: this.host.sources?.()?.origin(providerId),
 					name: p.name as string | undefined,
 					api: p.api as string | undefined,
 					baseUrl: p.baseUrl as string | undefined,
@@ -473,7 +476,7 @@ export class ModelAdminService {
 				};
 			},
 		);
-		this.host.emit({ type: "models_config", providers: list });
+		this.host.emit({ type: "models_config", providers: [...list, ...(this.host.sources?.()?.configs() ?? [])], sources: this.host.sources?.()?.status(this.host.modelRuntime()) });
 	}
 
 	/** Numeric metadata value (NaN/string "unknown" → undefined). */
@@ -778,6 +781,11 @@ static async probeModelsEndpoint(
 		config: UiProviderConfig,
 	): Promise<void> {
 		const pid = providerId.trim();
+		if (this.host.sources?.()?.owns(pid)) {
+			try { await this.host.sources()!.edit(pid, config); await this.listModelsConfig(); await this.host.pushModels(); }
+			catch { this.host.emit({ type: "notice", level: "error", text: "保存独立模型失败，请检查配置" }); }
+			return;
+		}
 		if (!pid || !/^[\w.-]+$/.test(pid)) {
 			this.host.emit({
 				type: "notice",
@@ -852,6 +860,11 @@ static async probeModelsEndpoint(
 
 	/** Remove a provider from models.json and hot-reload. */
 	async deleteModelConfig(providerId: string): Promise<void> {
+		if (this.host.sources?.()?.owns(providerId)) {
+			try { await this.host.sources()!.edit(providerId); await this.listModelsConfig(); await this.host.pushModels(); }
+			catch { this.host.emit({ type: "notice", level: "error", text: "删除独立模型失败" }); }
+			return;
+		}
 		try {
 			const { providers, rest } = this.readModelsConfig();
 			if (!(providerId in providers)) {

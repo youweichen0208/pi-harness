@@ -29,6 +29,7 @@ import type {
 	ToolStatus,
 	TerminalInfo,
 	UiModelConfigEntry,
+	ModelSourceStatus,
 	UiPluginInfo,
 	UiProviderConfig,
 	UiSettingsState,
@@ -115,6 +116,7 @@ export interface ChatState {
 	modelsLoading: boolean;
 	/** Custom providers from agentDir/models.json (model config panel). */
 	modelsConfig: UiProviderConfig[];
+	modelSources: ModelSourceStatus[];
 	/** Built-in providers with auth status (key-only config). */
 	providers: ProviderStatus[];
 	/** Result of the last install_pi_agent run (null while not started/running). */
@@ -252,7 +254,7 @@ type Action =
 	| { type: "prompt_result"; result: Extract<ServerMessage, { type: "prompt_result" }> }
 	| { type: "file_result"; result: Extract<ServerMessage, { type: "file_result" }> }
 	| { type: "models"; models: ModelInfo[]; loading: boolean }
-	| { type: "models_config"; providers: UiProviderConfig[] }
+	| { type: "models_config"; providers: UiProviderConfig[]; sources?: ModelSourceStatus[] }
 	| { type: "providers_status"; providers: ProviderStatus[] }
 	| { type: "fetch_models_result"; result: { reqId: number; ok: boolean; models?: UiModelConfigEntry[]; error?: string } }
 	| { type: "refresh_provider_result"; result: { reqId: number; ok: boolean; added?: number; total?: number; error?: string } }
@@ -580,7 +582,7 @@ function reducer(state: ChatState, action: Action): ChatState {
 		case "models":
 			return { ...state, models: action.models, modelsLoading: action.loading };
 		case "models_config":
-			return { ...state, modelsConfig: action.providers };
+			return { ...state, modelsConfig: action.providers, modelSources: action.sources ?? [] };
 		case "provider_auth":
 			return { ...state, providerAuth: action.state };
 		case "providers_status":
@@ -753,6 +755,7 @@ export function useChat() {
 		models: [],
 		modelsLoading: false,
 		modelsConfig: [],
+		modelSources: [],
 		providers: [],
 		installResult: null,
 		pathCompletions: [],
@@ -1122,7 +1125,7 @@ export function useChat() {
 					dispatch({ type: "models", models: msg.models, loading: false });
 					break;
 				case "models_config":
-					dispatch({ type: "models_config", providers: msg.providers });
+					dispatch({ type: "models_config", providers: msg.providers, sources: msg.sources });
 					break;
 				case "native_mcp_result":
 					window.dispatchEvent(new CustomEvent("pi-native-mcp-event", { detail: msg }));

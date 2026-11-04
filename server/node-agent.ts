@@ -1,3 +1,4 @@
+import { modelConfigurationChanged, modelSourcesFor, type ModelSourceSync } from "./model-source-sync.js";
 import { isSelectableProvider } from "./provider-catalog.js";
 /** Local native Pi session whose only tools operate on one captured SSH connection. */
 import { NodeCommandApprovals } from "./node-command-policy.js";
@@ -5,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Type } from "typebox";
-import { createAgentSession, DefaultResourceLoader, getAgentDir, SettingsManager, SessionManager, type AgentSession, type AgentSessionEvent, type ToolDefinition } from "@earendil-works/pi-coding-agent";
+import { createAgentSession, ModelRuntime, DefaultResourceLoader, getAgentDir, SettingsManager, SessionManager, type AgentSession, type AgentSessionEvent, type ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { serializeMessage } from "./serialize.js";
 import type { NodeAgentState, UiMessage } from "./protocol.js";
 
@@ -20,13 +21,15 @@ export class NodeAgent {
 	private state: NodeAgentState;
 	private readonly approvals = new NodeCommandApprovals(pending => this.set({ dialogs: pending.map(item => ({ id: item.id, method: "confirm", title: "请求执行 · 写入或未识别的操作", message: item.command })) }, true));
 	private session?: AgentSession;
+	private sources?: ModelSourceSync;
+	private sourceUnbind?: () => void;
 	private unsubscribe?: () => void;
 	private timer?: ReturnType<typeof setTimeout>;
 	private generation = 0;
 	private changing = false;
 	private promptCancellation?: AbortController;
 	private readonly lifetime = new AbortController();
-	constructor(private readonly sessionDir: string, cwd: string, private readonly operations: NodeAgentOperations, private readonly changed: (state: NodeAgentState) => void) {
+	constructor(private readonly sessionDir: string, cwd: string, private readonly operations: NodeAgentOperations, private readonly changed: (state: NodeAgentState) => void, private readonly dataDir?: string) {
 		this.state = { id: this.id, cwd, phase: "starting", running: false, messages: [], tools: [], models: [], dialogs: [] };
 	}
 	get busy(): boolean { return this.state.phase !== "closed" && (this.state.phase === "starting" || this.state.running || this.changing); }
@@ -70,12 +73,17 @@ export class NodeAgent {
 	private async create(fresh: boolean | string) {
 		const generation = ++this.generation;
 		mkdirSync(this.sessionDir, { recursive: true, mode: 0o700 });
-		const agentDir = getAgentDir();
+		const agentDir = process.env.PI_CODING_AGENT_DIR ?? getAgentDir();
 		const settings = SettingsManager.create(this.sessionDir, agentDir);
 		const loader = new DefaultResourceLoader({ cwd: this.sessionDir, agentDir, settingsManager: settings, noExtensions: true, noSkills: true, noPromptTemplates: true, noContextFiles: true,
 			systemPrompt: `You are the assistant for one connected SSH node. All provided tools operate only on that node. Remote working directory: ${JSON.stringify(this.state.cwd)}. Use remote_command, remote_read and remote_write for node tasks. Commands run with the SSH user's permissions. You have no local filesystem or local shell tools. Run read-only Linux queries directly using the provided tools. Every deletion, write or state-changing operation requires the tool approval dialog; never treat a previous approval as authorization for another operation. Prefer simple read-only commands over shell scripts for diagnostics. Never assume a previous command's cd persists.`, appendSystemPrompt: [] });
 		await loader.reload();
-		const { session } = await createAgentSession({ cwd: this.sessionDir, agentDir, resourceLoader: loader, settingsManager: settings,
+		const modelRuntime = this.session?.modelRuntime ?? await ModelRuntime.create({ authPath: join(agentDir, "auth.json"), modelsPath: join(agentDir, "models.json") });
+		if (this.dataDir && !this.sources) {
+			this.sources = modelSourcesFor(this.dataDir, agentDir);
+			this.sourceUnbind = await this.sources.bind(modelRuntime, () => this.state.running, () => { if (this.session) this.refresh(); });
+		}
+		const { session } = await createAgentSession({ cwd: this.sessionDir, agentDir, modelRuntime, resourceLoader: loader, settingsManager: settings,
 			sessionManager: typeof fresh === "string" ? SessionManager.open(fresh, this.sessionDir, this.sessionDir) : fresh ? SessionManager.create(this.sessionDir, this.sessionDir) : SessionManager.continueRecent(this.sessionDir, this.sessionDir),
 			model: this.session?.model, noTools: "all", tools: ["remote_command", "remote_read", "remote_write"], excludeTools: ["mcp__*"], customTools: this.tools() });
 		if (this.state.phase === "closed" || generation !== this.generation) { session.dispose(); throw new Error("节点 Agent 已关闭"); }
@@ -105,6 +113,7 @@ export class NodeAgent {
 	}
 	close() {
 		if (this.state.phase === "closed") return;
+		this.sourceUnbind?.();
 		this.generation++; this.lifetime.abort(); this.approvals.reset();
 		this.unsubscribe?.(); this.unsubscribe = undefined;
 		const session = this.session; this.session = undefined;
@@ -129,42 +138,47 @@ export class NodeAgent {
 		if (!session) return;
 		this.set({ messages: this.retain(session.messages.slice(-200).map((message, index) => serializeMessage(message, Math.max(0, session.messages.length - 200) + index)).filter((message): message is UiMessage => !!message)),
 			model: session.model ? { id: session.model.id, provider: session.model.provider, name: session.model.name } : undefined,
-			models: session.modelRuntime.getAvailableSnapshot().filter(model => isSelectableProvider(model.provider)).map(model => ({ id: model.id, provider: model.provider, name: model.name })) });
+			models: session.modelRuntime.getAvailableSnapshot().filter(model => this.sources?.visible(model.provider) ?? isSelectableProvider(model.provider)).map(model => ({ id: model.id, provider: model.provider, name: model.name })) });
 	}
 	async prompt(text: string, queue?: "steer" | "followUp") {
 		const session = this.ready();
-		if (!text.trim() || text.length > 200000) throw new Error("消息无效");
-		if (!session.model) throw new Error("请先在本机设置中配置模型，再重新打开节点 Agent");
-		if (this.state.running) {
-			if (!queue || !session.isStreaming) throw new Error("节点 Agent 正在处理请求，请稍后或排队发送");
-			await session.prompt(text, { streamingBehavior: queue, expandPromptTemplates: false }); return;
-		}
-		this.set({ running: true, error: undefined, tools: [] }, true);
-		const cancellation = new AbortController();
-		this.promptCancellation = cancellation;
-		const signal = AbortSignal.any([cancellation.signal, this.lifetime.signal]);
-		await new Promise<void>((resolve, reject) => {
-			void session.prompt(text, { expandPromptTemplates: false, preflightResult: disposition => {
-				// Abort during asynchronous auth/compaction must prevent a later model call.
-				// SDK 1.2 marks the run active before "started" and does not guard this
-				// callback, so throwing here would strand the session busy. Abort the
-				// starting run instead: the SDK stops it at agent_start, before any request.
-				if (signal.aborted) {
-					const stopped = () => reject(new Error("已停止"));
-					// Report the stop only once the aborted run has settled, so the next prompt is accepted.
-					if (disposition === "started") void session.abort().catch(() => {}).finally(stopped);
-					else { if (!session.isStreaming) this.set({ running: false }); stopped(); }
-					return;
-				}
-				if (disposition !== "started" && !session.isStreaming) this.set({ running: false });
-				resolve();
-			} }).catch(error => {
-				reject(error);
-				if (this.session === session && this.state.phase !== "closed" && this.promptCancellation === cancellation) {
-					this.refresh(); this.set({ running: false, error: signal.aborted ? undefined : (error as Error).message }, true);
-				}
+		const release = await this.sources?.acquire(session.modelRuntime);
+		try {
+			if (session.model && this.sources && !this.sources.accepts(session.modelRuntime, session.model.provider, session.model.id)) throw new Error("当前模型来源不可用，请选择其他模型");
+			if (!session.isStreaming && session.model) { const updated = session.modelRuntime.getModel(session.model.provider, session.model.id); if (!updated && this.sources?.owns(session.model.provider)) throw new Error("当前模型已移除"); if (updated && modelConfigurationChanged(updated, session.model)) await session.setModel(updated); }
+			if (!text.trim() || text.length > 200000) throw new Error("消息无效");
+			if (!session.model) throw new Error("请先在本机设置中配置模型，再重新打开节点 Agent");
+			if (this.state.running) {
+				if (!queue || !session.isStreaming) throw new Error("节点 Agent 正在处理请求，请稍后或排队发送");
+				await session.prompt(text, { streamingBehavior: queue, expandPromptTemplates: false }); return;
+			}
+			this.set({ running: true, error: undefined, tools: [] }, true);
+			const cancellation = new AbortController();
+			this.promptCancellation = cancellation;
+			const signal = AbortSignal.any([cancellation.signal, this.lifetime.signal]);
+			await new Promise<void>((resolve, reject) => {
+				void session.prompt(text, { expandPromptTemplates: false, preflightResult: disposition => {
+					// Abort during asynchronous auth/compaction must prevent a later model call.
+					// SDK 1.2 marks the run active before "started" and does not guard this
+					// callback, so throwing here would strand the session busy. Abort the
+					// starting run instead: the SDK stops it at agent_start, before any request.
+					if (signal.aborted) {
+						const stopped = () => reject(new Error("已停止"));
+						// Report the stop only once the aborted run has settled, so the next prompt is accepted.
+						if (disposition === "started") void session.abort().catch(() => {}).finally(stopped);
+						else { if (!session.isStreaming) this.set({ running: false }); stopped(); }
+						return;
+					}
+					if (disposition !== "started" && !session.isStreaming) this.set({ running: false });
+					resolve();
+				} }).catch(error => {
+					reject(error);
+					if (this.session === session && this.state.phase !== "closed" && this.promptCancellation === cancellation) {
+						this.refresh(); this.set({ running: false, error: signal.aborted ? undefined : (error as Error).message }, true);
+					}
+				});
 			});
-		});
+		} finally { release?.(); }
 	}
 	async abort() {
 		const session = this.ready();
@@ -179,6 +193,8 @@ export class NodeAgent {
 	}
 	async model(provider: string, modelId: string) {
 		const session = this.ready(); if (this.busy) throw new Error("请先停止当前任务");
+		await this.sources?.ready(session.modelRuntime);
+		if (this.sources && !this.sources.accepts(session.modelRuntime, provider, modelId)) throw new Error("模型来源不可用");
 		const model = session.modelRuntime.getAvailableSnapshot().find(model => model.provider === provider && model.id === modelId);
 		if (!model) throw new Error("本机模型不可用");
 		this.changing = true;
@@ -191,6 +207,6 @@ export class NodeAgent {
 		if (event.type === "message_update") this.set({ streamingMessage: serializeMessage(event.message, this.session!.messages.length) ?? undefined });
 		if (event.type === "message_end") { this.refresh(); if (event.message.role === "assistant") this.set({ streamingMessage: undefined }); }
 		if (event.type === "tool_execution_start" || event.type === "tool_execution_end") this.set({ tools: [...this.state.tools.filter(tool => tool.id !== event.toolCallId), { id: event.toolCallId, name: event.toolName, running: event.type === "tool_execution_start", isError: event.type === "tool_execution_end" && event.isError }].slice(-256) });
-		if (event.type === "agent_settled") { this.refresh(); this.set({ running: false, streamingMessage: undefined }, true); }
+		if (event.type === "agent_settled") { this.refresh(); this.set({ running: false, streamingMessage: undefined }, true); void this.sources?.ready(this.session!.modelRuntime).then(() => this.refresh()).catch(() => {}); }
 	}
 }

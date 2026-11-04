@@ -1,3 +1,4 @@
+import { ModelSources } from "./ModelSources";
 import { useDialogFocus } from "../use-dialog-focus";
 import { OpenAIProxySettings } from "./OpenAIProxySettings";
 import { useEffect, useRef, useState } from "react";
@@ -13,6 +14,7 @@ import {
 } from "react-icons/fi";
 import type {
 	ClientMessage,
+	ModelSourceStatus,
 	ProviderStatus,
 	UiModelConfigEntry,
 	UiProviderConfig,
@@ -20,6 +22,7 @@ import type {
 import { useT } from "../i18n";
 
 interface ModelConfigModalProps {
+	sources?: ModelSourceStatus[];
 	send: (msg: ClientMessage) => boolean;
 	/** Custom providers from agentDir/models.json. */
 	providers: UiProviderConfig[];
@@ -120,6 +123,7 @@ export function ModelConfigModal({
 	send,
 	providers,
 	providerStatus,
+	sources = [],
 	fetchModelsResult,
 	refreshProviderResult,
 	cloneProviderResult,
@@ -371,11 +375,12 @@ export function ModelConfigModal({
 					<span role="status">{t("providerResults", { n: custom.length + builtin.length })}</span>
 				</div>}
 				<div className="model-modal-body">
+				{!editing && <ModelSources sources={sources} send={send} />}
 				{!editing ? (
 					<>
 						{custom.length + builtin.length === 0 && <p className="modal-desc">{t("providerNoResults")}</p>}
 						<div className="form-section-title">{t("customProviders")}</div>
-						<p className="modal-desc">{t("customDesc")}</p>
+						<p className="modal-desc">{t("customDesc")} {t("modelDetachHint")}</p>
 						{custom.length === 0 && (
 							<div className="dd-loading">{t("noCustomProviders")}</div>
 						)}
@@ -386,6 +391,7 @@ export function ModelConfigModal({
 										<span className="provider-name">{p.name || p.providerId}</span>
 										<span className="provider-sub">
 											{p.providerId} · {p.api ?? "—"}
+											{p.origin && ` · ${p.origin.sources.join(" / ")} · ${t(p.origin.mode === "local" ? "modelLocal" : "modelSynced")}`}
 											{p.baseUrl ? ` · ${p.baseUrl}` : ""}
 											{p.models.length > 0 &&
 												` · ${t("modelsCount", { n: p.models.length })}`}

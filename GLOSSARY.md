@@ -42,3 +42,18 @@ _Avoid_: Workspace 知识库项目
 
 普通对话中打开一篇 Markdown 的编辑弹窗；其中的 Agent Chat 属于主聊天，通过引用当前文档进行讨论和修改。
 _Avoid_: 独立文档会话、知识库窗口
+
+## 模型配置来源（Model configuration source）
+
+用户已有模型连接信息的来源，例如 Pi、Claude Code、Codex 或 OpenCode 的配置。同一个模型连接可以同时具有多个配置来源。
+_Avoid_: 模型服务商（配置来源不一定提供模型服务）
+
+## 模型连接（Model connection）
+
+通过特定接口和认证身份使用某个模型的配置，包含影响请求行为的协议、地址与能力声明。同名模型不一定是同一个模型连接。
+_Avoid_: 模型名称（名称不足以区分连接）
+
+## 本地独立配置（Local independent configuration）
+
+由 pi-harness 用户单独维护、不再跟随原配置来源更新的模型连接配置。
+_Avoid_: 同步副本（独立配置不再参与来源同步）

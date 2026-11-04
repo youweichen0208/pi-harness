@@ -201,3 +201,5 @@ Wiki 的「问 pi」浮动模式使用独立无边框助手窗口，可拖动到
 ### Python 代码运行
 
 Playground 使用宿主 Python 3.9+，安装包不捆绑解释器。`PI_WEB_PYTHON` 可指定虚拟环境，Jedi 补全与 Black 格式化需安装到同一环境。首次检测到可用 Python 默认开启，保留已保存选择；`PI_WEB_PLAYGROUND=off` 强制关闭。执行不是沙箱，仍拥有服务用户权限。详见 [Playground 架构](architecture-playground.md)。
+
+桌面模型来源发现由服务子进程读取当前用户目录，不依赖 Pi CLI。生产依赖包含 smol-toml 和 jsonc-parser；三平台打包回归运行 `tests/model-sources-test.mjs <appRoot>`，检查真实包内模块、凭据隔离与同步。支持目录覆盖与 Finder 环境差异见 [模型配置来源](architecture-model-sources.md)。

@@ -431,6 +431,10 @@ On first launch, pick a model provider (OpenAI, Anthropic, DeepSeek and many mor
 
 Before exposing the server to other devices, set `PI_WEB_TOKEN` and read the [deployment guide](docs/deployment.md). See also the [SSH workbench guide](docs/ssh-workbench.md) and [environment variables](docs/env-vars.md).
 
+### 自动发现本机模型
+
+无需安装 Pi CLI：pi-harness 默认只读发现 Pi、Claude Code、Codex 和 OpenCode 的用户级 API 模型配置。在「管理模型 → 配置来源」查看结果、立即同步或关闭来源。不会复用第三方订阅登录，也不会执行认证助手；已有 Pi OAuth 继续可用。编辑导入项后保存为 pi-harness 本地独立配置，删除后需主动恢复同步。详见 [来源范围与配置说明](docs/architecture-model-sources.md)。
+
 ## License
 
 [MIT](LICENSE)

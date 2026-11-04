@@ -17,6 +17,23 @@ const STORAGE_KEY = "pi-harness:lang";
 /* ------------------------------------------------------------------ */
 
 const zh = {
+	modelSources: "配置来源",
+	modelSourcePending: "任务结束后应用",
+	syncModelsNow: "立即同步",
+	restoreModelSync: "恢复同步",
+	modelSourcesHint: "自动读取本机用户级 API 配置，无需安装 Pi CLI；不导入第三方订阅登录。",
+	modelSource_ready: "已同步",
+	modelSource_missing: "未发现配置",
+	modelSource_invalid: "配置损坏，已暂停",
+	modelSource_unreadable: "无法读取，已暂停",
+	modelSource_incomplete: "缺少模型、地址或 API 密钥／环境变量",
+	modelSource_unsupported: "协议、别名或认证方式暂不支持",
+	modelSource_partial: "部分同步失败",
+	modelSource_disabled: "已关闭",
+	modelLocal: "本地独立",
+	modelSynced: "同步",
+	modelDetachHint: "编辑同步项会保存为本地独立配置，后续来源变化不会覆盖；删除后可用“恢复同步”重新导入。",
+
 	notesTitle: "小记",
 	notesChat: "对话",
 	notesPlayground: "Playground",
@@ -1189,6 +1206,7 @@ const zh = {
 	theme: "主题",
 	themeDefault: "深色（默认）",
 	newChat: "新对话",
+	currentConversation: "当前会话",
 	more: "更多",
 	newChatTip: "新建对话（每个浏览器独立保存会话）",
 	"thinking.off": "关闭",
@@ -1778,9 +1796,9 @@ const zh = {
 	"sound.error.desc": "出现错误提示时",
 
 	/* pi setup modal */
-	setupTitle: "未检测到 pi agent 配置",
+	setupTitle: "配置模型",
 	setupDesc:
-		"pi-harness 需要 pi 的配置目录（~/.pi/agent）和至少一个 API 密钥才能运行智能体。pi 内置了 openai、anthropic、deepseek 等服务商——选一个填密钥即可，全程无需打开终端。",
+		"直接使用自动发现的 API 模型，或添加密钥／登录。无需安装 Pi CLI。",
 	installFailed: "pi agent 安装失败：",
 	retryInstall: "重试安装",
 	skip: "跳过",
@@ -2308,6 +2326,23 @@ const zh = {
 /* ------------------------------------------------------------------ */
 
 const en: Record<keyof typeof zh, string> = {
+	modelSources: "Configuration sources",
+	modelSourcePending: "Applies after running tasks",
+	syncModelsNow: "Sync now",
+	restoreModelSync: "Restore sync",
+	modelSourcesHint: "Discover local user API configuration without Pi CLI. Third-party subscription sign-ins are excluded.",
+	modelSource_ready: "Synced",
+	modelSource_missing: "No configuration found",
+	modelSource_invalid: "Invalid configuration; paused",
+	modelSource_unreadable: "Cannot read configuration; paused",
+	modelSource_incomplete: "Missing model, endpoint, API key or environment variable",
+	modelSource_unsupported: "Unsupported protocol, alias or authentication",
+	modelSource_partial: "Partially synced",
+	modelSource_disabled: "Disabled",
+	modelLocal: "Local copy",
+	modelSynced: "Synced",
+	modelDetachHint: "Editing a synced entry saves an independent local copy. Source updates no longer overwrite it. After deletion, use Restore sync to import it again.",
+
 	notesTitle: "Notes",
 	notesChat: "Chats",
 	notesPlayground: "Playground",
@@ -3480,6 +3515,7 @@ const en: Record<keyof typeof zh, string> = {
 	theme: "Theme",
 	themeDefault: "Dark (default)",
 	newChat: "New chat",
+	currentConversation: "Current conversation",
 	more: "More",
 	newChatTip: "New chat (sessions are saved per browser)",
 	"thinking.off": "Off",
@@ -4073,9 +4109,9 @@ const en: Record<keyof typeof zh, string> = {
 	"sound.error.desc": "When an error notice appears",
 
 	/* pi setup modal */
-	setupTitle: "pi agent config not detected",
+	setupTitle: "Set up a model",
 	setupDesc:
-		"pi-harness needs pi's config directory (~/.pi/agent) and at least one API key to run the agent. pi has built-in providers such as openai, anthropic, and deepseek — just pick one and enter a key, no terminal needed.",
+		"Use discovered API models, add a key or sign in. Pi CLI is not required.",
 	installFailed: "pi agent installation failed:",
 	retryInstall: "Retry install",
 	skip: "Skip",

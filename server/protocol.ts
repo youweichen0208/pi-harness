@@ -277,7 +277,22 @@ export interface TaskStep {
 	artifacts: { toolCallId: string; kind: string; label: string; path?: string; outputLines?: number }[];
 }
 
+export type ModelSourceId = "pi" | "claude" | "codex" | "opencode";
+export interface ModelSourceStatus {
+	pending?: boolean;
+	missing?: string[];
+	source: ModelSourceId;
+	enabled: boolean;
+	status: "ready" | "partial" | "missing" | "invalid" | "unreadable" | "incomplete" | "unsupported" | "disabled";
+	failures?: number;
+	failureReasons?: ModelSourceStatus["status"][];
+	count: number;
+	checkedAt: number;
+}
+export interface ModelOrigin { sources: ModelSourceId[]; mode: "synced" | "local" }
+
 export interface UiModelInfo {
+	origin?: ModelOrigin;
 	id: string;
 	name: string;
 	provider: string;
@@ -607,6 +622,7 @@ export type ClientMessage =
 	| { type: "clear_provider_api_key"; provider: string }
 	// -- custom model config (agentDir/models.json) ---------------------------
 	| { type: "list_models_config" }
+	| { type: "sync_model_sources"; source?: ModelSourceId; enabled?: boolean; restore?: boolean }
 	/** Upsert one provider (api/baseUrl/apiKey + its models) into models.json. */
 	| { type: "save_model_config"; providerId: string; config: UiProviderConfig }
 	/** Remove a provider from models.json. */
@@ -847,6 +863,7 @@ export interface ScmCommitEntry {
 }
 
 export interface ModelInfo {
+	origin?: ModelOrigin;
 	id: string;
 	name: string;
 	provider: string;
@@ -874,6 +891,7 @@ export interface UiModelConfigEntry {
 
 /** A custom provider block in models.json (providers.<id>). */
 export interface UiProviderConfig {
+	origin?: ModelOrigin;
 	/** Typed image/classifier entries are retained server-side by the chat editor. */
 	nonChatModelCount?: number;
 	providerId: string;
@@ -1227,7 +1245,7 @@ export type ServerMessage =
 			size: number;
 	  }
 	| { type: "models"; models: ModelInfo[] }
-	| { type: "models_config"; providers: UiProviderConfig[] }
+	| { type: "models_config"; providers: UiProviderConfig[]; sources?: ModelSourceStatus[] }
 	| { type: "provider_auth"; state: ProviderAuthState }
 	| { type: "providers_status"; providers: ProviderStatus[] }
 	/** Result of a fetch_models probe: ok + the advertised models (id plus

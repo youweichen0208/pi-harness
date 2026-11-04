@@ -1,3 +1,4 @@
+import { MODEL_SOURCE_NAMES } from "./ModelSources";
 import { UiIcon } from "./UiIcon";
 import { memo, useEffect, useMemo, useState } from "react";
 import { FiCpu, FiSearch, FiZap } from "react-icons/fi";
@@ -173,7 +174,7 @@ export const ModelThinking = memo(function ModelThinking({ state, models, models
 							<span className="dd-model-cell">
 								<span className="dd-model-name">{m.name}</span>
 								<span className="dd-model-meta">
-									<span className="dd-model-provider">{m.provider}</span>
+									<span className="dd-model-provider">{m.origin?.sources.some(source => source !== "pi") ? m.origin.sources.map(source => MODEL_SOURCE_NAMES[source]).join(" / ") : m.provider}{m.origin?.mode === "local" ? ` · ${t("modelLocal")}` : ""}</span>
 									{(m.reasoning || m.vision) && (
 										<span className="dd-model-badges">
 											{m.reasoning && (

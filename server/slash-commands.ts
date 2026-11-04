@@ -21,6 +21,7 @@ import type {  } from "./plugins.js";
 
 /** ClientSession 提供给本服务的宿主能力（窄接口，便于独立测试）。 */
 export interface SlashHost {
+	isModelVisible?: (provider: string) => boolean;
 	treeCommand?: (name: string, args: string, context: { conversationId: string; requestId: string }) => Promise<void>;
 	emit: (msg: ServerMessage) => void;
 	/** 当前工作目录（/cwd 无参数时回显）。 */
@@ -173,7 +174,7 @@ export class SlashCommandsService {
 					return true;
 				}
 				const query = args.toLowerCase();
-				const available = (await this.host.getSession().modelRuntime.getAvailable()).filter(m => isSelectableProvider(m.provider));
+				const available = (await this.host.getSession().modelRuntime.getAvailable()).filter(m => this.host.isModelVisible?.(m.provider) ?? isSelectableProvider(m.provider));
 				// Prefer an exact "provider/id" match, else id/name substring.
 				const exact = available.find(
 					(m) => m.provider + "/" + m.id === args.trim(),

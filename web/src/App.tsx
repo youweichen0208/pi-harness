@@ -1610,6 +1610,8 @@ export function App() {
 				!setupDismissed &&
 				!manageModelsOpen && (
 					<PiSetupModal
+						sources={chat.modelSources}
+						onManage={() => setManageModelsOpen(true)}
 						send={send}
 						piConfigured={chat.state.piConfigured}
 						piAgentInstalled={chat.state.piAgentInstalled}
@@ -1621,6 +1623,7 @@ export function App() {
 			<ProviderAuthModal state={chat.providerAuth} send={send} />
 			{manageModelsOpen && (
 				<ModelConfigModal
+					sources={chat.modelSources}
 					send={send}
 					providers={chat.modelsConfig}
 					providerStatus={chat.providers}

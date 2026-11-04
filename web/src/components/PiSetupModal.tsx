@@ -1,11 +1,13 @@
+import { ModelSources } from "./ModelSources";
 import { useDialogFocus } from "../use-dialog-focus";
-import { UiIcon } from "./UiIcon";
 import { useEffect, useState } from "react";
 import { FiCpu, FiRefreshCw, FiX } from "react-icons/fi";
-import type { ClientMessage, ProviderStatus } from "../types";
+import type { ClientMessage, ModelSourceStatus, ProviderStatus } from "../types";
 import { useT } from "../i18n";
 
 interface PiSetupModalProps {
+	sources?: ModelSourceStatus[];
+	onManage?: () => void;
 	send: (msg: ClientMessage) => boolean;
 	/** Fetched from the latest snapshot; true once auth.json has credentials. */
 	piConfigured: boolean;
@@ -18,23 +20,18 @@ interface PiSetupModalProps {
 	onClose: () => void;
 }
 
-/**
- * One-time setup overlay: shown when the server reports the pi agent config is
- * missing (no auth.json credentials). If the pi CLI is already installed the
- * API key form appears immediately; otherwise the modal offers auto-install
- * first and the key form after the server confirms it (install_result).
- */
+/** First-run API setup, powered by the embedded SDK; no CLI installation required. */
 export function PiSetupModal({
 	send,
 	piConfigured,
-	piAgentInstalled,
+	sources = [],
+	onManage,
 	providers,
-	installResult,
 	onClose,
 }: PiSetupModalProps) {
 	const t = useT();
 	const dialogRef = useDialogFocus();
-	const [installing, setInstalling] = useState(false);
+
 	const [provider, setProvider] = useState("");
 	const [apiKey, setApiKey] = useState("");
 	const [saving, setSaving] = useState(false);
@@ -42,6 +39,7 @@ export function PiSetupModal({
 	// Built-in provider list for the dropdown.
 	useEffect(() => {
 		send({ type: "list_providers" });
+		send({ type: "sync_model_sources" });
 	}, [send]);
 
 	// Auto-close once the config is actually ready (snapshot-driven).
@@ -49,23 +47,12 @@ export function PiSetupModal({
 		if (piConfigured) onClose();
 	}, [piConfigured, onClose]);
 
-	// Install finished (success or failure) → stop the spinner.
-	useEffect(() => {
-		if (installResult) setInstalling(false);
-	}, [installResult]);
-
 	// Default to the first unconfigured provider once the list arrives.
 	useEffect(() => {
 		if (!provider && providers.length > 0) {
 			setProvider(providers.find((p) => !p.configured)?.id ?? providers[0].id);
 		}
 	}, [providers, provider]);
-
-	const doInstall = () => {
-		if (installing) return;
-		setInstalling(true);
-		send({ type: "install_pi_agent" });
-	};
 
 	const saveKey = () => {
 		if (!apiKey.trim() || saving) return;
@@ -83,10 +70,11 @@ export function PiSetupModal({
 	const recheck = () => {
 		send({ type: "get_state" });
 		send({ type: "list_providers" });
+		send({ type: "sync_model_sources" });
 	};
 
 	const selected = providers.find((p) => p.id === provider);
-	const installFailed = installResult !== null && !installResult.ok;
+
 
 	return (
 		<div className="modal-backdrop">
@@ -105,29 +93,9 @@ export function PiSetupModal({
 				</div>
 				<p className="modal-desc">{t("setupDesc")}</p>
 
-				{installFailed ? (
-					<div className="setup-failed">
-						<div className="setup-done"><UiIcon name="close" /> {t("installFailed")}</div>
-						<pre className="setup-detail">{installResult.detail}</pre>
-						<div className="setup-actions">
-							<button
-								type="button"
-								className="btn primary"
-								disabled={installing}
-								onClick={doInstall}
-							>
-								{t("retryInstall")}
-							</button>
-							<button type="button" className="btn" onClick={onClose}>
-								{t("skip")}
-							</button>
-						</div>
-					</div>
-				) : piAgentInstalled || installResult?.ok ? (
-					<div className="setup-key-form">
-						<div className="setup-done">
-							<UiIcon name="check" /> {installResult?.ok ? t("installDone") : t("cliReadyHint")}
-						</div>
+				<ModelSources sources={sources} send={send} />
+				<button type="button" className="btn" onClick={onManage}>{t("manageModels")}</button>
+				<div className="setup-key-form">
 						<label className="field">
 							<span className="field-label">{t("provider")}</span>
 							<select
@@ -158,6 +126,7 @@ export function PiSetupModal({
 							/>
 						</label>
 						<div className="setup-actions">
+							{selected?.oauth && <button type="button" className="btn" onClick={() => send({ type: "login_provider", provider })}>{t("providerLogin")}</button>}
 							<button
 								type="button"
 								className="btn primary"
@@ -171,21 +140,7 @@ export function PiSetupModal({
 							</button>
 						</div>
 					</div>
-				) : (
-					<div className="setup-actions">
-						<button
-							type="button"
-							className="btn primary"
-							disabled={installing}
-							onClick={doInstall}
-						>
-							{installing ? t("installing") : t("autoInstall")}
-						</button>
-						<button type="button" className="btn" onClick={onClose}>
-							{t("skip")}
-						</button>
-					</div>
-				)}
+
 			</div>
 		</div>
 	);

@@ -77,6 +77,7 @@ SDK `tool_execution_update.partialResult` 是累计输出快照，服务端发�
   - 入列：活动对话**正在流式输出时**被挤到后台（new_chat / switch_conversation / set_cwd）→ `listed=true`；
   - 留在列表：后台跑完不移出（用户可能还没看结果）；
   - 移出：打开它（切为活动）→ 没有继续对话（期间没发过 prompt）→ 切走时 `displaceActive()` 返回它，`removeConversation` 释放 runtime（会话已持久化，历史列表仍可恢复）。
+- 新建普通会话只复用当前项目的空白会话；其它项目缓存的空白运行实例不参与复用，避免新建时跳回先前项目。浏览器回归：`tests/project-new-chat-test.mjs`。
 - 上限 `MAX_OPEN_CONVERSATIONS = 8` **按项目计**，超出时 new_chat 发 warning notice。
 - 所有对话共享**一个 ModelRuntime**（首个对话创建时播种，`makeRuntimeFactory` 传入复用）——顶栏换模型对全部对话生效。**消息序列化缓存（msgIds/uiMessageCache/签名）按对话隔离**：两个对话可能产生相同的 (role, timestamp) 键，共享会串号。
 - `snapshot` 带 `conversationId`；`conversations`（ServerMessage）推当前活动对话及当前项目已入列的后台对话。新对话尚未落盘时，活动项仍可在左栏显示；`switch_conversation`（ClientMessage）只在同项目内切换。
@@ -229,3 +230,5 @@ SDK started/queued 只证明当时接收，**不表示模型完成、transcript 
 浏览器保留 pending request 身份到标签页 sessionStorage，断线/刷新后只查询、不重发。等待最多 30 秒；unknown、missing、expired 或查询超时解除界面操作锁并保留草稿、显示核对提示。明确接收后只清除与原发送文本相同的草稿，期间输入的新内容保留；恢复后的回执不按可复用的 conversationId 清除另一原生会话的输入。再次发送是用户显式操作，使用新 ID。已确认接收但对话已变化时，输入框提示显示 5 秒后自动关闭，草稿保留与请求去重逻辑不受影响；接收状态未知的核对提示继续保留。
 
 回归：`prompt-receipts-test.mjs` 使用真实 SDK 扩展验证副作用计数、重复 ID、断线/刷新查询、进程重启与执行中 SIGKILL；单测覆盖容量、损坏、写失败、过期与客户端隔离。
+
+模型来源自动同步（Pi / Claude Code / Codex / OpenCode）、内存凭据、独立副本和协议 51 见 [模型配置来源](architecture-model-sources.md)。

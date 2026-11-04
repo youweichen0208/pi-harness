@@ -4,7 +4,6 @@ import { createPortal } from "react-dom";
 import { useEffect, useState } from "react";
 import {
 	FiSidebar,
-	FiChevronRight,
 	FiChevronDown,
 	FiDatabase,
 	FiGitBranch,
@@ -26,8 +25,6 @@ import { SoundSettingsPanel } from "./SoundSettings";
 import { DesktopWindowControls } from "./DesktopWindowControls";
 import type { SoundKind, SoundSettings } from "../sounds";
 import { useI18n, type Locale } from "../i18n";
-import { skillAwarePreview } from "../skill-block";
-import { conversationDisplayTitle } from "../conversation-display-title";
 
 interface TopBarProps {
 	onOpenDatabase: () => void;
@@ -105,17 +102,6 @@ export function TopBar({
 	const planItems = task?.plan?.items.filter((item) => item.status !== "removed") ?? task?.steps ?? [];
 	const currentStep = planItems.findIndex((item) => item.status === "running");
 	const completedSteps = planItems.filter(item => item.status === "done").length;
-
-	const session = chat.sessions.find((item) => item.path === chat.state?.sessionFile);
-	const conversation = chat.conversations.find((item) => item.id === chat.activeConversationId);
-	const conversationTitle = conversationDisplayTitle(
-		conversation?.title || skillAwarePreview(session?.firstMessage ?? "") || t("newChat"),
-		session?.firstMessage,
-		session?.name,
-		Math.max(session?.messageCount ?? 0, conversation?.messageCount ?? 0, chat.state?.messages.length ?? 0),
-		locale,
-		chat.state?.messages,
-	);
 
 	const LANGUAGES: { value: Locale; label: string }[] = [
 		{ value: "zh", label: t("langZh") },
@@ -202,7 +188,7 @@ export function TopBar({
 			</div>
 
 			{view !== "nodes" && <button type="button" className="project-panel-toggle" title={t(leftCollapsed ? "expandProjects" : "collapseProjects")} aria-label={t(leftCollapsed ? "expandProjects" : "collapseProjects")} aria-expanded={!leftCollapsed} onClick={() => onOpenPanel("left")}><FiSidebar /></button>}
-			<div className="header-location"><span title={chat.state?.cwd}>{projectName || t("desktopWorkspace")}</span><i className="header-location-separator" aria-hidden="true"><FiChevronRight /></i><button type="button" className="conversation-title-button" title={t("treeTitle")} aria-label={`${conversationTitle} · ${t("treeTitle")}`} onClick={() => openSessionTree()}><strong title={conversationTitle}>{conversationTitle}</strong><FiChevronDown className="conversation-title-chevron" aria-hidden="true" /></button>{(interrupted || reminding || planItems.length > 0 || !!task?.plan?.awaitingConfirmation) && <button type="button" className={`header-task-progress${interrupted ? " interrupted" : reminding ? " reminding" : ""}`} title={t("taskProgress")} onClick={onOpenTask}>{interrupted ? t("toolRecoveryInterrupted") : reminding ? t("working") : task?.plan?.awaitingConfirmation ? t("taskProgress") : t("taskPlanPosition", { current: currentStep >= 0 ? currentStep + 1 : completedSteps, total: planItems.length })}{planItems.length > 0 && <span className="header-task-segments" aria-hidden="true">{planItems.map(item => <i key={item.id} className={item.status} />)}</span>}</button>}</div>
+			<div className="header-location"><button type="button" className="conversation-title-button" title={t("treeTitle")} aria-label={`${t("currentConversation")} · ${t("treeTitle")}`} onClick={() => openSessionTree()}><strong>{t("currentConversation")}</strong><FiChevronDown className="conversation-title-chevron" aria-hidden="true" /></button>{(interrupted || reminding || planItems.length > 0 || !!task?.plan?.awaitingConfirmation) && <button type="button" className={`header-task-progress${interrupted ? " interrupted" : reminding ? " reminding" : ""}`} title={t("taskProgress")} onClick={onOpenTask}>{interrupted ? t("toolRecoveryInterrupted") : reminding ? t("working") : task?.plan?.awaitingConfirmation ? t("taskProgress") : t("taskPlanPosition", { current: currentStep >= 0 ? currentStep + 1 : completedSteps, total: planItems.length })}{planItems.length > 0 && <span className="header-task-segments" aria-hidden="true">{planItems.map(item => <i key={item.id} className={item.status} />)}</span>}</button>}</div>
 			<div className="topbar-actions">
 				<div className="panel-tab-bar">
 				<div className="view-switch" role="tablist" aria-label={t("viewSwitch")}>
