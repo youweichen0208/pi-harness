@@ -1,5 +1,9 @@
 # 发布流程
 
+## 1.13.2：自动缩进与 Windows 顶栏修复
+
+修复 #141 块头后首条简单语句缺少缩进时的自动缩进失败，以及 #142 展开侧栏时 Windows 顶栏拥挤。SDK / pi-ai 1.5.0、协议 v50 不变。仅发布 GitHub 三平台桌面 Release；同提交 CI、打包与升级验证及附件核对通过后公开。说明见 `.github/release-notes/v1.13.2.md`。
+
 ## 1.13.1：统一桌面字体
 
 界面与文档优先使用内置 UI SC，统一 Windows／macOS 字号和文字颜色，并增加真实 Electron 的跨平台字体及 Windows 100%／125%／150% 缩放回归。SDK / pi-ai 1.5.0、协议 v50 保持不变。仅发布 GitHub 三平台桌面 Release；同提交 CI、打包与升级验证及附件核对通过后公开。说明见 `.github/release-notes/v1.13.1.md`。
