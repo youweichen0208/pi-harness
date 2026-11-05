@@ -282,7 +282,14 @@ export class ModelSourceSync {
 				authHeader: p.authHeader === true, reasoning: m.reasoning, input: m.input, contextWindow: m.contextWindow, maxTokens: m.maxTokens };
 			for (const entry of this.entries) {
 				if (entry.origin.mode !== "synced") continue;
-				const completed = completeCapabilities([entry.connection, native])[0];
+				// Compare effective limits with the candidate native context before
+				// completing capabilities; otherwise the conservative context cap
+				// itself prevents an otherwise equivalent native match.
+				const c = entry.connection;
+				const candidate = c.unknownCapabilities?.includes("contextWindow")
+					? { ...c, maxTokens: outputTokenLimit(c.maxTokens, native.contextWindow, env) }
+					: c;
+				const completed = completeCapabilities([candidate, native])[0];
 				if (!equivalent(native, completed)) continue;
 				entry.connection = completed;
 				this.nativeMatches.set(entry.provider, m.provider);

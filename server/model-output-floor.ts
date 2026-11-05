@@ -2,7 +2,7 @@ import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import type { AnyModel } from "@earendil-works/pi-ai";
 
 export function outputTokenLimit(maxTokens: number, contextWindow: number, env: NodeJS.ProcessEnv = process.env): number {
-	const floor = Number(env.PI_MAX_TOKENS_FLOOR ?? 16384);
+	const floor = Number(env.PI_MAX_TOKENS_FLOOR ?? 65536);
 	return Number.isSafeInteger(floor) && floor > 0 ? Math.max(maxTokens, Math.min(floor, contextWindow)) : maxTokens;
 }
 

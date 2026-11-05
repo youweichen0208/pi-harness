@@ -23,7 +23,7 @@ const messages = [];
 async function wait(fn, label) { const deadline = Date.now() + 20000; while (Date.now() < deadline) { const result = fn(); if (result) return result; await delay(25); } throw Error(`Timeout: ${label}`); }
 try {
 	const port = await listenIsolated(endpoint);
-	const config = key => ({ provider: { fixture: { npm: "@ai-sdk/openai-compatible", options: { baseURL: `http://127.0.0.1:${port}/v1`, apiKey: key }, models: { example: { limit: { context: 32768, output: 4096 } }, broken: { options: { unsupported: true } } } } } });
+	const config = key => ({ provider: { fixture: { npm: "@ai-sdk/openai-compatible", options: { baseURL: `http://127.0.0.1:${port}/v1`, apiKey: key }, models: { example: { limit: { context: 200000, output: 4096 } }, broken: { options: { unsupported: true } } } } } });
 	const source = put("opencode/opencode.json", config("FIRST_SECRET"));
 	put("pi/settings.json", { defaultTools: { codemode: false } });
 	harness = await startIsolatedHarness({ env: { HOME: home, USERPROFILE: home, PI_CODING_AGENT_DIR: join(home, "pi"), PI_WEB_DATA_DIR: join(home, "data"), PI_WEB_CWD: home,
@@ -53,8 +53,8 @@ try {
 	send({ type: "prompt", text: "Reply fixture" });
 	await wait(() => pending, "mock model request");
 	assert.equal(requests[0].key, "Bearer FIRST_SECRET");
-	assert.equal(providers[0].models[0].maxTokens, 16384);
-	assert.equal(requests[0].body.max_tokens ?? requests[0].body.max_completion_tokens, 16384);
+	assert.equal(providers[0].models[0].maxTokens, 65536);
+	assert.equal(requests[0].body.max_tokens ?? requests[0].body.max_completion_tokens, 65536);
 	writeFileSync(source, JSON.stringify(config("SECOND_SECRET")));
 	send({ type: "sync_model_sources" }); await delay(300);
 	pending();
@@ -66,11 +66,11 @@ try {
 	assert(!harness.logs.includes("FIRST_SECRET"));
 	assert(!readFileSync(join(home, "data/model-sources.json"), "utf8").includes("SECOND_SECRET"));
 	// Keep the original Pi identity while its equivalent external source survives.
-	const nativeConfig = put("pi/models.json", { providers: { native: { api: "openai-completions", baseUrl: `http://127.0.0.1:${port}/v1`, apiKey: "SECOND_SECRET", models: [{ id: "example", contextWindow: 32768, maxTokens: 4096, reasoning: false, input: ["text"] }] } } });
+	const nativeConfig = put("pi/models.json", { providers: { native: { api: "openai-completions", baseUrl: `http://127.0.0.1:${port}/v1`, apiKey: "SECOND_SECRET", models: [{ id: "example", contextWindow: 200000, maxTokens: 4096, reasoning: false, input: ["text"] }] } } });
 	await delay(300); send({ type: "sync_model_sources" });
 	await wait(() => messages.findLast(m => m.type === "models")?.models.some(m => m.id === "native/example" && m.origin.sources.includes("opencode")), "native merged identity");
 	send({ type: "list_models_config" });
-	await wait(() => messages.findLast(m => m.type === "models_config")?.providers.find(p => p.providerId === "native")?.models[0].maxTokens === 16384, "native effective config floor");
+	await wait(() => messages.findLast(m => m.type === "models_config")?.providers.find(p => p.providerId === "native")?.models[0].maxTokens === 65536, "native effective config floor");
 	send({ type: "set_model", modelId: "native/example" });
 	await delay(300);
 	rmSync(nativeConfig); send({ type: "sync_model_sources" });

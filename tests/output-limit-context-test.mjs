@@ -35,7 +35,7 @@ const mock = createServer(async (req, res) => {
 let session, unbind;
 try {
 	const port = await listenIsolated(mock);
-	writeFileSync(join(agent, "models.json"), JSON.stringify({ providers: { fixture: { api: "anthropic-messages", baseUrl: `http://127.0.0.1:${port}`, apiKey: "fixture", models: [{ id: "fixture", reasoning: true, input: ["text"], contextWindow: 65536, maxTokens: 4096 }] } } }));
+	writeFileSync(join(agent, "models.json"), JSON.stringify({ providers: { fixture: { api: "anthropic-messages", baseUrl: `http://127.0.0.1:${port}`, apiKey: "fixture", models: [{ id: "fixture", reasoning: true, input: ["text"], contextWindow: 200000, maxTokens: 4096 }] } } }));
 	writeFileSync(join(agent, "settings.json"), JSON.stringify({ defaultProvider: "fixture", defaultModel: "fixture", retry: { enabled: false }, compaction: { enabled: false } }));
 	for (signed of [false, true]) {
 		({ session } = await createAgentSession({ cwd: root, agentDir: agent, tools: [], sessionManager: SessionManager.inMemory(root) }));
@@ -53,21 +53,21 @@ try {
 	}
 	// Native models.json uses the same floor without modifying the source file.
 	const nativeRuntime = withOutputTokenFloor(await ModelRuntime.create({ authPath: join(agent, "auth.json"), modelsPath: join(agent, "models.json"), allowModelNetwork: false }));
-	assert.equal(nativeRuntime.getModel("fixture", "fixture").maxTokens, 16384);
+	assert.equal(nativeRuntime.getModel("fixture", "fixture").maxTokens, 65536);
 	({ session } = await createAgentSession({ cwd: root, agentDir: agent, modelRuntime: nativeRuntime, tools: [], sessionManager: SessionManager.inMemory(root) }));
 	await session.prompt("Write report with native model");
-	assert.equal(requests.at(-1).max_tokens, 16384);
+	assert.equal(requests.at(-1).max_tokens, 65536);
 	assert.equal(session.messages.at(-1).stopReason, "stop");
 	await nativeRuntime.refresh({ allowNetwork: false });
 	await session.prompt("Write again after reload");
-	assert.equal(requests.at(-1).max_tokens, 16384);
+	assert.equal(requests.at(-1).max_tokens, 65536);
 	assert.equal(JSON.parse(readFileSync(join(agent, "models.json"), "utf8")).providers.fixture.models[0].maxTokens, 4096);
-	console.log("PASS native configured model: default 16384 on wire and after reload, source unchanged");
+	console.log("PASS native configured model: default 65536 on wire and after reload, source unchanged");
 	session.dispose(); session = undefined;
 	// Synced model override keeps identity/history while changing actual request budget.
 	const external = join(root, "external"); mkdirSync(external);
 	const source = join(external, "opencode.json");
-	writeFileSync(source, JSON.stringify({ provider: { gateway: { npm: "@ai-sdk/anthropic", options: { baseURL: `http://127.0.0.1:${port}`, apiKey: "fixture" }, models: { fixture: { reasoning: true, limit: { context: 65536, output: 4096 } } } } } }));
+	writeFileSync(source, JSON.stringify({ provider: { gateway: { npm: "@ai-sdk/anthropic", options: { baseURL: `http://127.0.0.1:${port}`, apiKey: "fixture" }, models: { fixture: { reasoning: true, limit: { context: 200000, output: 4096 } } } } } }));
 	const env = { OPENCODE_CONFIG: source, PI_MAX_TOKENS_FLOOR: "0" };
 	const isolatedAgent = join(root, "synced-agent"); mkdirSync(isolatedAgent);
 	writeFileSync(join(isolatedAgent, "settings.json"), JSON.stringify({ compaction: { enabled: false }, retry: { enabled: false } }));
@@ -80,10 +80,10 @@ try {
 	assert.equal(requests.at(-1).max_tokens, 4096);
 	assert.equal(session.messages.at(-1).stopReason, "length");
 	delete env.PI_MAX_TOKENS_FLOOR; await sync.sync();
-	assert.equal(sync.configs()[0].models[0].maxTokens, 16384);
+	assert.equal(sync.configs()[0].models[0].maxTokens, 65536);
 	await session.setModel(runtime.getModel(provider, "fixture"));
 	await session.prompt("Finish the report after increasing the output budget");
-	assert.equal(requests.at(-1).max_tokens, 16384);
+	assert.equal(requests.at(-1).max_tokens, 65536);
 	assert(requests.at(-1).messages.some(m => m.role === "assistant" && JSON.stringify(m.content).includes("UNFINISHED_REASONING_FIXTURE")));
 	assert.equal(session.messages.at(-1).stopReason, "stop");
 	assert(session.messages.at(-1).content.some(b => b.text === "REPORT_COMPLETE_FIXTURE"));
@@ -93,9 +93,9 @@ try {
 	await sync.edit(provider, { ...localConfig, models: [{ ...localConfig.models[0], maxTokens: 2048 }] });
 	await session.setModel(runtime.getModel(provider, "fixture"));
 	await session.prompt("Write with an independent model");
-	assert.equal(requests.at(-1).max_tokens, 16384);
-	console.log("PASS independent model: default 16384 on wire");
-	console.log("PASS default synced floor: 4096 → 16384 on wire, preserved history, explicit maxTokens=1 unchanged");
+	assert.equal(requests.at(-1).max_tokens, 65536);
+	console.log("PASS independent model: default 65536 on wire");
+	console.log("PASS default synced floor: 4096 → 65536 on wire, preserved history, explicit maxTokens=1 unchanged");
 } finally {
 	session?.dispose(); unbind?.(); mock.closeAllConnections(); await new Promise(resolve => mock.close(resolve));
 	rmSync(root, { recursive: true, force: true });
