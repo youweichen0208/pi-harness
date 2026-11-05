@@ -103,6 +103,14 @@ SDK `tool_execution_update.partialResult` 是累计输出快照，服务端发�
 
 计划校验失败虽然不生成执行步骤，仍参与本轮失败判定，成功纠正后清除；不会把失败的完成请求当成步骤已完成。任务展示从成功 plan 快照投影，遵循 [计划扩展](architecture-plan.md) 的分支身份、轮次确认和工具归属规则；settle 时未收尾的 active 计划由扩展提醒模型补终态调用，投影不推断完成（issue #63）。第三方 todo 使用普通工具卡；历史 task_plan 保留只读兼容。
 
+### 输出长度上限（#143）
+
+最后一条助手消息的 `stopReason === "length"` 表示回答被输出额度截断；有正文、只有思考或完全空内容均保留可见提示。`agent_settled` 仍表示运行结束，但不代表回答完成：有任务时复用 `failed` 状态，已成功的工具步骤不改为失败，原生计划快照不改写。后续正常助手回复可清除本轮截断失败判定。纯聊天不虚构任务。
+
+提示区显示本轮实际输出 token 用量，并提供按 conversationId 打开当前输入框模型管理的「调整输出额度」。只有部分正文的最新、已停止回复提供「准备继续」，追加普通后续请求到草稿，保留已有输入，由用户发送；不承诺断点续写。只有思考或空回复时，明确说明继续可能再次截断，优先引导提高额度或降低思考强度后重试原问题。宿主不因 `length` 自动调用模型或提高额度。
+
+#145 验证边界：SDK 1.5.0 在同模型、未发生压缩的普通后续请求中回传 thinking；Anthropic 有签名块原样保留，无签名块按适配器规则转换。普通「继续」不会提高预算；模型切换或原生压缩／溢出恢复仍可能改变上下文，WebUI 不绕过原生处理。`tests/output-limit-context-test.mjs` 使用本地 Anthropic 兼容接口验证签名／无签名回传、相同预算反复截断，以及显式提高同步额度后的请求。回归：`tests/output-limit-test.mjs`（真实 SDK、本地模拟接口、中英文浏览器）、任务进度与空消息过滤单测。
+
 ### 工具挂死看门狗
 
 每个 `tool_execution_start` 都会为 toolCallId arm 一个 `TOOL_WATCHDOG_TIMEOUT_MS`（默认 20 分钟，环境变量 `PI_WEB_TOOL_TIMEOUT_MS`（毫秒）覆盖）的 timer——超时仍在跑就 `session.abort()`（杀进程树）+ warning notice，`tool_execution_end` / `removeConversation` / `dispose` 都会清掉对应 timer。恢复重建 + 重绑会话（同一 conv 记录，UI 不掉线）；旧 runtime 释放后到新会话绑定前标记 `rebuilding`，拒绝提示（issue #65）。重建失败时保持标记、不改用新会话文件，仅放行 `/restart`——它从原会话文件重新打开，不再释放已死的 runtime；看门狗超时也走同一 `interruptRun`。中断仅作用于当前运行。

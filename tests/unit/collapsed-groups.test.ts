@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCollapsedGroups, collapsedPreview } from "../../web/src/collapsed-groups.js";
+import { buildCollapsedGroups, collapsedPreview, isEmptyReply } from "../../web/src/collapsed-groups.js";
 
 it("collapsed previews remove Markdown delimiters and omit folded model content", () => {
 	expect(collapsedPreview("你选了 **1：平台研究工具**，开始写 `tools.py`。")).toBe("你选了 1：平台研究工具，开始写 tools.py。");
@@ -115,4 +115,8 @@ describe("buildCollapsedGroups", () => {
 	it("recentStart 超出数组长度也不越界", () => {
 		expect(shape([msg("a1", "assistant")], 99)).toEqual({ 0: ["a1"] });
 	});
+});
+
+it("keeps an empty length-limited reply visible for its truncation notice", () => {
+	expect(isEmptyReply({ id: "limited", role: "assistant", stopReason: "length", content: [] })).toBe(false);
 });

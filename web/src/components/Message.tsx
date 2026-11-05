@@ -1,3 +1,4 @@
+import { appendComposerText, openComposerModelSettings } from "../composer-text";
 import { UiIcon } from "./UiIcon";
 import { DelegateNotification } from "./DelegateNotification";
 import { useChangesAvailable } from "../changes-context";
@@ -209,9 +210,8 @@ export const Message = memo(function Message({
 	turnContinues,
 }: MessageProps) {
 	const t = useT();
-	const lengthOnlyReply = message.role === "assistant" && message.stopReason === "length"
-		&& !message.content.some(block => block.type === "toolCall" || block.type === "image"
-			|| block.type === "text" && typeof block.text === "string" && !!block.text.trim());
+	const outputLimited = message.role === "assistant" && message.stopReason === "length";
+	const hasPartialReply = message.content.some(block => block.type === "text" && typeof block.text === "string" && !!block.text.trim());
 	const cwd = useContext(WorkspacePathContext);
 	const changesPanel = useChangesAvailable();
 	const replyQuestions = useMemo(() => message.role === "assistant" ? message.content.flatMap(block => block.type === "text" && typeof block.text === "string" ? parseReplySegments(block.text).flatMap(segment => segment.kind === "questions" ? segment.questions : []) : []) : [], [message.content, message.role]);
@@ -664,8 +664,15 @@ export const Message = memo(function Message({
 						{message.errorMessage && (
 							<div className="msg-error">{message.errorMessage}</div>
 						)}
-						{lengthOnlyReply && !message.errorMessage && (
-							<div className="msg-error" role="status">{t("replyLengthLimit")}</div>
+						{outputLimited && (
+							<div className="msg-error reply-output-limit" role="status">
+								<span>{t(hasPartialReply ? "replyLengthLimit" : "replyLengthNoText")}</span>
+								{message.usage && <span>{t("replyOutputUsed", { n: message.usage.output })}</span>}
+								{isLast && !streaming && !turnContinues && conversationId && <div className="reply-output-actions">
+									<button type="button" className="btn" onClick={() => openComposerModelSettings(conversationId)}>{t("replyAdjustOutput")}</button>
+									{hasPartialReply && <button type="button" className="btn" onClick={() => appendComposerText(conversationId, t("replyContinuePrompt"))}>{t("replyPrepareContinue")}</button>}
+								</div>}
+							</div>
 						)}
 						{isFileAttachment ? (
 							<AttachmentCard message={message} />

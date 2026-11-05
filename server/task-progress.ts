@@ -174,6 +174,7 @@ export function deriveTaskProgress(conversationId: string, messages: UiMessage[]
 		steps.push({ id: `${user.id}:pending`, messageId: previous?.id ?? user.id, title: "正在分析请求", status: "running", startedAt: previous?.timestamp ?? user.timestamp ?? 0, artifacts: [] });
 	}
 	const currentTail = messages.slice(latestUserIndex + 1).concat(streamingMessage ? [streamingMessage] : []);
+	const outputLimited = currentTail.findLast(message => message.role === "assistant")?.stopReason === "length";
 	const cancelled = currentTail.some((message) => message.role === "assistant" && message.stopReason === "aborted");
 	// Earlier failed commands can be followed by a successful fix or rerun.
 	// The latest completed tool group is the best observed outcome for this turn.
@@ -182,7 +183,7 @@ export function deriveTaskProgress(conversationId: string, messages: UiMessage[]
 	// must still prevent a successful turn status. A corrected call clears it.
 	const planCalls = currentTail.flatMap(message => message.role === "assistant" ? message.content.filter((part): part is UiToolCallBlock => part.type === "toolCall" && ["plan", "task_plan"].includes((part as UiToolCallBlock).name)) : []);
 	const planFailed = results.get(planCalls.at(-1)?.id ?? "")?.isError === true;
-	const status: TaskProgress["status"] = cancelled ? "cancelled" : isStreaming ? "running" : planFailed || lastCompleted?.status === "failed" ? "failed" : "done";
+	const status: TaskProgress["status"] = cancelled ? "cancelled" : isStreaming ? "running" : outputLimited || planFailed || lastCompleted?.status === "failed" ? "failed" : "done";
 	const plannedEnd = status === "done" ? Math.max(user.timestamp ?? 0, turnEndedAt ?? 0, ...tail.map((message) => message.timestamp ?? 0), ...steps.map((step) => step.endedAt ?? 0)) : undefined;
 	const plan = recorded.known ? recorded.plan : planFromTranscript(tail, results, steps, status === "done", plannedEnd);
 	const planIncomplete = plan?.source === "plan" && plan.status === "active";

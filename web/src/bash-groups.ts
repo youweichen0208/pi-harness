@@ -25,8 +25,8 @@ function step(groups: ProcessGroups, byId: Map<string, UiMessage>, message: UiMe
 	const { projected, owners, sources } = groups;
 	for (const block of message.content) if (block.type === "toolCall" && typeof block.id === "string") sources.set(block.id, message.id);
 	if (message.role === "toolResult") return;
-	// Aborted/errored messages keep their own "not executed" state (issue #66).
-	const settled = message.role === "assistant" && !message.errorMessage && message.stopReason !== "aborted" && message.stopReason !== "error";
+	// Interrupted replies keep their own failure/truncation notice (#66, #143).
+	const settled = message.role === "assistant" && !message.errorMessage && message.stopReason !== "aborted" && message.stopReason !== "error" && message.stopReason !== "length";
 	const owner = groups.owner ? projected.get(groups.owner) ?? byId.get(groups.owner) : undefined;
 	let lead = 0;
 	if (settled) while (lead < message.content.length && isProcessBlock(message.content[lead])) lead++;

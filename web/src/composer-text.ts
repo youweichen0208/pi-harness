@@ -38,3 +38,21 @@ export function useComposerAppend(conversationId: string, enabled: boolean, appe
 		return () => window.removeEventListener(EVENT, consume);
 	}, [conversationId, enabled, append]);
 }
+
+const MODEL_SETTINGS_EVENT = "pi-composer-model-settings";
+
+/** Open the model controls belonging to the same active composer. */
+export function openComposerModelSettings(conversationId: string): void {
+	window.dispatchEvent(new CustomEvent(MODEL_SETTINGS_EVENT, { detail: { conversationId } }));
+}
+
+export function useComposerModelSettings(conversationId: string, active: boolean, open: () => void): void {
+	useEffect(() => {
+		if (!active) return;
+		const receive = (event: Event) => {
+			if ((event as CustomEvent<{ conversationId: string }>).detail.conversationId === conversationId) open();
+		};
+		window.addEventListener(MODEL_SETTINGS_EVENT, receive);
+		return () => window.removeEventListener(MODEL_SETTINGS_EVENT, receive);
+	}, [conversationId, active, open]);
+}

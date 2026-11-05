@@ -31,7 +31,7 @@ export function userPreviewParts(message: UiMessage): { skill?: string; text: st
 
 /** A settled reply with nothing to show (no prose, thinking, tools or error) — e.g. an empty retry. */
 export function isEmptyReply(message: UiMessage): boolean {
-	return message.role === "assistant" && !message.errorMessage && !message.content.some(block =>
+	return message.role === "assistant" && message.stopReason !== "length" && !message.errorMessage && !message.content.some(block =>
 		block.type === "text" ? typeof block.text === "string" && !!block.text.trim()
 			: block.type === "thinking" ? typeof block.thinking === "string" && !!block.thinking.trim()
 				: true);

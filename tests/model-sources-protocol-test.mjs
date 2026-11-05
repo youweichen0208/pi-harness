@@ -53,6 +53,8 @@ try {
 	send({ type: "prompt", text: "Reply fixture" });
 	await wait(() => pending, "mock model request");
 	assert.equal(requests[0].key, "Bearer FIRST_SECRET");
+	assert.equal(providers[0].models[0].maxTokens, 16384);
+	assert.equal(requests[0].body.max_tokens ?? requests[0].body.max_completion_tokens, 16384);
 	writeFileSync(source, JSON.stringify(config("SECOND_SECRET")));
 	send({ type: "sync_model_sources" }); await delay(300);
 	pending();
@@ -64,7 +66,7 @@ try {
 	assert(!harness.logs.includes("FIRST_SECRET"));
 	assert(!readFileSync(join(home, "data/model-sources.json"), "utf8").includes("SECOND_SECRET"));
 	// Keep the original Pi identity while its equivalent external source survives.
-	const nativeConfig = put("pi/models.json", { providers: { native: { api: "openai-completions", baseUrl: `http://127.0.0.1:${port}/v1`, apiKey: "SECOND_SECRET", models: [{ id: "example", contextWindow: 32768, maxTokens: 4096, reasoning: false, input: ["text"] }] } } });
+	const nativeConfig = put("pi/models.json", { providers: { native: { api: "openai-completions", baseUrl: `http://127.0.0.1:${port}/v1`, apiKey: "SECOND_SECRET", models: [{ id: "example", contextWindow: 32768, maxTokens: 16384, reasoning: false, input: ["text"] }] } } });
 	await delay(300); send({ type: "sync_model_sources" });
 	await wait(() => messages.findLast(m => m.type === "models")?.models.some(m => m.id === "native/example" && m.origin.sources.includes("opencode")), "native merged identity");
 	send({ type: "set_model", modelId: "native/example" });

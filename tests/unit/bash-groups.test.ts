@@ -62,3 +62,10 @@ it("formats long thinking as minutes", async () => {
 	const { elapsedLabel } = await import("../../web/src/bash-presentation.js");
 	expect([elapsedLabel(3), elapsedLabel(59.6), elapsedLabel(77), elapsedLabel(3725)]).toEqual(["3s", "1m 0s", "1m 17s", "1h 2m"]);
 });
+
+it("does not absorb a length-limited thinking reply into a successful tool group", () => {
+	const limited: UiMessage = { id: "limited", role: "assistant", stopReason: "length", content: [{ type: "thinking", thinking: "Budget exhausted" }] };
+	const groups = groupBashMessages([call("a"), result("a"), limited]);
+	expect(groups.owners.has("limited")).toBe(false);
+	expect(groups.owner).toBeUndefined();
+});

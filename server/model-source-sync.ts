@@ -164,6 +164,15 @@ export class ModelSourceSync {
 			try { this.persist(); } catch { this.state = previous; this.storageError = true; entries.length = 0; }
 		}
 		if (!this.storageError) for (const [provider, c] of Object.entries(this.state.local)) entries.push({ aliases: [...new Set([provider, ...Object.entries(this.state.localAliases ?? {}).filter(([, target]) => target === provider).map(([alias]) => alias)])], provider, connection: c, slots: [], origin: { sources: [c.source], mode: "local" } });
+		// Apply after identity/deduplication: a deployment override must not merge
+		// conflicting source declarations or override an independent local model.
+		const floor = Number((this.options.env ?? process.env).PI_MAX_TOKENS_FLOOR ?? 16384);
+		if (Number.isSafeInteger(floor) && floor > 0) for (const entry of entries) {
+			if (entry.origin.mode !== "synced") continue;
+			const c = entry.connection;
+			const maxTokens = Math.max(c.maxTokens, Math.min(floor, c.contextWindow));
+			if (maxTokens > c.maxTokens) entry.connection = { ...c, maxTokens, unknownCapabilities: c.unknownCapabilities?.filter(field => field !== "maxTokens") };
+		}
 		const next = JSON.stringify([entries, this.statuses.map(s => s.status)]);
 		if (next !== this.previous || piFiles !== this.piFiles) { this.revision++; this.previous = next; this.piFiles = piFiles; this.entries = entries; }
 		this.watchFiles([...result.files, this.file]);

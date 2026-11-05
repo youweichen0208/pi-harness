@@ -14774,3 +14774,17 @@ html.pi-desktop .design-workspace .topbar { height: 48px; min-height: 48px; }
 @container workspace-titlebar (max-width: 900px) {
 	.design-workspace .header-task-segments { display: none; }
 }
+
+/* Output-limit notice and explicit continuation draft. */
+.reply-output-limit {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 8px;
+}
+
+.reply-output-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}

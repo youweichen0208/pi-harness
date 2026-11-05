@@ -151,3 +151,24 @@ test("issue #63: a running step without attributed calls cannot be inferred comp
 	expect(task.plan?.status).toBe("active");
 	expect(task.plan?.items.map((item) => item.status)).toEqual(["done", "running"]);
 });
+
+test.each([{ content: [] }, { content: [{ type: "text", text: "Partial report" }] }])("output limit after successful tools is not successful completion (%j)", ({ content }) => {
+	const messages: UiMessage[] = [user("u", "Write a report"),
+		{ id: "a", role: "assistant", content: [call("r", "read", { path: "README.md" })] },
+		{ id: "r", role: "toolResult", toolCallId: "r", content: [{ type: "text", text: "ok" }] },
+		{ id: "limited", role: "assistant", stopReason: "length", content: [{ type: "thinking", thinking: "Thinking" }, ...content] },
+	];
+	expect(deriveTaskProgress("c", messages, null, false)?.status).toBe("failed");
+	expect(deriveTaskProgress("c", messages, null, true)?.status).toBe("running");
+	expect(deriveTaskProgress("c", [...messages, { id: "finished", role: "assistant", stopReason: "stop", content: [{ type: "text", text: "Complete report" }] }], null, false)?.status).toBe("done");
+});
+
+test("truncation does not complete or rewrite the native plan", () => {
+	const messages = planTurn(snapshot({ revision: 2, currentStepId: "s2", completedStepIds: ["s1"] }), "ok", [{ id: "b1", name: "bash" }]);
+	messages.push({ id: "limited", role: "assistant", stopReason: "length", content: [] });
+	const task = deriveTaskProgress("c", messages, null, false)!;
+	expect(task.status).toBe("failed");
+	expect(task.plan?.status).toBe("active");
+	expect(task.plan?.items.map(item => item.status)).toEqual(["done", "running"]);
+	expect(deriveTaskProgress("c", [user("chat", "Hello"), messages.at(-1)!], null, false)).toBeNull();
+});

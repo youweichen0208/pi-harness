@@ -165,7 +165,7 @@ describe("runtime synchronization", () => {
 		try {
 			const merged = sync.configs().find(c => c.models[0].id === "claude-example-1")!;
 			expect(merged.origin?.sources).toEqual(["claude", "opencode"]);
-			expect(runtime.getModel(merged.providerId, "claude-example-1")).toMatchObject({ contextWindow: 200000, maxTokens: 8192, reasoning: true, input: ["text", "image"] });
+			expect(runtime.getModel(merged.providerId, "claude-example-1")).toMatchObject({ contextWindow: 200000, maxTokens: 16384, reasoning: true, input: ["text", "image"] });
 			rmSync(join(f.home, ".claude/settings.json"));
 			open(false, "https://new.example/v1"); await sync.sync();
 			expect(runtime.getModel(merged.providerId, "claude-example-1")?.baseUrl).toBe("https://new.example/v1");
@@ -226,7 +226,7 @@ describe("runtime synchronization", () => {
 	});
 	it.each(["models", "credentials"])("retains native history after Pi %s disappear, including restart", async removal => {
 		const f = fixture(); f.claude("shared");
-		f.put("pi/models.json", { providers: { native: { api: "anthropic-messages", baseUrl: "https://api.anthropic.com", models: [{ id: "claude-example-1", contextWindow: 32768, maxTokens: 4096, reasoning: false, input: ["text"] }, { id: "unrelated", contextWindow: 32768, maxTokens: 4096, reasoning: false, input: ["text"] }] } } });
+		f.put("pi/models.json", { providers: { native: { api: "anthropic-messages", baseUrl: "https://api.anthropic.com", models: [{ id: "claude-example-1", contextWindow: 32768, maxTokens: 16384, reasoning: false, input: ["text"] }, { id: "unrelated", contextWindow: 32768, maxTokens: 4096, reasoning: false, input: ["text"] }] } } });
 		f.put("pi/auth.json", { native: { type: "api_key", key: "shared" } });
 		const options = { modelsPath: join(f.home, "pi/models.json"), authPath: join(f.home, "pi/auth.json"), allowModelNetwork: false };
 		const nativeConfig = readFileSync(options.modelsPath, "utf8");
@@ -270,7 +270,7 @@ describe("runtime synchronization", () => {
 
 	it("keeps the existing Pi identity for an exact native duplicate", async () => {
 		const f = fixture(); f.claude("shared");
-		f.put("pi/models.json", { providers: { native: { api: "anthropic-messages", baseUrl: "https://api.anthropic.com", apiKey: "shared", models: [{ id: "claude-example-1", contextWindow: 200000, maxTokens: 8192, reasoning: false, input: ["text"] }] } } });
+		f.put("pi/models.json", { providers: { native: { api: "anthropic-messages", baseUrl: "https://api.anthropic.com", apiKey: "shared", models: [{ id: "claude-example-1", contextWindow: 200000, maxTokens: 16384, reasoning: false, input: ["text"] }] } } });
 		const runtime = await ModelRuntime.create({ modelsPath: join(f.home, "pi/models.json"), authPath: join(f.home, "pi/auth.json") });
 		const sync = new ModelSourceSync(join(f.home, "data"), join(f.home, "pi"), f.options);
 		const unbind = await sync.bind(runtime, () => false, () => {});
@@ -318,4 +318,51 @@ describe("runtime synchronization", () => {
 		expect(sync.configs()).toHaveLength(2); f.put(".claude/settings.json", "{"); await sync.sync();
 		expect(sync.configs()).toHaveLength(1); rmSync(join(f.home, ".codex/auth.json")); await sync.sync(); expect(sync.configs()).toHaveLength(0);
 	});
+});
+
+it("applies the default synced output floor consistently without changing independent models", async () => {
+	const f = fixture(); f.claude();
+	const runtime = await ModelRuntime.create({ authPath: join(f.home, "pi/auth.json"), modelsPath: join(f.home, "pi/models.json"), allowModelNetwork: false });
+	const sync = new ModelSourceSync(join(f.home, "data"), join(f.home, "pi"), { home: f.home, env: {} });
+	const unbind = await sync.bind(runtime, () => false, () => {});
+	try {
+		const config = sync.configs()[0];
+		expect(config.models[0].maxTokens).toBe(16384);
+		expect(runtime.getModel(config.providerId, config.models[0].id)?.maxTokens).toBe(16384);
+		await sync.edit(config.providerId, { ...config, models: [{ ...config.models[0], maxTokens: 2048 }] });
+		expect(sync.configs()[0].models[0].maxTokens).toBe(2048);
+		expect(runtime.getModel(config.providerId, config.models[0].id)?.maxTokens).toBe(2048);
+	} finally { unbind(); }
+});
+
+it.each(["", "0", "-1", "NaN", "Infinity", "1.5", "9007199254740992"])("ignores disabled/invalid floor %s", floor => {
+	const f = fixture(); f.claude();
+	const sync = new ModelSourceSync(join(f.home, "data"), join(f.home, "pi"), { home: f.home, env: { PI_MAX_TOKENS_FLOOR: floor } });
+	expect(sync.configs()[0].models[0].maxTokens).toBe(4096);
+});
+
+it("caps the floor at context size and preserves provider identities and source files", async () => {
+	const f = fixture(); f.claude();
+	const file = join(f.home, ".claude/settings.json"), original = readFileSync(file, "utf8");
+	const env = { PI_MAX_TOKENS_FLOOR: "0" };
+	const sync = new ModelSourceSync(join(f.home, "data"), join(f.home, "pi"), { home: f.home, env });
+	const id = sync.configs()[0].providerId;
+	env.PI_MAX_TOKENS_FLOOR = "999999"; await sync.sync();
+	expect(sync.configs()[0].providerId).toBe(id);
+	expect(sync.configs()[0].models[0].maxTokens).toBe(sync.configs()[0].models[0].contextWindow);
+	expect(readFileSync(file, "utf8")).toBe(original);
+});
+
+it("does not let native capability completion erase the configured synced floor", async () => {
+	const f = fixture(); f.claude("shared");
+	f.put("pi/models.json", { providers: { native: { api: "anthropic-messages", baseUrl: "https://api.anthropic.com", apiKey: "shared", models: [{ id: "claude-example-1", reasoning: false, input: ["text"], contextWindow: 32768, maxTokens: 4096 }] } } });
+	const runtime = await ModelRuntime.create({ authPath: join(f.home, "pi/auth.json"), modelsPath: join(f.home, "pi/models.json"), allowModelNetwork: false });
+	const sync = new ModelSourceSync(join(f.home, "data"), join(f.home, "pi"), { home: f.home, env: { PI_MAX_TOKENS_FLOOR: "16384" } });
+	const unbind = await sync.bind(runtime, () => false, () => {});
+	try {
+		const config = sync.configs()[0];
+		expect(config.models[0].maxTokens).toBe(16384);
+		expect(sync.visible(config.providerId)).toBe(true);
+		expect(runtime.getModel("native", "claude-example-1")?.maxTokens).toBe(4096);
+	} finally { unbind(); }
 });
