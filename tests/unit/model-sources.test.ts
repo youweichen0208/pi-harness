@@ -19,6 +19,30 @@ describe("read-only API discovery", () => {
 		const f = fixture(); expect(discoverModels(f.options).statuses.every(s => s.status === "missing")).toBe(true);
 		f.claude(); const r = discoverModels(f.options); expect(r.connections).toHaveLength(1); expect(r.connections[0].api).toBe("anthropic-messages");
 	});
+	it.each([
+		{ model: "claude-example[1m]", env: {} },
+		{ model: "claude-example[1M]", env: {} },
+		{ model: "opus[1m]", env: { ANTHROPIC_DEFAULT_OPUS_MODEL: "claude-example[1m]" } },
+		{ model: "sonnet[1m]", env: { ANTHROPIC_DEFAULT_SONNET_MODEL: "claude-example" } },
+		{ model: "sonnet", env: { ANTHROPIC_DEFAULT_SONNET_MODEL: "claude-example[1m]" } },
+		{ model: "ignored", env: { ANTHROPIC_MODEL: "claude-example[1m]" } },
+	])("imports Claude long-context syntax as capability metadata: %j", config => {
+		const f = fixture();
+		f.put(".claude/settings.json", { ...config, env: { ANTHROPIC_API_KEY: "fixture-key", ...config.env } });
+		const result = discoverModels(f.options);
+		expect(result.statuses.find(s => s.source === "claude")?.status).toBe("ready");
+		expect(result.connections.some(c => c.id === "claude-example" && c.contextWindow === 1_000_000 && !c.unknownCapabilities?.includes("contextWindow"))).toBe(true);
+		expect(result.connections.every(c => !c.id.includes("[1m]"))).toBe(true);
+	});
+
+	it("does not invent a concrete model for an unresolved long-context alias", () => {
+		const f = fixture();
+		f.put(".claude/settings.json", { model: "sonnet[1m]", env: { ANTHROPIC_API_KEY: "fixture-key" } });
+		const result = discoverModels(f.options);
+		expect(result.connections).toEqual([]);
+		expect(result.statuses.find(s => s.source === "claude")?.status).toBe("unsupported");
+	});
+
 	it("does not read disabled sources and reports missing environment references", () => {
 		const f = fixture(); f.claude();
 		expect(discoverModels({ ...f.options, disabled: ["claude", "codex", "opencode"] }).files).toEqual([]);
@@ -86,6 +110,23 @@ describe("read-only API discovery", () => {
 	});
 });
 describe("runtime synchronization", () => {
+	it("registers a clean API model ID with 1M context and merges a matching declaration", async () => {
+		const f = fixture();
+		f.put(".claude/settings.json", { model: "sonnet[1m]", env: { ANTHROPIC_API_KEY: "fixture-key", ANTHROPIC_DEFAULT_SONNET_MODEL: "claude-example" } });
+		f.put(".config/opencode/opencode.json", { provider: { anthropic: { options: { apiKey: "fixture-key" }, models: { "claude-example": { limit: { context: 1_000_000 } } } } } });
+		const agentDir = join(f.home, "pi");
+		const runtime = await ModelRuntime.create({ modelsPath: join(agentDir, "models.json"), authPath: join(agentDir, "auth.json"), allowModelNetwork: false });
+		const sync = new ModelSourceSync(join(f.home, "data"), agentDir, f.options);
+		const unbind = await sync.bind(runtime, () => false, () => {});
+		try {
+			expect(sync.configs()).toHaveLength(1);
+			const config = sync.configs()[0];
+			expect(config.origin?.sources).toEqual(["claude", "opencode"]);
+			expect(runtime.getModel(config.providerId, "claude-example")).toMatchObject({ id: "claude-example", contextWindow: 1_000_000 });
+			expect(runtime.getModel(config.providerId, "claude-example[1m]")).toBeUndefined();
+		} finally { unbind(); }
+	});
+
 	it("keeps keys in memory, rotates without changing identity, defers running tasks and suppresses detached deletion", async () => {
 		const f = fixture(); f.claude(); const before = readFileSync(join(f.home, ".claude/settings.json"), "utf8");
 		const agentDir = join(f.home, "pi"), dataDir = join(f.home, "data");

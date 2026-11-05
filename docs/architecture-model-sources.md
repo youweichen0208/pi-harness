@@ -13,7 +13,7 @@ pi-harness 使用内置 Pi SDK 执行对话，无需安装 Pi CLI。在「管理
 
 环境变量来自服务进程和来源配置，不执行 shell 启动文件。桌面应用从 Finder 启动时未必继承终端环境；缺少显式环境变量引用的条目会暂停，界面只显示同步状态，不展开失败原因。OpenCode 文件引用相对配置目录解析，并加入监听列表。只有内置 `openai` / `anthropic` 服务商使用对应的默认密钥环境变量；自定义服务商必须有明确的 apiKey、环境变量引用、文件引用或 API 凭据存储，缺失时显示需补充。
 
-协议限定 Anthropic Messages、OpenAI Responses 和 OpenAI-compatible Chat Completions。Claude 的 sonnet/opus 等未解析别名、云平台认证、modelOverrides、Codex 命令认证/gateway OAuth/query_params、OpenCode 未知 SDK 或无法转换的 options/variants 均报告不支持。不执行 apiKeyHelper、hooks、插件或远程配置；不读取项目配置、系统钥匙串和第三方订阅 token。不发现远程模型、不发起测试推理。
+协议限定 Anthropic Messages、OpenAI Responses 和 OpenAI-compatible Chat Completions。Claude 的模型 ID 或显式别名映射支持末尾 `[1m]`：导入时去掉该后缀，并明确声明 1,000,000 token 上下文；请求使用去掉后缀的模型 ID。sonnet/opus 等未解析别名、云平台认证、modelOverrides、Codex 命令认证/gateway OAuth/query_params、OpenCode 未知 SDK 或无法转换的 options/variants 均报告不支持。不执行 apiKeyHelper、hooks、插件或远程配置；不读取项目配置、系统钥匙串和第三方订阅 token。不发现远程模型、不发起测试推理。
 
 能力声明按字段区分“未声明”和明确值。接口、模型与认证一致的重复来源中，一个来源未声明而另一个明确声明时，采用明确值；多个明确声明存在冲突时保留独立入口，不取最大值，也不通过缺失值把冲突项合并。没有可采用的声明时使用保守文本模型配置（32768 上下文、4096 输出、不声明推理/图片）。可编辑为本地独立配置补充能力。费用字段不来自远程价格目录。
 

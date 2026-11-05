@@ -117,11 +117,22 @@ export function discoverModels(options: DiscoveryOptions = {}): { connections: C
 		if (vars.ANTHROPIC_AUTH_TOKEN && !vars.ANTHROPIC_API_KEY) headers.Authorization = `Bearer ${required(key)}`;
 		const selected = vars.ANTHROPIC_MODEL || config.model;
 		const aliases: ObjectValue = { opus: vars.ANTHROPIC_DEFAULT_OPUS_MODEL, sonnet: vars.ANTHROPIC_DEFAULT_SONNET_MODEL, haiku: vars.ANTHROPIC_DEFAULT_HAIKU_MODEL };
-		const models = [...new Set([aliases[string(selected)] || selected, vars.ANTHROPIC_DEFAULT_OPUS_MODEL, vars.ANTHROPIC_DEFAULT_SONNET_MODEL, vars.ANTHROPIC_DEFAULT_HAIKU_MODEL].filter(Boolean))];
+		const models = [...new Set([selected, vars.ANTHROPIC_DEFAULT_OPUS_MODEL, vars.ANTHROPIC_DEFAULT_SONNET_MODEL, vars.ANTHROPIC_DEFAULT_HAIKU_MODEL].filter(Boolean))];
 		if (!models.length) throw new SourceError("incomplete");
-		for (const id of models) attempt(() => {
-			if (/^(default|sonnet|opus|haiku|opusplan)(\[.*\])?$/.test(string(id))) throw new SourceError("unsupported");
-			add("claude", string(id), id, "anthropic-messages", vars.ANTHROPIC_BASE_URL || "https://api.anthropic.com", key, headers, {}, false);
+		const imported = new Set<string>();
+		for (const value of models) attempt(() => {
+			// [1m] is Claude Code selection syntax, not part of the API model ID.
+			const selection = required(value), extended = /\[1m\]$/i.test(selection);
+			const base = extended ? selection.slice(0, -4) : selection;
+			const mapped = required(aliases[base] || selection);
+			const mappedExtended = /\[1m\]$/i.test(mapped);
+			const id = mappedExtended ? mapped.slice(0, -4) : mapped;
+			if (!id || /^(default|sonnet|opus|haiku|opusplan)(\[.*\])?$/.test(id)) throw new SourceError("unsupported");
+			// Preserve previously issued slots for concrete IDs and mapped aliases.
+			const slot = extended && !mappedExtended ? mapped + "[1m]" : mapped;
+			if (imported.has(slot)) return;
+			add("claude", slot, id, "anthropic-messages", vars.ANTHROPIC_BASE_URL || "https://api.anthropic.com", key, headers, extended || mappedExtended ? { contextWindow: 1_000_000 } : {}, false);
+			imported.add(slot);
 		});
 		return true;
 	});

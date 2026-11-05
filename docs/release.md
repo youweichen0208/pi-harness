@@ -1,5 +1,9 @@
 # 发布流程
 
+## 1.14.1：Claude Code 长上下文模型解析修复
+
+修复 Claude Code 模型名末尾 `[1m]` 被当作模型 ID 的问题：解析为 1,000,000 token 上下文，支持显式别名映射和默认模型环境变量。SDK / pi-ai 1.5.0、协议 v51 不变。仅发布 GitHub 三平台桌面 Release；同提交 CI、打包与升级验证及附件核对通过后公开。说明见 `.github/release-notes/v1.14.1.md`。
+
 ## 1.14.0：多 Agent 模型同步与会话归属修复
 
 自动导入 Pi、Claude Code、Codex 和 OpenCode 的用户级 API 模型配置，支持严格去重、能力补全、单项错误隔离及本地独立编辑；修复切换项目后新建会话误复用其他项目空白会话的问题，并更新当前会话标题展示。SDK / pi-ai 保持 1.5.0，协议升至 v51。仅发布 GitHub 三平台桌面 Release；同提交 CI、打包与升级验证及附件核对通过后公开。说明见 `.github/release-notes/v1.14.0.md`。
