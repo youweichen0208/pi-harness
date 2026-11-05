@@ -1,10 +1,11 @@
 /** #145: inspect actual Anthropic-compatible requests through the native SDK. */
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createAgentSession, SessionManager, ModelRuntime } from "@earendil-works/pi-coding-agent";
+import { withOutputTokenFloor } from "../dist/server/model-output-floor.js";
 import { ModelSourceSync } from "../dist/server/model-source-sync.js";
 import { listenIsolated } from "./lib/isolated-server.mjs";
 const root = mkdtempSync(join(tmpdir(), "pi-length-context-"));
@@ -50,6 +51,19 @@ try {
 		console.log(`PASS ${signed ? "signed" : "unsigned"}: thinking replayed; ordinary continue retains max_tokens=${next.max_tokens}`);
 		session.dispose(); session = undefined;
 	}
+	// Native models.json uses the same floor without modifying the source file.
+	const nativeRuntime = withOutputTokenFloor(await ModelRuntime.create({ authPath: join(agent, "auth.json"), modelsPath: join(agent, "models.json"), allowModelNetwork: false }));
+	assert.equal(nativeRuntime.getModel("fixture", "fixture").maxTokens, 16384);
+	({ session } = await createAgentSession({ cwd: root, agentDir: agent, modelRuntime: nativeRuntime, tools: [], sessionManager: SessionManager.inMemory(root) }));
+	await session.prompt("Write report with native model");
+	assert.equal(requests.at(-1).max_tokens, 16384);
+	assert.equal(session.messages.at(-1).stopReason, "stop");
+	await nativeRuntime.refresh({ allowNetwork: false });
+	await session.prompt("Write again after reload");
+	assert.equal(requests.at(-1).max_tokens, 16384);
+	assert.equal(JSON.parse(readFileSync(join(agent, "models.json"), "utf8")).providers.fixture.models[0].maxTokens, 4096);
+	console.log("PASS native configured model: default 16384 on wire and after reload, source unchanged");
+	session.dispose(); session = undefined;
 	// Synced model override keeps identity/history while changing actual request budget.
 	const external = join(root, "external"); mkdirSync(external);
 	const source = join(external, "opencode.json");
@@ -75,6 +89,12 @@ try {
 	assert(session.messages.at(-1).content.some(b => b.text === "REPORT_COMPLETE_FIXTURE"));
 	await runtime.complete(runtime.getModel(provider, "fixture"), { messages: [{ role: "user", content: "Explicit small budget", timestamp: Date.now() }] }, { maxTokens: 1 });
 	assert.equal(requests.at(-1).max_tokens, 1, "metadata floor does not overwrite explicit call budgets");
+	const localConfig = sync.configs()[0];
+	await sync.edit(provider, { ...localConfig, models: [{ ...localConfig.models[0], maxTokens: 2048 }] });
+	await session.setModel(runtime.getModel(provider, "fixture"));
+	await session.prompt("Write with an independent model");
+	assert.equal(requests.at(-1).max_tokens, 16384);
+	console.log("PASS independent model: default 16384 on wire");
 	console.log("PASS default synced floor: 4096 → 16384 on wire, preserved history, explicit maxTokens=1 unchanged");
 } finally {
 	session?.dispose(); unbind?.(); mock.closeAllConnections(); await new Promise(resolve => mock.close(resolve));

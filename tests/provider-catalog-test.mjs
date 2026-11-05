@@ -16,6 +16,7 @@ try {
 		{ provider: "custom-codex", id: "codex", name: "Custom Codex" },
 	];
 	const runtime = {
+		getModel: (provider, id) => models.find(m => m.provider === provider && m.id === id),
 		getAvailable: async () => models,
 		getAvailableSnapshot: () => models,
 		getProviders: () => models.map(m => ({ id: m.provider, name: m.name, auth: { oauth: true } })),

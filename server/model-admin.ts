@@ -459,7 +459,7 @@ export class ModelAdminService {
 							reasoning: m.reasoning as boolean | undefined,
 							input: Array.isArray(m.input) ? (m.input as string[]) : undefined,
 							contextWindow: m.contextWindow as number | undefined,
-							maxTokens: m.maxTokens as number | undefined,
+							maxTokens: this.host.modelRuntime().getModel(providerId, String(m.id ?? ""))?.maxTokens ?? m.maxTokens as number | undefined,
 						}))
 					: [];
 				return {

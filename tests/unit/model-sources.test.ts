@@ -320,7 +320,7 @@ describe("runtime synchronization", () => {
 	});
 });
 
-it("applies the default synced output floor consistently without changing independent models", async () => {
+it("applies the default output floor to synced and independent models", async () => {
 	const f = fixture(); f.claude();
 	const runtime = await ModelRuntime.create({ authPath: join(f.home, "pi/auth.json"), modelsPath: join(f.home, "pi/models.json"), allowModelNetwork: false });
 	const sync = new ModelSourceSync(join(f.home, "data"), join(f.home, "pi"), { home: f.home, env: {} });
@@ -330,8 +330,8 @@ it("applies the default synced output floor consistently without changing indepe
 		expect(config.models[0].maxTokens).toBe(16384);
 		expect(runtime.getModel(config.providerId, config.models[0].id)?.maxTokens).toBe(16384);
 		await sync.edit(config.providerId, { ...config, models: [{ ...config.models[0], maxTokens: 2048 }] });
-		expect(sync.configs()[0].models[0].maxTokens).toBe(2048);
-		expect(runtime.getModel(config.providerId, config.models[0].id)?.maxTokens).toBe(2048);
+		expect(sync.configs()[0].models[0].maxTokens).toBe(16384);
+		expect(runtime.getModel(config.providerId, config.models[0].id)?.maxTokens).toBe(16384);
 	} finally { unbind(); }
 });
 

@@ -16,7 +16,7 @@ try {
 	writeFileSync(path, JSON.stringify({ providers: { fixture: original } }));
 	const wire = [];
 	let refreshes = 0;
-	const service = new ModelAdminService({ agentDir: directory, emit: message => wire.push(message), flushSnapshot() {}, isDisposed: () => false, modelRuntime: () => ({ refresh: async () => { refreshes++; } }), invalidatePiConfig() {}, pushModels: async () => {} });
+	const service = new ModelAdminService({ agentDir: directory, emit: message => wire.push(message), flushSnapshot() {}, isDisposed: () => false, modelRuntime: () => ({ getModel: () => undefined, refresh: async () => { refreshes++; } }), invalidatePiConfig() {}, pushModels: async () => {} });
 	await service.listModelsConfig();
 	const form = wire.at(-1).providers[0];
 	assert.deepEqual(form.models.map(model => model.id), ['chat']);

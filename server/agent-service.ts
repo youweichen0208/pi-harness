@@ -1,3 +1,4 @@
+import { withOutputTokenFloor } from "./model-output-floor.js";
 import { modelConfigurationChanged, modelSourcesFor, type ModelSourceSync } from "./model-source-sync.js";
 import { taskDetail, recoverTaskSummaries, taskSummaries } from "./subagents/tasks.js";
 import type { SubagentRequest } from "./protocol.js";
@@ -634,6 +635,7 @@ export class ClientSession {
 				settingsManager: settings,
 				resourceLoaderOptions: { extensionFactories: nativeToolExtensions(() => databaseScope(this.clientId, cwd, sessionManager), () => subagentParent ? { session: subagentParent, agentDir: this.agentDir, workspaceId: getSubagentWorkspace(sessionManager) } : undefined, () => settings.getSettings().defaultTools) },
 			});
+			services.modelRuntime = withOutputTokenFloor(services.modelRuntime);
 			if (!this.sources) {
 				this.sources = modelSourcesFor(this.stateStore.dataDir, this.agentDir);
 				this.sourceUnbind = await this.sources.bind(services.modelRuntime,
