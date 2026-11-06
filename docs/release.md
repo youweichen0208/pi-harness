@@ -1,5 +1,9 @@
 # 发布流程
 
+## 1.16.0：Pi CLI 检测与安装引导
+
+Extensions 页检测独立 Pi CLI、Node.js 与 npm，缺少 Pi 时提供最新版安装入口，在可见终端执行并避免重复启动。补齐依赖、权限、网络及 PATH 提示，CLI 安装不升级内置 SDK。SDK / pi-ai 1.5.0、协议 v52 不变。仅发布 GitHub 三平台桌面 Release；同提交 CI、macOS／Windows 专项回归和三平台安装升级验证通过后公开。说明见 `.github/release-notes/v1.16.0.md`。
+
 ## 1.15.2：计划、回答卡片与外部文件预览修复
 
 修复 #147 创建计划省略标题时报错、#148 冒号选项在回答卡片中丢失、#149 工作区外路径的面包屑与无效预览。SDK / pi-ai 1.5.0、协议 v52 保持不变。仅发布 GitHub 三平台桌面 Release；同提交 CI、三平台打包及安装升级验证通过后公开。说明见 `.github/release-notes/v1.15.2.md`。

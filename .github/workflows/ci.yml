@@ -84,6 +84,10 @@ jobs:
         run: |
           npx playwright-core install chromium
           node tests/desktop-toolbar-test.mjs
+      - name: Pi CLI detection and installation UI (no global installation)
+        run: |
+          npx vitest run tests/unit/pi-cli-status.test.ts
+          node tests/pi-cli-setup-browser-test.mjs
       - run: npx electron-builder install-app-deps
       - name: Actual Electron typography and DPI regression
         run: node tests/windows-rendering-test.mjs

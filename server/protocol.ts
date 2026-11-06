@@ -1480,6 +1480,8 @@ export interface WikiDirectory {
 }
 
 // Extensions HTTP API: native Pi package management, separate from agent messages.
+export interface CliToolStatus { status: "available" | "missing" | "unusable"; version?: string; reason?: string; }
+export interface PiCliStatus { pi: CliToolStatus; node: CliToolStatus; npm: CliToolStatus; canInstall: boolean; }
 export type ExtensionScope = "user" | "project";
 export interface ExtensionPackage {
 	id: string; source: string; name: string; scope: ExtensionScope; kind: "npm" | "git" | "local" | "file";

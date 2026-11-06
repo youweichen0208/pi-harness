@@ -1,3 +1,4 @@
+import { PiCliSetup } from "./PiCliSetup";
 import { copyText } from "../clipboard";
 import { useDialogFocus } from "../use-dialog-focus";
 import { UiIcon } from "./UiIcon";
@@ -15,7 +16,7 @@ async function request<T>(cwd: string, action: string, args: Record<string,unkno
 	const response = await fetch(withToken("/api/extensions"), { method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ ...args,clientId:getClientId(),cwd,action }),signal });
 	const result = await response.json(); if (!response.ok) throw Error(result.error ?? response.statusText); return result;
 }
-export function ExtensionsPanel({ cwd, reload, onUpdateCount, mode = "manage", children, builtins }: { cwd: string; reload: () => void; onUpdateCount?: (count:number)=>void; mode?: "manage" | "updates"; children?: ReactNode; builtins?: ReactNode }) {
+export function ExtensionsPanel({ cwd, reload, onUpdateCount, mode = "manage", children, builtins, cliInstall }: { cwd: string; reload: () => void; onUpdateCount?: (count:number)=>void; mode?: "manage" | "updates"; children?: ReactNode; builtins?: ReactNode; cliInstall?: { ready: boolean; run: () => void } }) {
 	const t=useT(), {locale}=useI18n();
 	const catalogDetails = useCallback((source: string, signal: AbortSignal) => request<ExtensionPackageDetails>(cwd, "details", { source }, signal), [cwd]);
 	const [state,setState]=useState<ExtensionsState>();
@@ -114,6 +115,7 @@ export function ExtensionsPanel({ cwd, reload, onUpdateCount, mode = "manage", c
 	return <section className={`extensions-panel ${mode==="manage"?"extensions-v3":""}`}>
 		<header className="ext-header"><h2>{mode==="updates"?t("componentUpdates"):"Extensions"}</h2>{mode==="updates"&&<span className="settings-count">{state?.checkedAt?t("v2LastChecked",{time:new Date(state.checkedAt).toLocaleDateString()===new Date().toLocaleDateString()?new Date(state.checkedAt).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"}):new Date(state.checkedAt).toLocaleDateString([], {month:"short",day:"numeric"})}):t("extNotChecked")}</span>}<div className="settings-heading-actions">{mode==="updates"?<button disabled={checking||working} onClick={()=>void load(true)}>{t(checking?"extChecking":"settingsCheckNow")}</button>:<button disabled={working} onClick={()=>{setSource("");setPreview(undefined);setJob(undefined);setError("");setInstallOpen(true);}}>{t("extInstallSource")}</button>}</div></header>
 		{mode==="manage"&&<div className="ext-v3-tabs" role="tablist" aria-label="Extensions">{(["installed","browse"] as const).map(value=><button key={value} role="tab" tabIndex={tab===value?0:-1} onKeyDown={e=>{if(["ArrowLeft","ArrowRight","Home","End"].includes(e.key)){e.preventDefault();const next=e.key==="Home"?"installed":e.key==="End"?"browse":value==="installed"?"browse":"installed";setTab(next);setQuery("");setPage(1);(e.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next==="installed"?0:1])?.focus();}}} aria-selected={tab===value} onClick={()=>{setTab(value);setQuery("");setPage(1);}}>{value==="installed"?`${t("extInstalled")} · ${state?.packages.filter(p=>p.kind!=="file").length??0}`:t("extBrowse")}</button>)}</div>}
+		{mode === "manage" && cliInstall && <PiCliSetup cwd={cwd} ready={cliInstall.ready} onInstall={cliInstall.run} />}
 		{children}
 		{mode === "manage" && <div className="ext-local-directory">
 			<p className="ext-muted">{t("extLocalHint")}</p>

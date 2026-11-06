@@ -16,6 +16,7 @@ import { TermXterm } from "./TermXterm";
 import { useT } from "../i18n";
 
 interface TerminalPanelProps {
+	focusRequest?: { id: string };
 	active: boolean;
 	chat: ChatState;
 	send: (msg: ClientMessage) => boolean;
@@ -45,9 +46,11 @@ const EMPTY_DRAFT: Draft = { name: "", command: "", cwd: "${pwd}" };
  *          (on mobile this whole column slides in as a drawer)
  *   right: the active terminal (one xterm per tab, kept mounted)
  */
-export function TerminalPanel({ chat, send, terminal, active }: TerminalPanelProps) {
+export function TerminalPanel({ chat, send, terminal, active, focusRequest }: TerminalPanelProps) {
 	const t = useT();
 	const [activeId, setActiveId] = useState<string | null>(null);
+	const focusedRequest = useRef<typeof focusRequest>();
+
 	// Mobile: the left column (commands + tabs) slides in as a drawer.
 	const [sideOpen, setSideOpen] = useState(false);
 	// Command list editing state.
@@ -66,6 +69,12 @@ export function TerminalPanel({ chat, send, terminal, active }: TerminalPanelPro
 			setActiveId(chat.terminals[chat.terminals.length - 1].id);
 		}
 	}, [chat.terminals, activeId]);
+
+	useEffect(() => {
+		if (!focusRequest || focusedRequest.current === focusRequest || !chat.terminals.some(item => item.id === focusRequest.id)) return;
+		focusedRequest.current = focusRequest;
+		setActiveId(focusRequest.id);
+	}, [focusRequest, chat.terminals]);
 
 	useEffect(() => {
 		return () => {

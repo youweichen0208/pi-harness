@@ -1,3 +1,4 @@
+import { PI_CLI_INSTALL_COMMAND } from "./pi-cli-install";
 import { useWikiCoordinator } from "./use-wiki-coordinator";
 import { WikiCoordinationError, type WikiOperation } from "./wiki-coordinator";
 import type { WikiProjectReference } from "./types";
@@ -902,6 +903,23 @@ export function App() {
 	const [globalSearchFilesOnly, setGlobalSearchFilesOnly] = useState(false);
 	const openFileSearch = useCallback(() => { setGlobalSearchFilesOnly(true); setGlobalSearchOpen(true); }, []);
 
+	const [terminalFocus, setTerminalFocus] = useState<{ id: string }>();
+	const installPiCli = () => {
+		const conversationId = chat.activeConversationId || chat.state?.conversationId;
+		if (!chat.ready || switching || !conversationId || !chat.state?.cwd) return;
+		const existing = chat.terminals.find(item => item.conversationId === conversationId && item.command?.command === PI_CLI_INSTALL_COMMAND);
+		const id = existing?.id ?? randomUuid();
+		const command: CommandDef = { name: "Install Pi CLI", command: PI_CLI_INSTALL_COMMAND, cwd: "${pwd}" };
+		if (!existing) terminal.create({ id, conversationId, title: command.name, cwd: chat.state.cwd, cols: 80, rows: 24, running: true, exitCode: null, command });
+		else if (!existing.running) {
+			terminal.restart(id);
+			send({ type: "run_command", terminalId: id, conversationId, command, cols: 80, rows: 24 });
+		}
+		setTerminalFocus({ id });
+		setSettingsOpen(false);
+		setView("terminal");
+	};
+
 	// 插件视图桥：插件无 chat 上下文，通过窗口事件请求在可见终端执行命令
 	// （与 SCM 面板同款：已有同名 tab 原地重跑，否则新建并自动切到终端视图）。
 	useEffect(() => {
@@ -1552,7 +1570,7 @@ export function App() {
 					<div className={`view-pane ${view === "terminal" ? "" : "hidden"}`}>
 						<TerminalViewBoundary onBack={() => setView("chat")}>
 						<Suspense fallback={<div className="boot-wait" role="status">{t("loading")}</div>}>
-							{visited.current.has("terminal") && <TerminalPanel active={view === "terminal" && !switching} chat={chat} send={send} terminal={terminal} />}
+							{visited.current.has("terminal") && <TerminalPanel focusRequest={terminalFocus} active={view === "terminal" && !switching} chat={chat} send={send} terminal={terminal} />}
 						</Suspense>
 						</TerminalViewBoundary>
 					</div>
@@ -1636,6 +1654,7 @@ export function App() {
 			{settingsOpen && (
 				<SettingsModal
 					initialTab={settingsInitialTab}
+					onInstallPiCli={installPiCli}
 					chat={chat}
 					send={send}
 					playground={playground}

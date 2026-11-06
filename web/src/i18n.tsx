@@ -17,6 +17,17 @@ const STORAGE_KEY = "pi-harness:lang";
 /* ------------------------------------------------------------------ */
 
 const zh = {
+	piCliCheckFailed: "Pi CLI 检测失败，请重试。",
+	piCliMissing: "未检测到",
+	piCliUnusable: "无法运行",
+	piCliHint: "检测和安装发生在运行 pi-harness 的电脑（Web 模式为服务所在电脑）。Pi CLI 可用于官网的 pi install 命令；现有界面安装无需 Pi CLI，安装 CLI 不会升级内置 Pi。",
+	piCliDisconnected: "连接后可检测与安装。",
+	piCliDependencies: "请先安装 Node.js 22.19 或更高版本及 npm，再重新检测。",
+	piCliTroubleshoot: "安装日志保留在终端。权限不足时请检查 npm 的全局安装目录；网络失败可在终端重试。若安装后仍未检测到，请检查 PATH 并重启 pi-harness。",
+	piCliInstall: "安装 Pi CLI",
+	piCliCheck: "重新检测",
+	piCliDocs: "官方说明",
+
 	modelSources: "配置来源",
 	modelSourcePending: "任务结束后应用",
 	syncModelsNow: "立即同步",
@@ -2331,6 +2342,17 @@ const zh = {
 /* ------------------------------------------------------------------ */
 
 const en: Record<keyof typeof zh, string> = {
+	piCliCheckFailed: "Pi CLI detection failed. Please retry.",
+	piCliMissing: "Not detected",
+	piCliUnusable: "Cannot run",
+	piCliHint: "Detection and installation run on the computer hosting pi-harness (the server for Web connections). Pi CLI enables website commands such as pi install. UI package installation does not require it, and installing the CLI does not upgrade the embedded Pi.",
+	piCliDisconnected: "Connect to detect and install.",
+	piCliDependencies: "Install Node.js 22.19 or newer and npm, then check again.",
+	piCliTroubleshoot: "Installation logs remain in the terminal. For permission errors, check the npm global installation directory; retry network failures in the terminal. If Pi is still not detected after installation, check PATH and restart pi-harness.",
+	piCliInstall: "Install Pi CLI",
+	piCliCheck: "Check again",
+	piCliDocs: "Official guide",
+
 	modelSources: "Configuration sources",
 	modelSourcePending: "Applies after running tasks",
 	syncModelsNow: "Sync now",

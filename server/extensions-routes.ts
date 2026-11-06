@@ -1,3 +1,4 @@
+import { piCliStatus } from "./pi-cli-status.js";
 import { extensionToolFailure } from "./extension-tools.js";
 import { nativeSkills } from "./skills-service.js";
 import { builtinExtensionsState, toggleBuiltinDocument } from "./builtin-extensions.js";
@@ -82,6 +83,11 @@ export function installExtensionsRoutes(app: Express, service: () => AgentServic
 		if (!cs || cs.cwd !== cwd || cs.switchingWorkspace || service().quiesceInfo().quiesced) { res.status(409).json({ error: "Workspace unavailable" }); return; }
 		const agentDir = getAgentDir();
 		try {
+			if (action === "cli-status") {
+				const result = await piCliStatus();
+				if (cs.cwd !== cwd || cs.switchingWorkspace || service().quiesceInfo().quiesced) { res.status(409).json({ error: "Workspace unavailable" }); return; }
+				res.json(result); return;
+			}
 			if (["builtin-list", "builtin-toggle"].includes(action)) {
 				const conversationId = req.body.conversationId;
 				const valid = () => cs.cwd === cwd && !cs.switchingWorkspace && cs.conversationId === conversationId && !service().quiesceInfo().quiesced;

@@ -16,6 +16,7 @@ import { randomUuid } from "../uuid";
 type Tab = "prompt" | "appearance" | "skills" | "extensions" | "native-mcp" | "playground" | "updates";
 interface SettingsModalProps {
 	initialTab?: Tab;
+	onInstallPiCli: () => void;
 	chat: {
 		ready: boolean;
 		settings: UiSettingsState | null;
@@ -29,7 +30,7 @@ interface SettingsModalProps {
 	onClose: () => void;
 }
 
-export function SettingsModal({ chat, send, playground, onClose, initialTab = "prompt" }: SettingsModalProps) {
+export function SettingsModal({ chat, send, playground, onClose, onInstallPiCli, initialTab = "prompt" }: SettingsModalProps) {
 	const t = useT();
 	const dialogRef = useDialogFocus();
 	const [extensionUpdates,setExtensionUpdates]=useState(0);
@@ -61,6 +62,7 @@ export function SettingsModal({ chat, send, playground, onClose, initialTab = "p
 						{tab === "appearance" && <AppearancePanel />}
 						{tab === "skills" && chat.state && <SkillsPanel key={chat.state.cwd} cwd={chat.state.cwd} reload={() => send({ type: "extensions_reload" })} />}
 						{tab === "extensions" && chat.state?.cwd && <ExtensionsPanel
+							cliInstall={{ ready: chat.ready, run: () => { if (canLeave()) onInstallPiCli(); } }}
 							key={chat.state.cwd} cwd={chat.state.cwd} onUpdateCount={setExtensionUpdates}
 							reload={() => send({ type: "extensions_reload" })}
 							builtins={<BuiltinExtensionsPanel

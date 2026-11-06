@@ -82,3 +82,9 @@ pi.dev 当前通过服务端 HTML 提供目录，没有依赖未公开 JSON API�
 数据库查询由原生内置扩展 `pi-harness-database` 提供 `database_read`，权限绑定显式附加连接的当前会话；连接与只读执行见 [数据库工作台](architecture-database.md)。
 
 Pi 1.5 的包安装失败会出现在原生资源加载器 warnings 中。会话首次绑定和重载后，WebUI 将 warnings/errors 发送到带 conversationId 的通知；首次 socket attach 前暂存通知。兼容入口仍支持用户扩展从 pi-ai 导入 Type/StringEnum，迁移限制见 [升级说明](pi-1.5-upgrade.md)。
+
+## 独立 Pi CLI 检测与安装
+
+管理页调用只读 `cli-status` 动作，检测服务主机的 Pi、Node.js、npm；探测固定 `--version` 参数，5 秒／16 KB 限制，过滤 PATH 中的相对目录和依赖 `.bin` 目录，避免将内置 SDK 当成外部 CLI。不缓存结果，打开页面或重新检测即刷新。缺失与无法运行分开显示，Node.js 至少 22.19 且 npm 可用才开放安装。
+
+用户点击后通过现有终端桥运行 `npm install -g --ignore-scripts @earendil-works/pi-coding-agent@latest`，安装独立 CLI，不改变内置 SDK 或社区包。当前对话已有同安装命令的运行中终端时只定位，不重启；终端结束后可重新运行。安装日志保持可见，返回管理页重新检测，不以输出文本或终端创建判定成功。权限／网络／PATH 提示不自动提权、不改系统 PATH、不捆绑或自动安装工具。HTTP 类型定义在 protocol.ts，不新增 WebSocket 消息。
