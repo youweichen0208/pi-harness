@@ -1,7 +1,7 @@
 /* Smoke test: chat-input slash commands.
  *   - slash_commands catalog arrives on attach and on get_commands (builtin +
  *     extension + prompt template + skill commands).
- *   - Native commands (/new /model /cwd /thinking /help …) are intercepted
+ *   - Native commands (/new /model /cwd /help …) are intercepted
  *     server-side in AgentService.prompt() and never hit the SDK.
  *   - Non-native slash text falls through to the SDK prompt (no interception).
  *
@@ -31,7 +31,6 @@ const NATIVE_NAMES = [
 	"model",
 	"compact",
 	"cwd",
-	"thinking",
 	"resume",
 	"reload",
 	"help",
@@ -126,6 +125,7 @@ async function main() {
 	const cat = await c.wait((m) => m.type === "slash_commands");
 	const names = new Set(cat.commands.map((x) => x.name));
 	const missing = NATIVE_NAMES.filter((n) => !names.has(n));
+	if (cat.commands.some(command => command.source === "builtin" && command.name === "thinking")) throw new Error("Retired thinking control is still advertised");
 	if (missing.length > 0) {
 		throw new Error(`FAIL: builtin commands missing: ${missing.join(", ")}`);
 	}
@@ -150,6 +150,9 @@ async function main() {
 		);
 	}
 	console.log(`[2] get_commands re-request: ${cat2.commands.length} commands`);
+
+	c.send({ type: "prompt", text: "/thinking high" });
+	await c.wait(m => m.type === "notice" && m.text.includes("手动思考档位已移除"), 6000);
 
 	// --- 3. native /cwd (valid + invalid) --- 跨平台：用临时目录而非 mac 专属的 /tmp
 	const TMP_CWD = mkdtempSync(join(tmpdir(), "slash-cwd-"));

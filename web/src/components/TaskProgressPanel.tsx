@@ -1,9 +1,11 @@
+import { currentCodemodeGroups, type CodemodeActivity } from "../codemode-records";
+import { CodemodeRecords } from "./CodemodeRecords";
 import { UiIcon } from "./UiIcon";
 import { toolTextIncidents } from "../tool-text";
 import { conversationWait } from "../waiting-indicator";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FiChevronRight, FiFile } from "react-icons/fi";
-import type { ServerMessage, TaskProgress, UiMessage } from "../types";
+import type { ClientMessage, ServerMessage, TaskProgress, UiMessage } from "../types";
 import { useI18n, useT } from "../i18n";
 import { phaseHeadline, phaseItems, planStepArtifacts, progressPhases } from "../task-progress-view";
 import { commandDuration, elapsedLabel } from "../bash-presentation";
@@ -11,8 +13,9 @@ import { taskOutputs } from "../task-outputs";
 
 type Silence = Extract<ServerMessage, { type: "agent_silence" }> | null;
 
-export function TaskProgressPanel({ task, silence, cwd, messages, onPreview, streaming, live }: { task?: TaskProgress | null; silence: Silence; cwd: string; messages: UiMessage[]; onPreview: (path: string, name: string) => void; streaming?: boolean; live?: UiMessage | null }) {
+export function TaskProgressPanel({ send, codemode, liveOutputs, toolStatuses, conversationId, task, silence, cwd, messages, onPreview, streaming, live }: CodemodeActivity & { send?: (message: ClientMessage) => boolean; conversationId?: string; task?: TaskProgress | null; silence: Silence; cwd: string; messages: UiMessage[]; onPreview: (path: string, name: string) => void; streaming?: boolean; live?: UiMessage | null }) {
 	const t = useT();
+	const codemodeGroups = useMemo(() => currentCodemodeGroups(messages, live, streaming ?? task?.status === "running", { codemode, liveOutputs, toolStatuses }, conversationId), [messages, live, streaming, task?.status, codemode, liveOutputs, toolStatuses, conversationId]);
 	const { locale } = useI18n();
 	const incident = toolTextIncidents(live ? [...messages, live] : messages, streaming ?? task?.status === "running").current;
 	const interrupted = incident?.state === "stopped";
@@ -55,7 +58,7 @@ export function TaskProgressPanel({ task, silence, cwd, messages, onPreview, str
 	const planSource = planMessage && messages.find(message => message.role === "assistant" && message.content.some(block => block.type === "toolCall" && block.id === planMessage.toolCallId));
 	const outputLimited = !streaming && task?.status === "failed" && messages.findLast(message => message.role === "assistant" || message.role === "user")?.stopReason === "length";
 	const status = outputLimited ? t("replyOutputIncomplete") : interrupted ? t("toolRecoveryInterrupted") : reminding ? `${t("working")} · ${t("waitSeconds", { n: elapsed })}` : task?.status === "failed" ? t("taskFailed") : task?.status === "cancelled" ? t("taskCancelled") : task?.plan?.awaitingConfirmation ? t("planPrevious") : task?.status === "waiting" ? t("taskPlanOpen") : silence && task && silence.conversationId === task.conversationId ? t(phase?.label ?? "working") : "";
-	if (!task && !streaming && !interrupted && !reminding && !files.length) return null;
+	if (!task && !streaming && !interrupted && !reminding && !files.length && !codemodeGroups.length) return null;
 	return <div className={`task-progress task-sections ${interrupted ? "interrupted" : reminding ? "reminding" : task?.status ?? "empty"}`} tabIndex={-1} aria-label={t("taskProgress")}>
 		<div className="task-sections-scroll" ref={scrollRef}>
 			<section className="task-section">
@@ -96,6 +99,7 @@ export function TaskProgressPanel({ task, silence, cwd, messages, onPreview, str
 					})}</ol> : interrupted ? <div className="task-interrupted-hint"><strong>● {t("taskInterruptedTitle")}</strong><p>{t("taskInterruptedHint")}</p></div> : reminding ? null : <div className="task-section-empty"><div className="task-empty-circles" aria-hidden="true"><i /><i /><i /></div><p>{t("taskProgressEmpty")}</p></div>}
 				</div>}
 			</section>
+			<CodemodeRecords groups={codemodeGroups} messages={live ? [...messages, live] : messages} conversationId={conversationId} send={send}/>
 			<section className="task-section">
 				<button type="button" className="task-section-heading" aria-expanded={outputsOpen} onClick={() => setOutputsOpen(value => !value)}><FiChevronRight className={outputsOpen ? "open" : ""} />{t("taskOutputsHeading")}<span className="task-section-count">{t("taskOutputsCount", { n: files.length })}</span></button>
 				{outputsOpen && <div className="task-section-content">{files.length ? <div className="task-file-results">{files.map(file => <div className="task-file-result" key={file.path}>

@@ -1,3 +1,4 @@
+import type { CodemodeHistory } from "./codemode-history.js";
 import type { AgentSession, AgentSessionRuntime } from "@earendil-works/pi-coding-agent";
 import type { UiMessage } from "./protocol.js";
 import type { RecoveryState } from "./recovery-state.js";
@@ -25,6 +26,7 @@ export class QuiesceRejectedError extends Error {
  * never interrupts another conversation's in-flight run.
  */
 export interface Conversation {
+	codemodeHistory?: CodemodeHistory;
 	tree?: SessionTreeController;
 	treeProjectionRevision?: string;
 	treeEntryIds?: Map<string, string[]>;

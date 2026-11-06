@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { FiChevronDown } from "react-icons/fi";
-import { useT, type Translate } from "../i18n";
+import { useChatT, type Translate } from "../i18n";
 import type { PlanChange } from "../types";
 import type { PlanPresentation } from "../plan-presentation";
 function changeLabel(change: PlanChange, t: Translate): string {
@@ -10,7 +10,7 @@ function changeLabel(change: PlanChange, t: Translate): string {
 	return change.position ? t(keys[change.kind], { n: change.position }) : `${t("todoRemoved")}: ${change.title}`;
 }
 export function PlanChecklist({ view, toolCallId }: { view: PlanPresentation; toolCallId: string }) {
-	const t = useT();
+	const t = useChatT();
 	const [open, setOpen] = useState(false);
 	useEffect(() => {
 		const reveal = (event: Event) => {

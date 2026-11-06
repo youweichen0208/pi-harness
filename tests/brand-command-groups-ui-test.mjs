@@ -221,14 +221,7 @@ try {
 	await input.fill('alternate follow'); await input.press('Alt+Enter');
 	await page.waitForFunction(() => document.querySelector('.inputbox textarea').value === '');
 	assert.equal(submitted.at(-1).queue, true);
-	await page.locator('.delivery-control .chip').click();
-	await page.locator('.delivery-control .dd-item').last().click();
-	await input.fill('selected follow'); await input.press('Enter');
-	await page.waitForFunction(() => document.querySelector('.inputbox textarea').value === '');
-	assert.equal(submitted.at(-1).queue, true);
-	await input.fill('alternate steer'); await input.press('Alt+Enter');
-	await page.waitForFunction(() => document.querySelector('.inputbox textarea').value === '');
-	assert.equal(submitted.at(-1).queue, false);
+	assert.equal(await page.locator('.delivery-control').count(), 0);
 	await input.fill('draft'); const beforeEscape = submitted.length;
 	await input.press('Escape'); assert.equal(await input.inputValue(), ''); assert.equal(submitted.length, beforeEscape);
 	await input.press('Escape'); await page.waitForTimeout(100); assert.equal(submitted.at(-1).type, 'abort');
@@ -242,7 +235,7 @@ try {
 	await page.locator('.composer-action.stop').waitFor({ state: 'detached' });
 	assert.equal(await page.locator('.delivery-control').count(), 0);
 	snapshot.state.isStreaming = true; snapshot.state.rev += 1; socket.send(JSON.stringify(snapshot));
-	await page.locator('.delivery-control .chip', { hasText: '插话' }).waitFor();
+	await page.locator('.composer-action.stop').waitFor();
 	snapshot.state.queue = { steering: [], followUp: ['one pending message'] };
 	snapshot.state.rev += 1; socket.send(JSON.stringify(snapshot));
 	await page.locator('.queue-single').waitFor();
@@ -271,7 +264,7 @@ try {
 	for (const width of [900, 390]) {
 		await page.setViewportSize({ width, height: 900 }); await page.waitForTimeout(350);
 		const box = await page.locator('.inputbox').boundingBox();
-		for (const selector of ['.composer-action.stop', '.composer-action.send', '.delivery-control']) {
+		for (const selector of ['.composer-action.stop', '.composer-action.send']) {
 			const button = await page.locator(selector).boundingBox();
 			assert(button.x >= box.x && button.x + button.width <= box.x + box.width + 1, `English control overflow: ${selector} at ${width}`);
 		}

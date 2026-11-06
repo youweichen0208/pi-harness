@@ -2,7 +2,7 @@ import { copyText } from "../clipboard";
 import { useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { FiChevronDown, FiChevronRight } from "react-icons/fi";
 import { commandReading, consecutiveAttempts } from "../command-reading";
-import { useT, useI18n } from "../i18n";
+import { useChatT, useI18n } from "../i18n";
 import { WorkspacePathContext } from "../workspace-context";
 import { bashCommand } from "../bash-steps";
 import { commandPresentation, commandPreview, isLikelyErrorLine, compactCommandLabel, commandDuration, elapsedLabel } from "../bash-presentation";
@@ -46,7 +46,7 @@ export function latestAttemptStates(items: Item[], cwd: string) {
 
 /** `flat`: rows only, inside a process group that owns the header and collapse. */
 export function BashGroup({ items, onKill, active = false, flat = false }: { items: Item[]; onKill?: () => void; active?: boolean; flat?: boolean }) {
-	const t = useT();
+	const t = useChatT();
 	const cwd = useContext(WorkspacePathContext);
 	const attempts = consecutiveAttempts(items, item => commandReading(commandPresentation(bashCommand(item.block.argumentsText) ?? "", cwd).command).title);
 	const [open, setOpen] = useState(active);
@@ -84,7 +84,7 @@ export function BashGroup({ items, onKill, active = false, flat = false }: { ite
 }
 
 function BashRow({ block, view, onKill, revealed, messageId, attempts, historical, history, compact }: Item & { onKill?: () => void; revealed: boolean; attempts?: number; historical?: boolean; history?: ReactNode; compact?: boolean }) {
-	const t = useT();
+	const t = useChatT();
 	const cwd = useContext(WorkspacePathContext);
 	const state = historical && !view.result ? "empty" : stateOf(view);
 	const { locale } = useI18n();

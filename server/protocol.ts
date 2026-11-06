@@ -183,7 +183,7 @@ export interface UiTreeState {
 }
 export type TreeRequest =
 	| { type: "tree_get"; conversationId: string; reqId: string; filter?: TreeFilterMode; query?: string }
-	| { type: "tree_content"; conversationId: string; reqId: string; entryId: string }
+	| { type: "tree_content"; conversationId: string; reqId: string; entryId: string; codemodeToolCallId?: string }
 	| { type: "tree_preview"; conversationId: string; reqId: string; targetId: string }
 	| { type: "tree_navigate"; conversationId: string; reqId: string; targetId: string; summary: "none" | "default" | "custom"; customInstructions?: string; replaceInstructions?: boolean; label?: string; abortRunning?: boolean }
 	| { type: "tree_label"; conversationId: string; reqId: string; entryId: string; label: string | null }
@@ -194,7 +194,7 @@ export type TreeResponse =
 	| { type: "tree"; conversationId: string; reqId: string; revision: string; leafId: string | null; nodes: UiTreeNode[]; truncated: boolean }
 	| { type: "tree_changed"; conversationId: string; revision: string; branchPoints: number }
 	| { type: "tree_open"; conversationId: string; mode: "tree" | "fork" }
-	| { type: "tree_content_result"; conversationId: string; reqId: string; entryId: string; content: string; toolCallId?: string }
+	| { type: "tree_content_result"; conversationId: string; reqId: string; entryId: string; content: string; toolCallId?: string; codemode?: { block: UiToolCallBlock; result?: UiMessage } }
 	| { type: "tree_preview_result"; conversationId: string; reqId: string; entryCount?: number; commonAncestorId?: string | null }
 	| { type: "tree_navigate_result"; conversationId: string; reqId: string; status: "ok" | "cancelled" | "aborted" | "busy" | "error"; editorText?: string; restoredQueue?: { steering: string[]; followUp: string[]; images?: { data: string; mimeType: string }[] }; error?: string };
 
@@ -336,6 +336,8 @@ export interface UiState {
 	streamingMessage: UiMessage | null;
 	/** Server-derived current task; null before the first user prompt. */
 	taskProgress?: TaskProgress | null;
+	/** Current request from the persistent branch, independent of compaction. No output bodies. */
+	codemode?: { history: UiMessage[]; live: { toolCallId: string; details: UiCodemodeDetails }[] };
 	isStreaming: boolean;
 	/** Initial detached Wiki session; never restores ordinary conversation history. */
 	wiki?: boolean;

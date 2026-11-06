@@ -56,9 +56,7 @@ try {
 	await page.locator('.wiki-model-controls > .dropdown > .chip').click();
 	await page.locator('.wiki-model-controls .dd-item').filter({ hasText: 'wiki-b' }).click();
 	await page.waitForFunction(() => document.querySelector('.wiki-model-controls .chip-model')?.textContent.includes('wiki-b'));
-	await page.locator('.wiki-model-controls .thinking-control > .dropdown > .chip').click();
-	await page.locator('.wiki-model-controls .thinking-mode-option').filter({ hasText: '深度' }).click();
-	await page.waitForFunction(() => document.querySelector('.wiki-model-controls .thinking-control')?.textContent.includes('深度'));
+	assert.equal(await page.locator('.thinking-control, .dd-thinking-levels').count(), 0);
 
 	await page.locator('.wiki-chat-panel > header button').last().click();
 	assert.equal(await page.locator('.wiki-chat-panel').count(), 0);

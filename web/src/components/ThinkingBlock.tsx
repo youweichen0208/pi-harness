@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { FiChevronDown, FiChevronRight } from "react-icons/fi";
-import { useT } from "../i18n";
+import { useChatT } from "../i18n";
 import { elapsedLabel } from "../bash-presentation";
 
 interface ThinkingBlockProps {
@@ -29,7 +29,7 @@ function useLiveSeconds(active: boolean) {
 }
 
 export function ThinkingBlock({ thinking, durationMs, streaming, wrap = true }: ThinkingBlockProps) {
-	const t = useT();
+	const t = useChatT();
 	// null = 未手动点过 → 跟随开关：wrap=true（开）→ 完整展开；wrap=false（关）→ 折叠。
 	// 流式与结束后行为一致——不再出现「流式折叠、结束后又自动展开」的跳动。
 	const [open, setOpen] = useState<boolean | null>(null);

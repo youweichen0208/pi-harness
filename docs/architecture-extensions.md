@@ -6,6 +6,16 @@
 
 扩展代码刷新（issue #64）：jiti 对原生 .js/.mjs 走 Node import()/require()，进程内缓存会让 `/restart`、`/reload` 和 `extensions_reload` 重建扩展工厂后仍命中旧代码——扩展内的 MCP 连接等顶层状态也随之遗留。`server/extension-module-cache.ts` 在每次创建 runtime 前注册受控目录（agentDir/extensions、agentDir/npm、cwd/.pi/extensions、cwd/.pi/npm，realpath 双形式匹配），并仅在用户显式触发的重建前（restartSession、`/reload` 命令、`reloadExtensions`）bump 代数——ESM 缓存不可释放，每次刷新多留一份模块实例，所以设置、提示词、MCP 保存共用的 `session.reload()` 不刷新；代数进程全局，刷新后其他对话懒加载受控模块也拿到新实例。bump 机制：resolve 钩子给受控模块 URL 追加 `?piextgen=<代数>` 绕开 ESM loader 永久缓存（CJS 的 require 会剥掉 search，无副作用），同时清空受控目录下的 require.cache 条目刷新 CJS 本体；`module.registerHooks` 不可用时 ESM 优雅降级为旧行为。.ts 由 jiti 每次实例化重新转译，天然新鲜。回归：`tests/restart-extension-cache-test.mjs` 覆盖 .ts 文件、npm CJS 包、npm ESM 包在 /restart、二次重启与 reloadExtensions() 下拿到新代码与新状态，普通 session.reload() 保持旧代码。
 
+## 本地扩展与外部工具
+
+无需单独安装 pi。管理页独立请求 `open-info` 的固定 ID `extensions:user`，创建并展示 `getAgentDir()/extensions`；默认 macOS/Linux 为 `~/.pi/agent/extensions/`，Windows 为 `%USERPROFILE%\.pi\agent\extensions\`，尊重 `PI_CODING_AGENT_DIR`。Desktop 打开目录，Web 复制服务端目录路径；请求沿用同源、clientId/cwd 和 quiesce 检查，不接受自定义创建路径。目录失败独立展示并可重试，不阻断包列表；已有内容不覆盖，项目级 `.pi/extensions/` 不自动创建，继续遵循项目信任规则。
+
+普通 `.ts`/`.js` 本地扩展由现有运行时加载，无需系统 Node.js、npm 或 Git。放入目录后重载或新建会话生效。社区 package 仍走原生包声明和安装路径，不直接复制进个人 extensions 目录；安装第三方依赖或调用外部命令的扩展可能需要宿主工具。
+
+不额外打包或自动安装 Node.js/npm/Git。包写操作和更新检查在实际需要时，以参数数组执行所需命令的 `--version`（5 秒、16 KB 上限，同一次 worker 去重），尊重原生 `npmCommand` 及其前缀参数。单包更新仅检查目标范围；离线检查保留原生跳过语义。Windows 使用 cross-spawn 处理 `.cmd`。探测进程由父 worker 调度器登记并清理。失败区分命令缺失、无法运行和普通包错误；安装日志中明确的 node/npm/git 缺失诊断也提供中英文提示，普通网络、编译等错误保留原样。没有永久探测缓存，环境补齐后可重试；应用 PATH 变更可能需要重启。不能静态预判任意扩展调用的全部外部程序。
+
+回归：`extensions-local-test.mjs` 在工具 PATH 清空时验证自定义目录、固定路径接口、目录失败隔离、文件保留与真实 SDK 加载/重载；支持指定打包 app 根目录。`extensions-worker-test.mjs` 验证缺失工具不会改配置、工具恢复后操作成功；浏览器回归覆盖目录入口、中英文和缺失工具提示及重试；`extensions-directory-desktop-test.mjs` 通过真实 Electron 验证打开目录 IPC，仅替换系统文件管理器调用。
+
 ## 内置扩展清单
 
 已安装页按内置扩展、安装包、单文件分组。六个内置条目由 `nativeExtensionRegistry` 与会话资源共同投影；包页签数量只统计安装包。内置清单独立请求，即使包 worker 失败仍能展示；不提供包更新、卸载或源码编辑。Workspace 子代理默认开启，独立全局开关与只读分工规则见 [子代理架构](architecture-subagents.md)，工具可被用户同名扩展替换。

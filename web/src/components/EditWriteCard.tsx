@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { FiChevronRight, FiMoreHorizontal } from "react-icons/fi";
 import type { UiToolCallBlock } from "../types";
-import { useT } from "../i18n";
+import { useChatT } from "../i18n";
 import { editWriteChange, type ChangeLine, type EditWriteChange } from "../edit-write-presentation";
 import { highlightLine, langFromPath } from "../hljs-lite";
 import type { ToolView } from "./ToolCallBlock";
@@ -22,7 +22,7 @@ function Lines({ lines, path }: { lines: ChangeLine[]; path: string }) {
 }
 
 function ChangeBody({ change, state }: { change: EditWriteChange; state: string }) {
-	const t = useT();
+	const t = useChatT();
 	const [expanded, setExpanded] = useState(false);
 	const allLines = change.hunks.reduce((sum, hunk) => sum + hunk.lines.length, 0);
 	let remaining = expanded ? Infinity : 12;
@@ -40,7 +40,7 @@ function ChangeBody({ change, state }: { change: EditWriteChange; state: string 
 }
 
 export function EditWriteCard({ item, compact = false, retried = false }: { item: Item; compact?: boolean; retried?: boolean }) {
-	const t = useT();
+	const t = useChatT();
 	const change = useMemo(() => editWriteChange(item.block, item.view.result), [item.block, item.view.result]);
 	const [open, setOpen] = useState(!compact && !retried);
 	useEffect(() => { if (retried) setOpen(false); }, [retried]);
@@ -70,7 +70,7 @@ export function EditWriteCard({ item, compact = false, retried = false }: { item
 }
 
 export function EditWriteGroup({ items, retriedIds }: { items: Item[]; retriedIds?: ReadonlySet<string> }) {
-	const t = useT();
+	const t = useChatT();
 	const [open, setOpen] = useState(true);
 	useEffect(() => {
 		const onJump = (event: Event) => {

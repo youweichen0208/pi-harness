@@ -1,3 +1,4 @@
+import { requireExtensionCommand } from "./extension-tools.js";
 import { DefaultPackageManager, SettingsManager, ProjectTrustStore, type PackageSource } from "@earendil-works/pi-coding-agent";
 import { writeFileSync, mkdirSync, renameSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -24,7 +25,27 @@ export async function extensionWork(input: WorkerRequest, progress: (message: st
 		if(scope === "project") isolated.setProjectPackages(entries); else isolated.setPackages(entries);
 		return new DefaultPackageManager({cwd,agentDir,settingsManager:isolated});
 	};
-	const checkUpdates = async () => (await Promise.all((["user","project"] as const).filter(scope=>scope==="user"||trusted).map(scope=>scopedManager(scope,packages(scope)).checkForAvailableUpdates()))).flat();
+	const checkedCommands = new Set<string>();
+	const requireTools = async (source: string, operation: "install" | "remove" | "check") => {
+		const kind = sourceInfo(source).kind;
+		const configured = settings.getNpmCommand();
+		const command = kind === "npm" ? configured?.length ? configured : ["npm"] : kind === "git" && operation !== "remove" ? ["git"] : undefined;
+		if (!command) return;
+		const key = JSON.stringify(command);
+		if (!checkedCommands.has(key)) { await requireExtensionCommand(command, cwd); checkedCommands.add(key); }
+	};
+	const checkUpdates = async (onlyId?: string) => {
+		const selected = (scope: ExtensionScope) => packages(scope).filter(entry => !onlyId || `${scope}:${sourceOf(entry)}` === onlyId);
+		if (["1", "true", "yes"].includes(process.env.PI_OFFLINE?.toLowerCase() ?? "")) return [];
+		for (const scope of ["user", "project"] as const) {
+			if (scope === "project" && !trusted) continue;
+			for (const entry of selected(scope)) {
+				const source = sourceOf(entry);
+				if (!sourceInfo(source).pinned && manager.getInstalledPath(source, scope)) await requireTools(source, "check");
+			}
+		}
+		return (await Promise.all((["user","project"] as const).filter(scope=>scope==="user"||trusted).map(scope=>scopedManager(scope,selected(scope)).checkForAvailableUpdates()))).flat();
+	};
 	const backupPath = join(agentDir, "webui-extension-filters.json");
 	const backup = readJson(backupPath);
 	const backupKey = (id: string) => createHash("sha256").update(`${id.startsWith("user:") ? "global" : cwd}:${id}`).digest("hex");
@@ -64,10 +85,12 @@ export async function extensionWork(input: WorkerRequest, progress: (message: st
 		if (op.action === "install") {
 			if (!input.source) throw Error("Install preview expired");
 			if (["@youweichen/pi-harness", "pi-harness", "@earendil-works/pi-coding-agent"].includes(sourceInfo(input.source).name)) throw Error("Manage this package with the application updater");
+			await requireTools(input.source, "install");
 			await manager.install(input.source, { local });
 			if (input.version !== settingsVersion(cwd,agentDir)) throw Error("Pi settings changed during install; files were installed but configuration was not overwritten");
 			manager.addSourceToSettings(input.source, { local });
 		} else if (op.action === "remove") {
+			if (target?.path) await requireTools(source, "remove");
 			await manager.remove(source, { local });
 			await settings.reload(); manager.removeSourceFromSettings(source, { local });
 			delete backup[backupKey(target!.id)]; saveBackup();
@@ -90,6 +113,7 @@ export async function extensionWork(input: WorkerRequest, progress: (message: st
 			if (!trusted) throw Error("Project is not trusted");
 			if (packages(destination).some(p => sourceInfo(sourceOf(p)).unpinned === sourceInfo(source).unpinned)) throw Error("Package already declared in destination scope");
 			const movedSource = target!.kind === "local" ? target!.path ?? source : source;
+			await requireTools(movedSource, "install");
 			await manager.install(movedSource, { local: destination === "project" });
 			if (input.version !== settingsVersion(cwd,agentDir)) throw Error("Pi settings changed during move; destination files installed but configuration retained");
 			const old = entries[index], moved = typeof old === "string" ? movedSource : { ...old, source: movedSource };
@@ -97,7 +121,7 @@ export async function extensionWork(input: WorkerRequest, progress: (message: st
 			setPackages(scope, entries.filter((_,i) => i !== index));
 			const oldBackup = backup[backupKey(target!.id)]; if (oldBackup) { backup[backupKey(`${destination}:${movedSource}`)] = typeof oldBackup === "string" ? movedSource : { ...oldBackup, source: movedSource }; saveBackup(); }
 		} else if (op.action === "update" || op.action === "update-all") {
-			const updates = await checkUpdates();
+			const updates = await checkUpdates(op.action === "update" ? target!.id : undefined);
 			const eligible = state.packages.filter(p => !p.protected && p.trusted && !p.pinned && updates.some(u => u.source === p.source && u.scope === p.scope) && (op.action === "update-all" || p.id === target!.id));
 			if (!eligible.length) throw Error("No updates available");
 			for (const [i,p] of eligible.entries()) {

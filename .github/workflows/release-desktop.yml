@@ -115,7 +115,9 @@ jobs:
         run: |
           executable="release/mac-arm64/pi.app/Contents/MacOS/pi"
           ELECTRON_RUN_AS_NODE=1 "$executable" tests/extensions-worker-test.mjs release/mac-arm64/pi.app/Contents/Resources/app
+          ELECTRON_RUN_AS_NODE=1 "$executable" tests/extensions-local-test.mjs release/mac-arm64/pi.app/Contents/Resources/app
           node tests/windows-rendering-test.mjs "$executable"
+          node tests/extensions-directory-desktop-test.mjs "$executable"
 
       - uses: actions/upload-artifact@v4
         if: always()
@@ -226,9 +228,13 @@ jobs:
           $env:ELECTRON_RUN_AS_NODE = "1"
           & ./release/win-unpacked/pi.exe tests/extensions-worker-test.mjs release/win-unpacked/resources/app | Out-Host
           if ($LASTEXITCODE -ne 0) { throw "Packaged extension worker failed" }
+          & ./release/win-unpacked/pi.exe tests/extensions-local-test.mjs release/win-unpacked/resources/app | Out-Host
+          if ($LASTEXITCODE -ne 0) { throw "Packaged local extensions failed" }
           Remove-Item Env:ELECTRON_RUN_AS_NODE
           node tests/windows-rendering-test.mjs release/win-unpacked/pi.exe
           if ($LASTEXITCODE -ne 0) { throw "Packaged rendering failed" }
+          node tests/extensions-directory-desktop-test.mjs release/win-unpacked/pi.exe
+          if ($LASTEXITCODE -ne 0) { throw "Packaged extension directory failed" }
 
       - uses: actions/upload-artifact@v4
         if: always()
@@ -326,6 +332,8 @@ jobs:
           node tests/native-tools-desktop-test.mjs "$executable" "$root"
           ELECTRON_RUN_AS_NODE=1 "$executable" tests/provider-auth-test.mjs "$root"
           ELECTRON_RUN_AS_NODE=1 "$executable" tests/model-sources-test.mjs "$root"
+          ELECTRON_RUN_AS_NODE=1 "$executable" tests/extensions-local-test.mjs "$root"
+          ELECTRON_RUN_AS_NODE=1 "$executable" tests/extensions-worker-test.mjs "$root"
 
       - name: Verify deb installation and previous-version data
         env:

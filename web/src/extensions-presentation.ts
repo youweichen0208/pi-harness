@@ -18,3 +18,14 @@ export function catalogInstallation(packages: ExtensionPackage[], name: string) 
 	const matches = packages.filter(p => p.kind === "npm" && p.name === name);
 	return matches.find(p => p.update && p.trusted && !p.protected && !p.pinned) ?? matches[0];
 }
+
+/** Keep the native diagnostic after a localized, actionable explanation. */
+export function extensionErrorMessage(message: string, t: (key: "extToolMissing" | "extToolUnusable" | "extNodeInstallHint", vars?: Record<string, string>) => string): string {
+	const match = /^\[extension-tool-(missing|unusable):([^\]]+)\]\s*/.exec(message);
+	if (!match) return message;
+	let tool: string;
+	try { tool = decodeURIComponent(match[2]); } catch { return message; }
+	return [t(match[1] === "missing" ? "extToolMissing" : "extToolUnusable", { tool }),
+		["npm", "node"].includes(tool) ? t("extNodeInstallHint") : "",
+		message.slice(match[0].length)].filter(Boolean).join("\n");
+}

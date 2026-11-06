@@ -38,7 +38,7 @@ import { StreamMarkdown } from "./StreamMarkdown";
 import { ThinkingBlock } from "./ThinkingBlock";
 import { GrepSummary, liveNestedCalls, ReadGroup, ToolCallBlock, type ToolView } from "./ToolCallBlock";
 import { EditWriteCard, EditWriteGroup } from "./EditWriteCard";
-import { useT, type Translate } from "../i18n";
+import { useChatT, type Translate } from "../i18n";
 import { splitLeakedThinking } from "../leaked-thinking";
 import { type ToolTextIncident, unexecutedToolText } from "../tool-text";
 import { parseSkillBlock, type SkillBlock } from "../skill-block";
@@ -209,7 +209,7 @@ export const Message = memo(function Message({
 	questionsActive,
 	turnContinues,
 }: MessageProps) {
-	const t = useT();
+	const t = useChatT();
 	const outputLimited = message.role === "assistant" && message.stopReason === "length";
 	const hasPartialReply = message.content.some(block => block.type === "text" && typeof block.text === "string" && !!block.text.trim());
 	const cwd = useContext(WorkspacePathContext);
@@ -466,7 +466,7 @@ export const Message = memo(function Message({
 			}
 			const thinking = message.role === "assistant" ? asThinking(block) : null;
 			if (thinking && !thinking.thinking.trim()) continue;
-			push(<Block key={`${message.id}-${i}`} suppressLeak={!!incident} block={block} user={message.role === "user"} toolResults={toolResults} liveOutputs={liveOutputs} toolStatuses={toolStatuses} streaming={streaming} abandoned={abandoned} isLast={isLast && i === message.content.length - 1} onKillBash={onKillBash} toolsWrap={toolsWrap} thinkingWrap={thinkingWrap} answerKey={answerKey} conversationId={conversationId} />, !!thinking, thinking ? stats => {
+			push(<Block key={`${message.id}-${i}`} suppressLeak={!!incident} block={block} user={message.role === "user"} toolResults={toolResults} liveOutputs={liveOutputs} toolStatuses={toolStatuses} streaming={streaming} runActive={toolsRunning ?? streaming} abandoned={abandoned} isLast={isLast && i === message.content.length - 1} onKillBash={onKillBash} toolsWrap={toolsWrap} thinkingWrap={thinkingWrap} answerKey={answerKey} conversationId={conversationId} />, !!thinking, thinking ? stats => {
 				stats.thinking++;
 				stats.thoughtMs += thinking.durationMs ?? 0;
 				if (streaming && isLast && i === message.content.length - 1) stats.running = true;
@@ -718,7 +718,7 @@ export const Message = memo(function Message({
 });
 
 export function SystemEvent({ message }: { message: UiMessage }) {
-	const t = useT();
+	const t = useChatT();
 	const text = message.content.map(b => asText(b)?.text ?? "").filter(Boolean).join("\n");
 	return <div className="system-event" data-msg-id={message.id} title={text || undefined}>
 		<span>{t("systemPromptLoaded")}{message.timestamp ? ` · ${formatTime(message.timestamp)}` : ""}</span>
@@ -736,7 +736,7 @@ function ReplyMarkdown({ text, answerKey, conversationId, runnable }: { text: st
 
 /** Collapsible card for an attached file (customType "file"). */
 function AttachmentCard({ message }: { message: UiMessage }) {
-	const t = useT();
+	const t = useChatT();
 	const [open, setOpen] = useState(false);
 	const details = (message.details ?? {}) as {
 		editorSnapshot?: PromptAttachment["editorSnapshot"];
@@ -854,7 +854,7 @@ function stripFileWrapper(text: string): string {
  * full SKILL.md content. The user's own question (args) renders separately.
  */
 function SkillCard({ block }: { block: SkillBlock }) {
-	const t = useT();
+	const t = useChatT();
 	const [expanded, setExpanded] = useState(false);
 	const content = splitFrontmatter(block.content);
 	return (
@@ -891,6 +891,7 @@ function Block({
 	liveOutputs,
 	toolStatuses,
 	streaming,
+	runActive,
 	abandoned,
 	isLast,
 	onKillBash,
@@ -906,6 +907,7 @@ function Block({
 	liveOutputs: ReadonlyMap<string, LiveToolOutput>;
 	toolStatuses: ReadonlyMap<string, ToolStatus>;
 	streaming: boolean;
+	runActive?: boolean;
 	/** Owning assistant message ended aborted/error (issue #66). */
 	abandoned?: boolean;
 	isLast: boolean;
@@ -918,7 +920,7 @@ function Block({
 	answerKey?: string;
 	conversationId?: string;
 }) {
-	const t = useT();
+	const t = useChatT();
 	const text = asText(block);
 	if (text) {
 		const live = streaming && isLast;
@@ -972,6 +974,7 @@ function Block({
 			codemode: live?.codemode,
 			subagents: live?.subagents,
 			streaming,
+			runActive,
 			...(abandoned ? { abandoned: true } : {}),
 			status: toolStatuses.get(toolCall.id),
 		};

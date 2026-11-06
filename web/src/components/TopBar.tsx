@@ -20,7 +20,7 @@ import { desktopAPI } from "../desktop";
 import type { ChatState } from "../use-chat";
 import type { ClientMessage, CommandDef } from "../types";
 import { Dropdown, DropdownItem } from "./Dropdown";
-import { ModelThinking } from "./ModelThinking";
+import { ModelPicker } from "./ModelPicker";
 import { SoundSettingsPanel } from "./SoundSettings";
 import { DesktopWindowControls } from "./DesktopWindowControls";
 import type { SoundKind, SoundSettings } from "../sounds";
@@ -99,6 +99,7 @@ export function TopBar({
 	const interrupted = incident?.state === "stopped";
 	const reminding = incident?.state === "reminding";
 	const task = chat.state?.conversationId === chat.activeConversationId ? chat.state?.taskProgress : null;
+	const hasCodemode = chat.state?.conversationId === chat.activeConversationId && chat.state?.codemode?.history.some(message => message.role === "assistant" && message.content.some(block => block.type === "toolCall" && block.name === "codemode"));
 	const planItems = task?.plan?.items.filter((item) => item.status !== "removed") ?? task?.steps ?? [];
 	const currentStep = planItems.findIndex((item) => item.status === "running");
 	const completedSteps = planItems.filter(item => item.status === "done").length;
@@ -188,7 +189,7 @@ export function TopBar({
 			</div>
 
 			{view !== "nodes" && <button type="button" className="project-panel-toggle" title={t(leftCollapsed ? "expandProjects" : "collapseProjects")} aria-label={t(leftCollapsed ? "expandProjects" : "collapseProjects")} aria-expanded={!leftCollapsed} onClick={() => onOpenPanel("left")}><FiSidebar /></button>}
-			<div className="header-location"><button type="button" className="conversation-title-button" title={t("treeTitle")} aria-label={`${t("currentConversation")} · ${t("treeTitle")}`} onClick={() => openSessionTree()}><strong>{t("currentConversation")}</strong><FiChevronDown className="conversation-title-chevron" aria-hidden="true" /></button>{(interrupted || reminding || planItems.length > 0 || !!task?.plan?.awaitingConfirmation) && <button type="button" className={`header-task-progress${interrupted ? " interrupted" : reminding ? " reminding" : ""}`} title={t("taskProgress")} onClick={onOpenTask}>{interrupted ? t("toolRecoveryInterrupted") : reminding ? t("working") : task?.plan?.awaitingConfirmation ? t("taskProgress") : t("taskPlanPosition", { current: currentStep >= 0 ? currentStep + 1 : completedSteps, total: planItems.length })}{planItems.length > 0 && <span className="header-task-segments" aria-hidden="true">{planItems.map(item => <i key={item.id} className={item.status} />)}</span>}</button>}</div>
+			<div className="header-location"><button type="button" className="conversation-title-button" title={t("treeTitle")} aria-label={`${t("currentConversation")} · ${t("treeTitle")}`} onClick={() => openSessionTree()}><strong>{t("currentConversation")}</strong><FiChevronDown className="conversation-title-chevron" aria-hidden="true" /></button>{(interrupted || reminding || hasCodemode || planItems.length > 0 || !!task?.plan?.awaitingConfirmation) && <button type="button" className={`header-task-progress${interrupted ? " interrupted" : reminding ? " reminding" : ""}`} title={t("taskProgress")} onClick={onOpenTask}>{interrupted ? t("toolRecoveryInterrupted") : reminding ? t("working") : task?.plan?.awaitingConfirmation || !planItems.length ? t("taskProgress") : t("taskPlanPosition", { current: currentStep >= 0 ? currentStep + 1 : completedSteps, total: planItems.length })}{planItems.length > 0 && <span className="header-task-segments" aria-hidden="true">{planItems.map(item => <i key={item.id} className={item.status} />)}</span>}</button>}</div>
 			<div className="topbar-actions">
 				<div className="panel-tab-bar">
 				<div className="view-switch" role="tablist" aria-label={t("viewSwitch")}>
@@ -205,13 +206,13 @@ export function TopBar({
 
 				</div>
 
-				{/* Desktop toolbar — hidden on mobile (model/thinking move into the
+				{/* Desktop toolbar — hidden on mobile (model controls move into the
 				    input row; sound/lang fold into "⋯" below). Update-check and
 				    GitHub link live only inside the "⋯" panel now, on both
 				    desktop and mobile — no separate top-level chips for them. */}
 				<div className="topbar-desktop">
-					<ModelThinking
-						state={chat.state ? { conversationId: chat.state.conversationId, runSettings: chat.state.runSettings, model: chat.state.model, routedModel: chat.state.routedModel, thinkingLevel: chat.state.thinkingLevel, availableThinkingLevels: chat.state.availableThinkingLevels } : null}
+					<ModelPicker
+						state={chat.state ? { conversationId: chat.state.conversationId, runSettings: chat.state.runSettings, model: chat.state.model, routedModel: chat.state.routedModel } : null}
 						models={chat.models}
 						modelsLoading={chat.modelsLoading}
 						send={send}

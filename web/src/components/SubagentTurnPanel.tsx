@@ -1,7 +1,7 @@
 import { createContext, useEffect, useState } from "react";
 import { FiChevronRight, FiGitBranch, FiCheck, FiX, FiClock, FiAlertTriangle } from "react-icons/fi";
 import { commandDuration } from "../bash-presentation";
-import { useT } from "../i18n";
+import { useChatT } from "../i18n";
 import { subagentPresentation, type SubagentItemView } from "../subagent-presentation";
 import { subagentErrorGroups, subagentFailed } from "../subagent-errors";
 import type { UiToolCallBlock } from "../types";
@@ -12,12 +12,12 @@ export interface SubagentTurnCall { block: UiToolCallBlock; view: ToolView }
 export const SubagentTurnContext = createContext<ReadonlyMap<string, SubagentTurnCall[]>>(new Map());
 export const subagentTerminal = (item: SubagentItemView) => ["completed", "failed", "cancelled"].includes(item.phase);
 export function SubagentStatus({ item }: { item: SubagentItemView }) {
-	const t = useT();
+	const t = useChatT();
 	const key = ({ queued: "toolQueued", running: "processRunning", stopping: "subagentStopping", completed: "executionCompleted", failed: "error", cancelled: "subagentCancelled" } as const)[item.phase];
 	return <span className={`subagent-task-status ${item.phase}`}>{item.phase === "running" || item.phase === "stopping" ? <i className="thinking-spinner" /> : item.phase === "completed" ? <FiCheck /> : subagentFailed(item) ? <FiX /> : <FiClock />}{t(key)}</span>;
 }
 export function SubagentTurnPanel({ calls, fallback }: { calls: SubagentTurnCall[]; fallback: (call: SubagentTurnCall) => React.ReactNode }) {
-	const t = useT();
+	const t = useChatT();
 	const [manualOpen, setOpen] = useState<boolean>();
 	const [failuresOpen, setFailuresOpen] = useState(false);
 	const [selected, setSelected] = useState<string>();

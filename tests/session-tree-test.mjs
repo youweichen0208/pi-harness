@@ -192,10 +192,10 @@ try {
 		assert.equal(await page.locator(".sidebar-logo").evaluate(el => getComputedStyle(el).width), "24px");
 		assert.equal(await page.locator(".inputbox").evaluate(el => getComputedStyle(el).borderRadius), "8px");
 		assert.equal(await page.locator(".view-switch button.active").evaluate(el => getComputedStyle(el).color), "rgb(47, 122, 174)");
-		await page.locator(".thinking-control .chip").click();
-		const retryToggle = page.locator(".thinking-run-settings").getByRole("checkbox", { name: "自动重试" });
+		await page.locator(".input-tools-left > .dropdown .chip").click();
+		const retryToggle = page.locator(".model-run-settings").getByRole("checkbox", { name: "自动重试" });
 		await retryToggle.click(); await wait(() => state.runSettings.autoRetry);
-		await page.waitForFunction(() => document.querySelectorAll(".thinking-run-settings input")[1]?.checked);
+		await page.waitForFunction(() => document.querySelectorAll(".model-run-settings input")[1]?.checked);
 		await retryToggle.click(); await wait(() => !state.runSettings.autoRetry);
 		await page.keyboard.press("Escape");
 		await page.getByRole("button", { name: "设置", exact: true }).click();

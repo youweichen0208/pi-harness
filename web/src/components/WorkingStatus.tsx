@@ -1,11 +1,11 @@
 import type { UiState, ToolStatus } from "../types";
 import { useEffect, useRef, useState } from "react";
-import { useT } from "../i18n";
+import { useChatT } from "../i18n";
 import { conversationWait, type WaitStage } from "../waiting-indicator";
 import { skillAwarePreview } from "../skill-block";
 
 function WaitingIndicator({ stage, onStop }: { stage: WaitStage; onStop?: () => void }) {
-	const t = useT();
+	const t = useChatT();
 	const started = useRef(Date.now());
 	const [elapsed, setElapsed] = useState(0);
 	useEffect(() => {
@@ -29,7 +29,7 @@ export function ConversationWorkingStatus({ state, connected, silenceNotified, t
 	state: Pick<UiState, "messages" | "streamingMessage" | "isStreaming" | "conversationId" | "model" | "recovery"> & Partial<Pick<UiState, "queue">>;
 	connected: boolean; silenceNotified: boolean; toolStatuses: ReadonlyMap<string, ToolStatus>; onStop?: () => void;
 }) {
-	const t = useT();
+	const t = useChatT();
 	const lastUser = state.messages.findLast(m => m.role === "user");
 	const previous = useRef({ conversation: state.conversationId, user: lastUser?.id, steering: [] as string[] });
 	const [steeredUser, setSteeredUser] = useState<string>();

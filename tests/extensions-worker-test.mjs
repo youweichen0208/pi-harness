@@ -24,8 +24,8 @@ writeFileSync(join(packagePath, 'package.json'), JSON.stringify({ name: 'pi-work
 writeFileSync(join(packagePath, 'index.js'), 'export default () => {};');
 writeFileSync(join(prefix, 'package.json'), JSON.stringify({ private: true, dependencies: { 'pi-worker-fixture': '1.0.0' } }));
 writeFileSync(join(agentDir, 'settings.json'), JSON.stringify({ packages: ['npm:pi-worker-fixture'] }));
-async function run(input) {
-	const child = fork(join(appRoot, 'dist/server/extensions-worker.js'), ['--extensions-worker'], { execArgv: input.action === 'mutate' ? ['--import', pathToFileURL(preload).href] : [], stdio: ['ignore', 'pipe', 'pipe', 'ipc'], env: { ...process.env, npm_config_offline: 'true', npm_config_audit: 'false', npm_config_fund: 'false' } });
+async function run(input, env = {}, expectedError) {
+	const child = fork(join(appRoot, 'dist/server/extensions-worker.js'), ['--extensions-worker'], { execArgv: input.action === 'mutate' ? ['--import', pathToFileURL(preload).href] : [], stdio: ['ignore', 'pipe', 'pipe', 'ipc'], env: { ...process.env, npm_config_offline: 'true', npm_config_audit: 'false', npm_config_fund: 'false', ...env } });
 	let result, error, logs = '';
 	child.stdout.on('data', value => logs += value); child.stderr.on('data', value => logs += value);
 	child.on('message', message => { if (message.progress) logs += message.progress + '\n'; if (message.state) result = message.state; if (message.error) error = message.error; });
@@ -33,6 +33,7 @@ async function run(input) {
 	try {
 		child.send({ cwd, agentDir, ...input });
 		await new Promise((resolve, reject) => { child.once('error', reject); child.once('close', (code, signal) => { console.log(`worker exit ${code}/${signal}: ${logs.trim()}`); resolve(); }); });
+		if (expectedError) { assert(error?.includes(expectedError), `${error}\n${logs}`); return; }
 		assert(result && !error, `Package worker stopped without final state: ${error ?? ''}\n${logs}`);
 		return result;
 	} finally { clearTimeout(timer); }
@@ -40,7 +41,15 @@ async function run(input) {
 try {
 	const state = await run({ action: 'list' });
 	const item = state.packages.find(item => item.name === 'pi-worker-fixture'); assert(item);
-	const after = await run({ action: 'mutate', version: state.version, operation: { action: 'remove', id: item.id } });
+	const emptyPath = join(root, 'empty-bin'); mkdirSync(emptyPath);
+	const withoutTools = { PATH: emptyPath, Path: emptyPath };
+	const before = readFileSync(join(agentDir, 'settings.json'), 'utf8');
+	await run({ action: 'mutate', version: state.version, operation: { action: 'install' }, source: 'npm:missing-fixture' }, withoutTools, '[extension-tool-missing:npm]');
+	await run({ action: 'mutate', version: state.version, operation: { action: 'install' }, source: 'git:github.com/fixture/no-network' }, withoutTools, '[extension-tool-missing:git]');
+	await run({ action: 'check' }, withoutTools, '[extension-tool-missing:npm]');
+	await run({ action: 'mutate', version: state.version, operation: { action: 'remove', id: item.id } }, withoutTools, '[extension-tool-missing:npm]');
+	assert.equal(readFileSync(join(agentDir, 'settings.json'), 'utf8'), before);
+	const after = await run({ action: 'mutate' , version: state.version, operation: { action: 'remove', id: item.id } });
 	assert(!after.packages.some(candidate => candidate.id === item.id));
 	assert(!existsSync(packagePath));
 	assert.deepEqual(JSON.parse(readFileSync(join(agentDir, 'settings.json'))).packages, []);

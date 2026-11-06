@@ -1,7 +1,7 @@
 import { useWikiCoordinator } from "./use-wiki-coordinator";
 import { WikiCoordinationError, type WikiOperation } from "./wiki-coordinator";
 import type { WikiProjectReference } from "./types";
-import { ModelThinking } from "./components/ModelThinking";
+import { ModelPicker } from "./components/ModelPicker";
 import { FluidDrawer } from "./components/FluidDrawer";
 import { UiIcon } from "./components/UiIcon";
 import { DatabaseWorkbench } from "./components/DatabaseWorkbench";
@@ -1200,11 +1200,9 @@ export function App() {
 	}, [chat.state?.cwd, chat.activeConversationId, addImageFilesCb]);
 
 
-	// Narrow snapshot of the model/thinking fields for the memoized ChatInput →
-	// ModelThinking chain; identity is stable while tokens stream in.
+	// Narrow snapshot of the model fields for the memoized ChatInput →
+	// ModelPicker chain; identity is stable while tokens stream in.
 	const model = chat.state?.model;
-	const thinkingLevel = chat.state?.thinkingLevel;
-	const availableThinkingLevels = chat.state?.availableThinkingLevels;
 	const modelState = useMemo(
 		() =>
 			conversationState
@@ -1213,13 +1211,11 @@ export function App() {
 						conversationId: conversationState.conversationId,
 						runSettings: conversationState.runSettings,
 						routedModel: conversationState?.routedModel,
-						thinkingLevel: thinkingLevel ?? "off",
-						availableThinkingLevels: availableThinkingLevels ?? [],
 				  }
 				: null,
 		// Deps are the STABLE inner refs (server reuses them across snapshots),
 		// so the object identity survives token deltas and ChatInput's memo holds.
-		[model, thinkingLevel, availableThinkingLevels, conversationState?.routedModel, conversationState?.conversationId, conversationState?.runSettings?.autoCompaction, conversationState?.runSettings?.autoRetry],
+		[model, conversationState?.routedModel, conversationState?.conversationId, conversationState?.runSettings?.autoCompaction, conversationState?.runSettings?.autoRetry],
 	);
 
 	// A same-project history switch changes the owner without changing cwd.
@@ -1499,6 +1495,9 @@ export function App() {
 						>
 							<div className="file-list-host" hidden={inlinePreview}>
 								<RightPanel
+									codemode={conversationState?.codemode}
+									liveOutputs={chat.liveOutputs}
+									toolStatuses={chat.toolStatuses}
 									taskFocusRequest={taskFocusRequest}
 									onSearchFiles={openFileSearch}
 									active={!filesCollapsed && !inlinePreview && !switching && view === "chat" && (!filesOverlay || drawer === "right")}
@@ -1538,7 +1537,7 @@ export function App() {
 							onReferences={updateWikiReferences}
 							onChatAction={wikiChatAction}
 							empty={!conversationState?.messages.some(message => message.role === "user") && !conversationState?.isStreaming}
-							modelControls={<ModelThinking state={modelState} models={chat.models} modelsLoading={chat.modelsLoading} send={send} onManageModels={openManageModels} />}
+							modelControls={<ModelPicker state={modelState} models={chat.models} modelsLoading={chat.modelsLoading} send={send} onManageModels={openManageModels} />}
 							notices={chat.notices.length > 0 && <div className="notices wiki-status-notices">{chat.notices.map(n => <NoticeToast key={n.id} notice={n} onDismiss={dismissNotice} onOpenExtensions={openExtensionSettings} onSelectDirectory={() => setCwdNoticePicker(n.id)} />)}</div>}
 							chatOpen={wikiChatOpen}
 							chatWidth={wikiChatWidth}

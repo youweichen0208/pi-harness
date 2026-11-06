@@ -510,7 +510,10 @@ ipcMain.handle("pi-extension-open-path", async (event, request) => {
 	});
 	const result = await response.json();
 	if (!response.ok || typeof result.absolute !== "string") throw new Error(result.error || "Installed path unavailable");
-	shell.showItemInFolder(result.absolute);
+	if (request.id === "extensions:user") {
+		const error = await shell.openPath(result.absolute);
+		if (error) throw new Error(error);
+	} else shell.showItemInFolder(result.absolute);
 });
 ipcMain.handle("pi-window-state-read", (event) => {
 	const win = windowOf(event);

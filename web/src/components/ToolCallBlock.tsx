@@ -24,7 +24,7 @@ import {
 	FiX,
 } from "react-icons/fi";
 import type { ToolStatus, UiMessage, UiSubagentProgress, UiToolCallBlock } from "../types";
-import { useT } from "../i18n";
+import { useChatT } from "../i18n";
 import { Markdown } from "./Markdown";
 import { highlightLine, langFromPath } from "../hljs-lite";
 import { displayReadPath, readPath, splitFrontmatter } from "../read-presentation";
@@ -40,6 +40,8 @@ export interface ToolView {
 	liveOutput?: string;
 	/** True when the session is streaming (tool may still be running). */
 	streaming: boolean;
+	/** Authoritative run lifecycle, independent of browser connectivity. */
+	runActive?: boolean;
 	/** Set the moment tool_execution_end fires (tool_status) — the command
 	 *  exited but the model hasn't responded yet. */
 	status?: ToolStatus;
@@ -71,7 +73,7 @@ function notifyToolHover(toolCallId: string | null) {
 
 /** Consecutive reads form one quiet step. Each file remains inspectable. */
 export function ReadGroup({ items, wrap }: { items: { block: UiToolCallBlock; view: ToolView }[]; wrap?: boolean }) {
-	const t = useT();
+	const t = useChatT();
 	const [open, setOpen] = useState(false);
 	const paths = items.map(({ block }) => readPath(block.argumentsText) ?? block.name);
 	const pending = items.some(({ view }) => view.streaming && !view.result && !view.status && !view.abandoned);
@@ -91,7 +93,7 @@ export function ReadGroup({ items, wrap }: { items: { block: UiToolCallBlock; vi
 }
 
 function ReadFileRow({ block, view, wrap }: { block: UiToolCallBlock; view: ToolView; wrap?: boolean }) {
-	const t = useT();
+	const t = useChatT();
 	const [open, setOpen] = useState(false);
 	const path = readPath(block.argumentsText) ?? block.name;
 	const content = view.result?.content.map((part) => part.type === "text" && typeof part.text === "string" ? part.text : "").join("") ?? view.liveOutput ?? "";
@@ -100,7 +102,7 @@ function ReadFileRow({ block, view, wrap }: { block: UiToolCallBlock; view: Tool
 }
 
 export function GrepSummary({ block, view, wrap }: { block: UiToolCallBlock; view: ToolView; wrap?: boolean }) {
-	const t = useT();
+	const t = useChatT();
 	const [open, setOpen] = useState(false);
 	let pattern = "";
 	let path = "";
@@ -141,7 +143,7 @@ function toolIcon(name: string) {
 }
 
 function ToolArguments({ text }: { text: string }) {
-	const t = useT();
+	const t = useChatT();
 	let entries: [string, unknown][] | undefined;
 	try {
 		const value: unknown = JSON.parse(text);
@@ -319,7 +321,7 @@ export const ToolCallBlock = memo(function ToolCallBlock(props: ToolCallBlockPro
 });
 
 function TaskPlanCard({ block, view }: Pick<ToolCallBlockProps, "block" | "view">) {
-	const t = useT();
+	const t = useChatT();
 	let steps: { id: string; title: string }[] = [];
 	try { const parsed = JSON.parse(block.argumentsText ?? "{}"); if (Array.isArray(parsed.steps)) steps = parsed.steps.filter((step: unknown) => typeof step === "object" && step !== null && typeof (step as { title?: unknown }).title === "string"); } catch { /* streamed arguments may be incomplete */ }
 	const [open, setOpen] = useState(!view.result);
@@ -330,7 +332,7 @@ function TaskPlanCard({ block, view }: Pick<ToolCallBlockProps, "block" | "view"
 }
 
 function BashCommandHeader({ command, original, directory, running, elapsed, status, full, onFull, onKill, children }: { command: string; original: string; directory: string | null; running: boolean; elapsed: number; status: string; full: boolean; onFull: () => void; onKill?: () => void; children: React.ReactNode }) {
-	const t = useT();
+	const t = useChatT();
 	const commit = /^git\s+commit\s+(?:-q\s+)?-m\s+(?:"([^"$`]+)"|'([^']+)')\s*$/.exec(command);
 	const label = useRef<HTMLSpanElement>(null);
 	const [clipped, setClipped] = useState(false);
@@ -354,7 +356,7 @@ function BashCommandHeader({ command, original, directory, running, elapsed, sta
 
 function RegularToolCallBlock({ block, view, onKillBash, wrap = true, rawSubagent = false }: ToolCallBlockProps) {
 	const nestedCalls = view.result?.nestedCalls ?? view.nestedCalls;
-	const t = useT();
+	const t = useChatT();
 	const quietSubagent = block.name === "subagent";
 	const [open, setOpen] = useState(quietSubagent && !rawSubagent && !view.result?.isError ? false : wrap);
 	const [copyError, setCopyError] = useState(false);
@@ -706,7 +708,7 @@ function formatDuration(ms?: number): string {
 
 /** Numbered plain output stays text-only; path styling never interprets HTML. */
 function BashSteps({ run, wrap }: { run: BashStepRun; wrap: boolean }) {
-	const t = useT();
+	const t = useChatT();
 	const [selected, setSelected] = useState<number | null>(() => run.steps.findIndex((step) => step.state === "failed"));
 	return <div className="bash-steps">{run.steps.map((step, index) => {
 		const visible = selected === index;
@@ -724,7 +726,7 @@ function BashSteps({ run, wrap }: { run: BashStepRun; wrap: boolean }) {
 }
 
 function BashFailure({ diagnostics, output, wrap }: { diagnostics: ReturnType<typeof parseBashDiagnostics>; output: string; wrap: boolean }) {
-	const t = useT();
+	const t = useChatT();
 	const [raw, setRaw] = useState(false);
 	return <div className="bash-failure">
 		<div className="bash-failure-list">{diagnostics.map((item, index) => <div key={`${item.path}:${item.line}:${index}`} className="bash-failure-line"><button type="button" onClick={() => window.dispatchEvent(new CustomEvent("pi-harness:open-tool-file", { detail: item }))}>{item.path}:{item.line}{item.column ? `:${item.column}` : ""}</button><span>{item.message}</span></div>)}</div>
@@ -734,7 +736,7 @@ function BashFailure({ diagnostics, output, wrap }: { diagnostics: ReturnType<ty
 }
 
 function BashOutput({ output, wrap, cwd, searchOutput, compact = false, command = "" }: { output: string; wrap: boolean; cwd: string; searchOutput: "standalone" | "mixed" | "none"; compact?: boolean; command?: string }) {
-	const t = useT();
+	const t = useChatT();
 	const [all, setAll] = useState(false);
 	const scroller = useRef<HTMLDivElement>(null);
 	const [overflow, setOverflow] = useState(false);

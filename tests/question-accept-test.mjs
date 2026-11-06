@@ -153,10 +153,20 @@ try {
 	assert.equal(await offer.locator('.question-other.selected').count(), 1);
 	await offer.getByRole('radio').nth(1).click();
 	await page.screenshot({ path: 'tests/scratch/question-final-offer.png' });
-	reply = '已收到回答。';
+	reply = '❓ **Q146** - **判断职责**：选择职责\n- **A.** 意图识别\n- **B.** 槽位抽取\n- **C.** 引擎路由\n- **D.** API 编排\n\n➡️ 推荐 (b)。抽取字段';
 	await bar.getByRole('button', { name: '发送回答', exact: true }).click();
 	await page.getByText('Q1：(b) 留到周一', { exact: true }).waitFor();
 	console.log('PASS final offer preserves A/B prose, starts unselected, supports Other and submits only on Send');
+	const choices = page.locator('.question-card').filter({ hasText: 'Q146' });
+	await choices.locator('.question-option.selected:not([disabled])').waitFor();
+	assert.equal(await choices.getByRole('radio').count(), 5, 'all four bold choices plus Other are visible');
+	assert.match(await choices.locator('.question-option.selected').innerText(), /槽位抽取/);
+	await choices.getByRole('radio').nth(2).click();
+	reply = '已收到回答。';
+	await bar.getByRole('button', { name: '发送回答', exact: true }).click();
+	await page.getByText('Q146 判断职责：(c) 引擎路由', { exact: true }).waitFor();
+	console.log('PASS #146 bold option labels render all choices and submit a nonrecommended answer');
+
 } catch (error) {
 	console.error('FAIL', error);
 	process.exitCode = 1;

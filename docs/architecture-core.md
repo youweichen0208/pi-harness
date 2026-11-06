@@ -38,6 +38,10 @@ OpenAI 代理由 `server/openai-proxy.ts` 在服务启动时安装，默认关�
 
 同时：delta 活跃期（1.5s 内有增量）snapshot 降为**事件驱动检查点**——agent_settled / tool_execution_end 立即 flush，其余事件走 2s 兜底定时器（增量负责流畅度、快照只做边界校准）。单测：`tests/unit/message-delta.test.ts`。
 
+### Codemode 持久展示记录
+
+协议 v52 的 `UiState.codemode` 从当前持久分支定位最近真实用户请求，保留压缩前的调用元数据与当前运行详情。它不属于模型上下文，不修改 `messages` 或原生 JSONL。新请求替换记录，自动提醒不重置；切分支、恢复及刷新以权威快照为准。详情见 architecture-plugins.md「原生 Codemode 卡片」。
+
 ### `tool_delta` 同协议
 
 SDK `tool_execution_update.partialResult` 是累计输出快照，服务端发送 `replace: true`，前端替换当前工具输出（包括空快照），避免重复拼接。`bash_execution_update` 才是真正的增量，保持追加。两条路径均保留浏览器输出长度上限。协议版本 22 要求旧前端刷新。

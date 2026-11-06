@@ -4,7 +4,6 @@ import { getClientId } from "../use-chat";
 import type { WikiCoordinator } from "../wiki-coordinator";
 import { UiIcon } from "./UiIcon";
 import { appendChatReference, takeChatReference, type ChatReferenceRequest } from "../chat-reference";
-import { Dropdown, DropdownItem } from "./Dropdown";
 import { queuedMessagePreview } from "../skill-block";
 import { TreeDraftRestore } from "./TreeDraftRestore";
 import { useExtensionEditor } from "../extension-editor";
@@ -19,7 +18,7 @@ import type { ClientMessage, WikiProjectReference, PromptAttachment, ServerMessa
 import { useT, useI18n } from "../i18n";
 import { isRasterImage } from "../image-paste";
 
-import { ModelThinking } from "./ModelThinking";
+import { ModelPicker } from "./ModelPicker";
 import { UsagePopover } from "./UsagePopover";
 import { acceptRecommended, useQuestionAnswers } from "../question-answers";
 import { composeAnswers, isAnswered } from "../question-cards";
@@ -62,14 +61,12 @@ interface ChatInputProps {
 	/** Persisted messages (stable reference while unchanged) — used by /copy. */
 	messages: UiMessage[];
 	slashCommands: SlashCommandInfo[];
-	/** Forwarded to ModelThinking (all fields stable while streaming). */
+	/** Forwarded to ModelPicker (all fields stable while streaming). */
 	modelState: {
 		conversationId: string;
 		runSettings?: UiState["runSettings"];
 		model: UiState["model"];
-		thinkingLevel: UiState["thinkingLevel"];
 		routedModel?: UiState["routedModel"];
-		availableThinkingLevels: UiState["availableThinkingLevels"];
 	} | null;
 	models: ModelInfo[];
 	modelsLoading: boolean;
@@ -166,10 +163,8 @@ export const ChatInput = memo(function ChatInput({
 		if (!draftStorageKey) return;
 		try { if (text) sessionStorage.setItem(draftStorageKey, text); else sessionStorage.removeItem(draftStorageKey); } catch { /* Optional draft persistence. */ }
 	}, [text, draftStorageKey]);
-	const [delivery, setDelivery] = useState<"steer" | "followUp">("steer");
-	const [deliveryOpen, setDeliveryOpen] = useState(false);
 	const [queueOpen, setQueueOpen] = useState(false);
-	useEffect(() => { setDelivery("steer"); setDeliveryOpen(false); setQueueOpen(false); }, [activeConversationId, streaming]);
+	useEffect(() => { setQueueOpen(false); }, [activeConversationId, streaming]);
 	const recallQueue = () => send({ type: "recall_queue", conversationId: activeConversationId, requestId: randomUuid() });
 	const stop = () => {
 		const accepted = send({ type: "abort" });
@@ -568,8 +563,7 @@ ${t("wikiProjectPrompt", { workspace: selectedProject.workspaceName, path: JSON.
 		if (e.key === "Escape") {
 			e.preventDefault();
 			e.stopPropagation();
-			if (deliveryOpen) setDeliveryOpen(false);
-			else if (text) setText("");
+			if (text) setText("");
 			else if (streaming) stop();
 			return;
 		}
@@ -578,7 +572,7 @@ ${t("wikiProjectPrompt", { workspace: selectedProject.workspaceName, path: JSON.
 		}
 		if (e.key === "Enter" && !e.shiftKey) {
 			e.preventDefault();
-			submit(streaming && (e.altKey ? delivery !== "followUp" : delivery === "followUp"));
+			submit(streaming && e.altKey);
 		}
 	};
 
@@ -588,7 +582,7 @@ ${t("wikiProjectPrompt", { workspace: selectedProject.workspaceName, path: JSON.
 			{streaming && <button type="button" className="btn composer-action stop" title={`${t("stopTask")} · Esc`} aria-label={t("stopTask")} onClick={stop}><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="3" /></svg></button>}
 			<button type="button" className="btn composer-action send" title={t("sendTip")} aria-label={t("sendTip")}
 				disabled={!connected || verifying || (!text.trim() && !attachments.some(a => a.imageData || a.fileData))}
-				onClick={() => submit(streaming && delivery === "followUp")}><FiArrowUp strokeWidth={3} aria-hidden="true" /></button>
+				onClick={() => submit()}><FiArrowUp strokeWidth={3} aria-hidden="true" /></button>
 		</div>
 	);
 
@@ -799,7 +793,7 @@ ${t("wikiProjectPrompt", { workspace: selectedProject.workspaceName, path: JSON.
 														placeholder={
 															connected
 																? t("composerShortcutPrefix") + (streaming
-																	? silentActivity ? t("placeholderModelSilent") : t("placeholderStreamingModes", { primary: t(delivery === "steer" ? "queueSteerTag" : "queueFollowTag"), alternate: t(delivery === "steer" ? "queueFollowTag" : "queueSteerTag") })
+																	? silentActivity ? t("placeholderModelSilent") : t("composerPlaceholder")
 																	: t(answering ? "questionPlaceholder" : "composerPlaceholder"))
 																: t("placeholderConnecting")
 														}
@@ -818,18 +812,15 @@ ${t("wikiProjectPrompt", { workspace: selectedProject.workspaceName, path: JSON.
 				<div className="input-tools">
 					<div className="input-tools-left">
 						<button type="button" className="btn composer-attach" title={t("uploadFile")} disabled={!connected} onClick={() => fileInputRef.current?.click()}><FiPlus /></button>
-						<ModelThinking
+						<ModelPicker
 							state={modelState}
 							models={models}
 							modelsLoading={modelsLoading}
 							send={send}
 							onManageModels={onManageModels}
 							compact
-							segmented
 						/>
-						{streaming && <div className="delivery-control"><Dropdown direction="up" open={deliveryOpen} onOpenChange={setDeliveryOpen} trigger={t(delivery === "steer" ? "queueSteerTag" : "queueFollowTag")}>
-							{(["steer", "followUp"] as const).map(mode => <DropdownItem key={mode} active={delivery === mode} onClick={() => { setDelivery(mode); setDeliveryOpen(false); taRef.current?.focus(); }}><span className="delivery-option"><strong>{t(mode === "steer" ? "queueSteerTag" : "queueFollowTag")}</strong><small>{t(mode === "steer" ? "deliverySteerHint" : "deliveryFollowHint")}</small></span></DropdownItem>)}
-						</Dropdown></div>}
+
 					</div>
 					<div className="input-tools-right">
 						<UsagePopover stats={stats} />

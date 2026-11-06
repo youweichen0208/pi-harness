@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { FiCheck, FiChevronRight } from "react-icons/fi";
-import { useT } from "../i18n";
+import { useChatT } from "../i18n";
 import { failureRecovered, type ProcessStats } from "../process-stats";
 export { emptyProcessStats, type ProcessStats } from "../process-stats";
 import { elapsedLabel } from "../bash-presentation";
@@ -8,7 +8,7 @@ import { elapsedLabel } from "../bash-presentation";
 /** One collapsible list per stretch of thinking/commands/reads between paragraphs.
  * Open while its turn is still on it or after a failure; rows stay mounted so jumps and search can reveal them. */
 export function ProcessGroup({ stats, children }: { stats: ProcessStats; children: ReactNode }) {
-	const t = useT();
+	const t = useChatT();
 	const [manual, setManual] = useState<boolean | null>(null);
 	const recovered = failureRecovered(stats);
 	const single = stats.commands === 1 && !stats.reads && !stats.searches && !stats.thinking && !stats.failed && !stats.skipped;

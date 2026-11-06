@@ -84,13 +84,15 @@ try {
 		}
 		await input.fill("");
 		emit({ isStreaming: true, messages: [], streamingMessage: null });
-		await placeholder(prefix + (locale === "zh" ? "继续输入，↵ 插话 · ⌥↵ 排队" : "Keep typing, ↵ Steer · Alt+↵ Queued"));
+		await placeholder(prefix + (locale === "zh" ? "给 pi 发送消息…" : "Message pi…"));
 		await send("steer", "Enter", false);
 		await send("queue", "Alt+Enter", true);
-		await page.locator(".delivery-control button").first().click();
-		await page.locator(".delivery-option").filter({ hasText: locale === "zh" ? "排队" : "Queued" }).click();
-		await send("queue default", "Enter", true);
-		await send("steer alternate", "Alt+Enter", false);
+		assert.equal(await page.locator(".delivery-control, .thinking-control").count(), 0);
+		await input.fill("click steer");
+		await page.locator(".composer-action.send").click();
+		await page.waitForFunction(() => document.querySelector(".inputbox textarea").value === "");
+		assert.equal(prompts.at(-1).queue, false);
+		assert.equal(prompts.at(-1).text, "click steer");
 		socket.send(JSON.stringify({ type: "agent_silence", conversationId: state.conversationId, phase: "silent", since: Date.now() - 60000, activity: "model" }));
 		await placeholder(prefix + (locale === "zh" ? "模型暂时没有响应，可停止、重试或继续等待…" : "The model is quiet. Stop, retry, or keep waiting…"));
 		emit({ isStreaming: false, messages: [{ id: "question", role: "assistant", content: [{ type: "text", text: "❓ **Q1** - **选择**：选哪个？(a) A;(b) B" }] }] });

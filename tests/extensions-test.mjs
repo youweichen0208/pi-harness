@@ -33,6 +33,8 @@ try{
  assert.equal((await req('list',{}, {Origin:'https://evil.invalid'})).status,403);
  assert.equal((await req('list',{cwd:root})).status,409);
  assert.equal((await req('open-info',{id:'skills:user'})).absolute,join(agent,'skills'));
+ assert.equal((await req('open-info',{id:'extensions:user'})).absolute,join(agent,'extensions'));
+ assert.equal((await req('open-info',{id:'extensions:user',cwd:root})).status,409);
  assert.equal((await req('skills-list',{}, {Origin:'https://evil.invalid'})).status,403);
  assert.equal((await req('skills-list',{cwd:root})).status,409);
  const parallelLists=await Promise.all(Array.from({length:8},()=>req('list')));assert(parallelLists.every(result=>result.status===200),JSON.stringify(parallelLists.map(result=>({status:result.status,error:result.error}))));
@@ -63,7 +65,7 @@ try{
   browser=await chromium.launch({executablePath:CHROME_PATH||chromium.executablePath()});const page=await browser.newPage({viewport:{width:1440,height:1050}});page.setDefaultTimeout(20000);const errors=[];page.on('response',async res=>{if(res.url().includes('/api/extensions')&&res.status()>=400)console.error('API',await res.text());});page.on('pageerror',e=>errors.push(e.message));
   await page.addInitScript(id=>{sessionStorage.setItem('pi-web-client-id',id);localStorage.setItem('pi-extensions-autocheck','false');},clientId);
   await page.goto(`http://127.0.0.1:${port}/?token=${token}`);await page.getByRole('button',{name:'设置',exact:true}).first().click();await page.getByText('所有设置',{exact:true}).click();await page.getByRole('button',{name:'Extensions',exact:true}).click();
-  const panel=page.locator('.extensions-panel');await panel.getByText('local-tools',{exact:true}).waitFor();
+  const panel=page.locator('.extensions-panel');await panel.getByText('local-tools',{exact:true}).waitFor();await panel.getByRole('button',{name:'复制个人扩展目录',exact:true}).waitFor();await panel.getByText('无需单独安装 pi。',{exact:false}).waitFor();
   for (const name of ['weather', 'deploy']) await panel.getByRole('switch', {name: `启用 ${name}`, exact: true}).waitFor();
   assert.equal(await panel.getByText('index.ts', {exact: true}).count(), 0);
   await panel.getByRole('button',{name:'查看详情 local-tools',exact:true}).click();await panel.getByRole('button',{name:'移除引用',exact:true}).waitFor();
@@ -72,8 +74,8 @@ try{
   await panel.getByText('操作完成',{exact:true}).waitFor();await wait(async()=>!await panel.getByRole('switch',{name:'启用 local-tools',exact:true}).isChecked());await panel.getByRole('switch',{name:'启用 local-tools',exact:true}).click();await wait(async()=>await panel.getByRole('switch',{name:'启用 local-tools',exact:true}).isChecked());
   await panel.getByRole('button',{name:'从 npm / git 安装',exact:true}).click();await panel.locator('.ext-dialog input').fill(another);await panel.getByRole('button',{name:'查看安装信息',exact:true}).click();await panel.locator('.ext-security').waitFor();await page.screenshot({path:'tests/scratch/extensions-install.png',fullPage:true});
   const dialog=panel.locator('.ext-dialog');await assertFocusLoop(page,dialog);await dialog.getByRole('button',{name:'关闭',exact:true}).focus();await page.keyboard.press('Shift+Tab');assert.equal(await page.evaluate(()=>document.activeElement?.textContent),'安装');
-  let failedOnce=false;const failInstall=async route=>{const body=route.request().postDataJSON();if(body.action==='start'&&body.operation?.action==='install'&&!failedOnce){failedOnce=true;return route.fulfill({json:{id:'failed-fixture',phase:'error',error:'Fixture install failure',log:'Step one\nFixture install failure'}});}return route.continue();};
-  await page.route('**/api/extensions**',failInstall);await dialog.getByRole('button',{name:'安装',exact:true}).click();await dialog.getByRole('alert').filter({hasText:'Fixture install failure'}).waitFor();assert(await dialog.isVisible());
+  let failedOnce=false;const failInstall=async route=>{const body=route.request().postDataJSON();if(body.action==='start'&&body.operation?.action==='install'&&!failedOnce){failedOnce=true;return route.fulfill({json:{id:'failed-fixture',phase:'error',error:'[extension-tool-missing:npm] Fixture install failure',log:'Step one\nFixture install failure'}});}return route.continue();};
+  await page.route('**/api/extensions**',failInstall);await dialog.getByRole('button',{name:'安装',exact:true}).click();await dialog.getByRole('alert').filter({hasText:'Fixture install failure'}).waitFor();assert(await dialog.isVisible());await dialog.getByRole('alert').filter({hasText:'找不到 npm'}).waitFor();
   await dialog.getByRole('button',{name:'重试',exact:true}).click();await dialog.waitFor({state:'hidden'});await page.unroute('**/api/extensions**',failInstall);
   await panel.getByRole('tab',{name:'已安装 · 2',exact:true}).waitFor();await panel.locator('.ext-new').waitFor();assert((await req('list')).packages.some(p=>p.name==='another-package'&&p.scope==='user'));
   await panel.getByRole('button',{name:'查看详情 footer',exact:true}).click();await panel.getByRole('button',{name:'编辑文件',exact:true}).click();await assertFocusLoop(page,panel.locator('.ext-editor'));await panel.getByRole('textbox',{name:'编辑文件',exact:true}).fill('export default () => {}; // browser editor');await panel.getByRole('button',{name:'保存文件',exact:true}).click();await panel.locator('.ext-editor').waitFor({state:'hidden'});assert(readFileSync(file.path,'utf8').includes('browser editor'));
@@ -123,7 +125,7 @@ try{
   await page.getByRole('button',{name:'技能',exact:true}).click();await skills.getByRole('switch',{name:'启用 design-fixture',exact:true}).waitFor();assert(await skills.evaluate(el=>el.scrollWidth<=el.clientWidth+1));
   await page.getByRole('button',{name:'Extensions',exact:true}).click();await panel.getByText('local-tools',{exact:true}).waitFor();
   await page.setViewportSize({width:390,height:844});await page.screenshot({path:'tests/scratch/extensions-mobile.png',fullPage:true});assert(await panel.evaluate(el=>el.scrollWidth<=el.clientWidth+1));
-  await page.setViewportSize({width:1440,height:1050});await page.evaluate(()=>localStorage.setItem('pi-harness:lang','en'));await page.reload();await page.getByRole('button',{name:'Settings',exact:true}).first().click();await page.getByText('All settings',{exact:true}).click();await page.getByRole('button',{name:'Extensions',exact:true}).click();await page.locator('.ext-header').getByRole('button',{name:'Install from npm / git',exact:true}).waitFor();await page.locator('.extensions-panel').getByText('local-tools',{exact:true}).waitFor();await page.screenshot({path:'tests/scratch/extensions-en.png',fullPage:true});
+  await page.setViewportSize({width:1440,height:1050});await page.evaluate(()=>localStorage.setItem('pi-harness:lang','en'));await page.reload();await page.getByRole('button',{name:'Settings',exact:true}).first().click();await page.getByText('All settings',{exact:true}).click();await page.getByRole('button',{name:'Extensions',exact:true}).click();await page.locator('.ext-header').getByRole('button',{name:'Install from npm / git',exact:true}).waitFor();await page.locator('.extensions-panel').getByText('local-tools',{exact:true}).waitFor();await panel.getByRole('button',{name:'Copy personal extensions folder',exact:true}).waitFor();await page.screenshot({path:'tests/scratch/extensions-en.png',fullPage:true});
   assert.deepEqual(errors,[]);await browser.close();browser=undefined;
  }
  console.log('PASS native packages: auth/origin/cwd, list, toggle, preview, install, local remove, browser desktop/mobile');

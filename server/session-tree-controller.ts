@@ -1,3 +1,4 @@
+import { codemodeHistoryContent } from "./codemode-history.js";
 import { parseUserAttachments } from "./user-attachments.js";
 import { recallPending } from "./prompt-delivery.js";
 import { SessionTailValidator } from "./session-file-read.js";
@@ -132,7 +133,7 @@ export class SessionTreeController {
 			if (request.type === "tree_content") {
 				const entry = sm.getEntry(request.entryId);
 				if (!entry) throw new Error("Entry not found");
-				this.host.emit({ type: "tree_content_result", ...context, entryId: entry.id, content: treeEntryContent(entry), toolCallId: entry.type === "message" && entry.message.role === "toolResult" ? entry.message.toolCallId : undefined }); return;
+				this.host.emit({ type: "tree_content_result", ...context, entryId: entry.id, content: request.codemodeToolCallId ? "" : treeEntryContent(entry), ...(request.codemodeToolCallId ? { codemode: codemodeHistoryContent(sm, entry.id, request.codemodeToolCallId) } : {}), toolCallId: entry.type === "message" && entry.message.role === "toolResult" ? entry.message.toolCallId : undefined }); return;
 			}
 			if (request.type === "tree_preview") {
 				if (!sm.getEntry(request.targetId)) throw new Error("Entry not found");

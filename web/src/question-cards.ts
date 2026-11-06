@@ -36,8 +36,8 @@ function parseHead(line: string, index: number) {
 	return titled ? { id, title: plain(titled[1]), prompt: titled[2] } : { id, title: "", prompt: rest };
 }
 
-/** A list-style option line: `- A. text`, `A、 text` or `(a) text`. */
-const LIST_OPTION = /^\s*(?:[-–—*]\s*)?(?:[(（]([A-Ha-h])[)）]|([A-Ha-h])[.、．])\s+(.+)$/;
+/** A list-style option line, after removing inline emphasis: `- **A.** text`, `A) text` or `(a) text`. */
+const LIST_OPTION = /^\s*(?:[-–—*]\s*)?(?:[(（]([A-Ha-h])[)）]|([A-Ha-h])[.、．)）])\s+(.+)$/;
 
 /** Split `(a) x;(b) y;(c) z。trailing` into options; text before (a) and after the last option's sentence stays prompt. */
 function parseOptions(text: string) {
@@ -146,7 +146,7 @@ export function parseReplySegments(text: string): ReplySegment[] {
 		const listOptions: QuestionOption[] = [];
 		const promptLines: string[] = [];
 		for (const line of body) {
-			const listed = LIST_OPTION.exec(line);
+			const listed = LIST_OPTION.exec(plain(line));
 			if (listed) listOptions.push({ key: (listed[1] ?? listed[2]!).toLowerCase(), text: plain(listed[3].trim()) });
 			else promptLines.push(line);
 		}

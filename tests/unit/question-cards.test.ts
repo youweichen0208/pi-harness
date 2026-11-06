@@ -129,3 +129,13 @@ test("ordinary prose, quoted offers, fenced examples and ambiguous alternatives 
 		"要我执行，还是等待，还是取消？", "要我执行，还是等待？\n后面还有说明。",
 	]) expect(parseReplySegments(text)).toEqual([{ kind: "markdown", text }]);
 });
+
+test.each([
+	"- **A.** 意图识别\n- **B.** 槽位抽取\n- **C.** 引擎路由\n- **D.** API 编排",
+	"A) 意图识别\nB) 槽位抽取\nC) 引擎路由\nD) API 编排",
+])("explicit choices remain selectable instead of recommendation-only: %s", choices => {
+	const questions = parseReplySegments(`❓ **Q1** - **判断职责**：选择职责\n${choices}\n\n➡️ 推荐 (b)。抽取字段`).flatMap(s => s.kind === "questions" ? s.questions : []);
+	expect(questions[0].options.map(option => option.text)).toEqual(["意图识别", "槽位抽取", "引擎路由", "API 编排"]);
+	expect(recommendedAnswers(questions)).toEqual({ Q1: 1 });
+	expect(composeAnswers(questions, { Q1: 2 })).toBe("Q1 判断职责：(c) 引擎路由");
+});

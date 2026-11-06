@@ -383,6 +383,8 @@ function pruneLiveOutputs(
 	live: Map<string, LiveToolOutput>,
 	state: UiState,
 ): Map<string, LiveToolOutput> {
+	const original = live;
+	live = new Map(live);
 	const completed = new Set<string>();
 	for (const m of state.messages) {
 		if (m.role === "toolResult" && m.toolCallId) completed.add(m.toolCallId);
@@ -396,7 +398,18 @@ function pruneLiveOutputs(
 			changed = true;
 		}
 	}
-	return changed ? new Map(live) : live;
+	// A resync carries the latest native Codemode details, including updates missed offline.
+	for (const message of state.codemode?.history ?? []) {
+		if (message.role === "toolResult" && message.toolCallId && live.delete(message.toolCallId)) changed = true;
+	}
+	for (const item of state.codemode?.live ?? []) {
+		const previous = live.get(item.toolCallId);
+		if (previous?.codemode !== item.details) {
+			live.set(item.toolCallId, { ...previous, toolName: "codemode", text: previous?.text ?? "", codemode: item.details });
+			changed = true;
+		}
+	}
+	return changed ? live : original;
 }
 
 /** Retain measured bash durations while their results remain in the transcript.

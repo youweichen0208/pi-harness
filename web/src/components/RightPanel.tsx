@@ -1,6 +1,7 @@
+import type { CodemodeActivity } from "../codemode-records";
 import { memo, useId, useCallback, useEffect, useRef, useState } from "react";
 import { FiChevronRight, FiFolder, FiFile, FiSearch, FiMaximize2, FiMoreHorizontal, FiPlus, FiRefreshCw, FiX } from "react-icons/fi";
-import type { FileEntry, FileListing, ScmFileEntry, ServerMessage, TaskProgress, UiMessage } from "../types";
+import type { ClientMessage, FileEntry, FileListing, ScmFileEntry, ServerMessage, TaskProgress, UiMessage } from "../types";
 import { useT } from "../i18n";
 import { mentionedHiddenDirs } from "../conversation-files";
 import { CreateFileForm } from "./CreateFileForm";
@@ -18,7 +19,7 @@ function fileIconCategory(name: string): string {
 }
 
 type AttachMode = "inline";
-interface RightPanelProps {
+interface RightPanelProps extends CodemodeActivity {
 	taskFocusRequest?: number;
 	active: boolean;
 	onSearchFiles: () => void;
@@ -34,12 +35,12 @@ interface RightPanelProps {
 	conversationId: string;
 	agentSilence?: Extract<ServerMessage, { type: "agent_silence" }> | null;
 	cwd: string;
-	send: (msg: { type: "list_files"; path?: string }) => boolean;
+	send: (msg: ClientMessage) => boolean;
 	onAttach: (path: string, name: string, mode: AttachMode, isDir?: boolean) => void;
 	onPreview: (path: string, name: string) => void;
 }
 
-export const RightPanel = memo(function RightPanel({ taskFocusRequest = 0, onSearchFiles, active, files, fileChanged, changed, notRepo, widgets, messages, streamingMessage, isStreaming, taskProgress, conversationId, agentSilence, cwd, send, onAttach, onPreview }: RightPanelProps) {
+export const RightPanel = memo(function RightPanel({ codemode, liveOutputs, toolStatuses, taskFocusRequest = 0, onSearchFiles, active, files, fileChanged, changed, notRepo, widgets, messages, streamingMessage, isStreaming, taskProgress, conversationId, agentSilence, cwd, send, onAttach, onPreview }: RightPanelProps) {
 	const t = useT();
 	const tabId = useId();
 	const [tab, setTab] = useState<"files" | "task">("files");
@@ -230,7 +231,7 @@ export const RightPanel = memo(function RightPanel({ taskFocusRequest = 0, onSea
 			</div>
 		</div>
 		</div>
-		<div className="panel-lower" role="tabpanel" id={`${tabId}-task`} aria-labelledby={`${tabId}-task-tab`} hidden={tab !== "task"}><TaskProgressPanel key={conversationId} task={taskProgress} streaming={isStreaming} live={streamingMessage} silence={agentSilence ?? null} cwd={cwd} messages={messages} onPreview={onPreview} /></div>
+		<div className="panel-lower" role="tabpanel" id={`${tabId}-task`} aria-labelledby={`${tabId}-task-tab`} hidden={tab !== "task"}><TaskProgressPanel key={conversationId} send={send} codemode={codemode} conversationId={conversationId} liveOutputs={liveOutputs} toolStatuses={toolStatuses} task={taskProgress} streaming={isStreaming} live={streamingMessage} silence={agentSilence ?? null} cwd={cwd} messages={messages} onPreview={onPreview} /></div>
 			{widgets.filter((w) => w.lines.length > 0).length > 0 && (
 				<div className="panel-widgets">
 					{widgets

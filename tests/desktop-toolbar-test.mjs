@@ -46,6 +46,8 @@ try {
 			assert.equal(await page.locator('.topbar').evaluate(el => el.getBoundingClientRect().height), 48);
 			assert.equal(await page.locator('.topbar').evaluate(el => getComputedStyle(el).getPropertyValue('-webkit-app-region')), 'drag', 'restored desktop windows retain a continuous titlebar drag region');
 			assert.equal(await page.locator('.conversation-title-button').evaluate(el => getComputedStyle(el).getPropertyValue('-webkit-app-region')), 'no-drag', 'session selector remains clickable');
+			assert.equal(await page.locator('.topbar-actions').evaluate(el => getComputedStyle(el).getPropertyValue('-webkit-app-region')), 'drag', 'toolbar gaps remain draggable');
+			assert.equal(await page.locator('.topbar-actions .topbar-more .chip').evaluate(el => getComputedStyle(el).getPropertyValue('-webkit-app-region')), 'no-drag', 'titlebar settings stays clickable');
 			assert.equal(await page.locator('.status-messages').count(), 0);
 			assert.equal(await page.evaluate(() => getComputedStyle(document.body).fontSize), '14px');
 			assert.equal(await page.locator('.topbar-actions > .icon-btn').count(), 0);
@@ -107,6 +109,13 @@ try {
 				assert.equal(await page.locator('.tree-filter, .tree-modified-count').count(), 0);
 				await page.locator('.project-panel-toggle').click();
 				if (platform === 'darwin') assert.equal((await page.locator('.project-panel-toggle').boundingBox()).x, 92);
+				const brand = page.locator('.compact-brand');
+				await brand.waitFor({ state: 'visible' });
+				assert.equal(await brand.evaluate(el => getComputedStyle(el).getPropertyValue('-webkit-app-region')), 'drag', 'current sidebar brand is draggable');
+				const brandBox = await brand.boundingBox(), navBox = await page.locator('.compact-navigation .global-navigation').boundingBox();
+				assert.equal(brandBox.y, navBox.y, 'brand drag region includes top padding');
+				assert.equal(brandBox.x, navBox.x, 'brand drag region includes side padding');
+				assert(brandBox.width >= navBox.width - 1, 'brand drag region spans sidebar width');
 				await page.screenshot({ path: `tests/scratch/toolbar-${platform}-expanded.png` });
 			}
 		}

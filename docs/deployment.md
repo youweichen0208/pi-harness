@@ -133,7 +133,7 @@ npm run publish:electron       # 同 build，但 --publish always——本地跑
 - 关闭窗口 → 最小化到托盘（不退出）；托盘菜单可重新打开 / 退出。macOS 全屏关闭时，保存守卫通过后先退出原生全屏，等待 `leave-full-screen` 再隐藏，避免留下黑色全屏空间；连续关闭合并处理。回归：`tests/desktop-fullscreen-close-test.mjs`。
 - 桌面主窗口与 Wiki 窗口都使用无边框外壳：macOS 隐藏系统标题栏、保留左侧原生红黄绿按钮；
   Windows/Linux 使用 `DesktopWindowControls` 自绘最小化、最大化、关闭按钮。主窗口拖动区
-  覆盖整条顶栏背景（含窄窗口），按钮、输入框、链接和会话选择器为 `no-drag`；Wiki 的 Windows/Linux 窗口按钮在标题栏中占用独立 132px 空间，不继承主窗口的固定定位，避免覆盖搜索、历史与「问 pi」（#113）；整条文档标题栏与面包屑都可拖动，按钮、保存状态和菜单均为
+  覆盖整条顶栏背景（含窄窗口）及左侧 pi-harness 品牌区的上方／两侧留白，右侧操作区的控件间空白也可拖动；按钮、输入框、链接、会话选择器、可滚动页签组和弹出菜单为 `no-drag`；Wiki 的 Windows/Linux 窗口按钮在标题栏中占用独立 132px 空间，不继承主窗口的固定定位，避免覆盖搜索、历史与「问 pi」（#113）；整条文档标题栏与面包屑都可拖动，按钮、保存状态和菜单均为
   `no-drag`。双击标题区、系统缩放和全屏仍由 Electron 处理。沙箱兼容的 `preload.cjs`
   仅暴露固定窗口操作和窗口状态通知，主窗口关闭按钮继续隐藏到托盘，Wiki 窗口真正关闭。
 - Electron 渲染页加 `pi-desktop` 类，次要操作位于设置菜单；窗口宽度
@@ -203,3 +203,9 @@ Wiki 的「问 pi」浮动模式使用独立无边框助手窗口，可拖动到
 Playground 使用宿主 Python 3.9+，安装包不捆绑解释器。`PI_WEB_PYTHON` 可指定虚拟环境，Jedi 补全与 Black 格式化需安装到同一环境。首次检测到可用 Python 默认开启，保留已保存选择；`PI_WEB_PLAYGROUND=off` 强制关闭。执行不是沙箱，仍拥有服务用户权限。详见 [Playground 架构](architecture-playground.md)。
 
 桌面模型来源发现由服务子进程读取当前用户目录，不依赖 Pi CLI。生产依赖包含 smol-toml 和 jsonc-parser；三平台打包回归运行 `tests/model-sources-test.mjs <appRoot>`，检查真实包内模块、凭据隔离与同步。支持目录覆盖与 Finder 环境差异见 [模型配置来源](architecture-model-sources.md)。
+
+### 扩展安装所需环境
+
+Desktop 包含 Pi SDK 和扩展运行环境，普通本地扩展不要求独立安装 pi 或 Node.js。在「设置 → Extensions」打开个人扩展目录，放入文件后重载或新建会话即可。Windows 默认目录为 `%USERPROFILE%\.pi\agent\extensions\`，macOS/Linux 为 `~/.pi/agent/extensions/`；自定义 `PI_CODING_AGENT_DIR` 时以页面实际路径为准。
+
+Desktop 不额外内置 Git、npm 或独立 Node.js。npm 来源社区包使用系统包管理工具（也支持 Pi 的自定义 `npmCommand`）；Git 来源需要 Git，包依赖或安装脚本可能还需要 npm/Node.js。缺失时界面提示安装并重试，PATH 变更后可能需要重启应用。远程 Web 部署需在运行服务的电脑上准备工具及扩展文件。

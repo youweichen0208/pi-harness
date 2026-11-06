@@ -567,6 +567,13 @@ const zh = {
 	extDone: "操作完成",
 	extFailed: "操作失败",
 	extLog: "查看完整日志",
+	extLocalOpen: "打开个人扩展目录",
+	extLocalCopy: "复制个人扩展目录",
+	extLocalHint: "无需单独安装 pi。将本地扩展放入此目录后，重载当前会话或新建会话；社区包请使用安装入口。",
+	extLocalUnavailable: "无法准备个人扩展目录：{error}",
+	extToolMissing: "找不到 {tool}。请在运行 pi-harness 的电脑上安装该工具，并确保应用能找到它；若环境变量已更改，请重启应用后重试。无需单独安装 pi。",
+	extToolUnusable: "{tool} 无法执行。请检查工具路径与执行权限，修复后重试。",
+	extNodeInstallHint: "npm 通常随 Node.js 一起安装；自定义包管理命令请检查 Pi 的 npmCommand 配置。",
 	extReloadHint: "变更在新会话生效；也可重载当前会话。",
 	extReload: "重载当前会话",
 	extLastChecked: "上次检查",
@@ -621,6 +628,13 @@ const zh = {
 
 	cmCalls: "调用",
 	cmScript: "脚本",
+	cmRecordsHeading: "Codemode 执行记录",
+	cmHistoryTitle: "Codemode 历史调用",
+	cmRecordsCount: "{n} 次调用",
+	cmRecordsReceived: "已收到 {n} 条",
+	cmRecordsIncomplete: "此历史记录可能不完整，未记录的调用或参数无法还原。",
+	cmRecordsPartial: "Completed · contains failed calls",
+	cmRecordsLimited: "仅收到 {shown}/{total} 条调用记录，其余未展示；状态仅反映已收到的记录。",
 	cmWaitingCalls: "等待脚本调用…",
 	cmNoCalls: "没有嵌套调用",
 	cmMoreCalls: "前面还有 {n} 次调用 · 展开全部",
@@ -1153,7 +1167,6 @@ const zh = {
 	refreshModels: "刷新模型列表（保留手填，合并新增）",
 	manageModels: "管理模型（新增 / 修改）",
 	manageModelsTitle: "管理模型",
-	thinkingLevel: "思考强度",
 	steerSend: "插话发送",
 	activityReply: "正在生成回复…",
 	activityTool: "正在运行 {name}…",
@@ -1207,7 +1220,6 @@ const zh = {
 	repeatedMessage: "已重发 {n} 次",
 	thinkingUnrecorded: "耗时未记录",
 	thinking: "思考",
-	thinkingChip: "思考：{level}",
 	sound: "声音",
 	theme: "主题",
 	themeDefault: "深色（默认）",
@@ -1215,14 +1227,6 @@ const zh = {
 	currentConversation: "当前会话",
 	more: "更多",
 	newChatTip: "新建对话（每个浏览器独立保存会话）",
-	"thinking.off": "关闭",
-	"thinking.minimal": "极简",
-	"thinking.low": "低",
-	"thinking.medium": "中",
-	"thinking.high": "高",
-	"thinking.xhigh": "极高",
-	"thinking.max": "最大",
-	thinkingUnsupported: "当前模型不支持该级别，已按模型能力就近生效",
 
 	/* footerbar */
 	context: "上下文",
@@ -1289,7 +1293,6 @@ const zh = {
 	recallQueueEdit: "全部撤回编辑",
 	deliverySteerHint: "当前这一步结束后发送",
 	deliveryFollowHint: "本轮结束后发送",
-	placeholderStreamingModes: "继续输入，↵ {primary} · ⌥↵ {alternate}",
 	queueFollowTag: "排队",
 	sendTip: "发送（Enter）",
 
@@ -1534,12 +1537,6 @@ const zh = {
 	workspaceSaveFailed: "保存失败，请检查连接后重试",
 
 	composerPlaceholder: "给 pi 发送消息…",
-	thinkingStandard: "标准",
-	thinkingDeep: "深度",
-	thinkingOffDescription: "不开启思考，直接回答",
-	thinkingMinimalDescription: "开启少量思考；部分模型会忽略预算",
-	thinkingStandardDescription: "速度和质量平衡",
-	thinkingDeepDescription: "充分思考，适合复杂任务",
 	workspaceModified: "有未提交改动",
 	workspaceChanges: "{n} 项最近改动",
 	runningConversations: "运行的对话",
@@ -2883,6 +2880,13 @@ const en: Record<keyof typeof zh, string> = {
 	extDone: "Operation complete",
 	extFailed: "Operation failed",
 	extLog: "View full log",
+	extLocalOpen: "Open personal extensions folder",
+	extLocalCopy: "Copy personal extensions folder",
+	extLocalHint: "No separate pi installation is needed. Place local extensions here, then reload or start a new session. Use the install entry for community packages.",
+	extLocalUnavailable: "Cannot prepare the personal extensions folder: {error}",
+	extToolMissing: "Cannot find {tool}. Install it on the computer running pi-harness and make it available to the app. If PATH changed, restart the app before retrying. No separate pi installation is needed.",
+	extToolUnusable: "Cannot execute {tool}. Check its path and execution permissions, then retry.",
+	extNodeInstallHint: "npm is normally installed with Node.js. For a custom package manager, check Pi's npmCommand setting.",
 	extReloadHint: "Changes apply to new sessions. You can also reload the current session.",
 	extReload: "Reload current session",
 	extLastChecked: "Last checked",
@@ -2937,6 +2941,13 @@ const en: Record<keyof typeof zh, string> = {
 
 	cmCalls: "Calls",
 	cmScript: "Script",
+	cmRecordsHeading: "Codemode execution records",
+	cmHistoryTitle: "Codemode call history",
+	cmRecordsCount: "{n} calls",
+	cmRecordsReceived: "{n} received",
+	cmRecordsIncomplete: "This historical record may be incomplete. Unrecorded calls or arguments cannot be recovered.",
+	cmRecordsPartial: "Completed · contains failed calls",
+	cmRecordsLimited: "Only {shown}/{total} call records were received; remaining records are not shown. Call statuses cover received records only.",
 	cmWaitingCalls: "Waiting for script calls…",
 	cmNoCalls: "No nested calls",
 	cmMoreCalls: "{n} earlier calls · Show all",
@@ -3469,7 +3480,6 @@ const en: Record<keyof typeof zh, string> = {
 	refreshModels: "Refresh model list (keeps manual rows, merges new ones)",
 	manageModels: "Manage models (add / edit)",
 	manageModelsTitle: "Manage models",
-	thinkingLevel: "Thinking level",
 	steerSend: "Send now",
 	activityReply: "Writing the reply…",
 	activityTool: "Running {name}…",
@@ -3523,7 +3533,6 @@ const en: Record<keyof typeof zh, string> = {
 	repeatedMessage: "Resent {n}×",
 	thinkingUnrecorded: "duration unavailable",
 	thinking: "Thinking",
-	thinkingChip: "Thinking: {level}",
 	sound: "Sound",
 	theme: "Theme",
 	themeDefault: "Dark (default)",
@@ -3531,15 +3540,6 @@ const en: Record<keyof typeof zh, string> = {
 	currentConversation: "Current conversation",
 	more: "More",
 	newChatTip: "New chat (sessions are saved per browser)",
-	"thinking.off": "Off",
-	"thinking.minimal": "Minimal",
-	"thinking.low": "Low",
-	"thinking.medium": "Medium",
-	"thinking.high": "High",
-	"thinking.xhigh": "Extra high",
-	"thinking.max": "Max",
-	thinkingUnsupported:
-		"Not supported by this model — snapped to the nearest supported level",
 
 	/* footerbar */
 	context: "Context",
@@ -3606,7 +3606,6 @@ const en: Record<keyof typeof zh, string> = {
 	recallQueueEdit: "Recall all to edit",
 	deliverySteerHint: "Send after the current step",
 	deliveryFollowHint: "Send after this turn",
-	placeholderStreamingModes: "Keep typing, ↵ {primary} · Alt+↵ {alternate}",
 	queueFollowTag: "Queued",
 	sendTip: "Send (Enter)",
 
@@ -3851,12 +3850,6 @@ const en: Record<keyof typeof zh, string> = {
 	workspaceSaveFailed: "Save failed. Check the connection and retry.",
 
 	composerPlaceholder: "Message pi…",
-	thinkingStandard: "Standard",
-	thinkingDeep: "Deep",
-	thinkingOffDescription: "No thinking, answer directly",
-	thinkingMinimalDescription: "A little thinking; some models ignore the budget",
-	thinkingStandardDescription: "Balanced speed and quality",
-	thinkingDeepDescription: "More reasoning for complex tasks",
 	workspaceModified: "Uncommitted changes",
 	workspaceChanges: "{n} recent changes",
 	runningConversations: "Running chats",
@@ -4730,4 +4723,24 @@ export function useI18n(): I18nContextValue {
 /** Convenience: translation function only. */
 export function useT(): Translate {
 	return useI18n().t;
+}
+
+/** Chat execution labels stay English; message content and other UI copy keep the selected locale. */
+const chatStatusKeys = new Set<keyof typeof en>([
+	"thinkingLive", "thinkingFor", "thinkingDone", "thinkingNow", "thinkingUnrecorded",
+	"processThought", "processThoughtUnmeasured", "processRunning", "processFailed", "processFailedRecovered", "processAllPassed",
+	"done", "running", "error", "cancelled", "executionCompleted", "toolQueued", "toolNotExecuted", "toolDoneWaitingModel", "waitingOutput",
+	"bashRunning", "bashPartial", "bashFailed", "working", "planActive", "todoPending", "taskCancelled",
+	"subagentStopping", "subagentCancelled", "cmCancelled", "cmUnfinished", "cmRecordsPartial",
+	"waitWorking", "waitUnderstanding", "waitResults", "waitFile", "waitThinking", "waitTests", "waitBuild", "waitSteer", "waitSeconds", "waitMinutes",
+]);
+
+export function useChatT(): Translate {
+	const t = useT();
+	return useCallback<Translate>((key, vars) => {
+		if (!chatStatusKeys.has(key)) return t(key, vars);
+		let text = en[key];
+		for (const [name, value] of Object.entries(vars ?? {})) text = text.replaceAll(`{${name}}`, String(value));
+		return text;
+	}, [t]);
 }

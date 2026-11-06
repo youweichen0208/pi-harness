@@ -6,7 +6,7 @@
 
 `server/session-tree.ts` 从公开的 `getTree()` 派生有序列表、可见父节点、当前路径、分叉点和兄弟目标。按 CLI 选择器优先排列活动分支；五种过滤与多关键词搜索使用锁定版本的实际语义：`usage` 在所有模式隐藏；非当前 leaf 的无文本正常 assistant 消息在所有模式隐藏。消息搜索只使用 CLI 搜索的前 200 个内容字符；摘要搜索遵循 CLI 的区别处理。
 
-过滤先于 5000 节点截断，预览去除 ANSI 与换行并限 120 字符。节点内容由 `tree_content` 按需读取，供摘要全文和复制使用。遍历采用显式栈，避免长路径递归溢出。
+过滤先于 5000 节点截断，预览去除 ANSI 与换行并限 120 字符。节点内容由 `tree_content` 按需读取，供摘要全文和复制使用。协议 v52 可选 `codemodeToolCallId` 返回 `tree_content_result.codemode`（序列化后的调用与结果），仅接受当前分支内匹配该调用的 assistant／toolResult 条目；供压缩记录只读弹窗使用，不调用 navigateTree、不改变 leaf 或模型上下文。遍历采用显式栈，避免长路径递归溢出。
 
 `buildSessionProjection().entries[].sourceEntry` 提供 UI 消息的 entryId，包括压缩摘要与分支摘要。保留现有 UI ID 和旧编辑请求的反查兜底。每次原生 revision 变化重新派生 label、siblings 和消息来源映射；只缓存这些展示元数据，不缓存或修改原生树。未变更的 UI 消息继续复用引用。revision 由 sessionId、条目数和 leafId 组成；label 覆盖和清除均追加原生条目，能够使 revision 失效。
 

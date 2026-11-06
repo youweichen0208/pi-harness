@@ -1,52 +1,38 @@
 import { MODEL_SOURCE_NAMES } from "./ModelSources";
 import { UiIcon } from "./UiIcon";
 import { memo, useEffect, useMemo, useState } from "react";
-import { FiCpu, FiSearch, FiZap } from "react-icons/fi";
+import { FiCpu, FiSearch } from "react-icons/fi";
 import type { ClientMessage, ModelInfo, UiState } from "../types";
 import { Dropdown, DropdownItem } from "./Dropdown";
 import { useT } from "../i18n";
 
 /** Messages this component sends (a subset shared by TopBar and ChatInput). */
-export type ModelThinkingMsg =
+export type ModelPickerMsg =
 	| { type: "list_models" }
 	| { type: "set_model"; modelId: string }
-	| { type: "set_thinking"; level: string }
 	| Extract<ClientMessage, { type: "set_run_settings" }>;
-
-const THINKING_VALUES = [
-	"off",
-	"minimal",
-	"low",
-	"medium",
-	"high",
-	"xhigh",
-	"max",
-] as const;
 
 /** Props are deliberately NARROW (no whole-ChatState object): every field is
  *  stable while tokens stream in, so the shallow-compared memo() below keeps
  *  both toolbars idle during streaming. */
 interface Props {
-	state: Pick<UiState, "model" | "thinkingLevel" | "availableThinkingLevels" | "routedModel" | "conversationId" | "runSettings"> | null;
+	state: Pick<UiState, "model" | "routedModel" | "conversationId" | "runSettings"> | null;
 	models: ModelInfo[];
 	modelsLoading: boolean;
-	send: (msg: ModelThinkingMsg) => boolean;
+	send: (msg: ModelPickerMsg) => boolean;
 	/** Opens the custom-model config modal (App-level state). */
 	onManageModels: () => void;
 	/** Compact triggers for narrow toolbars (mobile input row). */
 	compact?: boolean;
-	segmented?: boolean;
 }
 
-/** Model picker + thinking-level picker. Rendered in the top bar on desktop
- * and in the input row on mobile — same dropdowns, different trigger styles. */
-export const ModelThinking = memo(function ModelThinking({ state, models, modelsLoading, send, onManageModels, compact = false, segmented = false }: Props) {
+/** Shared model picker and native run settings. */
+export const ModelPicker = memo(function ModelPicker({ state, models, modelsLoading, send, onManageModels, compact = false }: Props) {
 	const t = useT();
 	const model = state?.model;
 	// snapshot model.id is the bare id; list ids are "provider/id".
 	const currentModelId = model ? `${model.provider}/${model.id}` : null;
 	const [modelOpen, setModelOpen] = useState(false);
-	const [thinkingOpen, setThinkingOpen] = useState(false);
 	// Model dropdown filter — the list can be long (all providers × models),
 	// so a type-to-filter box sits above it. Reset when the dropdown closes.
 	const [modelFilter, setModelFilter] = useState("");
@@ -66,34 +52,7 @@ export const ModelThinking = memo(function ModelThinking({ state, models, models
 	// Local loading flag for the model dropdown (list arrives via props.models).
 	const [reqLoading, setReqLoading] = useState(false);
 
-	// Model-supported thinking levels (snapshot). The SDK clamps any request
-	// outside this set — unsupported levels must be disabled, not silently
-	// snapped (that's what made the level look "impossible to change").
-	// Empty/absent → unknown, keep everything enabled.
-	const supportedThinking =
-		state?.availableThinkingLevels && state.availableThinkingLevels.length > 0
-			? new Set(state.availableThinkingLevels)
-			: null;
-	const thinkingLevels: {
-		value: string;
-		label: string;
-		supported: boolean;
-	}[] = THINKING_VALUES.map((v) => ({
-		value: v,
-		label: t(`thinking.${v}`),
-		supported: supportedThinking ? supportedThinking.has(v) : true,
-	}));
-	const modes = [
-		{ label: t("thinking.off"), description: t("thinkingOffDescription"), values: ["off"] },
-		{ label: t("thinking.minimal"), description: t("thinkingMinimalDescription"), values: ["minimal", "low"] },
-		{ label: t("thinkingStandard"), description: t("thinkingStandardDescription"), values: ["medium"] },
-		{ label: t("thinkingDeep"), description: t("thinkingDeepDescription"), values: ["high", "xhigh", "max"] },
-	];
-	const activeMode = modes.find((mode) => mode.values.includes(state?.thinkingLevel ?? "off")) ?? modes[0];
-	const thinkingLabel = (level: string): string =>
-		thinkingLevels.find((l) => l.value === level)?.label ?? level;
-
-	const runSettings = state?.runSettings && <div className="thinking-run-settings">
+	const runSettings = state?.runSettings && <div className="model-run-settings">
 		{(["autoCompaction", "autoRetry"] as const).map(key => <label key={key}>
 			<input type="checkbox" checked={state.runSettings![key]} onChange={event => send({ type: "set_run_settings", conversationId: state.conversationId, [key]: event.target.checked })} />
 			{t(key === "autoCompaction" ? "conversationAutoCompaction" : "conversationAutoRetry")}
@@ -119,7 +78,7 @@ export const ModelThinking = memo(function ModelThinking({ state, models, models
 						<FiCpu />
 						<span className="chip-model">
 							{model ? model.name : t("selectModel")}
-							{state?.routedModel && <span className="chip-routed-model" title={`${state.routedModel.provider}/${state.routedModel.id}${state.routedModel.thinkingLevel ? ` · ${state.routedModel.thinkingLevel}` : ""}`}> → {state.routedModel.name}</span>}
+							{state?.routedModel && <span className="chip-routed-model" title={`${state.routedModel.provider}/${state.routedModel.id}`}> → {state.routedModel.name}</span>}
 						</span>
 						{!compact && model?.vision && (
 							<span className="chip-vision" title={t("vision")}>
@@ -190,7 +149,7 @@ export const ModelThinking = memo(function ModelThinking({ state, models, models
 							</DropdownItem>
 						))}
 					</div>
-					{segmented && <div className="dd-thinking-levels"><span>{t("thinkingLevel")}</span>{thinkingLevels.filter((level) => level.supported).map((level) => <button type="button" key={level.value} aria-pressed={state?.thinkingLevel === level.value} onClick={() => send({ type: "set_thinking", level: level.value })}>{level.label}</button>)}</div>}
+					{runSettings}
 					{/* Fixed footer — refresh / manage never scroll away. */}
 					<div className="dd-footer">
 						<button
@@ -213,52 +172,6 @@ export const ModelThinking = memo(function ModelThinking({ state, models, models
 					</div>
 				</Dropdown>
 
-			{segmented ? <div className="thinking-control"><Dropdown
-				trigger={<><span className="thinking-trigger-prefix">{t("thinking")} · </span><span>{activeMode.label}</span></>}
-				open={thinkingOpen}
-				onOpenChange={setThinkingOpen}
-				align="left"
-				menuClassName="dd-menu-thinking"
-			>
-				<div className="dd-header">{t("thinkingLevel")}</div>
-				{modes.map((mode) => {
-					const value = mode.values.find((candidate) => !supportedThinking || supportedThinking.has(candidate));
-					return <DropdownItem key={mode.label} active={mode === activeMode} disabled={!value} title={value ? undefined : t("thinkingUnsupported")} onClick={() => { if (value && state?.thinkingLevel !== value) send({ type: "set_thinking", level: value }); setThinkingOpen(false); }}><span className="thinking-mode-option"><strong>{mode.label}</strong><small>{mode.description}</small></span></DropdownItem>;
-				})}
-				{runSettings}
-			</Dropdown></div> : <Dropdown
-				trigger={
-					<>
-						<FiZap />
-						<span className="chip-sub">
-							{t("thinkingChip", {
-								level: state ? thinkingLabel(state.thinkingLevel) : "—",
-							})}
-						</span>
-					</>
-				}
-				open={thinkingOpen}
-				onOpenChange={setThinkingOpen}
-			>
-				<div className="dd-header">{t("thinkingLevel")}</div>
-				{thinkingLevels.map((l) => (
-					<DropdownItem
-						key={l.value}
-						active={state?.thinkingLevel === l.value}
-						disabled={!l.supported}
-						title={l.supported ? undefined : t("thinkingUnsupported")}
-						onClick={() => {
-							if (state?.thinkingLevel !== l.value) {
-								send({ type: "set_thinking", level: l.value });
-							}
-							setThinkingOpen(false);
-						}}
-					>
-						{l.label}
-					</DropdownItem>
-				))}
-				{runSettings}
-			</Dropdown>}
 		</>
 	);
 });

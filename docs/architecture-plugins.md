@@ -116,11 +116,17 @@ App 按 chat.plugins 动态 import 各插件的 client bundle（`/* @vite-ignore
 
 `server/codemode-presentation.ts` 对 SDK `CodemodeToolDetails` 做展示字段白名单：calls（含模型调用）、status、durationMs、cost、error、fullOutputPath。完成记录随 `UiMessage.codemode` 下发，执行中随 `tool_delta.codemode` 下发；不向模型加入任何消息。每张卡最多传输 256 条调用，保留实际总数并提示省略；默认展示最后 8 条，可展开其余已传输调用。旧 transcript 没有 details 时回退到 `nestedCalls`。
 
+右栏任务面板在进度与本轮文件之间独立展示「Codemode 执行记录」，按外层调用分组，不嵌入或修改计划。`server/codemode-history.ts` 从当前原生持久分支提取本轮元数据，通过协议 v52 的 `UiState.codemode` 下发；`web/src/codemode-records.ts` 结合流式消息、原生 details 和内部工具状态推导记录，自动提醒及工具文本恢复不切换请求边界；优先使用 details，旧历史回退到 nestedCalls，不合并重复来源。组件为 `CodemodeRecords.tsx`。临时内部调用 ID 可能重复且结束时改变，因此行标识采用组内追加序号。
+
+持久投影按 SessionManager、leafId 和条目数量缓存，不依赖 plan 是否开启；快照只携带本轮调用元数据，不包含脚本、输出正文或图片。每个运行中外层调用的最新有界原生详情保存在对话内，快照重连时覆盖旧的浏览器详情，结果持久化后清除。聊天卡片使用独立的 `runActive` 判断生命周期，连接状态只控制本地计时，断线不产生结束状态。
+
+运行中分组默认展开、仅显示最后 8 条已收到记录，手动折叠和结束时的展开状态保留；历史已结束分组初始折叠。点击记录跳到聊天中的外层卡片并展开调用页签；目标已被压缩时，通过 `tree_content.codemodeToolCallId` 按需读取并在只读弹窗复用卡片，不导航分支或恢复模型上下文。顶栏任务入口在仅剩持久 Codemode 记录时仍保留。内部失败保留，外层成功仍显示 Completed · contains failed calls；明确取消显示 Cancelled，外层已结束但内部缺少终态显示 Unfinished。传输省略与界面折叠分别提示，旧历史不完整时只报告已收到数量，不推断未收到调用成功。仅增加展示协议字段，不添加模型消息或额外模型调用。完整决策见 [Codemode 执行记录设计](codemode-task-records-design.md)。
+
 卡片提供调用／脚本／输出页签，费用仅汇总 SDK 实际报告的值；没有费用时不显示虚构的 $0。脚本错误保留输出及调用列表，并提示已执行调用不会撤销。1.0.1 在输出超过 16 Mi 字符或 100,000 项时失败；界面原样呈现 SDK 错误。`max_output_tokens` 导致文本截断时，仅展示 SDK 实际提供的 `fullOutputPath`，不假定每种失败都有完整输出文件。
 
 图片保持原生结果的 data URL；「附加到下一条消息」使用现有图片附件路径，用户发送前不进入上下文。「保存到当前目录」走鉴权及同源保护的 `/api/codemode-image`，校验活动工作区与图片签名，以随机文件名、`wx` 创建，不覆盖已有文件；单张保存上限 6 MiB。保存是用户文件操作，不注册额外工具，也不把生成结果自动注入下一轮。图片超过此保存上限时仍可使用浏览器图片下载。
 
-验证：`codemode-mcp-test.mjs`（9204/9205、隔离配置和工作区、本地 mock 模型）验证真实 SDK 状态、凭据掩码、CAS、项目覆盖、配置生效、实时调用、部分失败、输出限制和图片安全；加 `--browser` 校验实际卡片、图片操作及设置交互。`native-tools-desktop-test.mjs` 覆盖 Node/Electron 的原生工具执行，`native-features-browser-test.mjs` 覆盖历史回退及 OAuth 界面。相关纯函数测试在 `tests/unit/codemode-presentation.test.ts`。
+验证：`codemode-mcp-test.mjs`（9204/9205、隔离配置和工作区、本地 mock 模型）验证真实 SDK 状态、凭据掩码、CAS、项目覆盖、配置生效、实时调用、部分失败、输出限制和图片安全；加 `--browser` 校验实际卡片、图片操作及设置交互。`native-tools-desktop-test.mjs` 覆盖 Node/Electron 的原生工具执行，`native-features-browser-test.mjs` 覆盖历史回退及 OAuth 界面。相关纯函数测试在 `tests/unit/codemode-presentation.test.ts` 与 `tests/unit/codemode-records.test.ts`；`codemode-records-browser-test.mjs` 使用模拟接口覆盖右栏实时更新、折叠、跳转、历史恢复、失败及传输限额，并检查 Web/macOS/Windows 窗口布局。
 
 原生 Pi 包与 standalone 扩展由设置 › Extensions 管理，接口、过滤恢复、作用域、目录与编辑规则见 [Extensions 架构](architecture-extensions.md)。这里的界面插件仍是独立的展示插件系统。
 
@@ -135,3 +141,5 @@ App 按 chat.plugins 动态 import 各插件的 client bundle（`/* @vite-ignore
 后台任务面板与注册接口已移除；插件在自身 deactivate 中清理计时器、连接与 worker。
 
 MCP OAuth 的 `oauth.clientRegistration` 接受 `auto`、`dcr`、`cimd`，通过原生验证和现有 JSON 编辑器保存；缺省由 SDK 使用 auto，宿主不将默认值写回用户配置。
+
+Codemode 压缩回归：`tests/unit/codemode-history.test.ts` 使用真实 SDK 验证 split-turn／整轮压缩、分支及请求边界、缓存和只读读取；`tests/codemode-history-browser-test.mjs` 使用真实持久会话与生产快照／树接口验证刷新、分支隔离及历史卡片，无模型调用。

@@ -1,3 +1,4 @@
+import { CodemodeHistory } from "./codemode-history.js";
 import { withOutputTokenFloor } from "./model-output-floor.js";
 import { modelConfigurationChanged, modelSourcesFor, type ModelSourceSync } from "./model-source-sync.js";
 import { taskDetail, recoverTaskSummaries, taskSummaries } from "./subagents/tasks.js";
@@ -982,6 +983,7 @@ export class ClientSession {
 				const update = toolOutputUpdate(event.partialResult);
 				const details = (event.partialResult as { details?: unknown })?.details;
 				const codemode = event.toolName === "codemode" ? codemodeDetails(details) : undefined;
+				if (codemode) (conv.codemodeHistory ??= new CodemodeHistory()).live.set(event.toolCallId, codemode);
 				const subagents = event.toolName === "subagent" ? subagentProgressDetails(details) : undefined;
 				if (update || codemode || subagents) {
 					this.emit({
@@ -1266,6 +1268,7 @@ export class ClientSession {
 			// ~60ms granularity instead of appearing only when the turn finishes.
 			streamingMessage,
 			subagentTasks: taskSummaries(conv.session.sessionManager.getSessionId(), new Set(messages.flatMap(message => message.content.flatMap(block => block.type === "toolCall" && block.name === "subagent" ? [block.id as string] : []))), new Set(messages.flatMap(message => message.role === "toolResult" && message.toolCallId ? [message.toolCallId] : []))),
+			codemode: (conv.codemodeHistory ??= new CodemodeHistory()).snapshot(conv.session.sessionManager, (message, entryId) => this.serializeCached(message, entryId)),
 			taskProgress: deriveTaskProgress(conv.id, taskHistoryFromSession(conv.session.sessionManager, (message, entryId) => this.serializeCached(message, entryId)) ?? messages, streamingMessage, conv.session.isStreaming, conv.lastTaskEndedAt),
 			isStreaming: this.session.isStreaming,
 			wiki: !!conv.wiki,
@@ -1544,7 +1547,6 @@ export class ClientSession {
 			},
 			setModel: (id) => this.setModel(id),
 		setCwd: (path) => this.setCwd(path),
-		setThinking: (level) => this.setThinking(level),
 		refreshSessions: () => this.refreshSessions(),
 
 		onQuit: () => this.onQuit?.() ?? false,

@@ -32,7 +32,6 @@ export interface SlashHost {
 	restartSession?: (conversationId: string) => Promise<void>;
 	setModel: (modelId: string) => Promise<void>;
 	setCwd: (path: string) => Promise<void>;
-	setThinking: (level: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max") => void;
 	refreshSessions: () => Promise<void>;
 	/** supervisor 的优雅重启调度；返回 false 时 exec 兜底 process.exit(0)。 */
 	onQuit?: () => boolean;
@@ -65,13 +64,6 @@ export const NATIVE_COMMANDS: {
 	{ name: "model", description: "切换模型", descriptionEn: "Switch model", argumentHint: "[名称]", argumentHintEn: "[name]" },
 	{ name: "compact", description: "压缩上下文", descriptionEn: "Compact context", argumentHint: "[说明]", argumentHintEn: "[instructions]" },
 	{ name: "cwd", description: "切换工作目录", descriptionEn: "Switch workspace", argumentHint: "<路径>", argumentHintEn: "<path>" },
-	{
-		name: "thinking",
-		description: "设置思考强度",
-		descriptionEn: "Set thinking level",
-		argumentHint: "<off|low|medium|high|xhigh|max>",
-		argumentHintEn: "<off|low|medium|high|xhigh|max>",
-	},
 	{ name: "resume", description: "刷新会话列表", descriptionEn: "Refresh session list" },
 	{ name: "reload", description: "重新加载扩展、技能与模板", descriptionEn: "Reload extensions, skills & templates" },
 	{ name: "help", description: "显示全部命令", descriptionEn: "Show all commands" },
@@ -228,35 +220,11 @@ export class SlashCommandsService {
 					await this.host.setCwd(args);
 				}
 				return true;
-			case "thinking": {
-				const ALIAS: Record<string, string> = {
-					off: "off",
-					minimal: "minimal",
-					low: "low",
-					medium: "medium",
-					high: "high",
-					xhigh: "xhigh",
-					max: "max",
-					关闭: "off",
-					极简: "minimal",
-					低: "low",
-					中: "medium",
-					高: "high",
-					极高: "xhigh",
-					最大: "max",
-				};
-				const level = ALIAS[args.trim().toLowerCase()];
-				if (!level) {
-					this.host.emit({
-						type: "notice",
-						level: "error",
-						text: `无效的思考强度：${args || "（空）"}。可用：off / minimal / low / medium / high / xhigh / max`,
-					});
-					return true;
-				}
-				this.host.setThinking(level as Parameters<SlashHost["setThinking"]>[0]);
+			// Retired UI command: consume old drafts without changing native settings
+			// or accidentally sending them to a paid model.
+			case "thinking":
+				this.host.emit({ type: "notice", level: "info", text: "手动思考档位已移除，思考行为由原生模型配置决定。" });
 				return true;
-			}
 			case "resume":
 				await this.host.refreshSessions();
 				this.host.emit({

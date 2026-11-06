@@ -1,3 +1,4 @@
+import { extensionToolFailure } from "./extension-tools.js";
 import { nativeSkills } from "./skills-service.js";
 import { builtinExtensionsState, toggleBuiltinDocument } from "./builtin-extensions.js";
 import { mkdirSync, readFileSync, writeFileSync, renameSync, statSync, realpathSync, existsSync } from "node:fs";
@@ -36,13 +37,17 @@ function runWorker(input: WorkerRequest, log: (line: string) => void = () => {})
 	return new Promise((resolve, reject) => {
 		const child = fork(new URL(import.meta.url.endsWith(".ts") ? "./extensions-worker.ts" : "./extensions-worker.js", import.meta.url), ["--extensions-worker"], { detached: process.platform !== "win32", stdio: ["ignore","pipe","pipe","ipc"], execArgv: process.execArgv.filter(a => !a.startsWith("--watch")), env: { ...process.env, ELECTRON_RUN_AS_NODE: "1", GIT_TERMINAL_PROMPT: "0" } });
 		let result: ExtensionsState | undefined, failure: Error | undefined;
-		child.stdout?.on("data", chunk => log(String(chunk))); child.stderr?.on("data", chunk => log(String(chunk)));
-		child.on("message", (message: { progress?: string; state?: ExtensionsState; error?: string }) => { if (message.progress) log(message.progress); if (message.state) result = message.state; if (message.error) failure = Error(message.error); });
-		const stop = () => { if (child.pid) killPidTree(child.pid); };
+		const toolPids = new Set<number>();
+		let output = "";
+		const capture = (chunk: unknown) => { output = (output + String(chunk)).slice(-12000); log(String(chunk)); };
+		child.stdout?.on("data", capture); child.stderr?.on("data", capture);
+		child.on("message", (message: { progress?: string; state?: ExtensionsState; error?: string; extensionToolPid?: number; active?: boolean }) => { if (message.extensionToolPid && Number.isInteger(message.extensionToolPid) && message.extensionToolPid > 0) { if (message.active) toolPids.add(message.extensionToolPid); else toolPids.delete(message.extensionToolPid); } if (message.progress) log(message.progress); if (message.state) result = message.state; if (message.error) failure = Error(message.error); });
+		const stopTools = () => { for (const pid of toolPids) killPidTree(pid); toolPids.clear(); };
+		const stop = () => { stopTools(); if (child.pid) killPidTree(child.pid); };
 		process.once("exit", stop);
 		const timer = setTimeout(() => { failure = Error("Package operation timed out"); stop(); }, input.action === "mutate" ? 20*60*1000 : 120000);
 		child.once("error", error => { clearTimeout(timer); process.removeListener("exit",stop); reject(error); });
-		child.once("close", (code, signal) => { clearTimeout(timer); process.removeListener("exit",stop); result && !failure && code === 0 ? resolve(result) : reject(failure ?? Error(`Package worker stopped (exit ${code ?? "none"}, signal ${signal ?? "none"})`)); });
+		child.once("close", (code, signal) => { stopTools(); clearTimeout(timer); process.removeListener("exit",stop); result && !failure && code === 0 ? resolve(result) : reject(extensionToolFailure(failure ?? Error(`Package worker stopped (exit ${code ?? "none"}, signal ${signal ?? "none"})`), output)); });
 		child.send(input, error => { if (error) { failure = error; stop(); } });
 	});
 }
@@ -87,6 +92,11 @@ export function installExtensionsRoutes(app: Express, service: () => AgentServic
 				}
 				res.json(builtinExtensionsState(cs.session, conversationId, cs.session.isIdle));
 				return;
+			}
+			if (action === "open-info" && req.body.id === "extensions:user") {
+				const path = join(agentDir, "extensions");
+				mkdirSync(path, { recursive: true, mode: 0o700 });
+				res.json({ absolute: path }); return;
 			}
 			if (action === "open-info" && req.body.id === "skills:user") {
 				const path = join(agentDir, "skills");

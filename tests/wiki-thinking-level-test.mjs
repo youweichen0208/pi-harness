@@ -16,8 +16,8 @@ const cwd = join(base, 'workspace');
 mkdirSync(cwd);
 writeFileSync(join(cwd, 'note.md'), '# Note\n\nhello\n');
 mkdirSync(join(base, 'agent'));
-writeFileSync(join(base, 'agent', 'models.json'), JSON.stringify({ providers: { volc: { api: 'anthropic-messages', baseUrl: `http://127.0.0.1:${mockPort}`, apiKey: 'test-only', models: [{ id: 'glm', name: 'GLM test', reasoning: true, input: ['text'], contextWindow: 32000, maxTokens: 4096 }] } } }));
-writeFileSync(join(base, 'agent', 'settings.json'), JSON.stringify({ defaultProvider: 'volc', defaultModel: 'glm', defaultThinkingLevel: 'off' }));
+writeFileSync(join(base, 'agent', 'models.json'), JSON.stringify({ providers: { volc: { api: 'anthropic-messages', baseUrl: `http://127.0.0.1:${mockPort}`, apiKey: 'test-only', models: [{ id: 'glm', name: 'GLM test', reasoning: true, compat: { forceAdaptiveThinking: true }, input: ['text'], contextWindow: 32000, maxTokens: 4096 }] } } }));
+writeFileSync(join(base, 'agent', 'settings.json'), JSON.stringify({ defaultProvider: 'volc', defaultModel: 'glm', defaultThinkingLevel: 'medium' }));
 writeFileSync(join(base, 'agent', 'auth.json'), JSON.stringify({ volc: { type: 'api_key', key: 'test-only' } }));
 const thinking = [];
 const mock = createServer(async (req, res) => {
@@ -50,15 +50,11 @@ try {
 	browser = await chromium.launch({ executablePath: CHROME_PATH || chromium.executablePath() });
 	const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
 	await page.goto(`http://127.0.0.1:${port}`);
-	// Pick the level once the session state has arrived, as a user would.
-	await page.locator('.thinking-control .chip').waitFor();
+	// The native configuration supplies thinking; no manual UI is needed.
 	await page.locator('.file-name', { hasText: 'note.md' }).waitFor();
-	for (let attempt = 0; attempt < 3 && !await page.locator('.thinking-control .chip', { hasText: '标准' }).count(); attempt++) {
-		await page.locator('.thinking-control .chip').click();
-		await page.locator('.dd-menu-thinking .dd-item', { hasText: '标准' }).click();
-		await page.locator('.thinking-control .chip', { hasText: '标准' }).waitFor({ timeout: 3000 }).catch(() => {});
-	}
-	await page.locator('.thinking-control .chip', { hasText: '标准' }).waitFor({ timeout: 1000 });
+	await page.locator('.input-tools-left > .dropdown .chip').click();
+	assert.equal(await page.locator('.dd-thinking-levels, .thinking-control').count(), 0);
+	await page.keyboard.press('Escape');
 	// ADR-0003: the Wiki chat runs in a detached window; the main window's
 	// chosen thinking level travels in the window URL and is applied on boot.
 	const popupPromise = page.context().waitForEvent('page');
@@ -70,8 +66,8 @@ try {
 	await wiki.locator('.wiki-agent-chat .inputbar textarea').fill('可以帮我读一下吗');
 	await wiki.locator('.wiki-agent-chat .inputbar button.send').click();
 	await wiki.locator('.wiki-agent-chat .messages', { hasText: 'Hello.' }).waitFor({ timeout: 15000 });
-	assert.deepEqual(thinking, ['enabled'], 'the Wiki request keeps thinking enabled');
-	console.log('PASS Wiki chat keeps the main chat thinking level');
+	assert.deepEqual(thinking, ['adaptive'], 'the Wiki request preserves native adaptive thinking');
+	console.log('PASS Wiki preserves native adaptive thinking without manual controls');
 } finally {
 	await browser?.close();
 	await new Promise(r => mock.close(r));
