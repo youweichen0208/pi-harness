@@ -30,6 +30,8 @@ const plain = (text: string) => text.replace(/\*\*([^*]+)\*\*/g, "$1").replace(/
 
 function parseHead(line: string, index: number) {
 	const body = line.replace(QUESTION, "");
+	const boldHead = /^\*\*(Q\d+[a-z]?)\s*[-–—:：.]\s*(.+?)\*\*\s*[:：]?\s*(.*)$/.exec(body);
+	if (boldHead) return { id: boldHead[1], title: plain(boldHead[2]), prompt: boldHead[3] };
 	const id = /\*{0,2}(Q\d+[a-z]?)\*{0,2}/.exec(body)?.[1] ?? `Q${index + 1}`;
 	const rest = body.replace(/^\*{0,2}Q\d+[a-z]?\*{0,2}\s*[-–—:：.]?\s*/, "");
 	const titled = /^\*\*([^*]+)\*\*\s*[:：]?\s*(.*)$/.exec(rest);
@@ -37,7 +39,7 @@ function parseHead(line: string, index: number) {
 }
 
 /** A list-style option line, after removing inline emphasis: `- **A.** text`, `A) text` or `(a) text`. */
-const LIST_OPTION = /^\s*(?:[-–—*]\s*)?(?:[(（]([A-Ha-h])[)）]|([A-Ha-h])[.、．)）])\s+(.+)$/;
+const LIST_OPTION = /^\s*(?:[-–—*]\s*)?(?:(?:[(（]([A-Ha-h])[)）]|([A-Ha-h])[.、．)）])\s+|([A-Ha-h])[:：]\s*)(.+)$/;
 
 /** Split `(a) x;(b) y;(c) z。trailing` into options; text before (a) and after the last option's sentence stays prompt. */
 function parseOptions(text: string) {
@@ -147,7 +149,7 @@ export function parseReplySegments(text: string): ReplySegment[] {
 		const promptLines: string[] = [];
 		for (const line of body) {
 			const listed = LIST_OPTION.exec(plain(line));
-			if (listed) listOptions.push({ key: (listed[1] ?? listed[2]!).toLowerCase(), text: plain(listed[3].trim()) });
+			if (listed) listOptions.push({ key: (listed[1] ?? listed[2] ?? listed[3]!).toLowerCase(), text: plain(listed[4].trim()) });
 			else promptLines.push(line);
 		}
 		const { prompt, options } = listOptions.length >= 2

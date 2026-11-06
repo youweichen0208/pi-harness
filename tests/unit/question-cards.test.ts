@@ -139,3 +139,29 @@ test.each([
 	expect(recommendedAnswers(questions)).toEqual({ Q1: 1 });
 	expect(composeAnswers(questions, { Q1: 2 })).toBe("Q1 判断职责：(c) 引擎路由");
 });
+
+
+test("issue #148: live grill round keeps colon-delimited options and fully bold question headings", () => {
+	const text = `❓ **Q1 —「新建会话」在数据模型里到底是什么？**
+短期新建还是原会话升级？
+
+- A：全新 Session 实体，旧会话只读。
+- B：同一逻辑会话内换类型。
+- C：复用 Session 并修改类型。
+
+➡️ 推荐 **A**：保留证据链。
+
+---
+
+❓ **Q2 — 升级由谁发起？**
+- **A:** 用户发起。
+- **B：** 系统发起。
+- C: 系统建议，用户确认。
+
+➡️ 推荐 **C**：保留用户确认。`;
+	const questions = parseReplySegments(text).flatMap(segment => segment.kind === "questions" ? segment.questions : []);
+	expect(questions.map(question => question.options.map(option => option.key))).toEqual([["a", "b", "c"], ["a", "b", "c"]]);
+	expect(questions[0]).toMatchObject({ id: "Q1", title: "「新建会话」在数据模型里到底是什么？", prompt: "短期新建还是原会话升级？" });
+	expect(recommendedAnswers(questions)).toEqual({ Q1: 0, Q2: 2 });
+	expect(composeAnswers(questions, { Q1: 1 })).toContain("(b) 同一逻辑会话内换类型。");
+});

@@ -89,14 +89,21 @@ test("omitted status/currentStepId/completedStepIds default instead of failing",
 	expect(() => transition({ action: "create", title: input.title }, undefined)).toThrow(/Invalid plan status|steps/);
 });
 
-test("issue #107: update inherits an omitted title but create still requires one", () => {
+test("issues #107/#147: update inherits its title and create defaults to the first step", () => {
 	const before = create();
 	const withoutTitle: Record<string, unknown> = { ...update(before) };
 	delete withoutTitle.title;
 	const next = transition(withoutTitle, before);
 	expect(next).toMatchObject({ title: before.title, status: "active", revision: 2 });
 	expect(planSnapshot(next)).toEqual(next);
-	expect(() => transition({ action: "create", steps: input.steps }, undefined)).toThrow(/title/);
+	const command = { action: "create", currentStepId: "q10-revise-docs", steps: [{ id: "q10-revise-docs", title: "Q10 修订落盘（ADR 0002 + CONTEXT.md）", detail: "..." }] };
+	const created = transition(command, before);
+	expect(created).toMatchObject({ title: command.steps[0].title, status: "active", currentStepId: "q10-revise-docs", revision: 1 });
+	expect(planSnapshot(created)).toEqual(created);
+	expect(command).not.toHaveProperty("title");
+	for (const title of ["", " ", null, 42, "x".repeat(81)]) expect(() => transition({ ...command, title })).toThrow(/title/);
+	for (const steps of [[], [{ id: "a" }], [{ id: "a", title: "x".repeat(81) }]]) expect(() => transition({ action: "create", steps })).toThrow();
+	expect(planSnapshot({ ...created, title: undefined })).toBeUndefined();
 });
 
 test("conflicts supply complete branch-local editable correction; ended plans require create", () => {

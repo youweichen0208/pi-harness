@@ -67,10 +67,16 @@ function commandState(value: Record<string, unknown>): PlanState {
  *  Applied before validation so an otherwise well-formed intent is not rejected
  *  by the SDK schema check. */
 export function withPlanDefaults(value: unknown, current?: PlanSnapshot): unknown {
-	if (!object(value) || !("action" in value) || !Array.isArray((value as { steps?: unknown }).steps)) return value;
+	if (!object(value) || !("action" in value) || !Array.isArray(value.steps)) return value;
 	const inherit = value.action === "update" && current?.status === "active" ? current : undefined;
 	const patch: Record<string, unknown> = {};
-	if (value.title === undefined && inherit) patch.title = inherit.title;
+	if (value.title === undefined) {
+		if (inherit) patch.title = inherit.title;
+		else if (value.action === "create") {
+			const first = value.steps[0];
+			patch.title = text(object(first) ? first.title : undefined, "steps[0].title (used as the omitted create title)", 80);
+		}
+	}
 	if (value.status === undefined) patch.status = inherit?.status ?? "active";
 	if (value.completedStepIds === undefined) patch.completedStepIds = inherit?.completedStepIds ?? [];
 	if (value.currentStepId === undefined) patch.currentStepId = inherit ? inherit.currentStepId : null;

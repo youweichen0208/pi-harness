@@ -1,3 +1,4 @@
+import { workspaceFilePath } from "../workspace-file-path";
 import { useFileDocument } from "../use-file-document";
 import { UiIcon } from "./UiIcon";
 import type { CurrentFileContext, ReadCurrentFile, SaveCurrentFile } from "../current-file";
@@ -71,7 +72,28 @@ interface Range {
 	end: number;
 }
 
-export const FilePreviewContent = memo(function FilePreviewContent({
+export const FilePreviewContent = memo(function FilePreviewContent(props: FilePreviewProps) {
+	const t = useT();
+	const location = workspaceFilePath(props.file.cwd, props.file.path);
+	if (!location.outside) return <WorkspaceFilePreviewContent {...props} />;
+	const reason = t("fileOutsideWorkspace");
+	return <div className="fp-embedded"><div className="fp">
+		<div className="fp-title-row">
+			<button className="fp-back" aria-label={t("backToFiles")} title={t("backToFiles")} onClick={props.onClose}>←</button>
+			<span className="fp-file-path" title={location.fullPath}>{location.fullPath}</span>
+			<div className="fp-header-actions">
+				<div className="fp-view-switch" role="group" aria-label={t("fileViewMode")} title={reason}>
+					<button type="button" disabled title={reason}>{t("fileViewPreview")}</button>
+					<button type="button" disabled title={reason}>{t("fileViewSource")}</button>
+				</div>
+				<button type="button" className="fp-header-action fp-reference" disabled={props.disabled} onClick={() => props.onAttach(props.file.path, props.file.name, "reference")}>@{t("fileReference")}</button>
+			</div>
+		</div>
+		<div className="fp-empty" role="status">{reason}</div>
+	</div></div>;
+});
+
+const WorkspaceFilePreviewContent = memo(function WorkspaceFilePreviewContent({
 	result, guard, disabled, connected, contextReader, contextSaver, onContextChange, autoSave = false,
 	file,
 	content,
@@ -84,6 +106,7 @@ export const FilePreviewContent = memo(function FilePreviewContent({
 	scmDirty,
 }: FilePreviewProps) {
 	const t = useT();
+	const location = workspaceFilePath(file.cwd, file.path);
 	const { document, loaded, draft, loading, status, error: documentError, conflict, leave, savedAt, remoteText, readRevision } = useFileDocument(file, send, autoSave, connected, disabled, content, result, fileChanged);
 	const [localError, setError] = useState("");
 	const error = documentError ? documentError.message ?? t(documentError.kind === "offline" ? "fileOffline" : "fileSaveFailed") : localError;
@@ -310,7 +333,7 @@ export const FilePreviewContent = memo(function FilePreviewContent({
 
 				<div className="fp-title-row">
 					<button className="fp-back" aria-label={t("backToFiles")} title={t("backToFiles")} onClick={handleClose} disabled={status === "saving"}>←</button>
-					<span className="fp-file-path" title={`${file.cwd}/${file.path}`}><span className="fp-project-name">{file.cwd.split(/[\\/]/).filter(Boolean).at(-1)}</span><span className="fp-path-separator"> / </span>{file.path.split(/[\\/]/).join(" / ")}</span>
+					<span className="fp-file-path" title={location.fullPath}><span className="fp-project-name">{file.cwd.split(/[\\/]/).filter(Boolean).at(-1)}</span><span className="fp-path-separator"> / </span>{location.relativePath.split("/").join(" / ")}</span>
 					{canEdit && <span className="fp-header-status" role="status">{status === "saving" ? t("fileSaving") : status === "failed" ? t("fileSaveFailed") : dirty ? t("fileUnsaved") : loaded ? t("fileSaved") : ""}{loaded && !dirty && status === "saved" && <time> · {savedAt.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}</time>}</span>}
 					<div className="fp-header-actions">
 						{isMarkdown && kind === "text" && <div className="fp-view-switch" role="group" aria-label={t("fileViewMode")}><button type="button" aria-pressed={!diffMode && markdownPreview} onClick={() => { setDiffMode(null); setMarkdownPreview(true); setEditing(true); setSel(null); }}>{t("fileViewPreview")}</button><button type="button" aria-pressed={!diffMode && !markdownPreview} disabled={!canEdit} onClick={() => { setDiffMode(null); setMarkdownPreview(false); setEditing(true); setSel(null); }}>{t("fileViewSource")}</button></div>}

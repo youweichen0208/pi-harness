@@ -48,9 +48,10 @@ try {
 			assert(request.tools.some(t => t.function.name === 'plan'));
 			assert(session.getToolDefinition('plan').executionMode === 'sequential');
 			assert.equal(session.getCallableToolNames().includes('plan'), false);
-			return round++ === 0 ? [['create', { ...input, ...(mode === 'only' ? { completionCriteria: undefined } : {}) }]] : [];
+			return round++ === 0 ? [['create', { ...input, ...(mode === 'only' ? { completionCriteria: undefined, title: undefined } : {}) }]] : [];
 		});
 		const first = latest(); assert.equal(first.revision, 1);
+		assert.equal(first.title, mode === 'only' ? input.steps[0].title : input.title);
 		assert.equal(first.completionCriteria, mode === 'only' ? '' : input.completionCriteria);
 		const firstLeaf = session.sessionManager.getLeafId();
 		round = 0;

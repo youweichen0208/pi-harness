@@ -118,7 +118,7 @@ try {
 	await page.locator(".fp-rich-document").waitFor();
 
 	// [7] Quote-selected lines coexist with the snapshot; markdown edits ride along.
-	await page.locator(".fp-markdown p").evaluate((node) => {
+	await page.locator(".fp-markdown p", { hasText: "Selected paragraph." }).evaluate((node) => {
 		const range = document.createRange();
 		range.selectNodeContents(node);
 		const selected = window.getSelection();
