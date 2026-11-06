@@ -1,3 +1,4 @@
+import { scmOperation } from "./scm-operation.js";
 import { installNoteAssets } from "./note-assets.js";
 import { installLinkPreview } from "./link-preview.js";
 import { installDatabaseRoutes } from "./database/routes.js";
@@ -195,6 +196,17 @@ app.get("/api/sqlite", async (req, res) => {
 	} catch (error) {
 		if (!controller.signal.aborted) res.status(400).json({ ...identity, error: (error as Error).message });
 	}
+});
+
+app.post("/api/scm-operation", async (req, res) => {
+	if (!originAllowed(req) || !req.is("application/json")) { res.status(403).json({ error: "Forbidden" }); return; }
+	const { clientId, cwd, conversationId, action, branch } = req.body ?? {};
+	if (![clientId, cwd, conversationId, action].every(value => typeof value === "string")) { res.status(400).json({ error: "Invalid request" }); return; }
+	const cs = service.get(clientId);
+	const admit = () => !!cs && !cs.switchingWorkspace && cs.cwd === cwd && cs.conversationId === conversationId && !service.quiesceInfo().quiesced;
+	if (!admit()) { res.status(409).json({ error: "Workspace unavailable" }); return; }
+	try { const text = await scmOperation(cwd, action, branch, admit); res.json({ cwd, conversationId, text }); }
+	catch (error) { res.status(400).json({ cwd, conversationId, error: (error as Error).message }); }
 });
 
 app.post("/api/markdown-image", (req, res) => {

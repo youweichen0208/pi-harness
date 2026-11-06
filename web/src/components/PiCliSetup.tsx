@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { FiExternalLink, FiAlertTriangle, FiCheckCircle } from "react-icons/fi";
+import { CopyButton } from "./copy-button";
 import { useT } from "../i18n";
 import { withToken } from "../auth-token";
 import { getClientId } from "../use-chat";
@@ -25,18 +27,18 @@ export function PiCliSetup({ cwd, ready, onInstall }: { cwd: string; ready: bool
 	}, [cwd, ready, attempt, t]);
 	const label = (tool: CliToolStatus) => tool.status === "available" ? tool.version : t(tool.status === "missing" ? "piCliMissing" : "piCliUnusable");
 	return <section className="ext-local-directory pi-cli-setup" aria-label="Pi CLI">
-		<strong>Pi CLI</strong>
+		<div className="ext-card-heading"><h3>Pi CLI</h3>{status && <span className="pi-cli-badge" data-status={status.pi.status}>{status.pi.status === "available" ? <FiCheckCircle aria-hidden="true" /> : <FiAlertTriangle aria-hidden="true" />}{status.pi.status === "available" ? t("piCliDetected") : label(status.pi)}</span>}</div>
 		<p className="ext-muted">{t("piCliHint")}</p>
-		{error ? <p role="alert" className="ext-error">{error}</p> : status ? <p role="status">Pi: {label(status.pi)} · Node.js: {label(status.node)} · npm: {label(status.npm)}</p> : <p role="status">{t(ready ? "loading" : "piCliDisconnected")}</p>}
+		{error ? <p role="alert" className="ext-error">{error}</p> : status ? <div className="pi-cli-tools" role="status">{([["Pi CLI", status.pi], ["Node.js", status.node], ["npm", status.npm]] as const).map(([name, tool]) => <span className="pi-cli-tool" data-status={tool.status} key={name}><i aria-hidden="true" />{name} · {label(tool)}</span>)}</div> : <p role="status">{t(ready ? "loading" : "piCliDisconnected")}</p>}
 		{status?.pi.status === "missing" && <>
-			<code className="ext-source">{PI_CLI_INSTALL_COMMAND}</code>
-			{!status.canInstall && <p className="ext-muted">{t("piCliDependencies")} <a href="https://nodejs.org/en/download" target="_blank" rel="noreferrer">Node.js</a></p>}
+			<div className="pi-cli-command"><code>{PI_CLI_INSTALL_COMMAND}</code><CopyButton text={PI_CLI_INSTALL_COMMAND} /></div>
+			{!status.canInstall && <p className="ext-muted">{t("piCliDependencies")} <a href="https://nodejs.org/en/download" target="_blank" rel="noreferrer">{t("piCliGetNode")}</a></p>}
 		</>}
 		{status?.pi.status !== "available" && <p className="ext-muted">{t("piCliTroubleshoot")}</p>}
 		<div className="ext-actions">
-			{status?.pi.status === "missing" && <button disabled={!ready || !status.canInstall} onClick={onInstall}>{t("piCliInstall")}</button>}
+			{status?.pi.status === "missing" && <button className="pi-cli-install" disabled={!ready || !status.canInstall} onClick={onInstall}>{t("piCliInstall")}</button>}
 			<button disabled={!ready || !status && !error} onClick={() => setAttempt(value => value + 1)}>{t("piCliCheck")}</button>
-			<a href="https://pi.dev/docs/latest/quickstart" target="_blank" rel="noreferrer">{t("piCliDocs")}</a>
+			<a href="https://pi.dev/docs/latest/quickstart" target="_blank" rel="noreferrer">{t("piCliDocs")} <FiExternalLink aria-hidden="true" /></a>
 		</div>
 	</section>;
 }

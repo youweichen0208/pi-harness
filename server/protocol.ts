@@ -1019,6 +1019,13 @@ export interface ConversationSummary {
 /** One loaded skill, with whether it is currently enabled. Disabled skills are
  *  excluded from the system prompt and from the /skill: command catalog. */
 /** Native discovery and versioned skill filters for the settings page. */
+export interface ScmWorktree {
+	path: string; branch?: string; current: boolean; bare?: boolean; detached?: boolean; locked?: string; prunable?: string;
+}
+
+export interface ScmOperationRequest { clientId: string; cwd: string; conversationId: string; action: "switch" | "push" | "pull"; branch?: string; }
+export interface ScmOperationResult { cwd: string; conversationId: string; text?: string; error?: string; }
+
 export interface NativeSkillsState {
 	version: string;
 	paths: string[];
@@ -1303,6 +1310,8 @@ export type ServerMessage =
 			upstreamGone?: boolean;
 			files?: ScmFileEntry[];
 			branches?: ScmBranchEntry[];
+			worktrees?: ScmWorktree[];
+			worktreesError?: string;
 			stats?: Record<string, [number, number]>;
 			history?: ScmCommitEntry[];
 			/** filediff payload */

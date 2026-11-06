@@ -5,7 +5,7 @@ import { UiIcon } from "./UiIcon";
 import { ExtensionCatalogList, extensionResourceKeys } from "./ExtensionCatalogList";
 import { extensionDownloads, extensionErrorMessage } from "../extensions-presentation";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { FiSearch, FiChevronDown, FiChevronRight, FiExternalLink, FiFolder, FiLock, FiX, FiDownload } from "react-icons/fi";
+import { FiPlus, FiRefreshCw, FiSearch, FiChevronDown, FiChevronRight, FiExternalLink, FiFolder, FiLock, FiX, FiDownload } from "react-icons/fi";
 import { useI18n, useT } from "../i18n";
 import { withToken } from "../auth-token";
 import { getClientId } from "../use-chat";
@@ -113,13 +113,13 @@ export function ExtensionsPanel({ cwd, reload, onUpdateCount, mode = "manage", c
 		</article>;
 	}
 	return <section className={`extensions-panel ${mode==="manage"?"extensions-v3":""}`}>
-		<header className="ext-header"><h2>{mode==="updates"?t("componentUpdates"):"Extensions"}</h2>{mode==="updates"&&<span className="settings-count">{state?.checkedAt?t("v2LastChecked",{time:new Date(state.checkedAt).toLocaleDateString()===new Date().toLocaleDateString()?new Date(state.checkedAt).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"}):new Date(state.checkedAt).toLocaleDateString([], {month:"short",day:"numeric"})}):t("extNotChecked")}</span>}<div className="settings-heading-actions">{mode==="updates"?<button disabled={checking||working} onClick={()=>void load(true)}>{t(checking?"extChecking":"settingsCheckNow")}</button>:<button disabled={working} onClick={()=>{setSource("");setPreview(undefined);setJob(undefined);setError("");setInstallOpen(true);}}>{t("extInstallSource")}</button>}</div></header>
+		<header className="ext-header"><h2>{mode==="updates"?t("componentUpdates"):"Extensions"}</h2>{mode==="updates"&&<span className="settings-count">{state?.checkedAt?t("v2LastChecked",{time:new Date(state.checkedAt).toLocaleDateString()===new Date().toLocaleDateString()?new Date(state.checkedAt).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"}):new Date(state.checkedAt).toLocaleDateString([], {month:"short",day:"numeric"})}):t("extNotChecked")}</span>}<div className="settings-heading-actions">{mode==="updates"?<button disabled={checking||working} onClick={()=>void load(true)}>{t(checking?"extChecking":"settingsCheckNow")}</button>:<button disabled={working} onClick={()=>{setSource("");setPreview(undefined);setJob(undefined);setError("");setInstallOpen(true);}}><FiPlus aria-hidden="true" />{t("extInstallSource")}</button>}</div></header>
 		{mode==="manage"&&<div className="ext-v3-tabs" role="tablist" aria-label="Extensions">{(["installed","browse"] as const).map(value=><button key={value} role="tab" tabIndex={tab===value?0:-1} onKeyDown={e=>{if(["ArrowLeft","ArrowRight","Home","End"].includes(e.key)){e.preventDefault();const next=e.key==="Home"?"installed":e.key==="End"?"browse":value==="installed"?"browse":"installed";setTab(next);setQuery("");setPage(1);(e.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next==="installed"?0:1])?.focus();}}} aria-selected={tab===value} onClick={()=>{setTab(value);setQuery("");setPage(1);}}>{value==="installed"?`${t("extInstalled")} · ${state?.packages.filter(p=>p.kind!=="file").length??0}`:t("extBrowse")}</button>)}</div>}
 		{mode === "manage" && cliInstall && <PiCliSetup cwd={cwd} ready={cliInstall.ready} onInstall={cliInstall.run} />}
 		{children}
-		{mode === "manage" && <div className="ext-local-directory">
+		{mode === "manage" && <div className="ext-local-directory"><h3>{t("extLocalTitle")}</h3>
 			<p className="ext-muted">{t("extLocalHint")}</p>
-			{localDirectory && <><code className="ext-source">{localDirectory}</code><div className="ext-actions"><button onClick={event => void openLocalDirectory(event.currentTarget.ownerDocument)}><FiFolder/>{t(desktopAPI?.openExtensionPath ? "extLocalOpen" : "extLocalCopy")}</button><button disabled={working} onClick={reload}>{t("extReload")}</button></div></>}
+			{localDirectory && <div className="ext-directory-controls"><code className="ext-source">{localDirectory}</code><div className="ext-actions"><button onClick={event => void openLocalDirectory(event.currentTarget.ownerDocument)}><FiFolder/>{t(desktopAPI?.openExtensionPath ? "extLocalOpen" : "extLocalCopy")}</button><button disabled={working} onClick={reload}><FiRefreshCw aria-hidden="true" />{t("extReload")}</button></div></div>}
 			{directoryError && <div className="ext-error" role="alert">{t("extLocalUnavailable", { error: directoryError })}<button onClick={() => setDirectoryAttempt(value => value + 1)}>{t("extRetry")}</button></div>}
 		</div>}
 		{error&&!installOpen&&<div className="ext-error" role="alert">{errorMessage(error)}<button onClick={()=>void load()}>{t("extRefresh")}</button></div>}

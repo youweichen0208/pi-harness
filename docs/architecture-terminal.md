@@ -31,7 +31,7 @@ Windows ConPTY 关闭终端时还有一个 node-pty 1.1.0 竞态：console-list 
 
 ### 协议
 
-客户端发 `scm_status`（status+branches(含远程,for-each-ref)+numstat）/ `scm_history`（提交图，懒加载——切到「提交树」tab 才查）/ `scm_filediff`（单文件 staged+worktree diff；未跟踪文本返回最多 512KB 的内容，二进制与目录返回类型提示）/ `scm_commit`（hash 白名单校验后 git show），服务端必回一条 `scm_data`（echo reqId + kind，ok/error/notRepo），前端按 reqId 匹配 pending 槽位——每个请求必有且仅有一个响应，UI 不会卡在 loading；sendScm 在 socket 断开时不占槽位不置 busy。路径校验：filediff 的 path 必须 resolve 后仍在工作区内；未跟踪文件预览还校验真实路径，防止符号链接越界；非 git 仓库返回 ok:true + notRepo:true。15s 超时/maxBuffer 16MB。
+客户端发 `scm_status`（status+branches(含远程,for-each-ref)+numstat）/ `scm_history`（提交图，懒加载——切到「提交树」tab 才查）/ `scm_filediff`（单文件 staged+worktree diff；未跟踪文本返回最多 512KB 的内容，二进制与目录返回类型提示）/ `scm_commit`（hash 白名单校验后 git show），服务端必回一条 `scm_data`（echo reqId + kind，ok/error/notRepo），SCM 面板的正数请求结果按 kind 保留，避免顶栏负数请求或其他查询在 React 批处理时覆盖；前端按 reqId 匹配 pending 槽位——每个请求必有且仅有一个响应，UI 不会卡在 loading；sendScm 在 socket 断开时不占槽位不置 busy。路径校验：filediff 的 path 必须 resolve 后仍在工作区内；未跟踪文件预览还校验真实路径，防止符号链接越界；非 git 仓库返回 ok:true + notRepo:true。15s 超时/maxBuffer 16MB。
 
 ### 对话改动面板（35a，协议 v41）
 
@@ -47,7 +47,9 @@ Windows ConPTY 关闭终端时还有一个 node-pty 1.1.0 竞态：console-list 
 
 ### 写操作
 
-仍走可见终端 tab（TerminalPanel 同款 tab 复用逻辑）并切到终端视图：提交/推送/拉取/切换分支（远程分支 `origin/x` → `git checkout -b x origin/x || git checkout x`）/ 单文件暂存（`git add -- <path>`，行 hover 显示 + 按钮）/ 取消暂存（`git reset HEAD -- <path>`，− 按钮），路径经单引号转义。分支下拉本地/远程分组（optgroup，i18n scmRemoteBranches）。
+切换分支、推送、拉取通过同源鉴权的 `/api/scm-operation` 执行固定 Git 参数，不经 shell；绑定 clientId、cwd、conversationId，共享 Git common-dir 写锁，执行前复核工作区，拒绝 quiesce。禁止终端凭证提示、编辑器与交互 SSH，120 秒与 1 MiB 输出限额，失败不自动重跑。前端保留结果，用户可打开普通终端自行处理；断连结果不明时提示检查状态。工作树通过 `git worktree list --porcelain -z` 与当前 toplevel 查询，路径按 NUL 解析，包含 locked/prunable/bare/detached。
+
+仍走可见终端 tab（TerminalPanel 同款 tab 复用逻辑）并切到终端视图：提交 / 单文件暂存（`git add -- <path>`，行 hover 显示 + 按钮）/ 取消暂存（`git reset HEAD -- <path>`，− 按钮），路径经单引号转义。分支下拉本地/远程分组（optgroup，i18n scmRemoteBranches）。
 
 ### 历史教训（已废弃的旧实现）
 
@@ -74,3 +76,5 @@ macOS 下若服务由 launchd 拉起（`process.ppid === 1`，LaunchAgent/孤儿
 同一规范化 cwd 的进行中 `scmStatus` 在服务进程内共用，覆盖多个面板、对话和客户端；成功或失败后清除，不缓存已完成结果。并行子查询全部退出后才释放请求，避免其中一个失败时其他扫描仍在运行却启动下一组。只读 Git 查询设置 `GIT_OPTIONAL_LOCKS=0`，避免刷新 index 触发 watcher 再次查询。15 秒超时或 16 MiB 输出限额通过进程树清理结束：POSIX 使用独立进程组，Windows 使用 `taskkill /F /T`；待管道关闭后返回错误。保留未跟踪文件和重命名检测。
 
 回归：`tests/unit/scm-status.test.ts`、`tests/scm-features-test.mjs`。
+
+SCM 工作树与操作回归：`tests/unit/scm-operations.test.ts` 使用本地仓库及 bare 远端验证切换、推拉、脏文件拒绝、固定参数与工作树解析；`tests/scm-operations-browser-test.mjs` 覆盖中英文、顶栏状态响应交错、原地结果、终端恢复不重跑及工作区／会话拒绝。Windows 工作区外路径继续由 `tests/external-file-preview-browser-test.mjs` 验证，不把另一个工作树路径拼到当前工作区名称后。

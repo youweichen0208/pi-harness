@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { FiDatabase, FiList, FiUsers, FiServer, FiCode, FiSearch } from "react-icons/fi";
 import { useT } from "../i18n";
 import { withToken } from "../auth-token";
 import { getClientId } from "../use-chat";
@@ -12,6 +13,8 @@ const labels = {
 	codemode: ["builtinCodemode", "builtinCodemodeHint"],
 	"tool-search": ["builtinSearch", "builtinSearchHint"],
 } as const;
+
+const icons = { "pi-harness-database": FiDatabase, "pi-harness-plan": FiList, "pi-harness-subagents": FiUsers, mcp: FiServer, codemode: FiCode, "tool-search": FiSearch };
 
 export function BuiltinExtensionsPanel({ cwd, conversationId, ready, canReload, plan, togglePlan, reload, openNative }: {
 	cwd: string; conversationId: string; ready: boolean; canReload: boolean; plan?: PlanSettingsState;
@@ -59,12 +62,13 @@ export function BuiltinExtensionsPanel({ cwd, conversationId, ready, canReload, 
 		{!state && <p>{t("loading")}</p>}
 		<div className="ext-list">{state?.items.map(item => {
 			const [title, description] = labels[item.id];
+			const Icon = icons[item.id];
 			const planItem = item.id === "pi-harness-plan" ? plan : undefined;
 			const status = planItem ? !planItem.available ? "unavailable" : planItem.pending ? "pending" : planItem.effective ? "loaded" : "disabled" : item.status;
 			const documentItem = item.id === "pi-harness-database" || item.id === "pi-harness-subagents";
 			const version = item.settingsVersion ?? state.documentVersion;
 			return <article className="ext-row builtin-row" key={item.id} data-builtin-id={item.id}>
-				<div className="builtin-row-head"><div><strong>{t(title)}</strong><p className="settings-description">{t(description)}</p></div>
+				<span className="builtin-icon" aria-hidden="true"><Icon /></span><div className="builtin-row-content"><div className="builtin-row-head"><div><strong>{t(title)}</strong><p className="settings-description">{t(description)}</p></div>
 					<span className="builtin-status" data-status={status}>{t(({ loaded: "builtinLoaded", disabled: "builtinDisabled", pending: "builtinPending", unavailable: "builtinUnavailable", error: "builtinError" } as const)[status])}</span>
 					{documentItem ? <input className="ext-switch" type="checkbox" role="switch" aria-label={`${t("extEnable")} ${t(title)}`} checked={item.enabled ?? false} disabled={busy || !ready || !version || item.enabled === undefined} onChange={event => void change({ action: "builtin-toggle", conversationId, id: item.id as "pi-harness-database" | "pi-harness-subagents", enabled: event.target.checked, version: version! })} />
 						: planItem ? <input className="ext-switch" type="checkbox" role="switch" aria-label={t("planEnabled")} checked={planItem.enabled} disabled={!ready} onChange={event => togglePlan(event.target.checked)} />
@@ -78,7 +82,7 @@ export function BuiltinExtensionsPanel({ cwd, conversationId, ready, canReload, 
 					<p>{t("builtinTools")}: <code>{item.tools.join(", ") || "—"}</code></p>
 					{item.commands.length > 0 && <p>{t("builtinCommands")}: <code>{item.commands.map(command => `/${command}`).join(", ")}</code></p>}
 					{documentItem && <button disabled={busy || !ready || !canReload || !state.canReload} onClick={reload}>{t("extReload")}</button>}
-				</details>
+				</details></div>
 			</article>;
 		})}</div>
 	</section>;

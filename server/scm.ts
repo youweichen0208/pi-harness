@@ -13,6 +13,7 @@ import { promisify } from "node:util";
 import { killPidTree } from "./process-utils.js";
 import { decodeText, looksLikeText } from "./text-sniff.js";
 
+import type { ScmWorktree } from "./protocol.js";
 const exec = promisify(execFile);
 
 /** Per-command timeout / output cap — a stuck repo must not hang the panel. */
@@ -49,6 +50,8 @@ export interface ScmCommitEntry {
 }
 
 export interface ScmStatusData {
+	worktrees?: ScmWorktree[];
+	worktreesError?: string;
 	base?: string;
 	notRepo: boolean;
 	branch: string;
@@ -353,7 +356,9 @@ async function queryStatus(
 	}
 	const branches = parseBranches(branchText);
 	const base = (await git(cwd, ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"]).catch(() => "")).trim() || ["main", "master", "develop"].find(name => branches.some(branch => branch.name === name)) || "HEAD";
+	const trees = await scmWorktrees(cwd).then(worktrees => ({ worktrees }), error => ({ worktreesError: (error as Error).message }));
 	return {
+		...trees,
 		base,
 		notRepo: false,
 		branch: header.branch,
@@ -517,4 +522,23 @@ export async function scmDiff(cwd: string, options: { scope: "branch" | "work"; 
 		parts.push(patch);
 	}
 	return { text: parts.join(""), ...(paths.length > shown.length ? { omittedUntracked: paths.length - shown.length } : {}), ...(result.reducedContext ? { reducedContext: true } : {}) };
+}
+
+export function parseWorktrees(text: string, current: string): ScmWorktree[] {
+	const entries: ScmWorktree[] = [];
+	let item: ScmWorktree | undefined;
+	const identity = (path: string) => process.platform === "win32" ? resolve(path).toLowerCase() : resolve(path);
+	for (const field of text.split("\0")) {
+		if (field.startsWith("worktree ")) { const path = field.slice(9); item = { path, current: identity(path) === identity(current) }; entries.push(item); }
+		else if (item && field.startsWith("branch ")) item.branch = field.slice(7).replace(/^refs\/heads\//, "");
+		else if (item && field === "bare") item.bare = true;
+		else if (item && field === "detached") item.detached = true;
+		else if (item && (field === "locked" || field.startsWith("locked "))) item.locked = field.slice(7) || "locked";
+		else if (item && (field === "prunable" || field.startsWith("prunable "))) item.prunable = field.slice(9) || "prunable";
+	}
+	return entries;
+}
+export async function scmWorktrees(cwd: string): Promise<ScmWorktree[]> {
+	const [text, root] = await Promise.all([git(cwd, ["worktree", "list", "--porcelain", "-z"]), git(cwd, ["rev-parse", "--show-toplevel"])]);
+	return parseWorktrees(text, root.replace(/\r?\n$/, ""));
 }

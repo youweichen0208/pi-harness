@@ -257,9 +257,9 @@ async function main() {
 	);
 	check("branch switched to feature-x", true);
 
-	// terminal tab for the checkout exists
-	await page.waitForSelector('.term-tab:has-text("git checkout")', { timeout: 8000 });
-	check("terminal tab 'git checkout' created", true);
+	// Successful switching stays in SCM and reports completion.
+	await page.waitForSelector('.scm-operation[role="status"]', { timeout: 8000 });
+	check("branch switch stays in SCM", await page.locator('.view-switch button[aria-selected="true"]:has-text("Git")').isVisible());
 
 	// switch back and verify the panel shows the new branch
 	await page.click('.view-switch button:has-text("Git")');

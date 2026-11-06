@@ -1657,7 +1657,6 @@ export function App() {
 					onInstallPiCli={installPiCli}
 					chat={chat}
 					send={send}
-					playground={playground}
 					onClose={() => setSettingsOpen(false)}
 				/>
 			)}

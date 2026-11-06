@@ -88,6 +88,10 @@ jobs:
         run: |
           npx vitest run tests/unit/pi-cli-status.test.ts
           node tests/pi-cli-setup-browser-test.mjs
+      - name: SCM operations and worktrees (local Git only)
+        run: |
+          npx vitest run tests/unit/scm-operations.test.ts
+          node tests/scm-operations-browser-test.mjs
       - run: npx electron-builder install-app-deps
       - name: Actual Electron typography and DPI regression
         run: node tests/windows-rendering-test.mjs

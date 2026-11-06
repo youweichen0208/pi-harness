@@ -8,8 +8,8 @@
 /* by reqId; every request is answered exactly once so the UI can never */
 /* get stuck "loading".                                                 */
 /*                                                                     */
-/* Write operations (commit / checkout / push / pull) still run in the  */
-/* visible terminal tab so the user sees exactly what happened.         */
+/* Switch/push/pull run through the bounded SCM operation endpoint.    */
+/* Commit and staging still use the visible terminal.                  */
 /* ------------------------------------------------------------------ */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -23,6 +23,9 @@ import {
 } from "react-icons/fi";
 import type { ChatState, TerminalMeta } from "../use-chat";
 import type { ClientMessage, CommandDef, ServerMessage } from "../types";
+import { withToken } from "../auth-token";
+import { getClientId } from "../use-chat";
+import type { ScmWorktree, ScmOperationRequest, ScmOperationResult } from "../types";
 import { randomUuid } from "../uuid";
 import { useT } from "../i18n";
 
@@ -115,6 +118,14 @@ export function ScmPanel({
 }: ScmPanelProps) {
 	const t = useT();
 	const [status, setStatus] = useState<ScmStatus | null>(null);
+	const [worktrees, setWorktrees] = useState<ScmWorktree[]>([]);
+	const [worktreesError, setWorktreesError] = useState("");
+	const [operation, setOperation] = useState<{ running: boolean; error?: string; text?: string }>();
+	const operationRef = useRef(false);
+	const operationEpoch = useRef(0);
+	useEffect(() => { operationEpoch.current++; operationRef.current = false; setOperation(undefined); return () => { operationEpoch.current++; }; }, [chat.state?.cwd, chat.state?.conversationId]);
+	useEffect(() => { setWorktrees([]); setWorktreesError(""); }, [chat.state?.cwd]);
+	const branchSelectionEdited = useRef(false);
 	const [branches, setBranches] = useState<ScmBranch[]>([]);
 	const [branchSel, setBranchSel] = useState("");
 	const [statMap, setStatMap] = useState<Map<string, StatInfo>>(new Map());
@@ -170,6 +181,8 @@ export function ScmPanel({
 				}
 				if (data.notRepo) {
 					setNotRepo(true);
+					setWorktrees([]);
+					setWorktreesError("");
 					setStatus(null);
 					setBranches([]);
 					setStatMap(new Map());
@@ -194,10 +207,13 @@ export function ScmPanel({
 				for (const [path, pair] of Object.entries(data.stats ?? {})) {
 					stats.set(path, { add: pair[0], del: pair[1] });
 				}
+				setWorktrees(data.worktrees ?? []);
+				setWorktreesError(data.worktreesError ?? "");
 				setStatus(st);
 				setBranches(brs);
 				setStatMap(stats);
 				setBranchSel((prev) => {
+					if (branchSelectionEdited.current && brs.some(x => x.name === prev)) return prev;
 					if (st.detached) return prev || "";
 					if (st.branch && brs.some((x) => x.name === st.branch)) return st.branch;
 					if (prev && brs.some((x) => x.name === prev)) return prev;
@@ -249,9 +265,10 @@ export function ScmPanel({
 
 	// Responses arrive through chat.scmData — apply when the reqId matches.
 	useEffect(() => {
-		const data = chat.scmData;
-		if (data && data.type === "scm_data") applyScmData(data);
-	}, [chat.scmData, applyScmData]);
+		for (const data of Object.values(chat.scmPanelResults)) {
+			if (data && data.cwd === chat.state?.cwd) applyScmData(data);
+		}
+	}, [chat.scmPanelResults, chat.state?.cwd, applyScmData]);
 
 	/**
 	 * Send an scm query and arm its pending slot. Returns false (without
@@ -292,6 +309,7 @@ export function ScmPanel({
 			if (lastCwdRef.current !== undefined && lastCwdRef.current !== chat.state.cwd) {
 				setStatus(null);
 				setBranches([]);
+				branchSelectionEdited.current = false;
 				setStatMap(new Map());
 				setHistory([]);
 				setHistoryLoading(false);
@@ -347,7 +365,7 @@ export function ScmPanel({
 
 	const runGitCommand = useCallback(
 		(title: string, command: string) => {
-			if (!chat.ready) return;
+			if (!chat.ready || operationRef.current) return;
 			const def: CommandDef = { name: title, command, cwd: "${pwd}" };
 			const existing = chat.terminals.find((tm) => tm.title === title);
 			if (existing) {
@@ -410,24 +428,34 @@ export function ScmPanel({
 		[notRepo, runGitCommand],
 	);
 
-	const handleSwitch = useCallback(() => {
-		if (!branchSel || notRepo) return;
-		const entry = branches.find((x) => x.name === branchSel);
-		if (entry?.remote && typeof entry.remote === "string") {
-			// Remote-tracking ref: create a local branch tracking it (falls back
-			// to a plain checkout when the local branch already exists).
-			const localName = branchSel.slice(entry.remote.length + 1);
-			runGitCommand(
-				"git checkout",
-				`git checkout -b ${localName} ${branchSel} || git checkout ${branchSel}`,
-			);
-		} else {
-			runGitCommand("git checkout", `git checkout ${branchSel}`);
+	const performOperation = async (action: ScmOperationRequest["action"]) => {
+		if (!chat.ready || !chat.state || operationRef.current) return;
+		operationRef.current = true;
+		const epoch = operationEpoch.current;
+		const body: ScmOperationRequest = { clientId: getClientId(), cwd: chat.state.cwd, conversationId: chat.state.conversationId, action, ...(action === "switch" ? { branch: branchSel } : {}) };
+		if (action === "switch") branchSelectionEdited.current = false;
+		setOperation({ running: true });
+		try {
+			const response = await fetch(withToken("/api/scm-operation"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+			const result: ScmOperationResult = await response.json();
+			if (epoch !== operationEpoch.current) return;
+			if (!response.ok) throw Error(result.error || t("scmOperationUnknown"));
+			if (result.cwd !== body.cwd || result.conversationId !== body.conversationId) throw Error(t("scmOperationUnknown"));
+			setOperation({ running: false, text: result.text });
+		} catch (error) {
+			if (epoch === operationEpoch.current) setOperation({ running: false, error: error instanceof TypeError ? t("scmOperationUnknown") : (error as Error).message });
+		} finally {
+			if (epoch === operationEpoch.current) { operationRef.current = false; refresh(false, true); }
 		}
-	}, [branchSel, branches, notRepo, runGitCommand]);
-
-	const handlePush = useCallback(() => runGitCommand("git push", "git push"), [runGitCommand]);
-	const handlePull = useCallback(() => runGitCommand("git pull", "git pull"), [runGitCommand]);
+	};
+	const handleSwitch = () => void performOperation("switch");
+	const handlePush = () => void performOperation("push");
+	const handlePull = () => void performOperation("pull");
+	const openRecoveryTerminal = () => {
+		if (!chat.ready || !chat.state) return;
+		terminal.create({ id: randomUuid(), conversationId: chat.state.conversationId, title: "Git", cwd: chat.state.cwd, cols: 80, rows: 24, running: true, exitCode: null });
+		onSwitchToTerminal();
+	};
 
 	/** Load the commit graph (lazy — only needed by the history tab). */
 	const loadHistory = useCallback(() => {
@@ -588,6 +616,16 @@ export function ScmPanel({
 						</button>
 				</div>
 
+				{operation && <div className="scm-operation" role={operation.error ? "alert" : "status"}>
+					<strong>{t(operation.running ? "scmOperationRunning" : operation.error ? "scmOperationFailed" : "scmOperationDone")}</strong>
+					{(operation.error || operation.text) && <pre>{operation.error || operation.text}</pre>}
+					{operation.error && <button className="btn" disabled={!chat.ready} onClick={openRecoveryTerminal}>{t("scmOperationTerminal")}</button>}
+				</div>}
+				{worktrees.length > 0 && <details className="scm-worktrees"><summary>{t("scmWorktrees", { n: worktrees.length })} · {t("scmWorktreeCurrent")}: {worktrees.find(tree => tree.current)?.path}</summary>
+					<p>{t("scmWorktreesHint")}</p>
+					<ul>{worktrees.map(tree => <li key={tree.path}><code>{tree.path}</code><span>{tree.current ? `${t("scmWorktreeCurrent")} · ` : ""}{tree.branch || (tree.bare ? "bare" : "detached")}{tree.locked ? ` · locked: ${tree.locked}` : ""}{tree.prunable ? ` · prunable: ${tree.prunable}` : ""}</span></li>)}</ul>
+				</details>}
+				{worktreesError && <p className="scm-worktrees" role="status">{t("scmWorktreesFailed")} {worktreesError}</p>}
 				{/* branch + push/pull */}
 				<div className="scm-row">
 					<span className="scm-branch-current" title={t("scmCurrentBranch")}>
@@ -612,7 +650,7 @@ export function ScmPanel({
 						value={branchSel}
 						disabled={notRepo || branches.length === 0}
 						title={t("scmSwitchBranch")}
-						onChange={(e) => setBranchSel(e.target.value)}
+						onChange={(e) => { branchSelectionEdited.current = true; setBranchSel(e.target.value); }}
 					>
 						<option value="" disabled>
 							{t("scmSelectBranch")}
@@ -635,7 +673,7 @@ export function ScmPanel({
 					<button
 						type="button"
 						className="btn"
-						disabled={!branchSel || branchSel === status?.branch || notRepo}
+						disabled={!chat.ready || operation?.running || !branchSel || branchSel === status?.branch || notRepo}
 						title={t("scmSwitchBranchTip", { branch: branchSel })}
 						onClick={handleSwitch}
 					>
@@ -645,7 +683,7 @@ export function ScmPanel({
 					<button
 						type="button"
 						className="btn"
-						disabled={!status || status.detached || notRepo}
+						disabled={!chat.ready || operation?.running || !status || status.detached || notRepo}
 						title={t("scmPushTip")}
 						onClick={handlePush}
 					>
@@ -655,7 +693,7 @@ export function ScmPanel({
 					<button
 						type="button"
 						className="btn"
-						disabled={!status || status.detached || notRepo}
+						disabled={!chat.ready || operation?.running || !status || status.detached || notRepo}
 						title={t("scmPullTip")}
 						onClick={handlePull}
 					>
