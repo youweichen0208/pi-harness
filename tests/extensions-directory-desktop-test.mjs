@@ -18,8 +18,17 @@ try {
 	let page;
 	for (let i = 0; i < 200; i++) { page = app.windows().find(window => window.url().startsWith('http://127.0.0.1:')); if (page) break; await sleep(100); }
 	assert(page); page.setDefaultTimeout(15000);
+	// Hosted Windows displays can clamp the initial window below the sidebar
+	// breakpoint. Keep this directory IPC test on a deterministic desktop canvas.
+	await app.evaluate(({ BrowserWindow }) => {
+		const window = BrowserWindow.getAllWindows().find(w => w.webContents.getURL().startsWith('http://127.0.0.1:'));
+		window.setContentSize(1440, 900); window.show(); window.focus();
+	});
+	const cdp = await page.context().newCDPSession(page);
+	await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+	await page.locator('.conn-dot.ok').first().waitFor({ state: 'attached' });
 	await app.evaluate(({ shell }) => { globalThis.openedExtensionFolders = []; shell.openPath = async path => { globalThis.openedExtensionFolders.push(path); return ''; }; });
-	await page.getByRole('button', { name: '设置', exact: true }).first().click();
+	await page.getByRole('button', { name: '设置', exact: true }).and(page.locator(':visible')).first().click();
 	await page.getByText('所有设置', { exact: true }).click();
 	await page.getByRole('button', { name: 'Extensions', exact: true }).click();
 	await page.getByRole('button', { name: '打开个人扩展目录', exact: true }).click();
