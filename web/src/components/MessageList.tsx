@@ -769,7 +769,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 	const many = markerGroups.some((group) => group.ids.length > 1);
 
 	return (
-		<SubagentTurnContext.Provider key={state.conversationId} value={subagentGroups}><div className="messages-wrap">
+		<SubagentTurnContext.Provider key={`${state.conversationId}:${state.sessionId}`} value={subagentGroups}><div className="messages-wrap">
 			<div className="messages" ref={scrollRef} onScroll={onScroll}>
 				{timeline.length === 0 && !state.streamingMessage && (
 					<div className="empty-state">

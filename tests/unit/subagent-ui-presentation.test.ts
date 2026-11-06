@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { subagentPresentation } from "../../web/src/subagent-presentation.js";
+import { mergeSubagentDetail, subagentPresentation } from "../../web/src/subagent-presentation.js";
 import type { UiSubagentProgress } from "../../server/protocol.js";
 import type { ProjectedSubagentResult } from "../../server/subagents/results.js";
 import type { SubagentResult } from "../../server/subagents/runner.js";
@@ -115,4 +115,19 @@ describe("subagentPresentation", () => {
 			expect(subagentPresentation(args, JSON.stringify(value), [live(0)])).toBeUndefined();
 		}
 	});
+});
+
+it("does not let persisted running metadata override a parent terminal result", () => {
+	const model = subagentPresentation(args, JSON.stringify({ results: [result(0)] }), undefined, [live(0)]);
+	expect(model?.items[0].phase).toBe("completed");
+	expect(model?.items[0].tool).toBeUndefined();
+});
+
+it("shares terminal detail state until the parent result arrives and never regresses finished steps", () => {
+	const running = live(0, { steps: [{ id: "step", tool: "source_read", status: "running" }] });
+	const completed = { ...running, phase: "completed" as const, steps: [{ id: "step", tool: "source_read" as const, status: "completed" as const }] };
+	expect(mergeSubagentDetail(running, completed).phase).toBe("completed");
+	expect(mergeSubagentDetail(completed, running)).toMatchObject({ phase: "completed", steps: [{ status: "completed" }] });
+	const final = { ...completed, phase: "failed" as const, text: "Authoritative failure" };
+	expect(mergeSubagentDetail(final, { ...completed, text: "Old report" }, true)).toMatchObject({ phase: "failed", text: "Authoritative failure" });
 });

@@ -812,6 +812,9 @@ export function useChat() {
 	const confirmedCwd = useRef("");
 	const snapshotReady = useRef(false);
 	const [hasSnapshot, setHasSnapshot] = useState(false);
+	useEffect(() => {
+		if (hasSnapshot && chat.status === "open") window.dispatchEvent(new CustomEvent("pi:subagent-ready"));
+	}, [hasSnapshot, chat.status]);
 	const acknowledged = useRef<string | null>(null);
 	const [switchError, setSwitchError] = useState<string | null>(null);
 	useEffect(() => {

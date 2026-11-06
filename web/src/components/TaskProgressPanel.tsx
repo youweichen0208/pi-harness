@@ -1,3 +1,4 @@
+import { isToolTextContinuation } from "../../../server/tool-text";
 import { currentCodemodeGroups, type CodemodeActivity } from "../codemode-records";
 import { CodemodeRecords } from "./CodemodeRecords";
 import { UiIcon } from "./UiIcon";
@@ -13,7 +14,15 @@ import { taskOutputs } from "../task-outputs";
 
 type Silence = Extract<ServerMessage, { type: "agent_silence" }> | null;
 
-export function TaskProgressPanel({ send, codemode, liveOutputs, toolStatuses, conversationId, task, silence, cwd, messages, onPreview, streaming, live }: CodemodeActivity & { send?: (message: ClientMessage) => boolean; conversationId?: string; task?: TaskProgress | null; silence: Silence; cwd: string; messages: UiMessage[]; onPreview: (path: string, name: string) => void; streaming?: boolean; live?: UiMessage | null }) {
+type TaskProgressPanelProps = CodemodeActivity & { send?: (message: ClientMessage) => boolean; conversationId?: string; task?: TaskProgress | null; silence: Silence; cwd: string; messages: UiMessage[]; onPreview: (path: string, name: string) => void; streaming?: boolean; live?: UiMessage | null };
+
+export function TaskProgressPanel(props: TaskProgressPanelProps) {
+	const history = props.codemode?.history ?? props.messages;
+	const request = history.findLast((message, index) => message.role === "user" && message.origin !== "auto-reminder" && !isToolTextContinuation(history, index));
+	return <TaskProgressContent key={`${props.conversationId ?? ""}:${props.task?.sourceMessageId ?? request?.id ?? "empty"}`} {...props} />;
+}
+
+function TaskProgressContent({ send, codemode, liveOutputs, toolStatuses, conversationId, task, silence, cwd, messages, onPreview, streaming, live }: TaskProgressPanelProps) {
 	const t = useT();
 	const codemodeGroups = useMemo(() => currentCodemodeGroups(messages, live, streaming ?? task?.status === "running", { codemode, liveOutputs, toolStatuses }, conversationId), [messages, live, streaming, task?.status, codemode, liveOutputs, toolStatuses, conversationId]);
 	const { locale } = useI18n();
@@ -32,6 +41,7 @@ export function TaskProgressPanel({ send, codemode, liveOutputs, toolStatuses, c
 	const [progressOpen, setProgressOpen] = useState(true);
 	const [outputsOpen, setOutputsOpen] = useState(true);
 	const [expandedPhase, setExpandedPhase] = useState<string | null>(null);
+	const [allPhases, setAllPhases] = useState<Set<string>>(() => new Set());
 	const [expanded, setExpanded] = useState<string | null>(null);
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const items = task?.plan?.items.filter(item => item.status !== "removed") ?? [];
@@ -57,14 +67,24 @@ export function TaskProgressPanel({ send, codemode, liveOutputs, toolStatuses, c
 	const planMessage = messages.find(message => message.role === "toolResult" && message.planSnapshot?.planId === task?.plan?.origin);
 	const planSource = planMessage && messages.find(message => message.role === "assistant" && message.content.some(block => block.type === "toolCall" && block.id === planMessage.toolCallId));
 	const outputLimited = !streaming && task?.status === "failed" && messages.findLast(message => message.role === "assistant" || message.role === "user")?.stopReason === "length";
-	const status = outputLimited ? t("replyOutputIncomplete") : interrupted ? t("toolRecoveryInterrupted") : reminding ? `${t("working")} · ${t("waitSeconds", { n: elapsed })}` : task?.status === "failed" ? t("taskFailed") : task?.status === "cancelled" ? t("taskCancelled") : task?.plan?.awaitingConfirmation ? t("planPrevious") : task?.status === "waiting" ? t("taskPlanOpen") : silence && task && silence.conversationId === task.conversationId ? t(phase?.label ?? "working") : "";
-	if (!task && !streaming && !interrupted && !reminding && !files.length && !codemodeGroups.length) return null;
-	return <div className={`task-progress task-sections ${interrupted ? "interrupted" : reminding ? "reminding" : task?.status ?? "empty"}`} tabIndex={-1} aria-label={t("taskProgress")}>
+	const status = outputLimited ? t("replyOutputIncomplete") : interrupted ? t("toolRecoveryInterrupted") : reminding ? `${t("working")} · ${t("waitSeconds", { n: elapsed })}` : task?.plan?.awaitingConfirmation ? t("planPrevious") : task?.status === "waiting" ? t("taskPlanOpen") : silence && silence.conversationId === conversationId ? t(phase?.label ?? "working") : "";
+	const empty = !task && !streaming && !interrupted && !reminding && !codemodeGroups.length;
+	const state = interrupted ? "interrupted" : reminding ? "reminding" : task?.status ?? (streaming ? "running" : undefined);
+	const stateKeys = { running: "taskStateRunning", waiting: "taskStateWaiting", done: "taskStateDone", failed: "taskStateFailed", cancelled: "taskStateCancelled", interrupted: "taskStateInterrupted", reminding: "taskStateReminding" } as const;
+	return <div className={`task-progress task-sections ${state ?? "empty"}`} tabIndex={-1} aria-label={t("taskProgress")}>
 		<div className="task-sections-scroll" ref={scrollRef}>
+			{empty ? <p className="task-panel-empty">{t("taskPanelEmpty")}</p> : <>
+			<header className="task-overview">
+				<h3>{task?.title || t(streaming || interrupted || reminding ? "taskCurrentTitle" : "taskRecordsTitle")}</h3>
+				<div className="task-overview-meta">
+					{state && <span className={`task-overview-state ${state}`} role="status">{t(stateKeys[state])}</span>}
+					{!!items.length && <span>{t("taskPlanCount", { completed: items.filter(item => item.status === "done").length, total: items.length })}</span>}
+				</div>
+				{status && <p className="task-overview-reason task-progress-status task-progress-source">{status}</p>}
+			</header>
 			<section className="task-section">
 				<button type="button" className="task-section-heading" aria-expanded={progressOpen} onClick={() => setProgressOpen(value => !value)}><FiChevronRight className={progressOpen ? "open" : ""} />{t(stepLog ? "taskStepsHeading" : "taskProgressHeading")}{stepLog && <span className="task-section-count">{t("taskStepsCount", { n: phases.length })}</span>}</button>
 				{progressOpen && <div className="task-section-content">
-					{status && (!interrupted || !!task?.plan) && <p className={`task-progress-status task-progress-source ${interrupted ? "interrupted" : reminding ? "reminding" : task?.status}`} role="status">{reminding && <i aria-hidden="true" />}{status}</p>}
 					{task?.plan && items.length ? <>
 						{task.plan.completionCriteria && <p className="task-outline-criteria">{t("taskCompletionCriteria")}：{task.plan.completionCriteria}</p>}
 						<div className="task-plan-list">{items.map(item => <div key={item.id} className={`task-plan-step ${interrupted && item.status === "running" ? "interrupted" : item.status}${expanded === item.id ? " expanded" : ""}`}>
@@ -84,7 +104,8 @@ export function TaskProgressPanel({ send, codemode, liveOutputs, toolStatuses, c
 						</div>)}</div>
 					</> : stepLog ? <ol className="task-step-log">{phases.map(phase => {
 						const items = phaseItems(phase, cwd);
-						const shown = items.slice(0, 4);
+						const showAll = allPhases.has(phase.id);
+						const shown = showAll ? items : items.slice(0, 4);
 						const duration = phase.status !== "running" && phase.endedAt && phase.startedAt ? phase.endedAt - phase.startedAt : undefined;
 						return <li key={phase.id} className={`task-step ${phase.status}`}>
 							<span className="task-step-mark" aria-hidden="true">{phase.status === "done" ? "✓" : phase.status === "failed" ? "×" : <svg className="task-step-spinner" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeDasharray="29 9" /></svg>}</span>
@@ -93,10 +114,14 @@ export function TaskProgressPanel({ send, codemode, liveOutputs, toolStatuses, c
 							{duration !== undefined && duration >= 100 && <span className="task-step-time">{duration < 60_000 ? commandDuration(duration) : elapsedLabel(duration / 1000)}</span>}
 							{expandedPhase === phase.id && shown.length > 0 && <ul className="task-step-items">
 								{shown.map(item => <li key={item.key}><button type="button" title={item.path ?? item.label} onClick={() => item.path ? preview(item.path) : window.dispatchEvent(new CustomEvent("pi:jump-tool", { detail: { messageId: item.messageId, toolCallId: item.toolCallId } }))}>{item.label}</button></li>)}
-								{items.length > shown.length && <li className="task-step-more">{t("taskStepsMore", { n: items.length - shown.length })}</li>}
+								{items.length > 4 && <li className="task-step-more"><button type="button" aria-expanded={showAll} onClick={() => setAllPhases(previous => {
+									const next = new Set(previous);
+									if (next.has(phase.id)) next.delete(phase.id); else next.add(phase.id);
+									return next;
+								})}>{showAll ? t("taskRecordsCollapse") : t("taskRecordsExpand", { n: items.length - 4 })}</button></li>}
 							</ul>}
 						</li>;
-					})}</ol> : interrupted ? <div className="task-interrupted-hint"><strong>● {t("taskInterruptedTitle")}</strong><p>{t("taskInterruptedHint")}</p></div> : reminding ? null : <div className="task-section-empty"><div className="task-empty-circles" aria-hidden="true"><i /><i /><i /></div><p>{t("taskProgressEmpty")}</p></div>}
+					})}</ol> : interrupted ? <div className="task-interrupted-hint"><strong>● {t("taskInterruptedTitle")}</strong><p>{t("taskInterruptedHint")}</p></div> : reminding ? null : <div className="task-section-empty"><p>{t(streaming ? "taskStepsPending" : "taskStepsEmpty")}</p></div>}
 				</div>}
 			</section>
 			<CodemodeRecords groups={codemodeGroups} messages={live ? [...messages, live] : messages} conversationId={conversationId} send={send}/>
@@ -107,6 +132,7 @@ export function TaskProgressPanel({ send, codemode, liveOutputs, toolStatuses, c
 					{file.counted && <span className="task-file-counts" title={t("taskOutputsCountsHint")} aria-label={t("taskOutputsCountsLabel", { added: file.added, removed: file.removed })}><span>+{file.added}</span> <span>−{file.removed}</span></span>}
 				</div>)}</div> : <p className="task-files-empty">{t("taskOutputsEmpty")}</p>}</div>}
 			</section>
+			</>}
 		</div>
 	</div>;
 }

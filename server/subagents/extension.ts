@@ -89,7 +89,7 @@ export const createSubagentExtension = (host: () => SubagentHost | undefined = (
 			if (spawned + jobs.length > requestBudget) throw Error(`Subagent request budget exceeded (${requestBudget} children); synthesize the available evidence`);
 
 			spawned += jobs.length;
-			for (const job of jobs) covered.add(job.source.id);
+			for (const job of jobs) for (const source of job.sources ?? [job.source]) covered.add(source.id);
 			const statuses: UiSubagentProgress[] = jobs.map((job, taskIndex) => ({ taskIndex, title: job.title, sources: job.sources, sourceId: job.source.id, source: job.source.name, root: job.source.root, task: job.task, phase: "queued" }));
 			const publish = () => update?.({ content: [{ type: "text", text: statuses.map(status => `${status.title}: ${status.phase}${status.tool ? ` · ${status.tool}` : ""}`).join("\n") }], details: { subagents: statuses } });
 			for (const [index, job] of jobs.entries()) {

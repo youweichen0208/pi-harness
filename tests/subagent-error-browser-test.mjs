@@ -30,13 +30,20 @@ try {
 		{ id: 'sources-call', role: 'assistant', model: 'test-model', content: [{ type: 'toolCall', id: 'sources', name: 'subagent', argumentsText: '{"action":"sources"}' }] },
 		{ id: 'sources-result', role: 'toolResult', toolCallId: 'sources', toolName: 'subagent', durationMs: 25, content: [{ type: 'text', text: '{"sources":[{"name":"pi-web-ui"}]}' }] },
 	);
-	let base;
+	let base, displayed, liveRoute, detailMode = "error";
 	await page.routeWebSocket(/\/ws(?:\?|$)/, route => {
+		liveRoute = route;
 		const upstream = route.connectToServer();
 		route.onMessage(w => {
 			const message = JSON.parse(String(w));
 			if (message.type === 'subagent_request') {
 				detailRequests.push(message);
+				if (detailMode === "drop") return;
+				if (detailMode === "stale" || detailMode === "complete") {
+					const item = results.find(item => item.taskId === message.taskId);
+					route.send(JSON.stringify({ type: "subagent_response", requestId: message.requestId, conversationId: message.conversationId, taskId: message.taskId, detail: { task: { ...item, phase: detailMode === "stale" ? "running" : item.status }, events: [{ seq: 0, at: stamp, type: "answer", text: "Retained execution output" }], truncated: false } }));
+					return;
+				}
 				route.send(JSON.stringify({ type: 'subagent_response', requestId: message.requestId, conversationId: message.conversationId, taskId: message.taskId, error: 'fixture unavailable' }));
 				return;
 			}
@@ -46,7 +53,8 @@ try {
 			const message = JSON.parse(String(w));
 			if (message.type === 'snapshot' || message.type === 'snapshot_delta') {
 				base = { ...base, ...message.state };
-				route.send(JSON.stringify({ type: 'snapshot', state: { ...base, piConfigured: true, model: { id: "fixture-model", name: "Fixture model", provider: "fixture", vision: false }, isStreaming: false, messages, streamingMessage: null, taskProgress: null } }));
+				displayed = { ...base, piConfigured: true, model: { id: "fixture-model", name: "Fixture model", provider: "fixture", vision: false }, isStreaming: false, messages, streamingMessage: null, taskProgress: null };
+				route.send(JSON.stringify({ type: "snapshot", state: displayed }));
 			} else route.send(w);
 		});
 	});
@@ -61,7 +69,7 @@ try {
 	assert.equal(await page.locator('.header-model-label').count(), 0);
 	const sourcesCard = page.locator('.toolcall-subagent-quiet').filter({ has: page.locator('.toolcall-action', { hasText: 'sources' }) });
 	assert.equal(await sourcesCard.locator('.toolcall-head button').count(), 1, 'only the named expand control remains in the header');
-	assert.match(await sourcesCard.locator('.toolcall-status').innerText(), /已完成/);
+	assert.match(await sourcesCard.locator('.toolcall-status').innerText(), /Completed/);
 	assert.equal(await sourcesCard.locator('.toolcall-body').count(), 0);
 	await sourcesCard.locator('.toolcall-name-toggle').click();
 	assert.equal(await sourcesCard.locator('.subagent-tool-actions button').count(), 2, 'copy and zoom remain in details');
@@ -101,6 +109,39 @@ try {
 	await page.keyboard.press('Escape');
 	mkdirSync('tests/scratch', { recursive: true });
 	await page.screenshot({ path: 'tests/scratch/subagent-errors-light.png' });
+	// A terminal task still needs its first detail response. Drop it, then return stale status.
+	detailMode = "drop";
+	const beforeDrop = detailRequests.length;
+	await page.locator('.subagent-task-row').filter({ hasText: '任务 3' }).click();
+	await page.waitForTimeout(200);
+	assert.equal(detailRequests.length, beforeDrop + 1);
+	detailMode = "stale";
+	await page.waitForTimeout(10800);
+	assert(detailRequests.length >= beforeDrop + 2, 'lost terminal detail is automatically retried');
+	assert.match(await page.locator('.subagent-drawer-meta').innerText(), /Completed/);
+	assert.equal(await page.getByRole('button', { name: '停止任务', exact: true }).count(), 0);
+	assert.match(await page.locator('.subagent-task-result').innerText(), /快照由统一入口生成/);
+	await page.getByRole('button', { name: '执行过程', exact: true }).click();
+	detailMode = "error";
+	await page.locator('.subagent-drawer [role="status"]').waitFor();
+	assert.equal(await page.getByRole('button', { name: '执行过程', exact: true }).getAttribute('aria-pressed'), 'true');
+	assert.match(await page.locator('.subagent-drawer-content').innerText(), /子代理回答/);
+	// Reconnect must wait for a full snapshot, then resume detail at the prior sequence.
+	detailMode = "complete";
+	const beforeReconnect = detailRequests.length;
+	liveRoute.close();
+	await page.waitForFunction(() => !document.querySelector('.subagent-drawer [role="status"]'));
+	assert(detailRequests.length > beforeReconnect);
+	assert.equal(detailRequests.at(-1).cursor, 1);
+	await page.getByRole('button', { name: '结果', exact: true }).click();
+	assert.match(await page.locator('.subagent-task-result').innerText(), /快照由统一入口生成/);
+	const previousRequest = detailRequests.at(-1);
+	liveRoute.send(JSON.stringify({ type: "snapshot", state: { ...displayed, sessionId: `${displayed.sessionId}-switched` } }));
+	await page.waitForFunction(() => !document.querySelector('.subagent-drawer'));
+	liveRoute.send(JSON.stringify({ ...previousRequest, type: "subagent_response", error: "late old-session response" }));
+	await page.waitForTimeout(1200);
+	assert.equal(await page.locator('.subagent-drawer').count(), 0, 'switching conversation closes detail and ignores old replies');
+	detailMode = "error";
 	for (const item of results) { item.status = 'cancelled'; item.text = 'Error: This operation was aborted'; item.evidenceStatus = 'unverified'; delete item.report; }
 	messages[2].content[0].text = JSON.stringify({ results });
 	await page.reload();

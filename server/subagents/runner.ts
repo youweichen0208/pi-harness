@@ -6,7 +6,7 @@ import type { SubagentSource } from "./sources.js";
 
 export interface SubagentJob { source: SubagentSource; sources?: SubagentSource[]; title?: string; task: string; record?: TaskRecord }
 export interface SubagentResult {
-	taskId?: string; title?: string; sources?: SubagentSource[];
+	taskId?: string; taskIndex?: number; title?: string; sources?: SubagentSource[];
 	steps?: UiSubagentStep[];
 	sourceId: string; source: string; root: string; task: string;
 	status: "completed" | "failed" | "cancelled";
@@ -14,6 +14,7 @@ export interface SubagentResult {
 	evidenceStatus: "checked" | "unverified";
 	report?: SubagentResearchReport;
 	evidenceWarning?: string;
+	outputTruncated?: true;
 	usage?: { input: number; output: number; cacheRead: number; cacheWrite: number; cost: number };
 }
 export interface SubagentProgress { index: number; phase: "queued" | "running" | "completed" | "failed" | "cancelled"; tool?: string; steps?: UiSubagentStep[] }
@@ -51,9 +52,9 @@ const slots = new Slots();
 
 /** Fresh native sessions; no shared transcript, project code, plugins or recursive delegation. */
 export async function runSubagent(job: SubagentJob, parent: SubagentParent, signal: AbortSignal, progress: (tool?: string, steps?: UiSubagentStep[]) => void): Promise<SubagentResult> {
-	const started = Date.now();
+	let started: number | undefined;
 	const timeout = new AbortController();
-	const timer = setTimeout(() => timeout.abort(new Error("Subagent timed out after 180 seconds")), CHILD_TIMEOUT_MS);
+	let timer = setTimeout(() => timeout.abort(new Error("Subagent queue timed out after 180 seconds; investigation never started")), CHILD_TIMEOUT_MS);
 	const cancel = AbortSignal.any([signal, timeout.signal, ...(job.record ? [job.record.controller.signal] : [])]);
 	let session: AgentSession | undefined, release: (() => void) | undefined, off: (() => void) | undefined;
 	let aborting: Promise<void> | undefined;
@@ -69,7 +70,10 @@ export async function runSubagent(job: SubagentJob, parent: SubagentParent, sign
 	try {
 		release = await slots.acquire(cancel);
 		cancel.throwIfAborted();
-		job.record?.update({ startedAt: Date.now() });
+		clearTimeout(timer);
+		started = Date.now();
+		timer = setTimeout(() => timeout.abort(new Error("Subagent timed out after 180 seconds of execution")), CHILD_TIMEOUT_MS);
+		job.record?.update({ startedAt: started });
 		emit();
 		const research = await createSubagentResearchTools(job.source.root, job.sources);
 		const customTools = research.tools;
@@ -125,15 +129,17 @@ export async function runSubagent(job: SubagentJob, parent: SubagentParent, sign
 		result.report = research.getReport();
 		const final = session.messages.findLast(message => message.role === "assistant");
 		const answer = (final?.role === "assistant" ? final.content.filter(part => part.type === "text").map(part => part.text).join("\n").trim() : "") || result.report?.summary || "";
+		const modelTruncated = final?.role === "assistant" && final.stopReason === "length";
+		result.truncated = modelTruncated;
 		if (!answer) throw Error("Subagent finished without a report");
 		if (!steps.some(step => step.tool !== "source_report" && step.status === "completed")) {
 			// Preserve the bounded answer as diagnostic output, never as a successful report.
 			result.report = undefined;
 			throw Error(`Subagent finished without a successful investigation step. Unverified response: ${answer}`);
 		}
-		result.status = "completed";
-		result.truncated = answer.length > MAX_RESULT_CHARS;
-		result.text = answer.slice(0, MAX_RESULT_CHARS) + (result.truncated ? "\n[Report truncated; narrow the follow-up question.]" : "");
+		result.status = modelTruncated && !result.report ? "failed" : "completed";
+		result.text = (modelTruncated && !result.report ? "Investigation incomplete: model output was truncated before a valid report was submitted.\n\n" : "") + answer.slice(0, MAX_RESULT_CHARS);
+		if (answer.length > MAX_RESULT_CHARS) result.outputTruncated = true;
 		result.evidenceStatus = result.report?.findings.some(finding => finding.citations.length) ? "checked" : "unverified";
 		if (result.evidenceStatus === "unverified") result.evidenceWarning = research.getReportError() ?? (result.report ? "The report contains no cited findings; consult its open questions before drawing conclusions." : "No structured evidence report was submitted. Treat the text as unverified leads, not checked findings.");
 	} catch (error) {
@@ -151,7 +157,7 @@ export async function runSubagent(job: SubagentJob, parent: SubagentParent, sign
 		}
 		for (const step of steps) if (step.status === "running") { step.status = result.status === "cancelled" ? "cancelled" : "failed"; step.durationMs = Math.max(0, Date.now() - stepStarts.get(step.id)!); }
 		result.steps = steps;
-		release?.(); result.durationMs = Date.now() - started;
+		release?.(); result.durationMs = started === undefined ? 0 : Date.now() - started;
 	}
 	return result;
 }
@@ -170,6 +176,7 @@ export async function runSubagents(jobs: SubagentJob[], parent: SubagentParent, 
 			} catch (error) {
 				results[index] = { sourceId: job.source.id, source: job.source.name, root: job.source.root, task: job.task, status: signal.aborted ? "cancelled" : "failed", text: String(error).slice(0, 2000), durationMs: 0, truncated: false, evidenceStatus: "unverified" };
 			}
+			results[index].taskIndex = index;
 			if (job.record) {
 				results[index] = { ...results[index], taskId: job.record.id, title: job.title, sources: job.sources };
 				try { await job.record.finish(results[index]); }

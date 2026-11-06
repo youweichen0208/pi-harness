@@ -173,3 +173,9 @@ test("explicit batches cover large workspaces and the task budget resets for new
 	await execute({ action: "run", tasks: [{ sourceIds: [sources.sources[0].id], task: "Follow up" }] });
 	expect(runSubagents.mock.calls.at(-1)![0]).toHaveLength(1);
 });
+
+test("coverage includes every selected source once, across tasks", async () => {
+	const ids = sources.sources.slice(0, 2).map(source => source.id);
+	const result = await execute({ action: "run", tasks: [{ sourceIds: ids, task: "Compare" }, { sourceIds: [ids[0]], task: "Read" }] });
+	expect(JSON.parse(String(result.content[0].type === "text" && result.content[0].text)).coverage.attemptedSourceIds).toEqual(ids);
+});

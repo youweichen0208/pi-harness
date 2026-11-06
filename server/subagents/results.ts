@@ -25,7 +25,6 @@ function clip(text: string, maxBytes: number): string {
 }
 
 function mark(result: ProjectedSubagentResult): void {
-	result.truncated = true;
 	result.outputTruncated = true;
 }
 

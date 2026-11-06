@@ -72,6 +72,7 @@ export class TaskRecord {
 		}).catch(error => { this.storageError = error instanceof Error ? error : Error(String(error)); });
 	}
 	update(patch: Partial<UiSubagentProgress>) {
+		if (terminal(this.data.task.phase) && patch.phase && !terminal(patch.phase)) return;
 		// A pending stop must not regress to running when the SDK drains an event.
 		if (this.data.task.phase === "stopping" && patch.phase === "running") patch = { ...patch, phase: "stopping" };
 		this.data.task = { ...this.data.task, ...patch };
@@ -102,12 +103,14 @@ export class TaskRecord {
 	}
 }
 
-export async function taskDetail(sessionId: string, taskId: string, allowedCalls: ReadonlySet<string>, cursor = 0, stop = false): Promise<UiSubagentTaskDetail> {
+export async function taskDetail(sessionId: string, taskId: string, allowedCalls: ReadonlySet<string>, cursor = 0, stop = false, ancestor = false): Promise<UiSubagentTaskDetail> {
 	if (!Number.isSafeInteger(cursor) || cursor < 0) throw Error("Invalid subagent detail cursor");
 	file(taskId, sessionId);
 	const running = active.get(taskId);
 	const data: RecordData = running?.data ?? JSON.parse(await readFile(file(taskId, sessionId), "utf8"));
 	if (data.sessionId !== sessionId || !allowedCalls.has(data.toolCallId)) throw Error("Subagent task does not belong to this session branch");
+	if (data.task.taskId !== taskId) throw Error("Subagent task identity mismatch");
+	if (ancestor && (running || !terminal(data.task.phase))) throw Error("Ancestor subagent record is not terminal");
 	if (stop) running?.stop();
 	if (!running && !terminal(data.task.phase)) {
 		data.task = { ...data.task, phase: "failed", tool: undefined, steps: data.task.steps?.map(step => step.status === "running" ? { ...step, status: "failed" } : step) };

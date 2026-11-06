@@ -58,12 +58,12 @@ const model = createServer((req, res) => { void handleModel(req, res).catch(erro
 	if (!res.destroyed) { res.writeHead(500, { "content-type": "application/json" }); res.end(JSON.stringify({ error: { message: error.message } })); }
 }); });
 
-function respond(res, modelId, content, tool) {
+function respond(res, modelId, content, tool, finishReason = "stop") {
 	if (res.destroyed) return;
 	const id = `fixture-${++requestNumber}`;
 	const delta = tool ? { tool_calls: [{ index: 0, id, type: "function", function: { name: tool.name, arguments: JSON.stringify(tool.args) } }] } : { content };
 	res.writeHead(200, { "content-type": "text/event-stream" });
-	for (const choice of [{ index: 0, delta, finish_reason: null }, { index: 0, delta: {}, finish_reason: tool ? "tool_calls" : "stop" }]) {
+	for (const choice of [{ index: 0, delta, finish_reason: null }, { index: 0, delta: {}, finish_reason: tool ? "tool_calls" : finishReason }]) {
 		res.write(`data: ${JSON.stringify({ id, object: "chat.completion.chunk", model: modelId, choices: [choice] })}\n\n`);
 	}
 	res.write(`data: ${JSON.stringify({ id, object: "chat.completion.chunk", model: modelId, choices: [], usage: { prompt_tokens: 19, completion_tokens: 7, total_tokens: 26 } })}\n\n`);
@@ -116,13 +116,13 @@ async function handleModel(req, res) {
 					respond(res, body.model, undefined, { name: "source_report", args: { summary: "Invalid correction missing required fields" } });
 					return;
 				}
-				respond(res, body.model, `${basename(source.root)}: evidence.md:2 establishes orderId; EVIDENCE_${basename(source.root)}.`);
+				respond(res, body.model, `${basename(source.root)}: evidence.md:2 establishes orderId; EVIDENCE_${basename(source.root)}.`, undefined, scenario === "truncatedreport" ? "length" : "stop");
 				return;
 			}
 			assert.match(text(readResult.content), new RegExp(`evidence\\.md:2: EVIDENCE_${basename(source.root)}`), "real source_read returns line-numbered source text");
 			assert.match(text(readResult.content), /SHA-256 [a-f0-9]{64}/);
-			if (scenario === "unverified") {
-				respond(res, body.model, `${basename(source.root)}: evidence.md:2 is a free-text report without submitted evidence.`);
+			if (scenario === "unverified" || scenario === "truncatedplain") {
+				respond(res, body.model, `${basename(source.root)}: evidence.md:2 is a free-text report without submitted evidence.`, undefined, scenario === "truncatedplain" ? "length" : "stop");
 				return;
 			}
 			const evidenceId = text(readResult.content).match(/evidenceId (ev_[a-f0-9]+)/)?.[1];
@@ -250,6 +250,7 @@ async function finished(client, scenario) {
 	await wait(() => !client.state.isStreaming && client.state.messages.some(message => message.role === "assistant" && text(message.content).includes(`SYNTHESIS ${scenario}:`)), `${scenario} synthesis and settled snapshot`);
 	const output = resultOnWire(client);
 	assert(output, "child result JSON crosses the standard tool-result wire format");
+	assert.deepEqual(output.results.map(result => result.taskIndex), output.results.map((_, index) => index));
 	assert.equal(output.workspace.id, workspaceId);
 	assert.equal(output.results.length, scenario === "workspace" ? 5 : scenario === "multi" ? 2 : rootsFor(scenario).length);
 	assert(client.wire.some(message => message.type === "tool_delta" && message.toolName === "subagent"), "child progress streams through the existing tool card channel");
@@ -305,6 +306,20 @@ try {
 	happy.send({ type: "subagent_request", action: "stop", requestId: "foreign-task", conversationId: happy.state.conversationId, taskId: compared[0].taskId });
 	assert((await wait(() => happy.wire.find(message => message.requestId === "foreign-task"), "foreign task rejected")).error);
 	console.log("PASS subagents: multi-source citations, same-source independent identities, persisted output and cross-session rejection");
+	for (let generation = 0; generation < 2; generation++) {
+		const previous = multi.state.sessionId;
+		multi.send({ type: "prompt", text: "/clone" });
+		await wait(() => multi.state.sessionId !== previous && !multi.state.tree?.verifying, "native clone ready");
+		for (const action of ["detail", "stop"]) {
+			const requestId = `ancestor-${generation}-${action}`;
+			multi.send({ type: "subagent_request", action, requestId, conversationId: multi.state.conversationId, taskId: compared[0].taskId });
+			const reply = await wait(() => multi.wire.find(message => message.requestId === requestId), "ancestor response");
+			if (action === "detail") { assert(!reply.error, reply.error); assert.equal(reply.detail.task.phase, "completed"); }
+			else assert(reply.error, "ancestor stop must be rejected");
+		}
+	}
+	console.log("PASS subagents: real native clone chain restores details and rejects ancestor stops");
+
 
 	const workspace = await connect("subagents-workspace"); await sendPrompt(workspace, "workspace");
 	const all = await finished(workspace, "workspace");
@@ -330,6 +345,15 @@ try {
 		assert(saved.subagents.every(item => item.steps.length === (scenario === "nosteps" ? 0 : 1)));
 	}
 	console.log("PASS subagents: missing investigation fails with original answer and no automatic retry");
+
+	for (const scenario of ["truncatedreport", "truncatedplain"]) {
+		const client = await connect(`subagents-${scenario}`); await sendPrompt(client, scenario);
+		const results = await finished(client, scenario);
+		assert(results.every(result => result.truncated && result.status === (scenario === "truncatedreport" ? "completed" : "failed")));
+		assert(results.every(result => scenario === "truncatedreport" ? result.report : !result.report && result.text.includes("incomplete") && result.text.includes("free-text")));
+		assert.equal(requests.filter(request => request.scenario === scenario && request.isChild).length, scenario === "truncatedreport" ? 9 : 6);
+	}
+	console.log("PASS subagents: model length termination retains valid reports, fails incomplete research and never auto-continues");
 
 	const unverified = await connect("subagents-unverified"); await sendPrompt(unverified, "unverified");
 	const fallback = await finished(unverified, "unverified");

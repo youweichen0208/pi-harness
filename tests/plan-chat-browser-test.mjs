@@ -114,7 +114,8 @@ try {
 		assert.equal(await headings.last().getAttribute('aria-expanded'), 'true');
 		await headings.first().click();
 		fixture = []; send();
-		await page.locator('.task-progress').waitFor({ state: 'hidden' });
+		await page.locator('.task-panel-empty').waitFor();
+		assert.equal(await page.locator('.task-section').count(), 0);
 		fixture = updates; send();
 		await page.locator('.task-plan-step').last().waitFor();
 		// A short sidebar with many output files must not crush the plan.

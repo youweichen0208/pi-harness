@@ -14904,3 +14904,15 @@ html.pi-desktop .design-workspace .topbar { height: 48px; min-height: 48px; }
 .scm-worktrees ul { padding-left: 20px; }
 .scm-worktrees li { margin: 10px 0; }
 .scm-worktrees li span { display: block; color: var(--text-dim); font-size: 12px; }
+
+/* Current-task overview: authoritative state, above the execution sections. */
+.task-overview { padding: 14px; border-bottom: 1px solid var(--border); }
+.task-overview h3 { margin: 0; color: var(--text); font: 500 13px/1.6 var(--sans); overflow-wrap: anywhere; }
+.task-overview-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-top: 6px; color: var(--text-faint); font-size: 12px; }
+.task-overview-state.running { color: var(--accent); }
+.task-overview-state.done { color: var(--green); }
+.task-overview-state.failed, .task-overview-state.cancelled, .task-overview-state.interrupted { color: var(--red); }
+.task-overview-state.waiting, .task-overview-state.reminding { color: var(--yellow-fg); }
+.task-overview .task-overview-reason, .task-panel-empty { margin: 8px 0 0; color: var(--text-faint); font: 12px/1.7 var(--sans); overflow-wrap: anywhere; }
+.task-panel-empty { margin: 0; padding: 14px; }
+.task-step-more > button { color: var(--accent); }

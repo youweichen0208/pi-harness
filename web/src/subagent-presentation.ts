@@ -140,8 +140,21 @@ export function subagentPresentation(argumentsText: string, outputText: string, 
 	const items = finalItems?.map(item => {
 		const savedIndex = savedItems?.findIndex(saved => item.taskId ? saved.taskId === item.taskId : saved.sourceId === item.sourceId) ?? -1;
 		const saved = savedIndex >= 0 ? savedItems?.splice(savedIndex, 1)[0] : undefined;
-		return saved ? { ...item, ...saved, task: item.task } : item;
+		return saved ? { ...saved, ...item, steps: item.steps ?? saved.steps, tool: undefined } : item;
 	}) ?? progressItems;
 	if (!items.length) return;
 	return { ...(workspace ? { workspace } : {}), items, final: finalItems !== undefined };
+}
+
+/** Parent results settle identity/status; detail enriches full instructions and uncropped output. */
+export function mergeSubagentDetail(item: SubagentItemView, detail?: SubagentItemView, parentFinal = false): SubagentItemView {
+	if (!detail) return item;
+	const terminal = (value: SubagentItemView) => ["completed", "failed", "cancelled"].includes(value.phase);
+	const winner = parentFinal || terminal(item) && !terminal(detail) || item.phase === "stopping" && ["queued", "running"].includes(detail.phase) ? item : detail;
+	const merged = { ...item, ...detail, ...(parentFinal && detail.phase !== item.phase ? item : {}), task: detail.task, phase: winner.phase, durationMs: winner.durationMs, tool: terminal(winner) ? undefined : winner.tool };
+	merged.steps = (winner.steps ?? merged.steps)?.map(step => {
+		const other = (winner === item ? detail : item).steps?.find(value => value.id === step.id);
+		return step.status === "running" && other && other.status !== "running" ? other : step;
+	});
+	return merged;
 }

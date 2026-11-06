@@ -1,3 +1,4 @@
+import { inheritedTaskDetail } from "./subagents/history.js";
 import { CodemodeHistory } from "./codemode-history.js";
 import { withOutputTokenFloor } from "./model-output-floor.js";
 import { modelConfigurationChanged, modelSourcesFor, type ModelSourceSync } from "./model-source-sync.js";
@@ -1369,11 +1370,17 @@ export class ClientSession {
 			const conv = this.convs.get(message.conversationId);
 			if (!conv) throw Error("Conversation is not available");
 			const session = conv.session;
+			const leaf = session.sessionManager.getLeafId();
 			const allowed = new Set(session.messages.flatMap(entry => entry.role === "assistant" ? entry.content.flatMap(block => block.type === "toolCall" && block.name === "subagent" ? [block.id] : []) : []));
 			if (message.action !== "detail" && message.action !== "stop") throw Error("Invalid subagent action");
-			let detail = await taskDetail(session.sessionManager.getSessionId(), message.taskId, allowed, message.cursor);
+			let detail;
+			try { detail = await taskDetail(session.sessionManager.getSessionId(), message.taskId, allowed, message.cursor); }
+			catch (error) {
+				if (message.action !== "detail" || (error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+				detail = await inheritedTaskDetail(session.sessionManager, message.taskId, message.cursor);
+			}
 			const currentCalls = new Set(session.messages.flatMap(entry => entry.role === "assistant" ? entry.content.flatMap(block => block.type === "toolCall" && block.name === "subagent" ? [block.id] : []) : []));
-			if (this.convs.get(message.conversationId)?.session !== session || [...allowed].some(id => !currentCalls.has(id))) throw Error("Conversation changed");
+			if (session.sessionManager.getLeafId() !== leaf || this.convs.get(message.conversationId)?.session !== session || [...allowed].some(id => !currentCalls.has(id))) throw Error("Conversation changed");
 			if (message.action === "stop") detail = await taskDetail(session.sessionManager.getSessionId(), message.taskId, currentCalls, message.cursor, true);
 			this.emit({ type: "subagent_response", requestId: message.requestId, conversationId: message.conversationId, taskId: message.taskId, detail });
 		} catch (error) {

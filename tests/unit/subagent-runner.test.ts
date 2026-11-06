@@ -62,7 +62,7 @@ describe("bounded subagent scheduler", () => {
 		const results = await pending;
 		expect(peak).toBe(3); expect(active).toBe(0);
 		expect(completed).toEqual([2, 1, 3, 0, 5, 4, 6]);
-		expect(results).toEqual(tasks.map(job => report(job)));
+		expect(results).toEqual(tasks.map((job, taskIndex) => ({ ...report(job), taskIndex })));
 		expect(updates.filter(update => update.phase === "running")).toEqual(tasks.map((_, index) => ({ index, phase: "running", tool: "source_search" })));
 		expect(updates.filter(update => update.phase === "completed").map(update => update.index)).toEqual(completed);
 	});
@@ -77,7 +77,7 @@ describe("bounded subagent scheduler", () => {
 		const results = await runSubagents(tasks, parent, new AbortController().signal, update => updates.push(update), run);
 		expect(results.map(result => result.status)).toEqual(["completed", "failed", "completed", "failed", "completed"]);
 		expect(results[1]).toMatchObject({ sourceId: tasks[1].source.id, source: tasks[1].source.name, root: tasks[1].source.root, task: tasks[1].task, text: expect.stringContaining("repository unavailable") });
-		expect(results[4]).toEqual(report(tasks[4]));
+		expect(results[4]).toEqual({ ...report(tasks[4]), taskIndex: 4 });
 		expect(updates.filter(update => update.phase === "failed").map(update => update.index).sort()).toEqual([1, 3]);
 	});
 

@@ -92,7 +92,7 @@ describe("bounded parent subagent results", () => {
 		expect(json).not.toContain("�");
 		expect(inputs).toEqual(before);
 		for (const [index, item] of output.entries()) {
-			expect(item).toMatchObject({ sourceId: inputs[index].sourceId, root: inputs[index].root, status: "completed", usage: inputs[index].usage, truncated: true, outputTruncated: true });
+			expect(item).toMatchObject({ sourceId: inputs[index].sourceId, root: inputs[index].root, status: "completed", usage: inputs[index].usage, truncated: false, outputTruncated: true });
 			expect(Array.from(item.task).length).toBeLessThanOrEqual(240);
 			expect(item.omittedFindings).toBeGreaterThan(0);
 			expect(item.report!.checkedAt).toBe(inputs[index].report!.checkedAt);
@@ -132,7 +132,8 @@ describe("bounded parent subagent results", () => {
 		expect(output.text).toMatch(/^无法证实🙂/);
 		expect(output.evidenceStatus).toBe("unverified");
 		expect(output.evidenceWarning).toContain("No structured report");
-		expect(output.truncated).toBe(true);
+		expect(output.truncated).toBe(false);
+		expect(output.outputTruncated).toBe(true);
 	});
 
 	test("preserves unusually long real source paths and uses the aggregate budget", () => {

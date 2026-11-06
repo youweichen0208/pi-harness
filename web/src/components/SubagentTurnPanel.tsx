@@ -2,7 +2,7 @@ import { createContext, useEffect, useState } from "react";
 import { FiChevronRight, FiGitBranch, FiCheck, FiX, FiClock, FiAlertTriangle } from "react-icons/fi";
 import { commandDuration } from "../bash-presentation";
 import { useChatT } from "../i18n";
-import { subagentPresentation, type SubagentItemView } from "../subagent-presentation";
+import { mergeSubagentDetail, subagentPresentation, type SubagentItemView } from "../subagent-presentation";
 import { subagentErrorGroups, subagentFailed } from "../subagent-errors";
 import type { UiToolCallBlock } from "../types";
 import type { ToolView } from "./ToolCallBlock";
@@ -20,6 +20,7 @@ export function SubagentTurnPanel({ calls, fallback }: { calls: SubagentTurnCall
 	const t = useChatT();
 	const [manualOpen, setOpen] = useState<boolean>();
 	const [failuresOpen, setFailuresOpen] = useState(false);
+	const [details, setDetails] = useState<Record<string, SubagentItemView>>({});
 	const [selected, setSelected] = useState<string>();
 	const [now, setNow] = useState(Date.now());
 	const entries = calls.map(call => {
@@ -28,7 +29,7 @@ export function SubagentTurnPanel({ calls, fallback }: { calls: SubagentTurnCall
 		const model = call.view.result && !parsed?.final ? undefined : parsed;
 		return { ...call, output, model };
 	});
-	const rows = entries.flatMap(entry => entry.model?.items.map((item, index) => ({ item, entry, key: item.taskId ?? `${entry.block.id}:${index}` })) ?? []);
+	const rows = entries.flatMap(entry => entry.model?.items.map((item, index) => ({ item: mergeSubagentDetail(item, item.taskId ? details[item.taskId] : undefined, entry.model?.final), entry, key: item.taskId ?? `${entry.block.id}:${index}` })) ?? []);
 	const running = rows.some(row => !subagentTerminal(row.item));
 	const open = manualOpen ?? (running || rows.some(row => row.item.phase === "completed") || entries.some(entry => !entry.model));
 	const failed = rows.filter(row => subagentFailed(row.item));
@@ -56,7 +57,7 @@ export function SubagentTurnPanel({ calls, fallback }: { calls: SubagentTurnCall
 		const item = row.item;
 		const ms = item.durationMs ?? (item.startedAt ? now - item.startedAt : undefined);
 		return <button type="button" className="subagent-task-row" key={row.key} onClick={() => setSelected(row.key)} data-task-id={row.key}>
-			<SubagentStatus item={item} /><span className="subagent-task-label"><strong title={item.task}>{item.title || item.task || item.source}</strong><small><span className="subagent-task-source">{item.sources?.map(source => source.name).join(" · ") || item.source}</span>{item.tool ? ` · ${t(({ source_list: "subagentActivityList", source_read: "subagentActivityRead", source_search: "subagentActivitySearch", source_report: "subagentActivityReport" } as const)[item.tool])}` : ""}</small></span>
+			<SubagentStatus item={item} /><span className="subagent-task-label"><strong title={item.task}>{item.title || item.task || item.source}</strong><small><span className="subagent-task-source">{item.sources?.map(source => source.name).join(" · ") || item.source}</span>{item.tool ? ` · ${t(({ source_list: "subagentActivityList", source_read: "subagentActivityRead", source_search: "subagentActivitySearch", source_report: "subagentActivityReport" } as const)[item.tool])}` : ""}</small>{item.truncated && <small>{t("subagentModelTruncated")}</small>}</span>
 			<span className="subagent-task-time">{ms !== undefined ? commandDuration(Math.max(0, ms)) : ""}</span><FiChevronRight />
 		</button>;
 	};
@@ -74,6 +75,6 @@ export function SubagentTurnPanel({ calls, fallback }: { calls: SubagentTurnCall
 			</div>}
 			{entries.filter(entry => !entry.model).map(entry => <div key={entry.block.id}>{fallback(entry)}</div>)}
 		</div>}
-		{current && <SubagentTaskDrawer key={current.key} item={current.item} argumentsText={current.entry.block.argumentsText ?? ""} outputText={current.entry.output} onClose={() => setSelected(undefined)} />}
+		{current && <SubagentTaskDrawer key={current.key} item={current.item} parentFinal={!!current.entry.model?.final} onDetail={item => setDetails(old => ({ ...old, [current.key]: mergeSubagentDetail(old[current.key] ?? current.item, item) }))} argumentsText={current.entry.block.argumentsText ?? ""} outputText={current.entry.output} onClose={() => setSelected(undefined)} />}
 	</div>;
 }
