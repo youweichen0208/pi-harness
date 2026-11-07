@@ -1593,7 +1593,7 @@ export type DatabaseOperation =
 export type DatabaseRequest = DatabaseOperation & { clientId: string; cwd: string; conversationId: string; requestId: string };
 export interface DatabaseResponse {
 	requestId: string; error?: string; connections?: DatabaseConnection[]; grants?: string[];
-	syncIssues?: { path: string; issue: string }[];
+	syncIssues?: { path: string; issue: string; category?: "unsupported-driver" }[];
 	sources?: { kind: "datagrip" | "dbeaver"; path: string }[]; preview?: DatabaseImportPreview; grid?: DatabaseGrid;
 }
 

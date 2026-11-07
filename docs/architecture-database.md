@@ -20,7 +20,7 @@ DBeaver 另读取各数据目录的 UTF-8 `.workspaces` 最近工作区记录，
 
 前端同步使用独立请求通道，前台操作期间跳过检查，10 秒超时后释放请求并在下一周期重试；按会话生命周期及前台操作序号丢弃迟到响应。同步不覆盖编辑表单及 SQL 草稿；配置版本变化时清除旧表树与查询结果。连接版本变化会使旧授权失效并取消对应进行中的查询；需要重新测试的连接显示提示。同步错误保留列表并显示重试提示，不覆盖前台操作错误。
 
-来源丢失、格式损坏或重复 ID 时保留已导入记录并禁用连接；恢复后自动重新核对。不支持的驱动／认证／隧道列在来源问题中，不自动导入。用户删除来源连接后，`excluded-sources.json` 保存来源标识摘要，后续自动发现不再添加；手动预览导入可恢复。未变化的记录保留版本，避免反复撤销授权。密码首次导入可读取配置中明确提供的密码，后续同步始终保留本地密码，加密密码库仍需用户补填。
+来源丢失、格式损坏或重复 ID 时保留已导入记录并禁用连接；恢复后自动重新核对。不支持的驱动／认证／隧道不自动导入。不支持驱动的同步条目带可选 category=unsupported-driver，界面以默认折叠的信息行展示跳过数量与明细，不计入来源警告；其它来源错误保持警告。轮询不自动展开信息行，旧端缺少 category 时仍按警告展示。用户删除来源连接后，`excluded-sources.json` 保存来源标识摘要，后续自动发现不再添加；手动预览导入可恢复。未变化的记录保留版本，避免反复撤销授权。密码首次导入可读取配置中明确提供的密码，后续同步始终保留本地密码，加密密码库仍需用户补填。
 
 DataGrip 从 dataSources.xml 读取连接，并合并相邻 dataSources.local.xml 中的用户名及明确提供的密码；DBeaver 从 data-sources.json 提取参数和 URL。未知驱动、连接属性、认证、代理或隧道不静默转为直连；预览列出原因且不能导入；缺少 host 仅在没有其它来源问题时报告，避免覆盖不支持驱动、无效 URL 或隧道配置等具体原因（#153）。支持 MySQL/MariaDB/PostgreSQL，密码缺失需补填，不读取系统钥匙串或破解第三方加密凭据。
 
@@ -34,7 +34,7 @@ DataGrip 从 dataSources.xml 读取连接，并合并相邻 dataSources.local.xm
 
 所有用户 SQL 经 node-sql-parser 完整解析及重新序列化，仅允许单条 SELECT（含只读 CTE），拒绝写入、SELECT INTO、锁定、多语句和非白名单分析函数。无法解析的语法直接拒绝。每次查询独立连接、独立只读事务；PostgreSQL 固定 pg_catalog/public search_path，不复用数据库切换状态。内建元数据查询使用转义标识符和字面量。
 
-最多 8 个并发查询，默认 30 秒。数据库 statement timeout 与 AbortController 配合，取消通过同账号控制连接调用 pg_cancel_backend 或 KILL QUERY，并关闭执行连接。MySQL 流式读取，PostgreSQL 游标按批读取；普通结果最多 1000 行，数据页 50 行，最多 2 MiB 结果，单元格文本最多 4000 字符，超限标记截断。BIGINT/NUMERIC 保留字符串避免精度丢失。数据库错误仅回传错误代码，不透出可能含凭据或查询字面量的驱动消息。
+最多 8 个并发查询，默认 30 秒。数据库 statement timeout 与 AbortController 配合，取消通过同账号控制连接调用 pg_cancel_backend 或 KILL QUERY，并关闭执行连接。MySQL 流式读取，PostgreSQL 游标按批读取；普通结果最多 1000 行，数据页 50 行，最多 2 MiB 结果，单元格文本最多 4000 字符，超限标记截断。BIGINT/NUMERIC 保留字符串避免精度丢失。数据库错误使用固定的网络、认证失败、TLS 验证及认证协议不兼容提示，其它错误仅回传校验过的错误代码，不透出可能含凭据或查询字面量的驱动消息。PostgreSQL 连接阶段的异常 SASL 顺序及 pg SASL 内部 TypeError 提示认证协议不兼容；普通查询 TypeError 不作此归类。GaussDB/openGauss 私有认证尚未提供兼容保证，不内置厂商 JDBC 或替换 pg；出现该错误时使用厂商支持的客户端。标准 SASL 顺序参考 [PostgreSQL 协议文档](https://www.postgresql.org/docs/17/sasl-authentication.html)。
 
 当前不支持写数据、DDL、SSH、代理、第三方驱动、密码库解密。表预览不是一致性快照，外部修改可能改变翻页结果；分析总量应使用聚合 SQL。
 
@@ -50,3 +50,5 @@ DataGrip 从 dataSources.xml 读取连接，并合并相邻 dataSources.local.xm
 #152 回归：`tests/unit/datagrip-discovery.test.ts` 覆盖三平台配置根、非默认目录、注册表动态变化、Windows 路径、旧版列表、home 宏、去重、坏文件隔离及资源上限。注册格式参考 [JetBrains RecentProjectsManagerBase](https://github.com/JetBrains/intellij-community/blob/master/platform/platform-impl/src/com/intellij/ide/RecentProjectsManagerBase.kt)。
 
 DBeaver 自定义工作区回归：`tests/unit/dbeaver-discovery.test.ts` 覆盖三平台数据根、`.workspaces` 动态变化、中文/空格/换行、去重、环境路径、无效/过大文件和发现上限。
+
+#155/#156 回归：`tests/database-sync-browser-test.mjs` 验证跳过提示与警告分开、明细折叠及轮询不重开；`tests/unit/database-auth.test.ts` 使用真实 pg 驱动与本地模拟 PostgreSQL 服务发送提前的 SASL Final，覆盖两种密码、错误脱敏及分类边界，不连接真实业务库。

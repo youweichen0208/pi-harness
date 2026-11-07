@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { FiDatabase, FiTable, FiSearch, FiPlus, FiRefreshCw, FiLink, FiX } from "react-icons/fi";
 import { useT } from "../i18n";
 import { startDatabaseSync } from "../database-sync";
+import { databaseErrorMessages } from "../../../server/database/errors";
 import { databaseRequest } from "../database-api";
 import { randomUuid } from "../uuid";
-import type { DatabaseConfig, DatabaseConnection, DatabaseGrid, DatabaseImportPreview, DatabaseOperation } from "../types";
+import type { DatabaseConfig, DatabaseConnection, DatabaseGrid, DatabaseImportPreview, DatabaseOperation, DatabaseResponse } from "../types";
 import type { ChatReferenceRequest } from "../chat-reference";
 
 const blank = (): DatabaseConfig & { password?: string; id?: string; version?: string } => ({ name: "", driver: "mysql", host: "localhost", port: 3306, user: "", db_name: "", password: "", tls: { enabled: false } });
@@ -20,7 +21,10 @@ export function DatabaseWorkbench({ cwd, conversationId, onReference, onRevoke }
 	const [form, setForm] = useState<ReturnType<typeof blank>>(), [tested, setTested] = useState(false);
 	const [importing, setImporting] = useState(false), [kind, setKind] = useState<"datagrip" | "dbeaver">("dbeaver"), [path, setPath] = useState("");
 	const [sources, setSources] = useState<{ kind: "datagrip" | "dbeaver"; path: string }[]>([]), [preview, setPreview] = useState<DatabaseImportPreview>(), [chosen, setChosen] = useState<string[]>([]);
-	const [syncError, setSyncError] = useState(""), [syncIssues, setSyncIssues] = useState<{ path: string; issue: string }[]>([]);
+	const [syncError, setSyncError] = useState(""), [syncIssues, setSyncIssues] = useState<NonNullable<DatabaseResponse["syncIssues"]>>([]);
+	const skippedSources = syncIssues.filter(item => item.category === "unsupported-driver");
+	const sourceWarnings = syncIssues.filter(item => item.category !== "unsupported-driver");
+	const errorLabel = error === databaseErrorMessages.authProtocol ? t("dbAuthProtocolError") : error === databaseErrorMessages.auth ? t("dbAuthError") : error === databaseErrorMessages.network ? t("dbNetworkError") : error === databaseErrorMessages.tls ? t("dbTlsError") : error;
 	const foreground = useRef(false), synchronize = useRef<() => Promise<void>>();
 	const [busy, setBusy] = useState(false), [selectedRows, setSelectedRows] = useState<number[]>([]);
 	const life = useRef(new AbortController()), operation = useRef<AbortController>(), sequence = useRef(0), job = useRef<string>();
@@ -97,8 +101,9 @@ export function DatabaseWorkbench({ cwd, conversationId, onReference, onRevoke }
 		</aside>
 		<div className="database-main">
 			{syncError && <div role="alert" className="database-error">{t("dbSyncFailed")} · {syncError}<button onClick={refresh}>{t("dbRefresh")}</button></div>}
-			{syncIssues.length > 0 && <details className="database-hint"><summary>{t("dbSyncIssues")} ({syncIssues.length})</summary>{syncIssues.map((item, i) => <p key={i}>{item.path} · {item.issue}</p>)}</details>}
-			{error && <div role="alert" className="database-error">{error}<button aria-label={t("close")} onClick={() => setError("")}><FiX /></button></div>}
+			{sourceWarnings.length > 0 && <details className="database-hint database-source-warnings"><summary>{t("dbSyncIssues")} ({sourceWarnings.length})</summary>{sourceWarnings.map((item, i) => <p key={i}>{item.path} · {item.issue}</p>)}</details>}
+			{skippedSources.length > 0 && <details className="database-hint database-source-skipped"><summary>{t("dbSkippedDrivers", { n: skippedSources.length })}</summary>{skippedSources.map((item, i) => <p key={i}>{item.path} · {item.issue}</p>)}</details>}
+			{error && <div role="alert" className="database-error">{errorLabel}<button aria-label={t("close")} onClick={() => setError("")}><FiX /></button></div>}
 			{busy && <div className="database-busy">{t("loading")}<button onClick={() => { if (job.current) void databaseRequest(cwd, conversationId, { action: "cancel", target: job.current }).catch(() => {}); operation.current?.abort(); foreground.current = false; setBusy(false); }}>{t("cancel")}</button></div>}
 			{form ? <form className="database-form" onSubmit={e => { e.preventDefault(); void task(async (signal, current) => { const r = await request({ action: "save", connection: form }, signal); if (current()) { setConnections(r.connections ?? []); setForm(undefined); } }); }}>
 				<h3>{form.id ? t("dbEdit") : t("dbNew")}</h3>

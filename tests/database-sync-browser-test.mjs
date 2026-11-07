@@ -22,7 +22,10 @@ try {
 	await page.route('**/api/database', async route => {
 		const body = route.request().postDataJSON();
 		if (body.action === 'sync') syncs++;
-		await route.fulfill({ json: { requestId: body.requestId, connections: [connection()], grants: [], syncIssues: [], ...(body.action === 'run' ? { grid: { columns: ['database'], rows: [['fixture']], elapsedMs: 0, truncated: false } } : {}) } });
+		await route.fulfill({ json: { requestId: body.requestId, connections: [connection()], grants: [], syncIssues: [
+			{ path: '/fixture/data-sources.json', issue: 'SQLite: Unsupported driver', category: 'unsupported-driver' },
+			{ path: '/fixture/broken.json', issue: 'Source unavailable or invalid' },
+		], ...(body.action === 'run' ? { grid: { columns: ['database'], rows: [['fixture']], elapsedMs: 0, truncated: false } } : {}) } });
 	});
 	await page.clock.install();
 	await page.goto(`http://127.0.0.1:${port}`);
@@ -31,6 +34,14 @@ try {
 	await page.getByRole('button', { name: '数据库', exact: true }).click();
 	await page.locator('.database-tree-row', { hasText: 'Discovered 1' }).waitFor();
 	assert(syncs >= 1);
+	const skipped = page.locator('.database-source-skipped');
+	assert.equal(await skipped.locator('summary').innerText(), '已跳过 1 个不支持的驱动');
+	assert.equal(await skipped.getAttribute('open'), null);
+	assert.match(await page.locator('.database-source-warnings summary').innerText(), /部分来源无法同步.*1/);
+	assert.equal(await page.locator('.database-source-warnings').getByText('SQLite: Unsupported driver', { exact: false }).count(), 0);
+	await skipped.locator('summary').click();
+	await skipped.locator('p', { hasText: 'SQLite' }).waitFor();
+	await skipped.locator('summary').click();
 	await page.locator('.database-tree-row', { hasText: 'Discovered 1' }).click();
 	await page.getByRole('button', { name: '连接设置', exact: true }).click();
 	await page.locator('.database-form input[type=password]').fill('draft-password');
@@ -38,6 +49,7 @@ try {
 	await page.clock.fastForward(15000);
 	await page.locator('.database-tree-row', { hasText: 'Discovered 2' }).waitFor();
 	assert.equal(await page.locator('.database-form input[type=password]').inputValue(), 'draft-password');
+	assert.equal(await skipped.getAttribute('open'), null, 'polling must not reopen skipped drivers');
 	version = 3;
 	await page.getByRole('button', { name: '立即同步', exact: true }).click();
 	await page.locator('.database-tree-row', { hasText: 'Discovered 3' }).waitFor();

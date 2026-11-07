@@ -71,3 +71,14 @@ it("automatic sync invalidates grants while unchanged sync keeps them, and agent
 	f.write("changed"); await databaseAction("sync-owner", f.dir, "sync", { action: "sync" }); expect(grantedConnections("sync-owner")).toHaveLength(0);
 	await expect(databaseAction("sync-owner", f.dir, "sync", { action: "sync" }, undefined, true)).rejects.toThrow(/Unsupported agent/);
 });
+it("identifies unsupported drivers as informational while retaining actionable source errors (#155)", () => {
+	const f = fixture();
+	writeFileSync(f.path, JSON.stringify({ connections: {
+		a: { driver: "sqlite", configuration: { url: "jdbc:sqlite:local.db" } },
+		b: { driver: "postgres", configuration: {} },
+	} }));
+	expect(f.sync()).toEqual([
+		{ path: f.path, issue: "a: Unsupported driver; only MySQL/MariaDB and PostgreSQL are supported", category: "unsupported-driver" },
+		{ path: f.path, issue: "b: Missing host" },
+	]);
+});

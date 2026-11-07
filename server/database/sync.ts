@@ -30,7 +30,7 @@ export function synchronizeSources(cwd: string, discovered: Source[] = scanSourc
 			const identity = { ...source, id: item.sourceId }, existing = old.find(c => c.source?.id === item.sourceId);
 			if (!existing && isSourceExcluded(identity)) continue;
 			if (item.issue) {
-				issues.push({ path: source.path, issue: `${item.config.name}: ${item.issue}` });
+				issues.push({ path: source.path, issue: `${item.config.name}: ${item.issue}`, ...(item.issue === "Unsupported driver; only MySQL/MariaDB and PostgreSQL are supported" ? { category: "unsupported-driver" as const } : {}) });
 				if (existing) markMissing(existing.id, item.issue);
 				continue;
 			}

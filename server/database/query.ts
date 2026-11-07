@@ -2,6 +2,7 @@ import mysql from "mysql2/promise";
 import { createConnection } from "mysql2";
 import pg from "pg";
 import Cursor from "pg-cursor";
+import { databaseErrorMessage } from "./errors.js";
 import type { DatabaseConfig, DatabaseGrid } from "../protocol.js";
 import { operationSql, type Run } from "./sql.js";
 
@@ -20,6 +21,7 @@ export async function executeQuery(config: Config, request: Run, external?: Abor
 	const timer = setTimeout(() => controller.abort(), 30000);
 	const start = Date.now();
 	const ssl = config.tls?.enabled ? { rejectUnauthorized: true, verifyIdentity: true, ...(config.tls.ca ? { ca: config.tls.ca } : {}) } : undefined;
+	let connecting = true;
 	let close: (() => Promise<void>) | undefined;
 	let cancel: (() => Promise<void>) | undefined;
 	const aborted = () => { void cancel?.().catch(() => {}).finally(() => close?.().catch(() => {})); };
@@ -39,6 +41,7 @@ export async function executeQuery(config: Config, request: Run, external?: Abor
 			const options = { host: config.host, port: config.port, user: config.user, password: config.password, database, ssl, connectTimeout: 10000, supportBigNumbers: true, bigNumberStrings: true, dateStrings: true, multipleStatements: false, enableKeepAlive: true };
 			const raw = createConnection(options), conn = raw.promise();
 			await conn.connect();
+			connecting = false;
 			close = async () => { conn.destroy(); };
 			cancel = async () => { const killer = await mysql.createConnection(options); try { await killer.query(`KILL QUERY ${Number(conn.threadId)}`); } finally { killer.destroy(); } };
 			controller.signal.throwIfAborted();
@@ -55,6 +58,7 @@ export async function executeQuery(config: Config, request: Run, external?: Abor
 			conn.on("error", () => {});
 			close = () => conn.end();
 			await conn.connect();
+			connecting = false;
 			const pid = (await conn.query("SELECT pg_backend_pid() AS pid")).rows[0].pid;
 			cancel = async () => { const killer = new pg.Client(options); try { await killer.connect(); await killer.query("SELECT pg_cancel_backend($1)", [pid]); } finally { await killer.end(); } };
 			controller.signal.throwIfAborted();
@@ -76,9 +80,8 @@ export async function executeQuery(config: Config, request: Run, external?: Abor
 		return result;
 	} catch (error) {
 		if (controller.signal.aborted) throw Error("Query cancelled or timed out");
-		// Driver messages can contain credentials, SQL literals or server paths: expose codes only.
-		const code = (error as { code?: string }).code;
-		throw Error(code && /^[A-Z0-9_]{2,60}$/.test(code) ? `Database error: ${code}` : "Database query failed; check connection settings and SQL");
+		// Driver messages can contain credentials, SQL literals or server paths: expose fixed categories or validated codes only.
+		throw Error(databaseErrorMessage(error, config.driver, connecting));
 	} finally {
 		clearTimeout(timer); external?.removeEventListener("abort", forward); controller.signal.removeEventListener("abort", aborted);
 		await close?.().catch(() => {}); active.delete(controller);
