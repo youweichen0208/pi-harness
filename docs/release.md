@@ -1,5 +1,9 @@
 # 发布流程
 
+## 1.18.2：数据库来源错误提示修复
+
+修复 #153：DataGrip / DBeaver 不支持的驱动、无效 URL 和隧道配置等具体错误不再被 Missing host 覆盖；仅缺少主机时仍保留校验。SDK / pi-ai 1.5.0、协议 v52 不变。仅发布 GitHub 三平台桌面 Release，同提交 CI、三平台打包及安装升级验证通过后公开。说明见 `.github/release-notes/v1.18.2.md`。
+
 ## 1.18.1：数据库发现与命令重试状态修复
 
 修复 #152，读取 DataGrip 最近项目发现非默认位置的连接；补充 DBeaver 工作区历史与环境变量路径发现。相同命令重试成功后显示成功，未解决的失败保留失败状态。SDK / pi-ai 1.5.0、协议 v52 不变。仅发布 GitHub 三平台桌面 Release，同提交 CI、三平台打包及安装升级验证通过后公开。说明见 `.github/release-notes/v1.18.1.md`。

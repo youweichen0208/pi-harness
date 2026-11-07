@@ -27,6 +27,27 @@ describe("database sources and credentials", () => {
 		expect(parseSource("dbeaver", JSON.stringify({ connections: { a: { driver: "mysql8", name: "A", configuration: { host: "localhost", port: "3307", database: "a", user: "u" } } } }))[0].config.port).toBe(3307);
 		expect(() => parseSource("datagrip", '<!DOCTYPE x [<!ENTITY a SYSTEM "file:///etc/passwd">]><project/>')).toThrow();
 	});
+	for (const kind of ["datagrip", "dbeaver"] as const) {
+		it(`${kind}: preserves unsupported SQLite errors instead of reporting a missing host (#153)`, () => {
+			const url = "jdbc:sqlite:D:/data/example.db";
+			const text = kind === "datagrip"
+				? `<project><component><data-source uuid="sqlite"><driver-ref>sqlite</driver-ref><jdbc-url>${url}</jdbc-url></data-source></component></project>`
+				: JSON.stringify({ connections: { sqlite: { driver: "sqlite", configuration: { url } } } });
+			expect(parseSource(kind, text)[0].issue).toBe("Unsupported driver; only MySQL/MariaDB and PostgreSQL are supported");
+		});
+	}
+	it("uses missing host only when no more specific source error exists", () => {
+		const text = JSON.stringify({ connections: {
+			missing: { driver: "postgres", configuration: {} },
+			invalidUrl: { driver: "postgres", configuration: { url: "not a URL" } },
+			tunnel: { driver: "postgres", configuration: { handlers: { ssh: { enabled: true } } } },
+			valid: { driver: "postgres", configuration: { host: "localhost" } },
+		} });
+		expect(parseSource("dbeaver", text).map(c => c.issue)).toEqual([
+			"Missing host", "Unsupported connection URL",
+			"SSH/proxy settings are not supported; direct connection was not attempted", undefined,
+		]);
+	});
 	it("reads a DataGrip adjacent local username without reading a password vault", () => {
 		const dir = setup();
 		writeFileSync(join(dir, "dataSources.xml"), '<project><component><data-source uuid="a" name="A"><driver-ref>postgresql</driver-ref><jdbc-url>jdbc:postgresql://localhost/app</jdbc-url></data-source></component></project>');

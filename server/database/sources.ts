@@ -41,7 +41,7 @@ export function parseSource(kind: "datagrip" | "dbeaver", text: string): Importe
 		if (extra["auth-model"] && extra["auth-model"] !== "native") issue = "Unsupported authentication method";
 		const config: DatabaseConfig = { name: String(name || id || "Imported connection"), driver: type, host: String(c.host ?? url?.hostname ?? ""), port: Number(c.port ?? url?.port) || (type === "mysql" ? 3306 : 5432), user: String(c.user ?? c.userName ?? props.user ?? (url?.username ? decodeURIComponent(url.username) : "")), db_name: String(c.database ?? (url?.pathname ? decodeURIComponent(url.pathname.slice(1)) : "")), tls: { enabled: tls } };
 		const password = c.password ?? props.password ?? (url?.password ? decodeURIComponent(url.password) : undefined);
-		if (!config.host) issue = "Missing host";
+		if (!config.host && !issue) issue = "Missing host";
 		return { sourceId: String(id || createHash("sha256").update(JSON.stringify(config)).digest("hex")), config, password: typeof password === "string" ? password : undefined, issue };
 	});
 }
