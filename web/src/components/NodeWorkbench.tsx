@@ -109,7 +109,14 @@ export function NodeWorkbench({ send, active, dirBrowse }: { send: (msg: ClientM
 	const source = sources.find((s) => s.id === node?.sourceId);
 	const entries = listings[selected]?.path === path ? listings[selected].entries : [];
 
-	useEffect(() => { if (active) { request("state"); request("source_detect"); } }, [active, request]);
+	useEffect(() => {
+		if (!active) return;
+		request("state"); request("source_detect");
+		const timer = setInterval(() => request("source_detect"), 30000);
+		const focus = () => request("source_detect");
+		window.addEventListener("focus", focus);
+		return () => { clearInterval(timer); window.removeEventListener("focus", focus); };
+	}, [active, request]);
 
 	useEffect(() => { if (node) setPath(node.defaultDir); }, [selected, node?.defaultDir]);
 	useEffect(() => {

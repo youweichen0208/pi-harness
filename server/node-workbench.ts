@@ -65,6 +65,7 @@ export class NodeWorkbench {
 	private nodes: Node[] = [];
 	private sources: NodeSource[] = [];
 	private syncing = new Set<string>();
+	private discovering?: Promise<Awaited<ReturnType<typeof detectSources>>>;
 	private timer: ReturnType<typeof setInterval>;
 	private disposed = false;
 	private pendingConnections = new Map<string, symbol>();
@@ -75,7 +76,7 @@ export class NodeWorkbench {
 	private readonly sinks = new Map<string, Set<Sink>>();
 	private readonly connections = new Map<string, Connection>();
 
-	constructor(private readonly dataDir: string, private readonly xshellCredentials = new XshellCredentials()) {
+	constructor(private readonly dataDir: string, private readonly xshellCredentials = new XshellCredentials(), private readonly discoverSources = detectSources) {
 		this.file = join(dataDir, "nodes.json");
 		this.secrets = new PluginSecrets(dataDir, join(dataDir, "node-workbench"));
 		try { const saved = JSON.parse(readFileSync(this.file, "utf8")); this.nodes = saved.nodes ?? []; this.sources = saved.sources ?? []; } catch { this.nodes = []; }
@@ -164,7 +165,7 @@ export class NodeWorkbench {
 			let result: Record<string, unknown> = {};
 			switch (req.action) {
 				case "state": this.emit(clientId, "state", this.state(clientId)); break;
-				case "source_detect": result = { sources: await detectSources() }; break;
+				case "source_detect": result = { sources: await this.discoverAndSync() }; break;
 				case "source_preview": {
 					const path = sourcePath(field(p.path, "路径", 4096)), kind = p.kind === "xshell" ? "xshell" : "ssh";
 					result = { nodes: await scanSource({ kind, path }) }; break;
@@ -377,6 +378,25 @@ export class NodeWorkbench {
 			}
 			this.emit(clientId, "failure", { action: req.action, message: (error as Error).message, ...(error instanceof NodeCredentialError ? { credentialRequired: true, credentialReason: error.reason } : {}) }, req);
 		}
+	}
+	/** Reuse saved sources without changing a user's pause or selection choices. */
+	private discoverAndSync(): Promise<Awaited<ReturnType<typeof detectSources>>> {
+		if (this.discovering) return this.discovering;
+		this.discovering = (async () => {
+			const detected = await this.discoverSources();
+			if (this.disposed) return [];
+			for (const candidate of detected) {
+				const path = sourcePath(candidate.path);
+				if (this.sources.some(s => s.kind === candidate.kind && sourcePath(s.path) === path)) continue;
+				if (this.sources.length >= 10) continue;
+				const source: NodeSource = { ...candidate, path, id: randomUUID(), enabled: true };
+				this.sources.push(source);
+				await this.syncSource(source);
+				if (this.disposed) return [];
+			}
+			return detected;
+		})().finally(() => { this.discovering = undefined; });
+		return this.discovering;
 	}
 	/** In-flight scans are serialized per source. Failures leave the previous snapshot intact. */
 	private async syncSource(source: NodeSource): Promise<void> {

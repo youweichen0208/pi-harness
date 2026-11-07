@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { FiDatabase, FiTable, FiSearch, FiPlus, FiRefreshCw, FiLink, FiX } from "react-icons/fi";
 import { useT } from "../i18n";
+import { startDatabaseSync } from "../database-sync";
 import { databaseRequest } from "../database-api";
 import { randomUuid } from "../uuid";
 import type { DatabaseConfig, DatabaseConnection, DatabaseGrid, DatabaseImportPreview, DatabaseOperation } from "../types";
@@ -19,21 +20,35 @@ export function DatabaseWorkbench({ cwd, conversationId, onReference, onRevoke }
 	const [form, setForm] = useState<ReturnType<typeof blank>>(), [tested, setTested] = useState(false);
 	const [importing, setImporting] = useState(false), [kind, setKind] = useState<"datagrip" | "dbeaver">("dbeaver"), [path, setPath] = useState("");
 	const [sources, setSources] = useState<{ kind: "datagrip" | "dbeaver"; path: string }[]>([]), [preview, setPreview] = useState<DatabaseImportPreview>(), [chosen, setChosen] = useState<string[]>([]);
+	const [syncError, setSyncError] = useState(""), [syncIssues, setSyncIssues] = useState<{ path: string; issue: string }[]>([]);
+	const foreground = useRef(false), synchronize = useRef<() => Promise<void>>();
 	const [busy, setBusy] = useState(false), [selectedRows, setSelectedRows] = useState<number[]>([]);
 	const life = useRef(new AbortController()), operation = useRef<AbortController>(), sequence = useRef(0), job = useRef<string>();
 	const connection = connections.find(c => c.id === selected);
 	const sourceManaged = !!form?.id && !!connections.find(c => c.id === form.id)?.source;
 	useEffect(() => {
-		life.current = new AbortController(); void task(async (signal, current) => { const r = await databaseRequest(cwd, conversationId, { action: "list" }, signal); if (current()) { setConnections(r.connections ?? []); setGrants(r.grants ?? []); } });
-		return () => { life.current.abort(); operation.current?.abort(); sequence.current++; };
+		life.current = new AbortController(); foreground.current = false;
+		setConnections([]); setGrants([]); setSelected(""); setForm(undefined); setImporting(false); setSyncIssues([]); setSyncError("");
+		const sync = startDatabaseSync({
+			request: signal => databaseRequest(cwd, conversationId, { action: "sync" }, signal),
+			canStart: () => !foreground.current,
+			revision: () => sequence.current,
+			receive: r => { setConnections(r.connections ?? []); setGrants(r.grants ?? []); setSyncIssues(r.syncIssues ?? []); setSyncError(""); },
+			error: e => setSyncError((e as Error).message),
+		});
+		synchronize.current = sync.refresh;
+		const focus = () => { void sync.refresh(); };
+		window.addEventListener("focus", focus);
+		return () => { sync.stop(); window.removeEventListener("focus", focus); life.current.abort(); operation.current?.abort(); sequence.current++; };
 	}, [cwd, conversationId]);
+	useEffect(() => { setDatabases([]); setDatabase(""); setTables([]); setTable(undefined); setGrid(undefined); setSelectedRows([]); }, [connection?.id, connection?.version]);
 	useEffect(() => { try { sessionStorage.setItem(`pi-db-sql:${cwd}:${conversationId}`, sql); } catch { /* optional draft cache */ } }, [sql, cwd, conversationId]);
 	async function task(fn: (signal: AbortSignal, current: () => boolean) => Promise<void>) {
 		operation.current?.abort(); const controller = new AbortController(); operation.current = controller;
 		const n = ++sequence.current, current = () => !controller.signal.aborted && !life.current.signal.aborted && n === sequence.current;
-		setBusy(true); setError("");
+		foreground.current = true; setBusy(true); setError("");
 		try { await fn(controller.signal, current); } catch (e) { if (current()) setError((e as Error).message); }
-		finally { if (current()) setBusy(false); }
+		finally { if (current()) { foreground.current = false; setBusy(false); } }
 	}
 	async function request(op: DatabaseOperation, signal: AbortSignal) { const id = randomUuid(); job.current = id; return databaseRequest(cwd, conversationId, op, signal, id); }
 	function run(c: DatabaseConnection, operation: "databases" | "tables" | "page" | "describe" | "query", db = database, target = table, start = offset) {
@@ -66,22 +81,25 @@ export function DatabaseWorkbench({ cwd, conversationId, onReference, onRevoke }
 	function previewSource(content?: string, filePath = path) {
 		void task(async (signal, current) => { const r = await request({ action: "preview", kind, path: filePath, content }, signal); if (current()) { setPreview(r.preview); setChosen(r.preview?.items.filter(i => (!i.issue || i.change !== "new") && i.change !== "unchanged").map(i => i.key) ?? []); } });
 	}
-	const refresh = () => void task(async (signal, current) => { const r = await request({ action: "list" }, signal); if (current()) { setConnections(r.connections ?? []); setGrants(r.grants ?? []); } });
+	const refresh = () => { void synchronize.current?.(); };
 	return <section className="database-workbench" aria-label={t("dbTitle")}>
 		<aside className="database-sidebar">
 			<label className="file-search-trigger"><FiSearch /><input aria-label={t("dbSearch")} placeholder={t("dbSearch")} value={search} onChange={e => setSearch(e.target.value)} /></label>
-			<div className="database-actions"><button onClick={() => { setForm(blank()); setTested(false); setImporting(false); }}><FiPlus />{t("dbNew")}</button><button onClick={() => { setImporting(true); setForm(undefined); }}>{t("dbImport")}</button><button aria-label={t("dbRefresh")} onClick={refresh}><FiRefreshCw /></button></div>
+			<div className="database-actions"><button onClick={() => { setForm(blank()); setTested(false); setImporting(false); }}><FiPlus />{t("dbNew")}</button><button onClick={() => { setImporting(true); setForm(undefined); }}>{t("dbImport")}</button><button disabled={busy} aria-label={t("dbRefresh")} onClick={refresh}><FiRefreshCw /></button></div>
 			<div className="database-tree">{connections.filter(c => !search || c.name.toLowerCase().includes(search.toLowerCase()) || c.id === selected).map(c => <div key={c.id}>
 				<button className={`database-tree-row${selected === c.id ? " selected" : ""}`} title={`${c.host}:${c.port}`} onClick={() => openConnection(c)}><FiDatabase /><span>{c.name}</span>{c.issue || c.needsTest ? <small>!</small> : null}</button>
 				{selected === c.id && databases.map(db => <div key={db} className="database-indent"><button className={`database-tree-row${database === db ? " selected" : ""}`} onClick={() => openDatabase(db)}><FiDatabase /><span>{db}</span></button>
 					{database === db && [...new Set(tables.map(t => t.schema))].map(schema => <details key={schema} open className="database-indent"><summary>{schema}</summary>{tables.filter(t => t.schema === schema && t.name.toLowerCase().includes(search.toLowerCase())).map(item => <div className="database-table-row" key={item.name}><button className={`database-tree-row${table?.name === item.name && table.schema === item.schema ? " selected" : ""}`} onClick={() => show(item, "page")}><FiTable /><span>{item.name}</span></button><button aria-label={`${t("dbAsk")} ${item.name}`} title={t("dbAsk")} onClick={() => { setTable(item); onReference({ id: randomUuid(), cwd, conversationId, path: `database:${c.id} · ${c.name}/${db}/${schema}/${item.name}`, text: t("dbReferenceText"), database: { id: c.id, name: c.name, version: c.version } }); }}><FiLink /></button></div>)}</details>)}
 				</div>)}
 			</div>)}</div>
+			<p className="database-hint">{t("dbAutoSync")}</p>
 			<p className="database-hint">{t("dbWorkbenchReadOnly")}</p>
 		</aside>
 		<div className="database-main">
+			{syncError && <div role="alert" className="database-error">{t("dbSyncFailed")} · {syncError}<button onClick={refresh}>{t("dbRefresh")}</button></div>}
+			{syncIssues.length > 0 && <details className="database-hint"><summary>{t("dbSyncIssues")} ({syncIssues.length})</summary>{syncIssues.map((item, i) => <p key={i}>{item.path} · {item.issue}</p>)}</details>}
 			{error && <div role="alert" className="database-error">{error}<button aria-label={t("close")} onClick={() => setError("")}><FiX /></button></div>}
-			{busy && <div className="database-busy">{t("loading")}<button onClick={() => { if (job.current) void databaseRequest(cwd, conversationId, { action: "cancel", target: job.current }).catch(() => {}); operation.current?.abort(); setBusy(false); }}>{t("cancel")}</button></div>}
+			{busy && <div className="database-busy">{t("loading")}<button onClick={() => { if (job.current) void databaseRequest(cwd, conversationId, { action: "cancel", target: job.current }).catch(() => {}); operation.current?.abort(); foreground.current = false; setBusy(false); }}>{t("cancel")}</button></div>}
 			{form ? <form className="database-form" onSubmit={e => { e.preventDefault(); void task(async (signal, current) => { const r = await request({ action: "save", connection: form }, signal); if (current()) { setConnections(r.connections ?? []); setForm(undefined); } }); }}>
 				<h3>{form.id ? t("dbEdit") : t("dbNew")}</h3>
 				{sourceManaged && <p className="database-hint">{t("dbSourceManaged")}</p>}
@@ -99,8 +117,10 @@ export function DatabaseWorkbench({ cwd, conversationId, onReference, onRevoke }
 				{preview && <><p>{preview.source}</p><div className="database-import-list">{preview.items.map(i => <label key={i.key}><input type="checkbox" disabled={!!i.issue && i.change === "new"} checked={chosen.includes(i.key)} onChange={e => setChosen(v => e.target.checked ? [...v, i.key] : v.filter(k => k !== i.key))} /><span><strong>{i.connection.name}</strong> · {t(({ new: "dbAdded", updated: "dbUpdated", unchanged: "dbUnchanged", missing: "dbMissing" } as const)[i.change])}<small>{i.connection.driver} · {i.connection.host}:{i.connection.port} · {i.connection.user} · {i.connection.db_name}</small>{!i.hasPassword && <small>{t("dbPasswordMissing")}</small>}{i.issue && <small className="database-error">{i.issue}</small>}</span></label>)}</div><button disabled={busy || !chosen.length} onClick={() => void task(async (signal, current) => { const r = await request({ action: "import", ticket: preview.ticket, keys: chosen }, signal); if (current()) { setConnections(r.connections ?? []); setPreview(undefined); setImporting(false); } })}>{t("dbApplyImport")}</button></>}
 			</div> : connection ? <>
 				<header className="database-heading"><div><strong>{connection.name}</strong><small>{connection.driver} · {connection.host}:{connection.port}{database ? ` / ${database}` : ""}{table ? ` / ${table.schema}.${table.name}` : ""}</small></div><button onClick={() => ask()}><FiLink />{t("dbAsk")}</button></header>
-				<div className="database-actions"><button onClick={() => { setForm({ ...connection, password: undefined }); setTested(false); }}>{t("dbEdit")}</button><button onClick={() => { const { id, version, hasPassword, source, issue, needsTest, ...copy } = connection; setForm({ ...copy, name: `${copy.name} ${t("dbCopy")}`, password: "" }); setTested(false); }}>{t("dbCopy")}</button><button onClick={() => { setPath(connection.source?.path.replace(/^upload:/, "") ?? ""); setKind(connection.source?.kind ?? "dbeaver"); setImporting(true); }}>{t("dbSync")}</button><button disabled={busy} onClick={() => void task(async (signal, current) => { const r = await request({ action: "delete", id: connection.id, version: connection.version }, signal); if (current()) { setConnections(r.connections ?? []); setSelected(""); } })}>{t("dbDelete")}</button></div>
+				<div className="database-actions"><button onClick={() => { setForm({ ...connection, password: undefined }); setTested(false); }}>{t("dbEdit")}</button><button onClick={() => { const { id, version, hasPassword, source, issue, needsTest, ...copy } = connection; setForm({ ...copy, name: `${copy.name} ${t("dbCopy")}`, password: "" }); setTested(false); }}>{t("dbCopy")}</button><button disabled={busy} onClick={() => { if (connection.source?.path.startsWith("upload:")) { setPath(connection.source.path.slice(7)); setKind(connection.source.kind); setImporting(true); } else refresh(); }}>{t("dbSync")}</button><button disabled={busy} onClick={() => void task(async (signal, current) => { const r = await request({ action: "delete", id: connection.id, version: connection.version }, signal); if (current()) { setConnections(r.connections ?? []); setSelected(""); } })}>{t("dbDelete")}</button></div>
 				{connection.issue && <p className="database-error">{connection.issue}</p>}
+				{connection.needsTest && <p className="database-hint">{t("dbRetest")}</p>}
+				{!connection.hasPassword && <p className="database-hint">{t("dbPasswordMissing")}</p>}
 				<p className="database-hint">{t("dbGrantHint")}{grants.includes(connection.id) && <button onClick={() => void task(async (_signal, current) => { await onRevoke(connection.id); if (current()) setGrants(g => g.filter(id => id !== connection.id)); })}>{t("dbRevoke")}</button>}</p>
 				<nav className="database-tabs">{(["page", "describe", "query"] as const).map(value => <button key={value} aria-pressed={tab === value} onClick={() => value === "query" ? (setTab(value), setGrid(undefined), setSelectedRows([])) : show(table, value)}>{t(({ page: "dbData", describe: "dbStructure", query: "dbSql" } as const)[value])}</button>)}</nav>
 				{tab === "query" && <div className="database-sql"><textarea aria-label={t("dbSql")} spellCheck={false} value={sql} onChange={e => setSql(e.target.value)} onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); show(table, "query"); } }} /><button disabled={busy} onClick={() => show(table, "query")}>{t("dbRun")}</button></div>}

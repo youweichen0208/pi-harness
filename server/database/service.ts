@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseImportPreview, DatabaseOperation, DatabaseResponse } from "../protocol.js";
 import { getDocumentSettings } from "../document-extension-settings.js";
-import { deleteConnection, getConnection, listConnections, markMissing, markTested, saveConnection, validateConfig } from "./store.js";
+import { deleteConnection, getConnection, listConnections, markMissing, markTested, saveConnection, restoreSource, validateConfig } from "./store.js";
 import { parseSource, loadSource, scanSources, type ImportedConnection } from "./sources.js";
 import { executeQuery } from "./query.js";
+import { synchronizeSources } from "./sync.js";
 
 const scopes = new WeakMap<object, string>();
 export function databaseScope(client: string, cwd: string, manager: { getSessionId(): string }): string {
@@ -24,6 +25,15 @@ export async function databaseAction(owner: string, cwd: string, requestId: stri
 	if (agent && !["list", "run"].includes(op.action)) throw Error("Unsupported agent database action");
 	const state = () => ({ ...response, connections: listConnections(), grants: grantedConnections(owner).map(c => c.id) });
 	switch (op.action) {
+		case "sync": {
+			const before = new Map(listConnections().map(c => [c.id, c.version]));
+			try { response.syncIssues = synchronizeSources(cwd); }
+			finally {
+				const after = new Map(listConnections().map(c => [c.id, c.version]));
+				for (const job of running.values()) if (before.get(job.connectionId) !== after.get(job.connectionId)) job.controller.abort();
+			}
+			return state();
+		}
 		case "list": return agent ? { ...response, connections: grantedConnections(owner) } : state();
 		case "save": saveConnection(op.connection); return state();
 		case "delete": deleteConnection(op.id, op.version); for (const job of running.values()) if (job.connectionId === op.id) job.controller.abort(); return state();
@@ -57,6 +67,7 @@ export async function databaseAction(owner: string, cwd: string, requestId: stri
 				if (item.issue && previous) { markMissing(previous.id, item.issue); continue; }
 				if (previous && JSON.stringify(validateConfig(previous)) === JSON.stringify(item.config) && !previous.issue) continue;
 				saveConnection({ ...item.config, id: previous?.id, version: previous?.version, password: previous ? undefined : item.password }, { path: ticket.source, id: item.sourceId, kind: ticket.kind });
+				restoreSource({ path: ticket.source, id: item.sourceId, kind: ticket.kind });
 			}
 			for (const item of ticket.preview.items.filter(i => selected.has(i.key) && i.change === "missing")) { const old = current.find(c => c.source?.path === ticket.source && c.source.id === item.sourceId); if (old) markMissing(old.id); }
 			tickets.delete(op.ticket); return state();

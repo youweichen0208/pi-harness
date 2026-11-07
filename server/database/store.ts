@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, randomBytes, randomUUID } from "node:crypto";
+import { createHash, createCipheriv, createDecipheriv, randomBytes, randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { documentDataDir } from "../document-extension-settings.js";
@@ -49,5 +49,16 @@ export function saveConnection(value: DatabaseConfig & { id?: string; version?: 
 	return listConnections().find(c => c.id === next.id)!;
 }
 export function markTested(id: string, version: string) { const items = read(), item = items.find(c => c.id === id && c.version === version); if (!item) throw Error("Connection changed"); item.needsTest = false; write(items); }
-export function deleteConnection(id: string, version: string) { const items = read(), item = items.find(c => c.id === id && c.version === version); if (!item) throw Error("Connection changed"); write(items.filter(c => c !== item)); }
-export function markMissing(id: string, issue = "Source connection missing; synchronize its source before connecting") { const items = read(), item = items.find(c => c.id === id); if (item) { item.issue = issue; item.version = randomUUID(); write(items); } }
+function sourceKey(source: NonNullable<DatabaseConnection["source"]>) { return createHash("sha256").update(JSON.stringify([source.kind, source.path, source.id])).digest("hex"); }
+function exclusions(): string[] {
+	try { const value: unknown = JSON.parse(readFileSync(join(folder(), "excluded-sources.json"), "utf8")); if (!Array.isArray(value) || value.some(v => typeof v !== "string")) throw Error("Invalid source exclusions"); return value; }
+	catch (e) { if ((e as NodeJS.ErrnoException).code === "ENOENT") return []; throw e; }
+}
+export function isSourceExcluded(source: NonNullable<DatabaseConnection["source"]>) { return exclusions().includes(sourceKey(source)); }
+export function restoreSource(source: NonNullable<DatabaseConnection["source"]>) { const keys = exclusions(), next = keys.filter(k => k !== sourceKey(source)); if (keys.length !== next.length) atomic(join(folder(), "excluded-sources.json"), JSON.stringify(next)); }
+export function deleteConnection(id: string, version: string) {
+	const items = read(), item = items.find(c => c.id === id && c.version === version); if (!item) throw Error("Connection changed");
+	if (item.source) atomic(join(folder(), "excluded-sources.json"), JSON.stringify([...new Set([...exclusions(), sourceKey(item.source)])]));
+	write(items.filter(c => c !== item));
+}
+export function markMissing(id: string, issue = "Source connection missing; synchronize its source before connecting") { const items = read(), item = items.find(c => c.id === id); if (item && item.issue !== issue) { item.issue = issue; item.version = randomUUID(); write(items); } }

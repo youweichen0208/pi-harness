@@ -6,13 +6,19 @@
 
 `server/database/` 将配置、来源解析、SQL 校验、驱动执行、会话授权和 HTTP 路由分开。内置 MySQL/MariaDB 使用 mysql2，PostgreSQL 使用 pg/pg-cursor，依赖随 npm/桌面包分发，不在打开界面时安装。旧 db-client 插件保持独立，不导入它的写操作或自动迁移配置。
 
-`POST /api/database` 经过共享口令、同源、clientId、cwd、conversationId、quiesce 校验。协议类型在 protocol.ts；action 覆盖 list/save/delete/test/scan/preview/import/grant/revoke/run/cancel。HTTP 断开会取消当前查询；完成后重验会话及配置版本，前端 AbortController 和请求序号丢弃迟到响应。
+`POST /api/database` 经过共享口令、同源、clientId、cwd、conversationId、quiesce 校验。协议类型在 protocol.ts；action 覆盖 list/sync/save/delete/test/scan/preview/import/grant/revoke/run/cancel。HTTP 断开会取消当前查询；完成后重验会话及配置版本，前端 AbortController 和请求序号丢弃迟到响应。
 
 连接保存于 `<dataDir>/database/connections.json`，密码字段仅存 AES-256-GCM 密文，密钥为同目录 0600 的 key 文件。原子替换、随机配置版本和显式字段白名单避免覆盖及凭据回显；坏文件/无法解密直接报错，不回退明文。名称、host、port、user、db_name、driver 为核心字段，TLS 验证证书，允许提供 PEM CA。
 
-## 来源导入
+## 自动发现与来源同步
 
 扫描限制在当前项目 .idea/.dbeaver、DataGrip 常见配置／项目目录及 DBeaverData，最多 2500 个目录、100 个来源，不递归扫描整个 home，不跟随符号链接。手动指定服务端配置文件路径或浏览器上传用于其它布局。配置文件上限 2 MiB、200 个连接；XML 禁用 DTD/实体。
+
+打开工作台立即执行 `sync`，打开期间每 15 秒及窗口重新获得焦点时检查一次；关闭后停止轮询，下次打开重新同步。同步只读取服务所在机器的配置，不连接数据库，不授权 Agent，也不写回第三方配置。已导入的本地自定义路径会一并检查；上传文件不自动重读。未识别的路径仍可通过手动导入加入。当前实现不在关闭工作台后运行后台文件监控。
+
+前端同步使用独立请求通道，前台操作期间跳过检查，10 秒超时后释放请求并在下一周期重试；按会话生命周期及前台操作序号丢弃迟到响应。同步不覆盖编辑表单及 SQL 草稿；配置版本变化时清除旧表树与查询结果。连接版本变化会使旧授权失效并取消对应进行中的查询；需要重新测试的连接显示提示。同步错误保留列表并显示重试提示，不覆盖前台操作错误。
+
+来源丢失、格式损坏或重复 ID 时保留已导入记录并禁用连接；恢复后自动重新核对。不支持的驱动／认证／隧道列在来源问题中，不自动导入。用户删除来源连接后，`excluded-sources.json` 保存来源标识摘要，后续自动发现不再添加；手动预览导入可恢复。未变化的记录保留版本，避免反复撤销授权。密码首次导入可读取配置中明确提供的密码，后续同步始终保留本地密码，加密密码库仍需用户补填。
 
 DataGrip 从 dataSources.xml 读取连接，并合并相邻 dataSources.local.xml 中的用户名及明确提供的密码；DBeaver 从 data-sources.json 提取参数和 URL。未知驱动、连接属性、认证、代理或隧道不静默转为直连；预览列出原因且不能导入。支持 MySQL/MariaDB/PostgreSQL，密码缺失需补填，不读取系统钥匙串或破解第三方加密凭据。
 
@@ -28,11 +34,13 @@ DataGrip 从 dataSources.xml 读取连接，并合并相邻 dataSources.local.xm
 
 最多 8 个并发查询，默认 30 秒。数据库 statement timeout 与 AbortController 配合，取消通过同账号控制连接调用 pg_cancel_backend 或 KILL QUERY，并关闭执行连接。MySQL 流式读取，PostgreSQL 游标按批读取；普通结果最多 1000 行，数据页 50 行，最多 2 MiB 结果，单元格文本最多 4000 字符，超限标记截断。BIGINT/NUMERIC 保留字符串避免精度丢失。数据库错误仅回传错误代码，不透出可能含凭据或查询字面量的驱动消息。
 
-当前不支持写数据、DDL、SSH、代理、第三方驱动、自动持续同步、密码库解密。表预览不是一致性快照，外部修改可能改变翻页结果；分析总量应使用聚合 SQL。
+当前不支持写数据、DDL、SSH、代理、第三方驱动、密码库解密。表预览不是一致性快照，外部修改可能改变翻页结果；分析总量应使用聚合 SQL。
 
 ## 验证
 
 - `tests/database-tls-test.mjs`：隔离 Docker PostgreSQL 验证自签 CA、可信连接与未知 CA 拒绝。
+- `tests/unit/database-sync.test.ts`：自动发现、持续同步、缺失恢复、删除排除、密码保留，以及虚拟时钟下的超时、前台操作和迟到响应隔离。
+- `tests/database-sync-browser-test.mjs`：本地模拟接口验证自动同步、表单草稿保留、立即同步和关闭清理，不连接数据库或调用模型。
 - `tests/unit/database.test.ts`：来源解析、SQL 拒绝边界、凭据加密、版本冲突、同步幂等、来源删除及授权隔离。
 - `tests/database-test.mjs --browser`：真实 MySQL/PostgreSQL、表结构/索引、跨 Schema、分页、BIGINT、写操作拒绝、查询取消；真实 SDK＋本地模型验证未授权拒绝、授权查询、撤销；浏览器验证弹窗、原聊天草稿/附件、引用、同步、焦点和小屏。
 - 集成测试仅针对临时测试数据库：默认 localhost:9277 PostgreSQL（postgres）及 :9278 MySQL（root），数据库 analytics，密码 pi_test_only；可用 PI_TEST_PG_PORT / PI_TEST_MYSQL_PORT 覆盖隔离端口。不要指向业务数据库，夹具会创建/重置测试表。

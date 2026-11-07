@@ -1583,6 +1583,7 @@ export type DatabaseOperation =
 	| { action: "delete"; id: string; version: string }
 	| { action: "test"; connection: DatabaseConfig & { id?: string; version?: string; password?: string } }
 	| { action: "scan" }
+	| { action: "sync" }
 	| { action: "preview"; kind: "datagrip" | "dbeaver"; path: string; content?: string }
 	| { action: "import"; ticket: string; keys: string[] }
 	| { action: "grant"; ids: string[]; versions: Record<string, string> }
@@ -1592,6 +1593,7 @@ export type DatabaseOperation =
 export type DatabaseRequest = DatabaseOperation & { clientId: string; cwd: string; conversationId: string; requestId: string };
 export interface DatabaseResponse {
 	requestId: string; error?: string; connections?: DatabaseConnection[]; grants?: string[];
+	syncIssues?: { path: string; issue: string }[];
 	sources?: { kind: "datagrip" | "dbeaver"; path: string }[]; preview?: DatabaseImportPreview; grid?: DatabaseGrid;
 }
 
