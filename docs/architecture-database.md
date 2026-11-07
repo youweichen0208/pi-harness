@@ -12,7 +12,9 @@
 
 ## 自动发现与来源同步
 
-扫描限制在当前项目 .idea/.dbeaver、DataGrip 常见配置／项目目录及 DBeaverData，最多 2500 个目录、100 个来源，不递归扫描整个 home，不跟随符号链接。手动指定服务端配置文件路径或浏览器上传用于其它布局。配置文件上限 2 MiB、200 个连接；XML 禁用 DTD/实体。
+扫描限制在当前项目 .idea/.dbeaver、DataGrip 常见配置／项目目录及 DBeaverData，最多 2500 个目录、100 个来源，不递归扫描整个 home，不跟随符号链接。另读取 macOS Application Support、Windows APPDATA、Linux XDG_CONFIG_HOME（默认 ~/.config）中 JetBrains/DataGrip*/options/recentProjects.xml，支持 additionalInfo 与旧版 recentPaths/openPaths，以及 $USER_HOME$ 路径。每次同步重新读取，最多 32 份注册表、每份 2 MiB、合计 200 个去重项目；只检查注册项目的 .idea/dataSources.xml，不递归扫描项目或任意盘符，最终来源仍不超过 100 个。坏文件与失效路径独立忽略，不影响其它版本。手动指定服务端配置文件路径或浏览器上传用于其它布局，路径输入旁说明需要完整文件路径及启用预览的条件。配置文件上限 2 MiB、200 个连接；XML 禁用 DTD/实体。
+
+DBeaver 另读取各数据目录的 UTF-8 `.workspaces` 最近工作区记录，按行解析绝对路径，支持 Windows 换行、中文与空格并去重；支持服务进程继承的 `DBEAVER_WORKSPACE`、`DBEAVER_DATA` 绝对路径及 Linux `XDG_DATA_HOME`。每轮最多 32 个工作区、2500 个项目目录，历史文件最大 2 MiB；只检查工作区及直接子项目的 `.dbeaver/data-sources.json`，不沿历史路径递归扫描其它目录、不跟随符号链接，最终仍受 100 个来源上限限制。历史缺失、过大或工作区被删除时独立忽略。只有其它启动进程可见的环境变量、没有写入 `.workspaces` 的路径、Eclipse 外部链接项目和自定义安装配置仍需手动导入；一旦导入本地来源，即参与后续同步。依据：[DBeaver 工作区记录实现](https://github.com/dbeaver/dbeaver/blob/devel/plugins/org.jkiss.dbeaver.ui.app.standalone/src/org/jkiss/dbeaver/ui/app/standalone/DBeaverWorkspaces.java)、[工作区位置文档](https://github.com/dbeaver/dbeaver/wiki/Workspace-Location)。
 
 打开工作台立即执行 `sync`，打开期间每 15 秒及窗口重新获得焦点时检查一次；关闭后停止轮询，下次打开重新同步。同步只读取服务所在机器的配置，不连接数据库，不授权 Agent，也不写回第三方配置。已导入的本地自定义路径会一并检查；上传文件不自动重读。未识别的路径仍可通过手动导入加入。当前实现不在关闭工作台后运行后台文件监控。
 
@@ -44,3 +46,7 @@ DataGrip 从 dataSources.xml 读取连接，并合并相邻 dataSources.local.xm
 - `tests/unit/database.test.ts`：来源解析、SQL 拒绝边界、凭据加密、版本冲突、同步幂等、来源删除及授权隔离。
 - `tests/database-test.mjs --browser`：真实 MySQL/PostgreSQL、表结构/索引、跨 Schema、分页、BIGINT、写操作拒绝、查询取消；真实 SDK＋本地模型验证未授权拒绝、授权查询、撤销；浏览器验证弹窗、原聊天草稿/附件、引用、同步、焦点和小屏。
 - 集成测试仅针对临时测试数据库：默认 localhost:9277 PostgreSQL（postgres）及 :9278 MySQL（root），数据库 analytics，密码 pi_test_only；可用 PI_TEST_PG_PORT / PI_TEST_MYSQL_PORT 覆盖隔离端口。不要指向业务数据库，夹具会创建/重置测试表。
+
+#152 回归：`tests/unit/datagrip-discovery.test.ts` 覆盖三平台配置根、非默认目录、注册表动态变化、Windows 路径、旧版列表、home 宏、去重、坏文件隔离及资源上限。注册格式参考 [JetBrains RecentProjectsManagerBase](https://github.com/JetBrains/intellij-community/blob/master/platform/platform-impl/src/com/intellij/ide/RecentProjectsManagerBase.kt)。
+
+DBeaver 自定义工作区回归：`tests/unit/dbeaver-discovery.test.ts` 覆盖三平台数据根、`.workspaces` 动态变化、中文/空格/换行、去重、环境路径、无效/过大文件和发现上限。

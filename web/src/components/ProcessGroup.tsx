@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { FiCheck, FiChevronRight } from "react-icons/fi";
 import { useChatT } from "../i18n";
-import { failureRecovered, type ProcessStats } from "../process-stats";
+import { processGroupState, type ProcessStats } from "../process-stats";
 export { emptyProcessStats, type ProcessStats } from "../process-stats";
 import { elapsedLabel } from "../bash-presentation";
 
@@ -10,10 +10,9 @@ import { elapsedLabel } from "../bash-presentation";
 export function ProcessGroup({ stats, children }: { stats: ProcessStats; children: ReactNode }) {
 	const t = useChatT();
 	const [manual, setManual] = useState<boolean | null>(null);
-	const recovered = failureRecovered(stats);
 	const single = stats.commands === 1 && !stats.reads && !stats.searches && !stats.thinking && !stats.failed && !stats.skipped;
-	// Only a failure the turn stopped on asks for attention; recovered ones stay folded.
-	const open = single || (manual ?? (stats.running || stats.failed > 0 && !recovered));
+	// Unresolved failures remain visible; successful retries use the normal success state.
+	const open = single || (manual ?? (stats.running || stats.failed > 0));
 	const ids = stats.toolIds.join("\n");
 	useEffect(() => {
 		const reveal = (event: Event) => {
@@ -29,7 +28,7 @@ export function ProcessGroup({ stats, children }: { stats: ProcessStats; childre
 		stats.searches && t(stats.searches === 1 ? "processSearch" : "processSearches", { n: stats.searches }),
 	].filter(Boolean) as string[];
 	const thought = stats.thinking > 0 && (stats.thoughtMs >= 1000 ? t("processThought", { d: elapsedLabel(stats.thoughtMs / 1000) }) : t("processThoughtUnmeasured"));
-	const state = stats.running ? "run" : stats.failed ? recovered ? "recovered" : "err" : stats.skipped ? "empty" : "ok";
+	const state = processGroupState(stats);
 	return <section className={`process-group ${state}${open ? " open" : ""}${single ? " single-command" : ""}`}>
 		{!single && <button type="button" className="process-group-head" aria-expanded={open} onClick={() => setManual(!open)}>
 			<FiChevronRight className="process-group-chevron" aria-hidden="true" />
@@ -37,7 +36,7 @@ export function ProcessGroup({ stats, children }: { stats: ProcessStats; childre
 			{thought && <><span className="process-group-dot" aria-hidden="true">·</span><span className="process-group-thought">{thought}</span></>}
 			<span className="process-group-status" aria-label={state === "ok" ? t("processAllPassed") : undefined} title={state === "ok" ? t("processAllPassed") : undefined}>
 				{stats.running ? <><i className="thinking-spinner" aria-hidden="true" />{t("processRunning")}</>
-					: stats.failed ? t(recovered ? "processFailedRecovered" : "processFailed", { n: stats.failed })
+					: stats.failed ? t("processFailed", { n: stats.failed })
 						: stats.skipped ? t("toolNotExecuted") : <><FiCheck aria-hidden="true" />{t("executionCompleted")}</>}
 			</span>
 		</button>}

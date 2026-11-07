@@ -40,7 +40,7 @@ export function stateOf(view: ToolView): "ok" | "err" | "run" | "empty" {
 /** Presentation only: tool IDs and the authoritative result lookup stay intact. */
 /** Latest attempt of each command, as its row shows it (retries collapse into one row). */
 export function latestAttemptStates(items: Item[], cwd: string) {
-	return consecutiveAttempts(items, item => commandReading(commandPresentation(bashCommand(item.block.argumentsText) ?? "", cwd).command).title)
+	return consecutiveAttempts(items, item => bashCommand(item.block.argumentsText) ?? item.block.argumentsText ?? item.block.id)
 		.map(group => ({ state: stateOf(group[group.length - 1].view), view: group[group.length - 1].view }));
 }
 
@@ -48,7 +48,7 @@ export function latestAttemptStates(items: Item[], cwd: string) {
 export function BashGroup({ items, onKill, active = false, flat = false }: { items: Item[]; onKill?: () => void; active?: boolean; flat?: boolean }) {
 	const t = useChatT();
 	const cwd = useContext(WorkspacePathContext);
-	const attempts = consecutiveAttempts(items, item => commandReading(commandPresentation(bashCommand(item.block.argumentsText) ?? "", cwd).command).title);
+	const attempts = consecutiveAttempts(items, item => bashCommand(item.block.argumentsText) ?? item.block.argumentsText ?? item.block.id);
 	const [open, setOpen] = useState(active);
 	useEffect(() => setOpen(active), [active]);
 	const [all, setAll] = useState(false);

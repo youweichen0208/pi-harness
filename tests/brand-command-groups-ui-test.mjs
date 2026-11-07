@@ -57,10 +57,9 @@ try {
 		});
 	});
 	await page.goto(`http://localhost:${port}`);
-	// Tool group: cmd-8 failed but later commands succeeded, so the failure is recovered and the group stays folded.
-	await page.locator('.process-group.recovered:not(.open) .process-group-head', { hasText: 'Ran 10 commands' }).waitFor();
-	assert.match(await page.locator('.process-group-status').textContent(), /1 failed · recovered/);
-	await page.locator('.process-group-head').click();
+	// An unrelated later success cannot clear cmd-8 failure.
+	await page.locator('.process-group.err.open .process-group-head', { hasText: /Ran 10 commands|已运行 10 条命令/ }).waitFor();
+	assert.match(await page.locator('.process-group-status').textContent(), /1 failed/);
 	assert.equal(await page.locator('.process-group').count(), 1);
 	assert.equal(await page.locator('.bash-group-head').count(), 0);
 	assert.equal(await page.locator('.bash-row').count(), 8);
@@ -92,7 +91,7 @@ try {
 	assert.equal(await page.locator('.task-progress-meta').count(), 0);
 	assert.equal(await page.locator('.task-artifact-row').count(), 0);
 	const colors = await page.evaluate(() => { const s = getComputedStyle(document.documentElement); return ['--green', '--red', '--yellow-fg', '--accent'].map(key => s.getPropertyValue(key).trim()); });
-	assert.deepEqual(colors, ['#3e9b5f', '#c9483a', '#8a5a00', '#2f7aae']);
+	assert.deepEqual(colors, ['#12a453', '#dc4848', '#8a5a00', '#008ac4']);
 	assert.equal(await page.locator('.usage-trigger').count(), 0, 'zero usage stays hidden');
 	await page.mouse.move(0, 0);
 	await page.waitForTimeout(1800);
@@ -124,7 +123,7 @@ try {
 	snapshot.state.isStreaming = true;
 	snapshot.state.streamingMessage = { id: 'a-live', role: 'assistant', content: [{ type: 'toolCall', id: 'live-call', name: 'bash', argumentsText: '{"command":"sleep 1"}' }] };
 	snapshot.state.rev += 1; socket.send(JSON.stringify(snapshot));
-	await page.locator('.process-group.run .process-group-head', { hasText: 'Ran 11 commands' }).waitFor();
+	await page.locator('.process-group.run .process-group-head', { hasText: /Ran 11 commands|已运行 11 条命令/ }).waitFor();
 	assert.equal(await page.locator('.bash-group').count(), 1);
 	assert.equal(await page.locator('.bash-row.run').count(), 1);
 	// A previous interrupted tool must not become running again on a new turn.
@@ -133,6 +132,7 @@ try {
 	snapshot.state.rev += 1; socket.send(JSON.stringify(snapshot));
 	await page.locator('[data-tool-call-id="live-call"].err').waitFor({ state: 'attached' });
 	assert.equal(await page.locator('.bash-row.run').count(), 0);
+	await page.setViewportSize({ width: 1440, height: 1000 });
 	// Completed tools remain part of a running turn until the model settles.
 	const reads = ['progress.json', 'ARCHITECTURE.md'].map((name, i) => ({ type: 'toolCall', id: `read-${i}`, name: 'bash', argumentsText: JSON.stringify({ command: `git show feat/hermes-design-package:docs/architecture/decisions/${name} 2>/dev/null` }) }));
 	snapshot.state.messages = [{ id: 'u-reads', role: 'user', timestamp: Date.now() - 26000, content: [{ type: 'text', text: 'Read project decisions' }] }, ...reads.flatMap((call, i) => [
@@ -144,7 +144,7 @@ try {
 	snapshot.state.taskProgress = deriveTaskProgress(snapshot.state.conversationId, snapshot.state.messages, null, true);
 	snapshot.state.stats = { ...snapshot.state.stats, tokens: { input: 6, cacheRead: 94, cacheWrite: 0, output: 10 }, contextUsage: { tokens: 600, contextWindow: 10000, percent: 6 } };
 	snapshot.state.rev += 1; socket.send(JSON.stringify(snapshot));
-	await page.locator('.task-progress.running').waitFor();
+	await page.locator('.task-progress.running').waitFor({ state: 'attached' });
 	assert.equal(await page.locator('.task-progress.done').count(), 0);
 	assert.equal(await page.locator('.task-file-result').count(), 0);
 	assert.equal(await page.locator('.task-artifact-row').count(), 0);
@@ -153,6 +153,7 @@ try {
 	// Compact rows show measured durations from 0.1s; shorter runs show their line count instead.
 	assert.equal(await page.locator('.bash-row-stats', { hasText: '<0.1s' }).count(), 0);
 	assert.equal(await page.locator('.bash-readable-title').first().innerText(), 'progress.json');
+	await page.locator('.process-group-head[aria-expanded="false"]').click();
 	await page.locator('[data-tool-call-id="read-0"] .bash-row-head').click();
 	assert.equal(await page.locator('[data-tool-call-id="read-0"] .bash-full-command').textContent(), JSON.parse(reads[0].argumentsText).command);
 	await page.locator('[data-tool-call-id="read-0"]').getByRole('button', { name: '复制命令', exact: true }).click();
@@ -182,12 +183,12 @@ try {
 	snapshot.state.isStreaming = false;
 	snapshot.state.taskProgress = deriveTaskProgress(snapshot.state.conversationId, snapshot.state.messages, null, false, Date.now());
 	snapshot.state.rev += 1; socket.send(JSON.stringify(snapshot));
-	await page.locator('.task-progress.done').waitFor();
+	await page.locator('.task-progress.done').waitFor({ state: 'attached' });
 	// A failed plan completion after successful commands is not a successful turn.
 	snapshot.state.messages.push({ id: 'a-plan-error', role: 'assistant', content: [{ type: 'toolCall', id: 'bad-plan', name: 'plan', argumentsText: '{"action":"update","status":"completed"}' }] }, { id: 'r-plan-error', role: 'toolResult', toolName: 'plan', toolCallId: 'bad-plan', isError: true, content: [{ type: 'text', text: 'Validation failed for tool "plan": steps is required' }] });
 	snapshot.state.taskProgress = deriveTaskProgress(snapshot.state.conversationId, snapshot.state.messages, null, false, Date.now());
 	snapshot.state.rev += 1; socket.send(JSON.stringify(snapshot));
-	await page.locator('.task-progress.failed').waitFor();
+	await page.locator('.task-progress.failed').waitFor({ state: 'attached' });
 	assert.equal(await page.locator('.task-progress.done').count(), 0);
 
 	// Older servers send skill bodies truncated before </skill>; previews stay compact.
@@ -226,7 +227,7 @@ try {
 	await input.press('Escape'); assert.equal(await input.inputValue(), ''); assert.equal(submitted.length, beforeEscape);
 	await input.press('Escape'); await page.waitForTimeout(100); assert.equal(submitted.at(-1).type, 'abort');
 	// 3a: Stop is the labelled primary action while running; Send hides until there is input.
-	assert.match(await page.locator('.composer-action.stop').innerText(), /停止/);
+	assert.match(await page.locator('.composer-action.stop').getAttribute('aria-label'), /停止/);
 	assert.equal(await page.locator('.composer-action.send').isVisible(), false);
 	assert.equal(await page.locator('.messages .waiting-indicator').count(), 1);
 	await page.screenshot({ path: '/tmp/pi-design16-running.png' });
@@ -250,7 +251,7 @@ try {
 	await page.keyboard.press('ControlOrMeta+d');
 	await page.locator('.changes-line.add').waitFor();
 	assert.equal(await page.locator('.changes-line.add').evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(230, 244, 234)');
-	assert.equal(await page.locator('.changes-line.add .changes-line-sign').evaluate(el => getComputedStyle(el).color), 'rgb(62, 155, 95)');
+	assert.equal(await page.locator('.changes-line.add .changes-line-sign').evaluate(el => getComputedStyle(el).color), 'rgb(22, 163, 74)');
 	await page.keyboard.press('ControlOrMeta+d');
 	await page.locator('.changes-panel').waitFor({state:'detached'});
 	// English has longer control labels; verify the same narrow layout.

@@ -1,8 +1,9 @@
 import { XMLParser, XMLValidator } from "fast-xml-parser";
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { lstatSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve, win32 } from "node:path";
 import { createHash } from "node:crypto";
+import { dbeaverDataRoots, registeredDbeaverSources } from "./dbeaver-discovery.js";
 import type { DatabaseConfig } from "../protocol.js";
 export interface ImportedConnection { sourceId: string; config: DatabaseConfig; password?: string; issue?: string }
 const array = <T>(v: T | T[] | undefined): T[] => v === undefined ? [] : Array.isArray(v) ? v : [v];
@@ -49,13 +50,69 @@ export function readSource(path: string): string {
 	if (!statSync(path).isFile() || statSync(path).size > 2 * 1024 * 1024) throw Error("Invalid source file");
 	return readFileSync(path, "utf8");
 }
+/** Read only registered project paths, never arbitrary path-like XML attributes. */
+export function dataGripProjectPaths(text: string, home: string): string[] {
+	if (Buffer.byteLength(text) > 2 * 1024 * 1024 || /<!DOCTYPE|<!ENTITY/i.test(text) || XMLValidator.validate(text) !== true) throw Error("Invalid recent projects XML");
+	const document = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: "@", parseTagValue: false }).parse(text);
+	const paths = new Set<string>();
+	for (const component of array<any>(document.application?.component)) {
+		if (!["RecentProjectsManager", "RecentProjectsManagerBase"].includes(component["@name"])) continue;
+		for (const option of array<any>(component.option)) {
+			const candidates = option["@name"] === "additionalInfo" ? array<any>(option.map?.entry).map(entry => entry["@key"])
+				: ["recentPaths", "openPaths"].includes(option["@name"]) ? array<any>(option.list?.option).map(entry => entry["@value"]) : [];
+			for (const candidate of candidates) {
+				if (typeof candidate !== "string" || candidate.length > 4096 || /[\0\r\n]/.test(candidate)) continue;
+				const path = candidate.replace(/^\$USER_HOME\$(?=[/\\]|$)/, () => home).replace(/^~(?=[/\\])/, () => home);
+				if (path.includes("$") || (!isAbsolute(path) && !win32.isAbsolute(path))) continue;
+				paths.add(path);
+				if (paths.size >= 200) return [...paths];
+			}
+		}
+	}
+	return [...paths];
+}
+
+function registeredDataGripSources(home: string, configRoots: string[]): string[] {
+	const projects = new Set<string>(); let registries = 0;
+	for (const root of new Set(configRoots)) {
+		try {
+			for (const entry of readdirSync(root, { withFileTypes: true }).slice(0, 512)) {
+				if (!entry.isDirectory() || !/^DataGrip[^/\\]*$/i.test(entry.name)) continue;
+				if (++registries > 32) break;
+				try {
+					const options = join(root, entry.name, "options"), file = join(options, "recentProjects.xml");
+					if (!lstatSync(options).isDirectory()) continue;
+					const stat = lstatSync(file);
+					if (!stat.isFile() || stat.size > 2 * 1024 * 1024) continue;
+					for (const project of dataGripProjectPaths(readFileSync(file, "utf8"), home)) {
+						if (projects.size >= 200) break;
+						if (isAbsolute(project)) projects.add(resolve(project));
+					}
+				} catch { /* Missing, stale or invalid registry must not hide other versions. */ }
+			}
+		} catch { /* Optional IDE configuration directory. */ }
+	}
+	const sources: string[] = [];
+	for (const project of projects) {
+		try {
+			const idea = join(project, ".idea"), file = join(idea, "dataSources.xml");
+			if (lstatSync(project).isDirectory() && lstatSync(idea).isDirectory() && lstatSync(file).isFile()) sources.push(file);
+		} catch { /* Deleted project or one without database connections. */ }
+	}
+	return sources;
+}
 /** Bounded known roots only; never walk the entire home directory. */
 export function scanSources(cwd: string): { kind: "datagrip" | "dbeaver"; path: string }[] {
-	const home = homedir(), roots = [join(cwd, ".idea"), join(cwd, ".dbeaver"), join(home, "Library/Application Support/JetBrains"), join(home, "Library/DBeaverData"), join(home, ".local/share/DBeaverData"), join(home, ".config/JetBrains"), join(home, "DataGripProjects"), ...(process.env.APPDATA ? [join(process.env.APPDATA, "DBeaverData"), join(process.env.APPDATA, "JetBrains")] : [])];
+	const home = homedir(), dbeaverRoots = dbeaverDataRoots(home);
+	const configRoots = [join(home, "Library/Application Support/JetBrains"), join(process.env.XDG_CONFIG_HOME || join(home, ".config"), "JetBrains"), ...(process.env.APPDATA ? [join(process.env.APPDATA, "JetBrains")] : [])];
+	const roots = [join(cwd, ".idea"), join(cwd, ".dbeaver"), ...configRoots, ...dbeaverRoots, join(home, "DataGripProjects")];
 	const found = new Map<string, "datagrip" | "dbeaver">(); let visited = 0;
+	for (const path of registeredDataGripSources(home, configRoots).slice(0, 100)) found.set(path, "datagrip");
+	for (const path of registeredDbeaverSources(dbeaverRoots)) { if (found.size >= 100) break; found.set(path, "dbeaver"); }
 	function walk(path: string, depth: number) {
 		if (depth > 6 || ++visited > 2500 || found.size >= 100) return;
 		try { for (const entry of readdirSync(path, { withFileTypes: true })) {
+			if (found.size >= 100) break;
 			if (entry.isSymbolicLink()) continue;
 			const p = join(path, entry.name);
 			if (entry.isFile() && ["dataSources.xml", "data-sources.json"].includes(entry.name)) found.set(resolve(p), entry.name === "dataSources.xml" ? "datagrip" : "dbeaver");

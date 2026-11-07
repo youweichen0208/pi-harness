@@ -12,17 +12,15 @@ export interface ProcessStats {
 	thoughtMs: number;
 	thinking: number;
 	toolIds: string[];
-	/** Tool outcomes in order, to tell a recovered failure from the one the turn stopped on. */
+	/** Latest command outcomes in display order. */
 	outcomes: ("ok" | "err" | "run" | "skip")[];
 	/** Prose or another step follows this list, so the turn moved on. */
 	continued: boolean;
 }
 
-/** A failure counts as recovered once a later call succeeded or the turn went on past the group. */
-export function failureRecovered(stats: ProcessStats): boolean {
-	if (!stats.failed || stats.running) return false;
-	const lastError = stats.outcomes.lastIndexOf("err");
-	return stats.continued || stats.outcomes.slice(lastError + 1).includes("ok");
+/** Success follows the latest attempts; later unrelated work cannot clear a failure. */
+export function processGroupState(stats: ProcessStats): "run" | "err" | "empty" | "ok" {
+	return stats.running ? "run" : stats.failed ? "err" : stats.skipped ? "empty" : "ok";
 }
 
 export function emptyProcessStats(): ProcessStats {

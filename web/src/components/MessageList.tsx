@@ -284,7 +284,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 		}
 		return summaries;
 	}, [state.messages, state.isStreaming, bashGroups]);
-	/** Replies after which the agent kept going in the same turn — their failed steps count as recovered. */
+	/** Replies after which the agent kept going in the same turn. */
 	const turnContinues = useMemo(() => {
 		const continues = new Set<string>();
 		let later = !!state.streamingMessage;

@@ -12576,7 +12576,6 @@ pre.wiki-mermaid-source-hidden > .wiki-mermaid-preview { border-bottom: 0; margi
 :root .design-workspace .inputbar > .scroll-bottom { top: -14px; right: calc(max(var(--composer-gutter, 20px), calc((100% - var(--chat-max)) / 2)) + 14px); width: 28px; height: 28px; padding: 0; justify-content: center; border-radius: 50%; }
 :root .design-workspace .inputbar > .scroll-bottom svg { width: 14px; height: 14px; }
 :root .design-workspace .inputbar > .scroll-bottom { top: -34px; right: max(2px, calc(max(var(--composer-gutter, 20px), calc((100% - var(--chat-max)) / 2)) - 32px)); }
-.process-group.recovered .process-group-status { color: var(--text-faint); }
 
 /* ---- Code search (⌘P): code / file-name modes, grouped hits, preview around the hit ---- */
 .cs-modal { display: flex; flex-direction: column; width: min(980px, 94vw); height: min(640px, 78vh); border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--bg-elev2); box-shadow: 0 18px 60px color-mix(in srgb, var(--shadow-color) 45%, transparent); overflow: hidden; }
@@ -14259,7 +14258,6 @@ html.pi-desktop .design-workspace .topbar { height: 48px; min-height: 48px; }
 .design-workspace .process-group-chevron { color: var(--text-faint); }
 .design-workspace .process-group-status { flex: none; padding: 2px 10px; border-radius: var(--r-switch); font-size: 11px; line-height: 1.6; }
 .design-workspace .process-group.ok .process-group-status { background: var(--green-soft); color: var(--green); }
-.design-workspace .process-group.recovered .process-group-status { background: var(--yellow-bg); color: var(--yellow-fg); }
 .design-workspace .process-group.err .process-group-status { background: var(--red-soft); color: var(--red); }
 .design-workspace .process-group.run .process-group-status { background: var(--accent-soft); color: var(--accent); }
 .design-workspace .process-group.empty .process-group-status { background: var(--bg-elev2); color: var(--text-muted); }
