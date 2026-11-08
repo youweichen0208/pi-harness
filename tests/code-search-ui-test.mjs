@@ -17,6 +17,7 @@ const cwd = join(root, "workspace");
 mkdirSync(cwd);
 writeFileSync(join(cwd, "order.ts"), Array.from({ length: 50 }, (_, i) => i === 19 ? "const placeOrder = 1;" : `// line ${i + 1}`).join("\n"));
 let server, browser, socket;
+let failFileSearch = true;
 const requests = [], errors = [];
 try {
 	server = spawn(process.execPath, ["dist/server/index.js"], { env: { ...testEnv(), PORT: String(port), PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(root, "data"), PI_CODING_AGENT_DIR: join(root, "agent") }, stdio: "ignore" });
@@ -29,7 +30,16 @@ try {
 	await page.routeWebSocket("**/ws", route => {
 		socket = route;
 		const upstream = route.connectToServer();
-		route.onMessage(wire => { const msg = JSON.parse(String(wire)); if (msg.type === "search_content") requests.push(msg); upstream.send(wire); });
+		route.onMessage(wire => {
+			const msg = JSON.parse(String(wire));
+			if (msg.type === "search_content") requests.push(msg);
+			if (msg.type === "search_files" && failFileSearch) {
+				failFileSearch = false;
+				route.send(JSON.stringify({ type: "search_files_result", cwd, reqId: msg.reqId, ok: false, results: [] }));
+				return;
+			}
+			upstream.send(wire);
+		});
 		upstream.onMessage(wire => route.send(wire));
 	});
 	await page.goto(`http://localhost:${port}`);
@@ -72,16 +82,37 @@ try {
 	socket.send(JSON.stringify({ type: "search_content_result", cwd, reqId: first, ok: true, done: true, matches: [{ path: "stale.ts", line: 1, column: 1, text: "stale-result", ranges: [[0, 5]] }] }));
 	await sleep(100);
 	assert.equal(await page.locator(".cs-row").count(), 0);
+	socket.send(JSON.stringify({ type: "search_content_result", cwd, reqId: latest, ok: false, done: true, matches: [], error: "Search fixture unavailable" }));
+	await page.locator(".cs-results .cs-empty small", { hasText: "Search fixture unavailable" }).waitFor();
+	await page.getByRole("button", { name: "重试", exact: true }).click();
+	await page.locator(".cs-results .cs-empty p", { hasText: "没有找到匹配结果" }).waitFor();
+	for (let i = 0; i < 100 && requests.filter(r => r.query === "missing-query").at(-1).reqId <= latest; i++) await sleep(20);
+	assert(requests.filter(r => r.query === "missing-query").at(-1).reqId > latest, "retry must create a new request identity");
 	await page.getByRole("button", { name: "正则表达式", exact: true }).click();
 	await input.fill("[");
 	await sleep(400);
 	assert.equal(requests.some(r => r.query === "["), false);
 	await input.press("Tab");
 	await input.fill("order");
+	await page.locator(".cs-results .cs-empty p", { hasText: "搜索失败" }).waitFor();
+	assert.equal(await page.locator(".cs-results .cs-empty p").innerText(), "搜索失败");
+	if (process.env.AFK_SCREENSHOTS) {
+		mkdirSync(process.env.AFK_SCREENSHOTS, { recursive: true });
+		for (const [theme, width] of [["warm", 1280], ["graphite", 1280], ["warm", 390], ["graphite", 390]]) {
+			await page.setViewportSize({ width, height: 800 });
+			await page.evaluate(theme => {
+				document.documentElement.dataset.theme = theme;
+				document.documentElement.dataset.appearance = theme === "graphite" ? "dark" : "light";
+			}, theme);
+			await page.screenshot({ path: join(process.env.AFK_SCREENSHOTS, `search-error-${theme}-${width}.png`) });
+		}
+		await page.setViewportSize({ width: 1280, height: 720 });
+	}
+	await page.getByRole("button", { name: "重试", exact: true }).click();
 	await page.locator(".cs-file", { hasText: "order.ts" }).waitFor();
 	await page.keyboard.press("Escape");
 	assert.deepEqual(errors, []);
-	console.log("PASS code search: streamed hits, preview window, open line, cancellation, stale identity, regex, filename mode");
+	console.log("PASS code search: streamed hits, preview window, open line, cancellation, stale identity, regex, filename failure and retry");
 } finally {
 	await browser?.close();
 	server?.kill();
