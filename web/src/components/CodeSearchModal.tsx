@@ -134,7 +134,7 @@ export function CodeSearchModal({ send, cwd, fileSearch, onClose, onPreviewFile 
 			else if (event.key === "ArrowDown") { event.preventDefault(); setActive(index => Math.max(0, Math.min(index + 1, flat.length - 1))); }
 			else if (event.key === "ArrowUp") { event.preventDefault(); setActive(index => Math.max(index - 1, 0)); }
 			else if (event.key === "Enter" && !(event.target instanceof HTMLButtonElement)) { event.preventDefault(); open(selected); }
-			else if (event.key === "Tab" && event.target === inputRef.current) { event.preventDefault(); switchMode(); }
+			else if (event.key === "Tab" && !event.shiftKey && event.target === inputRef.current) { event.preventDefault(); switchMode(); }
 		};
 		window.addEventListener("keydown", onKey, true);
 		return () => window.removeEventListener("keydown", onKey, true);

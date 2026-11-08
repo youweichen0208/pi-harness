@@ -48,6 +48,11 @@ try {
 		}, key), false, `IME ${key} must not navigate search`);
 		assert.equal(await page.locator(".cs-modal").count(), 1);
 	}
+	await input.focus();
+	await input.press("Shift+Tab");
+	assert.equal(await input.evaluate(el => document.activeElement === el), false, "Shift+Tab must leave the search input");
+	assert.equal(await page.getByRole("tab").first().getAttribute("aria-selected"), "true", "reverse Tab must not switch modes");
+	await input.focus();
 	const first = requests.find(r => r.query === "placeOrder").reqId;
 	await input.fill("");
 	await sleep(100);
