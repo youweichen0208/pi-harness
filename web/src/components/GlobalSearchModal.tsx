@@ -1,7 +1,6 @@
 import { useDialogFocus } from "../use-dialog-focus";
 import {
 	useCallback,
-	useDeferredValue,
 	useEffect,
 	useMemo,
 	useRef,
@@ -18,6 +17,8 @@ import {
 import type { ClientMessage, FileSearchResult, ProjectSummary, SessionSummary } from "../types";
 import { skillAwarePreview } from "../skill-block";
 import { useT } from "../i18n";
+
+let searchSequence = Date.now();
 
 interface GlobalSearchModalProps {
 	filesOnly?: boolean;
@@ -71,14 +72,8 @@ export function GlobalSearchModal({
 	const dialogRef = useDialogFocus();
 	const inputRef = useRef<HTMLInputElement>(null);
 	const [query, setQuery] = useState("");
-	const deferredQuery = useDeferredValue(query);
 	const [active, setActive] = useState(0);
-	// Local reqId counter for search_files requests; only accept results
-	// carrying the latest one (stale responses from earlier keystrokes drop).
-	const reqIdRef = useRef(1);
-	const lastReqRef = useRef(0);
-	// Debounce timer so typing doesn't fire a workspace walk per keystroke.
-	const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const [fileRequest, setFileRequest] = useState<{ reqId: number; query: string; cwd: string } | null>(null);
 
 	// Lazy-load sessions + projects once on open (same probes as LeftPanel).
 	useEffect(() => {
@@ -93,24 +88,21 @@ export function GlobalSearchModal({
 	/** True while a server-side file walk is in flight for the latest query. */
 	const [filesPending, setFilesPending] = useState(false);
 
-	// Fire a server-side file search on each settled query change.
+	const q = query.trim().toLowerCase();
 	useEffect(() => {
-		if (debounceRef.current) clearTimeout(debounceRef.current);
-		const q = deferredQuery.trim();
+		setFileRequest(null);
+		setFilesPending(!!q);
 		if (!q) return;
-		debounceRef.current = setTimeout(() => {
-			const reqId = ++reqIdRef.current;
-			lastReqRef.current = reqId;
-			setFilesPending(true);
-			send({ type: "search_files", reqId, query: q });
+		const timer = setTimeout(() => {
+			const reqId = ++searchSequence;
+			setFileRequest({ reqId, query: q, cwd });
+			if (!send({ type: "search_files", reqId, query: query.trim() })) setFilesPending(false);
 		}, 300);
-		return () => {
-			if (debounceRef.current) clearTimeout(debounceRef.current);
-		};
+		return () => clearTimeout(timer);
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- send is stable
-	}, [deferredQuery]);
+	}, [query, cwd]);
 
-	const q = deferredQuery.trim().toLowerCase();
+	const currentFiles = fileRequest?.query === q && fileRequest.cwd === cwd && fileSearch?.reqId === fileRequest.reqId ? fileSearch : null;
 
 	const sessionHits = useMemo(
 		() =>
@@ -131,23 +123,11 @@ export function GlobalSearchModal({
 				: [],
 		[projects, q, filesOnly],
 	);
-	const fileHits = useMemo(() => {
-		if (!q || !fileSearch || fileSearch.reqId !== lastReqRef.current || !fileSearch.ok)
-			return [];
-		return fileSearch.results;
-	}, [fileSearch, q]);
-
-	// Clear the "searching" hint once the latest query's results land.
+	const fileHits = currentFiles?.ok ? currentFiles.results : [];
 	useEffect(() => {
-		if (
-			fileSearch &&
-			fileSearch.reqId === lastReqRef.current &&
-			lastReqRef.current !== 0
-		) {
-			setFilesPending(false);
-		}
-	}, [fileSearch]);
-	const fileTruncated = !!fileSearch && fileSearch.ok && fileSearch.truncated;
+		if (currentFiles) setFilesPending(false);
+	}, [currentFiles]);
+	const fileTruncated = !!currentFiles?.ok && !!currentFiles.truncated;
 
 	/** Flat navigation order: conversations → projects → files. */
 	type NavItem =
@@ -167,7 +147,7 @@ export function GlobalSearchModal({
 
 	useEffect(() => {
 		setActive(0);
-	}, [deferredQuery]);
+	}, [query]);
 
 	const activate = useCallback(
 		(item: NavItem | undefined) => {
