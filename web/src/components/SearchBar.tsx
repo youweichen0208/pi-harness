@@ -115,14 +115,20 @@ export function SearchBar({
 	// 打开时聚焦输入框；若消息区有选中文本则预填
 	useEffect(() => {
 		if (!open) return;
+		const selection = window.getSelection();
+		const container = containerRef.current;
+		const selected = selection?.toString().trim() ?? "";
+		if (selection && container && selected.length > 0 && selected.length <= 512
+			&& container.contains(selection.anchorNode) && container.contains(selection.focusNode)) setQuery(selected);
 		setActive(0);
 		requestAnimationFrame(() => inputRef.current?.select());
-	}, [open]);
+	}, [open, containerRef]);
 
 	// 打开期间拦截 Esc 关闭
 	useEffect(() => {
 		if (!open) return;
 		const onKey = (e: KeyboardEvent) => {
+			if (e.isComposing || e.keyCode === 229) return;
 			if (document.querySelector(".wiki-document-dialog[open]") && !(e.target instanceof HTMLElement && e.target.closest(".wiki-agent-chat"))) return;
 			if (e.key === "Escape") {
 				e.preventDefault();
@@ -221,6 +227,7 @@ export function SearchBar({
 					setActive(0);
 				}}
 				onKeyDown={(e) => {
+					if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
 					if (e.key === "Enter") {
 						e.preventDefault();
 						step(e.shiftKey ? -1 : 1);

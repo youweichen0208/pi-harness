@@ -53,6 +53,7 @@ export function CodeSearchModal({ send, cwd, fileSearch, onClose, onPreviewFile 
 	const [toggles, setToggles] = useState<SearchToggles>({ caseSensitive: false, wholeWord: false, regex: false });
 	const [include, setInclude] = useState("");
 	const [active, setActive] = useState(0);
+	const [attempt, setAttempt] = useState(0);
 	const [matches, setMatches] = useState<ContentSearchMatch[]>([]);
 	const [status, setStatus] = useState<{ pending: boolean; truncated?: boolean; error?: string }>({ pending: false });
 	const reqRef = useRef(0);
@@ -87,18 +88,18 @@ export function CodeSearchModal({ send, cwd, fileSearch, onClose, onPreviewFile 
 				reqRef.current = reqId;
 				setMatches([]);
 				setStatus({ pending: true });
-				send({ type: "search_content", reqId, query: q, ...toggles, include: include.split(",").map(glob => glob.trim()).filter(Boolean) });
+				if (!send({ type: "search_content", reqId, query: q, ...toggles, include: include.split(",").map(glob => glob.trim()).filter(Boolean) })) setStatus({ pending: false, error: "" });
 			} else {
 				// Time-based ids never collide with an earlier dialog's stale file results.
 				const reqId = Math.max(Date.now(), fileReqRef.current + 1);
 				fileReqRef.current = reqId;
 				setStatus({ pending: true });
-				send({ type: "search_files", reqId, query: q });
+				if (!send({ type: "search_files", reqId, query: q })) setStatus({ pending: false, error: "" });
 			}
 		}, 300);
 		return () => window.clearTimeout(timer);
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- send is stable
-	}, [q, mode, toggles, include, invalidRegex, cwd]);
+	}, [q, mode, toggles, include, invalidRegex, cwd, attempt]);
 
 	useEffect(() => {
 		const onBatch = (event: Event) => {
@@ -111,7 +112,7 @@ export function CodeSearchModal({ send, cwd, fileSearch, onClose, onPreviewFile 
 		return () => window.removeEventListener(SEARCH_CONTENT_EVENT, onBatch);
 	}, [cwd]);
 
-	useEffect(() => { if (mode === "file" && fileSearch?.reqId === fileReqRef.current) setStatus({ pending: false, truncated: fileSearch.truncated }); }, [fileSearch, mode]);
+	useEffect(() => { if (mode === "file" && fileSearch?.reqId === fileReqRef.current) setStatus({ pending: false, truncated: fileSearch.truncated, error: fileSearch.ok ? undefined : "" }); }, [fileSearch, mode]);
 
 	const groups = useMemo(() => groupMatches(matches), [matches]);
 	const files = mode === "file" && q && fileSearch?.reqId === fileReqRef.current && fileSearch.ok ? fileSearch.results.filter(result => result.type === "file") : [];
@@ -129,11 +130,12 @@ export function CodeSearchModal({ send, cwd, fileSearch, onClose, onPreviewFile 
 
 	useEffect(() => {
 		const onKey = (event: KeyboardEvent) => {
+			if (event.isComposing || event.keyCode === 229) return;
 			if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); onClose(); }
 			else if (event.key === "ArrowDown") { event.preventDefault(); setActive(index => Math.max(0, Math.min(index + 1, flat.length - 1))); }
 			else if (event.key === "ArrowUp") { event.preventDefault(); setActive(index => Math.max(index - 1, 0)); }
 			else if (event.key === "Enter" && !(event.target instanceof HTMLButtonElement)) { event.preventDefault(); open(selected); }
-			else if (event.key === "Tab" && event.target === inputRef.current) { event.preventDefault(); switchMode(); }
+			else if (event.key === "Tab" && !event.shiftKey && event.target === inputRef.current) { event.preventDefault(); switchMode(); }
 		};
 		window.addEventListener("keydown", onKey, true);
 		return () => window.removeEventListener("keydown", onKey, true);
@@ -188,7 +190,7 @@ export function CodeSearchModal({ send, cwd, fileSearch, onClose, onPreviewFile 
 			</div>
 			<div className="cs-body">
 				<div className="cs-results" ref={listRef}>
-					{empty ? <div className="cs-empty"><p>{empty.text}</p>{empty.sub && <small>{empty.sub}</small>}</div>
+					{empty ? <div className="cs-empty"><p role="status">{empty.text}</p>{empty.sub && <small>{empty.sub}</small>}{status.error !== undefined && <button type="button" className="btn" onClick={() => { inputRef.current?.focus(); setAttempt(value => value + 1); }}>{t("retry")}</button>}</div>
 						: mode === "code" ? groups.map(group => <section key={group.path} className="cs-group">
 							<header><FiFileText aria-hidden="true" /><strong>{group.name}</strong><span>{group.dir}</span><em>{group.matches.length}</em></header>
 							{group.matches.map(match => { index++; const own = index; return <button key={`${match.line}:${match.column}`} type="button" className={`cs-row${own === active ? " active" : ""}`} onMouseEnter={() => setActive(own)} onClick={() => open({ path: match.path, line: match.line, match })}>
