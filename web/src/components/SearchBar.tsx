@@ -115,9 +115,14 @@ export function SearchBar({
 	// 打开时聚焦输入框；若消息区有选中文本则预填
 	useEffect(() => {
 		if (!open) return;
+		const selection = window.getSelection();
+		const container = containerRef.current;
+		const selected = selection?.toString().trim() ?? "";
+		if (selection && container && selected.length > 0 && selected.length <= 512
+			&& container.contains(selection.anchorNode) && container.contains(selection.focusNode)) setQuery(selected);
 		setActive(0);
 		requestAnimationFrame(() => inputRef.current?.select());
-	}, [open]);
+	}, [open, containerRef]);
 
 	// 打开期间拦截 Esc 关闭
 	useEffect(() => {
