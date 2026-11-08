@@ -167,9 +167,11 @@ export function GlobalSearchModal({
 				e.preventDefault();
 				e.stopPropagation();
 				onClose();
+			} else if (e.target !== inputRef.current) {
+				return;
 			} else if (e.key === "ArrowDown") {
 				e.preventDefault();
-				setActive((a) => Math.min(a + 1, navItems.length - 1));
+				setActive((a) => Math.max(0, Math.min(a + 1, navItems.length - 1)));
 			} else if (e.key === "ArrowUp") {
 				e.preventDefault();
 				setActive((a) => Math.max(a - 1, 0));
@@ -181,6 +183,10 @@ export function GlobalSearchModal({
 		window.addEventListener("keydown", onKey, true);
 		return () => window.removeEventListener("keydown", onKey, true);
 	}, [navItems, active, activate, onClose]);
+
+	useEffect(() => {
+		dialogRef.current?.querySelector(".gs-item.active")?.scrollIntoView({ block: "nearest" });
+	}, [active, navItems.length]);
 
 	const total = sessionHits.length + projectHits.length + fileHits.length;
 
@@ -283,8 +289,7 @@ export function GlobalSearchModal({
 						<div className="gs-section">
 							{sectionHead(t("gsFiles"), fileHits.length, <FiFileText />)}
 							{fileHits.map((f) => {
-								navIdx++;
-								const idx = navIdx;
+								const idx = f.type === "file" ? ++navIdx : -1;
 								return (
 									<button
 										key={`${f.type}:${f.path}`}

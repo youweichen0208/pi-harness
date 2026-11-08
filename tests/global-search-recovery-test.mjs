@@ -10,7 +10,7 @@ import { startIsolatedHarness } from "./lib/isolated-server.mjs";
 
 const root = mkdtempSync(join(tmpdir(), "pi-global-search-recovery-"));
 let server, browser, socket;
-const requests = [], errors = [];
+const requests = [], errors = [], reads = [];
 try {
 	server = await startIsolatedHarness({ env: { PI_WEB_CWD: root, PI_WEB_DATA_DIR: join(root, "data"), PI_CODING_AGENT_DIR: join(root, "agent") } });
 	browser = await chromium.launch({ executablePath: CHROME_PATH });
@@ -23,7 +23,7 @@ try {
 		route.onMessage(wire => {
 			const message = JSON.parse(String(wire));
 			if (message.type === "search_files") requests.push(message);
-			else upstream.send(wire);
+			else { if (message.type === "read_file") reads.push(message); upstream.send(wire); }
 		});
 		upstream.onMessage(wire => {
 			const message = JSON.parse(String(wire));
@@ -72,6 +72,29 @@ try {
 	assert.equal(await page.locator(".gs-item").count(), 0);
 	result(gamma.reqId, "gamma.ts");
 	await page.locator(".gs-item", { hasText: "gamma.ts" }).waitFor();
+	const beforeClose = reads.length;
+	await page.locator('.gs-close').focus();
+	await page.keyboard.press('Enter');
+	await page.locator('.gs-modal').waitFor({state:'detached'});
+	assert.equal(reads.length, beforeClose, 'Enter on Close must not open the active file');
+	await page.keyboard.press('Control+k');
+	await input.fill('mixed');
+	const mixed = await request('mixed');
+	socket.send(JSON.stringify({type:'search_files_result',cwd:root,reqId:mixed.reqId,ok:true,results:[
+		{path:'folder',name:'folder',type:'dir'},
+		...Array.from({length:25},(_,i)=>({path:`file-${i}.ts`,name:`file-${i}.ts`,type:'file'})),
+	]}));
+	await page.locator('.gs-item', {hasText:'file-0.ts'}).first().waitFor();
+	assert.match(await page.locator('.gs-item.active').innerText(),/file-0.ts/);
+	await input.focus();
+	for(let i=0;i<24;i++) await page.keyboard.press('ArrowDown');
+	assert.match(await page.locator('.gs-item.active').innerText(),/file-24.ts/);
+	await page.waitForFunction(()=>{const el=document.querySelector('.gs-item.active');const r=el.getBoundingClientRect(),p=el.closest('.gs-results').getBoundingClientRect();return r.top>=p.top-1&&r.bottom<=p.bottom+1;});
+	await page.locator('.gs-item', {hasText:'file-3.ts'}).first().focus();
+	await page.keyboard.press('Enter');
+	await page.locator('.gs-modal').waitFor({state:'detached'});
+	await sleep(50);
+	assert.equal(reads.at(-1)?.path,'file-3.ts','native Enter must activate the focused result');
 	assert.deepEqual(errors, []);
 	console.log("PASS global search query changes, clearing, late results and modal remount isolation");
 } finally {
