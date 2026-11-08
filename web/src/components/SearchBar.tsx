@@ -123,6 +123,7 @@ export function SearchBar({
 	useEffect(() => {
 		if (!open) return;
 		const onKey = (e: KeyboardEvent) => {
+			if (e.isComposing || e.keyCode === 229) return;
 			if (document.querySelector(".wiki-document-dialog[open]") && !(e.target instanceof HTMLElement && e.target.closest(".wiki-agent-chat"))) return;
 			if (e.key === "Escape") {
 				e.preventDefault();
@@ -221,6 +222,7 @@ export function SearchBar({
 					setActive(0);
 				}}
 				onKeyDown={(e) => {
+					if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
 					if (e.key === "Enter") {
 						e.preventDefault();
 						step(e.shiftKey ? -1 : 1);

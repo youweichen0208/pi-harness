@@ -129,6 +129,7 @@ export function CodeSearchModal({ send, cwd, fileSearch, onClose, onPreviewFile 
 
 	useEffect(() => {
 		const onKey = (event: KeyboardEvent) => {
+			if (event.isComposing || event.keyCode === 229) return;
 			if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); onClose(); }
 			else if (event.key === "ArrowDown") { event.preventDefault(); setActive(index => Math.max(0, Math.min(index + 1, flat.length - 1))); }
 			else if (event.key === "ArrowUp") { event.preventDefault(); setActive(index => Math.max(index - 1, 0)); }

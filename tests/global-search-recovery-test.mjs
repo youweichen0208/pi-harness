@@ -72,6 +72,11 @@ try {
 	assert.equal(await page.locator(".gs-item").count(), 0);
 	result(gamma.reqId, "gamma.ts");
 	await page.locator(".gs-item", { hasText: "gamma.ts" }).waitFor();
+	for (const key of ['Enter', 'Escape', 'ArrowDown']) {
+		const prevented = await input.evaluate((el,key)=>{const event=new KeyboardEvent('keydown',{key,isComposing:true,bubbles:true,cancelable:true});el.dispatchEvent(event);return event.defaultPrevented;},key);
+		assert.equal(prevented,false,`IME ${key} must remain available to the input method`);
+		assert.equal(await page.locator('.gs-modal').count(),1);
+	}
 	const beforeClose = reads.length;
 	await page.locator('.gs-close').focus();
 	await page.keyboard.press('Enter');

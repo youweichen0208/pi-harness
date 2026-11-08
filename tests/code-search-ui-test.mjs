@@ -41,6 +41,13 @@ try {
 	await page.locator(".cs-preview-line.hit").waitFor();
 	assert.equal(await page.locator(".cs-preview-line").count(), 21);
 	assert.equal(await page.locator(".cs-preview-line").first().locator("span").textContent(), "12");
+	for (const key of ["Enter", "Escape", "ArrowDown", "Tab"]) {
+		assert.equal(await input.evaluate((el, key) => {
+			const event = new KeyboardEvent("keydown", { key, isComposing: true, bubbles: true, cancelable: true });
+			el.dispatchEvent(event); return event.defaultPrevented;
+		}, key), false, `IME ${key} must not navigate search`);
+		assert.equal(await page.locator(".cs-modal").count(), 1);
+	}
 	const first = requests.find(r => r.query === "placeOrder").reqId;
 	await input.fill("");
 	await sleep(100);
