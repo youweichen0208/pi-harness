@@ -1,3 +1,5 @@
+import { CodeWorkspace } from "./components/CodeWorkspace";
+import { langFromPath } from "./hljs-lite";
 import { PI_CLI_INSTALL_COMMAND } from "./pi-cli-install";
 import { useWikiCoordinator } from "./use-wiki-coordinator";
 import { WikiCoordinationError, type WikiOperation } from "./wiki-coordinator";
@@ -319,7 +321,8 @@ export function App() {
 	}, [chat.activeConversationId, attachments]);
 	const [previewFile, setPreviewFile] = useState<PreviewFile | null>(null);
 	const documentPreview = !!previewFile && /\.(md|markdown)$/i.test(previewFile.path);
-	const inlinePreview = !!previewFile && !documentPreview;
+	const codePreview = !!previewFile && !isWikiWindow && !documentPreview && !/\.svg$/i.test(previewFile.name) && !!langFromPath(previewFile.name);
+	const inlinePreview = !!previewFile && !documentPreview && !codePreview;
 	const previousPreview = useRef<PreviewFile | null>(null);
 	useLayoutEffect(() => {
 		const previous = previousPreview.current;
@@ -1285,6 +1288,35 @@ export function App() {
 		onAttach={attach}
 		onClose={closePreview}
 		/>;
+	const searchOverlay = <>			{globalSearchOpen && globalSearchFilesOnly && (
+				<CodeSearchModal
+					send={send}
+					cwd={chat.state?.cwd ?? ""}
+					fileSearch={chat.fileSearch}
+					onClose={() => setGlobalSearchOpen(false)}
+					onPreviewFile={openPreview}
+				/>
+			)}
+			{globalSearchOpen && !globalSearchFilesOnly && (
+				<GlobalSearchModal
+					key={String(globalSearchFilesOnly)}
+					filesOnly={globalSearchFilesOnly}
+					send={send}
+					sessions={chat.sessions}
+					projects={chat.projects}
+					cwd={chat.state?.cwd ?? ""}
+					fileSearch={chat.fileSearch}
+					onClose={() => setGlobalSearchOpen(false)}
+					onSwitchSession={(path) => {
+						void send({ type: "switch_session", path });
+					}}
+					onSwitchProject={(path) => {
+						void send({ type: "set_cwd", path, source: "ui" });
+					}}
+					onPreviewFile={openPreview}
+				/>
+			)}</>;
+
 	return (
 		// Whole window is a drop target (issue #19): dragover highlights + any
 		// drop attaches. The plain preventDefault used to merely stop the browser
@@ -1518,7 +1550,7 @@ export function App() {
 									toolStatuses={chat.toolStatuses}
 									taskFocusRequest={taskFocusRequest}
 									onSearchFiles={openFileSearch}
-									active={!filesCollapsed && !inlinePreview && !switching && view === "chat" && (!filesOverlay || drawer === "right")}
+									active={!codePreview && !filesCollapsed && !inlinePreview && !switching && view === "chat" && (!filesOverlay || drawer === "right")}
 									send={send}
 									files={chat.files}
 									changed={workspaceScm.files}
@@ -1539,7 +1571,7 @@ export function App() {
 									onPreview={openPreview}
 								/>
 							</div>
-							{!documentPreview && filePreview}
+							{inlinePreview && filePreview}
 						</FluidDrawer>
 					</div>
 
@@ -1598,6 +1630,11 @@ export function App() {
 				</div>
 			</div>
 			{view !== "wiki" && <FooterBar chat={chat} send={send} />}
+			{codePreview && previewFile && <CodeWorkspace key={previewFile.cwd} file={previewFile} search={globalSearchOpen ? searchOverlay : null} onPick={openPreview}
+				onClose={() => { if (fileGuard.current) fileGuard.current(closePreview); else closePreview(); }}
+				navigation={<RightPanel filesOnly selectedPath={previewFile.path} active={!switching && chat.ready} onSearchFiles={openFileSearch} send={send} files={chat.files} fileChanged={chat.fileChanged} changed={workspaceScm.files} notRepo={!workspaceScm.loaded || workspaceScm.notRepo} widgets={[]} messages={[]} streamingMessage={null} conversationId={chat.activeConversationId} cwd={previewFile.cwd} onAttach={attach} onPreview={openPreview} />}>
+				{filePreview}
+			</CodeWorkspace>}
 			{documentPreview && previewFile && <WikiDocumentModal title={previewFile.name} onClose={() => { if (fileGuard.current) fileGuard.current(closePreview); else closePreview(); }} chatHost={setWikiChatHost} chatOpen={wikiChatOpen} onChatOpen={setWikiChatOpen}>
 				<div className="single-document-editor">{filePreview}</div>
 			</WikiDocumentModal>}
@@ -1660,34 +1697,7 @@ export function App() {
 					onClose={() => setSettingsOpen(false)}
 				/>
 			)}
-			{globalSearchOpen && globalSearchFilesOnly && (
-				<CodeSearchModal
-					send={send}
-					cwd={chat.state?.cwd ?? ""}
-					fileSearch={chat.fileSearch}
-					onClose={() => setGlobalSearchOpen(false)}
-					onPreviewFile={openPreview}
-				/>
-			)}
-			{globalSearchOpen && !globalSearchFilesOnly && (
-				<GlobalSearchModal
-					key={String(globalSearchFilesOnly)}
-					filesOnly={globalSearchFilesOnly}
-					send={send}
-					sessions={chat.sessions}
-					projects={chat.projects}
-					cwd={chat.state?.cwd ?? ""}
-					fileSearch={chat.fileSearch}
-					onClose={() => setGlobalSearchOpen(false)}
-					onSwitchSession={(path) => {
-						void send({ type: "switch_session", path });
-					}}
-					onSwitchProject={(path) => {
-						void send({ type: "set_cwd", path, source: "ui" });
-					}}
-					onPreviewFile={openPreview}
-				/>
-			)}
+			{!codePreview && searchOverlay}
 		</div></PlaygroundProvider></ChangesProvider>
 	);
 }

@@ -149,7 +149,7 @@ export const ChatInput = memo(function ChatInput({
 	}, [receiptWarning]);
 	const mounted = useRef(true);
 	const [submissionEpoch, setSubmissionEpoch] = useState(0);
-	const pendingSubmit = useRef<{ id: string; sessionId?: string; conversation: string; text: string; queued: boolean; attachments: ChatInputProps["attachments"] } | null>(null);
+	const pendingSubmit = useRef<{ id: string; sessionId?: string; conversation: string; text: string; queued: boolean; newSessionCommand?: boolean; attachments: ChatInputProps["attachments"] } | null>(null);
 
 	const { locale } = useI18n();
 	const slashDesc = (c: SlashCommandInfo) =>
@@ -200,7 +200,17 @@ export const ChatInput = memo(function ChatInput({
 			if (["unknown", "missing", "expired", "conflict"].includes(promptResult.receipt ?? "")) setReceiptWarning("unknown");
 			return;
 		}
-		if (pending.sessionId !== sessionId) { setReceiptWarning("acceptedElsewhere"); return; }
+		if (pending.sessionId !== sessionId) {
+			// /new replaces the native session before its success receipt arrives.
+			// Only a command sent by this mounted composer can consume that draft;
+			// restored receipts must never clear input belonging to another session.
+			if (pending.newSessionCommand && promptResult.commandExecuted &&
+				promptResult.sessionId === pending.sessionId && pending.conversation === activeConversationId) {
+				setText(value => value === pending.text ? "" : value);
+				return;
+			}
+			setReceiptWarning("acceptedElsewhere"); return;
+		}
 		if (promptResult.attachmentsConsumed !== false) onSent(pending.conversation, pending.attachments);
 		if (pending.conversation === activeConversationId && pending.sessionId === sessionId) {
 			setText((value) => value === pending.text ? "" : value);
@@ -214,7 +224,7 @@ export const ChatInput = memo(function ChatInput({
 			try {
 				const saved = JSON.parse(sessionStorage.getItem(pendingKey) ?? "null");
 				if (saved && typeof saved.id === "string" && typeof saved.text === "string" && typeof saved.conversation === "string") {
-					pendingSubmit.current = { ...saved, attachments: [] };
+					pendingSubmit.current = { ...saved, newSessionCommand: false, attachments: [] };
 					setText(value => value || saved.text);
 				}
 			} catch { /* Invalid browser metadata does not permit replay. */ }
@@ -494,7 +504,7 @@ export const ChatInput = memo(function ChatInput({
 			if (send({ type: "prompt", target: sessionId ? { cwd, conversationId: activeConversationId, sessionId, workspaceId: analysisWorkspaceId } : undefined, text: selectedProject && !trimmed.startsWith("/") ? `${trimmed}
 
 ${t("wikiProjectPrompt", { workspace: selectedProject.workspaceName, path: JSON.stringify(selectedProject.path) })}` : trimmed, queue, requestId, attachments: outgoing })) {
-				pendingSubmit.current = { id: requestId, sessionId, conversation: activeConversationId, text, queued: streaming, attachments };
+				pendingSubmit.current = { id: requestId, sessionId, conversation: activeConversationId, text, queued: streaming, newSessionCommand: /^\/new(?:\s|$)/.test(trimmed), attachments };
 				try { sessionStorage.setItem(pendingKey, JSON.stringify({ id: requestId, sessionId, conversation: activeConversationId, text, queued: streaming })); } catch { /* Live connection still tracks the receipt. */ }
 				setSubmissionEpoch(value => value + 1);
 				setReceiptWarning(null);

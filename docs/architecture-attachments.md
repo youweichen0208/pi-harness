@@ -118,3 +118,5 @@ Wiki 使用同一个富文本编辑器的专用编辑态：自动保存、H1–H
 ### 工作区外文件预览（#149）
 
 共享 `FilePreviewContent` 使用 `workspace-file-path.ts` 做词法范围预判；外部路径只显示路径与说明、禁用预览／源码，保留引用，不挂载文件读取与编辑生命周期。工作区内的绝对路径仍可读取，面包屑转为相对路径。预判不能识别符号链接，服务端 `workspacePath` 与真实路径校验继续作为安全边界。回归：`tests/unit/workspace-file-path.test.ts`、`tests/external-file-preview-browser-test.mjs`。
+
+主窗口代码文件入口由 `CodeWorkspace` 承载原 `FilePreviewContent`，左侧复用 `RightPanel` 的 filesOnly 模式，后台文件栏暂停请求。最近文件标签切换经过原 `openPreview` 和 fileGuard；关闭原生 dialog 同样检查未保存修改，退出恢复焦点。搜索挂在 dialog 内部保持可交互。识别复用 `langFromPath`，排除 Markdown 和 SVG，Wiki 窗口保持原入口。代码主题仅在工作区内覆盖 CSS 变量，既有代码配色偏好保持保存。

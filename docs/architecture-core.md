@@ -244,3 +244,5 @@ SDK started/queued 只证明当时接收，**不表示模型完成、transcript 
 回归：`prompt-receipts-test.mjs` 使用真实 SDK 扩展验证副作用计数、重复 ID、断线/刷新查询、进程重启与执行中 SIGKILL；单测覆盖容量、损坏、写失败、过期与客户端隔离。
 
 模型来源自动同步（Pi / Claude Code / Codex / OpenCode）、内存凭据、独立副本和协议 51 见 [模型配置来源](architecture-model-sources.md)。
+
+`/new` 的成功回执可能晚于新原生 session 的快照。当前挂载的输入框发出该命令且回执确认 commandExecuted、请求原 sessionId 与运行中 conversationId 均匹配时，允许清除仍等于发送原文的命令草稿；后续新输入不清除。此例外不持久化，刷新恢复的旧回执仍遵守跨原生会话草稿保护。回归：`tests/new-session-draft-browser-test.mjs`（真实 `/new`、延迟回执、零模型调用）。

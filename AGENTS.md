@@ -12,11 +12,12 @@
 - [8. 部署](#8-部署)
 - [9. 常见坑](#9-常见坑)
 - [Agent skills](#agent-skills)
+  - [Issue tracker](#issue-tracker)
+  - [Triage labels](#triage-labels)
+  - [Domain docs](#domain-docs)
 <!-- /toc -->
 
-> 本文件是给 AI 编码助手（pi / Claude Code / Cursor 等）看的高层项目说明书。
-> 详细文档按主题分拆在 `docs/` 目录下。
-> 修改本文件后，在 pi 中运行 `/reload` 生效。
+> 本文件是给 AI 编码助手（pi / Claude Code / Cursor 等）看的高层项目说明书。 详细文档按主题分拆在 `docs/` 目录下。 修改本文件后，在 pi 中运行 `/reload` 生效。
 
 ## 1. 项目是什么
 

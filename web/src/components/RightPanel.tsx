@@ -20,6 +20,8 @@ function fileIconCategory(name: string): string {
 
 type AttachMode = "inline";
 interface RightPanelProps extends CodemodeActivity {
+	filesOnly?: boolean;
+	selectedPath?: string;
 	taskFocusRequest?: number;
 	active: boolean;
 	onSearchFiles: () => void;
@@ -40,7 +42,7 @@ interface RightPanelProps extends CodemodeActivity {
 	onPreview: (path: string, name: string) => void;
 }
 
-export const RightPanel = memo(function RightPanel({ codemode, liveOutputs, toolStatuses, taskFocusRequest = 0, onSearchFiles, active, files, fileChanged, changed, notRepo, widgets, messages, streamingMessage, isStreaming, taskProgress, conversationId, agentSilence, cwd, send, onAttach, onPreview }: RightPanelProps) {
+export const RightPanel = memo(function RightPanel({ filesOnly = false, selectedPath, codemode, liveOutputs, toolStatuses, taskFocusRequest = 0, onSearchFiles, active, files, fileChanged, changed, notRepo, widgets, messages, streamingMessage, isStreaming, taskProgress, conversationId, agentSilence, cwd, send, onAttach, onPreview }: RightPanelProps) {
 	const t = useT();
 	const tabId = useId();
 	const [tab, setTab] = useState<"files" | "task">("files");
@@ -164,7 +166,7 @@ export const RightPanel = memo(function RightPanel({ codemode, liveOutputs, tool
 		if ((!showHidden && entry.name.startsWith(".")) && !mentioned) return null;
 		return <div key={entry.path} role="treeitem" aria-expanded={dir ? open : undefined}>
 			<div className={`file-item ${dir ? "dir" : "file"}`} style={{ paddingLeft: 26 + depth * 18 }}>
-				<button type="button" data-tree-node={entry.path} className={dir ? "file-dir-main" : "file-name"} title={entry.path} disabled={virtual && !dir} onClick={() => dir ? virtual ? setExpanded((previous) => { const next = new Set(previous); if (next.has(entry.path)) next.delete(entry.path); else next.add(entry.path); return next; }) : toggle(entry.path) : onPreview(entry.path, entry.name)}>
+				<button type="button" aria-current={!dir && entry.path === selectedPath ? "page" : undefined} data-tree-node={entry.path} className={dir ? "file-dir-main" : "file-name"} title={entry.path} disabled={virtual && !dir} onClick={() => dir ? virtual ? setExpanded((previous) => { const next = new Set(previous); if (next.has(entry.path)) next.delete(entry.path); else next.add(entry.path); return next; }) : toggle(entry.path) : onPreview(entry.path, entry.name)}>
 					<span className={`tree-caret ${open ? "open" : ""}`}>{dir && <FiChevronRight />}</span>
 					{dir ? <FiFolder className="tree-entry-icon tree-icon-folder" aria-hidden="true" /> : <FiFile className={`tree-entry-icon tree-icon-${fileIconCategory(entry.name)}`} aria-hidden="true" />}
 					<span className={dir ? "file-name" : "file-name-text"}>{entry.name}</span>
@@ -186,16 +188,16 @@ export const RightPanel = memo(function RightPanel({ codemode, liveOutputs, tool
 	const hiddenRootEntries = directoryEntries("").filter(({ entry }) => entry.name.startsWith(".") && !(entry.type === "dir" && hiddenMentioned.has(entry.name)));
 	const otherDirectories = directoryEntries("").filter(({ entry }) => entry.type === "dir" && !changed.some((change) => change.path === entry.path || change.path.startsWith(`${entry.path}/`)) && (showHidden || !entry.name.startsWith("."))).length;
 	return <aside className="panel panel-right has-task-progress">
-		<div className="right-panel-tabs" role="tablist" aria-label={t("rightPanelTabs")} onKeyDown={event => {
+		{!filesOnly && <div className="right-panel-tabs" role="tablist" aria-label={t("rightPanelTabs")} onKeyDown={event => {
 			if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
 			event.preventDefault();
 			const next = event.key === "Home" ? "files" : event.key === "End" ? "task" : tab === "files" ? "task" : "files";
 			setTab(next); document.getElementById(`${tabId}-${next}-tab`)?.focus();
 		}}>
 			{(["files", "task"] as const).map(value => <button type="button" key={value} id={`${tabId}-${value}-tab`} role="tab" aria-selected={tab === value} aria-controls={`${tabId}-${value}`} tabIndex={tab === value ? 0 : -1} onClick={() => setTab(value)}>{t(value === "files" ? "workspaceFiles" : "rightPanelTask")}</button>)}
-		</div>
-		<div className="right-files-pane" role="tabpanel" id={`${tabId}-files`} aria-labelledby={`${tabId}-files-tab`} hidden={tab !== "files"}>
-		<div className="panel-title"><span>{t("workspaceFiles")}</span><button type="button" className="tree-menu-trigger" aria-label={t("newWorkspaceFile")} title={t("newWorkspaceFile")} disabled={isStreaming || !cwd} onClick={() => setCreating(value => !value)}><FiPlus /></button><button type="button" className="tree-menu-trigger" aria-label={t("refreshWorkspaceFiles")} title={t("refreshWorkspaceFiles")} onClick={refreshFiles}><FiRefreshCw /></button><div className="tree-controls" ref={controlsRef}><button type="button" className="tree-menu-trigger" aria-label={t("more")} aria-expanded={controlsOpen} onClick={() => setControlsOpen(value => !value)}><FiMoreHorizontal /></button>{controlsOpen && <div className="tree-controls-menu"><button type="button" className="tree-hidden-toggle" role="switch" aria-checked={showHidden} onClick={() => setShowHidden(value => !value)}><span>{t("showHiddenFiles")}</span><span className="tree-switch-track" /></button></div>}</div></div>
+		</div>}
+		<div className="right-files-pane" role={filesOnly ? undefined : "tabpanel"} id={`${tabId}-files`} aria-labelledby={filesOnly ? undefined : `${tabId}-files-tab`} hidden={!filesOnly && tab !== "files"}>
+		<div className="panel-title"><span>{t(filesOnly ? "codeWorkspaceExplorer" : "workspaceFiles")}</span><button type="button" className="tree-menu-trigger" aria-label={t("newWorkspaceFile")} title={t("newWorkspaceFile")} disabled={isStreaming || !cwd} onClick={() => setCreating(value => !value)}><FiPlus /></button><button type="button" className="tree-menu-trigger" aria-label={t("refreshWorkspaceFiles")} title={t("refreshWorkspaceFiles")} onClick={refreshFiles}><FiRefreshCw /></button><div className="tree-controls" ref={controlsRef}><button type="button" className="tree-menu-trigger" aria-label={t("more")} aria-expanded={controlsOpen} onClick={() => setControlsOpen(value => !value)}><FiMoreHorizontal /></button>{controlsOpen && <div className="tree-controls-menu"><button type="button" className="tree-hidden-toggle" role="switch" aria-checked={showHidden} onClick={() => setShowHidden(value => !value)}><span>{t("showHiddenFiles")}</span><span className="tree-switch-track" /></button></div>}</div></div>
 		{creating && <CreateFileForm key={`${cwd}:${conversationId}`} cwd={cwd} conversationId={conversationId} disabled={isStreaming} onCancel={() => setCreating(false)} onCreated={path => { setCreating(false); refreshFiles(); onPreview(path, path.split("/").at(-1)!); }} />}
 		<button type="button" className="tree-search" onClick={onSearchFiles}><FiSearch aria-hidden="true" /><span>{t("treeSearchFiles")}</span><kbd>{/Mac|iPhone|iPad/.test(navigator.platform) ? "⌘ P" : "Ctrl P"}</kbd></button>
 		<div className="panel-body" role="tree" aria-label={t("workspaceFiles")} onKeyDown={(event) => {
@@ -231,7 +233,7 @@ export const RightPanel = memo(function RightPanel({ codemode, liveOutputs, tool
 			</div>
 		</div>
 		</div>
-		<div className="panel-lower" role="tabpanel" id={`${tabId}-task`} aria-labelledby={`${tabId}-task-tab`} hidden={tab !== "task"}><TaskProgressPanel key={conversationId} send={send} codemode={codemode} conversationId={conversationId} liveOutputs={liveOutputs} toolStatuses={toolStatuses} task={taskProgress} streaming={isStreaming} live={streamingMessage} silence={agentSilence ?? null} cwd={cwd} messages={messages} onPreview={onPreview} /></div>
+		<div className="panel-lower" role="tabpanel" id={`${tabId}-task`} aria-labelledby={`${tabId}-task-tab`} hidden={filesOnly || tab !== "task"}><TaskProgressPanel key={conversationId} send={send} codemode={codemode} conversationId={conversationId} liveOutputs={liveOutputs} toolStatuses={toolStatuses} task={taskProgress} streaming={isStreaming} live={streamingMessage} silence={agentSilence ?? null} cwd={cwd} messages={messages} onPreview={onPreview} /></div>
 			{widgets.filter((w) => w.lines.length > 0).length > 0 && (
 				<div className="panel-widgets">
 					{widgets

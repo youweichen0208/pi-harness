@@ -1,0 +1,52 @@
+import assert from 'node:assert/strict';
+import {spawn} from 'node:child_process';
+import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join,resolve} from 'node:path';
+import {setTimeout as sleep} from 'node:timers/promises';
+import {createServer} from 'vite';
+import {chromium} from 'playwright-core';
+import {CHROME_PATH} from './lib/chrome.mjs';
+import {testEnv} from './lib/test-env.mjs';
+import {portUp} from './lib/port-utils.mjs';
+const root=mkdtempSync(join(tmpdir(),'code-workspace-')),cwd=join(root,'AI-INFRA-LEARNING-PACK');mkdirSync(cwd);mkdirSync(join(cwd,'code'));
+const source='"""单头 causal attention：CPU FP64 算例。"""\nimport math\nimport torch\n\ndef causal_attention(x, weights):\n    """x: [batch, sequence, features]"""\n    q, k, v = (x @ weight for weight in weights)\n    scores = q @ k.transpose(-2, -1) / math.sqrt(q.size(-1))\n    return scores.softmax(dim=-1) @ v\n\ndef verify_attention():\n    generator = torch.Generator().manual_seed(0)\n    x = torch.randn(2, 4, 8, dtype=torch.float64)\n    weights = [torch.randn(8, 8) for _ in range(3)]\n    out = causal_attention(x, weights)\n    print("PASS: attention shape", tuple(out.shape))\n';
+writeFileSync(join(cwd,'code/attention_demo.py'),source);writeFileSync(join(cwd,'code/autograd_demo.py'),'import torch\nx = torch.tensor(1.0)\n');writeFileSync(join(cwd,'README.md'),'# 学习计划\n');
+let backend,vite,browser;
+try{
+ assert(!await portUp(9410));assert(!await portUp(9411));
+ backend=spawn(process.execPath,['--import','tsx','server/index.ts'],{env:testEnv({PORT:'9411',PI_WEB_ALLOW_ORIGINS:'http://localhost:9410',PI_WEB_CWD:cwd,PI_WEB_DATA_DIR:join(root,'data'),PI_CODING_AGENT_DIR:join(root,'agent')}),stdio:'ignore'});
+ for(let i=0;i<100&&!await portUp(9411);i++)await sleep(100);
+ vite=await createServer({configFile:resolve('web/vite.config.ts'),server:{port:9410,strictPort:true,proxy:{'/ws':{target:'ws://localhost:9411',ws:true},'/api':'http://localhost:9411','/plugins':'http://localhost:9411'}}});await vite.listen();
+ browser=await chromium.launch({executablePath:CHROME_PATH});const page=await browser.newPage({viewport:{width:1440,height:1000}});page.setDefaultTimeout(15000);
+ const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto('http://localhost:9410');await page.locator('.conn-dot.ok').first().waitFor({state:'attached'});
+ if(await page.locator('.setup-modal .modal-close').isVisible())await page.locator('.setup-modal .modal-close').click();
+ await page.locator('.file-dir-main',{hasText:'code'}).click();await page.locator('button.file-name',{hasText:'attention_demo.py'}).click();
+ const modal=page.locator('dialog.code-workspace');await modal.waitFor();await modal.locator('.fp-editor').waitFor();
+ const tree=modal.locator('.code-workspace-tree');await tree.locator('.file-dir-main',{hasText:'code'}).click();
+ for (const appearance of ['dark', 'light']) {
+  await page.evaluate(value=>document.documentElement.dataset.appearance=value,appearance);
+  assert.equal(await modal.locator('.fp-code-editor').evaluate(e=>getComputedStyle(e).backgroundColor),'rgb(35, 39, 47)');
+ }
+ await tree.locator('button.file-name',{hasText:'autograd_demo.py'}).click();await page.waitForFunction(()=>document.querySelector('.code-workspace .fp-editor')?.value.includes('tensor'));
+ await modal.locator('nav button',{hasText:'attention_demo.py'}).click();await page.waitForFunction(()=>document.querySelector('.code-workspace .fp-editor')?.value.includes('causal_attention'));
+ await modal.locator('.fp-editor').fill(source+'# saved\n');await tree.locator('button.file-name',{hasText:'autograd_demo.py'}).click();await modal.locator('.fp-leave').waitFor();
+ await modal.locator('.fp-leave').getByRole('button',{name:'取消',exact:true}).click();assert((await modal.locator('.fp-editor').inputValue()).includes('# saved'));
+ await tree.locator('button.file-name',{hasText:'autograd_demo.py'}).click();await modal.getByRole('button',{name:'保存后继续',exact:true}).click();await page.waitForFunction(()=>document.querySelector('.fp-editor')?.value.includes('tensor'));
+ assert(readFileSync(join(cwd,'code/attention_demo.py'),'utf8').includes('# saved'));
+ await modal.locator('nav button',{hasText:'attention_demo.py'}).click();await page.waitForFunction(()=>document.querySelector('.fp-editor')?.value.includes('causal_attention'));
+ await page.screenshot({path:'tests/scratch/code-workspace-desktop.png'});
+ await page.keyboard.press('Control+p');await modal.locator('.cs-modal').waitFor();await page.keyboard.press('Escape');await modal.locator('.cs-modal').waitFor({state:'detached'});assert(await modal.isVisible());
+ await modal.getByRole('button',{name:'最大化',exact:true}).click();assert(await modal.evaluate(e=>e.getBoundingClientRect().width===innerWidth));
+ await modal.getByRole('button',{name:'还原',exact:true}).click();
+ await tree.locator('button.file-name',{hasText:'README.md'}).click();await page.locator('dialog.wiki-document-dialog').waitFor();assert.equal(await page.locator('dialog.code-workspace').count(),0);
+ await page.locator('.wiki-modal-header').getByRole('button',{name:'关闭',exact:true}).click();
+ await page.locator('button.file-name',{hasText:'attention_demo.py'}).click();await modal.locator('.fp-editor').waitFor();
+ await page.setViewportSize({width:390,height:844});await modal.locator('.code-workspace-control').first().click();await modal.locator('.fp-editor').evaluate(el=>{el.scrollLeft=120;el.dispatchEvent(new Event('scroll',{bubbles:true}));});
+ assert(await modal.locator('.fp-code-paint').evaluate(el=>el.scrollLeft>0));
+ await modal.locator('.fp-editor').evaluate(el=>{el.scrollLeft=0;el.dispatchEvent(new Event('scroll',{bubbles:true}));});
+ await page.screenshot({path:'tests/scratch/code-workspace-mobile.png'});
+ await modal.locator('.fp-editor').fill('unsaved');await page.keyboard.press('Escape');await modal.locator('.fp-leave').waitFor();await modal.getByRole('button',{name:'放弃修改',exact:true}).click();await modal.waitFor({state:'detached'});
+ assert.deepEqual(errors,[]);console.log('PASS: code tree entry, tabs, palette, dirty cancel/save/switch/close, search Escape, maximize, mobile');
+}finally{await browser?.close();await vite?.close();backend?.kill();if(backend&&backend.exitCode===null)await new Promise(r=>backend.once('exit',r));rmSync(root,{recursive:true,force:true});}

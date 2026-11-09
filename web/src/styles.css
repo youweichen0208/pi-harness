@@ -177,8 +177,12 @@
 }
 
 :root {
-	--diff-word-add: oklch(0.86 0.08 150);
-	--diff-word-del: oklch(0.88 0.06 25);
+	--diff-add-bg: #14532d;
+	--diff-del-bg: #7f1d1d;
+	--diff-add-fg: #f0fdf4;
+	--diff-del-fg: #fff1f2;
+	--diff-word-add: #166534;
+	--diff-word-del: #991b1b;
 	--diff-header: oklch(0.985 0.003 80);
 	--diff-selected: oklch(0.97 0.012 240);
 	--r-diff-word: 2px;
@@ -10525,8 +10529,6 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { height: 44px;
 
 /* Application appearance; code preview keeps its independent palette. */
 :root[data-appearance="dark"] {
-	--diff-word-add: oklch(0.39 0.08 150);
-	--diff-word-del: oklch(0.39 0.06 25);
 	--diff-header: var(--bg);
 	--diff-selected: var(--accent-soft);
 	--wiki-code-bg: #242522;
@@ -14979,3 +14981,115 @@ html.pi-desktop .design-workspace .topbar { height: 48px; min-height: 48px; }
 
 .database-main > .database-error { flex-wrap: wrap; align-items: center; gap: 8px; }
 .database-main > .database-error > span { flex: 1 1 180px; min-width: 0; }
+
+/* Deep diff surfaces are independent of success/error UI status colors. */
+:root :is(.toolcall-diff-line.add, .scm-diff-line.add, .fp-diff-view pre .add, .change-line.add, .changes-line.add, .wiki-diff-after) {
+	--diff-line-fg: var(--diff-add-fg);
+	background: var(--diff-add-bg);
+	color: var(--diff-line-fg);
+}
+:root :is(.toolcall-diff-line.del, .scm-diff-line.del, .fp-diff-view pre .del, .change-line.del, .changes-line.del, .wiki-diff-before) {
+	--diff-line-fg: var(--diff-del-fg);
+	background: var(--diff-del-bg);
+	color: var(--diff-line-fg);
+}
+/* Includes syntax spans, line numbers and +/- markers on the solid surfaces. */
+:root :is(.toolcall-diff-line, .scm-diff-line, .fp-diff-view pre > span, .change-line, .changes-line):is(.add, .del) *,
+:root :is(.wiki-diff-before, .wiki-diff-after) * {
+	color: var(--diff-line-fg);
+}
+
+/* Code-file workspace: reference editor palette, isolated from the app theme. */
+:root {
+	--editor-bg: #23272f;
+	--editor-nav: #1e2227;
+	--editor-row: #2c313a;
+	--editor-line: #383e49;
+	--editor-fg: #abb2bf;
+	--editor-muted: #8b929f;
+	--editor-keyword: #c678dd;
+	--editor-string: #98c379;
+	--editor-function: #61afef;
+	--editor-type: #e5c07b;
+	--editor-number: #d19a66;
+	--editor-variable: #e06c75;
+	--editor-cyan: #56b6c2;
+}
+:root .code-workspace.design-workspace {
+	--bg: var(--editor-bg); --bg-elev: var(--editor-bg); --bg-elev2: var(--editor-row); --sidebar-bg: var(--editor-nav);
+	--text: var(--editor-fg); --text-dim: var(--editor-muted); --text-faint: var(--editor-muted); --text-muted: var(--editor-muted);
+	--border: var(--editor-line); --border-soft: var(--editor-line); --accent: var(--editor-function); --accent-soft: var(--editor-row); --row-active: var(--editor-row);
+	--row-hover: var(--editor-row); --wiki-tree-selected: var(--editor-row);
+}
+.code-workspace {
+	margin: auto; padding: 0; width: calc(100vw - 32px); height: calc(100dvh - 32px); max-width: none; max-height: none;
+	border: 1px solid var(--border); border-radius: var(--r-md); color: var(--text); background: var(--bg); overflow: hidden;
+}
+.code-workspace[open] { animation: code-workspace-enter 140ms ease-out; }
+.code-workspace::backdrop { background: color-mix(in srgb, var(--editor-nav) 72%, transparent); }
+.code-workspace.maximized { width: 100vw; height: 100dvh; border-radius: 0; border: 0; }
+.code-workspace-layout { display: flex; height: 100%; min-height: 0; }
+.code-workspace-tree { display: none; width: 280px; flex: 0 0 280px; min-height: 0; flex-direction: column; background: var(--editor-nav); border-right: 1px solid var(--border); }
+.code-workspace.tree-open .code-workspace-tree { display: flex; }
+.code-workspace .panel-right { width: 100%; min-width: 0; flex: 1; min-height: 0; border: 0; background: transparent; }
+.code-workspace .panel-right .panel-header { padding-top: 0; }
+.code-workspace .file-item:has(button[aria-current="page"]) { background: var(--editor-row); }
+.code-workspace .file-name { color: var(--text); }
+.code-workspace-main { display: flex; flex: 1; min-width: 0; min-height: 0; flex-direction: column; }
+.code-workspace-tabs { display: flex; height: 40px; flex: 0 0 40px; background: var(--editor-nav); }
+.code-workspace-tabs nav { display: flex; min-width: 0; flex: 1; overflow-x: auto; }
+.code-workspace-tabs nav button { display: flex; align-items: center; gap: 8px; min-width: 120px; max-width: 260px; padding: 0 16px; flex-shrink: 0; border: 0; border-right: 1px solid var(--border); border-bottom: 2px solid transparent; background: transparent; color: var(--text-dim); font: 13px var(--sans); }
+.code-workspace-tabs nav button span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.code-workspace-tabs nav button[aria-current] { background: var(--editor-bg); color: var(--text); border-bottom-color: var(--editor-function); }
+.code-workspace-tabs svg { flex-shrink: 0; }
+.code-workspace-control { display: grid; place-items: center; flex: 0 0 40px; border: 0; background: transparent; color: var(--text); }
+.code-workspace-tabs button { transition: background 120ms ease, transform 100ms ease; cursor: pointer; }
+.code-workspace-tabs button:hover { background: var(--editor-row); }
+.code-workspace-control:active { transform: scale(.94); }
+.code-workspace button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.code-workspace .fp-embedded {
+	--file-code-bg: var(--editor-bg); --file-code-fg: var(--editor-fg); --file-code-keyword: var(--editor-keyword);
+	--file-code-string: var(--editor-string); --file-code-comment: var(--editor-muted); --file-code-number: var(--editor-number); --file-code-type: var(--editor-type);
+	flex: 1; min-height: 0; border: 0;
+}
+.code-workspace .fp-title-row { background: var(--editor-bg); }
+.code-workspace .fp-code-editor .fp-editor, .code-workspace .fp-code-ink { font-size: calc(15px * var(--fp-zoom, 1)); line-height: 1.65; }
+.code-workspace .fp-edit-line.current { background: var(--editor-row); }
+.code-workspace .fp-editor { caret-color: var(--editor-function); }
+.code-workspace .fp-code-editor .fp-editor::selection { background: var(--editor-line); }
+.code-workspace .fp-embedded :is(.fp-edit-number, .fp-num) { color: var(--editor-muted); }
+.code-workspace .fp-embedded .hljs :is(.hljs-keyword, .hljs-selector-tag, .hljs-literal) { color: var(--editor-keyword); }
+.code-workspace .fp-embedded .hljs :is(.hljs-string, .hljs-regexp) { color: var(--editor-string); }
+.code-workspace .fp-embedded .hljs :is(.hljs-title, .hljs-title.function_) { color: var(--editor-function); }
+.code-workspace .fp-embedded .hljs :is(.hljs-type, .hljs-built_in, .hljs-title.class_) { color: var(--editor-type); }
+.code-workspace .fp-embedded .hljs :is(.hljs-number, .hljs-symbol) { color: var(--editor-number); }
+.code-workspace .fp-embedded .hljs :is(.hljs-variable, .hljs-attr, .hljs-params) { color: var(--editor-variable); }
+.code-workspace .fp-embedded .hljs :is(.hljs-comment, .hljs-quote) { color: var(--editor-muted); }
+.code-workspace .fp-embedded .hljs :is(.hljs-operator, .hljs-meta) { color: var(--editor-cyan); }
+@keyframes code-workspace-enter { from { transform: translateY(4px); } to { transform: translateY(0); } }
+@media (max-width: 760px) {
+	.code-workspace { width: 100vw; height: 100dvh; border-radius: 0; }
+	.code-workspace-tree { position: absolute; top: 40px; bottom: 0; left: 0; z-index: 3; width: min(280px, 85vw); }
+	.code-workspace-tree-title { display: none; }
+	.code-workspace-control { flex-basis: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+	.code-workspace[open] { animation: none; }
+	.code-workspace-tabs button { transition: none; }
+}
+
+.code-workspace .panel-title { min-height: 36px; padding-inline: 12px; }
+.code-workspace .panel-title > span { flex: 1; }
+.code-workspace .tree-search { background: var(--editor-nav); color: var(--text-dim); }
+.code-workspace .panel-right .panel-title { padding-top: 0; }
+.code-workspace .file-item { border-radius: 0; }
+
+.code-workspace-tabs button { border-radius: 0; }
+.code-workspace .panel-title { min-height: 40px; height: 40px; }
+
+@media (max-width: 760px) {
+	.code-workspace .fp-title-row { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 4px; }
+	.code-workspace .fp-header-actions { grid-column: 1 / -1; justify-content: flex-end; }
+}
+
+.code-workspace .file-attach.inline:hover { background: var(--editor-line); color: var(--editor-function); }
