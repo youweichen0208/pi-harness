@@ -86,6 +86,8 @@ const ALL = [
 	"wiki-bootstrap-model-test",
 	"wiki-modal-browser-test",
 	"wiki-format-editor-test",
+	"wiki-math-browser-test",
+	"claude-source-vision-test",
 	"wiki-insert-position-test",
 	"current-file-protocol-test",
 	"left-panel-delete-test",

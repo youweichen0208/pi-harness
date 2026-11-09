@@ -15093,3 +15093,12 @@ html.pi-desktop .design-workspace .topbar { height: 48px; min-height: 48px; }
 }
 
 .code-workspace .file-attach.inline:hover { background: var(--editor-line); color: var(--editor-function); }
+
+/* Local KaTeX layout; Markdown retains the original TeX source. */
+.rich-math { cursor: pointer; }
+div.rich-math { overflow-x: auto; max-width: 100%; padding: 4px 0; }
+.rich-math[data-math-error] { font-family: var(--mono); white-space: pre-wrap; color: var(--text-dim); }
+.rich-math-form { display: grid; gap: 16px; padding: 20px; }
+.rich-math-form textarea { display: block; box-sizing: border-box; width: 100%; margin-top: 8px; padding: 12px; font-family: var(--mono); color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: var(--r-sm); }
+.rich-math-form p { color: var(--text-dim); }
+span.rich-math { display: inline-block; }

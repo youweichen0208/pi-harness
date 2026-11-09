@@ -1,0 +1,77 @@
+import { openKnowledge } from "./lib/open-knowledge.mjs";
+// Real Wiki formula rendering, source preservation, editing and native undo.
+import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
+import { mkdirSync, mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { chromium } from 'playwright-core';
+import { CHROME_PATH } from './lib/chrome.mjs';
+import { portUp } from './lib/port-utils.mjs';
+import { testEnv } from "./lib/test-env.mjs";
+const port = 8998, base = mkdtempSync(join(tmpdir(), 'wiki-format-editor-'));
+const original = "# 数学公式\n\n中文 $E=mc^2$ 与分式 $\\frac{a}{b}$。\n\n$$\n\\sum_{i=1}^n i=\\frac{n(n+1)}{2}\n$$\n\n`$not_math$`\n\n```python\nprice = \"$5\"\n```\n\n错误 $\\notacommand{x}$\n\nInsert here.\n";
+writeFileSync(join(base, 'note.md'), original);
+let server, browser;
+try {
+	assert.equal(await portUp(port), false);
+	server = spawn(process.execPath, ['dist/server/index.js'], { env: { ...testEnv(), PORT: String(port), PI_WEB_TOKEN: '', PI_WEB_CWD: base, PI_WEB_DATA_DIR: join(base, 'data'), PI_CODING_AGENT_DIR: join(base, 'agent') }, stdio: 'ignore' });
+	for (let i = 0; i < 100 && !await portUp(port); i++) await new Promise(r => setTimeout(r, 100));
+	browser = await chromium.launch({ executablePath: CHROME_PATH || chromium.executablePath() });
+	const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+	await page.goto(`http://127.0.0.1:${port}`);
+	await page.locator('.setup-modal .modal-close').click();
+	// The knowledge-library entry opens the detached Wiki window.
+	const popupPromise = page.context().waitForEvent('page');
+	await openKnowledge(page, base, "note.md");
+	const wiki = await popupPromise;
+	wiki.setDefaultTimeout(15000);
+	await wiki.locator('.setup-modal .modal-close').click().catch(() => {});
+	const editor = wiki.locator('.wiki-prose .fp-rich-document');
+
+	await editor.locator('.katex').first().waitFor();
+	assert.equal(await editor.locator('.katex').count(), 3);
+	assert.equal(await editor.locator('[data-math-error]').count(), 1);
+	assert.equal(await editor.locator('code').filter({ hasText: '$not_math$' }).count(), 1);
+	await editor.locator('p').last().fill('Changed surrounding text');
+	await wiki.waitForTimeout(1500);
+	let saved = readFileSync(join(base, 'note.md'), 'utf8');
+	assert.ok(saved.includes('$E=mc^2$'));
+	assert.ok(saved.includes('$$\n\\sum_{i=1}^n i=\\frac{n(n+1)}{2}\n$$'));
+	assert.ok(!saved.includes('katex'));
+	await editor.locator('[data-rich-math]').first().click();
+	await wiki.locator('.rich-math-form textarea').fill('x^2 + y^2 = z^2');
+	await wiki.locator('.rich-math-form button[type=submit]').click();
+	await wiki.waitForTimeout(1500);
+	saved = readFileSync(join(base, 'note.md'), 'utf8');
+	assert.ok(saved.includes('$x^2 + y^2 = z^2$'), saved);
+	assert.ok(!saved.includes('katex'), saved);
+	await editor.locator('p').last().fill('/math');
+	await wiki.locator('.fp-slash-menu').getByRole('option', { name: '数学公式', exact: true }).click();
+	await wiki.locator('.rich-math-form textarea').fill('\\begin{pmatrix}1&2\\\\3&4\\end{pmatrix}');
+	await wiki.locator('.rich-math-form button[type=submit]').click();
+	await wiki.waitForTimeout(1500);
+	assert.ok(readFileSync(join(base, 'note.md'), 'utf8').includes('\\begin{pmatrix}'));
+	await editor.locator('[data-rich-math]').first().focus();
+	await wiki.keyboard.press('Enter');
+	await wiki.locator('.rich-math-form textarea').fill('\\href{javascript:alert(1)}{unsafe}');
+	await wiki.locator('.rich-math-form button[type=submit]').click();
+	assert.equal(await editor.locator('[data-rich-math] a').count(), 0);
+	await editor.focus();
+	await wiki.keyboard.press('ControlOrMeta+z');
+	await wiki.waitForTimeout(1500);
+	assert.ok(readFileSync(join(base, 'note.md'), 'utf8').includes('$x^2 + y^2 = z^2$'));
+	await wiki.reload();
+	await editor.locator('.katex').first().waitFor();
+	assert.equal(await editor.locator('.katex').count(), 4);
+	await wiki.locator('.setup-modal .modal-close').click();
+	await wiki.evaluate(() => document.fonts.ready);
+	mkdirSync('tests/scratch', { recursive: true });
+	await wiki.screenshot({ path: 'tests/scratch/wiki-math.png', fullPage: true });
+	console.log('PASS Wiki math rendering, invalid-source fallback, edit, insert, save and reload');
+} finally {
+	await browser?.close();
+	server?.kill('SIGTERM');
+	if (server) await new Promise(resolve => { server.once('exit', resolve); setTimeout(resolve, 3000); });
+	rmSync(base, { recursive: true, force: true });
+}

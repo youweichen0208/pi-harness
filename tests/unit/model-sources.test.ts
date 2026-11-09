@@ -15,6 +15,13 @@ function fixture() {
 }
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
 describe("read-only API discovery", () => {
+	it.each(["claude-sonnet-4-5", "codeagent/maas-glm-5.3-volcengine-codeagent[1m]"])("allows image input for Claude Code model %s (#165)", model => {
+		const f = fixture();
+		f.put(".claude/settings.json", { model, env: { ANTHROPIC_BASE_URL: "https://gateway.example/", ANTHROPIC_AUTH_TOKEN: "fixture-key" } });
+		const connection = discoverModels(f.options).connections[0];
+		expect(connection.input).toEqual(["text", "image"]);
+		expect(connection.unknownCapabilities).not.toContain("input");
+	});
 	it("requires no Pi or CLI and does not invent models for absent sources", () => {
 		const f = fixture(); expect(discoverModels(f.options).statuses.every(s => s.status === "missing")).toBe(true);
 		f.claude(); const r = discoverModels(f.options); expect(r.connections).toHaveLength(1); expect(r.connections[0].api).toBe("anthropic-messages");
@@ -226,7 +233,7 @@ describe("runtime synchronization", () => {
 	});
 	it.each(["models", "credentials"])("retains native history after Pi %s disappear, including restart", async removal => {
 		const f = fixture(); f.claude("shared");
-		f.put("pi/models.json", { providers: { native: { api: "anthropic-messages", baseUrl: "https://api.anthropic.com", models: [{ id: "claude-example-1", contextWindow: 32768, maxTokens: 32768, reasoning: false, input: ["text"] }, { id: "unrelated", contextWindow: 32768, maxTokens: 4096, reasoning: false, input: ["text"] }] } } });
+		f.put("pi/models.json", { providers: { native: { api: "anthropic-messages", baseUrl: "https://api.anthropic.com", models: [{ id: "claude-example-1", contextWindow: 32768, maxTokens: 32768, reasoning: false, input: ["text", "image"] }, { id: "unrelated", contextWindow: 32768, maxTokens: 4096, reasoning: false, input: ["text"] }] } } });
 		f.put("pi/auth.json", { native: { type: "api_key", key: "shared" } });
 		const options = { modelsPath: join(f.home, "pi/models.json"), authPath: join(f.home, "pi/auth.json"), allowModelNetwork: false };
 		const nativeConfig = readFileSync(options.modelsPath, "utf8");
@@ -270,7 +277,7 @@ describe("runtime synchronization", () => {
 
 	it("keeps the existing Pi identity for an exact native duplicate", async () => {
 		const f = fixture(); f.claude("shared");
-		f.put("pi/models.json", { providers: { native: { api: "anthropic-messages", baseUrl: "https://api.anthropic.com", apiKey: "shared", models: [{ id: "claude-example-1", contextWindow: 200000, maxTokens: 65536, reasoning: false, input: ["text"] }] } } });
+		f.put("pi/models.json", { providers: { native: { api: "anthropic-messages", baseUrl: "https://api.anthropic.com", apiKey: "shared", models: [{ id: "claude-example-1", contextWindow: 200000, maxTokens: 65536, reasoning: false, input: ["text", "image"] }] } } });
 		const runtime = await ModelRuntime.create({ modelsPath: join(f.home, "pi/models.json"), authPath: join(f.home, "pi/auth.json") });
 		const sync = new ModelSourceSync(join(f.home, "data"), join(f.home, "pi"), f.options);
 		const unbind = await sync.bind(runtime, () => false, () => {});
@@ -364,5 +371,8 @@ it("does not let native capability completion erase the configured synced floor"
 		expect(config.models[0].maxTokens).toBe(16384);
 		expect(sync.visible(config.providerId)).toBe(true);
 		expect(runtime.getModel("native", "claude-example-1")?.maxTokens).toBe(4096);
+		expect(runtime.getModel("native", "claude-example-1")?.input).toEqual(["text"]);
+		expect(runtime.getModel(config.providerId, "claude-example-1")?.input).toEqual(["text", "image"]);
+		expect(sync.origin("native").sources).toEqual(["pi"]);
 	} finally { unbind(); }
 });

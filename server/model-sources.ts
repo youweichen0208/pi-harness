@@ -131,7 +131,8 @@ export function discoverModels(options: DiscoveryOptions = {}): { connections: C
 			// Preserve previously issued slots for concrete IDs and mapped aliases.
 			const slot = extended && !mappedExtended ? mapped + "[1m]" : mapped;
 			if (imported.has(slot)) return;
-			add("claude", slot, id, "anthropic-messages", vars.ANTHROPIC_BASE_URL || "https://api.anthropic.com", key, headers, extended || mappedExtended ? { contextWindow: 1_000_000 } : {}, false);
+			// Match Claude Code image input; this default belongs to this source, not the API protocol.
+			add("claude", slot, id, "anthropic-messages", vars.ANTHROPIC_BASE_URL || "https://api.anthropic.com", key, headers, { input: ["text", "image"], ...(extended || mappedExtended ? { contextWindow: 1_000_000 } : {}) }, false);
 			imported.add(slot);
 		});
 		return true;

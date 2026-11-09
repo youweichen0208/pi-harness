@@ -1,3 +1,4 @@
+import { createMath } from "../rich-math";
 import { copyText } from "../clipboard";
 import { RichCommands } from "../rich-commands";
 import { editableDisclosures } from "../rich-content";
@@ -54,6 +55,13 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 	onChange: (value: string) => void;
 }) {
 	const t = useT();
+	const [mathInput, setMathInput] = useState<{ source: string; display: boolean } | null>(null);
+	const mathRange = useRef<Range | null>(null);
+	const openMath = (element: HTMLElement) => {
+		if (readOnly) return;
+		const range = document.createRange(); range.selectNode(element); mathRange.current = range;
+		setMathInput({ source: element.dataset.richMath ?? "", display: element.dataset.richMathDisplay === "true" });
+	};
 	const [cardOpen, setCardOpen] = useState(false);
 	const cardRange = useRef<Range | null>(null);
 	const [insertPopup, setInsertPopup] = useState<WikiInsertPopup | null>(null);
@@ -243,6 +251,7 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 	}, [value]);
 	useLayoutEffect(() => {
 		if (readOnly) closeMenu();
+		root.current?.querySelectorAll<HTMLElement>("[data-rich-math]").forEach(element => { element.tabIndex = readOnly ? -1 : 0; element.setAttribute("role", readOnly ? "math" : "button"); element.setAttribute("aria-label", `${t("richMath")}: ${element.dataset.richMath}`); });
 		root.current?.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach((input) => { input.disabled = readOnly; });
 	}, [readOnly, value]);
 	useLayoutEffect(() => {
@@ -517,6 +526,7 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		{ label: "richGreenBlock", alias: "tip", keywords: "green callout 绿色 高亮", action: "insertHTML", argument: '<blockquote data-rich-highlight="tip"><p data-slash-insert><br></p></blockquote><p><br></p>' },
 		{ label: "richYellowBlock", alias: "warning", keywords: "yellow callout 黄色 高亮", action: "insertHTML", argument: '<blockquote data-rich-highlight="warning"><p data-slash-insert><br></p></blockquote><p><br></p>' },
 		{ label: "richCollapse", alias: "collapse", keywords: "collapse details zhedie 折叠", action: "insertHTML", argument: `<p><br></p><div data-rich-collapse=""><p data-rich-summary data-slash-insert>${t("richCollapse")}</p><div data-rich-collapse-body><p><br></p></div></div><p><br></p>` },
+		{ label: "richMath", alias: "math", keywords: "math latex formula 公式 数学", action: "math" },
 		{ label: "richLinkCard", alias: "card", keywords: "card link 卡片 链接", action: "card" },
 		{ label: "wikiAddLink", alias: "link", keywords: "url link 链接", action: "link" },
 		{ label: "richTable", alias: "bg", keywords: "table bg biaoge 表格", action: "insertHTML", argument: `<table><thead><tr><th data-slash-insert>${t("richColumn")} 1</th><th>${t("richColumn")} 2</th></tr></thead><tbody><tr><td>…</td><td>…</td></tr></tbody></table><p><br></p>` },
@@ -530,9 +540,9 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		{ label: "richWikiLink", alias: "sl", keywords: "wiki link document sl shuanglian 链接 双链 文档", action: "wikiLink" },
 			{ label: "wikiMentionDate", alias: "date", keywords: "date mention riqi 日期", action: "insertText", get argument() { return new Date().toLocaleDateString("sv-SE"); } }, // read at insert time, not render time
 	] as const;
-	const wikiOrder = ["zw", "bt1", "bt2", "bt3", "bt4", "bt5", "bt6", "lb", "bh", "rw", "link", "dmk", "tp", "bg", "yy", "fgx", "date", "sl", "ml", "glk", "tip", "warning", "collapse", "card"];
+	const wikiOrder = ["zw", "bt1", "bt2", "bt3", "bt4", "bt5", "bt6", "lb", "bh", "rw", "link", "dmk", "tp", "bg", "yy", "fgx", "date", "sl", "ml", "glk", "tip", "warning", "collapse", "card", "math"];
 	const items = wiki ? allItems.filter(item => wikiOrder.includes(item.alias)).sort((a, b) => wikiOrder.indexOf(a.alias) - wikiOrder.indexOf(b.alias)) : allItems.filter(item => !["date", "sl", "ml"].includes(item.alias));
-	const icons = { richGreenBlock: wiki ? <LuLightbulb /> : <FiSquare />, richYellowBlock: wiki ? <LuTriangleAlert /> : <FiSquare />, richCollapse: wiki ? <LuChevronsUpDown /> : <FiSquare />, richLinkCard: wiki ? <LuPanelTop /> : <FiLink />, wikiAddLink: <FiLink />, wikiMentionDate: <FiCalendar />, richImage: <FiImage />, richWikiLink: <FiLink />, richHighlightBlock: wiki ? <LuInfo /> : <FiSquare />, richHeading: <FiType />, richParagraph: <FiType />, richCodeBlock: <FiCode />, richTable: <WikiTableIcon />, richList: <FiList />, richOrderedList: wiki ? <LuListOrdered /> : <FiList />, richTaskList: <FiCheckSquare />, richQuote: <WikiQuoteIcon />, richDivider: <FiMinus />, richTocInsert: <LuTableOfContents /> };
+	const icons = { richMath: <FiCode />, richGreenBlock: wiki ? <LuLightbulb /> : <FiSquare />, richYellowBlock: wiki ? <LuTriangleAlert /> : <FiSquare />, richCollapse: wiki ? <LuChevronsUpDown /> : <FiSquare />, richLinkCard: wiki ? <LuPanelTop /> : <FiLink />, wikiAddLink: <FiLink />, wikiMentionDate: <FiCalendar />, richImage: <FiImage />, richWikiLink: <FiLink />, richHighlightBlock: wiki ? <LuInfo /> : <FiSquare />, richHeading: <FiType />, richParagraph: <FiType />, richCodeBlock: <FiCode />, richTable: <WikiTableIcon />, richList: <FiList />, richOrderedList: wiki ? <LuListOrdered /> : <FiList />, richTaskList: <FiCheckSquare />, richQuote: <WikiQuoteIcon />, richDivider: <FiMinus />, richTocInsert: <LuTableOfContents /> };
 	const itemLabel = (item: typeof items[number]) => item.label === "richHeading" ? `${t(item.label)} ${"argument" in item ? item.argument.slice(1) : ""}` : t(item.label);
 	const isBlock = (item: typeof items[number]) => item.action === "insertHTML" || item.action === "toc";
 	const hints: Record<string, string> = { date: "@", zw: "", bt1: "#", bt2: "##", bt3: "###", lb: "-", bh: "1.", rw: "[]", yy: ">", dmk: "```", glk: ":::", bg: "3 × 3", fgx: "---", tp: "![]", sl: "[[", ml: "" };
@@ -569,6 +579,7 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 				command("insertHTML", clone.outerHTML); prepareInsert(); return;
 			}
 		}
+		if (id === "math") { mathRange.current = window.getSelection()?.getRangeAt(0).cloneRange() ?? null; setMathInput({ source: "", display: true }); return; }
 		if (id === "card") { cardRange.current = window.getSelection()?.getRangeAt(0).cloneRange() ?? null; setCardOpen(true); return; }
 		if (id === "link") { linkRange.current = window.getSelection()?.getRangeAt(0).cloneRange() ?? null; setLinkInput(""); return; }
 		if (id === "bg" && dimensions) {
@@ -576,7 +587,7 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		} else if (id === "dmk") command("insertHTML", `<pre><code data-slash-insert class="language-${language || 'plaintext'}">${language === 'mermaid' ? 'flowchart LR\n  A --> B' : '<br>'}</code></pre><p><br></p>`);
 		else {
 			const item = items.find(item => item.alias === id); if (!item) return;
-			if (item.action === "card" || item.action === "link") return;
+			if (item.action === "card" || item.action === "link" || item.action === "math") return;
 			if (item.action === "image") { imageRange.current = window.getSelection()?.getRangeAt(0).cloneRange() ?? null; imageInput.current?.click(); return; }
 			if (item.action === "toc") { insertToc(); return; }
 			if (item.action === "wikiLink") { command("insertText", "[["); const range = window.getSelection()?.getRangeAt(0).cloneRange(); if (range && range.startOffset >= 2) range.setStart(range.startContainer, range.startOffset - 2); linkRange.current = range ?? null; setLinkInput("[["); return; }
@@ -700,7 +711,7 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		closeMenu();
 		document.execCommand("delete");
 		if (wiki || host) { prepareInsert(); insertToolbar(item.alias, undefined, undefined, popupAnchor); return; }
-		if (item.action === "card" || item.action === "link") { prepareInsert(); insertToolbar(item.alias); update(); return; }
+		if (item.action === "card" || item.action === "link" || item.action === "math") { prepareInsert(); insertToolbar(item.alias); update(); return; }
 		if (item.action === "image") { imageRange.current = selection?.getRangeAt(0).cloneRange() ?? null; imageInput.current?.click(); update(); return; }
 		if (item.action === "wikiLink") { linkRange.current = selection?.getRangeAt(0).cloneRange() ?? null; setLinkInput("[["); update(); return; }
 		if (item.action === "toc") { insertToc(); return; }
@@ -801,6 +812,21 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 			<button className="wiki-ask-selection" onClick={() => { wiki.ask(window.getSelection()?.toString() ?? ""); setFloating(null); }}>{t("wikiAskPi")}</button>
 		</div>, document.querySelector(".wiki-document-dialog") ?? document.body)}
 		<input ref={imageInput} type="file" accept="image/*" hidden onChange={event => { const image = event.target.files?.[0], range = imageRange.current; if (image && range && root.current?.contains(range.startContainer)) { root.current.focus(); const selection = window.getSelection(); selection?.removeAllRanges(); selection?.addRange(range); void pasteImage(image); } event.target.value = ""; }} />
+		{mathInput !== null && <WikiReadingDialog title={t("richMath")} onClose={() => setMathInput(null)}>
+			<form className="rich-math-form" onSubmit={event => {
+				event.preventDefault();
+				const range = mathRange.current;
+				if (readOnly || !range || !root.current?.contains(range.startContainer)) return;
+				root.current.focus(); window.getSelection()?.removeAllRanges(); window.getSelection()?.addRange(range);
+				command("insertHTML", createMath(mathInput.source.trim(), mathInput.display).outerHTML);
+				setMathInput(null);
+			}}>
+				<label>{t("richMathSource")}<textarea autoFocus rows={5} value={mathInput.source} onChange={event => setMathInput({ ...mathInput, source: event.target.value })} /></label>
+				<label><input type="checkbox" checked={mathInput.display} onChange={event => setMathInput({ ...mathInput, display: event.target.checked })} />{t("richMathDisplay")}</label>
+				<p>{t("richMathHelp")}</p>
+				<button type="submit" disabled={!mathInput.source.trim()}>{t("save")}</button>
+			</form>
+		</WikiReadingDialog>}
 		{linkInput !== null && <WikiReadingDialog title={t("wikiAddLink")} onClose={() => setLinkInput(null)}><form className="wiki-link-form" onSubmit={event => { event.preventDefault(); insertLink(linkInput); }}><input aria-label={t("wikiLinkAddress")} placeholder={t("wikiLinkAddress")} value={linkInput} onChange={e => setLinkInput(e.target.value)} /><button type="submit" disabled={!linkInput.trim() || linkInput.startsWith("[[")}>{t("wikiInsertLinkAction")}</button></form>{linkInput.startsWith("[[") && <div className="wiki-link-results">{wiki?.paths.filter(path => /\.(md|markdown|mdown)$/i.test(path) && path.toLowerCase().includes(linkInput.slice(2).toLowerCase())).slice(0, 30).map(path => <button key={path} onClick={() => insertLink(path, true)}>{path}</button>)}</div>}</WikiReadingDialog>}
 		{menu && !readOnly && createPortal(<div ref={popup} className={`fp-slash-menu ${wiki ? `wiki-slash-menu ${menu.query ? "" : "wiki-slash-grid"}` : ""}`} style={{ left: menu.x, top: menu.y }}>
 			{wiki && !menu.query && recentInsertions.some(id => items.some(item => item.alias === id)) && <div className="wiki-insert-recent"><span>{t("wikiRecentlyUsed")}</span><div>{recentInsertions.map(id => {
@@ -826,6 +852,8 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 					onCompositionEnd={() => { const code = selectedCode(); if (code) paintCode(code); update(); inspectSlash(); }}
 					onKeyUp={() => { const cell = selectedCell(); if (cell || window.getSelection()?.isCollapsed) setTableCell(cell); }}
 					onKeyDown={(event) => {
+						const formula = (event.target as Element).closest<HTMLElement>("[data-rich-math]");
+						if (formula && ["Enter", " "].includes(event.key)) { event.preventDefault(); openMath(formula); return; }
 						if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === "a" && !event.nativeEvent.isComposing) {
 							const code = selectedCode();
 							if (code) {
@@ -933,6 +961,8 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 						if ((event.target as HTMLElement).closest("table a")) event.preventDefault();
 					}}
 					onClick={(event) => {
+						const formula = (event.target as Element).closest<HTMLElement>("[data-rich-math]");
+						if (formula) { event.preventDefault(); openMath(formula); return; }
 						const target = event.target as HTMLElement, toc = target.closest<HTMLElement>("[data-rich-toc]");
 						if (toc && target.closest("[data-rich-toc-remove]")) { event.preventDefault(); if (!readOnly) { toc.remove(); update(); } return; }
 						const entry = target.closest<HTMLElement>("[data-rich-toc-index]");

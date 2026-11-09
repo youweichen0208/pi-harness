@@ -1,3 +1,5 @@
+import remarkMath from "remark-math";
+import { remarkRichMath, paintMath } from "./rich-math";
 import { cleanRichHtml, cleanStyle, controlledBlock, canonicalDisclosures } from "./rich-content";
 import { remarkTextHighlight, textHighlightColor } from "./remark-text-highlight";
 import { richCodeText } from "./rich-code-text";
@@ -31,7 +33,7 @@ export interface RichDocument {
 	blocks: SourceBlock[];
 	suffix: string;
 }
-const parser = unified().use(remarkParse).use(remarkGfm);
+const parser = unified().use(remarkParse).use(remarkGfm).use(remarkMath);
 function codeFenceMarkdown(node: HTMLElement): string {
 	const code = node.querySelector("code");
 	const text = richCodeText(code ?? node);
@@ -82,6 +84,14 @@ converter.addRule("preservedSource", {
 converter.addRule("preservedInlineSource", {
 	filter: (node) => node.hasAttribute("data-rich-inline"),
 	replacement: (_content, node) => node.getAttribute("data-rich-inline") ?? "",
+});
+converter.addRule("math", {
+	filter: node => node.hasAttribute("data-rich-math-source"),
+	replacement: (_content, node) => {
+		const element = node as HTMLElement;
+		const source = element.dataset.richMathSource ?? "";
+		return element.dataset.richMathDisplay === "true" ? `\n\n${source}\n\n` : source;
+	},
 });
 converter.addRule("wikiLink", {
 	filter: (node) => node.nodeName === "A" && (node.getAttribute("href") ?? "").startsWith("#wiki="),
@@ -225,7 +235,7 @@ export function prepareRichDocument(source: string, wiki = false): RichDocument 
 		if (node.type === "heading" && node.depth === 1) firstHeading = false;
 		blocks.push({
 			raw, prefix: source.slice(end, start), protected: protectedBlock, hidden,
-			html: controlled ?? (protectedBlock ? "" : renderToStaticMarkup(<ReactMarkdown remarkPlugins={[remarkGfm, remarkTextHighlight, controlledBlocks, controlledInline, preserveInlineHtml, remarkHighlightBlock]} rehypePlugins={wiki ? [] : [rehypeHighlight]}>{(wiki ? renderWikiLinks(raw) : raw) + "\n\n" + definitions}</ReactMarkdown>)),
+			html: controlled ?? (protectedBlock ? "" : renderToStaticMarkup(<ReactMarkdown remarkPlugins={[remarkGfm, remarkMath, remarkRichMath, remarkTextHighlight, controlledBlocks, controlledInline, preserveInlineHtml, remarkHighlightBlock]} rehypePlugins={wiki ? [] : [rehypeHighlight]}>{(wiki ? renderWikiLinks(raw) : raw) + "\n\n" + definitions}</ReactMarkdown>)),
 		});
 		end = stop;
 	}
@@ -306,6 +316,7 @@ export function mountRichDocument(root: HTMLElement, document: RichDocument, lab
 			}
 		}
 		wrapper.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach((input) => { input.disabled = false; });
+		wrapper.querySelectorAll<HTMLElement>("[data-rich-math]").forEach(paintMath);
 		root.append(wrapper);
 		sourceLine += block.raw.split("\n").length - 1;
 		block.html = wrapper.innerHTML;
@@ -334,6 +345,7 @@ function serializeElement(node: Node, root: HTMLElement): string {
 export function readRichDocument(root: HTMLElement, document: RichDocument): string {
 	// Editor-only controls must never affect source preservation or saved Markdown.
 	root = root.cloneNode(true) as HTMLElement;
+	root.querySelectorAll("[data-rich-math]").forEach(element => { for (const attribute of ["tabindex", "role", "aria-label"]) element.removeAttribute(attribute); });
 	root.querySelectorAll("[data-table-selected]").forEach(table => table.removeAttribute("data-table-selected"));
 	root.querySelectorAll<HTMLElement>("[data-rich-tail]").forEach(paragraph => {
 		if (!paragraph.textContent && !paragraph.querySelector("img,table,pre,hr,input")) paragraph.remove();
