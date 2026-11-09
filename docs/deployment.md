@@ -213,3 +213,9 @@ Desktop 不额外内置 Git、npm 或独立 Node.js。npm 来源社区包使用�
 ### GaussDB 本地 JDBC
 
 应用包包含自建 JDBC 桥接，不包含 Java 运行时或厂商驱动。DataGrip 与服务需运行在能读取同一配置、jar 和证书的环境中；启动用户必须有对应文件权限。可设置 PI_WEB_JAVA 为 java/java.exe 的完整路径。Docker 构建阶段安装 JDK 17，运行镜像不带 Java；容器需要自行提供兼容 Java、配置、驱动及证书，宿主 Windows/macOS 的绝对路径不会自动转换为容器路径。
+
+### Vercel 静态前端
+
+仓库根目录的 `vercel.json` 将 Vercel 构建固定为 `npm run build:web`，发布 `web/dist`。静态托管不需要编译 JDBC 桥接，因此不要求 JDK。完整的 `npm run build` 仍为 CLI、Docker 与桌面版构建服务端及 JDBC 桥接，必须具备 JDK 17+。
+
+Vercel 静态部署只提供前端资源，不运行本项目的常驻 WebSocket、PTY 或本机数据库服务；完整功能使用上述 CLI / Docker / 桌面部署。此配置不添加后端代理或改变 API 路由。
