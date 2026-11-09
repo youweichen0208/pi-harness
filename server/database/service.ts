@@ -1,4 +1,4 @@
-import { listJdbcDrivers } from "./datagrip-jdbc.js";
+import { listGaussJdbcDrivers, listJdbcDrivers } from "./datagrip-jdbc.js";
 import { jdbcJavaCandidates } from "./jdbc-runtime.js";
 import type { DatabaseJdbcSelection } from "../protocol.js";
 import { randomUUID } from "node:crypto";
@@ -40,7 +40,31 @@ export async function databaseAction(owner: string, cwd: string, requestId: stri
 		case "list": return agent ? { ...response, connections: grantedConnections(owner) } : state();
 		case "save": saveConnection(op.connection); return state();
 		case "delete": deleteConnection(op.id, op.version); for (const job of running.values()) if (job.connectionId === op.id) job.controller.abort(); return state();
-		case "jdbc_drivers": return { ...response, jdbcDrivers: listJdbcDrivers(op.configDir) };
+		case "jdbc_drivers": return { ...state(), jdbcDrivers: listJdbcDrivers(op.configDir) };
+		case "jdbc_configure": {
+			const saved = listConnections().find(c => c.id === op.id && c.version === op.version);
+			if (!saved) throw Error("Connection changed; refresh and retry");
+			const source = saved.source;
+			if (source?.kind !== "datagrip" || source.path.startsWith("upload:")) throw Error("JDBC_CONFIG_INVALID");
+			if (op.mode !== undefined && !["automatic", "disabled"].includes(op.mode)) throw Error("JDBC_CONFIG_INVALID");
+			const selection: DatabaseJdbcSelection = { mode: op.mode ?? (op.driverId ? undefined : "automatic"), sourceId: source.id, configDir: op.configDir ?? source.jdbcSelection?.configDir, driverId: op.driverId };
+			if (op.mode === "disabled") {
+				saveConnection({ ...saved, driver: "postgres", jdbc: undefined }, { ...source, jdbcSelection: selection }, "JDBC_DISABLED");
+			} else {
+				const items = loadSource(source.kind, source.path, selection);
+				if (new Set(items.map(i => i.sourceId)).size !== items.length) throw Error("JDBC_CONFIG_INVALID");
+				const item = items.find(i => i.sourceId === source.id);
+				if (!item) throw Error("JDBC_CONFIG_INVALID");
+				if (item.issue === "JDBC_DRIVER_AMBIGUOUS" && !op.driverId) return { ...state(), jdbcDrivers: listGaussJdbcDrivers(selection.configDir) };
+				if (item.issue) throw Error(item.issue);
+				if (!item.jdbcProfile || !item.config.jdbc) throw Error("JDBC_DRIVER_MISSING");
+				// Remember the exact IDE directory and ID for this connection, never a global guess.
+				selection.configDir = item.config.jdbc.configDir; selection.driverId = item.config.jdbc.driverId;
+				saveConnection({ ...item.config, id: saved.id, version: saved.version }, { ...source, jdbcSelection: selection }, undefined, item.jdbcProfile);
+			}
+			for (const job of running.values()) if (job.connectionId === saved.id) job.controller.abort();
+			return state();
+		}
 		case "scan": return { ...response, sources: scanSources(cwd) };
 		case "preview": {
 			if (!["datagrip", "dbeaver"].includes(op.kind) || typeof op.path !== "string" || !op.path || op.path.length > 4096) throw Error("Invalid source");
@@ -53,11 +77,11 @@ export async function databaseAction(owner: string, cwd: string, requestId: stri
 			for (const item of items) { if (keys.has(item.sourceId)) throw Error("Duplicate source connection ID"); keys.add(item.sourceId); }
 			const preview: DatabaseImportPreview = { ticket: randomUUID(), source, items: items.map(item => {
 				const previous = old.find(c => c.source?.id === item.sourceId);
-				return { key: item.sourceId, sourceId: item.sourceId, connection: item.config, hasPassword: item.password !== undefined || !!previous?.hasPassword, issue: item.issue, change: !previous ? "new" : previous.issue !== item.issue || JSON.stringify(previous.source?.jdbcSelection) !== JSON.stringify(op.jdbcSelection) || JSON.stringify(validateConfig(previous)) !== JSON.stringify(item.issue ? item.config : validateConfig(item.config)) ? "updated" : "unchanged" };
+				return { key: item.sourceId, sourceId: item.sourceId, connection: item.config, hasPassword: item.password !== undefined || !!previous?.hasPassword, issue: item.issue, change: !previous ? "new" : previous.issue !== item.issue || JSON.stringify(previous.source?.jdbcSelection) !== JSON.stringify(item.jdbcSelection ?? op.jdbcSelection) || JSON.stringify(validateConfig(previous)) !== JSON.stringify(item.issue ? item.config : validateConfig(item.config)) ? "updated" : "unchanged" };
 			}) };
 			for (const missing of old.filter(c => !keys.has(c.source!.id))) preview.items.push({ key: missing.source!.id, sourceId: missing.source!.id, connection: validateConfig(missing), hasPassword: missing.hasPassword, change: "missing" });
 			tickets.set(preview.ticket, { owner, until: Date.now() + 10 * 60000, kind: op.kind, source, items, preview, jdbcSelection: op.jdbcSelection, versions: new Map(listConnections().map(c => [c.id, c.version])) });
-			return { ...response, preview };
+			return { ...response, preview, ...(items.some(i => i.issue === "JDBC_DRIVER_AMBIGUOUS") ? { jdbcDrivers: listGaussJdbcDrivers(op.jdbcSelection?.configDir) } : {}) };
 		}
 		case "import": {
 			const ticket = tickets.get(op.ticket);
@@ -69,8 +93,8 @@ export async function databaseAction(owner: string, cwd: string, requestId: stri
 			for (const item of ticket.items.filter(i => selected.has(i.sourceId))) {
 				const previous = current.find(c => c.source?.path === ticket.source && c.source.id === item.sourceId && c.source.kind === ticket.kind);
 				if (item.issue && previous) { markMissing(previous.id, item.issue); continue; }
-				if (previous && JSON.stringify(validateConfig(previous)) === JSON.stringify(validateConfig(item.config)) && !previous.issue && JSON.stringify(previous.source?.jdbcSelection) === JSON.stringify(ticket.jdbcSelection)) continue;
-				saveConnection({ ...item.config, id: previous?.id, version: previous?.version, password: previous ? undefined : item.password }, { path: ticket.source, id: item.sourceId, kind: ticket.kind, jdbcSelection: ticket.jdbcSelection }, undefined, item.jdbcProfile);
+				if (previous && JSON.stringify(validateConfig(previous)) === JSON.stringify(validateConfig(item.config)) && !previous.issue && JSON.stringify(previous.source?.jdbcSelection) === JSON.stringify(item.jdbcSelection ?? ticket.jdbcSelection)) continue;
+				saveConnection({ ...item.config, id: previous?.id, version: previous?.version, password: previous ? undefined : item.password }, { path: ticket.source, id: item.sourceId, kind: ticket.kind, jdbcSelection: item.jdbcSelection ?? ticket.jdbcSelection }, undefined, item.jdbcProfile);
 				restoreSource({ path: ticket.source, id: item.sourceId, kind: ticket.kind });
 			}
 			for (const item of ticket.preview.items.filter(i => selected.has(i.key) && i.change === "missing")) { const old = current.find(c => c.source?.path === ticket.source && c.source.id === item.sourceId); if (old) markMissing(old.id); }

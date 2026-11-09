@@ -84,8 +84,9 @@ it("requires testing before authorization, invalidates changes and rejects clien
 
 it("tracks certificate contents and per-source class overrides without changing native connections", () => {
 	const f = fixture(), cert = join(f.dir, "root.pem"); writeFileSync(cert, "first certificate");
-	f.write(`jdbc:gaussdb://localhost/db?sslmode=verify-full&sslrootcert=${encodeURIComponent(cert)}`, "<jdbc-driver>fixture.GaussDriver</jdbc-driver>");
+	f.write(`jdbc:gaussdb://localhost/db?sslmode=verify-full&sslrootcert=${encodeURIComponent(cert)}`, "<jdbc-driver>fixture.CustomGaussDriver</jdbc-driver>");
 	const first = f.item(); expect(first.issue).toBeUndefined(); f.sync(); const version = listConnections()[0].version;
+	f.sync(); expect(listConnections()[0].version).toBe(version); expect(listConnections()[0].jdbc?.driverClass).toBe("fixture.CustomGaussDriver");
 	writeFileSync(cert, "renewed certificate"); expect(() => verifyJdbcFiles(first.jdbcProfile!)).toThrow("JDBC_DRIVER_CHANGED");
 	f.sync(); expect(listConnections()[0].version).not.toBe(version); expect(listConnections()[0].needsTest).toBe(true);
 	expect(resolveDataGripJdbc({ "@uuid": "native", "driver-ref": "postgresql", "jdbc-url": "jdbc:postgresql://localhost/db" }, f.sourcePath, { configDir: f.configDir, driverId: "gauss", sourceId: "a" })).toBeUndefined();
@@ -125,4 +126,57 @@ it("repairs a source using explicit local jars without an IDE driver definition"
 	await databaseAction("manual", f.dir, "test", { action: "test", connection: c }); expect(listConnections()[0].needsTest).toBe(false);
 	expect(loadSource("datagrip", f.sourcePath, { ...selection, jarPaths: [join(f.dir, "missing.jar")] })[0].issue).toBe("JDBC_JAR_MISSING");
 	expect(loadSource("datagrip", f.sourcePath, { ...selection, sourceId: undefined })[0].issue).toBe("JDBC_CONFIG_INVALID");
+});
+
+it("automatically matches a unique registered Gauss driver when the source driver ID differs", () => {
+	const f = fixture();
+	writeFileSync(f.sourcePath, readFileSync(f.sourcePath, "utf8").replace("<driver-ref>gauss</driver-ref>", "<driver-ref>custom</driver-ref>"));
+	expect(f.item().issue).toBeUndefined();
+	expect(f.item().config.driver).toBe("gaussdb");
+	expect(f.sync()).toEqual([]);
+	expect(listConnections()[0].needsTest).toBe(true);
+});
+
+it("repairs a PostgreSQL source explicitly, remembers the IDE directory, and keeps removal across sync", async () => {
+	const f = fixture(); f.write("jdbc:postgresql://localhost/analytics");
+	writeFileSync(f.sourcePath, readFileSync(f.sourcePath, "utf8").replace("<driver-ref>gauss</driver-ref>", "<driver-ref>postgresql</driver-ref>"));
+	expect(f.item().config.driver).toBe("postgres"); f.sync(); const native = listConnections()[0];
+	const result = await databaseAction("repair", f.dir, "configure", { action: "jdbc_configure", id: native.id, version: native.version, configDir: f.configDir });
+	const c = result.connections![0]; expect(c.driver).toBe("gaussdb"); expect(c.needsTest).toBe(true);
+	expect(c.source?.jdbcSelection?.configDir).toBe(f.configDir);
+	await expect(databaseAction("repair", f.dir, "run", { action: "run", id: c.id, version: c.version, operation: "query", sql: "SELECT 1" })).rejects.toThrow(/test/);
+	f.sync(); expect(listConnections()[0].version).toBe(c.version);
+	await expect(databaseAction("repair", f.dir, "stale", { action: "jdbc_configure", id: c.id, version: native.version })).rejects.toThrow(/changed/);
+	const removed = await databaseAction("repair", f.dir, "remove", { action: "jdbc_configure", id: c.id, version: c.version, mode: "disabled" });
+	const disabled = removed.connections![0]; expect(disabled.jdbc).toBeUndefined(); expect(disabled.issue).toBe("JDBC_DISABLED");
+	f.sync(); expect(listConnections()[0].version).toBe(disabled.version);
+	await expect(databaseAction("repair", f.dir, "test", { action: "test", connection: disabled })).rejects.toThrow("JDBC_DISABLED");
+	const restored = await databaseAction("repair", f.dir, "restore", { action: "jdbc_configure", id: disabled.id, version: disabled.version });
+	expect(restored.connections![0].jdbc).toBeDefined(); expect(restored.connections![0].needsTest).toBe(true);
+});
+it("returns ambiguous candidates without executing or changing the connection, then persists the choice", async () => {
+	const f = fixture(); f.write("jdbc:postgresql://localhost/analytics");
+	writeFileSync(f.sourcePath, readFileSync(f.sourcePath, "utf8").replace("<driver-ref>gauss</driver-ref>", "<driver-ref>postgresql</driver-ref>"));
+	f.sync(); const c = listConnections()[0];
+	const definitions = join(f.configDir, "options/databaseDrivers.xml");
+	writeFileSync(definitions, readFileSync(definitions, "utf8").replace("</component>", `<driver id="gauss-other" name="GaussDB other"><driver-class>fixture.GaussDriver</driver-class><library><url>file://${driverJar.replaceAll("\\", "/")}</url></library></driver></component>`));
+	const ambiguous = await databaseAction("repair", f.dir, "ambiguous", { action: "jdbc_configure", id: c.id, version: c.version, configDir: f.configDir });
+	expect(ambiguous.jdbcDrivers).toHaveLength(2); expect(listConnections()[0].version).toBe(c.version);
+	const selected = await databaseAction("repair", f.dir, "selected", { action: "jdbc_configure", id: c.id, version: c.version, configDir: f.configDir, driverId: "gauss-other" });
+	expect(selected.connections![0].jdbc?.driverId).toBe("gauss-other");
+	f.sync(); expect(listConnections()[0].version).toBe(selected.connections![0].version);
+});
+
+it("pins automatic matches and exposes source IDs for a new ambiguous source", async () => {
+	const f = fixture(); f.sync(); const first = listConnections()[0];
+	expect(first.source?.jdbcSelection?.configDir).toBe(f.configDir);
+	expect(first.source?.jdbcSelection?.driverId).toBe("gauss");
+	const definitions = join(f.configDir, "options/databaseDrivers.xml");
+	const original = readFileSync(definitions, "utf8");
+	writeFileSync(definitions, original.replace("</component>", original.match(/<driver .*<\/driver>/)![0].replace('id="gauss"', 'id="gauss-other"') + "</component>"));
+	f.sync(); expect(listConnections()[0].version).toBe(first.version);
+	writeFileSync(f.sourcePath, readFileSync(f.sourcePath, "utf8").replace('uuid="a"', 'uuid="b"').replace("<driver-ref>gauss</driver-ref>", "<driver-ref>custom</driver-ref>"));
+	expect(f.sync()).toContainEqual(expect.objectContaining({ sourceId: "b", issue: "Gauss: JDBC_DRIVER_AMBIGUOUS" }));
+	const preview = await databaseAction("source", f.dir, "p", { action: "preview", kind: "datagrip", path: f.sourcePath, jdbcSelection: { mode: "automatic", sourceId: "b", configDir: f.configDir } });
+	expect(preview.jdbcDrivers).toHaveLength(2);
 });

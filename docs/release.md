@@ -1,5 +1,9 @@
 # 发布流程
 
+## 1.19.2：GaussDB JDBC 自动匹配与恢复
+
+修复 #159：唯一驱动自动匹配、歧义选择与目录记忆、认证错误一键配置并重试、首次执行确认、驱动移除及 Java 缺失前置提示。仅发布 GitHub 桌面 Release；同提交 CI、三平台打包及安装升级验证通过后公开。说明见 `.github/release-notes/v1.19.2.md`。
+
 ## 1.19.1：JDBC 手动配置与错误提示
 
 修复 #158，支持按 DataGrip 来源连接指定本地 jar 和 Driver 类，细分文件错误，清除切换连接后的旧操作提示并刷新导入后的来源状态。包含 Vercel 静态构建修复。仅发布 GitHub 桌面 Release；同提交 CI、三平台打包及安装升级验证通过后公开。说明见 `.github/release-notes/v1.19.1.md`。

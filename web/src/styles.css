@@ -14921,3 +14921,7 @@ html.pi-desktop .design-workspace .topbar { height: 48px; min-height: 48px; }
 .task-overview .task-overview-reason, .task-panel-empty { margin: 8px 0 0; color: var(--text-faint); font: 12px/1.7 var(--sans); overflow-wrap: anywhere; }
 .task-panel-empty { margin: 0; padding: 14px; }
 .task-step-more > button { color: var(--accent); }
+
+/* JDBC candidate selection stays readable with long local IDE paths. */
+.database-jdbc-choices { display: flex; flex-direction: column; gap: 8px; }
+.database-jdbc-choices button { white-space: normal; overflow-wrap: anywhere; text-align: start; }

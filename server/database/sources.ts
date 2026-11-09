@@ -7,7 +7,7 @@ import { dbeaverDataRoots, registeredDbeaverSources } from "./dbeaver-discovery.
 import { resolveDataGripJdbc, sourceEntries } from "./datagrip-jdbc.js";
 import type { JdbcProfile } from "./jdbc-profile.js";
 import type { DatabaseJdbcSelection, DatabaseConfig } from "../protocol.js";
-export interface ImportedConnection { sourceId: string; config: DatabaseConfig; password?: string; issue?: string; jdbcProfile?: JdbcProfile }
+export interface ImportedConnection { sourceId: string; config: DatabaseConfig; password?: string; issue?: string; jdbcProfile?: JdbcProfile; jdbcSelection?: DatabaseJdbcSelection }
 const array = <T>(v: T | T[] | undefined): T[] => v === undefined ? [] : Array.isArray(v) ? v : [v];
 export function parseSource(kind: "datagrip" | "dbeaver", text: string): ImportedConnection[] {
 	if (Buffer.byteLength(text) > 2 * 1024 * 1024) throw Error("Source exceeds 2 MiB");
@@ -148,8 +148,9 @@ export function loadSource(kind: "datagrip" | "dbeaver", path: string, selection
 		if (!raw) continue;
 		try {
 			const jdbc = resolveDataGripJdbc(raw, path, selection);
-			if (!jdbc) continue;
+			if (!jdbc) { if (selection?.mode === "disabled" && selection.sourceId === entry.sourceId) entry.issue = "JDBC_DISABLED"; continue; }
 			entry.config = { ...entry.config, driver: "gaussdb", host: jdbc.host, port: jdbc.port, db_name: jdbc.database, user: jdbc.user || entry.config.user, jdbc: jdbc.reference, tls: { enabled: jdbc.profile.properties.sslmode !== "disable" } };
+			entry.jdbcSelection = selection?.sourceId === entry.sourceId && (selection.jarPaths || selection.driverId) ? { ...selection, configDir: jdbc.reference.configDir } : { mode: "automatic", configDir: jdbc.reference.configDir, driverId: jdbc.reference.driverId, sourceId: entry.sourceId };
 			entry.password = jdbc.password ?? entry.password; entry.jdbcProfile = jdbc.profile; entry.issue = undefined;
 		} catch (error) { entry.issue = /^JDBC_[A-Z_]+$/.test((error as Error).message) ? (error as Error).message : "JDBC_CONFIG_INVALID"; }
 	}

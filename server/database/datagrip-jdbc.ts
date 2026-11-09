@@ -49,6 +49,12 @@ export function jdbcDefinitions(configDir?: string): Definition[] {
 	}
 	return result;
 }
+function isGaussDriver(d: Definition): boolean {
+	return /gauss|gsjdbc/i.test(`${d.id} ${d.name} ${d.driverClass} ${JSON.stringify(d.raw.library ?? [])}`);
+}
+export function listGaussJdbcDrivers(configDir?: string): DatabaseJdbcDriver[] {
+	return jdbcDefinitions(configDir).filter(isGaussDriver).map(({ raw, ...d }) => d);
+}
 export function listJdbcDrivers(configDir?: string): DatabaseJdbcDriver[] {
 	return jdbcDefinitions(configDir).map(({ raw, ...d }) => d);
 }
@@ -61,14 +67,21 @@ export function resolveDataGripJdbc(raw: any, sourcePath: string, selection?: Da
 	if (selection && (typeof selection !== "object" || Object.entries(selection).filter(([k]) => k !== "jarPaths").some(([, v]) => v !== undefined && (typeof v !== "string" || v.length > 4096 || /[\0\r\n]/.test(v))))) throw Error("JDBC_CONFIG_INVALID");
 	if (selection?.jarPaths !== undefined && (!Array.isArray(selection.jarPaths) || !selection.jarPaths.length || selection.jarPaths.length > 32 || selection.jarPaths.some(p => typeof p !== "string" || p.length > 4096 || /[\0\r\n]/.test(p)))) throw Error("JDBC_CONFIG_INVALID");
 	if ((selection?.driverClass || selection?.jarPaths) && (!selection.driverClass || !selection.jarPaths)) throw Error("JDBC_CONFIG_INVALID");
-	if ((selection?.driverId || selection?.jarPaths) && !selection.sourceId) throw Error("JDBC_CONFIG_INVALID");
+	if (selection?.mode && !["automatic", "disabled"].includes(selection.mode)) throw Error("JDBC_CONFIG_INVALID");
+	if ((selection?.mode || selection?.driverId || selection?.jarPaths) && !selection.sourceId) throw Error("JDBC_CONFIG_INVALID");
 	if (selection?.sourceId && selection.sourceId !== raw["@uuid"]) selection = { configDir: selection.configDir };
+	if (selection?.mode === "disabled") return;
 	if (!selection?.driverId && !selection?.jarPaths && /mysql|mariadb/i.test(String(raw["jdbc-url"]))) return;
 	const ref = selection?.driverId || raw["driver-ref"];
 	const manual = !!selection?.jarPaths;
-	let definitions: Definition[] = manual ? [{ id: "manual", name: "GaussDB JDBC", driverClass: selection!.driverClass!, configDir: selection?.configDir || dirname(sourcePath), raw: {} }] : jdbcDefinitions(selection?.configDir).filter(d => d.id === ref);
+	const available = manual ? [] : jdbcDefinitions(selection?.configDir);
+	let definitions: Definition[] = manual ? [{ id: "manual", name: "GaussDB JDBC", driverClass: selection!.driverClass!, configDir: selection?.configDir || dirname(sourcePath), raw: {} }] : available.filter(d => d.id === ref);
 	const hint = `${raw["jdbc-driver"] ?? ""} ${raw["driver-ref"] ?? ""} ${raw["jdbc-url"] ?? ""} ${definitions.map(d => `${d.name} ${d.driverClass} ${JSON.stringify(d.raw.library ?? [])}`).join(" ")}`;
-	if (!manual && !selection?.driverId && !/gauss|gsjdbc/i.test(hint)) return;
+	if (!manual && !selection?.driverId) {
+		if (!/gauss|gsjdbc/i.test(hint) && selection?.mode !== "automatic") return;
+		// A stale/custom source ID can still resolve to one explicitly registered Gauss driver.
+		if (!definitions.some(isGaussDriver)) definitions = available.filter(isGaussDriver);
+	}
 	// Prefer the IDE profile that explicitly registered this project, not the newest installation.
 	if (!selection?.configDir && definitions.length > 1) {
 		const project = dirname(dirname(sourcePath));
@@ -85,7 +98,7 @@ export function resolveDataGripJdbc(raw: any, sourcePath: string, selection?: Da
 	}
 	if (definitions.length !== 1) throw Error(definitions.length ? "JDBC_DRIVER_AMBIGUOUS" : "JDBC_DRIVER_MISSING");
 	const d = definitions[0], project = dirname(dirname(sourcePath));
-	const driverClass = manual || selection?.driverId ? d.driverClass : raw["jdbc-driver"] ?? d.driverClass;
+	const driverClass = manual || selection?.driverId && selection.mode !== "automatic" ? d.driverClass : raw["jdbc-driver"] ?? d.driverClass;
 	if (typeof driverClass !== "string" || !/^[\w.$]+$/.test(driverClass)) throw Error("JDBC_CONFIG_INVALID");
 	if (["ssh-properties", "ssh-tunnel", "proxy", "ssl-config", "ssl-properties", "startup-script", "init-script"].some(k => k in raw) || raw["auth-model"] && raw["auth-model"] !== "native") throw Error("JDBC_SETTINGS_UNSUPPORTED");
 	const libraries = manual ? selection!.jarPaths! : array<any>(d.raw.library);

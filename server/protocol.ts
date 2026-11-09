@@ -1566,7 +1566,7 @@ export type DatabaseDriver = "mysql" | "postgres" | "gaussdb";
 export interface DatabaseJdbcReference {
 	configDir: string; driverId: string; driverClass: string; jarNames: string[]; fingerprint: string;
 }
-export interface DatabaseJdbcSelection { configDir?: string; driverId?: string; sourceId?: string; driverClass?: string; jarPaths?: string[] }
+export interface DatabaseJdbcSelection { mode?: "automatic" | "disabled"; configDir?: string; driverId?: string; sourceId?: string; driverClass?: string; jarPaths?: string[] }
 export interface DatabaseJdbcDriver { id: string; name: string; driverClass: string; configDir: string }
 export interface DatabaseConfig {
 	name: string; driver: DatabaseDriver; host: string; port: number; user: string; db_name: string;
@@ -1590,6 +1590,7 @@ export type DatabaseOperation =
 	| { action: "test"; connection: DatabaseConfig & { id?: string; version?: string; password?: string } }
 	| { action: "scan" }
 	| { action: "jdbc_drivers"; configDir?: string }
+	| { action: "jdbc_configure"; id: string; version: string; mode?: "automatic" | "disabled"; configDir?: string; driverId?: string }
 	| { action: "sync" }
 	| { action: "preview"; kind: "datagrip" | "dbeaver"; path: string; content?: string; jdbcSelection?: DatabaseJdbcSelection }
 	| { action: "import"; ticket: string; keys: string[] }
@@ -1601,7 +1602,7 @@ export type DatabaseRequest = DatabaseOperation & { clientId: string; cwd: strin
 export interface DatabaseResponse {
 	requestId: string; error?: string; connections?: DatabaseConnection[]; grants?: string[];
 	jdbcDrivers?: DatabaseJdbcDriver[]; jdbcRuntime?: "detected" | "missing";
-	syncIssues?: { path: string; issue: string; category?: "unsupported-driver" }[];
+	syncIssues?: { path: string; sourceId?: string; issue: string; category?: "unsupported-driver" }[];
 	sources?: { kind: "datagrip" | "dbeaver"; path: string }[]; preview?: DatabaseImportPreview; grid?: DatabaseGrid;
 }
 
