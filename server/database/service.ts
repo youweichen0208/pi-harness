@@ -1,3 +1,6 @@
+import { listJdbcDrivers } from "./datagrip-jdbc.js";
+import { jdbcJavaCandidates } from "./jdbc-runtime.js";
+import type { DatabaseJdbcSelection } from "../protocol.js";
 import { randomUUID } from "node:crypto";
 import type { DatabaseImportPreview, DatabaseOperation, DatabaseResponse } from "../protocol.js";
 import { getDocumentSettings } from "../document-extension-settings.js";
@@ -12,7 +15,7 @@ export function databaseScope(client: string, cwd: string, manager: { getSession
 	return JSON.stringify([client, cwd, key, manager.getSessionId()]);
 }
 const grants = new Map<string, Map<string, string>>();
-const tickets = new Map<string, { owner: string; until: number; kind: "datagrip" | "dbeaver"; source: string; items: ImportedConnection[]; preview: DatabaseImportPreview; versions: Map<string,string> }>();
+const tickets = new Map<string, { owner: string; until: number; kind: "datagrip" | "dbeaver"; source: string; items: ImportedConnection[]; preview: DatabaseImportPreview; versions: Map<string,string>; jdbcSelection?: DatabaseJdbcSelection }>();
 const running = new Map<string, { owner: string; connectionId: string; controller: AbortController }>();
 export function grantedConnections(owner: string) {
 	const allowed = grants.get(owner);
@@ -23,7 +26,7 @@ export async function databaseAction(owner: string, cwd: string, requestId: stri
 	const response: DatabaseResponse = { requestId };
 	if (agent && !getDocumentSettings().databaseEnabled) throw Error("Database tools disabled");
 	if (agent && !["list", "run"].includes(op.action)) throw Error("Unsupported agent database action");
-	const state = () => ({ ...response, connections: listConnections(), grants: grantedConnections(owner).map(c => c.id) });
+	const state = () => ({ ...response, connections: listConnections(), grants: grantedConnections(owner).map(c => c.id), jdbcRuntime: jdbcJavaCandidates().length ? "detected" as const : "missing" as const });
 	switch (op.action) {
 		case "sync": {
 			const before = new Map(listConnections().map(c => [c.id, c.version]));
@@ -37,22 +40,23 @@ export async function databaseAction(owner: string, cwd: string, requestId: stri
 		case "list": return agent ? { ...response, connections: grantedConnections(owner) } : state();
 		case "save": saveConnection(op.connection); return state();
 		case "delete": deleteConnection(op.id, op.version); for (const job of running.values()) if (job.connectionId === op.id) job.controller.abort(); return state();
+		case "jdbc_drivers": return { ...response, jdbcDrivers: listJdbcDrivers(op.configDir) };
 		case "scan": return { ...response, sources: scanSources(cwd) };
 		case "preview": {
 			if (!["datagrip", "dbeaver"].includes(op.kind) || typeof op.path !== "string" || !op.path || op.path.length > 4096) throw Error("Invalid source");
 			for (const [key, t] of tickets) if (t.until < Date.now()) tickets.delete(key);
 			if (tickets.size >= 100) throw Error("Too many import previews");
 			const source = op.content === undefined ? op.path : `upload:${op.path}`;
-			const items = op.content === undefined ? loadSource(op.kind, op.path) : parseSource(op.kind, op.content);
+			const items = op.content === undefined ? loadSource(op.kind, op.path, op.jdbcSelection) : parseSource(op.kind, op.content);
 			const old = listConnections().filter(c => c.source?.path === source && c.source.kind === op.kind);
 			const keys = new Set<string>();
 			for (const item of items) { if (keys.has(item.sourceId)) throw Error("Duplicate source connection ID"); keys.add(item.sourceId); }
 			const preview: DatabaseImportPreview = { ticket: randomUUID(), source, items: items.map(item => {
 				const previous = old.find(c => c.source?.id === item.sourceId);
-				return { key: item.sourceId, sourceId: item.sourceId, connection: item.config, hasPassword: item.password !== undefined || !!previous?.hasPassword, issue: item.issue, change: !previous ? "new" : previous.issue !== item.issue || JSON.stringify(validateConfig(previous)) !== JSON.stringify(item.config) ? "updated" : "unchanged" };
+				return { key: item.sourceId, sourceId: item.sourceId, connection: item.config, hasPassword: item.password !== undefined || !!previous?.hasPassword, issue: item.issue, change: !previous ? "new" : previous.issue !== item.issue || JSON.stringify(previous.source?.jdbcSelection) !== JSON.stringify(op.jdbcSelection) || JSON.stringify(validateConfig(previous)) !== JSON.stringify(item.issue ? item.config : validateConfig(item.config)) ? "updated" : "unchanged" };
 			}) };
 			for (const missing of old.filter(c => !keys.has(c.source!.id))) preview.items.push({ key: missing.source!.id, sourceId: missing.source!.id, connection: validateConfig(missing), hasPassword: missing.hasPassword, change: "missing" });
-			tickets.set(preview.ticket, { owner, until: Date.now() + 10 * 60000, kind: op.kind, source, items, preview, versions: new Map(listConnections().map(c => [c.id, c.version])) });
+			tickets.set(preview.ticket, { owner, until: Date.now() + 10 * 60000, kind: op.kind, source, items, preview, jdbcSelection: op.jdbcSelection, versions: new Map(listConnections().map(c => [c.id, c.version])) });
 			return { ...response, preview };
 		}
 		case "import": {
@@ -65,8 +69,8 @@ export async function databaseAction(owner: string, cwd: string, requestId: stri
 			for (const item of ticket.items.filter(i => selected.has(i.sourceId))) {
 				const previous = current.find(c => c.source?.path === ticket.source && c.source.id === item.sourceId && c.source.kind === ticket.kind);
 				if (item.issue && previous) { markMissing(previous.id, item.issue); continue; }
-				if (previous && JSON.stringify(validateConfig(previous)) === JSON.stringify(item.config) && !previous.issue) continue;
-				saveConnection({ ...item.config, id: previous?.id, version: previous?.version, password: previous ? undefined : item.password }, { path: ticket.source, id: item.sourceId, kind: ticket.kind });
+				if (previous && JSON.stringify(validateConfig(previous)) === JSON.stringify(validateConfig(item.config)) && !previous.issue && JSON.stringify(previous.source?.jdbcSelection) === JSON.stringify(ticket.jdbcSelection)) continue;
+				saveConnection({ ...item.config, id: previous?.id, version: previous?.version, password: previous ? undefined : item.password }, { path: ticket.source, id: item.sourceId, kind: ticket.kind, jdbcSelection: ticket.jdbcSelection }, undefined, item.jdbcProfile);
 				restoreSource({ path: ticket.source, id: item.sourceId, kind: ticket.kind });
 			}
 			for (const item of ticket.preview.items.filter(i => selected.has(i.key) && i.change === "missing")) { const old = current.find(c => c.source?.path === ticket.source && c.source.id === item.sourceId); if (old) markMissing(old.id); }
@@ -88,10 +92,11 @@ export async function databaseAction(owner: string, cwd: string, requestId: stri
 		}
 		case "cancel": { const job = running.get(op.target); if (job?.owner === owner) job.controller.abort(); return response; }
 		case "test": case "run": {
-			const config = op.action === "test" ? { ...validateConfig(op.connection), password: op.connection.password ?? (op.connection.id ? getConnection(op.connection.id, op.connection.version).password : undefined) } : getConnection(op.id, op.version);
+			const config = op.action === "test" ? { ...validateConfig(op.connection), password: op.connection.password ?? (op.connection.id ? getConnection(op.connection.id, op.connection.version).password : undefined), jdbcProfile: op.connection.id ? getConnection(op.connection.id, op.connection.version).jdbcProfile : undefined } : getConnection(op.id, op.version);
 			if (op.action === "run" && "needsTest" in config && config.needsTest) throw Error("Connection changed; test it before querying");
 			if (op.action === "run" && agent && !grantedConnections(owner).some(c => c.id === op.id && c.version === op.version)) throw Error("Attach this connection to the current conversation before querying");
 			if (running.has(requestId)) throw Error("Duplicate query request");
+			if (config.driver === "gaussdb" && (!config.jdbcProfile || op.action === "test" && (!op.connection.id || JSON.stringify(validateConfig(getConnection(op.connection.id, op.connection.version))) !== JSON.stringify(validateConfig(config))))) throw Error("JDBC_CONFIG_INVALID");
 			const controller = new AbortController(), abort = () => controller.abort();
 			signal?.addEventListener("abort", abort, { once: true }); if (signal?.aborted) abort();
 			running.set(requestId, { owner, controller, connectionId: op.action === "run" ? op.id : op.connection.id ?? "" });

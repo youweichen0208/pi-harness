@@ -1562,13 +1562,19 @@ export interface NodeAgentState {
 }
 
 /** Built-in read-only database workbench HTTP protocol. Secrets are input-only. */
-export type DatabaseDriver = "mysql" | "postgres";
+export type DatabaseDriver = "mysql" | "postgres" | "gaussdb";
+export interface DatabaseJdbcReference {
+	configDir: string; driverId: string; driverClass: string; jarNames: string[]; fingerprint: string;
+}
+export interface DatabaseJdbcSelection { configDir?: string; driverId?: string; sourceId?: string }
+export interface DatabaseJdbcDriver { id: string; name: string; driverClass: string; configDir: string }
 export interface DatabaseConfig {
 	name: string; driver: DatabaseDriver; host: string; port: number; user: string; db_name: string;
+	jdbc?: DatabaseJdbcReference;
 	tls?: { enabled: boolean; ca?: string };
 }
 export interface DatabaseConnection extends DatabaseConfig {
-	id: string; version: string; hasPassword: boolean; source?: { path: string; id: string; kind: "datagrip" | "dbeaver" };
+	id: string; version: string; hasPassword: boolean; source?: { path: string; id: string; kind: "datagrip" | "dbeaver"; jdbcSelection?: DatabaseJdbcSelection };
 	issue?: string; needsTest?: boolean;
 }
 export interface DatabaseImportItem {
@@ -1583,8 +1589,9 @@ export type DatabaseOperation =
 	| { action: "delete"; id: string; version: string }
 	| { action: "test"; connection: DatabaseConfig & { id?: string; version?: string; password?: string } }
 	| { action: "scan" }
+	| { action: "jdbc_drivers"; configDir?: string }
 	| { action: "sync" }
-	| { action: "preview"; kind: "datagrip" | "dbeaver"; path: string; content?: string }
+	| { action: "preview"; kind: "datagrip" | "dbeaver"; path: string; content?: string; jdbcSelection?: DatabaseJdbcSelection }
 	| { action: "import"; ticket: string; keys: string[] }
 	| { action: "grant"; ids: string[]; versions: Record<string, string> }
 	| { action: "revoke"; id: string }
@@ -1593,6 +1600,7 @@ export type DatabaseOperation =
 export type DatabaseRequest = DatabaseOperation & { clientId: string; cwd: string; conversationId: string; requestId: string };
 export interface DatabaseResponse {
 	requestId: string; error?: string; connections?: DatabaseConnection[]; grants?: string[];
+	jdbcDrivers?: DatabaseJdbcDriver[]; jdbcRuntime?: "detected" | "missing";
 	syncIssues?: { path: string; issue: string; category?: "unsupported-driver" }[];
 	sources?: { kind: "datagrip" | "dbeaver"; path: string }[]; preview?: DatabaseImportPreview; grid?: DatabaseGrid;
 }

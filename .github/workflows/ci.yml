@@ -13,6 +13,11 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
       - uses: actions/setup-node@v5
         with:
           node-version: 22
@@ -38,6 +43,9 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Verify real JDBC bridge
+        run: node tests/packaged-jdbc-test.mjs
+
       # 设计令牌检查与纯函数单测（零 token）
       - name: Design tokens and unit tests
         run: npm test
@@ -55,6 +63,11 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
       - uses: actions/setup-node@v5
         with:
           node-version: 22
@@ -62,6 +75,7 @@ jobs:
       - run: npm run check:lockfile
       - run: npm ci
       - run: npm run build:server
+      - run: node tests/packaged-jdbc-test.mjs
       - run: node tests/node-workbench-test.mjs
 
   desktop-rendering:
@@ -73,6 +87,11 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
       - uses: actions/setup-node@v5
         with:
           node-version: 22
@@ -80,10 +99,13 @@ jobs:
       - run: npm run check:lockfile
       - run: npm ci
       - run: npm run build
+      - run: node tests/packaged-jdbc-test.mjs
       - name: Desktop toolbar with expanded and collapsed sidebar
         run: |
           npx playwright-core install chromium
           node tests/desktop-toolbar-test.mjs
+      - name: DataGrip JDBC interface (local fixtures only)
+        run: node tests/database-jdbc-browser-test.mjs
       - name: Pi CLI detection and installation UI (no global installation)
         run: |
           npx vitest run tests/unit/pi-cli-status.test.ts
@@ -107,6 +129,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
       - uses: actions/setup-node@v5
         with:
           node-version: 22

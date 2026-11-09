@@ -1,3 +1,5 @@
+import { executeJdbc } from "./jdbc-runtime.js";
+import type { JdbcProfile } from "./jdbc-profile.js";
 import mysql from "mysql2/promise";
 import { createConnection } from "mysql2";
 import pg from "pg";
@@ -6,14 +8,14 @@ import { databaseErrorMessage } from "./errors.js";
 import type { DatabaseConfig, DatabaseGrid } from "../protocol.js";
 import { operationSql, type Run } from "./sql.js";
 
-type Config = DatabaseConfig & { id?: string; password?: string };
+type Config = DatabaseConfig & { id?: string; password?: string; jdbcProfile?: JdbcProfile };
 const active = new Set<AbortController>();
 const cell = (v: unknown): string | number | boolean | null => v === null || v === undefined ? null : typeof v === "boolean" || typeof v === "number" ? v : Buffer.isBuffer(v) ? `[binary ${v.length} bytes]` : (v instanceof Date ? v.toISOString() : typeof v === "object" ? JSON.stringify(v) : String(v)).slice(0, 4000);
 /** A fresh connection/transaction per request: no mutable USE/search_path leaks between chats. */
 export async function executeQuery(config: Config, request: Run, external?: AbortSignal): Promise<DatabaseGrid> {
 	if (!config.user.trim()) throw Error("Database username is missing; complete the connection settings or duplicate the imported connection to edit");
 	if (active.size >= 8) throw Error("Database queries busy; retry shortly");
-	const database = request.database || config.db_name || (config.driver === "postgres" ? "postgres" : undefined);
+	const database = request.database || config.db_name || (config.driver !== "mysql" ? "postgres" : undefined);
 	const sql = operationSql({ ...request, database }, config.driver);
 	const controller = new AbortController(); active.add(controller);
 	const forward = () => controller.abort(); external?.addEventListener("abort", forward, { once: true });
@@ -37,7 +39,11 @@ export async function executeQuery(config: Config, request: Run, external?: Abor
 			if (row.some(v => typeof v === "string" && v.length > 4000)) truncated = true;
 			rows.push(values); return true;
 		};
-		if (config.driver === "mysql") {
+		if (config.driver === "gaussdb") {
+			if (!config.jdbcProfile) throw Error("JDBC_CONFIG_INVALID");
+			const jdbc = await executeJdbc(config.jdbcProfile, config.user, config.password ?? "", sql, database ?? "", limit, controller.signal);
+			columns = jdbc.columns; rows.push(...jdbc.rows); truncated = jdbc.truncated;
+		} else if (config.driver === "mysql") {
 			const options = { host: config.host, port: config.port, user: config.user, password: config.password, database, ssl, connectTimeout: 10000, supportBigNumbers: true, bigNumberStrings: true, dateStrings: true, multipleStatements: false, enableKeepAlive: true };
 			const raw = createConnection(options), conn = raw.promise();
 			await conn.connect();
@@ -80,6 +86,7 @@ export async function executeQuery(config: Config, request: Run, external?: Abor
 		return result;
 	} catch (error) {
 		if (controller.signal.aborted) throw Error("Query cancelled or timed out");
+		if (config.driver === "gaussdb" && /^(JDBC_[A-Z_]+|SQLSTATE_[A-Z0-9]{5})$/.test((error as Error).message)) throw error;
 		// Driver messages can contain credentials, SQL literals or server paths: expose fixed categories or validated codes only.
 		throw Error(databaseErrorMessage(error, config.driver, connecting));
 	} finally {

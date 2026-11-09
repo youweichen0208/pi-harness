@@ -4,8 +4,10 @@ import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve, win32 } from "node:path";
 import { createHash } from "node:crypto";
 import { dbeaverDataRoots, registeredDbeaverSources } from "./dbeaver-discovery.js";
-import type { DatabaseConfig } from "../protocol.js";
-export interface ImportedConnection { sourceId: string; config: DatabaseConfig; password?: string; issue?: string }
+import { resolveDataGripJdbc, sourceEntries } from "./datagrip-jdbc.js";
+import type { JdbcProfile } from "./jdbc-profile.js";
+import type { DatabaseJdbcSelection, DatabaseConfig } from "../protocol.js";
+export interface ImportedConnection { sourceId: string; config: DatabaseConfig; password?: string; issue?: string; jdbcProfile?: JdbcProfile }
 const array = <T>(v: T | T[] | undefined): T[] => v === undefined ? [] : Array.isArray(v) ? v : [v];
 export function parseSource(kind: "datagrip" | "dbeaver", text: string): ImportedConnection[] {
 	if (Buffer.byteLength(text) > 2 * 1024 * 1024) throw Error("Source exceeds 2 MiB");
@@ -124,13 +126,15 @@ export function scanSources(cwd: string): { kind: "datagrip" | "dbeaver"; path: 
 }
 
 /** DataGrip keeps the username in the adjacent local file in some versions. */
-export function loadSource(kind: "datagrip" | "dbeaver", path: string): ImportedConnection[] {
-	const result = parseSource(kind, readSource(path));
+export function loadSource(kind: "datagrip" | "dbeaver", path: string, selection?: DatabaseJdbcSelection): ImportedConnection[] {
+	const text = readSource(path), result = parseSource(kind, text);
+	const rawEntries = kind === "datagrip" ? sourceEntries(text) : [];
 	if (kind !== "datagrip") return result;
 	const localPath = join(dirname(path), "dataSources.local.xml");
 	try {
 		if (!statSync(localPath).isFile() || statSync(localPath).size > 2 * 1024 * 1024) throw Error("Invalid local data source XML");
-		const local = parseSource(kind, readFileSync(localPath, "utf8"));
+		const localText = readFileSync(localPath, "utf8"), local = parseSource(kind, localText);
+		for (const entry of sourceEntries(localText)) { const raw = rawEntries.find(r => r["@uuid"] === entry["@uuid"]); if (raw) Object.assign(raw, entry); }
 		for (const entry of result) {
 			const override = local.find(c => c.sourceId === entry.sourceId);
 			if (!override) continue;
@@ -139,5 +143,15 @@ export function loadSource(kind: "datagrip" | "dbeaver", path: string): Imported
 			if (override.issue?.includes("settings")) entry.issue = override.issue;
 		}
 	} catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+	for (const entry of result) {
+		const raw = rawEntries.find(r => r["@uuid"] === entry.sourceId);
+		if (!raw) continue;
+		try {
+			const jdbc = resolveDataGripJdbc(raw, path, selection);
+			if (!jdbc) continue;
+			entry.config = { ...entry.config, driver: "gaussdb", host: jdbc.host, port: jdbc.port, db_name: jdbc.database, user: jdbc.user || entry.config.user, jdbc: jdbc.reference, tls: { enabled: jdbc.profile.properties.sslmode !== "disable" } };
+			entry.password = jdbc.password ?? entry.password; entry.jdbcProfile = jdbc.profile; entry.issue = undefined;
+		} catch (error) { entry.issue = /^JDBC_[A-Z_]+$/.test((error as Error).message) ? (error as Error).message : "JDBC_CONFIG_INVALID"; }
+	}
 	return result;
 }

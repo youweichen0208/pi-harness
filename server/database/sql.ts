@@ -35,7 +35,7 @@ export function operationSql(request: Run, driver: DatabaseDriver): string {
 		case "describe": {
 			const schema = lit(driver === "mysql" ? db : request.schema), table = lit(request.table);
 			const columns = `SELECT 'column' AS kind, column_name AS name, data_type AS definition, is_nullable AS nullable, column_default AS default_value FROM information_schema.columns WHERE table_schema = ${schema} AND table_name = ${table}`;
-			return driver === "postgres" ? `${columns} UNION ALL SELECT 'index', indexname, indexdef, NULL, NULL FROM pg_indexes WHERE schemaname = ${schema} AND tablename = ${table}` : `${columns} UNION ALL SELECT 'index', index_name, CONCAT(index_type, ' (', GROUP_CONCAT(column_name ORDER BY seq_in_index), ')', IF(non_unique = 0, ' UNIQUE', '')), NULL, NULL FROM information_schema.statistics WHERE table_schema = ${schema} AND table_name = ${table} GROUP BY index_name, index_type, non_unique`;
+			return driver !== "mysql" ? `${columns} UNION ALL SELECT 'index', indexname, indexdef, NULL, NULL FROM pg_indexes WHERE schemaname = ${schema} AND tablename = ${table}` : `${columns} UNION ALL SELECT 'index', index_name, CONCAT(index_type, ' (', GROUP_CONCAT(column_name ORDER BY seq_in_index), ')', IF(non_unique = 0, ' UNIQUE', '')), NULL, NULL FROM information_schema.statistics WHERE table_schema = ${schema} AND table_name = ${table} GROUP BY index_name, index_type, non_unique`;
 		}
 		case "page": {
 			const offset = request.offset ?? 0;

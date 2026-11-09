@@ -1,6 +1,6 @@
 {
   "name": "@youweichen/pi-harness",
-  "version": "1.18.4",
+  "version": "1.19.0",
   "description": "Web chat interface for the pi coding agent, powered by the pi SDK (@earendil-works/pi-coding-agent) — one-command run, Docker/systemd/launchd deployable",
   "license": "MIT",
   "author": {
@@ -46,12 +46,14 @@
   },
   "scripts": {
     "prepublishOnly": "npm run build",
+    "predev": "npm run build:jdbc",
     "dev": "concurrently -k -n server,web -c blue,green \"npm:dev:server\" \"npm:dev:web\"",
     "dev:server": "cross-env PORT=8788 PI_WEB_ALLOW_ORIGINS=http://localhost:5173,http://127.0.0.1:5173 node --watch --import tsx server/index.ts",
     "dev:web": "vite --config web/vite.config.ts",
     "build": "npm run build:web && npm run build:server",
     "build:web": "vite build --config web/vite.config.ts",
-    "build:server": "tsc -p tsconfig.server.json",
+    "build:server": "tsc -p tsconfig.server.json && npm run build:jdbc",
+    "build:jdbc": "node scripts/build-database-jdbc.mjs",
     "typecheck": "tsc -p tsconfig.server.json --noEmit && tsc -p web/tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit",
     "test": "node --test tests/check-design-tokens-test.mjs && npm run check:design && vitest run",
     "test:unit": "vitest run",

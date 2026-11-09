@@ -12298,6 +12298,10 @@ pre.wiki-mermaid-source-hidden > .wiki-mermaid-preview { border-bottom: 0; margi
 .database-form, .database-import { padding: 20px; overflow: auto; }
 .database-form label, .database-import > label { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; color: var(--text-dim); }
 .database-form input, .database-form select, .database-form textarea, .database-import input:not([type="checkbox"]), .database-sql textarea { padding: 8px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--bg); color: var(--text); font: inherit; }
+.database-jdbc-mapping { margin-inline: 0; overflow-wrap: anywhere; }
+.database-jdbc-mapping summary { margin-bottom: 12px; cursor: pointer; }
+.database-jdbc-mapping label { display: flex; flex-direction: column; gap: 5px; margin-block: 12px; min-width: 0; }
+.database-jdbc-mapping input, .database-jdbc-mapping select { box-sizing: border-box; width: 100%; min-width: 0; }
 .database-form .database-checkbox { flex-direction: row; align-items: center; }
 .database-form .database-actions { padding-inline: 0; }
 .database-source { display: block; width: 100%; text-align: left; overflow-wrap: anywhere; margin-bottom: 6px; }

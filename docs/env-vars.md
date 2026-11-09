@@ -27,3 +27,7 @@ Pi 1.4.0 的 `PI_CODEMODE_MAX_WORKERS` 控制同一服务进程中所有会话�
 例如前台启动：`PI_CODEMODE_MAX_WORKERS=4 pi-harness`。使用 systemd、launchd 或 Docker 时配置服务进程的环境并重启服务；终端中设置变量不会修改已经运行的服务。该值由 SDK 读取，WebUI 不提供额外设置项；提高上限会增加并发内存占用。
 
 `PI_WEB_PYTHON`：Playground 的 Python 3.9+ 解释器路径，可指向虚拟环境；不接受 shell 参数。未设置时探测 VIRTUAL_ENV、PATH 和 Windows py -3。Jedi 补全与 Black 格式化也使用该环境。见 `architecture-playground.md`。
+
+### JDBC 运行时
+
+`PI_WEB_JAVA`：可选，指定 GaussDB JDBC 使用的 `java` / `java.exe` 完整路径；设置后优先使用且不回退。未设置时探测本机 DataGrip bundled runtime、JAVA_HOME 与 PATH。不自动安装 Java。

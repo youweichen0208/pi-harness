@@ -143,3 +143,9 @@ docker rm -f pi-db-test-pg pi-db-test-mysql
 3a/4a 回复回归：`node tests/chat-redesign-ui-test.mjs` 验证分段问题汇总、推荐／其他回答与发送；5a 的 `node tests/node-terminal-pty-test.mjs` 在本机 POSIX PTY 验证中文、包装过滤、退出码、取消、超时和手动占用保护（Windows 跳过，跨平台 SSH 模拟回归由 node-agent/node-workbench 测试承担）。两者纳入冒烟。节点浏览器另运行 `node tests/node-agent-test.mjs --browser`，核对执行确认、终端定位及窄屏布局。
 
 代码搜索：`tests/code-search-ui-test.mjs` 覆盖真实 WS/ripgrep 的高亮、预览、打开定位、输入取消、过期批次、正则及文件名切换；桌面启动回归还核对包内 rg 路径和可执行性。
+
+### JDBC 桥接构建
+
+`npm run build:server` 同时运行 `build:jdbc`，需要 JDK 17+（JAVA_HOME 或 PATH）；桥接使用 Java 8 字节码，仅依赖标准库。首次直接运行 `dev:server` 前执行 `npm run build:jdbc`，`npm run dev` 自动准备桥接。单测中的 JDBC 测试同样需要 javac/jar。无 Java 的终端用户仍可使用原生 MySQL/PostgreSQL。
+
+本地验证：`npm run typecheck`、`npm run build`、`npm test`、`node tests/packaged-jdbc-test.mjs`、`node tests/database-jdbc-browser-test.mjs`。不需要真实数据库或模型服务；厂商驱动与目标 Windows 的兼容性单独验收。

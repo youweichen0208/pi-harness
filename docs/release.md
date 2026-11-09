@@ -1,5 +1,9 @@
 # 发布流程
 
+## 1.19.0：DataGrip 本地 GaussDB JDBC
+
+引用同机 DataGrip 驱动，增加按连接映射、来源变化复测及独立 Java 只读执行。保留 MySQL/PostgreSQL；不分发厂商 jar 或 Java。实际 Windows 厂商驱动与 GaussDB 仍需实机验收。仅发布 GitHub 桌面 Release；同提交 CI、三平台打包及安装升级验证通过后公开。说明见 `.github/release-notes/v1.19.0.md`。
+
 ## 1.18.4：搜索交互与失败恢复
 
 包含 PR #157：全局搜索隔离旧查询与迟到结果，修正键盘焦点与滚动导航，保留输入法组合输入；会话搜索支持从当前选区填充，代码搜索支持 Shift+Tab 离开输入框及失败后手动重试。SDK / pi-ai 1.5.0、协议 v52 不变。仅发布 GitHub 三平台桌面 Release，同提交 CI、打包及安装升级验证通过后公开。说明见 `.github/release-notes/v1.18.4.md`。

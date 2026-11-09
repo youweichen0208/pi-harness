@@ -72,6 +72,11 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
       - uses: actions/setup-node@v5
         with:
           node-version: 22
@@ -106,6 +111,7 @@ jobs:
           root="$app/Contents/Resources/app"
           executable="$app/Contents/MacOS/pi"
           node tests/packaged-server-start-test.mjs "$executable" "$root"
+          node tests/packaged-jdbc-test.mjs "$executable" "$root"
           node tests/native-tools-desktop-test.mjs "$executable" "$root"
           ELECTRON_RUN_AS_NODE=1 "$executable" tests/provider-auth-test.mjs "$PWD/$root"
           ELECTRON_RUN_AS_NODE=1 "$executable" tests/model-sources-test.mjs "$PWD/$root"
@@ -164,6 +170,11 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
       - uses: actions/setup-node@v5
         with:
           node-version: 22
@@ -208,6 +219,8 @@ jobs:
       - name: Verify packaged server and portable relaunch
         shell: pwsh
         run: |
+          node tests/packaged-jdbc-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "Packaged JDBC bridge failed" }
           node tests/packaged-server-start-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
           if ($LASTEXITCODE -ne 0) { throw "Packaged server cannot start" }
           node tests/native-tools-desktop-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
@@ -294,6 +307,11 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
       - uses: actions/setup-node@v5
         with:
           node-version: 22
@@ -329,6 +347,7 @@ jobs:
           root="$PWD/release/linux-unpacked/resources/app"
           executable="$PWD/release/linux-unpacked/pi-harness"
           node tests/packaged-server-start-test.mjs "$executable" "$root"
+          node tests/packaged-jdbc-test.mjs "$executable" "$root"
           node tests/native-tools-desktop-test.mjs "$executable" "$root"
           ELECTRON_RUN_AS_NODE=1 "$executable" tests/provider-auth-test.mjs "$root"
           ELECTRON_RUN_AS_NODE=1 "$executable" tests/model-sources-test.mjs "$root"

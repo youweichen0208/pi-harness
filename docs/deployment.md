@@ -209,3 +209,7 @@ Playground 使用宿主 Python 3.9+，安装包不捆绑解释器。`PI_WEB_PYTH
 Desktop 包含 Pi SDK 和扩展运行环境，普通本地扩展不要求独立安装 pi 或 Node.js。在「设置 → Extensions」打开个人扩展目录，放入文件后重载或新建会话即可。Windows 默认目录为 `%USERPROFILE%\.pi\agent\extensions\`，macOS/Linux 为 `~/.pi/agent/extensions/`；自定义 `PI_CODING_AGENT_DIR` 时以页面实际路径为准。
 
 Desktop 不额外内置 Git、npm 或独立 Node.js。npm 来源社区包使用系统包管理工具（也支持 Pi 的自定义 `npmCommand`）；Git 来源需要 Git，包依赖或安装脚本可能还需要 npm/Node.js。缺失时界面提示安装并重试，PATH 变更后可能需要重启应用。远程 Web 部署需在运行服务的电脑上准备工具及扩展文件。
+
+### GaussDB 本地 JDBC
+
+应用包包含自建 JDBC 桥接，不包含 Java 运行时或厂商驱动。DataGrip 与服务需运行在能读取同一配置、jar 和证书的环境中；启动用户必须有对应文件权限。可设置 PI_WEB_JAVA 为 java/java.exe 的完整路径。Docker 构建阶段安装 JDK 17，运行镜像不带 Java；容器需要自行提供兼容 Java、配置、驱动及证书，宿主 Windows/macOS 的绝对路径不会自动转换为容器路径。

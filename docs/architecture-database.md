@@ -6,7 +6,7 @@
 
 `server/database/` 将配置、来源解析、SQL 校验、驱动执行、会话授权和 HTTP 路由分开。内置 MySQL/MariaDB 使用 mysql2，PostgreSQL 使用 pg/pg-cursor，依赖随 npm/桌面包分发，不在打开界面时安装。旧 db-client 插件保持独立，不导入它的写操作或自动迁移配置。
 
-`POST /api/database` 经过共享口令、同源、clientId、cwd、conversationId、quiesce 校验。协议类型在 protocol.ts；action 覆盖 list/sync/save/delete/test/scan/preview/import/grant/revoke/run/cancel。HTTP 断开会取消当前查询；完成后重验会话及配置版本，前端 AbortController 和请求序号丢弃迟到响应。
+`POST /api/database` 经过共享口令、同源、clientId、cwd、conversationId、quiesce 校验。协议类型在 protocol.ts；action 覆盖 list/sync/save/delete/test/scan/preview/import/grant/revoke/run/cancel，以及只读驱动发现 jdbc_drivers。HTTP 断开会取消当前查询；完成后重验会话及配置版本，前端 AbortController 和请求序号丢弃迟到响应。
 
 连接保存于 `<dataDir>/database/connections.json`，密码字段仅存 AES-256-GCM 密文，密钥为同目录 0600 的 key 文件。原子替换、随机配置版本和显式字段白名单避免覆盖及凭据回显；坏文件/无法解密直接报错，不回退明文。名称、host、port、user、db_name、driver 为核心字段，TLS 验证证书，允许提供 PEM CA。
 
@@ -34,9 +34,9 @@ DataGrip 从 dataSources.xml 读取连接，并合并相邻 dataSources.local.xm
 
 所有用户 SQL 经 node-sql-parser 完整解析及重新序列化，仅允许单条 SELECT（含只读 CTE），拒绝写入、SELECT INTO、锁定、多语句和非白名单分析函数。无法解析的语法直接拒绝。每次查询独立连接、独立只读事务；PostgreSQL 固定 pg_catalog/public search_path，不复用数据库切换状态。内建元数据查询使用转义标识符和字面量。
 
-最多 8 个并发查询，默认 30 秒。数据库 statement timeout 与 AbortController 配合，取消通过同账号控制连接调用 pg_cancel_backend 或 KILL QUERY，并关闭执行连接。MySQL 流式读取，PostgreSQL 游标按批读取；普通结果最多 1000 行，数据页 50 行，最多 2 MiB 结果，单元格文本最多 4000 字符，超限标记截断。BIGINT/NUMERIC 保留字符串避免精度丢失。数据库错误使用固定的网络、认证失败、TLS 验证及认证协议不兼容提示，其它错误仅回传校验过的错误代码，不透出可能含凭据或查询字面量的驱动消息。PostgreSQL 连接阶段的异常 SASL 顺序及 pg SASL 内部 TypeError 提示认证协议不兼容；普通查询 TypeError 不作此归类。GaussDB/openGauss 私有认证尚未提供兼容保证，不内置厂商 JDBC 或替换 pg；出现该错误时使用厂商支持的客户端。标准 SASL 顺序参考 [PostgreSQL 协议文档](https://www.postgresql.org/docs/17/sasl-authentication.html)。
+最多 8 个并发查询，默认 30 秒。数据库 statement timeout 与 AbortController 配合，取消通过同账号控制连接调用 pg_cancel_backend 或 KILL QUERY，并关闭执行连接。MySQL 流式读取，PostgreSQL 游标按批读取；普通结果最多 1000 行，数据页 50 行，最多 2 MiB 结果，单元格文本最多 4000 字符，超限标记截断。BIGINT/NUMERIC 保留字符串避免精度丢失。数据库错误使用固定的网络、认证失败、TLS 验证及认证协议不兼容提示，其它错误仅回传校验过的错误代码，不透出可能含凭据或查询字面量的驱动消息。PostgreSQL 连接阶段的异常 SASL 顺序及 pg SASL 内部 TypeError 提示认证协议不兼容；普通查询 TypeError 不作此归类。GaussDB 可使用下述 DataGrip 本地 JDBC 通道；不替换原生 pg 驱动，厂商私有认证兼容性仍取决于实际 jar 和服务端版本。标准 SASL 顺序参考 [PostgreSQL 协议文档](https://www.postgresql.org/docs/17/sasl-authentication.html)。
 
-当前不支持写数据、DDL、SSH、代理、第三方驱动、密码库解密。表预览不是一致性快照，外部修改可能改变翻页结果；分析总量应使用聚合 SQL。
+当前不支持写数据、DDL、SSH、代理、任意第三方驱动导入或密码库解密。表预览不是一致性快照，外部修改可能改变翻页结果；分析总量应使用聚合 SQL。
 
 ## 验证
 
@@ -52,3 +52,15 @@ DataGrip 从 dataSources.xml 读取连接，并合并相邻 dataSources.local.xm
 DBeaver 自定义工作区回归：`tests/unit/dbeaver-discovery.test.ts` 覆盖三平台数据根、`.workspaces` 动态变化、中文/空格/换行、去重、环境路径、无效/过大文件和发现上限。
 
 #155/#156 回归：`tests/database-sync-browser-test.mjs` 验证跳过提示与警告分开、明细折叠及轮询不重开；`tests/unit/database-auth.test.ts` 使用真实 pg 驱动与本地模拟 PostgreSQL 服务发送提前的 SASL Final，覆盖两种密码、错误脱敏及分类边界，不连接真实业务库。
+
+## DataGrip 本地 GaussDB JDBC
+
+同一台机器上可引用 DataGrip 已配置的 GaussDB 驱动，不复制、下载或分发厂商 jar。只读取已发现的 DataGrip 配置目录中 `options/databaseDrivers.xml` / `jdbc-drivers.xml`，按数据源 driver-ref 匹配类和完整本地 classpath；尊重数据源 jdbc-driver 覆盖。支持 USER_HOME、APPLICATION_CONFIG_DIR、PROJECT_DIR 宏及带空格/中文的 Windows 路径。多个 IDE 配置命中时优先使用 recentProjects 中明确注册该项目的配置；仍歧义则要求在导入预览中选择配置目录、驱动及目标连接，不猜测最新 jar。同一来源中的连接分别保留映射。
+
+仅支持单主机 `jdbc:gaussdb`、`jdbc:opengauss`、`jdbc:postgresql` URL 的直连和系统 VPN；原生 MySQL/PostgreSQL 仍走原驱动。属性使用白名单，TLS 支持 disable / verify-ca / verify-full（ssl=true 默认 verify-full），不接受会降级的 require/prefer。证书必须是本机可读文件。IDE SSH、代理、独立 SSL 配置块、初始化 SQL、VM 参数、native library 和需要下载的 artifact 均明确拒绝；DBeaver JDBC 不在此范围。上传 XML 无法解析另一台机器的本地 jar，须使用服务所在机器上的文件路径。
+
+完整 JDBC URL、属性和绝对 classpath 以 AES-256-GCM 加密保存，仅按需解密到执行进程。浏览器只获取驱动类、jar 文件名、配置目录和摘要，不获取完整 URL/属性。配置、jar 或证书内容变化使连接版本变化，撤销旧会话授权并要求重新测试；文件缺失保留记录并禁用，恢复后重新测试。首次导入也要求测试。同步保留用户已保存密码，不读取 DataGrip Password Safe。JDBC 连接不提供“复制为手动连接”，修改由 DataGrip 来源管理。
+
+每次测试/查询启动独立 Java 进程，标准输入输出采用有界二进制帧，参数和环境不携带密码，驱动日志不回传。Java 按 PI_WEB_JAVA、DataGrip bundled runtime、JAVA_HOME、PATH 顺序探测（至少 Java 8，驱动可要求更高版本），不自动安装。显式 PI_WEB_JAVA 无效时报错，不静默换用其它运行时。桥接 jar 随应用打包，厂商 jar 仍引用原路径，执行前后重新核对文件摘要。设置 allowReadOnly=true，并在执行 SQL 前发送 BEGIN READ ONLY、核验 transaction_read_only，再设置事务级 search_path 和 statement_timeout；只读条件无法建立就拒绝执行。共享原有 SQL 白名单、8 并发/30 秒预算和结果上限；取消先发送 JDBC cancel，1 秒未结束则终止进程树。
+
+`tests/unit/database-jdbc.test.ts` 用真实 Java + 本地假驱动验证解析、加密、映射、同步、授权失效、只读核验、取消、结果精度与截断；`tests/packaged-jdbc-test.mjs [executable] [appRoot]` 验证构建/桌面包内的桥接产物，CI 在 macOS/Windows/Linux 执行。`tests/database-jdbc-browser-test.mjs` 使用本地 HTTP 夹具验证界面。以上不替代目标 Windows 机器上的厂商 jar、认证、TLS、目录查询和真实 GaussDB 验证；发布兼容性结论前仍需该环境验收，不调用付费模型。
