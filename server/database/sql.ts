@@ -31,7 +31,9 @@ export function operationSql(request: Run, driver: DatabaseDriver): string {
 	switch (request.operation) {
 		case "query": return readOnlySql(request.sql ?? "", driver);
 		case "databases": return driver === "mysql" ? "SELECT schema_name AS name FROM information_schema.schemata ORDER BY schema_name" : "SELECT datname AS name FROM pg_database WHERE datallowconn AND NOT datistemplate ORDER BY datname";
-		case "tables": return driver === "mysql" ? `SELECT table_schema AS ${q("schema")}, table_name AS name, table_type AS kind FROM information_schema.tables WHERE table_schema = ${lit(db)} ORDER BY table_name` : "SELECT table_schema AS schema, table_name AS name, table_type AS kind FROM information_schema.tables WHERE table_schema NOT IN ('pg_catalog','information_schema') UNION ALL SELECT schemaname AS schema, matviewname AS name, 'MATERIALIZED VIEW' AS kind FROM pg_matviews ORDER BY schema, name";
+		// pg_matviews does not exist on PG 9.2-derived servers. These catalog columns
+		// predate 9.3; older servers simply have no relkind=m entries.
+		case "tables": return driver === "mysql" ? `SELECT table_schema AS ${q("schema")}, table_name AS name, table_type AS kind FROM information_schema.tables WHERE table_schema = ${lit(db)} ORDER BY table_name` : "SELECT table_schema AS schema, table_name AS name, table_type AS kind FROM information_schema.tables WHERE table_schema NOT IN ('pg_catalog','information_schema') UNION ALL SELECT n.nspname AS schema, c.relname AS name, 'MATERIALIZED VIEW' AS kind FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace WHERE c.relkind = 'm' AND n.nspname NOT IN ('pg_catalog','information_schema') ORDER BY schema, name";
 		case "describe": {
 			const schema = lit(driver === "mysql" ? db : request.schema), table = lit(request.table);
 			const columns = `SELECT 'column' AS kind, column_name AS name, data_type AS definition, is_nullable AS nullable, column_default AS default_value FROM information_schema.columns WHERE table_schema = ${schema} AND table_name = ${table}`;

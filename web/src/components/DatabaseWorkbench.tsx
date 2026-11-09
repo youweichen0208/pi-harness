@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { FiDatabase, FiTable, FiSearch, FiPlus, FiRefreshCw, FiLink, FiX } from "react-icons/fi";
+import { FiDatabase, FiTable, FiSearch, FiPlus, FiRefreshCw, FiLink, FiX, FiCheckCircle } from "react-icons/fi";
+import { DatabaseSqlEditor } from "./DatabaseSqlEditor";
+import { quoteDatabaseName } from "../database-completion";
 import { useT } from "../i18n";
 import { startDatabaseSync } from "../database-sync";
 import { databaseErrorMessages } from "../../../server/database/errors";
@@ -19,21 +21,23 @@ export function DatabaseWorkbench({ cwd, conversationId, onReference, onRevoke }
 	const [connections, setConnections] = useState<DatabaseConnection[]>([]), [grants, setGrants] = useState<string[]>([]);
 	const [selected, setSelected] = useState(""), [databases, setDatabases] = useState<string[]>([]), [database, setDatabase] = useState("");
 	const [tables, setTables] = useState<Table[]>([]), [table, setTable] = useState<Table>();
+	const [catalogTruncated, setCatalogTruncated] = useState(false);
+	const [catalogFailed, setCatalogFailed] = useState(false);
 	const [tab, setTab] = useState<"page" | "describe" | "query">("page"), [grid, setGrid] = useState<DatabaseGrid>();
 	const [offset, setOffset] = useState(0), [search, setSearch] = useState(""), [error, setError] = useState("");
 	const [sql, setSql] = useState(() => { try { return sessionStorage.getItem(`pi-db-sql:${cwd}:${conversationId}`) ?? "SELECT 1 AS example"; } catch { return "SELECT 1 AS example"; } });
-	const [form, setForm] = useState<ReturnType<typeof blank>>(), [tested, setTested] = useState(false);
+	const [form, setForm] = useState<ReturnType<typeof blank>>();
 	const [importing, setImporting] = useState(false), [kind, setKind] = useState<"datagrip" | "dbeaver">("dbeaver"), [path, setPath] = useState("");
 	const [sources, setSources] = useState<{ kind: "datagrip" | "dbeaver"; path: string }[]>([]), [preview, setPreview] = useState<DatabaseImportPreview>(), [chosen, setChosen] = useState<string[]>([]);
-	const [jdbcChoices, setJdbcChoices] = useState<{ connection?: DatabaseConnection; source?: { path: string; id: string }; drivers: DatabaseJdbcDriver[] }>();
+	const [jdbcChoices, setJdbcChoices] = useState<{ connection: DatabaseConnection; drivers: DatabaseJdbcDriver[] }>();
 	const [jdbcEditing, setJdbcEditing] = useState(false);
 	const [jdbcManual, setJdbcManual] = useState(false), [jdbcClass, setJdbcClass] = useState("org.postgresql.Driver"), [jdbcPaths, setJdbcPaths] = useState("");
 	const [jdbcSourceId, setJdbcSourceId] = useState(""), [jdbcTargets, setJdbcTargets] = useState<{ id: string; name: string }[]>([]);
 	const [jdbcConfigDir, setJdbcConfigDir] = useState(""), [jdbcDriverId, setJdbcDriverId] = useState(""), [jdbcDrivers, setJdbcDrivers] = useState<DatabaseJdbcDriver[]>([]), [jdbcRuntime, setJdbcRuntime] = useState<DatabaseResponse["jdbcRuntime"]>();
 	const jdbcMessage = (message: string) => { const code = message.match(/JDBC_[A-Z_]+$/)?.[0] as keyof typeof jdbcErrors | undefined; return code && jdbcErrors[code] ? message.replace(code, t(jdbcErrors[code])) : /^SQLSTATE_/.test(message) ? `${t("dbJdbcQuery")} (${message.slice(9)})` : message; };
-	const [syncError, setSyncError] = useState(""), [syncIssues, setSyncIssues] = useState<NonNullable<DatabaseResponse["syncIssues"]>>([]);
-	const skippedSources = syncIssues.filter(item => item.category === "unsupported-driver");
-	const sourceWarnings = syncIssues.filter(item => item.category !== "unsupported-driver");
+	const [syncError, setSyncError] = useState("");
+	const [success, setSuccess] = useState("");
+	useEffect(() => { if (!success) return; const timer = setTimeout(() => setSuccess(""), 5000); return () => clearTimeout(timer); }, [success]);
 	const errorLabel = error === databaseErrorMessages.authProtocol ? t("dbAuthProtocolError") : error === databaseErrorMessages.auth ? t("dbAuthError") : error === databaseErrorMessages.network ? t("dbNetworkError") : error === databaseErrorMessages.tls ? t("dbTlsError") : jdbcMessage(error);
 	const foreground = useRef(false), synchronize = useRef<() => Promise<void>>();
 	const [busy, setBusy] = useState(false), [selectedRows, setSelectedRows] = useState<number[]>([]);
@@ -43,12 +47,12 @@ export function DatabaseWorkbench({ cwd, conversationId, onReference, onRevoke }
 	const sourceManaged = !!form?.id && !!connections.find(c => c.id === form.id)?.source;
 	useEffect(() => {
 		life.current = new AbortController(); foreground.current = false;
-		setConnections([]); setGrants([]); setSelected(""); setForm(undefined); setImporting(false); setJdbcEditing(false); setPreview(undefined); setJdbcSourceId(""); setJdbcTargets([]); setSyncIssues([]); setSyncError(""); setError(""); setJdbcChoices(undefined);
+		setConnections([]); setGrants([]); setSelected(""); setForm(undefined); setImporting(false); setJdbcEditing(false); setPreview(undefined); setJdbcSourceId(""); setJdbcTargets([]); setSyncError(""); setError(""); setJdbcChoices(undefined);
 		const sync = startDatabaseSync({
 			request: signal => databaseRequest(cwd, conversationId, { action: "sync" }, signal),
 			canStart: () => !foreground.current,
 			revision: () => sequence.current,
-			receive: r => { setConnections(r.connections ?? []); setJdbcRuntime(r.jdbcRuntime); setGrants(r.grants ?? []); setSyncIssues(r.syncIssues ?? []); setSyncError(""); },
+			receive: r => { setConnections(r.connections ?? []); setJdbcRuntime(r.jdbcRuntime); setGrants(r.grants ?? []); setSyncError(""); },
 			error: e => setSyncError((e as Error).message),
 		});
 		synchronize.current = sync.refresh;
@@ -56,12 +60,12 @@ export function DatabaseWorkbench({ cwd, conversationId, onReference, onRevoke }
 		window.addEventListener("focus", focus);
 		return () => { sync.stop(); window.removeEventListener("focus", focus); life.current.abort(); operation.current?.abort(); sequence.current++; };
 	}, [cwd, conversationId]);
-	useEffect(() => { setDatabases([]); setDatabase(""); setTables([]); setTable(undefined); setGrid(undefined); setSelectedRows([]); setError(""); setTested(false); }, [connection?.id, connection?.version]);
+	useEffect(() => { setDatabases([]); setDatabase(""); setTables([]); setCatalogTruncated(false); setTable(undefined); setGrid(undefined); setSelectedRows([]); setError(""); }, [connection?.id, connection?.version]);
 	useEffect(() => { try { sessionStorage.setItem(`pi-db-sql:${cwd}:${conversationId}`, sql); } catch { /* optional draft cache */ } }, [sql, cwd, conversationId]);
 	async function task(fn: (signal: AbortSignal, current: () => boolean) => Promise<void>) {
 		operation.current?.abort(); const controller = new AbortController(); operation.current = controller;
 		const n = ++sequence.current, current = () => !controller.signal.aborted && !life.current.signal.aborted && n === sequence.current;
-		foreground.current = true; setBusy(true); setError("");
+		foreground.current = true; setBusy(true); setError(""); setSuccess(""); setCatalogFailed(false);
 		try { await fn(controller.signal, current); } catch (e) { if (current()) setError((e as Error).message); }
 		finally { if (current()) { foreground.current = false; setBusy(false); } }
 	}
@@ -70,7 +74,7 @@ export function DatabaseWorkbench({ cwd, conversationId, onReference, onRevoke }
 		return { action: "run", id: c.id, version: c.version, operation, database: db, schema: target?.schema, table: target?.name, offset: start, sql } as const;
 	}
 	function resetOperation() {
-		operation.current?.abort(); sequence.current++; foreground.current = false; setBusy(false); setError(""); setJdbcChoices(undefined);
+		operation.current?.abort(); sequence.current++; foreground.current = false; setBusy(false); setError(""); setSuccess(""); setCatalogFailed(false); setJdbcChoices(undefined);
 	}
 	function configureJdbc(sourcePath: string, sourceId = "", selection?: DatabaseJdbcSelection) {
 		resetOperation(); setForm(undefined); setImporting(true); setKind("datagrip"); setPath(sourcePath); setPreview(undefined);
@@ -84,7 +88,7 @@ export function DatabaseWorkbench({ cwd, conversationId, onReference, onRevoke }
 		return !c.jdbc || c.needsTest === false || window.confirm(`${t("dbJdbcConfirm")}\n${c.jdbc.driverClass}\n${c.jdbc.jarNames.join(", ")}`);
 	}
 	function repairJdbc(c: DatabaseConnection, driver?: DatabaseJdbcDriver) {
-		setJdbcChoices(undefined); setTested(false);
+		setJdbcChoices(undefined);
 		void task(async (signal, current) => {
 			let target = c;
 			if (form?.id === c.id && form.password !== undefined) {
@@ -108,48 +112,39 @@ export function DatabaseWorkbench({ cwd, conversationId, onReference, onRevoke }
 			if (!allowJdbc(updated)) return;
 			const result = await request({ action: "test", connection: updated }, signal);
 			if (!current()) return;
-			setConnections(result.connections ?? []); setJdbcRuntime(result.jdbcRuntime); setTested(true);
+			setConnections(result.connections ?? []); setJdbcRuntime(result.jdbcRuntime); setSuccess(t("dbTestSuccess"));
+			await loadCatalog(updated, signal, current);
+			if (!current()) return;
 			const synced = await request({ action: "sync" }, signal);
-			if (current()) { setConnections(synced.connections ?? []); setSyncIssues(synced.syncIssues ?? []); setSyncError(""); }
+			if (current()) { setConnections(synced.connections ?? []); setSyncError(""); }
 		});
 	}
 
-	function repairSourceJdbc(source: { path: string; id: string }, driver?: DatabaseJdbcDriver) {
-		const existing = connections.find(c => c.source?.path === source.path && c.source.id === source.id);
-		if (existing) { repairJdbc(existing, driver); return; }
-		setJdbcChoices(undefined); setTested(false);
-		void task(async (signal, current) => {
-			const previewed = await request({ action: "preview", kind: "datagrip", path: source.path, jdbcSelection: { mode: "automatic", sourceId: source.id, configDir: driver?.configDir, driverId: driver?.id } }, signal);
-			if (!current()) return;
-			const item = previewed.preview?.items.find(i => i.sourceId === source.id);
-			if (item?.issue === "JDBC_DRIVER_AMBIGUOUS" && previewed.jdbcDrivers?.length) { setJdbcChoices({ source, drivers: previewed.jdbcDrivers }); return; }
-			if (!item || !previewed.preview) throw Error("JDBC_CONFIG_INVALID");
-			if (item.issue) { if (item.issue.startsWith("JDBC_")) { configureJdbc(source.path, source.id); setError(item.issue); return; } throw Error(item.issue); }
-			if (!item.connection.jdbc) throw Error("JDBC_DRIVER_MISSING");
-			const imported = await request({ action: "import", ticket: previewed.preview.ticket, keys: [item.key] }, signal);
-			if (!current()) return;
-			setConnections(imported.connections ?? []); setJdbcRuntime(imported.jdbcRuntime);
-			const updated = imported.connections?.find(c => c.source?.path === source.path && c.source.id === source.id);
-			if (!updated) return;
-			setSelected(updated.id); setForm(undefined); setImporting(false);
-			if (!allowJdbc(updated)) return;
-			const result = await request({ action: "test", connection: updated }, signal);
-			if (!current()) return;
-			setConnections(result.connections ?? []); setTested(true);
-			const synced = await request({ action: "sync" }, signal);
-			if (current()) { setConnections(synced.connections ?? []); setSyncIssues(synced.syncIssues ?? []); setSyncError(""); }
-		});
+	async function requestCatalog(c: DatabaseConnection, op: "databases" | "tables", db: string, signal: AbortSignal, current: () => boolean) {
+		try { return await request(run(c, op, db), signal); }
+		catch (e) { if (current()) { setCatalogFailed(true); setSuccess(""); } throw e; }
 	}
-
+	async function loadCatalog(c: DatabaseConnection, signal: AbortSignal, current: () => boolean) {
+		const r = await requestCatalog(c, "databases", c.db_name, signal, current);
+		if (!current()) return;
+		const names = r.grid?.rows.map(row => String(row[0])) ?? [];
+		setDatabases(names);
+		const db = c.db_name || names[0];
+		if (db && !names.includes(db)) setDatabases([db, ...names]);
+		if (!db) return;
+		setDatabase(db);
+		const result = await requestCatalog(c, "tables", db, signal, current);
+		if (current()) { setTables(result.grid?.rows.map(row => ({ schema: String(row[0]), name: String(row[1]), kind: String(row[2]) })) ?? []); setCatalogTruncated(!!result.grid?.truncated); }
+	}
 	function openConnection(c: DatabaseConnection) {
 		resetOperation();
-		setSelected(c.id); setTested(false); setDatabase(""); setDatabases([]); setTables([]); setTable(undefined); setGrid(undefined); setForm(undefined); setImporting(false);
+		setSelected(c.id); setDatabase(""); setDatabases([]); setTables([]); setCatalogTruncated(false); setTable(undefined); setGrid(undefined); setForm(undefined); setImporting(false);
 		if (c.issue || c.needsTest) return;
-		void task(async (signal, current) => { const r = await request(run(c, "databases", c.db_name), signal); if (current()) setDatabases(r.grid?.rows.map(row => String(row[0])) ?? []); });
+		void task((signal, current) => loadCatalog(c, signal, current));
 	}
 	function openDatabase(db: string) {
-		if (!connection) return; setDatabase(db); setTables([]); setTable(undefined); setGrid(undefined);
-		void task(async (signal, current) => { const r = await request(run(connection, "tables", db), signal); if (current()) setTables(r.grid?.rows.map(row => ({ schema: String(row[0]), name: String(row[1]), kind: String(row[2]) })) ?? []); });
+		if (!connection) return; setDatabase(db); setTables([]); setCatalogTruncated(false); setTable(undefined); setGrid(undefined);
+		void task(async (signal, current) => { const r = await requestCatalog(connection, "tables", db, signal, current); if (current()) { setTables(r.grid?.rows.map(row => ({ schema: String(row[0]), name: String(row[1]), kind: String(row[2]) })) ?? []); setCatalogTruncated(!!r.grid?.truncated); } });
 	}
 	function show(target: Table | undefined, nextTab = tab, start = 0) {
 		if (!connection) return; setTable(target); setTab(nextTab); setOffset(start); setSelectedRows([]); setGrid(undefined);
@@ -182,13 +177,15 @@ export function DatabaseWorkbench({ cwd, conversationId, onReference, onRevoke }
 			setConnections(saved.connections ?? []); setJdbcRuntime(saved.jdbcRuntime);
 			const updated = saved.connections?.find(c => c.source?.path === path && c.source.id === jdbcSourceId);
 			if (!updated) return;
-			setSelected(updated.id); setImporting(false); setTested(false);
+			setSelected(updated.id); setImporting(false);
 			if (!allowJdbc(updated)) return;
 			const result = await request({ action: "test", connection: updated }, signal);
 			if (!current()) return;
-			setConnections(result.connections ?? []); setTested(true);
+			setConnections(result.connections ?? []); setSuccess(t("dbTestSuccess"));
+			await loadCatalog(updated, signal, current);
+			if (!current()) return;
 			const synced = await request({ action: "sync" }, signal);
-			if (current()) { setConnections(synced.connections ?? []); setSyncIssues(synced.syncIssues ?? []); setSyncError(""); }
+			if (current()) { setConnections(synced.connections ?? []); setSyncError(""); }
 		});
 	}
 
@@ -196,7 +193,7 @@ export function DatabaseWorkbench({ cwd, conversationId, onReference, onRevoke }
 	return <section className="database-workbench" aria-label={t("dbTitle")}>
 		<aside className="database-sidebar">
 			<label className="file-search-trigger"><FiSearch /><input aria-label={t("dbSearch")} placeholder={t("dbSearch")} value={search} onChange={e => setSearch(e.target.value)} /></label>
-			<div className="database-actions"><button onClick={() => { resetOperation(); setForm(blank()); setTested(false); setImporting(false); }}><FiPlus />{t("dbNew")}</button><button onClick={() => { resetOperation(); setJdbcEditing(false); setJdbcManual(false); setJdbcSourceId(""); setJdbcDriverId(""); setJdbcDrivers([]); setPreview(undefined); setImporting(true); setForm(undefined); }}>{t("dbImport")}</button><button disabled={busy} aria-label={t("dbRefresh")} onClick={refresh}><FiRefreshCw /></button></div>
+			<div className="database-actions"><button onClick={() => { resetOperation(); setForm(blank()); setImporting(false); }}><FiPlus />{t("dbNew")}</button><button onClick={() => { resetOperation(); setJdbcEditing(false); setJdbcManual(false); setJdbcSourceId(""); setJdbcDriverId(""); setJdbcDrivers([]); setPreview(undefined); setImporting(true); setForm(undefined); }}>{t("dbImport")}</button><button disabled={busy} aria-label={t("dbRefresh")} onClick={refresh}><FiRefreshCw /></button></div>
 			<div className="database-tree">{connections.filter(c => !search || c.name.toLowerCase().includes(search.toLowerCase()) || c.id === selected).map(c => <div key={c.id}>
 				<button className={`database-tree-row${selected === c.id ? " selected" : ""}`} title={`${c.host}:${c.port}`} onClick={() => openConnection(c)}><FiDatabase /><span>{c.name}</span>{c.issue || c.needsTest ? <small>!</small> : null}</button>
 				{selected === c.id && databases.map(db => <div key={db} className="database-indent"><button className={`database-tree-row${database === db ? " selected" : ""}`} onClick={() => openDatabase(db)}><FiDatabase /><span>{db}</span></button>
@@ -207,25 +204,24 @@ export function DatabaseWorkbench({ cwd, conversationId, onReference, onRevoke }
 			<p className="database-hint">{t("dbWorkbenchReadOnly")}</p>
 		</aside>
 		<div className="database-main">
+			{success && <div className="database-success" role="status"><FiCheckCircle aria-hidden="true" />{success}</div>}
 			{syncError && <div role="alert" className="database-error">{t("dbSyncFailed")} · {syncError}<button onClick={refresh}>{t("dbRefresh")}</button></div>}
-			{sourceWarnings.length > 0 && <details className="database-hint database-source-warnings"><summary>{t("dbSyncIssues")} ({sourceWarnings.length})</summary>{sourceWarnings.map((item, i) => <p key={i}>{item.path} · {jdbcMessage(item.issue)}{item.issue.includes("JDBC_") && item.sourceId && <button disabled={busy} onClick={() => repairSourceJdbc({ path: item.path, id: item.sourceId! })}>{t("dbJdbcRepair")}</button>}{item.issue.includes("JDBC_") && <button onClick={() => configureJdbc(item.path, item.sourceId)}>{t("dbJdbcConfigure")}</button>}</p>)}</details>}
-			{skippedSources.length > 0 && <details className="database-hint database-source-skipped"><summary>{t("dbSkippedDrivers", { n: skippedSources.length })}</summary>{skippedSources.map((item, i) => <p key={i}>{item.path} · {jdbcMessage(item.issue)}</p>)}</details>}
-			{error && <div role="alert" className="database-error">{errorLabel}{error === databaseErrorMessages.authProtocol && (form?.id ? connections.find(c => c.id === form.id) : connection)?.source?.kind === "datagrip" && !(formSource ?? connection?.source)?.path.startsWith("upload:") && <button disabled={busy} onClick={() => repairJdbc((form?.id ? connections.find(c => c.id === form.id) : connection)!)}>{t("dbJdbcRepair")}</button>}<button aria-label={t("close")} onClick={() => setError("")}><FiX /></button></div>}
-			{jdbcChoices && <div role="dialog" aria-label={t("dbJdbcChoose")} className="database-hint database-jdbc-choices"><p>{t("dbJdbcChoose")}</p>{jdbcChoices.drivers.map(d => <button disabled={busy} key={JSON.stringify([d.configDir, d.id])} onClick={() => jdbcChoices.connection ? repairJdbc(jdbcChoices.connection, d) : repairSourceJdbc(jdbcChoices.source!, d)}>{d.name} · {d.driverClass} · {d.configDir}</button>)}<button onClick={() => setJdbcChoices(undefined)}>{t("cancel")}</button></div>}
+			{error && <div role="alert" className="database-error"><span>{catalogFailed && <strong>{t("dbCatalogFailed")} </strong>}{errorLabel}</span>{catalogFailed && connection && <button disabled={busy} onClick={() => database ? openDatabase(database) : openConnection(connection)}>{t("dbCatalogRetry")}</button>}{error === databaseErrorMessages.authProtocol && (form?.id ? connections.find(c => c.id === form.id) : connection)?.source?.kind === "datagrip" && !(formSource ?? connection?.source)?.path.startsWith("upload:") && <button disabled={busy} onClick={() => repairJdbc((form?.id ? connections.find(c => c.id === form.id) : connection)!)}>{t("dbJdbcRepair")}</button>}<button aria-label={t("close")} onClick={() => setError("")}><FiX /></button></div>}
+			{jdbcChoices && <div role="dialog" aria-label={t("dbJdbcChoose")} className="database-hint database-jdbc-choices"><p>{t("dbJdbcChoose")}</p>{jdbcChoices.drivers.map(d => <button disabled={busy} key={JSON.stringify([d.configDir, d.id])} onClick={() => repairJdbc(jdbcChoices.connection, d)}>{d.name} · {d.driverClass} · {d.configDir}</button>)}<button onClick={() => setJdbcChoices(undefined)}>{t("cancel")}</button></div>}
 			{busy && <div className="database-busy">{t("loading")}<button onClick={() => { if (job.current) void databaseRequest(cwd, conversationId, { action: "cancel", target: job.current }).catch(() => {}); operation.current?.abort(); foreground.current = false; setBusy(false); }}>{t("cancel")}</button></div>}
 			{form ? <form className="database-form" onSubmit={e => { e.preventDefault(); void task(async (signal, current) => { const r = await request({ action: "save", connection: form }, signal); if (current()) { setConnections(r.connections ?? []); setForm(undefined); } }); }}>
 				<h3>{form.id ? t("dbEdit") : t("dbNew")}</h3>
 				{sourceManaged && <p className="database-hint">{t("dbSourceManaged")}</p>}
 				{formSource?.kind === "datagrip" && !formSource.path.startsWith("upload:") && <button type="button" onClick={() => configureJdbc(formSource.path, formSource.id, formSource.jdbcSelection)}>{t("dbJdbcConfigure")}</button>}
-				<label>{t("dbName")}<input required disabled={sourceManaged} value={form.name} onChange={e => { setForm({ ...form, name: e.target.value }); setTested(false); }} /></label>
-				<label>driver<select disabled={sourceManaged} value={form.driver} onChange={e => { const driver = e.target.value as DatabaseConfig["driver"]; setForm({ ...form, driver, port: driver === "mysql" ? 3306 : 5432 }); setTested(false); }}><option value="mysql">MySQL / MariaDB</option><option value="postgres">PostgreSQL</option>{form.driver === "gaussdb" && <option value="gaussdb">GaussDB / PostgreSQL (JDBC)</option>}</select></label>
-				{(["host", "port", "user", "db_name"] as const).map(field => <label key={field}>{field}<input disabled={sourceManaged} required={field === "host" || field === "port"} type={field === "port" ? "number" : "text"} value={form[field]} onChange={e => { setForm({ ...form, [field]: field === "port" ? Number(e.target.value) : e.target.value }); setTested(false); }} /></label>)}
-				<label>password<input type="password" autoComplete="new-password" value={form.password ?? ""} placeholder={form.id ? t("dbKeepPassword") : ""} onChange={e => { setForm({ ...form, password: e.target.value || (form.id ? undefined : "") }); setTested(false); }} /></label>
-				<label className="database-checkbox"><input type="checkbox" disabled={sourceManaged} checked={form.tls?.enabled ?? false} onChange={e => { setForm({ ...form, tls: { ...form.tls, enabled: e.target.checked } }); setTested(false); }} />TLS</label>
+				<label>{t("dbName")}<input required disabled={sourceManaged} value={form.name} onChange={e => { setForm({ ...form, name: e.target.value }); }} /></label>
+				<label>driver<select disabled={sourceManaged} value={form.driver} onChange={e => { const driver = e.target.value as DatabaseConfig["driver"]; setForm({ ...form, driver, port: driver === "mysql" ? 3306 : 5432 }); }}><option value="mysql">MySQL / MariaDB</option><option value="postgres">PostgreSQL</option>{form.driver === "gaussdb" && <option value="gaussdb">GaussDB / PostgreSQL (JDBC)</option>}</select></label>
+				{(["host", "port", "user", "db_name"] as const).map(field => <label key={field}>{field}<input disabled={sourceManaged} required={field === "host" || field === "port"} type={field === "port" ? "number" : "text"} value={form[field]} onChange={e => { setForm({ ...form, [field]: field === "port" ? Number(e.target.value) : e.target.value }); }} /></label>)}
+				<label>password<input type="password" autoComplete="new-password" value={form.password ?? ""} placeholder={form.id ? t("dbKeepPassword") : ""} onChange={e => { setForm({ ...form, password: e.target.value || (form.id ? undefined : "") }); }} /></label>
+				<label className="database-checkbox"><input type="checkbox" disabled={sourceManaged} checked={form.tls?.enabled ?? false} onChange={e => { setForm({ ...form, tls: { ...form.tls, enabled: e.target.checked } }); }} />TLS</label>
 				{form.driver === "gaussdb" && jdbcRuntime === "missing" && <p className="database-hint">{t("dbJdbcJavaMissing")}</p>}
 				{form.driver === "gaussdb" && <p className="database-hint">{t("dbJdbcSourceManaged")}</p>}
-				{form.tls?.enabled && form.driver !== "gaussdb" && <label>{t("dbCA")}<textarea disabled={sourceManaged} value={form.tls.ca ?? ""} onChange={e => { setForm({ ...form, tls: { enabled: true, ca: e.target.value || undefined } }); setTested(false); }} /></label>}
-				<div className="database-actions"><button type="button" disabled={busy} onClick={() => void task(async (signal, current) => { if (!allowJdbc({ ...form, needsTest: connections.find(c => c.id === form.id)?.needsTest })) return; const r = await request({ action: "test", connection: form }, signal); if (current()) { setTested(true); setConnections(r.connections ?? []); } })}>{tested ? t("dbTestSuccess") : t("dbTest")}</button><button disabled={busy} type="submit">{t("save")}</button><button type="button" onClick={() => setForm(undefined)}>{t("cancel")}</button></div>
+				{form.tls?.enabled && form.driver !== "gaussdb" && <label>{t("dbCA")}<textarea disabled={sourceManaged} value={form.tls.ca ?? ""} onChange={e => { setForm({ ...form, tls: { enabled: true, ca: e.target.value || undefined } }); }} /></label>}
+				<div className="database-actions"><button type="button" disabled={busy} onClick={() => void task(async (signal, current) => { if (!allowJdbc({ ...form, needsTest: connections.find(c => c.id === form.id)?.needsTest })) return; const r = await request({ action: "test", connection: form }, signal); if (current()) { setSuccess(t("dbTestSuccess")); setConnections(r.connections ?? []); } })}>{t("dbTest")}</button><button disabled={busy} type="submit">{t("save")}</button><button type="button" onClick={() => setForm(undefined)}>{t("cancel")}</button></div>
 			</form> : importing ? <div className="database-import"><h3>{t(jdbcEditing ? "dbJdbcConfigure" : "dbImport")}</h3>{!jdbcEditing && <><p className="database-hint">{t("dbImportHint")}</p>
 				<div className="database-actions"><select aria-label={t("dbSource")} value={kind} onChange={e => { setKind(e.target.value as typeof kind); setPreview(undefined); }}><option value="dbeaver">DBeaver</option><option value="datagrip">DataGrip</option></select><button disabled={busy} onClick={() => void task(async (signal, current) => { const r = await request({ action: "scan" }, signal); if (current()) setSources(r.sources ?? []); })}>{t("dbScan")}</button><label className="database-upload">{t("dbUpload")}<input type="file" accept=".json,.xml" onChange={async e => { const f = e.target.files?.[0]; if (f) { if (f.size > 2 * 1024 * 1024) { setError(t("dbFileTooLarge")); return; } previewSource(await f.text(), f.name); } }} /></label></div>
 				{sources.map(s => <button className="database-source" key={s.path} onClick={() => { setPath(s.path); setKind(s.kind); setPreview(undefined); }}>{s.kind} · {s.path}</button>)}
@@ -234,21 +230,24 @@ export function DatabaseWorkbench({ cwd, conversationId, onReference, onRevoke }
 				{kind === "datagrip" && jdbcRuntime === "missing" && <p className="database-hint">{t("dbJdbcJavaMissing")}</p>}
 				{kind === "datagrip" && <details key={jdbcManual ? "manual" : "auto"} open={jdbcManual || undefined} className="database-hint database-jdbc-mapping"><summary>{t("dbJdbcMapping")}</summary>{jdbcManual && <><label>{t("dbJdbcClass")}<input aria-label={t("dbJdbcClass")} value={jdbcClass} onChange={e => { setJdbcClass(e.target.value); setPreview(undefined); }} /></label><label>{t("dbJdbcPaths")}<textarea aria-label={t("dbJdbcPaths")} rows={4} spellCheck={false} value={jdbcPaths} onChange={e => { setJdbcPaths(e.target.value); setPreview(undefined); }} /></label><p>{t("dbJdbcManualHint")}</p></>}<button disabled={busy || !path} onClick={() => previewSource(undefined, path, true)}>{t("dbJdbcReadDataGrip")}</button>{jdbcManual && jdbcEditing && <button disabled={busy || !jdbcSourceId || !jdbcClass.trim() || !jdbcPaths.trim()} onClick={saveManualJdbc}>{t("dbJdbcSaveTest")}</button>}<details open={!jdbcEditing || undefined}><summary>{t("dbJdbcOptions")}</summary><label>{t("dbJdbcConfigDir")}<input value={jdbcConfigDir} onChange={e => { setJdbcConfigDir(e.target.value); setJdbcDriverId(""); setJdbcDrivers([]); setPreview(undefined); }} /></label><button disabled={busy} onClick={() => void task(async (signal, current) => { const r = await request({ action: "jdbc_drivers", configDir: jdbcConfigDir || undefined }, signal); if (current()) { setJdbcDrivers(r.jdbcDrivers ?? []); setJdbcRuntime(r.jdbcRuntime); } })}>{t("dbJdbcFindDrivers")}</button><label>{t("dbJdbcDriver")}<select aria-label={t("dbJdbcDriver")} disabled={jdbcManual} value={jdbcDriverId ? JSON.stringify([jdbcConfigDir, jdbcDriverId]) : ""} onChange={e => { const [dir, id] = e.target.value ? JSON.parse(e.target.value) : [jdbcConfigDir, ""]; setJdbcConfigDir(dir); setJdbcDriverId(id); setPreview(undefined); }}><option value="">{t("dbJdbcAutomatic")}</option>{jdbcDrivers.map(d => <option key={JSON.stringify([d.configDir, d.id])} value={JSON.stringify([d.configDir, d.id])}>{d.name} · {d.driverClass} · {d.configDir}</option>)}</select></label><label>{t("dbJdbcTarget")}<select aria-label={t("dbJdbcTarget")} value={jdbcSourceId} onChange={e => { setJdbcSourceId(e.target.value); setPreview(undefined); }}><option value="">{t("dbJdbcSelectTarget")}</option>{jdbcTargets.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label><label className="database-checkbox"><input type="checkbox" checked={jdbcManual} onChange={e => { setJdbcManual(e.target.checked); setPreview(undefined); }} />{t("dbJdbcManual")}</label><p>{t("dbJdbcMappingHint")}</p></details></details>}
 				{jdbcEditing && jdbcManual && preview?.items.filter(i => i.sourceId === jdbcSourceId && i.issue).map(i => <p key={i.key} className="database-error">{jdbcMessage(i.issue!)}</p>)}
-				{preview && (!jdbcEditing || !jdbcManual) && <><p>{preview.source}</p><div className="database-import-list">{preview.items.map(i => <label key={i.key}><input type="checkbox" disabled={!!i.issue && i.change === "new"} checked={chosen.includes(i.key)} onChange={e => setChosen(v => e.target.checked ? [...v, i.key] : v.filter(k => k !== i.key))} /><span><strong>{i.connection.name}</strong> · {t(({ new: "dbAdded", updated: "dbUpdated", unchanged: "dbUnchanged", missing: "dbMissing" } as const)[i.change])}<small>{i.connection.driver} · {i.connection.host}:{i.connection.port} · {i.connection.user} · {i.connection.db_name}</small>{!i.hasPassword && <small>{t("dbPasswordMissing")}</small>}{i.issue && <small className="database-error">{jdbcMessage(i.issue)}</small>}</span></label>)}</div><button disabled={busy || !chosen.length} onClick={() => void task(async (signal, current) => { const r = await request({ action: "import", ticket: preview.ticket, keys: chosen }, signal); if (current()) { setConnections(r.connections ?? []); setPreview(undefined); setImporting(false); const synced = await request({ action: "sync" }, signal); if (current()) { setConnections(synced.connections ?? []); setSyncIssues(synced.syncIssues ?? []); setSyncError(""); } } })}>{t("dbApplyImport")}</button></>}
+				{preview && (!jdbcEditing || !jdbcManual) && <><p>{preview.source}</p><div className="database-import-list">{preview.items.map(i => <label key={i.key}><input type="checkbox" disabled={!!i.issue && i.change === "new"} checked={chosen.includes(i.key)} onChange={e => setChosen(v => e.target.checked ? [...v, i.key] : v.filter(k => k !== i.key))} /><span><strong>{i.connection.name}</strong> · {t(({ new: "dbAdded", updated: "dbUpdated", unchanged: "dbUnchanged", missing: "dbMissing" } as const)[i.change])}<small>{i.connection.driver} · {i.connection.host}:{i.connection.port} · {i.connection.user} · {i.connection.db_name}</small>{!i.hasPassword && <small>{t("dbPasswordMissing")}</small>}{i.issue && <small className="database-error">{jdbcMessage(i.issue)}</small>}</span></label>)}</div><button disabled={busy || !chosen.length} onClick={() => void task(async (signal, current) => { const r = await request({ action: "import", ticket: preview.ticket, keys: chosen }, signal); if (current()) { setConnections(r.connections ?? []); setPreview(undefined); setImporting(false); const synced = await request({ action: "sync" }, signal); if (current()) { setConnections(synced.connections ?? []); setSyncError(""); } } })}>{t("dbApplyImport")}</button></>}
 			</div> : connection ? <>
 				<header className="database-heading"><div><strong>{connection.name}</strong><small>{connection.jdbc ? "GaussDB / PostgreSQL (JDBC)" : connection.driver} · {connection.host}:{connection.port}{database ? ` / ${database}` : ""}{table ? ` / ${table.schema}.${table.name}` : ""}</small></div><button onClick={() => ask()}><FiLink />{t("dbAsk")}</button></header>
-				<div className="database-actions"><button onClick={() => { resetOperation(); setForm({ ...connection, password: undefined }); setTested(false); }}>{t("dbEdit")}</button><button disabled={connection.driver === "gaussdb"} onClick={() => { resetOperation(); const { id, version, hasPassword, source, issue, needsTest, ...copy } = connection; setForm({ ...copy, name: `${copy.name} ${t("dbCopy")}`, password: "" }); setTested(false); }}>{t("dbCopy")}</button><button disabled={busy} onClick={() => { if (connection.source?.path.startsWith("upload:")) { setPath(connection.source.path.slice(7)); setKind(connection.source.kind); setImporting(true); } else refresh(); }}>{t("dbSync")}</button><button disabled={busy} onClick={() => void task(async (signal, current) => { const r = await request({ action: "delete", id: connection.id, version: connection.version }, signal); if (current()) { setConnections(r.connections ?? []); setSelected(""); } })}>{t("dbDelete")}</button></div>
+				<div className="database-actions"><button onClick={() => { resetOperation(); setForm({ ...connection, password: undefined }); }}>{t("dbEdit")}</button><button disabled={busy || !!connection.issue} onClick={() => void task(async (signal, current) => { if (!allowJdbc(connection)) return; const r = await request({ action: "test", connection }, signal); if (current()) { setConnections(r.connections ?? []); setJdbcRuntime(r.jdbcRuntime); setSuccess(t("dbTestSuccess")); await loadCatalog(r.connections?.find(c => c.id === connection.id) ?? connection, signal, current); } })}>{t("dbTest")}</button>
+				<details className="database-connection-options" key={connection.id}><summary>{t("dbConnectionOptions")}</summary><div className="database-options-body"><div className="database-actions"><button disabled={connection.driver === "gaussdb"} onClick={() => { resetOperation(); const { id, version, hasPassword, source, issue, needsTest, ...copy } = connection; setForm({ ...copy, name: `${copy.name} ${t("dbCopy")}`, password: "" }); }}>{t("dbCopy")}</button><button disabled={busy} onClick={() => { if (connection.source?.path.startsWith("upload:")) { setPath(connection.source.path.slice(7)); setKind(connection.source.kind); setImporting(true); } else refresh(); }}>{t("dbSync")}</button><button disabled={busy} onClick={() => void task(async (signal, current) => { const r = await request({ action: "delete", id: connection.id, version: connection.version }, signal); if (current()) { setConnections(r.connections ?? []); setSelected(""); } })}>{t("dbDelete")}</button></div>
 				{connection.source?.kind === "datagrip" && !connection.source.path.startsWith("upload:") && <button onClick={() => configureJdbc(connection.source!.path, connection.source!.id, connection.source!.jdbcSelection)}>{t("dbJdbcConfigure")}</button>}
 				{connection.source?.kind === "datagrip" && !connection.source.path.startsWith("upload:") && <button disabled={busy} onClick={() => repairJdbc(connection)}>{t("dbJdbcRepair")}</button>}
 				{connection.jdbc && <button disabled={busy} onClick={() => void task(async (signal, current) => { const r = await request({ action: "jdbc_configure", id: connection.id, version: connection.version, mode: "disabled" }, signal); if (current()) setConnections(r.connections ?? []); })}>{t("dbJdbcRemove")}</button>}
+				{connection.jdbc && <div className="database-hint"><strong>GaussDB / PostgreSQL (JDBC)</strong><p>{t(!connection.source?.jdbcSelection?.jarPaths ? "dbJdbcAutoMatched" : "dbJdbcConfigured")}</p><p>{connection.jdbc.driverClass} · {connection.jdbc.jarNames.join(", ")}</p>{jdbcRuntime && <p>{t(jdbcRuntime === "detected" ? "dbJdbcJavaDetected" : "dbJdbcJavaMissing")}</p>}</div>}
+				<p className="database-hint">{t("dbGrantHint")}</p></div></details></div>
 				{connection.issue && <p className="database-error">{jdbcMessage(connection.issue)}</p>}
-				{connection.jdbc && <div className="database-hint"><strong>GaussDB / PostgreSQL (JDBC)</strong><p>{t(!connection.source?.jdbcSelection?.jarPaths ? "dbJdbcAutoMatched" : "dbJdbcConfigured")}</p><p>{connection.jdbc.driverClass} · {connection.jdbc.jarNames.join(", ")}</p>{jdbcRuntime && <p>{t(jdbcRuntime === "detected" ? "dbJdbcJavaDetected" : "dbJdbcJavaMissing")}</p>}<button disabled={busy || !!connection.issue} onClick={() => void task(async (signal, current) => { if (!allowJdbc(connection)) return; const r = await request({ action: "test", connection }, signal); if (current()) { setConnections(r.connections ?? []); setJdbcRuntime(r.jdbcRuntime); setTested(true); } })}>{tested && !connection.needsTest ? t("dbTestSuccess") : t("dbTest")}</button></div>}
 				{connection.needsTest && <p className="database-hint">{t("dbRetest")}</p>}
 				{!connection.hasPassword && <p className="database-hint">{t("dbPasswordMissing")}</p>}
-				<p className="database-hint">{t("dbGrantHint")}{grants.includes(connection.id) && <button onClick={() => void task(async (_signal, current) => { await onRevoke(connection.id); if (current()) setGrants(g => g.filter(id => id !== connection.id)); })}>{t("dbRevoke")}</button>}</p>
-				<nav className="database-tabs">{(["page", "describe", "query"] as const).map(value => <button key={value} aria-pressed={tab === value} onClick={() => value === "query" ? (setTab(value), setGrid(undefined), setSelectedRows([])) : show(table, value)}>{t(({ page: "dbData", describe: "dbStructure", query: "dbSql" } as const)[value])}</button>)}</nav>
-				{tab === "query" && <div className="database-sql"><textarea aria-label={t("dbSql")} spellCheck={false} value={sql} onChange={e => setSql(e.target.value)} onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); show(table, "query"); } }} /><button disabled={busy} onClick={() => show(table, "query")}>{t("dbRun")}</button></div>}
-				{grid ? <><div className="database-result-meta"><span>{grid.rows.length} {t("dbRowCount")} · {grid.elapsedMs} ms{grid.truncated ? ` · ${t("dbTruncated")}` : ""}</span><button disabled={!selectedRows.length} onClick={() => ask(true)}>{t("dbAskRows")} ({selectedRows.length})</button></div><div className="database-grid"><table><thead><tr><th aria-label={t("dbSelectRows")} />{grid.columns.map((c, i) => <th key={i}>{c}</th>)}</tr></thead><tbody>{grid.rows.map((row, index) => <tr key={index}><td><input type="checkbox" aria-label={`${t("dbSelectRows")} ${index + 1}`} checked={selectedRows.includes(index)} onChange={e => setSelectedRows(rows => e.target.checked ? [...rows, index] : rows.filter(i => i !== index))} /></td>{row.map((v, i) => <td key={i}>{v === null ? <span className="database-null">NULL</span> : String(v)}</td>)}</tr>)}</tbody></table></div>{tab === "page" && <div className="database-actions"><button disabled={busy || offset === 0} onClick={() => show(table, "page", Math.max(0, offset - 50))}>{t("dbPrevious")}</button><span>{offset + 1}–{offset + grid.rows.length}</span><button disabled={busy || !grid.truncated} onClick={() => show(table, "page", offset + 50)}>{t("dbNext")}</button></div>}</> : <p className="database-empty">{t("dbSelectTable")}</p>}
+				{grants.includes(connection.id) && <p className="database-hint"><button onClick={() => void task(async (_signal, current) => { await onRevoke(connection.id); if (current()) setGrants(g => g.filter(id => id !== connection.id)); })}>{t("dbRevoke")}</button></p>}
+				{catalogTruncated && <p className="database-hint">{t("dbMetadataTruncated")}</p>}
+				<nav className="database-tabs">{(["page", "describe", "query"] as const).map(value => <button key={value} disabled={busy} aria-pressed={tab === value} onClick={() => { if (catalogFailed && error) { setTab(value); return; } resetOperation(); if (value === "query") { setTab(value); setGrid(undefined); setSelectedRows([]); } else show(table, value); }}>{t(({ page: "dbData", describe: "dbStructure", query: "dbSql" } as const)[value])}</button>)}</nav>
+				{tab === "query" && <div className="database-sql"><DatabaseSqlEditor key={`${connection.id}:${connection.version}:${database}`} value={sql} onChange={setSql} onRun={() => { if (!busy && !connection.needsTest && !connection.issue) show(table, "query"); }} tables={tables} mysql={connection.driver === "mysql"} /><div className="database-query-actions"><small id="database-sql-help">{t(tables.length ? "dbSqlHelp" : "dbSqlNoMetadata")}</small><button className="database-primary" disabled={busy || !!connection.needsTest || !!connection.issue} onClick={() => show(table, "query")}>{t("dbRun")}</button></div></div>}
+				{grid ? <><div className="database-result-meta"><span>{grid.rows.length} {t("dbRowCount")} · {grid.elapsedMs} ms{grid.truncated ? ` · ${t("dbTruncated")}` : ""}</span><button disabled={!selectedRows.length} onClick={() => ask(true)}>{t("dbAskRows")} ({selectedRows.length})</button></div><div className="database-grid"><table><thead><tr><th scope="col">#</th>{grid.columns.map((c, i) => <th scope="col" key={i}>{c}</th>)}</tr></thead><tbody>{!grid.rows.length && <tr><td colSpan={grid.columns.length + 1} className="database-empty">{t("dbResultEmpty")}</td></tr>}{grid.rows.map((row, index) => <tr key={index} className={selectedRows.includes(index) ? "selected" : undefined}><td><span className="database-row-number">{(tab === "page" ? offset : 0) + index + 1}</span><input type="checkbox" aria-label={`${t("dbSelectRows")} ${index + 1}`} checked={selectedRows.includes(index)} onChange={e => setSelectedRows(rows => e.target.checked ? [...rows, index] : rows.filter(i => i !== index))} /></td>{row.map((v, i) => <td key={i}>{v === null ? <span className="database-null">NULL</span> : String(v)}</td>)}</tr>)}</tbody></table></div>{tab === "page" && <div className="database-actions"><button disabled={busy || offset === 0} onClick={() => show(table, "page", Math.max(0, offset - 50))}>{t("dbPrevious")}</button><span>{grid.rows.length ? offset + 1 : 0}–{offset + grid.rows.length}</span><button disabled={busy || !grid.truncated} onClick={() => show(table, "page", offset + 50)}>{t("dbNext")}</button></div>}</> : !busy && tables.length > 0 && tab !== "query" ? <div className="database-catalog"><h3>{t("dbTables")} <small>{tables.length}</small></h3>{tables.filter(item => `${item.schema}.${item.name}`.toLowerCase().includes(search.toLowerCase())).map(item => <article key={JSON.stringify([item.schema, item.name])}><FiTable aria-hidden="true" /><div><strong>{item.name}</strong><small>{item.schema} · {item.kind}</small></div><div className="database-catalog-actions"><button onClick={() => show(item, "page")}>{t("dbData")}</button><button onClick={() => show(item, "describe")}>{t("dbStructure")}</button><button onClick={() => { const q = (name: string) => quoteDatabaseName(name, connection.driver === "mysql"); setSql(`SELECT * FROM ${q(item.schema)}.${q(item.name)} LIMIT 50`); setTable(item); setTab("query"); }}>{t("dbSql")}</button></div></article>)}</div> : !busy && <p className="database-empty">{t(tab === "query" ? "dbSqlReady" : "dbSelectTable")}</p>}
 			</> : <div className="database-empty"><FiDatabase /><h3>{t("dbTitle")}</h3><p>{t("dbEmpty")}</p></div>}
 		</div>
 	</section>;

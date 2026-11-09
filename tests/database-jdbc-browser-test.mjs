@@ -46,13 +46,15 @@ try {
 			...(body.action === 'jdbc_drivers' ? { jdbcDrivers: [{ id: 'gauss', name: 'GaussDB', driverClass: 'fixture.GaussDriver', configDir: '/fixture/DataGrip2026.1' }] } : {}),
 			...(body.action === 'preview' ? { preview: { ticket: 'ticket', source: body.path, items: [{ key: 'a', sourceId: 'a', connection: connection(), hasPassword: true, change: 'updated', ...(body.jdbcSelection?.driverId || body.jdbcSelection?.jarPaths ? {} : { issue: readFails ? 'JDBC_LIBRARY_UNSUPPORTED' : 'JDBC_DRIVER_AMBIGUOUS' }) }] } } : {}),
 			...(body.action === 'preview' && body.path === '/new/dataSources.xml' ? { jdbcDrivers: [{ id: 'gauss', name: 'GaussDB', driverClass: 'fixture.GaussDriver', configDir: '/fixture/DataGrip2026.1' }], preview: { ticket: 'new-ticket', source: body.path, items: [{ key: 'new', sourceId: 'new', connection: sourceConnection(), hasPassword: true, change: 'new', ...(body.jdbcSelection.driverId ? {} : { issue: 'JDBC_DRIVER_AMBIGUOUS' }) }] } } : {}),
-			...(body.action === 'run' ? { grid: { columns: ['database'], rows: [['fixture']], elapsedMs: 0, truncated: false } } : {}),
+			...(body.action === 'run' ? { grid: { columns: body.operation === 'tables' ? ['schema', 'name', 'kind'] : ['database'], rows: body.operation === 'tables' ? [['public', 'accounts', 'BASE TABLE']] : [['fixture']], elapsedMs: 0, truncated: false } } : {}),
 		} });
 	});
 	await page.goto(`http://127.0.0.1:${port}`);
 	await page.locator('.conn-dot.ok').first().waitFor({ state: 'attached' });
 	await page.getByRole('button', { name: '数据库', exact: true }).click();
 	await page.locator('.database-tree-row', { hasText: 'Gauss fixture' }).click();
+	assert.equal(await page.getByText('fixture.GaussDriver · gauss driver.jar', { exact: true }).isVisible(), false);
+	await page.getByText('更多连接选项', { exact: true }).click();
 	await page.getByText('fixture.GaussDriver · gauss driver.jar', { exact: true }).waitFor();
 	assert.equal(runs, 0, 'untested connections must not automatically query');
 	page.once('dialog', dialog => dialog.dismiss());
@@ -60,9 +62,9 @@ try {
 	assert.equal(tests, 0, 'declining local driver execution must not send a test');
 	page.on('dialog', dialog => dialog.accept());
 	await page.getByRole('button', { name: '测试连接', exact: true }).click();
-	await page.getByRole('button', { name: '连接成功', exact: true }).waitFor();
+	await page.locator('.database-success', { hasText: '连接成功' }).waitFor();
 	await page.locator('.database-tree-row', { hasText: 'Gauss fixture' }).click();
-	await page.locator('.database-indent .database-tree-row').waitFor(); assert.equal(runs, 1);
+	await page.locator('.database-indent .database-tree-row').first().waitFor(); assert(runs >= 2);
 	failRun = true;
 	await page.locator('.database-tree-row', { hasText: 'Gauss fixture' }).click();
 	await page.locator('.database-main > [role=alert]').waitFor();
@@ -72,16 +74,12 @@ try {
 	await page.locator('.database-main > [role=alert]').waitFor();
 	await page.locator('.database-main > [role=alert]').getByRole('button', { name: '自动配置 JDBC 驱动并重试' }).click();
 	await page.getByRole('dialog', { name: '找到多个本地驱动，请选择该连接使用的驱动' }).getByRole('button', { name: 'GaussDB · fixture.GaussDriver · /fixture/DataGrip2026.1', exact: true }).click();
-	await page.getByRole('button', { name: '连接成功', exact: true }).waitFor();
+	await page.locator('.database-success', { hasText: '连接成功' }).waitFor();
 	assert.equal(repairs, 2); assert.equal(choices[1].driverId, 'gauss');
 	assert.equal(await page.locator('.database-main > [role=alert]').count(), 0);
-	await page.locator('.database-source-warnings summary').click();
-	await page.locator('.database-source-warnings').getByRole('button', { name: '自动配置 JDBC 驱动并重试' }).click();
-	await page.getByRole('dialog', { name: '找到多个本地驱动，请选择该连接使用的驱动' }).getByRole('button', { name: 'GaussDB · fixture.GaussDriver · /fixture/DataGrip2026.1', exact: true }).click();
-	await page.getByRole('button', { name: '连接成功', exact: true }).waitFor();
-	assert(sourceImported, 'repair must import the exact new source');
-	await page.locator('.database-source-warnings').waitFor({ state: 'detached' });
+	assert.equal(await page.locator('.database-source-warnings').count(), 0);
 	await page.locator('.database-tree-row', { hasText: 'Gauss fixture' }).click();
+	await page.getByText('更多连接选项', { exact: true }).click();
 	await page.getByRole('button', { name: '配置 JDBC 驱动', exact: true }).click();
 	assert(await page.getByLabel('本地 jar 完整路径（每行一个）', { exact: true }).isVisible(), 'manual fields are the default configuration entry');
 	assert.equal(await page.getByLabel('JDBC Driver 类名', { exact: true }).inputValue(), 'fixture.GaussDriver');
@@ -98,9 +96,11 @@ try {
 	await page.screenshot({ path: 'tests/scratch/database-jdbc-manual-narrow.png' });
 	await page.setViewportSize({ width: 1440, height: 900 });
 	await page.getByRole('button', { name: '保存并测试连接', exact: true }).click();
-	await page.getByRole('button', { name: '连接成功', exact: true }).waitFor();
+	await page.locator('.database-success', { hasText: '连接成功' }).waitFor();
 	assert.deepEqual(previews.at(-1).jdbcSelection.jarPaths, ['D:\\drivers\\gsjdbc4.jar']);
 	readFails = false; repairFails = true;
+	await page.locator('.database-busy').waitFor({ state: 'detached' });
+	await page.getByText('更多连接选项', { exact: true }).click();
 	await page.getByRole('button', { name: '自动配置 JDBC 驱动并重试', exact: true }).click();
 	await page.locator('.database-main > [role=alert]').waitFor();
 	assert(await page.getByLabel('本地 jar 完整路径（每行一个）', { exact: true }).isVisible(), 'failed automatic repair opens the manual form');
@@ -144,6 +144,7 @@ try {
 	await page.locator('.conn-dot.ok').first().waitFor({ state: 'attached' });
 	await page.getByRole('button', { name: 'Databases', exact: true }).click();
 	await page.locator('.database-tree-row', { hasText: 'Gauss fixture' }).click();
+	await page.getByText('More connection options', { exact: true }).click();
 	await page.getByText('Local Java detected; a connection test will verify driver compatibility', { exact: true }).waitFor();
 	await page.evaluate(() => { document.documentElement.dataset.theme = 'graphite'; document.documentElement.dataset.appearance = 'dark'; });
 	if (await page.locator('.wiki-agent-header button').isVisible()) await page.locator('.wiki-agent-header button').click();

@@ -29,6 +29,8 @@ public class GaussDriver implements Driver {
 					if (!begun[0]) throw new SQLException("transaction missing");
 					if (sql.equals("SHOW transaction_read_only")) return rows(new String[]{"transaction_read_only"}, new int[]{Types.VARCHAR}, new String[][]{{url.contains("writable") ? "off" : "on"}});
 					if (sql.contains("hang")) { while (!cancel[0]) Thread.sleep(10); throw new SQLException("cancelled", "57014"); }
+					if (sql.contains("pg_matviews") && !url.contains("modern")) throw new SQLException("relation PG_MATVIEWS does not exist", "42P01");
+					if (sql.contains("information_schema.tables")) return rows(new String[]{"schema", "name", "kind"}, new int[]{Types.VARCHAR, Types.VARCHAR, Types.VARCHAR}, new String[][]{{"CORE", "orders", "BASE TABLE"}});
 					if (sql.contains("badquery")) throw new SQLException("secret SQL", "42601");
 					if (sql.contains("many")) { String[][] values = new String[1001][1]; for (int i = 0; i < values.length; i++) values[i][0] = String.valueOf(i); return rows(new String[]{"n"}, new int[]{Types.BIGINT}, values); }
 					if (sql.contains("longtext")) { char[] chars = new char[4500]; Arrays.fill(chars, '文'); return rows(new String[]{"text"}, new int[]{Types.VARCHAR}, new String[][]{{new String(chars)}}); }

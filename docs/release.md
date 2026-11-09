@@ -1,5 +1,9 @@
 # 发布流程
 
+## 1.20.0：数据库工作台与旧版 GaussDB 目录兼容
+
+修复 #161、#162、#163：连接成功居中提示、精简连接操作、SQL Schema／表名补全与表目录展示；目录查询移除 pg_matviews 依赖，加载失败提供明确错误和重试。仅发布 GitHub 三平台桌面 Release，同提交 CI、打包及安装升级验证通过后公开。说明见 `.github/release-notes/v1.20.0.md`。
+
 ## 1.19.3：本地 JDBC 配置与 DataGrip 解析修复
 
 修复 #160：支持 driver-class 属性、本地 library 与 artifact 元数据并存；配置入口默认展示本地 jar 与类名，支持保存并测试以及自动读取失败后手动修复。仅发布 GitHub 桌面 Release，同提交 CI、三平台打包及安装升级验证通过后公开。说明见 `.github/release-notes/v1.19.3.md`。

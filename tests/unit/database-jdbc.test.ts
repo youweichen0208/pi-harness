@@ -204,3 +204,10 @@ it("uses explicit local libraries alongside artifact metadata without resolving 
 	writeFileSync(definitions, original.replace(/<library>.*?<\/library>/, '<artifact id="PostgreSQL" version="42.7.3"/>'));
 	expect(f.item().issue).toBe("JDBC_LIBRARY_UNSUPPORTED");
 });
+
+it("loads a PG 9.2-derived table catalog through the real JDBC bridge (#163)", async () => {
+	const item = fixture().item();
+	const result = await executeQuery({ ...item.config, password: item.password, jdbcProfile: item.jdbcProfile }, { action: "run", id: "test", version: "1", operation: "tables", database: "analytics" });
+	expect(result.columns).toEqual(["schema", "name", "kind"]);
+	expect(result.rows).toEqual([["CORE", "orders", "BASE TABLE"]]);
+}, 30000);
