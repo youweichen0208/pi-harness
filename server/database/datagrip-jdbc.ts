@@ -39,7 +39,7 @@ export function jdbcDefinitions(configDir?: string): Definition[] {
 			try {
 				const doc = readXml(join(dir, "options", filename));
 				for (const c of array<any>(doc.application?.component)) for (const d of array<any>(c.driver)) {
-					const id = d["@id"], driverClass = d["driver-class"] ?? (id === "postgresql" ? "org.postgresql.Driver" : undefined);
+					const id = d["@id"], driverClass = d["@driver-class"] ?? d["driver-class"] ?? (id === "postgresql" ? "org.postgresql.Driver" : undefined);
 					if (typeof id !== "string" || typeof driverClass !== "string" || !/^[\w.$]+$/.test(driverClass)) continue;
 					result.push({ id, name: String(d["@name"] || d.name || id), driverClass, configDir: dir, raw: d });
 					if (result.length >= 200) return result;
@@ -102,7 +102,7 @@ export function resolveDataGripJdbc(raw: any, sourcePath: string, selection?: Da
 	if (typeof driverClass !== "string" || !/^[\w.$]+$/.test(driverClass)) throw Error("JDBC_CONFIG_INVALID");
 	if (["ssh-properties", "ssh-tunnel", "proxy", "ssl-config", "ssl-properties", "startup-script", "init-script"].some(k => k in raw) || raw["auth-model"] && raw["auth-model"] !== "native") throw Error("JDBC_SETTINGS_UNSUPPORTED");
 	const libraries = manual ? selection!.jarPaths! : array<any>(d.raw.library);
-	if (!libraries.length || libraries.length > 32 || d.raw.artifact || d.raw["vm-options"] || d.raw["native-library"]) throw Error("JDBC_LIBRARY_UNSUPPORTED");
+	if (!libraries.length || libraries.length > 32 || d.raw["vm-options"] || d.raw["native-library"]) throw Error("JDBC_LIBRARY_UNSUPPORTED");
 	const paths = libraries.map(l => {
 		if (l["@native"] === "true" || l["@type"] && !["java", "jar"].includes(l["@type"])) throw Error("JDBC_DRIVER_FILES");
 		return expandJdbcPath(typeof l === "string" ? l : l.url ?? l["@path"], d.configDir, project);

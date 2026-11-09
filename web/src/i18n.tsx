@@ -181,6 +181,9 @@ const zh = {
 	notesBodyHint: "用 Markdown 记录想法…",
 	notesDirectoryToggle: "展开或收起目录",
 
+	dbJdbcOptions: "DataGrip 匹配选项",
+	dbJdbcReadDataGrip: "尝试从 DataGrip 读取",
+	dbJdbcSaveTest: "保存并测试连接",
 	dbJdbcManual: "手动指定本地驱动文件",
 	dbJdbcClass: "JDBC Driver 类名",
 	dbJdbcPaths: "本地 jar 完整路径（每行一个）",
@@ -2589,6 +2592,9 @@ const en: Record<keyof typeof zh, string> = {
 	notesBodyHint: "Write in Markdown…",
 	notesDirectoryToggle: "Toggle directory",
 
+	dbJdbcOptions: "DataGrip matching options",
+	dbJdbcReadDataGrip: "Try reading from DataGrip",
+	dbJdbcSaveTest: "Save and test connection",
 	dbJdbcManual: "Specify local driver files manually",
 	dbJdbcClass: "JDBC Driver class",
 	dbJdbcPaths: "Absolute local jar paths (one per line)",

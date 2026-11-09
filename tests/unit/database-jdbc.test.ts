@@ -180,3 +180,27 @@ it("pins automatic matches and exposes source IDs for a new ambiguous source", a
 	const preview = await databaseAction("source", f.dir, "p", { action: "preview", kind: "datagrip", path: f.sourcePath, jdbcSelection: { mode: "automatic", sourceId: "b", configDir: f.configDir } });
 	expect(preview.jdbcDrivers).toHaveLength(2);
 });
+
+it("reads DataGrip User Driver class attributes", () => {
+	const f = fixture(), definitions = join(f.configDir, "options/databaseDrivers.xml");
+	writeFileSync(definitions, readFileSync(definitions, "utf8").replace('name="GaussDB"', 'name="User Driver" driver-class="fixture.GaussDriver"').replace('<driver-class>fixture.GaussDriver</driver-class>', ''));
+	expect(listJdbcDrivers(f.configDir)).toHaveLength(1);
+	expect(f.item().issue).toBeUndefined();
+	expect(f.item().jdbcProfile?.driverClass).toBe("fixture.GaussDriver");
+});
+it("uses explicit local libraries alongside artifact metadata without resolving artifacts", async () => {
+	const f = fixture(), definitions = join(f.configDir, "options/databaseDrivers.xml");
+	const original = readFileSync(definitions, "utf8");
+	writeFileSync(definitions, original.replace('<library>', '<artifact id="PostgreSQL" version="42.7.3"/><library>'));
+	expect(f.item().issue).toBeUndefined();
+	expect(f.item().jdbcProfile?.jars.map(j => j.path)).toEqual([driverJar]);
+	f.sync(); const c = listConnections()[0];
+	await databaseAction("artifact", f.dir, "test", { action: "test", connection: c });
+	expect(listConnections()[0].needsTest).toBe(false);
+	writeFileSync(definitions, original.replace('<library>', '<artifact id="PostgreSQL" version="42.7.3"/><vm-options>-Dunsafe=true</vm-options><library>'));
+	expect(f.item().issue).toBe("JDBC_LIBRARY_UNSUPPORTED");
+	writeFileSync(definitions, original.replace(driverJar.replaceAll("\\", "/"), join(f.dir, "missing.jar").replaceAll("\\", "/")).replace('<library>', '<artifact id="PostgreSQL" version="42.7.3"/><library>'));
+	expect(f.item().issue).toBe("JDBC_JAR_MISSING");
+	writeFileSync(definitions, original.replace(/<library>.*?<\/library>/, '<artifact id="PostgreSQL" version="42.7.3"/>'));
+	expect(f.item().issue).toBe("JDBC_LIBRARY_UNSUPPORTED");
+});

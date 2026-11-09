@@ -9,7 +9,7 @@ import { CHROME_PATH } from './lib/chrome.mjs';
 import { portUp } from './lib/port-utils.mjs';
 import { testEnv } from './lib/test-env.mjs';
 const port = 9299, root = mkdtempSync(join(tmpdir(), 'pi-jdbc-browser-'));
-let server, browser, runs = 0, tested = false, failRun = false, repairs = 0, tests = 0, repaired = false, runtimeMissing = false, sourceImported = false;
+let server, browser, runs = 0, tested = false, failRun = false, repairs = 0, tests = 0, repaired = false, runtimeMissing = false, sourceImported = false, readFails = false, repairFails = false;
 const choices = [];
 const sourceConnection = () => ({ ...connection(), id: "source-new", name: "New ambiguous source", source: { path: "/new/dataSources.xml", id: "new", kind: "datagrip" } });
 const previews = [];
@@ -38,12 +38,13 @@ try {
 		if (body.action === 'run') { runs++; if (failRun) { failRun = false; return route.fulfill({ status: 400, json: { error: 'JDBC_CONNECTION_FAILED' } }); } }
 		if (body.action === 'import' && body.ticket === 'new-ticket') sourceImported = true;
 		if (body.action === 'test') { tested = true; tests++; }
+		if (body.action === 'jdbc_configure' && repairFails) return route.fulfill({ status: 400, json: { error: 'JDBC_LIBRARY_UNSUPPORTED' } });
 		if (body.action === 'jdbc_configure') { repairs++; choices.push(body); if (body.driverId) repaired = true; }
 		if (body.action === 'preview') previews.push(body);
 		await route.fulfill({ json: { requestId: body.requestId, connections: [connection(), { ...connection(), id: "other", name: "Other untested", needsTest: true }, native(), ...(sourceImported ? [sourceConnection()] : [])], grants: [], syncIssues: sourceImported ? [] : [{ path: "/new/dataSources.xml", sourceId: "new", issue: "New ambiguous source: JDBC_DRIVER_AMBIGUOUS" }], jdbcRuntime: runtimeMissing ? 'missing' : 'detected',
 			...(body.action === 'jdbc_configure' && !body.driverId ? { jdbcDrivers: [{ id: 'gauss', name: 'GaussDB', driverClass: 'fixture.GaussDriver', configDir: '/fixture/DataGrip2026.1' }, { id: 'other', name: 'Other Gauss', driverClass: 'fixture.Other', configDir: '/fixture/DataGrip2024.3' }] } : {}),
 			...(body.action === 'jdbc_drivers' ? { jdbcDrivers: [{ id: 'gauss', name: 'GaussDB', driverClass: 'fixture.GaussDriver', configDir: '/fixture/DataGrip2026.1' }] } : {}),
-			...(body.action === 'preview' ? { preview: { ticket: 'ticket', source: body.path, items: [{ key: 'a', sourceId: 'a', connection: connection(), hasPassword: true, change: 'updated', ...(body.jdbcSelection?.driverId || body.jdbcSelection?.jarPaths ? {} : { issue: 'JDBC_DRIVER_AMBIGUOUS' }) }] } } : {}),
+			...(body.action === 'preview' ? { preview: { ticket: 'ticket', source: body.path, items: [{ key: 'a', sourceId: 'a', connection: connection(), hasPassword: true, change: 'updated', ...(body.jdbcSelection?.driverId || body.jdbcSelection?.jarPaths ? {} : { issue: readFails ? 'JDBC_LIBRARY_UNSUPPORTED' : 'JDBC_DRIVER_AMBIGUOUS' }) }] } } : {}),
 			...(body.action === 'preview' && body.path === '/new/dataSources.xml' ? { jdbcDrivers: [{ id: 'gauss', name: 'GaussDB', driverClass: 'fixture.GaussDriver', configDir: '/fixture/DataGrip2026.1' }], preview: { ticket: 'new-ticket', source: body.path, items: [{ key: 'new', sourceId: 'new', connection: sourceConnection(), hasPassword: true, change: 'new', ...(body.jdbcSelection.driverId ? {} : { issue: 'JDBC_DRIVER_AMBIGUOUS' }) }] } } : {}),
 			...(body.action === 'run' ? { grid: { columns: ['database'], rows: [['fixture']], elapsedMs: 0, truncated: false } } : {}),
 		} });
@@ -80,6 +81,31 @@ try {
 	await page.getByRole('button', { name: '连接成功', exact: true }).waitFor();
 	assert(sourceImported, 'repair must import the exact new source');
 	await page.locator('.database-source-warnings').waitFor({ state: 'detached' });
+	await page.locator('.database-tree-row', { hasText: 'Gauss fixture' }).click();
+	await page.getByRole('button', { name: '配置 JDBC 驱动', exact: true }).click();
+	assert(await page.getByLabel('本地 jar 完整路径（每行一个）', { exact: true }).isVisible(), 'manual fields are the default configuration entry');
+	assert.equal(await page.getByLabel('JDBC Driver 类名', { exact: true }).inputValue(), 'fixture.GaussDriver');
+	await page.getByLabel('本地 jar 完整路径（每行一个）', { exact: true }).fill('D:\\drivers\\gsjdbc4.jar');
+	readFails = true;
+	await page.getByRole('button', { name: '尝试从 DataGrip 读取', exact: true }).click();
+	await page.getByText('DataGrip 的驱动库配置无法直接复用，请手动填写本地 jar 路径和 Driver 类名', { exact: true }).waitFor();
+	assert.equal(await page.getByLabel('本地 jar 完整路径（每行一个）', { exact: true }).inputValue(), 'D:\\drivers\\gsjdbc4.jar');
+	mkdirSync('tests/scratch', { recursive: true });
+	await page.screenshot({ path: 'tests/scratch/database-jdbc-manual-entry.png' });
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.getByLabel('本地 jar 完整路径（每行一个）', { exact: true }).scrollIntoViewIfNeeded();
+	assert(await page.locator('.database-main').evaluate(el => el.scrollWidth <= el.clientWidth + 1), 'manual repair must fit the narrow pane');
+	await page.screenshot({ path: 'tests/scratch/database-jdbc-manual-narrow.png' });
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await page.getByRole('button', { name: '保存并测试连接', exact: true }).click();
+	await page.getByRole('button', { name: '连接成功', exact: true }).waitFor();
+	assert.deepEqual(previews.at(-1).jdbcSelection.jarPaths, ['D:\\drivers\\gsjdbc4.jar']);
+	readFails = false; repairFails = true;
+	await page.getByRole('button', { name: '自动配置 JDBC 驱动并重试', exact: true }).click();
+	await page.locator('.database-main > [role=alert]').waitFor();
+	assert(await page.getByLabel('本地 jar 完整路径（每行一个）', { exact: true }).isVisible(), 'failed automatic repair opens the manual form');
+	repairFails = false;
+	const genericPreviewStart = previews.length;
 	runtimeMissing = true;
 	await page.getByRole('button', { name: '立即同步', exact: true }).click();
 	await page.getByRole('button', { name: '导入连接', exact: true }).click();
@@ -91,7 +117,7 @@ try {
 	await page.getByLabel('DataGrip 驱动', { exact: true }).selectOption(JSON.stringify(['/fixture/DataGrip2026.1', 'gauss']));
 	await page.getByRole('button', { name: '预览同步', exact: true }).click();
 	await page.locator('.database-import-list').waitFor();
-	assert.equal(previews.filter(p => p.path === "/fixture/dataSources.xml")[0].jdbcSelection.driverId, undefined, 'first preview must work before target selection');
+	assert.equal(previews[genericPreviewStart].jdbcSelection.driverId, undefined, 'first preview must work before target selection');
 	await page.getByText('找到多个对应驱动，请选择实际使用的 DataGrip 配置目录', { exact: true }).waitFor();
 	await page.getByLabel('应用驱动的连接', { exact: true }).selectOption('a');
 	await page.getByRole('button', { name: '预览同步', exact: true }).click();

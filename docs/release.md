@@ -1,5 +1,9 @@
 # 发布流程
 
+## 1.19.3：本地 JDBC 配置与 DataGrip 解析修复
+
+修复 #160：支持 driver-class 属性、本地 library 与 artifact 元数据并存；配置入口默认展示本地 jar 与类名，支持保存并测试以及自动读取失败后手动修复。仅发布 GitHub 桌面 Release，同提交 CI、三平台打包及安装升级验证通过后公开。说明见 `.github/release-notes/v1.19.3.md`。
+
 ## 1.19.2：GaussDB JDBC 自动匹配与恢复
 
 修复 #159：唯一驱动自动匹配、歧义选择与目录记忆、认证错误一键配置并重试、首次执行确认、驱动移除及 Java 缺失前置提示。仅发布 GitHub 桌面 Release；同提交 CI、三平台打包及安装升级验证通过后公开。说明见 `.github/release-notes/v1.19.2.md`。
