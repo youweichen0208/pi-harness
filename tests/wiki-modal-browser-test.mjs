@@ -23,7 +23,7 @@ writeFileSync(join(cwd, "README.md"), "# Knowledge entry\n\nSelected exact passa
 writeFileSync(join(cwd, "knowledge/manifest.json"), JSON.stringify({ kind: "pi-harness-knowledge", version: 1, evidenceDirectory: "evidence" }));
 const rawPath = join(cwd, "knowledge/evidence/source/original.md"), raw = "# Archived evidence\n\n原始文件内容应保持不变。\n";
 writeFileSync(rawPath, raw);
-writeFileSync(join(cwd, "background.ts"), "export const background = true;\n");
+writeFileSync(join(cwd, "background.txt"), "export const background = true;\n");
 writeFileSync(join(cwd, "other.md"), "# Other document\n\nOther text.\n");
 let releaseReply;
 let responseGate = new Promise(resolve => { releaseReply = resolve; });
@@ -351,14 +351,14 @@ try {
 
 	// A background preview on the main window keeps its own context; the Wiki
 	// window carries its own chip and closing it leaves the preview untouched.
-	await page.evaluate(() => window.dispatchEvent(new CustomEvent("pi-harness:open-tool-file", {detail: {path: "background.ts"}})));
-	await page.locator(".attach-chip.current-file", {hasText: "@background.ts"}).waitFor();
+	await page.evaluate(() => window.dispatchEvent(new CustomEvent("pi-harness:open-tool-file", {detail: {path: "background.txt"}})));
+	await page.locator(".attach-chip.current-file", {hasText: "@background.txt"}).waitFor();
 	await page.locator(".fp-editor, .fp-code-editor, .fp-markdown").first().waitFor();
 	await open();
 	await showChat();
 	await wiki.page.locator(".attach-chip.current-file", {hasText: "@README.md"}).waitFor();
 	await close();
-	await page.locator(".attach-chip.current-file", {hasText: "@background.ts"}).waitFor();
+	await page.locator(".attach-chip.current-file", {hasText: "@background.txt"}).waitFor();
 
 	// Mobile: the Wiki window's chat panel is an overlay toggled from the view header.
 	await open();
