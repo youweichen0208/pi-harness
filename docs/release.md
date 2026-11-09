@@ -1,5 +1,9 @@
 # 发布流程
 
+## 1.19.1：JDBC 手动配置与错误提示
+
+修复 #158，支持按 DataGrip 来源连接指定本地 jar 和 Driver 类，细分文件错误，清除切换连接后的旧操作提示并刷新导入后的来源状态。包含 Vercel 静态构建修复。仅发布 GitHub 桌面 Release；同提交 CI、三平台打包及安装升级验证通过后公开。说明见 `.github/release-notes/v1.19.1.md`。
+
 ## 1.19.0：DataGrip 本地 GaussDB JDBC
 
 引用同机 DataGrip 驱动，增加按连接映射、来源变化复测及独立 Java 只读执行。保留 MySQL/PostgreSQL；不分发厂商 jar 或 Java。实际 Windows 厂商驱动与 GaussDB 仍需实机验收。仅发布 GitHub 桌面 Release；同提交 CI、三平台打包及安装升级验证通过后公开。说明见 `.github/release-notes/v1.19.0.md`。

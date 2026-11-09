@@ -111,6 +111,18 @@ it("keeps unchanged import previews stable and detects driver changes and recove
 	writeFileSync(localJar, readFileSync(driverJar)); writeFileSync(definitions, original.replace(driverJar.replaceAll("\\", "/"), localJar.replaceAll("\\", "/"))); f.sync(); c = listConnections()[0];
 	const before = getConnection(c.id).jdbcProfile!; writeFileSync(localJar, Buffer.concat([readFileSync(localJar), Buffer.from("changed")]));
 	expect(() => verifyJdbcFiles(before)).toThrow("JDBC_DRIVER_CHANGED"); f.sync(); expect(listConnections()[0].version).not.toBe(c.version);
-	rmSync(localJar); f.sync(); expect(listConnections()[0].issue).toBe("JDBC_DRIVER_FILES");
+	rmSync(localJar); f.sync(); expect(listConnections()[0].issue).toBe("JDBC_JAR_MISSING");
 	writeFileSync(localJar, readFileSync(driverJar)); f.sync(); expect(listConnections()[0].issue).toBeUndefined(); expect(listConnections()[0].needsTest).toBe(true);
+});
+it("repairs a source using explicit local jars without an IDE driver definition", async () => {
+	const f = fixture(); rmSync(join(f.configDir, "options/databaseDrivers.xml"));
+	const selection = { sourceId: "a", driverClass: "fixture.GaussDriver", jarPaths: [driverJar] };
+	const preview = await databaseAction("manual", f.dir, "preview", { action: "preview", kind: "datagrip", path: f.sourcePath, jdbcSelection: selection });
+	expect(preview.preview!.items[0].issue).toBeUndefined();
+	await databaseAction("manual", f.dir, "import", { action: "import", ticket: preview.preview!.ticket, keys: ["a"] });
+	const c = listConnections()[0]; expect(c.driver).toBe("gaussdb"); expect(c.needsTest).toBe(true);
+	expect(f.sync()).toEqual([]); expect(listConnections()[0].version).toBe(c.version);
+	await databaseAction("manual", f.dir, "test", { action: "test", connection: c }); expect(listConnections()[0].needsTest).toBe(false);
+	expect(loadSource("datagrip", f.sourcePath, { ...selection, jarPaths: [join(f.dir, "missing.jar")] })[0].issue).toBe("JDBC_JAR_MISSING");
+	expect(loadSource("datagrip", f.sourcePath, { ...selection, sourceId: undefined })[0].issue).toBe("JDBC_CONFIG_INVALID");
 });

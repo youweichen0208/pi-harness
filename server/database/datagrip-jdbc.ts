@@ -58,14 +58,17 @@ export function sourceEntries(text: string): any[] {
 }
 /** Resolve only explicit local classpath entries; never fetch Maven artifacts or guess a jar version. */
 export function resolveDataGripJdbc(raw: any, sourcePath: string, selection?: DatabaseJdbcSelection): { profile: JdbcProfile; reference: DatabaseJdbcReference; host: string; port: number; database: string; user?: string; password?: string } | undefined {
-	if (selection && (typeof selection !== "object" || Object.values(selection).some(v => v !== undefined && (typeof v !== "string" || v.length > 4096 || /[\0\r\n]/.test(v))))) throw Error("JDBC_CONFIG_INVALID");
-	if (selection?.driverId && !selection.sourceId) throw Error("JDBC_CONFIG_INVALID");
+	if (selection && (typeof selection !== "object" || Object.entries(selection).filter(([k]) => k !== "jarPaths").some(([, v]) => v !== undefined && (typeof v !== "string" || v.length > 4096 || /[\0\r\n]/.test(v))))) throw Error("JDBC_CONFIG_INVALID");
+	if (selection?.jarPaths !== undefined && (!Array.isArray(selection.jarPaths) || !selection.jarPaths.length || selection.jarPaths.length > 32 || selection.jarPaths.some(p => typeof p !== "string" || p.length > 4096 || /[\0\r\n]/.test(p)))) throw Error("JDBC_CONFIG_INVALID");
+	if ((selection?.driverClass || selection?.jarPaths) && (!selection.driverClass || !selection.jarPaths)) throw Error("JDBC_CONFIG_INVALID");
+	if ((selection?.driverId || selection?.jarPaths) && !selection.sourceId) throw Error("JDBC_CONFIG_INVALID");
 	if (selection?.sourceId && selection.sourceId !== raw["@uuid"]) selection = { configDir: selection.configDir };
-	if (!selection?.driverId && /mysql|mariadb/i.test(String(raw["jdbc-url"]))) return;
+	if (!selection?.driverId && !selection?.jarPaths && /mysql|mariadb/i.test(String(raw["jdbc-url"]))) return;
 	const ref = selection?.driverId || raw["driver-ref"];
-	let definitions = jdbcDefinitions(selection?.configDir).filter(d => d.id === ref);
+	const manual = !!selection?.jarPaths;
+	let definitions: Definition[] = manual ? [{ id: "manual", name: "GaussDB JDBC", driverClass: selection!.driverClass!, configDir: selection?.configDir || dirname(sourcePath), raw: {} }] : jdbcDefinitions(selection?.configDir).filter(d => d.id === ref);
 	const hint = `${raw["jdbc-driver"] ?? ""} ${raw["driver-ref"] ?? ""} ${raw["jdbc-url"] ?? ""} ${definitions.map(d => `${d.name} ${d.driverClass} ${JSON.stringify(d.raw.library ?? [])}`).join(" ")}`;
-	if (!selection?.driverId && !/gauss|gsjdbc/i.test(hint)) return;
+	if (!manual && !selection?.driverId && !/gauss|gsjdbc/i.test(hint)) return;
 	// Prefer the IDE profile that explicitly registered this project, not the newest installation.
 	if (!selection?.configDir && definitions.length > 1) {
 		const project = dirname(dirname(sourcePath));
@@ -82,20 +85,23 @@ export function resolveDataGripJdbc(raw: any, sourcePath: string, selection?: Da
 	}
 	if (definitions.length !== 1) throw Error(definitions.length ? "JDBC_DRIVER_AMBIGUOUS" : "JDBC_DRIVER_MISSING");
 	const d = definitions[0], project = dirname(dirname(sourcePath));
-	const driverClass = selection?.driverId ? d.driverClass : raw["jdbc-driver"] ?? d.driverClass;
+	const driverClass = manual || selection?.driverId ? d.driverClass : raw["jdbc-driver"] ?? d.driverClass;
 	if (typeof driverClass !== "string" || !/^[\w.$]+$/.test(driverClass)) throw Error("JDBC_CONFIG_INVALID");
 	if (["ssh-properties", "ssh-tunnel", "proxy", "ssl-config", "ssl-properties", "startup-script", "init-script"].some(k => k in raw) || raw["auth-model"] && raw["auth-model"] !== "native") throw Error("JDBC_SETTINGS_UNSUPPORTED");
-	const libraries = array<any>(d.raw.library);
-	if (!libraries.length || libraries.length > 32 || d.raw.artifact || d.raw["vm-options"] || d.raw["native-library"]) throw Error("JDBC_DRIVER_FILES");
+	const libraries = manual ? selection!.jarPaths! : array<any>(d.raw.library);
+	if (!libraries.length || libraries.length > 32 || d.raw.artifact || d.raw["vm-options"] || d.raw["native-library"]) throw Error("JDBC_LIBRARY_UNSUPPORTED");
 	const paths = libraries.map(l => {
 		if (l["@native"] === "true" || l["@type"] && !["java", "jar"].includes(l["@type"])) throw Error("JDBC_DRIVER_FILES");
 		return expandJdbcPath(typeof l === "string" ? l : l.url ?? l["@path"], d.configDir, project);
 	}).filter(p => !/license|\.txt$/i.test(basename(p)));
-	if (!paths.length) throw Error("JDBC_DRIVER_FILES");
+	if (!paths.length) throw Error("JDBC_LIBRARY_UNSUPPORTED");
 	let jars;
 	try {
-		if (paths.reduce((n, p) => n + statSync(p).size, 0) > 128 * 1024 * 1024) throw Error();
-		jars = [...new Set(paths)].map(path => ({ path, sha256: jarFingerprint(path) })); } catch { throw Error("JDBC_DRIVER_FILES"); }
+		if (paths.reduce((n, p) => n + statSync(p).size, 0) > 128 * 1024 * 1024) throw Error("JDBC_JAR_TOO_LARGE");
+		jars = [...new Set(paths)].map(path => ({ path, sha256: jarFingerprint(path) })); } catch (e) {
+		const error = e as NodeJS.ErrnoException;
+		throw Error(error.code === "ENOENT" ? "JDBC_JAR_MISSING" : error.code === "EACCES" || error.code === "EPERM" ? "JDBC_JAR_UNREADABLE" : error.message === "JDBC_JAR_TOO_LARGE" ? error.message : "JDBC_DRIVER_FILES");
+	}
 	const original = raw["jdbc-url"];
 	if (typeof original !== "string" || original.length > 16384 || !/^jdbc:(gaussdb|postgresql|opengauss):\/\//i.test(original)) throw Error("JDBC_URL_UNSUPPORTED");
 	const prefix = original.slice(0, original.indexOf("://"));

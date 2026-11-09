@@ -9,7 +9,7 @@ import { CHROME_PATH } from './lib/chrome.mjs';
 import { portUp } from './lib/port-utils.mjs';
 import { testEnv } from './lib/test-env.mjs';
 const port = 9299, root = mkdtempSync(join(tmpdir(), 'pi-jdbc-browser-'));
-let server, browser, runs = 0, tested = false;
+let server, browser, runs = 0, tested = false, failRun = false;
 const previews = [];
 const connection = () => ({ id: 'fixture', version: '1', name: 'Gauss fixture', driver: 'gaussdb', host: 'localhost', port: 5432, user: 'reader', db_name: 'fixture', hasPassword: true, needsTest: !tested, source: { path: '/fixture/dataSources.xml', id: 'a', kind: 'datagrip' }, jdbc: { configDir: '/fixture/DataGrip2026.1', driverId: 'gauss', driverClass: 'fixture.GaussDriver', jarNames: ['gauss driver.jar'], fingerprint: 'fixture' } });
 try {
@@ -31,12 +31,12 @@ try {
 	});
 	await page.route('**/api/database', async route => {
 		const body = route.request().postDataJSON();
-		if (body.action === 'run') runs++;
+		if (body.action === 'run') { runs++; if (failRun) { failRun = false; return route.fulfill({ status: 400, json: { error: 'JDBC_CONNECTION_FAILED' } }); } }
 		if (body.action === 'test') tested = true;
 		if (body.action === 'preview') previews.push(body);
-		await route.fulfill({ json: { requestId: body.requestId, connections: [connection()], grants: [], jdbcRuntime: 'detected',
+		await route.fulfill({ json: { requestId: body.requestId, connections: [connection(), { ...connection(), id: "other", name: "Other untested", needsTest: true }], grants: [], jdbcRuntime: 'detected',
 			...(body.action === 'jdbc_drivers' ? { jdbcDrivers: [{ id: 'gauss', name: 'GaussDB', driverClass: 'fixture.GaussDriver', configDir: '/fixture/DataGrip2026.1' }] } : {}),
-			...(body.action === 'preview' ? { preview: { ticket: 'ticket', source: body.path, items: [{ key: 'a', sourceId: 'a', connection: connection(), hasPassword: true, change: 'updated', ...(body.jdbcSelection?.driverId ? {} : { issue: 'JDBC_DRIVER_AMBIGUOUS' }) }] } } : {}),
+			...(body.action === 'preview' ? { preview: { ticket: 'ticket', source: body.path, items: [{ key: 'a', sourceId: 'a', connection: connection(), hasPassword: true, change: 'updated', ...(body.jdbcSelection?.driverId || body.jdbcSelection?.jarPaths ? {} : { issue: 'JDBC_DRIVER_AMBIGUOUS' }) }] } } : {}),
 			...(body.action === 'run' ? { grid: { columns: ['database'], rows: [['fixture']], elapsedMs: 0, truncated: false } } : {}),
 		} });
 	});
@@ -50,6 +50,11 @@ try {
 	await page.getByRole('button', { name: '连接成功', exact: true }).waitFor();
 	await page.locator('.database-tree-row', { hasText: 'Gauss fixture' }).click();
 	await page.locator('.database-indent .database-tree-row').waitFor(); assert.equal(runs, 1);
+	failRun = true;
+	await page.locator('.database-tree-row', { hasText: 'Gauss fixture' }).click();
+	await page.locator('.database-main > [role=alert]').waitFor();
+	await page.locator('.database-tree-row', { hasText: 'Other untested' }).click();
+	assert.equal(await page.locator('.database-main > [role=alert]').count(), 0, 'a failed connection must not leave its error on another connection');
 	await page.getByRole('button', { name: '导入连接', exact: true }).click();
 	await page.getByLabel('配置来源', { exact: true }).selectOption('datagrip');
 	await page.getByLabel('服务端配置文件路径', { exact: true }).fill('/fixture/dataSources.xml');
@@ -64,6 +69,14 @@ try {
 	await page.getByRole('button', { name: '预览同步', exact: true }).click();
 	await page.locator('.database-import-list input:checked').waitFor();
 	assert.equal(previews.at(-1).jdbcSelection.sourceId, 'a'); assert.equal(previews.at(-1).jdbcSelection.driverId, 'gauss');
+	await page.getByLabel('手动指定本地驱动文件', { exact: true }).check();
+	await page.getByLabel('JDBC Driver 类名', { exact: true }).fill('fixture.GaussDriver');
+	await page.getByLabel('本地 jar 完整路径（每行一个）', { exact: true }).fill('D:\\drivers\\高斯 driver.jar\nD:\\drivers\\dependency.jar');
+	await page.getByRole('button', { name: '预览同步', exact: true }).click();
+	await page.locator('.database-import-list input:checked').waitFor();
+	assert.deepEqual(previews.at(-1).jdbcSelection.jarPaths, ['D:\\drivers\\高斯 driver.jar', 'D:\\drivers\\dependency.jar']);
+	assert.equal(previews.at(-1).jdbcSelection.driverClass, 'fixture.GaussDriver');
+	assert.equal(previews.at(-1).jdbcSelection.driverId, undefined);
 	mkdirSync('tests/scratch', { recursive: true });
 	await page.locator('.wiki-agent-header button').click();
 	await page.screenshot({ path: 'tests/scratch/database-jdbc-light.png' });

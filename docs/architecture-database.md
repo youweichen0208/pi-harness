@@ -64,3 +64,11 @@ DBeaver 自定义工作区回归：`tests/unit/dbeaver-discovery.test.ts` 覆盖
 每次测试/查询启动独立 Java 进程，标准输入输出采用有界二进制帧，参数和环境不携带密码，驱动日志不回传。Java 按 PI_WEB_JAVA、DataGrip bundled runtime、JAVA_HOME、PATH 顺序探测（至少 Java 8，驱动可要求更高版本），不自动安装。显式 PI_WEB_JAVA 无效时报错，不静默换用其它运行时。桥接 jar 随应用打包，厂商 jar 仍引用原路径，执行前后重新核对文件摘要。设置 allowReadOnly=true，并在执行 SQL 前发送 BEGIN READ ONLY、核验 transaction_read_only，再设置事务级 search_path 和 statement_timeout；只读条件无法建立就拒绝执行。共享原有 SQL 白名单、8 并发/30 秒预算和结果上限；取消先发送 JDBC cancel，1 秒未结束则终止进程树。
 
 `tests/unit/database-jdbc.test.ts` 用真实 Java + 本地假驱动验证解析、加密、映射、同步、授权失效、只读核验、取消、结果精度与截断；`tests/packaged-jdbc-test.mjs [executable] [appRoot]` 验证构建/桌面包内的桥接产物，CI 在 macOS/Windows/Linux 执行。`tests/database-jdbc-browser-test.mjs` 使用本地 HTTP 夹具验证界面。以上不替代目标 Windows 机器上的厂商 jar、认证、TLS、目录查询和真实 GaussDB 验证；发布兼容性结论前仍需该环境验收，不调用付费模型。
+
+### #158：手动驱动文件与错误归属
+
+DataGrip 来源的连接详情、连接设置及 JDBC 同步警告提供“配置 JDBC 驱动”入口。导入预览可选择手动模式，按目标 sourceId 保存 Driver 类名和最多 32 个本机 jar 绝对路径；每行一个路径，保留中文和空格，引用文件而不上传。手动模式不依赖 IDE 驱动定义，使用来源 URL 和来源连接属性，完整连接配置仍加密存储；本地路径作为来源映射保留。每次同步仍检查文件摘要和 URL/属性，不绕过只读核验、重新测试或会话授权。手动配置只应用于目标连接，不覆盖同文件其它连接。
+
+驱动文件不存在、无读取权限、总大小超过 128 MiB、无法复用的 IDE 库配置分别返回固定错误码，中英文提示给出修复方向。首次手动指定后仍需预览、应用并测试连接。来源缺失或文件损坏时保留记录并禁用，不把失败隐藏成成功。
+
+切换连接、新建/导入、进入连接设置或驱动配置时取消旧前台请求并清除该操作的错误；连接版本变化清除旧结果及错误。成功重试清除先前失败。应用导入后立即同步，清除已恢复的来源警告；未恢复的来源继续显示当前状态。普通同步成功不能证明数据库认证已恢复，因此不会单凭配置读取成功清除仍然有效的认证错误。
