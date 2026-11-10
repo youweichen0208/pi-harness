@@ -12336,34 +12336,40 @@ pre.wiki-mermaid-source-hidden > .fp-mermaid-preview { padding-bottom: 0; }
 
 /* ---- Design 3a: one chat stream (process lists, quiet events, flat right panel) ---- */
 /* Thinking, commands, reads and searches between two prose paragraphs share one list. */
-:root .design-workspace .process-list, .process-list { margin: 10px 0; border: 1px solid var(--border-soft); border-radius: var(--r-md); background: var(--bg-elev); overflow: hidden; font-size: 12px; }
-:root .design-workspace .process-list > :is(.thinking, .bash-group, .read-group, .grep-summary) { margin: 0; border: 0; border-radius: 0; background: transparent; }
-:root .design-workspace .process-list > * + * { border-top: 1px solid var(--border-soft); }
-:root .design-workspace .process-list :is(.thinking-toggle, .bash-group-head, .bash-row-head, .read-group-head, .grep-summary-head) { gap: 10px; min-height: 34px; padding: 8px 12px; font-size: 12px; line-height: 1.5; }
-:root .design-workspace .process-list :is(.bash-row-head, .read-group-head, .grep-summary-head):hover, :root .design-workspace .process-list .thinking-toggle:hover { background: var(--output-bg); }
-:root .design-workspace .process-list .bash-row { border-top: 1px solid var(--border-soft); }
-:root .design-workspace .process-list .bash-group-items > .bash-row:first-child { border-top: 1px solid var(--border-soft); }
-:root .design-workspace .process-list .bash-group-head { background: var(--output-bg); color: var(--text); font-size: 12px; }
-:root .design-workspace .process-list .bash-group-head strong { font-weight: 600; }
-:root .design-workspace .process-list .bash-group.historical-step .bash-group-head { background: transparent; font-weight: 400; }
-:root .design-workspace .process-list .bash-group.historical-step .bash-group-head strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 400 12px var(--mono); }
-:root .design-workspace .process-list .bash-group.historical-step .bash-group-head > span:not(.bash-state) { flex: none; color: var(--text-dim); }
+.process-list { margin: 10px 0; border: 1px solid var(--border-soft); border-radius: var(--r-md); background: var(--bg-elev); overflow: hidden; font-size: 12px; }
+.process-list > :is(.thinking, .bash-group, .read-group, .grep-summary) { margin: 0; border: 0; border-radius: 0; background: transparent; }
+.process-list > * + * { border-top: 1px solid var(--border-soft); }
+.process-list :is(.thinking-toggle, .bash-group-head, .bash-row-head, .read-group-head, .grep-summary-head) { gap: 10px; min-height: 34px; padding: 8px 12px; font-size: 12px; line-height: 1.5; }
+.process-list :is(.bash-row-head, .read-group-head, .grep-summary-head):hover, .process-list .thinking-toggle:hover { background: var(--output-bg); }
+.process-list .bash-row { border-top: 1px solid var(--border-soft); }
+.process-list .bash-group-items > .bash-row:first-child { border-top: 1px solid var(--border-soft); }
+.process-list .bash-group-head { background: var(--output-bg); color: var(--text); font-size: 12px; }
+.process-list .bash-group-head strong { font-weight: 600; }
+.process-list .bash-group.historical-step .bash-group-head { background: transparent; font-weight: 400; }
+.process-list .bash-group.historical-step .bash-group-head strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 400 12px var(--mono); }
+.process-list .bash-group.historical-step .bash-group-head > span:not(.bash-state) { flex: none; color: var(--text-dim); }
 .process-list .bash-state { display: inline-grid; place-items: center; flex: none; width: 12px; }
 .process-list .bash-state.ok { color: var(--green); }
 .process-list .bash-state .thinking-spinner, .process-list .thinking.live .thinking-spinner { width: 10px; height: 10px; border-width: 2px; }
 .process-list .grep-summary-head > svg, .process-list .thinking-toggle > svg { flex: none; width: 12px; }
 /* Thinking rows stay one line; the body opens beneath the row. */
-:root .design-workspace .process-list .thinking-toggle { color: var(--text-faint); }
-:root .design-workspace .process-list .thinking-toggle .thinking-label { flex: none; }
-:root .design-workspace .process-list .thinking-body { max-height: 320px; overflow-y: auto; padding: 2px 12px 10px 34px; border-top: 0; font-size: 12.5px; line-height: 1.6; }
+.process-list .thinking-toggle { color: var(--text-faint); }
+.process-list .thinking-toggle .thinking-label { flex: none; }
+.process-list .thinking-body { max-height: 320px; overflow-y: auto; padding: 2px 12px 10px 34px; border-top: 0; font-size: 12.5px; line-height: 1.6; }
 /* Long thinking rows recede behind a light gray band so tool rows stay scannable. */
-:root .design-workspace .process-list > .thinking, :root .design-workspace .process-list .thinking { background: var(--output-bg); }
-:root .design-workspace .process-list .thinking.live .thinking-label { color: var(--accent); font-weight: 600; }
+.process-list > .thinking, .process-list .thinking { background: var(--output-bg); }
+.process-list .thinking.live .thinking-label { color: var(--accent); font-weight: 600; }
+/* A thinking block that stands on its own (no neighbouring tool call, so it is
+   not wrapped in a process list) keeps the base `.thinking` card. When such a
+   row sits directly above or below a completed run it must not stack its 8px
+   margin on top of the run's 10px, which read as a half-empty screen. */
+.process-list + .thinking, .thinking + .process-list { margin-top: 4px; }
+.thinking:has(+ .process-list), .process-list:has(+ .thinking) { margin-bottom: 4px; }
 /* Read rows: file icon on the left, measured completion time in green on the right. */
-:root .design-workspace .process-list .read-group-head > svg, :root .design-workspace .process-list .read-group-head .ui-icon { flex: none; color: var(--text-faint); }
-:root .design-workspace .process-list .read-group-status { color: var(--green); font-variant-numeric: tabular-nums; }
-:root .design-workspace .process-list .read-group.run .read-group-status { color: var(--accent); }
-:root .design-workspace .process-list .read-group.err .read-group-status { color: var(--red); }
+.process-list .read-group-head > svg, .process-list .read-group-head .ui-icon { flex: none; color: var(--text-faint); }
+.process-list .read-group-status { color: var(--green); font-variant-numeric: tabular-nums; }
+.process-list .read-group.run .read-group-status { color: var(--accent); }
+.process-list .read-group.err .read-group-status { color: var(--red); }
 .thinking.live .thinking-live-label { display: block; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-faint); font-style: italic; }
 /* Message rhythm: one header per reply, no negative margins pulling rows into it. */
 .design-workspace .msg-continuation { margin-top: -12px; padding-top: 0; }
