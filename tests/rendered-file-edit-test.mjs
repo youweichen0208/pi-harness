@@ -16,7 +16,8 @@ const original = '---\ntitle: Keep this metadata\n---\n\n# Heading\n\nUntouched 
 writeFileSync(join(workspace, "note.md"), original);
 writeFileSync(join(workspace, "expand.md"), "| One | Two |\n| :--- | ---: |\n| A | B |\n");
 const placeholderTable = "| 主题 | 要点 |\n| --- | --- |\n| 插件 | <dataDir>/plugins/<id>/ |\n| 说明 | 第一行<br>第二行 |\n";
-writeFileSync(join(workspace, "placeholders.md"), placeholderTable);
+const detailsOriginal = "第一组输出为 [32,64]；第二组内维度 128 与 64 不匹配。\n\n<details>\n<summary>展开</summary>\n\n第一组输出为 [32,64]；第二组内维度 128 与 64 不匹配。\n</details>\n\n## 二、自动微分到底做了什么\n\n考虑标量模型：\n";
+writeFileSync(join(workspace, "details.md"), detailsOriginal);writeFileSync(join(workspace, "placeholders.md"), placeholderTable);
 const tree = "pi-harness/\n├── server/                  # 后端（Node ESM，编译到 dist/server/）\n│   ├── index.ts             # 入口：express 静态 + /ws 端点、消息分发、心跳、优雅停机\n│   └── protocol.ts          # wire 协议\n└── web/\n";
 writeFileSync(join(workspace, "tree.md"), "# Directory\n\n```\n" + tree + "```\n");
 writeFileSync(join(workspace, "empty.md"), "```python\n\n```\n");
@@ -223,6 +224,37 @@ try {
 	assert(savedTable.includes("<dataDir>/plugins/<id>/"), savedTable);
 	assert(savedTable.includes("第一行<br>第二行"), savedTable);
 	assert(!savedTable.includes("data-rich-inline"), savedTable);
+	await page.getByRole("button", { name: "返回文件列表", exact: true }).click();
+	await page.locator(".file-name", { hasText: "details.md" }).click();
+	await editRich();
+	const disclosure = rich.locator("div[data-rich-collapse]");
+	await disclosure.first().waitFor();
+	// The reported bug: a hand-written disclosure was cut into opener/body/closer, so
+	// `</details>` surfaced in a protected source box of its own.
+	assert.equal(await disclosure.count(), 1);
+	assert.equal(await rich.locator(".rich-source-block").count(), 0);
+	assert.equal(await rich.locator("[data-rich-summary]").textContent(), "展开");
+	assert((await rich.locator("[data-rich-collapse-body] p").textContent()).includes("128 与 64 不匹配"));
+	// Reopening must fold again, not fall back to a source box.
+	await page.getByRole("button", { name: "返回文件列表", exact: true }).click();
+	await page.locator(".file-name", { hasText: "details.md" }).click();
+	await editRich();
+	await rich.locator("div[data-rich-collapse]").first().waitFor();
+	assert.equal(await rich.locator("div[data-rich-collapse]").count(), 1);
+	assert.equal(await rich.locator(".rich-source-block").count(), 0);
+	// An edit must not hand the source back carrying the editor's own attribute.
+	await replaceText(rich.locator("[data-rich-collapse-body] p").first(), "改写后的正文。");
+	await save();
+	const savedDetails = readFileSync(join(workspace, "details.md"), "utf8");
+	assert(savedDetails.includes("改写后的正文。"), savedDetails);
+	assert(!savedDetails.includes("data-rich-collapse"), savedDetails);
+	assert(savedDetails.includes("</details>"), savedDetails);
+	await page.getByRole("button", { name: "返回文件列表", exact: true }).click();
+	await page.locator(".file-name", { hasText: "details.md" }).click();
+	await editRich();
+	await rich.locator("details").first().waitFor();
+	assert.equal(await rich.locator("details").count(), 1);
+	assert((await rich.locator("details p").textContent()).includes("改写后的正文。"));
 	await page.getByRole("button", { name: "返回文件列表", exact: true }).click();
 	await page.locator(".file-name", { hasText: "placeholders.md" }).click();
 	await editRich();

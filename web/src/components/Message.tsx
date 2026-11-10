@@ -726,6 +726,21 @@ export function SystemEvent({ message }: { message: UiMessage }) {
 }
 
 /** Reply prose, with grilling-style questions lifted into answerable cards (4a). */
+/**
+ * A long pasted block in a user message reads as a wall of text. Folding it here is
+ * display-only: this Markdown is the model's actual input, so nothing is rewritten,
+ * and expanding shows the exact text that was sent.
+ */
+function UserTextBlock({ body }: { body: string }) {
+	const t = useChatT();
+	const long = body.split("\n").length >= 20 || body.length >= 1200;
+	if (!long) return <Markdown text={preserveUserTree(body)} fileLinks />;
+	return <details className="user-text-fold">
+		<summary>{t("collapseLongMessage")}</summary>
+		<Markdown text={preserveUserTree(body)} fileLinks />
+	</details>;
+}
+
 function ReplyMarkdown({ text, answerKey, conversationId, runnable }: { text: string; answerKey?: string; conversationId?: string; runnable?: boolean }) {
 	const segments = useMemo(() => parseReplySegments(text), [text]);
 	if (segments.length === 1 && segments[0].kind === "markdown") return <Markdown text={text} runnable={runnable} />;
@@ -941,7 +956,7 @@ function Block({
 					(live ? (
 						<StreamMarkdown text={user ? preserveUserTree(body) : body} />
 					) : user ? (
-						<Markdown text={preserveUserTree(body)} fileLinks />
+						<UserTextBlock body={body} />
 					) : (
 						<ReplyMarkdown text={body} answerKey={answerKey} conversationId={conversationId} runnable />
 					))}

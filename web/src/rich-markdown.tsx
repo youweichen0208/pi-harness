@@ -1,6 +1,7 @@
 import remarkMath from "remark-math";
 import { remarkRichMath, paintMath } from "./rich-math";
 import { cleanRichHtml, cleanStyle, controlledBlock, canonicalDisclosures } from "./rich-content";
+import { disclosureSpans, spansAreSafe } from "./rich-disclosure";
 import { remarkTextHighlight, textHighlightColor } from "./remark-text-highlight";
 import { richCodeText } from "./rich-code-text";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -24,6 +25,8 @@ interface SourceBlock {
 	html: string;
 	protected: boolean;
 	hidden?: boolean;
+	/** A hand-written disclosure: rendered folded, but never rewritten to carry editor attributes. */
+	bare?: boolean;
 	/** Generated table of contents; its list is rebuilt from headings, never edited. */
 	toc?: boolean;
 }
@@ -204,10 +207,31 @@ function preserveInlineHtml() {
 	};
 }
 
+/** A hand-written disclosure renders folded and editable; its body is ordinary Markdown. */
+function disclosureMarkup(raw: string, wiki: boolean, definitions: string): string {
+	const body = raw.replace(/^\s*<details(?:\s[^>]*)?>/i, "").replace(/<\/details\s*>\s*$/i, "");
+	const summary = body.match(/^\s*<summary(?:\s[^>]*)?>([\s\S]*?)<\/summary>/i);
+	const rest = summary ? body.slice(summary[0].length) : body;
+	const title = summary ? summary[1] : "";
+	const rendered = renderToStaticMarkup(<ReactMarkdown remarkPlugins={[remarkGfm, remarkMath, remarkRichMath, remarkTextHighlight, controlledBlocks, controlledInline, preserveInlineHtml, remarkHighlightBlock]} rehypePlugins={wiki ? [] : [rehypeHighlight]}>{(wiki ? renderWikiLinks(rest) : rest) + "\n\n" + definitions}</ReactMarkdown>);
+	// No attribute is written here: `bare` decides at save time whether the source keeps
+	// its hand-written `<details>` or the editor's own controlled format.
+	return `<details><summary>${title}</summary>${rendered}</details>`;
+}
+
 /** Preserve source slices, including definitions/HTML/front matter, independently of editable DOM. */
 export function prepareRichDocument(source: string, wiki = false): RichDocument {
 	const blocks: SourceBlock[] = [];
 	const nodes = parser.parse(source).children;
+	// Pair a hand-written <details> back into one slice: Markdown emits the opener, the
+	// body and the closer as separate sibling nodes, so per-node blocks would tear the
+	// construct apart and strand `</details>` in a source box of its own.
+	const seriesNodes = nodes.map(node => ({ type: node.type, start: node.position?.start.offset ?? 0, end: node.position?.end.offset ?? 0, value: node.type === "html" ? node.value : undefined }));
+	// Pair a hand-written <details> back into one slice: Markdown emits the opener, the
+	// body and the closer as separate sibling nodes, so per-node blocks would tear the
+	// construct apart and strand `</details>` in a source box of its own.
+	const spans = spansAreSafe(source, seriesNodes, disclosureSpans(source, seriesNodes));
+	const spanByStart = new Map([...spans.values()].map(span => [span.start, span]));
 	const definitions = nodes.filter((node) => node.type === "definition").map((node) => source.slice(node.position?.start.offset, node.position?.end.offset)).join("\n");
 	const frontMatter = source.match(/^---\r?\n[\s\S]*?\r?\n(?:---|\.\.\.)(?:\r?\n|$)/)?.[0];
 	const metadata = wiki ? wikiMetadata(source) : null;
@@ -226,6 +250,14 @@ export function prepareRichDocument(source: string, wiki = false): RichDocument 
 		if (toc && start === toc.start) {
 			blocks.push({ raw: source.slice(toc.start, toc.end), prefix: source.slice(end, start), html: "", protected: true, toc: true });
 			end = toc.end;
+			continue;
+		}
+		const span = spanByStart.get(start);
+		if (span) {
+			// One disclosure, one block: the gap before the span stays `prefix`, everything
+			// inside it stays inside `raw`, so prefix + raw + suffix rebuilds the source.
+			blocks.push({ raw: source.slice(span.start, span.end), prefix: source.slice(end, start), protected: false, hidden: properties.some(range => range.start === start && range.end === span.end), bare: span.bare, html: disclosureMarkup(source.slice(span.start, span.end), wiki, definitions) });
+			end = span.end;
 			continue;
 		}
 		const raw = source.slice(start, stop);
@@ -341,6 +373,15 @@ function serializeElement(node: Node, root: HTMLElement): string {
 	return converter.turndown(holder);
 }
 
+/**
+ * A hand-written `<details>` was never given `data-rich-collapse` by its author, so an
+ * edit must not hand it back carrying the editor's bookkeeping attribute. Only the
+ * marker this editor adds is removed; an author-supplied attribute is left alone.
+ */
+function stripEditorDisclosure(markdown: string): string {
+	return markdown.replace(/<details data-rich-collapse(="")?([^>]*)>/gi, "<details$2>");
+}
+
 /** Untouched blocks round-trip byte-for-byte. Only edited blocks go through HTML → Markdown. */
 export function readRichDocument(root: HTMLElement, document: RichDocument): string {
 	// Editor-only controls must never affect source preservation or saved Markdown.
@@ -363,7 +404,9 @@ export function readRichDocument(root: HTMLElement, document: RichDocument): str
 		span.removeAttribute("data-rich-typing"); if (!span.textContent && !span.querySelector("img,input,br")) span.remove();
 	});
 	canonicalDisclosures(root);
-	root.querySelectorAll("[data-rich-ui]").forEach((node) => node.remove());
+	root.querySelectorAll<HTMLElement>("[data-rich-ui]").forEach((node) => node.remove());
+	// The diagram preview is editor chrome: folding classes must not reach saved Markdown.
+	root.querySelectorAll<HTMLElement>("pre.wiki-mermaid").forEach((pre) => pre.classList.remove("wiki-mermaid", "wiki-mermaid-source-hidden"));
 	root.querySelectorAll<HTMLImageElement>("img[data-rich-image-src]").forEach((img) => {
 		img.setAttribute("src", img.dataset.richImageSrc!);
 		img.removeAttribute("data-rich-image-src");
@@ -388,8 +431,11 @@ export function readRichDocument(root: HTMLElement, document: RichDocument): str
 			seen.add(index);
 			let baseline = block.html;
 			if (baseline.includes("data-rich-collapse")) { const holder = root.ownerDocument.createElement("div"); holder.innerHTML = baseline; canonicalDisclosures(holder); holder.querySelectorAll("[data-rich-ui]").forEach(el => el.remove()); baseline = holder.innerHTML; }
+			// A disclosure is normalized the same way whether or not it carried the editor
+			// attribute; `block.bare` alone decides what the saved source looks like.
+			else if (baseline.includes("<details")) { const holder = root.ownerDocument.createElement("div"); holder.innerHTML = baseline; canonicalDisclosures(holder); holder.querySelectorAll("[data-rich-ui]").forEach(el => el.remove()); baseline = holder.innerHTML; }
 			const unchanged = child instanceof HTMLElement && child.tagName === "DIV" && child.innerHTML === baseline;
-			const text = unchanged || block.protected ? block.raw : serializeElement(child, root);
+			const text = unchanged || block.protected ? block.raw : block.bare ? stripEditorDisclosure(serializeElement(child, root)) : serializeElement(child, root);
 			parts.push((parts.length ? block.prefix || "\n\n" : block.prefix) + text);
 		} else if (child instanceof HTMLElement && child.hasAttribute("data-rich-toc")) {
 			// Newly inserted block: markers only, the list is generated below.

@@ -11589,6 +11589,13 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { height: 44px;
 /* Mermaid source folds away by default; the diagram is the reading view. */
 pre.wiki-mermaid-source-hidden > code { display: none; }
 pre.wiki-mermaid-source-hidden > .wiki-mermaid-preview { border-bottom: 0; margin-bottom: 0; }
+/* Plain file previews render the same folded diagram, with their own padding. */
+.fp-mermaid-preview { padding: 8px 0; white-space: normal; }
+.fp-code-language:has(> button[data-mermaid-source]) { pointer-events: auto; }
+.fp-code-language button[data-mermaid-source] { padding: 1px 6px; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--text-muted); font: 11px var(--sans); cursor: pointer; }
+.fp-code-language button[data-mermaid-source]:hover { background: var(--bg-elev2); color: var(--text); }
+pre.wiki-mermaid-source-hidden { padding-bottom: 0 !important; }
+pre.wiki-mermaid-source-hidden > .fp-mermaid-preview { padding-bottom: 0; }
 .wiki-prose [data-wiki-placeholder] { position: relative; }
 .wiki-prose [data-wiki-placeholder]::before {
 	content: attr(data-wiki-placeholder); color: var(--text-faint); pointer-events: none;
@@ -13413,6 +13420,13 @@ html.pi-desktop .wiki-window-header .desktop-window-controls { -webkit-app-regio
 :is(.wiki-prose, .notes-editor, .fp-markdown) .md [data-rich-highlight="warning"] { background: var(--rich-callout-warning); }
 .md details[data-rich-collapse] { border: 1px solid var(--border); border-radius: var(--r-md); padding: 12px 16px; margin: 12px 0; }
 .md details[data-rich-collapse] > summary { cursor: pointer; }
+/* A folded note keeps its callout color in the summary; the body is the same callout. */
+.md details[data-rich-collapse] > summary blockquote[data-rich-highlight] { margin: 0; padding: 0; border: 0; background: none; font-weight: 600; }
+.md details[data-rich-collapse] > summary blockquote[data-rich-highlight] p { margin: 0; }
+/* A long pasted user block folds for reading only; expanding shows the exact sent text. */
+.user-text-fold { margin: 6px 0; }
+.user-text-fold > summary { cursor: pointer; color: var(--text-faint); font-size: 12px; }
+.user-text-fold[open] > summary { margin-bottom: 6px; }
 .md details[data-rich-collapse] > :not(summary) { margin-left: 16px; }
 .md figure[data-rich-card] { padding: 16px; margin: 12px 0; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-elev2); overflow: auto; }
 .md figure[data-rich-card] > a { font-weight: 700; }

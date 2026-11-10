@@ -1,4 +1,6 @@
 import { createMath } from "../rich-math";
+import { classifyPaste } from "../paste-format";
+import { pasteHtml } from "../paste-format-html";
 import { copyText } from "../clipboard";
 import { RichCommands } from "../rich-commands";
 import { editableDisclosures } from "../rich-content";
@@ -328,13 +330,16 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		window.getSelection()?.removeAllRanges(); window.getSelection()?.addRange(range); savedRange.current = range.cloneRange();
 	}, [readOnly]);
 	useLayoutEffect(() => {
-		if (!wiki || !root.current) return;
+		if (!root.current) return;
 		const next: { host: HTMLElement; code: string }[] = [];
 		const caret = window.getSelection()?.anchorNode ?? null;
 		root.current.querySelectorAll<HTMLElement>('pre > code.language-mermaid').forEach(code => {
 			const pre = code.parentElement!;
-			let host = pre.querySelector<HTMLElement>('.wiki-mermaid-preview');
-			if (!host) { host = document.createElement('div'); host.dataset.richUi = ''; host.contentEditable = 'false'; host.className = 'wiki-mermaid-preview'; pre.prepend(host); }
+			// Wiki documents and plain file previews share the fold behavior; only the
+			// preview chrome class differs so each surface keeps its own styling.
+			const previewClass = wiki ? 'wiki-mermaid-preview' : 'fp-mermaid-preview';
+			let host = pre.querySelector<HTMLElement>('.' + previewClass);
+			if (!host) { host = document.createElement('div'); host.dataset.richUi = ''; host.contentEditable = 'false'; host.className = previewClass; pre.prepend(host); }
 			// The diagram is the reading view; the source stays folded until the
 			// user asks for it or the caret is already inside (fresh insert).
 			if (caret && code.contains(caret)) openMermaidSource.current.add(pre);
@@ -361,14 +366,14 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 			}
 			next.push({ host, code: richCodeText(code) });
 		});
-		root.current.querySelectorAll<HTMLElement>('.wiki-mermaid-preview').forEach(host => { if (!next.some(item => item.host === host)) host.remove(); });
+		root.current.querySelectorAll<HTMLElement>('.wiki-mermaid-preview, .fp-mermaid-preview').forEach(host => { if (!next.some(item => item.host === host)) host.remove(); });
 		root.current.querySelectorAll<HTMLElement>('pre.wiki-mermaid').forEach(pre => {
 			if (pre.querySelector('code.language-mermaid')) return;
 			pre.classList.remove('wiki-mermaid', 'wiki-mermaid-source-hidden');
 			pre.querySelector('button[data-mermaid-source]')?.remove();
 		});
 		setDiagrams(next);
-	}, [value, t]);
+	}, [value, t, wiki]);
 	const selectedCell = () => {
 		const node = window.getSelection()?.anchorNode;
 		const element = node instanceof Element ? node : node?.parentElement;
@@ -492,6 +497,31 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		root.current.querySelectorAll<HTMLElement>("[data-rich-toc]").forEach(toc => renderToc(toc, next, labels));
 		emitted.current = next;
 		onChange(next);
+	};
+	/**
+	 * Fold the block holding the selection into the editor's own disclosure. The
+	 * body keeps its own markup, so nothing is re-parsed; one update() records it as
+	 * a single edited fragment.
+	 */
+	const foldSelection = () => {
+		if (readOnly || !root.current) return;
+		const selection = window.getSelection();
+		const anchorNode = selection?.anchorNode;
+		if (!anchorNode || !root.current.contains(anchorNode)) return;
+		const holder = (anchorNode instanceof Element ? anchorNode : anchorNode.parentElement)?.closest<HTMLElement>("[data-rich-block]");
+		const block = (holder ?? anchorNode as Element).closest<HTMLElement>("[data-rich-block], p, blockquote, table, pre, ul, ol, h1, h2, h3, h4, h5, h6");
+		if (!block || !root.current.contains(block) || block.hasAttribute("data-rich-collapse") || block.closest("[data-rich-collapse]")) return;
+		const wrap = document.createElement("div");
+		wrap.dataset.richCollapse = "";
+		const summary = document.createElement("p");
+		summary.dataset.richSummary = "";
+		summary.textContent = t("richCollapse");
+		const body = document.createElement("div");
+		body.dataset.richCollapseBody = "";
+		block.replaceWith(wrap);
+		body.append(block);
+		wrap.append(summary, body);
+		update();
 	};
 	/** Adds the maintained block below the title once; an existing one is only scrolled to. */
 	const insertToc = () => {
@@ -791,7 +821,7 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		{insertPopup && !readOnly && <WikiInsertPopover popup={insertPopup} onClose={() => { setInsertPopup(null); restoreInsert(); }}>
 			<TableSizePicker onInsert={(columns, rows) => insertToolbar("bg", { columns, rows })} />
 		</WikiInsertPopover>}
-		{!wiki && !readOnly && <RichFormattingToolbar compact={compact} commands={commands} />}
+		{!wiki && !readOnly && <RichFormattingToolbar compact={compact} commands={commands} onFold={foldSelection} />}
 		{cardOpen && <RichLinkCardDialog onClose={() => setCardOpen(false)} onInsert={async (card, signal) => {
 			const range = cardRange.current, editor = root.current;
 			if (!range || !editor?.contains(range.startContainer) || readOnlyRef.current) throw Error();
@@ -963,6 +993,24 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 					onClick={(event) => {
 						const formula = (event.target as Element).closest<HTMLElement>("[data-rich-math]");
 						if (formula) { event.preventDefault(); openMath(formula); return; }
+						// A folded diagram is its own reading view: clicking it reveals the
+						// source so the block stays editable.
+						const preview = (event.target as HTMLElement).closest<HTMLElement>(".wiki-mermaid-preview, .fp-mermaid-preview");
+						const folded = preview?.closest<HTMLElement>("pre.wiki-mermaid-source-hidden");
+						if (folded) {
+							event.preventDefault();
+							openMermaidSource.current.add(folded);
+							folded.classList.remove("wiki-mermaid-source-hidden");
+							const toggle = folded.querySelector<HTMLButtonElement>("button[data-mermaid-source]");
+							if (toggle) { toggle.textContent = t("wikiMermaidHideCode"); toggle.setAttribute("aria-expanded", "true"); }
+							const code = folded.querySelector("code");
+							if (code) {
+								root.current?.focus({ preventScroll: true });
+								const range = code.ownerDocument.createRange(); range.selectNodeContents(code); range.collapse(false);
+								const selection = code.ownerDocument.getSelection(); selection?.removeAllRanges(); selection?.addRange(range);
+							}
+							return;
+						}
 						const target = event.target as HTMLElement, toc = target.closest<HTMLElement>("[data-rich-toc]");
 						if (toc && target.closest("[data-rich-toc-remove]")) { event.preventDefault(); if (!readOnly) { toc.remove(); update(); } return; }
 						const entry = target.closest<HTMLElement>("[data-rich-toc-index]");
@@ -976,7 +1024,16 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 						event.preventDefault();
 						const image = Array.from(event.clipboardData.files).find((file) => file.type.startsWith("image/"));
 						if (image) { void pasteImage(image); return; }
-						if (!readOnly) command("insertText", event.clipboardData.getData("text/plain"));
+						if (readOnly) return;
+						const text = event.clipboardData.getData("text/plain");
+						// Only text/plain is read: the editor's contract is a small controlled
+						// document format, never a general HTML renderer.
+						const nodes = classifyPaste(text);
+						// Nothing recognized means the paste is ordinary prose: insert it verbatim
+						// so the source the user pasted is exactly the source that lands.
+						if (!nodes.some(node => node.type !== "text")) { command("insertText", text); return; }
+						// One insertHTML call keeps a folded note in a single source fragment.
+						command("insertHTML", pasteHtml(nodes));
 					}}
 					onDrop={(event) => { event.preventDefault(); event.stopPropagation(); }}
 				/>

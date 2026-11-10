@@ -50,7 +50,7 @@ export function controlledBlock(raw: string): string | null {
 
 /** Editing uses ordinary blocks because Chromium's insertHTML unwraps SUMMARY. */
 export function editableDisclosures(root: HTMLElement, label: string) {
-	root.querySelectorAll<HTMLDetailsElement>("details[data-rich-collapse]").forEach(details => {
+	root.querySelectorAll<HTMLDetailsElement>("details").forEach(details => {
 		const block = document.createElement("div"); block.dataset.richCollapse = "";
 		const title = document.createElement("p"); title.dataset.richSummary = "";
 		const summary = details.querySelector(":scope > summary"); title.innerHTML = summary?.innerHTML ?? label; summary?.remove();
@@ -70,5 +70,5 @@ export function canonicalDisclosures(root: HTMLElement) {
 		const summary = document.createElement("summary"); summary.innerHTML = block.querySelector(":scope > [data-rich-summary]")?.innerHTML ?? "";
 		const body = block.querySelector(":scope > [data-rich-collapse-body]"); details.append(summary, ...(body ? [...body.childNodes] : [])); block.replaceWith(details);
 	});
-	root.querySelectorAll("details[data-rich-collapse]").forEach(node => node.removeAttribute("open"));
+	root.querySelectorAll("details").forEach(node => node.removeAttribute("open"));
 }

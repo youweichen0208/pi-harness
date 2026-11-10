@@ -38,6 +38,11 @@ _Avoid_: Run 历史、项目源文件
 一个单独配置的本地文件夹及其文档内容，在独立 Wiki 窗口中浏览和编辑，不依赖 Workspace 项目分组；子目录是文档分类，不是独立知识库。
 _Avoid_: Workspace 知识库项目
 
+## 富文本片段（rich document fragment）
+
+富文本编辑中一个可编辑单元所对应的连续源切片。多数情况下就是一个 Markdown 顶层节点；手写 `<details>` 这类跨多个节点的构造会合并成一个片段，因此片段边界不等于 AST 节点边界。
+_Avoid_: 块（块在代码里特指挂载用的 wrapper）、节点
+
 ## 单文件文档弹窗（single-document dialog）
 
 普通对话中打开一篇 Markdown 的编辑弹窗；其中的 Agent Chat 属于主聊天，通过引用当前文档进行讨论和修改。

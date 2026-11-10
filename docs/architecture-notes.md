@@ -18,6 +18,8 @@
 
 普通格式保存为 Markdown；蓝／绿／黄高亮块使用 `[!NOTE]`／`[!TIP]`／`[!WARNING]`。特殊格式由 `rich-content.ts` 的白名单处理：字号、文字颜色、背景、对齐、行距、下划线及上下标；折叠块为 `<details data-rich-collapse><summary>…</summary>…</details>`；链接卡片为 `<figure data-rich-card="1">`，内部保存链接、标题、摘要和可选图片。未知 HTML 保留源码，不执行脚本或事件属性。编辑态折叠块使用普通 div/p，规避 Chromium insertHTML 拆散 summary；保存时还原 details，展开状态不持久化。浏览器生成的兄弟嵌套列表仅在序列化副本中归一化，保留原生撤销记录。
 
+手写 `<details>` 在 Markdown AST 中是 opener、正文、closer 三个兄弟节点，按节点切块会把一个折叠构造撕成碎片并让 `</details>` 单独成为源码框。`rich-disclosure.ts` 按源文本做标签配对，把整段合并为一个块（`fragment`），中间空白归入 `raw` 而非 `prefix`，保证 `prefix + raw + suffix` 逐字节还原源文件。手写折叠块（`bare`，不带 `data-rich-collapse`）同样渲染为可折叠且正文可编辑，但保存时剥掉编辑器补写的 `data-rich-collapse`，不静默改写作者原文；未配对的 opener／closer 仍按单节点降级。多行 `<figure data-rich-card>`／`div[data-rich-format]` 会以同样方式碎裂，目前是已知缺口。
+
 `POST /api/notes/assets` 接受 `{data}`（Base64），返回 `{path}`；`GET /api/notes/assets/:asset` 读取资源。图片存于 `notes/assets`，UUID 文件、原子落盘、内容嗅探，PNG/JPEG/GIF/WebP 上限 5MiB；鉴权与 Origin/Host 校验沿用 Notes。资源在正文中使用不含口令的相对 API 路径，展示时才附加鉴权。副本共享稳定资源 ID，删除小记不自动删除资源；本版尚无孤立图片清理。
 
 `POST /api/link-preview` 接受 `{url}`，仅用户主动“获取网页信息”时执行，返回标题、摘要及可选 Base64 封面。仅访问公共 HTTP/HTTPS 80/443，DNS 结果固定到连接，重定向逐次检查（最多 3 次），总超时 8 秒、HTML 2MiB、封面 5MiB、最多 4 个并发请求。不转发口令、Cookie 或其他用户请求头。获取失败可手动填写；确认插入后封面通过当前宿主持久化，卡片为快照，重开不重新请求目标网页。新增 HTTP 类型仍只定义于 protocol.ts。
