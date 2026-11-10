@@ -1,5 +1,9 @@
 # 发布流程
 
+## 1.23.0：粘贴格式识别与手写折叠块修复
+
+粘贴进富文本编辑器的文本先判断源格式（标准 Markdown 块级语法、带显式定界符的 LaTeX）再决定转换哪些节点，认不出的按纯文本原样落地，不读剪贴板 `text/html`、不做猜测。修复手写 `<details>` 在 AST 中被视为 opener／正文／closer 三个兄弟节点而遭切块撕碎的问题：`rich-disclosure.ts` 按源文本配对标签合并为单一可编辑片段，`prefix + raw + suffix` 逐字节还原源文件，保存时剥掉编辑器补写的 `data-rich-collapse`，不静默改写作者原文；未配对标签仍按单节点降级。多行 `<figure data-rich-card>`／`div[data-rich-format]` 碎裂为已知缺口。SDK / pi-ai 1.5.0、协议 v52 不变。仅发布 GitHub 三平台桌面 Release，同提交 CI、打包及安装升级验证通过后公开。说明见 `.github/release-notes/v1.23.0.md`。
+
 ## 1.22.3：无边框命令行与消息节奏修正
 
 对话过程中的工具执行与文件改动改为无边框行，点行内展开细节：已结束的工具组不再有卡片与头部，编辑／写入改为一行并在点开时显示 diff，失败不再重复「N failed」胶囊与「Completed」。修复消息间距过大（同一轮内 padding 叠 margin 加残留 `!important`，出现 21～36px 空档）、回复正文比头部低 12px、顶栏把工具调用数当计划步数（#150）、问题卡片正文推荐与逐行选项不识别（#149）、Pi CLI 检测被工作区校验门控导致「检测失败」（#151）。SDK / pi-ai 1.5.0、协议 v52 不变。仅发布 GitHub 三平台桌面 Release，同提交 CI、打包及安装升级验证通过后公开。说明见 `.github/release-notes/v1.22.3.md`。
