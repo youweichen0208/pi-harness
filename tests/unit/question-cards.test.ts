@@ -76,6 +76,31 @@ test("a single numbered question uses cards and keeps its recommendation", () =>
 	expect(composeAnswers(questions, recommendedAnswers(questions))).toBe("Q25：(b) 新增中间态 degraded");
 });
 
+test("space-separated inline choices fall back to options when the letters run in order", () => {
+	const segments = parseReplySegments("❓ **Q4** - **What does the Bot give these 3 users?**\n(a) 早会提醒 (b) 记待办 (c) 搜索资料 (d) 不一定\n\n➡️ 推荐 (b)。先用低成本方式验证。");
+	const questions = segments.flatMap(segment => segment.kind === "questions" ? segment.questions : []);
+	expect(questions[0].prompt).toBe("");
+	expect(questions[0].options.map(option => [option.key, option.text])).toEqual([
+		["a", "早会提醒"], ["b", "记待办"], ["c", "搜索资料"], ["d", "不一定"],
+	]);
+	expect(questions[0].options[1]).toMatchObject({ recommended: true, reason: "先用低成本方式验证。" });
+});
+
+test("a space fallback still refuses references, short runs and prose mentions", () => {
+	const open = [
+		// an option body that opens with a bracketed letter is a reference, not the next choice
+		"❓ **Q2** - **x**\n(a) 只拒全零 (b) 拒全零 (c) (b) + 更多\n➡️ (b)。原因",
+		// two markers are not an option list
+		"❓ **Q3** - **x**\n(a) 甲 (b) 乙\n➡️ (a)。原因",
+		// letters do not start at a or run in order, so this is prose
+		"❓ **Q5** - **x**\n对比 (b) 和 (c) 两种 (d) 情况\n➡️ (b)。原因",
+	];
+	for (const text of open) {
+		const questions = parseReplySegments(text).flatMap(segment => segment.kind === "questions" ? segment.questions : []);
+		expect(questions[0].options.map(option => option.key)).toEqual([undefined]);
+	}
+});
+
 test("inline option references do not create empty or duplicate choices", () => {
 	const segments = parseReplySegments("❓ **Q18** - **占位哈希拒绝怎么定义？**\n(a) 只拒绝全零;(b) 拒绝全零 + 单一重复字符;(c) (b) + 拒绝明显占位模式如 deadbeef 重复\n➡️ (b). (c) 开始猜测，容易误伤真实哈希。\n\n❓ **Q19** - **下一题**\n(a) 是;(b) 否");
 	const questions = segments.flatMap(segment => segment.kind === "questions" ? segment.questions : []);

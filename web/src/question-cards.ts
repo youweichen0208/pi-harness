@@ -41,16 +41,20 @@ function parseHead(line: string, index: number) {
 /** A list-style option line, after removing inline emphasis: `- **A.** text`, `A) text` or `(a) text`. */
 const LIST_OPTION = /^\s*(?:[-–—*]\s*)?(?:(?:[(（]([A-Ha-h])[)）]|([A-Ha-h])[.、．)）])\s+|([A-Ha-h])[:：]\s*)(.+)$/;
 
-/** Split `(a) x;(b) y;(c) z。trailing` into options; text before (a) and after the last option's sentence stays prompt. */
+/** Split `(a) x;(b) y;(c) z。trailing` into options; text before (a) and after the last option's sentence stays prompt.
+ * Semicolons are the documented separator. Without any semicolon, a conservative
+ * fallback accepts space-separated `(a) x (b) y (c) z` when the letters run in
+ * order from `a` and no option body reads as a reference to another choice. */
 function parseOptions(text: string) {
 	// Inline choices are separated by semicolons. Parenthesized letters inside
 	// an option (for example `(c) (b) + …`) are references, not new choices.
-	const markers = [...text.matchAll(/[(（]([A-Ha-h])[)）]\s*/g)]
-		.filter((match, index) => index === 0 || /[;；]\s*$/.test(text.slice(0, match.index)));
+	const all = [...text.matchAll(/[(（]([A-Ha-h])[)）]\s*/g)].map(match => ({ index: match.index, text: match[0], letter: match[1] }));
+	const semicolonSeparated = all.filter((match, index) => index === 0 || /[;；]\s*$/.test(text.slice(0, match.index)));
+	const markers = semicolonSeparated.length >= 3 ? semicolonSeparated : (spaceSeparated(text, all) ?? semicolonSeparated);
 	const parts = [text.slice(0, markers[0]?.index ?? text.length)];
 	for (let i = 0; i < markers.length; i++) {
 		const marker = markers[i];
-		parts.push(marker[1], text.slice(marker.index + marker[0].length, markers[i + 1]?.index));
+		parts.push(marker.letter, text.slice(marker.index + marker.text.length, markers[i + 1]?.index));
 	}
 	if (parts.length < 5) return { prompt: text, options: [] as QuestionOption[] };
 	const options: QuestionOption[] = [];
@@ -64,6 +68,21 @@ function parseOptions(text: string) {
 		options.push({ key: parts[i].toLowerCase(), text: plain(option.replace(/[。;；]\s*$/, "")) });
 	}
 	return { prompt: [parts[0].trim(), trailing].filter(Boolean).join(" "), options };
+}
+
+/** Fallback for replies that separate inline choices with spaces: at least three
+ * markers, letters start at `a` and increase one by one, every choice body is
+ * non-empty, and no body opens with a letter in parentheses (a reference such as
+ * `(b) + …`) or with a connective that reads as prose (`和`/`或`/`+`/`and`). */
+function spaceSeparated(text: string, all: readonly { index: number; text: string; letter: string }[]) {
+	if (all.length < 3) return;
+	const letters = all.map(match => match.letter.toLowerCase());
+	if (letters[0] !== "a") return;
+	if (letters.some((letter, index) => letter !== String.fromCharCode(97 + index))) return;
+	const bodies = all.map((match, index) => text.slice(match.index + match.text.length, all[index + 1]?.index ?? text.length).trim());
+	if (bodies.some(body => !body)) return;
+	if (bodies.slice(0, -1).some(body => /^[(（][A-Ha-h][)）]/.test(body) || /^(?:[+＋]|和|或|及|以及|and\b|or\b)/i.test(body))) return;
+	return all;
 }
 
 function applyRecommendation(options: QuestionOption[], text: string): QuestionOption[] {
