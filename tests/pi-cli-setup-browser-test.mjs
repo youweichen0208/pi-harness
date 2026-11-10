@@ -31,8 +31,11 @@ try {
 					const actual = await route.fetch();
 					assert.equal(actual.status(), 200);
 					assert(['available', 'missing', 'unusable'].includes((await actual.json()).pi.status));
-					const rejected = await route.fetch({ postData: JSON.stringify({ ...route.request().postDataJSON(), cwd: '/not-the-workspace' }) });
-					assert.equal(rejected.status(), 409);
+					// #151: PATH probing does not belong to a workspace, so a stale or wrong cwd
+					// must not block it — only quiescing (shutdown/restart) answers 409.
+					const wrongCwd = await route.fetch({ postData: JSON.stringify({ ...route.request().postDataJSON(), cwd: '/not-the-workspace' }) });
+					assert.equal(wrongCwd.status(), 200);
+					assert(['available', 'missing', 'unusable'].includes((await wrongCwd.json()).pi.status));
 				}
 				return route.fulfill({ json: state });
 			}
