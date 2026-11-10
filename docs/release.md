@@ -1,5 +1,9 @@
 # 发布流程
 
+## 1.22.3：无边框命令行与消息节奏修正
+
+对话过程中的工具执行与文件改动改为无边框行，点行内展开细节：已结束的工具组不再有卡片与头部，编辑／写入改为一行并在点开时显示 diff，失败不再重复「N failed」胶囊与「Completed」。修复消息间距过大（同一轮内 padding 叠 margin 加残留 `!important`，出现 21～36px 空档）、回复正文比头部低 12px、顶栏把工具调用数当计划步数（#150）、问题卡片正文推荐与逐行选项不识别（#149）、Pi CLI 检测被工作区校验门控导致「检测失败」（#151）。SDK / pi-ai 1.5.0、协议 v52 不变。仅发布 GitHub 三平台桌面 Release，同提交 CI、打包及安装升级验证通过后公开。说明见 `.github/release-notes/v1.22.3.md`。
+
 ## 1.22.2：macOS 桌面版终端 PATH 修复
 
 修复 macOS 桌面版从 Dock／Spotlight／访达启动后，内置终端里 `npm`／`node`／`git` 报 `command not found`。GUI 启动不经过登录 shell，`~/.zprofile` 的 `brew shellenv` 不执行，服务继承的 PATH 只剩系统目录。启动时追加 `/opt/homebrew/{bin,sbin}`、`/usr/local/{bin,sbin}`，追加不前置、不重复、不存在跳过；nvm／volta 等版本管理器不猜。SDK / pi-ai 1.5.0、协议 v52 不变。仅发布 GitHub 三平台桌面 Release，同提交 CI、打包及安装升级验证通过后公开。说明见 `.github/release-notes/v1.22.2.md`。

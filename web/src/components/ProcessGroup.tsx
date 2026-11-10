@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { FiCheck, FiChevronRight } from "react-icons/fi";
+import { FiChevronRight } from "react-icons/fi";
 import { useChatT } from "../i18n";
 import { processGroupState, type ProcessStats } from "../process-stats";
 export { emptyProcessStats, type ProcessStats } from "../process-stats";
@@ -29,17 +29,23 @@ export function ProcessGroup({ stats, children }: { stats: ProcessStats; childre
 	].filter(Boolean) as string[];
 	const thought = stats.thinking > 0 && (stats.thoughtMs >= 1000 ? t("processThought", { d: elapsedLabel(stats.thoughtMs / 1000) }) : t("processThoughtUnmeasured"));
 	const state = processGroupState(stats);
-	return <section className={`process-group ${state}${open ? " open" : ""}${single ? " single-command" : ""}`}>
-		{!single && <button type="button" className="process-group-head" aria-expanded={open} onClick={() => setManual(!open)}>
+	const passed = state === "ok";
+	// 29a: a finished list drops its head and border entirely — the steps read as
+	// the quiet text Claude Code prints between two paragraphs. Running and failed
+	// lists keep a headless one-row summary so the state stays visible.
+	const headless = !single && passed && !open;
+	return <section className={`process-group ${state}${open ? " open" : ""}${single ? " single-command" : ""}${headless ? " headless" : ""}`}>
+		{!single && !headless && <button type="button" className="process-group-head" aria-expanded={open} onClick={() => setManual(!open)}>
 			<FiChevronRight className="process-group-chevron" aria-hidden="true" />
 			<span className="process-group-summary"><span>{parts.join(" · ")}</span></span>
 			{thought && <><span className="process-group-dot" aria-hidden="true">·</span><span className="process-group-thought">{thought}</span></>}
-			<span className="process-group-status" aria-label={state === "ok" ? t("processAllPassed") : undefined} title={state === "ok" ? t("processAllPassed") : undefined}>
-				{stats.running ? <><i className="thinking-spinner" aria-hidden="true" />{t("processRunning")}</>
-					: stats.failed ? t("processFailed", { n: stats.failed })
-						: stats.skipped ? t("toolNotExecuted") : <><FiCheck aria-hidden="true" />{t("executionCompleted")}</>}
-			</span>
+			{/* 29a: no "N failed" / "Completed" badge on the right — the ✗ rows and their
+			   exit code already say it. Only a running turn shows its spinner. */}
+			{stats.running && <span className="process-group-status">
+				<i className="thinking-spinner" aria-hidden="true" />{t("processRunning")}
+			</span>}
 		</button>}
+		{headless && <button type="button" className="process-group-summary-line" aria-expanded={false} onClick={() => setManual(true)}>{parts.join(" · ")}{thought && <> · {thought}</>}</button>}
 		<div className="process-list process-group-rows" hidden={!open}>{children}</div>
 	</section>;
 }

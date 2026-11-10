@@ -7,7 +7,7 @@ import { getClientId } from "../use-chat";
 import type { PiCliStatus, CliToolStatus } from "../types";
 import { PI_CLI_INSTALL_COMMAND } from "../pi-cli-install";
 
-export function PiCliSetup({ cwd, ready, onInstall }: { cwd: string; ready: boolean; onInstall: () => void }) {
+export function PiCliSetup({ ready, onInstall }: { ready: boolean; onInstall: () => void }) {
 	const t = useT();
 	const [attempt, setAttempt] = useState(0);
 	const [status, setStatus] = useState<PiCliStatus>();
@@ -17,14 +17,16 @@ export function PiCliSetup({ cwd, ready, onInstall }: { cwd: string; ready: bool
 		setStatus(undefined); setError("");
 		if (ready) void (async () => {
 			try {
-				const response = await fetch(withToken("/api/extensions"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "cli-status", clientId: getClientId(), cwd }), signal: abort.signal });
+				// The server probes PATH in its own process, so no cwd is needed here; sending one
+			// made the route answer "Workspace unavailable" whenever the workspace was unset.
+			const response = await fetch(withToken("/api/extensions"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "cli-status", clientId: getClientId() }), signal: abort.signal });
 				if (!response.ok) throw Error(t("piCliCheckFailed"));
 				const result: PiCliStatus = await response.json();
 				if (!abort.signal.aborted) setStatus(result);
 			} catch (error) { if (!abort.signal.aborted) setError((error as Error).message); }
 		})();
 		return () => abort.abort();
-	}, [cwd, ready, attempt, t]);
+	}, [ready, attempt, t]);
 	const label = (tool: CliToolStatus) => tool.status === "available" ? tool.version : t(tool.status === "missing" ? "piCliMissing" : "piCliUnusable");
 	return <section className="ext-local-directory pi-cli-setup" aria-label="Pi CLI">
 		<div className="ext-card-heading"><h3>Pi CLI</h3>{status && <span className="pi-cli-badge" data-status={status.pi.status}>{status.pi.status === "available" ? <FiCheckCircle aria-hidden="true" /> : <FiAlertTriangle aria-hidden="true" />}{status.pi.status === "available" ? t("piCliDetected") : label(status.pi)}</span>}</div>
@@ -32,7 +34,10 @@ export function PiCliSetup({ cwd, ready, onInstall }: { cwd: string; ready: bool
 		{error ? <p role="alert" className="ext-error">{error}</p> : status ? <div className="pi-cli-tools" role="status">{([["Pi CLI", status.pi], ["Node.js", status.node], ["npm", status.npm]] as const).map(([name, tool]) => <span className="pi-cli-tool" data-status={tool.status} key={name}><i aria-hidden="true" />{name} · {label(tool)}</span>)}</div> : <p role="status">{t(ready ? "loading" : "piCliDisconnected")}</p>}
 		{status?.pi.status === "missing" && <>
 			<div className="pi-cli-command"><code>{PI_CLI_INSTALL_COMMAND}</code><CopyButton text={PI_CLI_INSTALL_COMMAND} /></div>
-			{!status.canInstall && <p className="ext-muted">{t("piCliDependencies")} <a href="https://nodejs.org/en/download" target="_blank" rel="noreferrer">{t("piCliGetNode")}</a></p>}
+			{/* Say which check failed instead of a generic "install Node" that sends a user who
+			    already has Node 26 hunting for a missing installer. */}
+			{!status.canInstall && <p className="ext-muted">{t("piCliDependencies")} {status.node.status !== "available" && <span>Node.js ✗</span>} {status.npm.status !== "available" && <span>npm ✗</span>} <a href="https://nodejs.org/en/download" target="_blank" rel="noreferrer">{t("piCliGetNode")}</a></p>}
+			{status.node.status === "available" && status.npm.status === "available" && status.canInstall && <p className="ext-muted">{t("piCliDetectionNote", { node: status.node.version ?? "", npm: status.npm.version ?? "" })}</p>}
 		</>}
 		{status?.pi.status !== "available" && <p className="ext-muted">{t("piCliTroubleshoot")}</p>}
 		<div className="ext-actions">

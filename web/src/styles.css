@@ -14401,9 +14401,8 @@ html.pi-desktop .design-workspace .topbar { height: 48px; min-height: 48px; }
 	.subagent-errors > header > button { margin-left: 0; }
 }
 
-/* Message flow: completed single commands read as quiet inline evidence. */
-.bash-inline-command, .bash-inline-result { display: none; }
-.design-workspace .process-group.single-command { border: 0; background: transparent; margin-block: 4px 20px; padding: 0; }
+/* Message flow: a completed single command is a row, not a card (29a). */
+.design-workspace .process-group.single-command { border: 0; background: transparent; margin-block: 4px 12px; padding: 0; }
 .design-workspace .single-command > .process-group-rows { padding: 0; border: 0; }
 .design-workspace .single-command .bash-group, .design-workspace .single-command .bash-group-items, .design-workspace .single-command .bash-row { border: 0; background: transparent; margin: 0; padding: 0; }
 .design-workspace .single-command .bash-row-head { display: flex; gap: 8px; min-height: 28px; padding: 2px 0; background: transparent; }
@@ -14415,7 +14414,7 @@ html.pi-desktop .design-workspace .topbar { height: 48px; min-height: 48px; }
 .design-workspace .single-command .bash-row-head > svg:last-child { margin-left: auto; color: var(--text-faint); }
 .design-workspace .single-command .bash-row.run { border: 1px solid var(--border-soft); border-radius: var(--r-md); padding: 10px 14px; }
 .design-workspace .single-command .bash-row.run .bash-row-head { min-height: 30px; }
-.design-workspace .process-group.ok:not(.single-command) > .process-group-head { background: var(--bg-elev2); border: 1px solid var(--border-soft); border-radius: var(--r-md); min-height: 48px; }
+.design-workspace .process-group.ok:not(.single-command) > .process-group-head { background: transparent; border: 0; min-height: 26px; }
 .design-workspace .process-group.ok:not(.single-command) > .process-group-head .process-group-chevron { order: 4; margin-left: 8px; }
 .design-workspace .process-group.ok:not(.single-command) > .process-group-head .process-group-status { margin-left: auto; }
 @media (max-width: 600px) {
@@ -14425,10 +14424,10 @@ html.pi-desktop .design-workspace .topbar { height: 48px; min-height: 48px; }
 :root .design-workspace .process-group.single-command > .process-list { padding: 0; border: 0; }
 :root .design-workspace .process-group.single-command .bash-row-head { padding: 2px 0; }
 :root .design-workspace .process-group.single-command .bash-row.ok .bash-inline-command { flex: 0 1 auto; font-size: 11px; color: var(--text-muted); }
-:root .design-workspace .process-group.single-command .process-list .bash-group-items > .bash-row.run { border: 1px solid var(--border-soft); border-radius: var(--r-md); padding: 10px 14px; }
+:root .design-workspace .process-group.single-command .process-list .bash-group-items > .bash-row.run { border: 0; padding: 0; }
 
 /* Expanded successful groups expose the original command, with quiet per-row status. */
-:root .design-workspace .process-group.ok:not(.single-command).open { background: var(--bg-elev2); }
+:root .design-workspace .process-group.ok:not(.single-command).open { background: transparent; }
 :root .design-workspace .process-group.ok:not(.single-command).open .bash-row.ok .bash-inline-command { display: block; flex: 1; min-width: 0; overflow-x: auto; white-space: pre; color: var(--text-muted); font: 11px/1.8 var(--mono); order: -2; }
 :root .design-workspace .process-group.ok:not(.single-command).open .bash-row.ok :is(.bash-readable-title, .bash-command-secondary, .bash-extra-lines, .bash-inline-result) { display: none; }
 :root .design-workspace .process-group.ok:not(.single-command).open .bash-row.ok :is(.bash-state, .bash-row-stats) { color: var(--text-muted); flex: none; }
@@ -14690,30 +14689,15 @@ html.pi-desktop .design-workspace .topbar { height: 48px; min-height: 48px; }
 }
 
 /* Agent conversation refinement: quiet cards, one execution summary, readable command bodies. */
-:root .design-workspace .process-group,
-:root .design-workspace .process-group.single-command,
-:root .design-workspace .process-group.ok:not(.single-command).open,
+/* 29a supersedes this card layout: process groups and single commands are now
+   borderless rows (see the 29a block at the end of this file). Only the plan
+   checklist keeps the quiet card. */
 :root .design-workspace .todo-checklist { background: var(--bg-elev); border: 1px solid var(--border-soft); border-radius: var(--r-lg); margin-block: 12px 18px; overflow: hidden; }
-:root .design-workspace .process-group > .process-group-head,
-:root .design-workspace .process-group.ok:not(.single-command) > .process-group-head { background: transparent; border: 0; border-radius: 0; padding: 12px 16px; min-height: 48px; }
-:root .design-workspace .process-group > .process-group-rows { margin: 0 16px; padding: 8px 0; border-top: 1px solid var(--border-soft); }
-:root .design-workspace .process-group.single-command > .process-group-rows { margin: 0; padding: 0; border: 0; }
-:root .design-workspace .process-group .bash-row,
-:root .design-workspace .process-group.single-command .process-list .bash-group-items > .bash-row.run { border: 0; background: transparent; padding: 0; }
-:root .design-workspace .process-group .bash-row-head,
-:root .design-workspace .process-group.single-command .bash-row-head { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; padding: 10px 0; min-height: 44px; }
-:root .design-workspace .process-group.single-command .bash-row-head { padding: 14px 16px; min-height: 52px; }
-:root .design-workspace .process-group .bash-row .bash-inline-command,
-:root .design-workspace .process-group.single-command .bash-row.ok .bash-inline-command,
-:root .design-workspace .process-group.ok:not(.single-command).open .bash-row.ok .bash-inline-command { display: block; flex: 1; min-width: 0; max-width: none; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--text); font: 12px/1.7 var(--mono); order: 0; text-align: left; }
-:root .design-workspace .process-group .bash-row :is(.bash-readable-title, .bash-command-secondary, .bash-extra-lines, .bash-live-line) { display: none; }
-:root .design-workspace .process-group .bash-row.ok .bash-inline-result { display: inline; color: var(--green); font: 12px/1.5 var(--sans); white-space: nowrap; }
+:root .design-workspace .process-group .bash-row { border: 0; background: transparent; padding: 0; }
 :root .design-workspace .process-group .bash-row.ok .bash-state { color: var(--green); }
 :root .design-workspace .process-group .bash-row.run .bash-state,
 :root .design-workspace .process-group .bash-row.run .bash-row-stats,
 :root .design-workspace .process-group.run .process-group-status { color: var(--accent); }
-:root .design-workspace .process-group .bash-row-stats { flex: none; margin-left: 0; font: 11px/1.5 var(--mono); white-space: nowrap; }
-:root .design-workspace .process-group.single-command .bash-row-body { margin: 0 16px 12px; }
 :root .design-workspace .process-group-status { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; white-space: nowrap; }
 .plan-progress-toggle { display: flex; align-items: center; gap: 14px; width: 100%; padding: 16px; border: 0; background: transparent; color: var(--text-muted); font: 13px/1.5 var(--sans); text-align: left; cursor: pointer; }
 .plan-progress-segments { display: flex; gap: 4px; flex: 0 1 144px; min-width: 60px; }
@@ -15102,3 +15086,211 @@ div.rich-math { overflow-x: auto; max-width: 100%; padding: 4px 0; }
 .rich-math-form textarea { display: block; box-sizing: border-box; width: 100%; margin-top: 8px; padding: 12px; font-family: var(--mono); color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: var(--r-sm); }
 .rich-math-form p { color: var(--text-dim); }
 span.rich-math { display: inline-block; }
+
+/* ---- Design 29a: borderless command and edit rows (Claude Code style) --------------
+   过程列表、命令行与编辑行都不再套卡片外框：每行是「状态点 · 可读名称 / 等宽命令 · 右侧结果」，
+   点开（鼠标或 Enter／Space）时细节直接落在该行下面，再点收起。撤销后续任何重新加边框的旧规则。 */
+:root .design-workspace .process-list { margin: 6px 0 10px; border: 0; border-radius: 0; background: transparent; }
+:root .design-workspace .process-list > * + * { border-top: 0; }
+:root .design-workspace .process-list > .thinking, :root .design-workspace .process-list .thinking { border: 0; border-radius: 0; background: transparent; }
+:root .design-workspace .process-list .thinking-toggle { padding: 3px 0; }
+:root .design-workspace .process-list .thinking-body { padding: 2px 0 10px 34px; }
+:root .design-workspace .process-list .bash-row, :root .design-workspace .process-list .bash-group-items > .bash-row:first-child { border-top: 0; }
+:root .design-workspace .process-list .bash-group-head { background: transparent; }
+:root .design-workspace .process-group { margin: 6px 0 12px; border: 0; border-radius: 0; background: transparent; overflow: visible; }
+:root .design-workspace .process-group > .process-group-head, :root .design-workspace .process-group.ok:not(.single-command) > .process-group-head { padding: 2px 0; min-height: 26px; background: transparent; border: 0; }
+:root .design-workspace .process-group > .process-group-rows { margin: 0; padding: 2px 0; border-top: 0; }
+/* 已结束且收起的列表没有头也没有框，只留一行灰色统计（可点开）。 */
+:root .design-workspace .process-group-summary-line { display: block; width: 100%; margin: 0; padding: 2px 0; border: 0; background: transparent; color: var(--text-dim); text-align: left; font: 12.5px/1.6 var(--sans); cursor: pointer; }
+:root .design-workspace .process-group-summary-line:hover { color: var(--text); }
+/* 命令行。 */
+:root .design-workspace .bash-row-head { align-items: baseline; gap: 10px; min-height: 26px; padding: 3px 0; }
+:root .design-workspace .bash-row-head:hover { background: transparent; }
+:root .design-workspace .bash-row-head .bash-inline-command { flex: 0 1 auto; min-width: 0; overflow: hidden; color: var(--text-dim); font: 12.5px/1.7 var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+:root .design-workspace .bash-row-name { flex: none; color: var(--text); font: 500 13px/1.7 var(--sans); }
+:root .design-workspace .bash-row-head .bash-command-secondary { color: var(--text-faint); }
+:root .design-workspace .bash-row-head > svg { width: 12px; height: 12px; align-self: center; opacity: 0; transition: opacity .12s; }
+/* Hover affordances only on hover-capable pointers; touch taps would latch the arrow. */
+@media (hover: hover) { :root .design-workspace .bash-row-head:hover > svg { opacity: 1; } }
+:root .design-workspace .bash-row-head[aria-expanded="true"] > svg { opacity: 1; }
+:root .design-workspace .bash-row-head :is(.bash-row-stats, .bash-live-line) { margin-left: auto; }
+:root .design-workspace .bash-row-head .bash-attempt-count { flex: none; color: var(--text-faint); }
+:root .design-workspace .bash-row-head .bash-live-line { min-width: 0; overflow: hidden; font-style: italic; text-overflow: ellipsis; white-space: nowrap; }
+:root .design-workspace .bash-row-stats { font: 12px var(--sans); color: var(--text-faint); }
+:root .design-workspace .bash-row-body { padding: 2px 0 10px 34px; }
+:root .design-workspace .bash-full-command, :root .design-workspace .bash-numbered-output { padding-left: 0; border-radius: 0; background: transparent; }
+:root .design-workspace .bash-full-command { color: var(--text-dim); }
+:root .design-workspace .bash-numbered-line { padding-inline: 0; }
+:root .design-workspace .bash-numbered-line.error { background: transparent; }
+:root .design-workspace .bash-row-actions { padding-top: 4px; }
+/* 命令组头同样只有一行。 */
+:root .design-workspace .bash-group { margin: 0; border: 0; border-radius: 0; background: transparent; overflow: visible; }
+:root .design-workspace .bash-group-head { gap: 10px; min-height: 26px; padding: 3px 0; background: transparent; }
+:root .design-workspace .bash-group-head:hover { background: transparent; }
+:root .design-workspace .bash-group-head strong, :root .design-workspace .bash-group.historical-step .bash-group-head strong { color: var(--text-dim); font: 500 12.5px var(--sans); }
+:root .design-workspace .bash-group-head svg { width: 12px; height: 12px; }
+/* 编辑/写入：一行（状态点 · Edit/Write · 路径 · +N −M · 打开），点开在行下显示 diff。 */
+:root .design-workspace .change-card, :root .design-workspace .change-group { margin: 2px 0; border: 0; border-radius: 0; background: transparent; }
+:root .design-workspace .change-card.err, :root .design-workspace .change-group.err { border: 0; }
+:root .design-workspace .change-card-head, :root .design-workspace .change-group-head { min-height: 26px; gap: 10px; padding: 3px 0; }
+:root .design-workspace .change-card-head:hover, :root .design-workspace .change-group-head:hover { background: transparent; }
+:root .design-workspace .change-card-toggle { gap: 10px; }
+:root .design-workspace .change-card-toggle svg { width: 12px; height: 12px; opacity: 0; transition: opacity .12s; }
+@media (hover: hover) { :root .design-workspace .change-card-head:hover .change-card-toggle svg { opacity: 1; } }
+:root .design-workspace .change-card-toggle svg.open { opacity: 1; }
+:root .design-workspace .change-card-toggle code { color: var(--text); font: 13px/1.7 var(--mono); }
+:root .design-workspace .change-verb { color: var(--text-dim); font-size: 12.5px; }
+:root .design-workspace .change-state { order: -1; margin-left: 0; }
+:root .design-workspace .change-state i { width: 7px; height: 7px; }
+:root .design-workspace .change-card-body { padding: 2px 0 8px 34px; border-top: 0; }
+:root .design-workspace .change-card-summary { padding: 0 0 4px; color: var(--text-faint); font: 12px var(--sans); }
+:root .design-workspace .change-hunk-head { padding-inline: 0; border: 0; background: transparent; }
+:root .design-workspace .change-lines { background: transparent; }
+:root .design-workspace .change-error { padding: 4px 0; background: transparent; }
+:root .design-workspace .change-more, :root .design-workspace .change-empty { padding: 4px 0; border-top: 0; }
+:root .design-workspace .change-group-items, :root .design-workspace .change-group-items .change-card + .change-card { border-top: 0; }
+@media (prefers-reduced-motion: reduce) { :root .design-workspace .bash-row-head > svg, :root .design-workspace .change-card-toggle svg { transition: none; } }
+@media (max-width: 560px) { :root .design-workspace .bash-row-body, :root .design-workspace .change-card-body, :root .design-workspace .process-list .thinking-body { padding-left: 20px; } }
+/* 29a: the group status is plain text — a red "1 failed" still marks the state,
+   but no pill, wash or badge competes with the rows. */
+:root .design-workspace .process-group-status, :root .design-workspace .process-group:is(.ok, .err, .run, .empty) .process-group-status { padding: 0; border-radius: 0; background: transparent; color: var(--text-faint); }
+:root .design-workspace .process-group.err .process-group-status { color: var(--red); }
+:root .design-workspace .process-group.run .process-group-status { color: var(--accent); }
+
+/* ---- 29b: conversation rhythm ------------------------------------------------------
+   Message spacing used to be padding only (6px/14px) plus a -12px continuation pull,
+   so a new reply sat 21.9px under the previous one — closer than the 16px gap inside a
+   reply's own header. Spacing now lives on the top edge of each message, measured
+   between boxes; nothing uses negative margins and the scroll-margin-top for question
+   jumps is preserved. */
+/* Messages can sit inside a lazy-mount wrapper, so the gap is set from the workspace
+   root and the wrapper never adds its own. No !important here: an earlier `!important`
+   on the continuation rule silently beat every later spacing rule in this file, so the
+   36px holes kept coming back. Specificity is carried by the extra `.msg` token and
+   the wrapper-level rules in 29d / 29e instead. */
+:root .design-workspace .msg.msg { margin-top: 36px; }
+:root .design-workspace .msg.msg.msg-user { margin-top: 28px; }
+/* A reply that continues the previous one stays its own paragraph; only the header is
+   dropped (it already shares the avatar/name above). */
+:root .design-workspace .msg.msg.msg-continuation { margin-top: 14px; }
+/* The first message owns no top gap; the list padding already gives it room. */
+:root .design-workspace .messages > .msg:first-child, :root .design-workspace .messages > :first-child > .msg:first-child { margin-top: 0; }
+/* Quiet events separate turns instead of absorbing a message's spacing. */
+:root .design-workspace .system-event { margin: 34px auto 34px; }
+/* Header row: avatar, name and time on one line; the collapse action only reserves
+   space while it is actually shown (hover / keyboard focus / touch). */
+:root .design-workspace .msg-meta { min-height: 22px; align-items: center; gap: 8px; }
+:root .design-workspace .msg-assistant > .msg-meta, :root .design-workspace .msg-assistant .msg-meta { margin-bottom: 10px; }
+:root .design-workspace .msg-meta .msg-collapse-btn { align-self: center; margin-left: auto; padding: 2px 6px; border-radius: var(--r-sm); opacity: 0; transition: opacity .12s; }
+:root .design-workspace .msg:hover .msg-meta .msg-collapse-btn,
+:root .design-workspace .msg:focus-within .msg-meta .msg-collapse-btn { opacity: 1; }
+@media (hover: none) { :root .design-workspace .msg-meta .msg-collapse-btn { opacity: 1; } }
+:root .design-workspace .msg-meta .msg-collapse-btn:focus-visible { opacity: 1; outline: 2px solid var(--accent); outline-offset: -2px; }
+/* A command that just ran is already stated by ✓, the readable result and its line
+   count — "Completed" only repeats it, and breaks the "process copy is English" rule. */
+:root .design-workspace .bash-inline-result { display: none; }
+@media (prefers-reduced-motion: reduce) { :root .design-workspace .msg-meta .msg-collapse-btn { transition: none; } }
+/* 29c: one row height for every command state. An error row used to draw a filled wash
+   over the whole row (and the "errors open by default" rule adds an inline block), so
+   the box grew 5px taller than its neighbours. Pad every row equally and keep the error
+   mark on the state glyph, the exit code and a left rule instead of a background. */
+:root .design-workspace .bash-row-head { box-sizing: border-box; min-height: 30px; padding: 4px 8px; border-radius: var(--r-sm); }
+:root .design-workspace .bash-row.err > .bash-row-head { background: color-mix(in srgb, var(--red) 6%, transparent); box-shadow: inset 2px 0 0 var(--red); }
+/* Row affordances use a short, named transition; hover on pointer devices only. */
+:root .design-workspace .bash-row-head { transition: background-color 120ms ease, box-shadow 120ms ease, scale 150ms ease-out; }
+@media (hover: hover) { :root .design-workspace .bash-row-head:hover { background: var(--output-bg); } }
+/* Press feedback on the two expandable row kinds: scales only while enabled, and the
+   press itself must stay legible — the wash is the static cue, the 0.96 scale is polish. */
+:root .design-workspace :is(.bash-row-head, .change-card-toggle, .process-group-summary-line) { -webkit-tap-highlight-color: transparent; }
+@media (hover: hover) { :root .design-workspace :is(.bash-row-head, .change-card-toggle, .process-group-summary-line):active:not(:disabled) { background: var(--row-hover); } }
+:root .design-workspace :is(.bash-row-head, .change-card-toggle, .process-group-summary-line):active:not(:disabled) { scale: 0.96; transition: scale 150ms ease-out; }
+@media (prefers-reduced-motion: reduce) { :root .design-workspace :is(.bash-row-head, .change-card-toggle, .process-group-summary-line) { transition: none; } :root .design-workspace :is(.bash-row-head, .change-card-toggle, .process-group-summary-line):active:not(:disabled) { scale: none; } }
+/* ---- 29d: spacing measured between boxes ------------------------------------------
+   Every message carries padding-bottom: 14px, so the old model stacked padding under
+   margin and the gaps never matched what the CSS said (a 14px margin read as 28px).
+   The message box now owns no trailing padding; the gap is a single margin-top that
+   can be measured.
+
+   One stretch of work: prose -> commands -> prose -> reads -> prose is ONE block, laid
+   out as a tight stream — every piece inside it (prose or process) sits 10px below the
+   previous one, which is what makes the block read as one continuous run instead of a
+   stack of separate paragraphs. Two process blocks in a row stack at 4px. Only the real
+   turn boundary keeps the wide rhythm: 36px between turns, 28px before a user question.
+   Each message sits in its own lazy-mount wrapper (two levels), so selectors look at
+   the wrapper list. The doubled `.msg` token is a deliberate specificity step over the
+   base `.msg` margin — the earlier version lost to it and left 36px holes. */
+:root .design-workspace .msg { padding-bottom: 0; }
+:root .design-workspace :is(.messages > *, .messages > * > *) > :is(.msg, [data-lazy-id]:has(> .msg)) { margin-top: 36px; }
+:root .design-workspace :is(.messages > *, .messages > * > *, .messages > * > * > *) > .msg.msg { margin-top: 10px; }
+/* A stretch that starts a new turn keeps the paragraph gap the turn boundary earns. */
+:root .design-workspace :is(.messages > *, .messages > * > *):not(:has(~ * > .msg > .msg-body > :is(.process-group, .process-list))) + :is(.messages > *, .messages > * > *) > .msg.msg { margin-top: 18px; }
+:root .design-workspace :is(.messages > *, .messages > * > *, .messages > * > * > *):has(> .msg > .msg-body > :is(.process-group, .process-list)) + :is(.messages > *, .messages > * > *, .messages > * > * > *) > .msg.msg:has(> .msg-body > :is(.process-group, .process-list)) { margin-top: 4px; }
+:root .design-workspace .msg:has(> .msg-body > :is(.process-group, .process-list)) .process-group { margin-block: 0; }
+/* ---- 29e: one continuous stream inside a turn -------------------------------------
+   Every message sits three DOM levels below .messages (lazy wrapper > wrapper > .msg),
+   and :is() takes the HIGHEST specificity of its arguments, so `:root ... :is(.messages
+   > *, ...)` scored exactly one class — the same as the base `.msg` margin — and lost.
+   These rules spell the depth out instead and add the :root token on top.
+   Inside one turn every piece sits 10px under the previous one (prose, command group,
+   prose, read group); two process blocks in a row stack at 4px. The turn boundary keeps
+   36px, a user question 28px. */
+/* Inside one turn every piece sits 10px under the previous one. The `:not(…)` stay
+   below 4 classes so the two-process-block rule (which follows) still wins. */
+:root .design-workspace .messages > div > div > .msg.msg:not(.msg-goal-review),
+:root .design-workspace .messages > div > .msg.msg:not(.msg-goal-review) { margin-top: 10px; }
+:root .design-workspace .messages > div > div:has(> .msg > .msg-body > :is(.process-group, .process-list)) + div > .msg.msg.msg:has(> .msg-body > :is(.process-group, .process-list)) { margin-top: 4px; }
+:root .design-workspace .messages > div > div > .msg.msg.msg.msg-user { margin-top: 28px; }
+/* ---- 29f: polish pass on the reading column ----------------------------------------
+   Three things made the stream look uneven at the same 10px rhythm:
+   1. Each paragraph kept its own margin-block: 12px, so a single-paragraph reply was
+      24px taller than its text — the gap read as 34px while its neighbour read 10px.
+      The paragraph owns no outer margin; spacing between paragraphs comes from the gap
+      between .msg-text blocks, which is the rhythm above.
+   2. A reply that starts with an <h1> sat 26px under its own header while plain text
+      sat at 0 — same cause, fixed by the same zeroing.
+   3. Folded history rows still drew a 2px left rule and a rounded corner, so the
+      collapsed part of the transcript read as a different, older component. They are
+      now the same quiet row as everything else: avatar/name, preview, time. */
+/* The markdown root is not always the direct child, and the paragraph rule
+   (`.view-pane .main .msg-assistant .msg-text .md p`, six classes) outranks a plain
+   :first-child rule (five classes + pseudo-class), so the edge margin survived and every
+   reply started 12px low. Eight classes win outright — no !important. */
+:root .design-workspace .view-pane .main .msg-assistant .msg-text .md > p:first-child,
+:root .design-workspace .view-pane .main .msg-assistant .msg-text .md > :is(h1, h2, h3, h4, h5, h6, ul, ol, pre, blockquote, table):first-child { margin-block-start: 0; }
+:root .design-workspace .view-pane .main .msg-assistant .msg-text .md > p:last-child,
+:root .design-workspace .view-pane .main .msg-assistant .msg-text .md > :is(ul, ol, pre, blockquote, table):last-child { margin-block-end: 0; }
+/* Between two text blocks of one reply, a real paragraph gap instead of two stacked halves. */
+:root .design-workspace .msg-body > .msg-text + .msg-text { margin-top: 10px; }
+/* Folded rows: same row anatomy, no rule, no card. */
+:root .design-workspace .msg-collapsed { padding: 5px 0; border: 0; border-left: 0; border-radius: 0; background: transparent; }
+:root .design-workspace .msg-collapsed::before { display: none; }
+@media (hover: hover) { :root .design-workspace .msg-collapsed:hover { background: transparent; color: var(--text); } }
+:root .design-workspace .msg-collapsed .msg-collapsed-preview { color: var(--text-faint); }
+:root .design-workspace .msg-collapsed .msg-collapsed-time { font-variant-numeric: tabular-nums; font-size: 11px; }
+/* The fold boundary is a line, not a stray border on the first row after it. */
+:root .design-workspace .msg-collapsed + .time-gap,
+:root .design-workspace .time-gap + .msg-collapsed { margin-top: 6px; }
+:root .design-workspace .msg-collapsed:active { scale: 0.995; }
+@media (prefers-reduced-motion: reduce) { :root .design-workspace .msg-collapsed:active { scale: none; } }
+/* 29f: one consistent rhythm inside a reply too. Two text blocks of one reply used to sit
+   36px apart (10px gap + 12px + 12px of their own paragraph margins) while everything
+   around them was 10px. The gap is the only spacing; paragraphs inside a single block
+   still keep their own 12px so multi-paragraph prose stays readable. */
+:root .design-workspace .msg-body > .msg-text + .msg-text { margin-top: 0; }
+/* A real spacer element: ::before on .msg-text does not generate a box here (the markdown
+   root is an inline-flex child), which left the second block touching the first. */
+:root .design-workspace .msg-body > .msg-text + .msg-text { padding-top: 12px; }
+/* 29f: a reply's text block must contain the trailing margin of its last block, or the
+   margin leaks past the block and stacks on the gap to the next one (measured: 10px gap
+   read as 20px under a one-line reply, and under a heading). flow-root does that without
+   touching padding, so every piece in a reply now sits on the same 10px rhythm. */
+:root .design-workspace .msg-text { display: flow-root; }
+:root .design-workspace .msg-body > .msg-text + .msg-text { padding-top: 0; }
+/* 29f: two text blocks of one reply need a real gap. Once the trailing margin is
+   contained (flow-root), 0 would butt the heading straight into the next line, so the
+   gap is a margin again — 10px, the same step the rest of the turn uses. */
+:root .design-workspace .msg-body > .msg-text + .msg-text { margin-top: 10px; }
+/* 29f: with flow-root the 10px gap is true white space, and next to a heading it reads
+   wider than the same 10px between two lines of text. 18px keeps the two blocks visually
+   connected without merging them. */
+:root .design-workspace .msg-body > .msg-text + .msg-text { margin-top: 18px; }

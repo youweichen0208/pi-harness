@@ -79,15 +79,17 @@ export function installExtensionsRoutes(app: Express, service: () => AgentServic
 		res.setHeader("Cache-Control", "no-store");
 		if (!originAllowed(req) || !req.is("application/json")) { res.sendStatus(403); return; }
 		const { clientId, cwd, action } = req.body ?? {};
+		// PATH probing happens in this process; it needs no workspace at all. Answering it
+		// behind the workspace gate made the card say "检测失败" whenever the session was
+		// still switching or the proven cwd was stale.
+		if (action === "cli-status") {
+			if (service().quiesceInfo().quiesced) { res.status(409).json({ error: "Workspace unavailable" }); return; }
+			res.json(await piCliStatus()); return;
+		}
 		const cs = typeof clientId === "string" ? service().get(clientId) : undefined;
 		if (!cs || cs.cwd !== cwd || cs.switchingWorkspace || service().quiesceInfo().quiesced) { res.status(409).json({ error: "Workspace unavailable" }); return; }
 		const agentDir = getAgentDir();
 		try {
-			if (action === "cli-status") {
-				const result = await piCliStatus();
-				if (cs.cwd !== cwd || cs.switchingWorkspace || service().quiesceInfo().quiesced) { res.status(409).json({ error: "Workspace unavailable" }); return; }
-				res.json(result); return;
-			}
 			if (["builtin-list", "builtin-toggle"].includes(action)) {
 				const conversationId = req.body.conversationId;
 				const valid = () => cs.cwd === cwd && !cs.switchingWorkspace && cs.conversationId === conversationId && !service().quiesceInfo().quiesced;

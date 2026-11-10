@@ -59,7 +59,8 @@ try {
 	await page.goto(`http://localhost:${port}`);
 	// An unrelated later success cannot clear cmd-8 failure.
 	await page.locator('.process-group.err.open .process-group-head', { hasText: /Ran 10 commands|已运行 10 条命令/ }).waitFor();
-	assert.match(await page.locator('.process-group-status').textContent(), /1 failed/);
+	// 29a: no right-side "N failed" badge — the ✗ row and its exit code own that state.
+	assert.equal(await page.locator('.process-group-status').count(), 0);
 	assert.equal(await page.locator('.process-group').count(), 1);
 	assert.equal(await page.locator('.bash-group-head').count(), 0);
 	assert.equal(await page.locator('.bash-row').count(), 8);
@@ -68,7 +69,8 @@ try {
 	await page.locator('.bash-row.err .bash-row-head').click();
 	assert.equal(await page.locator('.bash-row.ok .bash-numbered-output').count(), 0);
 	assert.equal(await page.locator('.bash-numbered-line.error').count(), 1);
-	assert.equal(await page.locator('.bash-readable-title').first().textContent(), 'git show …/file-2.ts');
+	// 29a: rows are borderless; the command reads in monospace with no friendly-name span.
+	assert.equal(await page.locator('.bash-inline-command').first().textContent(), 'git show …/file-2.ts');
 	const last = page.locator('[data-tool-call-id="cmd-9"]');
 	await last.locator('.bash-row-head').click();
 	assert.equal(await last.locator('.bash-numbered-line').count(), 6);
@@ -152,9 +154,9 @@ try {
 	assert.equal(await page.locator('.bash-group-duration').count(), 0);
 	// Compact rows show measured durations from 0.1s; shorter runs show their line count instead.
 	assert.equal(await page.locator('.bash-row-stats', { hasText: '<0.1s' }).count(), 0);
-	assert.equal(await page.locator('.bash-readable-title').first().innerText(), 'progress.json');
-	await page.locator('.process-group-head[aria-expanded="false"]').click();
+	await page.locator('.process-group-summary-line[aria-expanded="false"], .process-group-head[aria-expanded="false"]').first().click();
 	await page.locator('[data-tool-call-id="read-0"] .bash-row-head').click();
+	assert.match(await page.locator('[data-tool-call-id="read-0"] .bash-inline-command').innerText(), /progress\.json$/);
 	assert.equal(await page.locator('[data-tool-call-id="read-0"] .bash-full-command').textContent(), JSON.parse(reads[0].argumentsText).command);
 	await page.locator('[data-tool-call-id="read-0"]').getByRole('button', { name: '复制命令', exact: true }).click();
 	assert.equal(await page.evaluate(() => navigator.clipboard.readText()), JSON.parse(reads[0].argumentsText).command);
@@ -173,9 +175,10 @@ try {
 	for (const width of [900, 390]) {
 		await page.setViewportSize({ width, height: 900 });
 		await page.waitForTimeout(200);
-		const leaf = page.locator('[data-tool-call-id="read-1"] .bash-readable-title');
-		assert.equal(await leaf.textContent(), 'ARCHITECTURE.md');
-		assert(await leaf.evaluate(el => el.scrollWidth <= el.clientWidth + 1), `filename clipped at ${width}`);
+		// 29a: the row truncates with an ellipsis rather than overflowing the column.
+		const leaf = page.locator('[data-tool-call-id="read-1"] .bash-inline-command');
+		assert.match(await leaf.textContent(), /…\/ARCHITECTURE\.md$/);
+		assert.equal(await leaf.evaluate(el => getComputedStyle(el).textOverflow), 'ellipsis');
 		assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
 	}
 	await page.screenshot({ path: '/tmp/pi-command-refinement-mobile.png' });
@@ -250,8 +253,11 @@ try {
 	snapshot.state.rev += 1; socket.send(JSON.stringify(snapshot));
 	await page.keyboard.press('ControlOrMeta+d');
 	await page.locator('.changes-line.add').waitFor();
-	assert.equal(await page.locator('.changes-line.add').evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(230, 244, 234)');
-	assert.equal(await page.locator('.changes-line.add .changes-line-sign').evaluate(el => getComputedStyle(el).color), 'rgb(22, 163, 74)');
+
+	// Diff surfaces and their markers stay readable in the light appearance. The exact
+	// wash is no longer asserted (it resolves through the diff tokens, not --green-soft).
+	assert.equal(await page.locator('.changes-line.add .changes-line-sign').textContent(), '+');
+	assert(await page.locator('.changes-line.add').evaluate(el => getComputedStyle(el).borderLeftColor !== 'rgba(0, 0, 0, 0)'));
 	await page.keyboard.press('ControlOrMeta+d');
 	await page.locator('.changes-panel').waitFor({state:'detached'});
 	// English has longer control labels; verify the same narrow layout.

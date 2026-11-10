@@ -190,3 +190,30 @@ test("issue #148: live grill round keeps colon-delimited options and fully bold 
 	expect(recommendedAnswers(questions)).toEqual({ Q1: 0, Q2: 2 });
 	expect(composeAnswers(questions, { Q1: 1 })).toContain("(b) 同一逻辑会话内换类型。");
 });
+
+test("issue #149: a recommendation stated in prose (no ➡️ line) still marks its option", () => {
+	const text = "❓ **Q1** - **步骤 vs 命令**：「步骤」和「命令」是两个维度。\n(a) 完全替换成命令列表;(b) 保留步骤并在行内展开命令;(c) 只补命令计数;(d) 其他方案。\n我建议 (b)，数据链已经通了。";
+	const questions = parseReplySegments(text).flatMap(segment => segment.kind === "questions" ? segment.questions : []);
+	expect(questions[0].options.map(option => option.key)).toEqual(["a", "b", "c", "d"]);
+	expect(questions[0].options[1]).toMatchObject({ recommended: true, reason: "数据链已经通了。" });
+});
+
+test("issue #149: options split across lines become one option list", () => {
+	const text = "❓ **Q1** - **步骤 vs 命令**：两个维度怎么合。\n(a) 完全替换成命令列表\n(b) 保留步骤并在行内展开命令\n(c) 只补命令计数\n➡️ 推荐 (b)。数据链已经通了。";
+	const questions = parseReplySegments(text).flatMap(segment => segment.kind === "questions" ? segment.questions : []);
+	expect(questions[0].options.map(option => [option.key, option.text])).toEqual([["a", "完全替换成命令列表"], ["b", "保留步骤并在行内展开命令"], ["c", "只补命令计数"]]);
+	expect(recommendedAnswers(questions)).toEqual({ Q1: 1 });
+});
+
+test("issue #149: a single recommendation paragraph with no options stays an open question", () => {
+	const questions = parseReplySegments("❓ **Q5** - **Hermes 运行形态**：跑 Docker 还是裸进程？\n我建议用 Docker。").flatMap(segment => segment.kind === "questions" ? segment.questions : []);
+	expect(questions[0].options).toEqual([{ text: "用 Docker", recommended: true }]);
+});
+
+test("issue #149: prose recommendation does not hijack real option bodies", () => {
+	const text = "❓ **Q2** - **筛选**：怎么筛？\n(a) 推荐 A 方案;(b) 保留全部\n➡️ 推荐 (b)。先不筛。";
+	const questions = parseReplySegments(text).flatMap(segment => segment.kind === "questions" ? segment.questions : []);
+	expect(questions[0].options.map(option => option.key)).toEqual(["a", "b"]);
+	expect(questions[0].options[0].recommended).toBeUndefined();
+	expect(recommendedAnswers(questions)).toEqual({ Q2: 1 });
+});

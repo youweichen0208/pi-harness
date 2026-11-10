@@ -25,6 +25,9 @@ export type ReplySegment = { kind: "markdown"; text: string } | { kind: "questio
 const QUESTION = /^\s*❓️?\s*/;
 const NOTE = /^\s*(?:⚠️?\s*|\*\*注意\*\*\s*[:：]?\s*|注意[:：]\s*)(.+)$/;
 const RECOMMEND = /^\s*➡️?\s*/;
+/** A recommendation written as ordinary prose ("我建议 (b)，因为…") instead of a `➡️` line.
+ * Anchored at the start so an option body that merely mentions 推荐 is untouched. */
+const PROSE_RECOMMEND = /^\s*(?:(?:我|我们|本人)?\s*(?:建议|推荐|倾向于)|(?:I\s+)?(?:recommend|suggest|I'd\s+(?:pick|choose)))\s*[:：]?\s*/i;
 
 const plain = (text: string) => text.replace(/\*\*([^*]+)\*\*/g, "$1").replace(/`([^`]+)`/g, "$1").trim();
 
@@ -40,6 +43,8 @@ function parseHead(line: string, index: number) {
 
 /** A list-style option line, after removing inline emphasis: `- **A.** text`, `A) text` or `(a) text`. */
 const LIST_OPTION = /^\s*(?:[-–—*]\s*)?(?:(?:[(（]([A-Ha-h])[)）]|([A-Ha-h])[.、．)）])\s+|([A-Ha-h])[:：]\s*)(.+)$/;
+/** One option per line, always bracketed: `(a) text`. A bare `a) text` still needs the list form. */
+const INLINE_OPTION_LINE = /^\s*[(（]([A-Ha-h])[)）]\s*(\S.*)$/;
 
 /** Split `(a) x;(b) y;(c) z。trailing` into options; text before (a) and after the last option's sentence stays prompt.
  * Semicolons are the documented separator. Without any semicolon, a conservative
@@ -97,6 +102,19 @@ function applyRecommendation(options: QuestionOption[], text: string): QuestionO
 	const answer = (cut > 0 ? body.slice(0, cut) : body).trim();
 	const why = cut > 0 ? body.slice(cut + 1).trim() : "";
 	return answer ? [{ text: answer, recommended: true, ...(why ? { reason: why } : {}) }] : [];
+}
+
+/** Inline options are joined into one string, so a prose recommendation written on a
+ * following line would otherwise land inside the last option: `(d) 其他。我建议 (b)，…`.
+ * Peel it back off and feed it to the recommendation pass. */
+function trimTrailingRecommendation(lines: readonly string[]): string[] {
+	const lastIndex = lines.findLastIndex(line => line.trim());
+	if (lastIndex <= 0) return [...lines];
+	if (!lines.slice(0, lastIndex).some(line => /[(（][A-Ha-h][)）]/.test(line))) return [...lines];
+	const match = /(?:^|[。；;！!])\s*((?:我|我们|本人)?\s*(?:建议|推荐|倾向于)[^\n]*|(?:I\s+)?(?:recommend|suggest)[^\n]*)$/i.exec(lines[lastIndex].trim());
+	if (!match) return [...lines];
+	const kept = lines[lastIndex].trim().slice(0, match.index + (match[0].length - match[1].length)).trim();
+	return [...lines.slice(0, lastIndex), ...(kept ? [kept] : []), match[1].trim()];
 }
 
 /** Only turn an explicit final offer into choices; explanatory A/B lists stay prose. */
@@ -159,8 +177,11 @@ export function parseReplySegments(text: string): ReplySegment[] {
 		const notes: string[] = [];
 		while (i + 1 < lines.length && !eligible[i + 1] && !/^\s*(?:#{1,6}\s|-{3,}\s*$|`{3,}|~{3,})/.test(lines[i + 1])) {
 			const next = lines[++i];
+			// A prose recommendation is a recommendation, not more prompt text — even when the
+			// option lines live in the same block (`(a) …;(b) …` followed by `我建议 (b)，…`).
 			if (NOTE.test(next)) notes.push(next.match(NOTE)![1]);
 			else if (RECOMMEND.test(next)) recommendation.push(next.replace(RECOMMEND, ""));
+			else if (PROSE_RECOMMEND.test(next)) recommendation.push(next.replace(PROSE_RECOMMEND, ""));
 			else if (recommendation.length) { if (!next.trim()) { if (NOTE.test(lines[i + 1] ?? "")) continue; break; } recommendation.push(next); }
 			else body.push(next);
 		}
@@ -171,9 +192,21 @@ export function parseReplySegments(text: string): ReplySegment[] {
 			if (listed) listOptions.push({ key: (listed[1] ?? listed[2] ?? listed[3]!).toLowerCase(), text: plain(listed[4].trim()) });
 			else promptLines.push(line);
 		}
+		// Options written one per line (`(a) …` / `(b) …`) are one option list, not prose.
+		const multiline: QuestionOption[] = [];
+		const restLines: string[] = [];
+		for (const line of promptLines) {
+			const inline = INLINE_OPTION_LINE.exec(plain(line));
+			if (inline) multiline.push({ key: inline[1].toLowerCase(), text: plain(inline[2].trim()) });
+			// A prose recommendation between/after the lines is not part of the prompt.
+			else if (multiline.length && PROSE_RECOMMEND.test(line)) recommendation.push(line.replace(PROSE_RECOMMEND, ""));
+			else restLines.push(line);
+		}
 		const { prompt, options } = listOptions.length >= 2
 			? { prompt: promptLines.join(" ").replace(/\s+/g, " ").trim(), options: listOptions }
-			: parseOptions(body.join(" ").replace(/\s+/g, " ").trim());
+			: multiline.length >= 2
+				? { prompt: restLines.join(" ").replace(/\s+/g, " ").trim(), options: multiline }
+				: parseOptions(trimTrailingRecommendation(body).join(" ").replace(/\s+/g, " ").trim());
 		questions.push({ id: head.id, title: head.title, prompt: plain(prompt), ...(notes.length ? { note: plain(notes.join(" ")) } : {}), options: applyRecommendation(options, recommendation.join(" ")) });
 	}
 	flushQuestions();

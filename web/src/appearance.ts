@@ -15,8 +15,16 @@ function systemDark(): boolean {
 function apply(state: AppearanceState = getAppearanceState()) {
 	const theme = resolveAppearance(state, systemDark());
 	const root = document.documentElement;
+	// Suppress transitions for the swap: without this every color/border transition on
+	// the page fires at once and the switch smears. Force a style flush, then restore.
+	const suppress = document.createElement("style");
+	suppress.textContent = "*, *::before, *::after { transition: none !important; animation: none !important; }";
+	document.head.append(suppress);
+	void root.offsetWidth;
 	root.dataset.theme = theme;
 	root.dataset.appearance = theme === "graphite" ? "dark" : "light";
+	void root.offsetWidth;
+	requestAnimationFrame(() => suppress.remove());
 	window.dispatchEvent(new Event(THEME_CHANGE_EVENT));
 	window.dispatchEvent(new Event(APPEARANCE_EVENT));
 }

@@ -37,7 +37,8 @@ try {
 		await page.goto(`http://127.0.0.1:${harness.port}`);
 		const single=page.locator('[data-tool-call-id="single"].bash-row');
 		await single.waitFor();
-		assert.match(await single.locator('.bash-inline-command').innerText(),/^\$ pytest -q --require-postgres$/);
+		// 29a: borderless rows show the command without the old `$ ` prefix span.
+		assert.equal((await single.locator('.bash-inline-command').innerText()).trim(),'pytest -q --require-postgres');
 		assert.equal(await page.locator('.time-gap').count(),1);
 		assert.equal(await page.locator('.msg-time:visible, .reply-actions time:visible').count(),0);
 		assert.equal(await page.getByText(prose,{exact:true}).count(),1);
@@ -57,9 +58,13 @@ try {
 		await toggle.click();
 		const spinner=page.locator('.bash-row.run .thinking-spinner');
 		assert.notEqual(await spinner.evaluate(el=>getComputedStyle(el).animationName),'none');
-		assert.match(await page.locator('.process-group.run .process-group-status').innerText(),language==='zh'?/运行中/:/Running/);
+		// Process-step copy is English in both locales (docs/ui-design.md 4.2).
+		assert.match(await page.locator('.process-group.run .process-group-status').innerText(),/Running/);
+		// 29a: the process group is borderless — no card wash, radius or outline.
 		const card=single.locator('xpath=ancestor::section[contains(@class,"process-group")]');
-		assert.equal(await card.evaluate(el=>getComputedStyle(el).borderRadius),'12px');
+		assert.equal(await card.evaluate(el=>getComputedStyle(el).borderRadius),'0px');
+		assert.equal(await card.evaluate(el=>getComputedStyle(el).borderTopWidth),'0px');
+		assert.equal(await card.evaluate(el=>getComputedStyle(el).backgroundColor),'rgba(0, 0, 0, 0)');
 		await page.locator('.header-task-progress').click();
 		const planDot=page.locator('.task-plan-step.running .task-plan-mark');
 		await planDot.waitFor();
