@@ -116,6 +116,8 @@ try {
 		assert.equal(commands[0].command.command, 'npm install -g --ignore-scripts @earendil-works/pi-coding-agent@latest');
 		assert(commands[0].conversationId);
 		assert.equal(await page.locator('.settings-modal').count(), 0);
+		// The settings backdrop can outlive the modal for a frame and swallow the click.
+		await page.locator('.modal-backdrop').waitFor({ state: 'detached' });
 		await page.getByTitle(lang === 'zh' ? '新建终端' : 'New terminal', { exact: true }).click();
 		await open(); await install().click();
 		await page.locator('.term-tab.active', { hasText: 'Install Pi CLI' }).waitFor();
