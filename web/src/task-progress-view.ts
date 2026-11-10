@@ -131,7 +131,13 @@ export function planStepArtifacts(task: TaskProgress, item: NonNullable<TaskProg
 }
 
 /** One line under a step-log phase: a file to preview or a command to jump to. */
-export interface PhaseItem { key: string; label: string; path?: string; toolCallId: string; messageId: string }
+export interface PhaseItem { key: string; label: string; path?: string; toolCallId: string; messageId: string; kind?: string }
+
+/** The command as it ran, on one line: the whole point is reading it back,
+ *  so unlike the transcript summary it is not shortened to 80 characters. */
+function commandRecord(command: string): string {
+	return command.replace(/\s+/g, " ").trim();
+}
 
 /** Workspace files read relative; short home paths keep `~/`; anything else shows its file name. */
 export function displayPhasePath(path: string, cwd: string): string {
@@ -139,6 +145,22 @@ export function displayPhasePath(path: string, cwd: string): string {
 	const home = /^(?:\/Users|\/home)\/[^/]+(\/.*)$/.exec(path)?.[1];
 	if (home && home.split("/").filter(Boolean).length <= 2) return `~${home}`;
 	return path.split(/[\\/]/).filter(Boolean).at(-1) ?? path;
+}
+
+/** Every command and edit of the turn in transcript order, one row each.
+ *  This is the回溯 list: nothing is merged or truncated, so a rerun of the same
+ *  command stays visible as its own row with its own id and status. */
+export function phaseRecords(steps: TaskStep[], cwd: string): PhaseItem[] {
+	const items: PhaseItem[] = [];
+	const seen = new Set<string>();
+	for (const step of steps) for (const artifact of step.artifacts) {
+		if (seen.has(artifact.toolCallId)) continue;
+		const label = artifact.path ? displayPhasePath(artifact.path, cwd) : commandRecord(artifact.label);
+		if (!label) continue;
+		seen.add(artifact.toolCallId);
+		items.push({ key: artifact.toolCallId, label, path: artifact.path, toolCallId: artifact.toolCallId, messageId: step.messageId, kind: artifact.kind });
+	}
+	return items;
 }
 
 /** Distinct files and commands a phase touched, in order. */

@@ -11352,12 +11352,6 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { height: 44px;
 .bash-row.empty .bash-readable-title { color: var(--text-faint); }
 .bash-group-items > .bash-row:first-child { border-top: 0; }
 .trailing-working:empty { display: none; }
-.task-file-result { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-bottom: 1px solid var(--border-soft); font-size: 12px; }
-.task-file-result > span:first-child { color: var(--text-faint); flex: none; }
-.task-file-result > button { min-width: 0; flex: 1; padding: 0; border: 0; background: none; color: var(--text); font: 12px var(--mono); text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
-.task-file-counts { flex: none; white-space: nowrap; }
-.task-file-counts > span:first-child { color: var(--green); }
-.task-file-counts > span:last-child { color: var(--red); }
 .bash-row-head:not(:has(.bash-command-secondary)) .bash-readable-title { flex: 1; max-width: none; font-family: var(--mono); }
 .trailing-working { width: calc(100% - 2 * var(--composer-gutter, 28px)); max-width: var(--chat-max); margin: 0 auto; }
 /* Ignore empty tool-result wrappers when locating the last visible message. */
@@ -11408,10 +11402,6 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { height: 44px;
 .task-sections .task-plan-step.done .task-plan-mark { border-color: var(--green); }
 .task-sections .task-plan-step.running .task-plan-mark { border-color: var(--progress-text); }
 .task-sections .task-plan-step-head > svg { margin-top: 3px; }
-.task-sections .task-file-result { padding: 8px 12px; border-bottom: 0; align-items: flex-start; }
-.task-sections .task-file-result > svg { flex: none; width: 15px; height: 18px; color: var(--text-faint); }
-.task-sections .task-file-result > button { white-space: normal; overflow-wrap: anywhere; font-family: var(--sans); }
-.task-sections .task-file-result small { display: block; color: var(--text-faint); font: 10px/1.5 var(--mono); overflow-wrap: anywhere; }
 
 /* ---- Design 19: manual recovery and consistent workspace tokens ---- */
 .wiki-composer-pill .wiki-pill-send:disabled { background: var(--send-disabled-bg); color: var(--text-faint); cursor: default; }
@@ -12530,7 +12520,9 @@ pre.wiki-mermaid-source-hidden > .fp-mermaid-preview { padding-bottom: 0; }
 .task-step-items button { display: block; max-width: 100%; padding: 0; overflow: hidden; border: 0; background: transparent; color: var(--text-dim); font: 12px/1.6 var(--mono); font-variant-ligatures: none; text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
 .task-step-items button:hover { color: var(--accent); }
 .task-step-items button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-radius: var(--r-sm); }
-.task-step-more { color: var(--text-faint); font-size: 11.5px; }
+/* Command records are read back, not skimmed: wrap the full command instead of clipping it. */
+.task-step-items li.command { overflow: visible; }
+.task-step-items li.command button { white-space: normal; overflow: visible; overflow-wrap: anywhere; text-overflow: clip; }
 :root .design-workspace .question-other textarea { border-width: 0 0 1px; border-radius: 0; box-shadow: none; }
 :root .design-workspace .question-other textarea:is(:focus, :focus-visible) { outline: none; box-shadow: none; border-bottom-color: var(--text); }
 /* Folded user rows: skill and attachments as chips around the question, never raw wrappers. */
@@ -13899,11 +13891,6 @@ html.pi-desktop .design-workspace .topbar :is(button, input, textarea, select, a
 .task-step-current { display: inline-flex; align-items: center; gap: 5px; padding: 2px 7px; border-radius: var(--r-switch); background: var(--accent-soft); color: var(--accent); font: 10px/1.8 var(--sans); white-space: nowrap; }
 .task-step-current::before { content: ""; width: 4px; height: 4px; border-radius: var(--r-switch); background: currentColor; }
 
-/* Current-turn files: filename first, directory and cumulative counts secondary. */
-.task-sections .task-file-result > button > span { display: block; overflow-wrap: anywhere; }
-.task-sections .task-file-result small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.task-sections .task-file-counts { padding-top: 1px; color: var(--text-dim); font: 11px/1.5 var(--sans); font-variant-numeric: tabular-nums; }
-.task-files-empty { margin: 0; padding: 0 12px 4px; color: var(--text-dim); font: 12px/1.6 var(--sans); }
 
 /* Single-document editing shares the main conversation through ChatDock. */
 .single-document-editor { display: flex; flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
@@ -14916,17 +14903,8 @@ html.pi-desktop .design-workspace .topbar { height: 48px; min-height: 48px; }
 .scm-worktrees li { margin: 10px 0; }
 .scm-worktrees li span { display: block; color: var(--text-dim); font-size: 12px; }
 
-/* Current-task overview: authoritative state, above the execution sections. */
-.task-overview { padding: 14px; border-bottom: 1px solid var(--border); }
-.task-overview h3 { margin: 0; color: var(--text); font: 500 13px/1.6 var(--sans); overflow-wrap: anywhere; }
-.task-overview-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-top: 6px; color: var(--text-faint); font-size: 12px; }
-.task-overview-state.running { color: var(--accent); }
-.task-overview-state.done { color: var(--green); }
-.task-overview-state.failed, .task-overview-state.cancelled, .task-overview-state.interrupted { color: var(--red); }
-.task-overview-state.waiting, .task-overview-state.reminding { color: var(--yellow-fg); }
-.task-overview .task-overview-reason, .task-panel-empty { margin: 8px 0 0; color: var(--text-faint); font: 12px/1.7 var(--sans); overflow-wrap: anywhere; }
+
 .task-panel-empty { margin: 0; padding: 14px; }
-.task-step-more > button { color: var(--accent); }
 
 /* JDBC candidate selection stays readable with long local IDE paths. */
 .database-jdbc-choices { display: flex; flex-direction: column; gap: 8px; }
@@ -15126,7 +15104,7 @@ span.rich-math { display: inline-block; }
 /* 命令行。 */
 :root .design-workspace .bash-row-head { align-items: baseline; gap: 10px; min-height: 26px; padding: 3px 0; }
 :root .design-workspace .bash-row-head:hover { background: transparent; }
-:root .design-workspace .bash-row-head .bash-inline-command { flex: 0 1 auto; min-width: 0; overflow: hidden; color: var(--text-dim); font: 12.5px/1.7 var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+:root .design-workspace .bash-row-head .bash-inline-command { flex: 0 1 auto; min-width: 0; overflow: hidden; color: var(--text-faint); font: 12.5px/1.7 var(--mono); text-overflow: ellipsis; white-space: nowrap; }
 :root .design-workspace .bash-row-name { flex: none; color: var(--text); font: 500 13px/1.7 var(--sans); }
 :root .design-workspace .bash-row-head .bash-command-secondary { color: var(--text-faint); }
 :root .design-workspace .bash-row-head > svg { width: 12px; height: 12px; align-self: center; opacity: 0; transition: opacity .12s; }
@@ -15147,7 +15125,7 @@ span.rich-math { display: inline-block; }
 :root .design-workspace .bash-group { margin: 0; border: 0; border-radius: 0; background: transparent; overflow: visible; }
 :root .design-workspace .bash-group-head { gap: 10px; min-height: 26px; padding: 3px 0; background: transparent; }
 :root .design-workspace .bash-group-head:hover { background: transparent; }
-:root .design-workspace .bash-group-head strong, :root .design-workspace .bash-group.historical-step .bash-group-head strong { color: var(--text-dim); font: 500 12.5px var(--sans); }
+:root .design-workspace .bash-group-head strong, :root .design-workspace .bash-group.historical-step .bash-group-head strong { color: var(--text-faint); font: 500 12.5px var(--sans); }
 :root .design-workspace .bash-group-head svg { width: 12px; height: 12px; }
 /* 编辑/写入：一行（状态点 · Edit/Write · 路径 · +N −M · 打开），点开在行下显示 diff。 */
 :root .design-workspace .change-card, :root .design-workspace .change-group { margin: 2px 0; border: 0; border-radius: 0; background: transparent; }
@@ -15215,7 +15193,7 @@ span.rich-math { display: inline-block; }
    the box grew 5px taller than its neighbours. Pad every row equally and keep the error
    mark on the state glyph, the exit code and a left rule instead of a background. */
 :root .design-workspace .bash-row-head { box-sizing: border-box; min-height: 30px; padding: 4px 8px; border-radius: var(--r-sm); }
-:root .design-workspace .bash-row.err > .bash-row-head { background: color-mix(in srgb, var(--red) 6%, transparent); box-shadow: inset 2px 0 0 var(--red); }
+:root .design-workspace .bash-row.err > .bash-row-head { background: color-mix(in srgb, var(--red) 6%, transparent); box-shadow: none; }
 /* Row affordances use a short, named transition; hover on pointer devices only. */
 :root .design-workspace .bash-row-head { transition: background-color 120ms ease, box-shadow 120ms ease, scale 150ms ease-out; }
 @media (hover: hover) { :root .design-workspace .bash-row-head:hover { background: var(--output-bg); } }

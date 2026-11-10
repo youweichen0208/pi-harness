@@ -116,7 +116,7 @@ App 按 chat.plugins 动态 import 各插件的 client bundle（`/* @vite-ignore
 
 `server/codemode-presentation.ts` 对 SDK `CodemodeToolDetails` 做展示字段白名单：calls（含模型调用）、status、durationMs、cost、error、fullOutputPath。完成记录随 `UiMessage.codemode` 下发，执行中随 `tool_delta.codemode` 下发；不向模型加入任何消息。每张卡最多传输 256 条调用，保留实际总数并提示省略；默认展示最后 8 条，可展开其余已传输调用。旧 transcript 没有 details 时回退到 `nestedCalls`。
 
-右栏任务面板在进度与本轮文件之间独立展示「Codemode 执行记录」，按外层调用分组，不嵌入或修改计划。`server/codemode-history.ts` 从当前原生持久分支提取本轮元数据，通过协议 v52 的 `UiState.codemode` 下发；`web/src/codemode-records.ts` 结合流式消息、原生 details 和内部工具状态推导记录，自动提醒及工具文本恢复不切换请求边界；优先使用 details，旧历史回退到 nestedCalls，不合并重复来源。组件为 `CodemodeRecords.tsx`。临时内部调用 ID 可能重复且结束时改变，因此行标识采用组内追加序号。
+右栏任务面板在步骤之后独立展示「Codemode 执行记录」，按外层调用分组，不嵌入或修改计划。`server/codemode-history.ts` 从当前原生持久分支提取本轮元数据，通过协议 v52 的 `UiState.codemode` 下发；`web/src/codemode-records.ts` 结合流式消息、原生 details 和内部工具状态推导记录，自动提醒及工具文本恢复不切换请求边界；优先使用 details，旧历史回退到 nestedCalls，不合并重复来源。组件为 `CodemodeRecords.tsx`。临时内部调用 ID 可能重复且结束时改变，因此行标识采用组内追加序号。
 
 持久投影按 SessionManager、leafId 和条目数量缓存，不依赖 plan 是否开启；快照只携带本轮调用元数据，不包含脚本、输出正文或图片。每个运行中外层调用的最新有界原生详情保存在对话内，快照重连时覆盖旧的浏览器详情，结果持久化后清除。聊天卡片使用独立的 `runActive` 判断生命周期，连接状态只控制本地计时，断线不产生结束状态。
 

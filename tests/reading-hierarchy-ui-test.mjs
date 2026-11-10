@@ -91,14 +91,13 @@ try {
 	await page.setViewportSize({width:390,height:900}); await page.waitForTimeout(300);
 	assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
 	await page.screenshot({path:'/tmp/pi-reading-hierarchy-mobile.png'});
-	// Read and edit of the same file produce one result with actual diff counts.
+	// The edit appears in the step record; the task panel has no files section (2026-11-07).
 	snapshot.state.messages.push({id:'edit-call',role:'assistant',content:[{type:'toolCall',id:'edit-file',name:'edit',argumentsText:JSON.stringify({path:'src/openai.py',oldText:'old',newText:'new'})}]},{id:'edit-result',role:'toolResult',toolName:'edit',toolCallId:'edit-file',content:[{type:'text',text:'Updated'}]});
 	snapshot.state.taskProgress = deriveTaskProgress(snapshot.state.conversationId, snapshot.state.messages, null, true);
 	snapshot.state.rev += 1; socket.send(JSON.stringify(snapshot));
 	await page.setViewportSize({width:1440,height:1000});
-	await page.locator('.task-file-counts').waitFor();
-	assert.equal(await page.locator('.task-file-result').count(),1);
-	assert.match(await page.locator('.task-file-counts').innerText(), /\+1.*−1/);
+	assert.equal(await page.locator('.task-file-result').count(),0);
+	assert.equal(await page.locator('.task-file-counts').count(),0);
 	// 35a: even one historical command folds into a step; the conclusion stays black.
 	snapshot.state.messages = [messages[0],messages[4],messages[5],{id:'conclusion',role:'assistant',content:[{type:'text',text:'检查通过，权限映射正确。'}]}];
 	snapshot.state.isStreaming = false; snapshot.state.rev += 1; socket.send(JSON.stringify(snapshot));

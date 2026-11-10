@@ -49,7 +49,6 @@ try {
 		else await page.getByRole('tab', { name: lang === 'zh' ? '任务' : 'Tasks', exact: true }).click();
 		const panel = page.locator('.task-progress:visible');
 		messages = [user]; send();
-		await panel.locator('.task-overview-state').filter({ hasText: 'Running' }).waitFor();
 		await panel.getByText(lang === 'zh' ? '正在处理请求，尚无执行步骤。' : 'Processing the request. No execution steps yet.', { exact: true }).waitFor();
 		assert.equal(await panel.locator('.task-step, .task-plan-step').count(), 0);
 		running = false; messages = []; send();
@@ -59,68 +58,73 @@ try {
 		messages = [user, { id: 'answer', role: 'assistant', content: [{ type: 'text', text: 'Hello' }] }]; send();
 		await panel.locator('.task-panel-empty').waitFor();
 		messages = records; send();
-		await panel.locator('.task-overview-state').filter({ hasText: 'Completed' }).waitFor();
-		assert.equal(await panel.locator('.task-overview h3').innerText(), 'Inspect files and run checks');
-		const readPhase = panel.locator('.task-step').first();
+		// No overview header: the request title and lifecycle status are no longer rendered here.
+		assert.equal(await panel.locator('.task-overview').count(), 0, 'overview header is gone');
+		// No 本轮文件 section either; the step records are the only listing.
+		assert.equal(await panel.getByRole('button', { name: lang === 'zh' ? /本轮文件/ : /Files this turn/ }).count(), 0);
+		const readPhase = panel.locator('.task-step').first().filter({ hasText: lang === 'zh' ? '读取文件' : 'Read files' });
 		await readPhase.locator('.task-step-toggle').click();
-		assert.equal(await readPhase.locator('.task-step-items > li:not(.task-step-more)').count(), 4);
-		await readPhase.locator('.task-step-more button').click();
-		assert.equal(await readPhase.locator('.task-step-items > li:not(.task-step-more)').count(), 7);
+		// Every read is listed, in order, with no four-row cap.
+		assert.equal(await readPhase.locator('.task-step-items > li').count(), 7);
+		assert.equal(await readPhase.locator('.task-step-more').count(), 0, 'no expand-the-rest control');
 		send();
-		assert.equal(await readPhase.locator('.task-step-more button').getAttribute('aria-expanded'), 'true');
 		const taskTab = page.getByRole('tab', { name: lang === 'zh' ? '任务' : 'Tasks', exact: true });
 		await taskTab.focus(); await page.keyboard.press('Home'); await page.keyboard.press('End');
 		assert.equal(await taskTab.getAttribute('aria-selected'), 'true');
-		assert.equal(await readPhase.locator('.task-step-more button').getAttribute('aria-expanded'), 'true');
 		await readPhase.getByRole('button', { name: 'file-6.ts', exact: true }).click();
 		await page.waitForFunction(() => !!document.querySelector('.fp-embedded'));
 		assert(sent.some(message => JSON.stringify(message).includes('file-6.ts')), 'preview requested the expanded record');
 		await page.locator('.fp-back').click();
 		// Return to the task drawer if opening a file dismissed it.
 		if (!(await panel.isVisible())) await page.locator('.header-task-progress').click();
-		await readPhase.locator('.task-step-more button').click();
-		assert.equal(await readPhase.locator('.task-step-items > li:not(.task-step-more)').count(), 4);
 		const commandPhase = panel.locator('.task-step').last();
-		await commandPhase.locator('.task-step-toggle').click(); await commandPhase.locator('.task-step-more button').click();
-		await commandPhase.locator('.task-step-items > li:not(.task-step-more) button').last().click();
+		await commandPhase.locator('.task-step-toggle').click();
+		// All six commands are listed in transcript order.
+		assert.equal(await commandPhase.locator('.task-step-items > li').count(), 6);
+		await commandPhase.locator('.task-step-items > li button').last().click();
 		assert.equal((await page.evaluate(() => window.taskJumps)).at(-1).toolCallId, 'cmd-5');
 		if (!(await panel.isVisible())) await page.locator('.header-task-progress').click();
 		// Same plan identity, different request: do not inherit expanded details.
 		taskOverride = { sourceMessageId: 'u2', title: 'Next request' }; send();
-		await panel.locator('.task-overview h3').filter({ hasText: 'Next request' }).waitFor();
+		// Component remounts per request; the new instance starts with every phase collapsed.
+		await page.waitForFunction(() => document.querySelectorAll('.task-progress:not([hidden]) .task-step-items').length === 0);
 		assert.equal(await panel.locator('.task-step-items').count(), 0);
 		await panel.locator('.task-step-toggle').first().click();
 		conversationId = `${base.conversationId}-other`; taskOverride = { title: 'Other conversation' }; send();
-		await panel.locator('.task-overview h3').filter({ hasText: 'Other conversation' }).waitFor();
+		await page.waitForFunction(() => document.querySelectorAll('.task-progress:not([hidden]) .task-step-items').length === 0);
 		assert.equal(await panel.locator('.task-step-items').count(), 0, 'conversation switch resets details even with reused tool IDs');
 		conversationId = undefined;
 		taskOverride = { title: 'A long task title that wraps in the sidebar without hiding the current status or causing horizontal overflow. 检查任务状态与执行结果。', status: 'waiting', plan: { source: 'plan', origin: 'p', status: 'active', revision: 1, added: 0, removed: 1, awaitingConfirmation: true, items: [{ id: 'one', title: 'Read files', status: 'done' }, { id: 'two', title: 'Validate results', status: 'pending' }, { id: 'removed', title: 'Removed step', status: 'removed' }] } }; send();
-		await panel.locator('.task-overview-state').filter({ hasText: 'Waiting' }).waitFor();
-		assert.match(await panel.locator('.task-overview-meta').innerText(), /1\/2/);
+		// Lifecycle is still carried by the panel state class; only the header text is gone.
+		await panel.locator('.task-plan-step.pending').first().waitFor();
+		assert.equal(await panel.locator('.task-overview').count(), 0);
 		assert.equal(await panel.locator('.task-plan-step.running').count(), 0);
 		await page.screenshot({ path: `tests/scratch/task-panel-waiting-${platform}.png` });
 		assert(await panel.evaluate(el => el.scrollWidth <= el.clientWidth + 1));
-		for (const [status, label] of [['running', 'Running'], ['failed', 'Failed'], ['cancelled', 'Cancelled'], ['done', 'Completed']]) {
-			taskOverride = { status }; running = status === 'running'; send(); await panel.locator('.task-overview-state').filter({ hasText: label }).waitFor();
+		const panelState = (status) => page.waitForFunction(expected => {
+			const visible = [...document.querySelectorAll('.task-progress')].find(el => el.getClientRects().length > 0);
+			return !!visible && visible.classList.contains(expected);
+		}, status);
+		for (const status of ['running', 'failed', 'cancelled', 'done']) {
+			taskOverride = { status }; running = status === 'running'; send();
+			await panelState(status);
 		}
 		messages = [...records, { id: 'limited', role: 'assistant', stopReason: 'length', content: [{ type: 'text', text: 'Partial response' }] }]; taskOverride = undefined; send();
-		await panel.locator('.task-overview-state').filter({ hasText: 'Failed' }).waitFor();
-		assert((await panel.locator('.task-overview-reason').innerText()).length > 0);
+		await panelState('failed');
 		// Offline status is not completion. Reconnect uses the authoritative snapshot.
 		messages = records; running = true; send();
-		await panel.locator('.task-overview-state').filter({ hasText: 'Running' }).waitFor();
+		await panelState('running');
 		await socket.close({ code: 1000, reason: 'task panel regression' });
-		assert.equal(await panel.locator('.task-overview-state').innerText(), 'Running');
+		assert.equal(await page.evaluate(() => [...document.querySelectorAll('.task-progress')].some(el => el.getClientRects().length > 0 && el.classList.contains('running'))), true, 'disconnect keeps the last authoritative state');
 		running = false;
-		await panel.locator('.task-overview-state').filter({ hasText: 'Completed' }).waitFor();
+		await panelState('done');
 		// A retained Codemode record without taskProgress must not imply global success.
 		taskOverride = null;
 		projection = { history: [user, { id: 'cm-a', role: 'assistant', content: [{ type: 'toolCall', id: 'cm', name: 'codemode', argumentsText: '{"code":"return 1"}' }] }, { id: 'cm-r', role: 'toolResult', toolCallId: 'cm', toolName: 'codemode', content: [], codemode: { calls: [], totalCalls: 0 } }], live: [] }; send();
 		await panel.locator('.cm-record-group').waitFor();
-		assert.equal(await panel.locator('.task-overview-state').count(), 0);
-		assert.equal(await panel.locator('.task-overview h3').innerText(), lang === 'zh' ? '本轮执行记录' : 'Execution records for this request');
+		assert.equal(await panel.locator('.task-step, .task-plan-step').count(), 0);
 		assert.deepEqual(errors, []);
 		await page.close();
 	}
-	console.log('PASS task sidebar: empty/running states, overview, authoritative outcomes, full records, preview/jumps, request isolation, keyboard tabs, reconnect and Codemode-only history (Web/macOS/Windows shells)');
+	console.log('PASS task sidebar: empty/running states, no overview or files section, full untruncated step records, preview/jumps, request isolation, keyboard tabs, reconnect lifecycle and Codemode-only history (Web/macOS/Windows shells)');
 } finally { await browser?.close(); await harness?.stop(); rmSync(root, { recursive: true, force: true }); }

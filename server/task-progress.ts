@@ -33,7 +33,10 @@ function artifact(call: UiToolCallBlock): TaskStep["artifacts"][number] {
 	try { args = JSON.parse(call.argumentsText ?? "{}") as Record<string, unknown>; } catch { /* keep tool name */ }
 	const path = typeof args.path === "string" ? args.path : undefined;
 	const command = typeof args.command === "string" ? args.command : undefined;
-	return { toolCallId: call.id, kind: call.name, label: path ?? (command ? short(command, 78) : call.name), ...(path ? { path } : {}) };
+	// The command row is read back on demand, so keep the whole command (one line,
+	// no sentence splitting) instead of the 78-character display summary.
+	const commandLabel = command?.replace(/\s+/g, " ").trim().slice(0, 400);
+	return { toolCallId: call.id, kind: call.name, label: path ?? (commandLabel ? commandLabel : call.name), ...(path ? { path } : {}) };
 }
 
 function defaultTitle(calls: UiToolCallBlock[]): string {

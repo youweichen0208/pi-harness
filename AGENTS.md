@@ -160,7 +160,7 @@ pi-harness/
 | --- | --- |
 | `FilePreview.tsx` | 右栏代码高亮编辑与媒体/SQLite 只读预览；Markdown 点击打开单文件弹窗并复用主聊天；保存生命周期位于 `file-document.ts`，React 接线为 `use-file-document.ts`；当前文件 chip 严格镜像预览面板，发送时携带编辑器快照（含未保存改动）；版本校验保存与离开保护（详见 docs/architecture-attachments.md） |
 | `LeftPanel.tsx` | 240px 单栏导航与 56px 收起态：顶部 Workspace 搜索切换浮层、小记入口、项目及会话、分组管理和底部设置；布局见 `docs/ui-design.md` |
-| `RightPanel.tsx` / `TaskProgressPanel.tsx` | 可展开目录树、Git 改动标记、文件预览；当前任务进度由服务端 transcript 推断，右栏展示合并后的任务阶段和结果；布局见 `docs/ui-design.md` |
+| `RightPanel.tsx` / `TaskProgressPanel.tsx` | 可展开目录树、Git 改动标记、文件预览；当前任务进度由服务端 transcript 推断，右栏只展示执行阶段与 Codemode 记录（不显示请求标题、生命周期状态文字，也没有本轮文件分区），展开阶段按顺序列出全部命令与编辑；布局见 `docs/ui-design.md` |
 | `ChatInput.tsx` | 输入框 + 附件 chips（inline/reference/lines 三色）+ 当前文件 chip（镜像预览面板，发送取编辑器快照）；全窗口拖放目标；followUp 排队/steer 插队；斜杠命令选择器 |
 | `Message.tsx` / `MessageList.tsx` / `WorkingStatus.tsx` | 消息渲染、流式等待标题与静默状态、tool 结果关联；编辑重问、惰性窗口化、问题导航；等待态切换与间距见 `docs/ui-design.md` |
 | `PlanChecklist.tsx` | Web/桌面共用清单卡和变化行；修改计划更新合并、替换隔离或步骤跳转时，读取 `web/src/plan-presentation.ts`、`docs/architecture-plan.md` 和 `docs/ui-design.md` |

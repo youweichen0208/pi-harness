@@ -104,40 +104,39 @@ try {
 		assert.doesNotMatch(await page.locator('.task-progress').textContent(), /等待确认|awaiting confirmation/);
 		running = false; fixture = updates; send();
 		const headings = page.locator('.task-section-heading');
-		assert.deepEqual(await headings.allTextContents(), lang === 'en' ? ['Progress', 'Files this turn0 files'] : ['进度', '本轮文件0 个文件']);
+		// Only the steps section remains: no request title, no status text, no files section.
+		assert.deepEqual(await headings.allTextContents(), lang === 'en' ? ['Progress'] : ['进度']);
 		assert.equal(await page.locator('.task-progress-meta').count(), 0);
 		await headings.first().focus(); await page.keyboard.press('Enter');
 		assert.equal(await headings.first().getAttribute('aria-expanded'), 'false');
 		fixture = [...updates]; send();
 		await page.waitForTimeout(100);
 		assert.equal(await headings.first().getAttribute('aria-expanded'), 'false');
-		assert.equal(await headings.last().getAttribute('aria-expanded'), 'true');
 		await headings.first().click();
 		fixture = []; send();
 		await page.locator('.task-panel-empty').waitFor();
 		assert.equal(await page.locator('.task-section').count(), 0);
 		fixture = updates; send();
 		await page.locator('.task-plan-step').last().waitFor();
-		// A short sidebar with many output files must not crush the plan.
+		// A short sidebar with many recorded writes must not crush the plan.
 		const savedFixture = fixture;
 		fixture = [...updates, text("next-round", "Inspect the implementation", "user"), ...Array.from({ length: 15 }, (_, i) => [
 			{ id: `unassigned-a-${i}`, role: 'assistant', timestamp, content: [{ type: 'toolCall', id: `unassigned-${i}`, name: 'write', argumentsText: JSON.stringify({ path: `src/file-${i}.ts`, content: 'example' }) }] },
 			{ id: `unassigned-r-${i}`, role: 'toolResult', timestamp, toolName: 'write', toolCallId: `unassigned-${i}`, content: [{ type: 'text', text: 'result' }] },
 		]).flat()];
 		await page.setViewportSize({ width, height: 600 }); send();
-		await page.locator('.task-file-result').last().waitFor({ state: 'attached' });
+		// The plan owns the panel when one exists; writes live in the transcript, not a files section.
+		await page.locator('.task-plan-step').last().waitFor();
+		assert.equal(await page.locator('.task-file-result').count(), 0, 'no files section in the task panel');
 		const geometry = await page.locator('.task-plan-list').evaluate(el => ({ height: el.clientHeight, first: el.firstElementChild.getBoundingClientRect().height }));
 		assert(geometry.height >= geometry.first, `plan compressed below one complete step: ${JSON.stringify(geometry)}`);
-		await page.locator('.task-file-result').last().scrollIntoViewIfNeeded();
-		assert(await page.locator('.task-file-result').last().evaluate(el => { const r = el.getBoundingClientRect(); const p = el.closest('.task-progress').getBoundingClientRect(); return r.top >= p.top && r.bottom <= p.bottom + 1; }), 'last execution record is reachable');
+		const lastStep = page.locator('.task-plan-step').last();
+		await lastStep.scrollIntoViewIfNeeded();
+		assert(await lastStep.evaluate(el => { const r = el.getBoundingClientRect(); const p = el.closest('.task-progress').getBoundingClientRect(); return r.top >= p.top && r.bottom <= p.bottom + 1; }), 'last plan step is reachable in a short sidebar');
 		await page.evaluate(() => document.documentElement.dataset.appearance = 'dark');
-		await page.screenshot({ path: `tests/scratch/task-outputs-${platform}.png` });
+		await page.screenshot({ path: `tests/scratch/task-records-${platform}.png` });
 		assert(await page.locator('.task-progress').evaluate(el => el.scrollWidth <= el.clientWidth + 1));
 		await page.evaluate(() => document.documentElement.dataset.appearance = 'light');
-		await page.locator('.task-file-result > button').last().click();
-		await page.locator('.fp-embedded:visible').waitFor();
-		assert.match(await page.locator('.fp-embedded').textContent(), /file-14.ts/);
-		await page.locator('.fp-embedded .fp-back').click();
 		fixture = savedFixture; await page.setViewportSize({ width, height: 900 }); send();
 
 		if (width <= 1100) await page.locator(".drawer-backdrop").click({ position: { x: 10, y: 100 } });
@@ -175,16 +174,15 @@ try {
 		fixture = [...updates, text('next-question', '一个普通问题', 'user')]; send();
 		await page.locator('.header-task-progress').click();
 		await page.locator('.task-progress:visible').waitFor();
-		assert.match(await page.locator('.task-progress-source').textContent(), lang === 'en' ? /Previous unfinished plan/ : /此前未完成计划/);
+		// The panel no longer prints status text; the plan rows carry the previous unfinished state.
 		assert.equal(await page.locator('.task-plan-step.running').count(), 0);
 		assert.equal(await page.locator('.task-plan-step.pending').count(), 5);
 		fixture.push({ id: 'outside-call', role: 'assistant', timestamp, content: [{ type: 'toolCall', id: 'outside-read', name: 'read', argumentsText: '{"path":"README.md"}' }] }, { id: 'outside-result', role: 'toolResult', toolName: 'read', toolCallId: 'outside-read', timestamp, isError: false, content: [{ type: 'text', text: 'file contents' }] }); send();
 		running = true; send();
 		await page.locator('.task-progress.running').waitFor();
 		assert.match(await page.locator('.header-task-progress').textContent(), lang === 'en' ? /Task progress/ : /任务进度/);
-		assert.match(await page.locator('.task-progress-status').textContent(), lang === 'en' ? /Previous unfinished plan/ : /此前未完成计划/);
 		assert.doesNotMatch(await page.locator('.task-progress').textContent(), /等待确认|awaiting confirmation/);
-		assert.match(await page.locator('.task-progress-source').first().textContent(), lang === 'en' ? /Previous unfinished plan/ : /此前未完成计划/);
+		assert.equal(await page.locator('.task-plan-step.running').count(), 0, 'previous plan still does not highlight a step');
 		running = false; send();
 		await page.locator('.task-progress.waiting').waitFor();
 		assert.equal(await page.locator('.task-file-result').count(), 0);
@@ -192,9 +190,8 @@ try {
 		await page.waitForFunction(() => document.querySelector('.task-plan-step.running')?.textContent.includes('提交文档'));
 		assert(await page.locator('.task-plan-step.running').evaluate(node => { const rect = node.getBoundingClientRect(), list = node.closest(".task-sections-scroll").getBoundingClientRect(); return rect.top >= list.top - 1 && rect.bottom <= list.bottom + 1; }));
 		await headings.first().click();
-		await headings.last().click();
-		assert.deepEqual(await headings.evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-expanded'))), ['false', 'false']);
-		// Changing the active conversation resets both sections, even before its snapshot arrives.
+		assert.deepEqual(await headings.evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-expanded'))), ['false']);
+		// Changing the active conversation resets the section, even before its snapshot arrives.
 		socket.send(JSON.stringify({ type: 'conversations', conversations: [], activeId: 'sidebar-other-conversation' }));
 		await page.waitForFunction(() => [...document.querySelectorAll('.task-section-heading')].every(node => node.getAttribute('aria-expanded') === 'true'));
 		assert.deepEqual(errors, []);
