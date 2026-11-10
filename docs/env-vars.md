@@ -11,6 +11,7 @@
 | `PI_WEB_STALL_NOTIFY_MS` | `180000` | 模型无进展看门狗：流式运行中 N 毫秒无任何 SDK 事件则发 warning 提示可能失联（不自动 abort——深度思考可合法静默数分钟）；0 = 关闭 |
 | `PI_WEB_UPLOAD_RETENTION_DAYS` | `14` | 上传文件保留天数（`<dataDir>/uploads/`，启动时扫一次 + 每 6 小时一次）；0 = 关闭清理 |
 | `PI_WEB_SHELL` | 自动探测 | Windows 终端面板（node-pty）的 shell：默认优先 Git Bash（与 SDK bash 工具一致），可用此变量显式指定（如 `powershell.exe` / `cmd.exe`） |
+| `PATH`（macOS 自动补全） | 追加 `/opt/homebrew/bin`、`/opt/homebrew/sbin`、`/usr/local/bin`、`/usr/local/sbin` | 桌面版从 Dock / Spotlight / launchd 启动时不经过登录 shell，`~/.zprofile` 的 `brew shellenv` 不执行，PATH 只剩 `/usr/bin:/bin:/usr/sbin:/sbin`，终端里 `npm`/`node`/`git` 全是 command not found。服务启动时**追加**（不前置、不重复、不存在的目录跳过）这几个系统标准目录；用户自己配的目录始终优先。nvm / volta / asdf / fnm 等版本管理器**不猜**，仍需用户在 `~/.zshenv` 里导出。见 `server/shell-path.ts` |
 | `PI_MAX_TOKENS_FLOOR` | `65536`（默认开启） | 所有聊天模型（内置、Pi 原生配置、独立配置、外部同步）的输出额度下限；设为 `0` 关闭，仅接受正安全整数，不超过已知上下文窗口。不覆盖调用方显式额度。修改部署环境后重启服务；详见 `architecture-model-sources.md` |
 | `PI_CODING_AGENT_DIR` | `~/.pi/agent` | pi 配置目录（auth.json / models.json / skills） |
 | `PI_WEB_HOST` | `127.0.0.1` | 监听地址。**默认只绑 loopback**（本地个人工具，不暴露到网络）；局域网/容器访问需显式 `0.0.0.0`（docker-compose 已内置，并同时设置 `PI_WEB_ALLOW_HOSTS`） |

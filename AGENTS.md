@@ -287,6 +287,7 @@ Windows job 的终端冒烟测试必须通过才能上传安装包；`AttachCons
 - **预览与附件行号**：`countLines` 不算尾随换行；前端 `split("\n")` 后也要 pop 掉末尾空串。
 - **问题卡片的选项分隔**：`❓ **Q…**` 卡片的行内选项优先按分号切分（`web/src/question-cards.ts` 的 `parseOptions`）。整段没有分号时，只在三条都成立才按空格回退切分：标记 ≥3 个、字母从 `a` 起逐个递增、且没有选项正文以 `(b)` 这类括号字母或 `+`／`和`／`或`／`and`／`or` 开头（那属于引用或叙述）。不满足时整段退化成问题说明，`➡️ 推荐 (b)。理由` 会成为唯一选项——表现为「卡片只显示一个选项」。首选写法 `(a) 甲;(b) 乙;(c) 丙`，也支持每行一项 `- A. 甲` 或 `A) 甲`。
 - **Windows 老中文文件乱码**：预览/内联附件/行附件统一走 `decodeText`（严格 UTF-8 失败 → GBK → latin1）。
+- **macOS 桌面版终端没有 `npm`/`node`**：从 Dock / Spotlight / launchd 启动**不经过登录 shell**，`~/.zprofile` 的 `brew shellenv` 不执行，继承到的 PATH 只有 `/usr/bin:/bin:/usr/sbin:/sbin`；同一用户在 Terminal.app 里却正常。服务启动时由 `ensureMacosShellPath()`（`server/shell-path.ts`）追加 `/opt/homebrew/{bin,sbin}`、`/usr/local/{bin,sbin}`，追加不前置、不重复、不存在的目录跳过。nvm / volta / asdf / fnm 不猜（路径随版本变化），由用户 `~/.zshenv` 导出。排查时先看服务进程的 PATH（`ps eww <pid>`），不要以为终端没继承环境。
 - **Playwright 脚本**：headless shell 路径写死在本机，CI/换机需要改 `HEADLESS` 常量。
 
 - **Electron `fork()` 必须显式带 `ipc`**：`child_process.fork()` 传自定义 `stdio` 数组时，不含 `'ipc'` 会直接抛 `ERR_CHILD_PROCESS_IPC_REQUIRED`（`electron/main.mjs` 里是 `stdio: ["ignore", "pipe", "pipe", "ipc"]`，别漏了最后一项）。

@@ -1,5 +1,9 @@
 # 发布流程
 
+## 1.22.2：macOS 桌面版终端 PATH 修复
+
+修复 macOS 桌面版从 Dock／Spotlight／访达启动后，内置终端里 `npm`／`node`／`git` 报 `command not found`。GUI 启动不经过登录 shell，`~/.zprofile` 的 `brew shellenv` 不执行，服务继承的 PATH 只剩系统目录。启动时追加 `/opt/homebrew/{bin,sbin}`、`/usr/local/{bin,sbin}`，追加不前置、不重复、不存在跳过；nvm／volta 等版本管理器不猜。SDK / pi-ai 1.5.0、协议 v52 不变。仅发布 GitHub 三平台桌面 Release，同提交 CI、打包及安装升级验证通过后公开。说明见 `.github/release-notes/v1.22.2.md`。
+
 ## 1.22.0：知识库数学公式与 Claude 图片输入
 
 新增知识库 LaTeX 行内／独立公式、本地渲染、插入与源码编辑，保存保留 Markdown；修复 #165 Claude Code 来源模型图片能力缺失，保留本地独立配置覆盖。SDK / pi-ai 1.5.0、协议 v52 不变。仅发布 GitHub 三平台桌面 Release，同提交 CI、打包及安装升级验证通过后公开。说明见 `.github/release-notes/v1.22.0.md`。

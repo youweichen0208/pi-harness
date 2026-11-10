@@ -33,6 +33,7 @@ import { stat } from "node:fs/promises";
 import { createServer, type IncomingMessage } from "node:http";
 import { createConnection } from "node:net";
 import { basename, delimiter, dirname, join, resolve, sep } from "node:path";
+import { ensureMacosShellPath } from "./shell-path.js";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
@@ -109,6 +110,12 @@ if (process.platform === "win32") {
 	process.env.PATH = `${windowsBashDir()}${delimiter}${process.env.PATH ?? ""}`;
 	void ensureWindowsBash();
 }
+
+// macOS 从 Dock / Spotlight / launchd 启动时不经过登录 shell，`~/.zprofile` 里的
+// `brew shellenv` 不会执行，PATH 只剩 /usr/bin:/bin:/usr/sbin:/sbin。于是桌面版
+// 终端里 npm / node / git 全是 command not found。这里追加系统标准目录（不前置、
+// 不猜 nvm 等版本管理器），见 shell-path.ts。
+ensureMacosShellPath();
 
 const app = express();
 app.use(express.json({ limit: "10mb" }));
