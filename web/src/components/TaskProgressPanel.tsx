@@ -44,17 +44,29 @@ function TaskProgressContent({ send, codemode, liveOutputs, toolStatuses, conver
 	const [allPhases, setAllPhases] = useState<Set<string>>(() => new Set());
 	const [expanded, setExpanded] = useState<string | null>(null);
 	const scrollRef = useRef<HTMLDivElement>(null);
+	/** Once the reader scrolls the panel themselves, stop following the running step:
+	 *  a streaming turn changes `currentId` repeatedly and the follow used to yank the
+	 *  panel back mid-read (e.g. while browsing 本轮文件 or an opened file preview). */
+	const userScrolled = useRef(false);
 	const items = task?.plan?.items.filter(item => item.status !== "removed") ?? [];
 	const currentId = items.find(item => item.status === "running")?.id;
 	useEffect(() => {
 		if (!progressOpen || !currentId) return;
+		// 只要读者自己碰过这个面板就不再跟随，否则流式期间 currentId 每次变化
+		// 都会把人正在看的位置拽回去。本轮换轮时组件按 sourceMessageId 重挂载，守卫自然归零。
+		if (userScrolled.current) return;
 		const scroller = scrollRef.current;
 		const active = scroller?.querySelector<HTMLElement>(".task-plan-step.running");
 		if (!scroller || !active) return;
-		const top = active.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
-		scroller.scrollTop = Math.max(0, top - scroller.clientHeight / 3);
+		// 步骤行已经在可视区内就不要动它，避免无谓的滚动跳变。
+		const box = scroller.getBoundingClientRect();
+		const row = active.getBoundingClientRect();
+		if (row.top >= box.top && row.bottom <= box.bottom) return;
+		scroller.scrollTop = Math.max(0, row.top - box.top + scroller.scrollTop - scroller.clientHeight / 3);
 	}, [currentId, task?.id, progressOpen]);
 	const preview = (path: string) => {
+		// 打开预览会改变右栏布局，不要顺手把面板滚回当前步骤。
+		userScrolled.current = true;
 		const relative = path.startsWith(`${cwd}/`) ? path.slice(cwd.length + 1) : path;
 		onPreview(relative, relative.replace(/\\/g, "/").split("/").at(-1) ?? relative);
 	};
@@ -72,7 +84,7 @@ function TaskProgressContent({ send, codemode, liveOutputs, toolStatuses, conver
 	const state = interrupted ? "interrupted" : reminding ? "reminding" : task?.status ?? (streaming ? "running" : undefined);
 	const stateKeys = { running: "taskStateRunning", waiting: "taskStateWaiting", done: "taskStateDone", failed: "taskStateFailed", cancelled: "taskStateCancelled", interrupted: "taskStateInterrupted", reminding: "taskStateReminding" } as const;
 	return <div className={`task-progress task-sections ${state ?? "empty"}`} tabIndex={-1} aria-label={t("taskProgress")}>
-		<div className="task-sections-scroll" ref={scrollRef}>
+		<div className="task-sections-scroll" ref={scrollRef} onPointerDown={() => { userScrolled.current = true; }} onWheel={() => { userScrolled.current = true; }} onTouchMove={() => { userScrolled.current = true; }} onKeyDown={event => { if (["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End"].includes(event.key)) userScrolled.current = true; }}>
 			{empty ? <p className="task-panel-empty">{t("taskPanelEmpty")}</p> : <>
 			<header className="task-overview">
 				<h3>{task?.title || t(streaming || interrupted || reminding ? "taskCurrentTitle" : "taskRecordsTitle")}</h3>
