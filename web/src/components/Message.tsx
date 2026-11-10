@@ -1,7 +1,6 @@
 import { appendComposerText, openComposerModelSettings } from "../composer-text";
 import { UiIcon } from "./UiIcon";
 import { DelegateNotification } from "./DelegateNotification";
-import { useChangesAvailable } from "../changes-context";
 import { ToolRecoveryCard, type ToolRecoveryActions } from "./ToolRecoveryCard";
 import { isProcessNarration } from "../command-reading";
 import { navigateSibling } from "../tree-events";
@@ -177,6 +176,10 @@ interface MessageProps {
 	questionsActive?: boolean;
 	/** The agent kept going after this reply in the same turn. */
 	turnContinues?: boolean;
+	/** Nothing follows this reply in the whole transcript: the reader is looking at
+	 *  the live tail of the conversation. Drives the edit cards keeping their diff
+	 *  open after the call settles (option B). */
+	settledTail?: boolean;
 }
 
 export const Message = memo(function Message({
@@ -208,12 +211,12 @@ export const Message = memo(function Message({
 	repeatCount = 1,
 	questionsActive,
 	turnContinues,
+	settledTail,
 }: MessageProps) {
 	const t = useChatT();
 	const outputLimited = message.role === "assistant" && message.stopReason === "length";
 	const hasPartialReply = message.content.some(block => block.type === "text" && typeof block.text === "string" && !!block.text.trim());
 	const cwd = useContext(WorkspacePathContext);
-	const changesPanel = useChangesAvailable();
 	const replyQuestions = useMemo(() => message.role === "assistant" ? message.content.flatMap(block => block.type === "text" && typeof block.text === "string" ? parseReplySegments(block.text).flatMap(segment => segment.kind === "questions" ? segment.questions : []) : []) : [], [message.content, message.role]);
 	const answerKey = `${conversationId}:${message.id}`;
 	useEffect(() => {
@@ -416,9 +419,16 @@ export const Message = memo(function Message({
 					changes.push(next);
 					i++;
 				}
-				const visibleChanges = changesPanel ? changes.filter(item => !toolResults.get(item.id) || toolResults.get(item.id)?.isError) : changes;
-				if (visibleChanges.length >= 3) push(<EditWriteGroup key={`${message.id}-${first.id}`} items={visibleChanges.map((item) => ({ block: item, view: viewFor(item) }))} retriedIds={retriedEditIds} />);
-				else for (const item of visibleChanges) push(<EditWriteCard key={`${message.id}-${item.id}`} item={{ block: item, view: viewFor(item) }} retried={retriedEditIds?.has(item.id)} />);
+				// Settled edits stay in the stream instead of being dropped the moment their
+				// result lands, and they keep their diff open while the reader is still on
+				// this part of the turn. `live` is what tells the card to hold that open
+				// state: true until the reply moves past it (no trailing text and the turn
+				// is done), so scrolling back later shows the folded one-row form again.
+				// `settledTail` means nothing follows this reply in the transcript, so the
+				// reader is on the live edge of the conversation.
+				const editsLive = !!settledTail && !turnContinues;
+				if (changes.length >= 3) push(<EditWriteGroup key={`${message.id}-${first.id}`} items={changes.map((item) => ({ block: item, view: viewFor(item) }))} retriedIds={retriedEditIds} />);
+				else for (const item of changes) push(<EditWriteCard key={`${message.id}-${item.id}`} item={{ block: item, view: viewFor(item) }} retried={retriedEditIds?.has(item.id)} live={editsLive} />);
 				continue;
 			}
 			if (first?.name === "bash") {

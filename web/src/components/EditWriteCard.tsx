@@ -46,14 +46,17 @@ function ChangeBody({ change, state }: { change: EditWriteChange; state: string 
 	</div>;
 }
 
-export function EditWriteCard({ item, compact = false, retried = false }: { item: Item; compact?: boolean; retried?: boolean }) {
+export function EditWriteCard({ item, compact = false, retried = false, live = false }: { item: Item; compact?: boolean; retried?: boolean; live?: boolean }) {
 	const t = useChatT();
 	const change = useMemo(() => editWriteChange(item.block, item.view.result), [item.block, item.view.result]);
-	// 29a: the row opens on click. A live call stays open while its diff streams,
-	// then folds itself to one line; a failure or an explicit jump keeps it open.
+	// 29a: the row opens on click. A live call stays open while its diff streams.
+	// A settled edit now stays open too while the reader is still on that part of
+	// the turn, and folds once the reply has moved past it — otherwise the green
+	// dot appeared and the diff was yanked away in the same breath. A failure, an
+	// explicit jump or an explicit toggle always wins over the automatic fold.
 	const [manual, setManual] = useState<boolean | null>(null);
 	const running = !retried && status(item) === "running";
-	const open = manual ?? (running && !change?.empty);
+	const open = manual ?? ((running || live) && !change?.empty);
 	useEffect(() => { if (running) setManual(null); }, [running]);
 	useEffect(() => {
 		const onJump = (event: Event) => {

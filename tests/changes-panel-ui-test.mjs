@@ -50,7 +50,12 @@ try {
 	});
 	await page.goto(`http://localhost:${port}`);
 	await page.locator('.change-summary').waitFor();
-	assert.equal(await page.locator('.change-card').count(),0);
+	assert.equal(await page.locator('.change-summary').count() > 0, true);
+	// A settled edit keeps its card in the stream as one folded row. It used to be
+	// filtered out as soon as `toolResults` had it, which erased the card right
+	// after `tool_status` (which arrives first) turned its dot green.
+	assert.equal(await page.locator('.change-card.done').count(), 1, 'a settled edit stays visible');
+	assert.equal(await page.locator('.change-card.done .change-card-body').count(), 0, 'a settled edit folds to one row');
 	assert.equal(await page.locator('.bash-group.historical-step').count(),1);
 	assert.equal(await page.locator('.process-group-head, .bash-group-head').count(), 0, 'a single successful command does not add a redundant group toggle');
 	assert.match(await page.locator('.command-turn-summary').innerText(), /本轮共 1 commands/, 'the turn summary includes the command count');

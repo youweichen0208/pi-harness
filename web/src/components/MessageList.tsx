@@ -874,6 +874,9 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 							repeatCount={repeatedUsers.counts.get(m.id)}
 							questionsActive={!state.isStreaming && m.id === lastAssistantId}
 							turnContinues={turnContinues.has(m.id)}
+							// The edit cards hold their diff open only at the live edge of the
+							// conversation: the newest assistant reply, with nothing said after it.
+							settledTail={m.id === lastAssistantId && !streamingHasContent && !state.streamingMessage?.content.some((block) => block.type === "toolCall")}
 							onCollapse={isExpandedOld ? collapse : undefined}
 						/>
 						{commandSummaries.has(m.id) && <CommandTurnSummary summary={commandSummaries.get(m.id)!} />}
