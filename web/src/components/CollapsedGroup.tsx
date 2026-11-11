@@ -21,6 +21,13 @@ interface CollapsedGroupProps {
 	onExpand: (messageIds: string[]) => void;
 	/** The head question was sent this many times in a row (3a). */
 	repeatCount?: number;
+	/**
+	 * This run is the leftover of a turn whose identity (`pi · time`) is already on
+	 * screen above — e.g. the user expanded one message out of a folded turn and the
+	 * remaining messages still fold together. Printing the role label again would
+	 * show the same turn twice.
+	 */
+	turnAlreadyIdentified?: boolean;
 }
 
 /** Distinct tool names to name before falling back to `+n`. */
@@ -36,6 +43,7 @@ export const CollapsedGroup = memo(function CollapsedGroup({
 	messages,
 	onExpand,
 	repeatCount,
+	turnAlreadyIdentified,
 }: CollapsedGroupProps) {
 	const t = useT();
 	const head = messages[0];
@@ -131,7 +139,7 @@ export const CollapsedGroup = memo(function CollapsedGroup({
 			aria-expanded={false}
 			onClick={() => onExpand(ids)}
 		>
-			<span className={`msg-collapsed-role role-${head.role}`}>{label}</span>
+			<span className={`msg-collapsed-role role-${head.role}`}>{turnAlreadyIdentified ? "" : label}</span>
 			<span className="msg-collapsed-body">
 				{userParts ? <span className="msg-collapsed-question">
 					{userParts.skill && <code className="msg-collapsed-skill">/{userParts.skill}</code>}

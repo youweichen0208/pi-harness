@@ -115,6 +115,17 @@ describe("buildCollapsedGroups", () => {
 	it("recentStart 超出数组长度也不越界", () => {
 		expect(shape([msg("a1", "assistant")], 99)).toEqual({ 0: ["a1"] });
 	});
+
+	it("展开一轮里的一条后，剩下的同角色消息另起一组（组头已不是这一轮的开头）", () => {
+		// 用户把 a1 展开后，a2 变成新组的头。界面上 a1 的头部已经展示了这一轮的身份，
+		// 所以 a2 这行摘要不能再打印一次角色名，否则同一轮出现两条 `pi`。
+		const messages = [msg("u1", "user"), msg("a1", "assistant"), msg("a2", "assistant")];
+		expect(shape(messages, 3, ["a1"])).toEqual({ 0: ["u1"], 2: ["a2"] });
+		const { groupAt } = buildCollapsedGroups(messages, 3, new Set(["a1"]));
+		// 残留组的头不是第 0 条，说明它只是上一轮的后半段。
+		expect(groupAt.get(2)![0].id).toBe("a2");
+		expect(groupAt.has(1)).toBe(false);
+	});
 });
 
 it("keeps an empty length-limited reply visible for its truncation notice", () => {

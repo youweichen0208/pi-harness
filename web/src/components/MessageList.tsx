@@ -815,6 +815,13 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 								<CollapsedGroup
 									messages={group}
 									onExpand={expandGroup}
+									// When the user expands one message out of a folded turn, the rest
+									// of that turn re-groups behind it. Its role label would print the
+									// turn identity a second time, right under the expanded header.
+									turnAlreadyIdentified={(() => {
+										const previous = state.messages[i - 1];
+										return !!previous && previous.role === m.role && i - 1 < recentStart && expanded.has(previous.id);
+									})()}
 									repeatCount={repeatedUsers.counts.get(group[0].id)}
 								/>
 							</LazyMount>
