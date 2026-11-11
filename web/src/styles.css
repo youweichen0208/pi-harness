@@ -288,8 +288,12 @@
 	--yellow: #f2bc4e;
 	--yellow-fg: #8a5a00;
 	--yellow-bg: #fdf1d6;
-	--progress-text: var(--yellow-fg);
-	--progress-soft: var(--yellow-bg);
+	/* 进行中指示（左栏运行点、任务面板步骤、计划步骤、进度条）。绿色同时表示
+	   「正在运行」与「成功」，与 bash 运行灯一致；这里用比 --green 更深的
+	   #0e7c36，因为 6px 圆点在暖白侧栏上需要 ≥5:1 才看得清（--green 只有
+	   3.1:1），与旧的 --yellow-fg 5.68:1 基本持平。黄色只留给「有改动／待发」。 */
+	--progress-text: #0e7c36;
+	--progress-soft: #e4f7e9;
 	--output-bg: #fafafa;
 	--card-shadow: 0 1px 2px color-mix(in oklch, var(--text) 5%, transparent), 0 8px 24px color-mix(in oklch, var(--text) 6%, transparent);
 	--action: #00875a;
@@ -8832,11 +8836,15 @@ img.brand-logo, img.empty-logo { background: transparent; object-fit: contain; }
 .design-workspace .messages-wrap::after { content: ""; position: absolute; left: 0; right: 0; z-index: 4; pointer-events: none; }
 .design-workspace .messages-wrap::before { top: 0; height: 16px; background: linear-gradient(to bottom, var(--bg), transparent); }
 .design-workspace .messages-wrap::after { display: none; }
-.design-workspace .msg { width: 100%; max-width: var(--chat-max); padding-inline: 28px; margin: 0 auto 22px; }
+/* 消息盒没有下边距：间距只由 `margin-top` 决定（docs/ui-design.md 4.1「消息盒
+   没有下内边距，间距只有一条 margin-top」）。这里原来的 `margin: 0 auto 22px`
+   让每条消息实际多出 22px，叠上 10px 的 margin-top 就是 32px，同一轮里每段之间
+   都多出这一截，整段对话看起来“隔得很开”，而且下调 margin-top 永远压不下来。 */
+.design-workspace .msg { width: 100%; max-width: var(--chat-max); padding-inline: 28px; margin: 0 auto; }
 .design-workspace .msg-text { font-size: 14.5px; line-height: 1.75; }
 .design-workspace .msg-user { display: flex; flex-direction: column; align-items: flex-end; }
-.design-workspace .msg-user > .msg-body { max-width: 78%; background: var(--bubble-bg); border: 0; border-radius: var(--r-md) var(--r-md) var(--r-sm) var(--r-md); padding: 10px 14px; }
-.design-workspace .msg-user .msg-text { background: transparent; padding: 0; border: 0; border-radius: 0; line-height: 1.6; }
+.design-workspace .msg-user > .msg-body { max-width: 75%; background: var(--bubble-bg); border: 0; border-radius: var(--r-md); padding: 8px 12px; }
+.design-workspace .msg-user .msg-text { background: transparent; padding: 0; border: 0; border-radius: 0; line-height: 1.74; }
 .design-workspace .msg-user > .msg-body, .design-workspace .msg-user .msg-text, .design-workspace .msg-user .md, .design-workspace .user-message-content { min-width: 0; overflow-wrap: anywhere; }
 .design-workspace .user-message-content { max-width: 100%; }
 .design-workspace .user-message-content.collapsed { max-height: 12.8em; overflow: hidden; }
@@ -9287,7 +9295,7 @@ body { -webkit-font-smoothing: antialiased; }
 .change-state { display: inline-flex; align-items: center; gap: 5px; flex: none; margin-left: auto; color: var(--text-faint); font: 11px var(--sans); white-space: nowrap; }
 .change-state.done { color: var(--green); }
 .change-state.err { color: var(--red); }
-.change-state.running { color: var(--accent); }
+.change-state.running { color: var(--progress-text); }
 .change-state i { display: block; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .change-open { flex: none; padding: 4px 5px; border: 0; border-radius: var(--r-sm); background: none; color: var(--text-dim); font: 11px var(--sans); cursor: pointer; }
 .change-open:hover, .change-raw summary:hover { background: var(--bg-elev2); color: var(--text); }
@@ -9348,7 +9356,7 @@ body { -webkit-font-smoothing: antialiased; }
 .task-progress-track { display: flex; height: 4px; gap: 2px; margin-top: 4px; overflow: hidden; border-radius: var(--r-sm); }
 .task-progress-track span { flex: 1; min-width: 3px; background: var(--border); }
 .task-progress-track span.done { background: var(--green); }
-.task-progress-track span.running { background: var(--accent); }
+.task-progress-track span.running { background: var(--progress-text); }
 .task-progress-track span.stalled { background: var(--yellow-fg); }
 .task-progress-track span.failed { background: var(--red); }
 .task-progress-list { min-height: 0; overflow-y: auto; padding: 6px 0 12px; }
@@ -9359,7 +9367,7 @@ body { -webkit-font-smoothing: antialiased; }
 .task-step.linked .task-step-head { background: var(--accent-soft); }
 .task-step-mark { display: grid; place-items: center; width: 17px; height: 17px; margin-left: -9px; flex: none; border-radius: 50%; background: var(--bg-elev); border: 1px solid var(--border); color: var(--text-faint); font: 10px var(--sans); }
 .task-step.done .task-step-mark { color: var(--green); border-color: var(--green); }
-.task-step.running .task-step-mark { color: var(--accent); border-color: var(--accent); }
+.task-step.running .task-step-mark { color: var(--progress-text); border-color: var(--progress-text); }
 .task-step.stalled .task-step-mark { color: var(--yellow-fg); border-color: var(--yellow-fg); }
 .task-step.failed .task-step-mark { color: var(--red); border-color: var(--red); }
 .task-step-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
@@ -9469,7 +9477,7 @@ body { -webkit-font-smoothing: antialiased; }
 .read-group-head strong { flex: none; color: var(--text); font-weight: 500; }
 .read-group-paths { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-faint); font-family: var(--mono); }
 .read-group-status { flex: none; color: var(--green); }
-.read-group.run .read-group-status { color: var(--accent); }
+.read-group.run .read-group-status { color: var(--progress-text); }
 .read-group.err .read-group-status { color: var(--red); }
 .read-group-items { display: grid; gap: 6px; padding: 0 8px 8px; }
 .read-group-items .toolcall { margin: 0; }
@@ -9712,11 +9720,11 @@ body { -webkit-font-smoothing: antialiased; }
 .task-progress-meta small { margin-left: auto; color: var(--text-faint); }
 .task-progress-status.done { color: var(--green); }
 .task-progress-status.failed { color: var(--red); }
-.task-progress-status.running { color: var(--accent); }
+.task-progress-status.running { color: var(--progress-text); }
 .task-progress-track { display: flex; gap: 3px; height: 4px; margin-top: 1px; background: transparent; overflow: visible; }
 .task-progress-track span { display: block; height: 100%; min-width: 0; flex: 1 1 0; border-radius: var(--r-sm); background: var(--border-soft); }
 .task-progress-track span.done { background: var(--text-faint); }
-.task-progress-track span.running { background: var(--accent); }
+.task-progress-track span.running { background: var(--progress-text); }
 .task-progress-track span.failed { background: var(--red); }
 .task-result { display: grid; gap: 9px; margin: 12px 14px 16px; padding: 13px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-elev); font: 12px var(--sans); }
 .task-result-label { color: var(--text-faint); }
@@ -9771,8 +9779,8 @@ body { -webkit-font-smoothing: antialiased; }
 .task-plan-mark { display: grid; place-items: center; width: 18px; height: 18px; flex: none; border-radius: 50%; border: 1px solid var(--border); font: 10px var(--mono); }
 .task-plan-step.done { color: var(--text); }
 .task-plan-step.done .task-plan-mark { border-color: var(--green); background: var(--green-soft); color: var(--green); }
-.task-plan-step.running { color: var(--accent); font-weight: 500; }
-.task-plan-step.running .task-plan-mark { border-color: var(--accent); background: var(--accent-soft); }
+.task-plan-step.running { color: var(--progress-text); font-weight: 500; }
+.task-plan-step.running .task-plan-mark { border-color: var(--progress-text); background: var(--progress-soft); }
 .task-plan-step.removed { color: var(--text-faint); text-decoration: line-through; }
 .task-plan-added { margin-left: 6px; padding: 1px 4px; border-radius: var(--r-sm); background: var(--accent-soft); color: var(--accent); text-decoration: none; }
 .task-plan-current-file { display: block; margin-top: 3px; color: var(--text-faint); font: 10px var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -9792,7 +9800,7 @@ body { -webkit-font-smoothing: antialiased; }
 .task-step { margin-left: 11px; border-left: 0; }
 .task-step-head { padding: 8px 13px 8px 0; gap: 10px; }
 .task-step-mark { width: 19px; height: 19px; margin-left: 0; border: 0 !important; background: transparent !important; color: var(--text-faint) !important; font-size: 11px; }
-.task-step.running .task-step-mark { color: var(--accent) !important; }
+.task-step.running .task-step-mark { color: var(--progress-text) !important; }
 .task-step.failed .task-step-mark { color: var(--red) !important; }
 .task-step-title { font-size: 12.5px; font-weight: 500; }
 .task-step-main small { margin-top: 3px; font-size: 11px; }
@@ -9847,7 +9855,7 @@ html.pi-desktop .design-workspace .topbar-actions > .topbar-more .chip > svg { f
 }
 
 /* Running command reference: one command, one clock, a separate task stop. */
-.design-workspace .toolcall-bash.run { border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+.design-workspace .toolcall-bash.run { border-color: color-mix(in srgb, var(--progress-text) 40%, var(--border)); }
 .design-workspace .toolcall-bash > .bash-command-head { flex-wrap: nowrap; gap: 8px; padding: 7px 12px; }
 .design-workspace .toolcall > .bash-command-head > .bash-head-command { display: flex; flex: 1 1 0; min-width: 0; gap: 7px; padding: 0; border: 0; background: transparent; text-align: left; justify-content: flex-start; font: 12px/1.6 var(--mono); opacity: 1; pointer-events: auto; cursor: pointer; }
 .design-workspace .toolcall > .bash-command-head > .bash-head-command:disabled { color: var(--text); cursor: default; }
@@ -9857,8 +9865,13 @@ html.pi-desktop .design-workspace .topbar-actions > .topbar-more .chip > svg { f
 .bash-head-command > svg.open { transform: rotate(180deg); }
 .bash-directory { max-width: 22%; overflow: hidden; text-overflow: ellipsis; padding: 2px 5px; border-radius: var(--r-sm); background: var(--bg-elev2); color: var(--text-dim); font: 10px var(--mono); }
 .bash-running-dot, .task-progress-status > i { display: inline-block; flex: none; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
-.bash-running-dot { color: var(--accent); animation: working-pulse 1.4s ease-in-out infinite; }
-.design-workspace .toolcall-bash.run .toolcall-status { color: var(--accent); font: 12px var(--mono); padding: 0; }
+.bash-running-dot { color: var(--progress-text); animation: bash-running-bloom 1.5s ease-in-out infinite; }
+/* Claude Code 式运行灯：内核深绿随明暗呼吸，外圈浅绿光晕周期性涨缩，合成「正在运行」的活体感。 */
+@keyframes bash-running-bloom {
+	0%, 100% { background: var(--progress-text); box-shadow: 0 0 0 0 color-mix(in srgb, var(--progress-text) 0%, transparent); }
+	45% { background: color-mix(in srgb, var(--progress-text) 62%, var(--bg)); box-shadow: 0 0 0 3px var(--progress-soft); }
+}
+.design-workspace .toolcall-bash.run .toolcall-status { color: var(--progress-text); font: 12px var(--mono); padding: 0; }
 .design-workspace .toolcall-bash.run .toolcall-status::before { display: none; }
 .design-workspace .toolcall > .bash-command-head > .toolcall-kill { flex: none; min-width: 42px; padding: 2px 8px; margin: 0; border: 1px solid var(--border); border-radius: var(--r-sm); background: transparent; color: var(--text-dim); font: 12px/1.5 var(--sans); }
 .design-workspace .toolcall > .bash-command-head > .toolcall-kill:hover { background: var(--bg-elev2); color: var(--text); }
@@ -9888,14 +9901,14 @@ html.pi-desktop .design-workspace .topbar-actions > .topbar-more .chip > svg { f
 .task-plan-tag { flex: none; max-width: 35%; overflow: hidden; text-overflow: ellipsis; border-radius: var(--r-sm); padding: 0 4px; background: var(--bg-elev2); color: var(--text-dim); font: 10px/1.7 var(--mono); }
 .task-plan-step-title { display: block; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .task-plan-mark { border: 0; background: transparent; line-height: 18px; }
-.task-plan-step.running { background: var(--bg-elev); border-color: color-mix(in srgb, var(--accent) 30%, var(--border)); }
+.task-plan-step.running { background: var(--bg-elev); border-color: color-mix(in srgb, var(--progress-text) 30%, var(--border)); }
 .task-plan-step.running .task-plan-step-title { color: var(--text); font-weight: 600; }
 .task-plan-step.running .task-plan-mark { background: transparent; }
 .task-plan-detail, .task-plan-current-file { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; margin-top: 2px; color: var(--text-dim); font: 11px/1.5 var(--sans); }
 .task-plan-step-duration { font: 11px/18px var(--mono); }
-.task-plan-step.running .task-plan-step-duration { color: var(--accent); }
+.task-plan-step.running .task-plan-step-duration { color: var(--progress-text); }
 @keyframes working-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
-@media (prefers-reduced-motion: reduce) { .bash-running-dot, .task-progress-status.running > i { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .bash-running-dot { animation: none; background: var(--progress-text); } .task-progress-status.running > i { animation: none; } }
 @media (max-width: 600px) {
 	.design-workspace .toolcall-bash > .bash-command-head { gap: 5px; padding-inline: 8px; }
 	.bash-directory { max-width: 15%; }
@@ -9942,7 +9955,7 @@ html.pi-desktop .design-workspace .topbar { height: 44px; min-height: 44px; gap:
 .design-workspace .topbar-actions > .panel-toggle,
 html.pi-desktop .design-workspace .topbar-actions > .panel-toggle { position: relative; width: 28px; height: 28px; margin-left: 8px; border: 0; border-radius: var(--r-sm); background: var(--row-hover); }
 .design-workspace .topbar-actions > .panel-toggle::before { content: ""; position: absolute; left: -11px; top: 4px; bottom: 4px; width: 1px; background: var(--border); }
-.header-task-progress { display: inline-flex; align-items: center; gap: 5px; flex: none; padding: 3px 0; border: 0; background: transparent; color: var(--accent); font: 11px var(--sans); white-space: nowrap; cursor: pointer; -webkit-app-region: no-drag; app-region: no-drag; }
+.header-task-progress { display: inline-flex; align-items: center; gap: 5px; flex: none; padding: 3px 0; border: 0; background: transparent; color: var(--progress-text); font: 11px var(--sans); white-space: nowrap; cursor: pointer; -webkit-app-region: no-drag; app-region: no-drag; }
 .header-task-progress > span { font-size: 8px; }
 .header-task-progress:hover { text-decoration: underline; text-underline-offset: 3px; }
 .task-progress:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
@@ -10560,8 +10573,8 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { height: 44px;
 	--yellow: #edc765;
 	--yellow-fg: #edc765;
 	--yellow-bg: #463c22;
-	--progress-text: #edc765;
-	--progress-soft: #463c22;
+	--progress-text: var(--green);
+	--progress-soft: #243c2b;
 	--input-border: #454c57;
 	--send-disabled-bg: var(--bg-elev2);
 	--stop-bg: #39434b;
@@ -11123,7 +11136,7 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { height: 44px;
 .bash-step.done .bash-step-icon, .wiki-chat-tool.done summary > span { color: var(--green); border-color: var(--green); }
 .task-progress-track span.done, .read-file-head i.done { background: var(--green); }
 .change-state.running, .task-progress-status.running, .task-plan-step.running,
-.task-plan-step.running .task-plan-step-duration, .bash-running-dot, .header-task-progress,
+.task-plan-step.running .task-plan-step-duration, .header-task-progress,
 .wiki-save-status.saving { color: var(--progress-text); }
 .task-step.running .task-step-mark { color: var(--progress-text) !important; border-color: var(--progress-text); }
 .task-plan-step.running .task-plan-mark { color: var(--progress-text); border-color: var(--progress-text); background: var(--progress-soft); }
@@ -11231,7 +11244,6 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { height: 44px;
 }
 
 .design-workspace .msg-text { font-size: 13.5px; line-height: 1.7; }
-.design-workspace .msg-user > .msg-body { max-width: 75%; border-radius: var(--r-md); padding: 8px 12px; }
 .design-workspace .msg-user .md > :first-child { margin-top: 0; }
 .design-workspace .msg-user .md > :last-child { margin-bottom: 0; }
 .design-workspace .usage-trigger { font-family: var(--sans); color: var(--text-dim); }
@@ -11406,8 +11418,8 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { height: 44px;
 /* ---- Design 19: manual recovery and consistent workspace tokens ---- */
 .wiki-composer-pill .wiki-pill-send:disabled { background: var(--send-disabled-bg); color: var(--text-faint); cursor: default; }
 .wiki-composer-pill .wiki-pill-send.stop { background: var(--bg-elev); color: var(--text); }
-.task-sections .task-plan-step.running { color: var(--accent); border-color: var(--accent); }
-.task-sections .task-plan-step.running .task-plan-mark { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.task-sections .task-plan-step.running { color: var(--progress-text); border-color: var(--progress-text); }
+.task-sections .task-plan-step.running .task-plan-mark { color: var(--progress-text); border-color: var(--progress-text); background: var(--progress-soft); }
 .task-sections.running .task-plan-step.running .task-plan-mark { animation: task-plan-pulse 1.4s ease-in-out infinite; }
 @keyframes task-plan-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .55; transform: scale(.82); } }
 @media (prefers-reduced-motion: reduce) { .task-sections.running .task-plan-step.running .task-plan-mark { animation: none; } }
@@ -12358,7 +12370,7 @@ pre.wiki-mermaid-source-hidden > .fp-mermaid-preview { padding-bottom: 0; }
 /* Read rows: file icon on the left, measured completion time in green on the right. */
 .process-list .read-group-head > svg, .process-list .read-group-head .ui-icon { flex: none; color: var(--text-faint); }
 .process-list .read-group-status { color: var(--green); font-variant-numeric: tabular-nums; }
-.process-list .read-group.run .read-group-status { color: var(--accent); }
+.process-list .read-group.run .read-group-status { color: var(--progress-text); }
 .process-list .read-group.err .read-group-status { color: var(--red); }
 .thinking.live .thinking-live-label { display: block; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-faint); font-style: italic; }
 /* Message rhythm: one header per reply, no negative margins pulling rows into it. */
@@ -12551,7 +12563,7 @@ pre.wiki-mermaid-source-hidden > .fp-mermaid-preview { padding-bottom: 0; }
 .process-group-dot, .process-group-thought { flex: none; color: var(--text-faint); }
 .process-group-status { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; flex: none; color: var(--text-faint); font-size: 12px; }
 .process-group.err .process-group-status { color: var(--red); }
-.process-group.run .process-group-status { color: var(--accent); }
+.process-group.run .process-group-status { color: var(--progress-text); }
 .process-group-status .thinking-spinner { width: 10px; height: 10px; border-width: 2px; }
 @media (prefers-reduced-motion: reduce) { .process-group-chevron { transition: none; } }
 /* Rows inside the group: compact, monospace commands, no dividers. */
@@ -13615,7 +13627,7 @@ html.pi-desktop-darwin .compact-navigation .compact-brand { --desktop-brand-inse
 .design-workspace .view-pane:not(.wiki-view) .main .msg-assistant .msg-text .md p { margin-block: 12px; }
 .design-workspace .view-pane:not(.wiki-view) .main .msg-text .md :is(ul, ol) { padding-left: 24px; }
 .design-workspace .view-pane:not(.wiki-view) .main .msg-text .md li { margin-block: 4px; }
-.design-workspace .view-pane:not(.wiki-view) .main .msg-text .md :not(pre) > code { font-size: .9em; padding: 1px 4px; border-radius: var(--r-sm); background: var(--bg-elev2); }
+.design-workspace .view-pane:not(.wiki-view) .main .msg-text .md :not(pre) > code { font-size: .9em; padding: 1px 4px; border-radius: var(--r-sm); background: var(--bg-elev2); line-height: inherit; vertical-align: baseline; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
 .design-workspace .system-event { font-size: 12px; }
 .design-workspace .system-event::before, .design-workspace .system-event::after { display: none; }
 .design-workspace .topbar-actions { flex: none; gap: 4px; }
@@ -13807,7 +13819,7 @@ html.pi-desktop-darwin .compact-navigation .compact-brand { --desktop-brand-inse
 .method-case-status.passed { color: var(--green); }
 .method-case-status.failed, .method-case-status.error { color: var(--red); }
 .method-case-status.stale { color: var(--yellow-fg); }
-.method-case-status.running { color: var(--accent); }
+.method-case-status.running { color: var(--progress-text); }
 .method-case-body { padding: 0 16px 16px; animation: scratch-enter 140ms ease-out; }
 .method-case-body > .playground-hint { margin-bottom: 14px; line-height: 1.6; color: var(--text-muted); }
 .method-case-body .method-parameters { gap: 14px; }
@@ -13883,7 +13895,7 @@ html.pi-desktop .design-workspace .topbar :is(button, input, textarea, select, a
 .task-step-log .task-step-items button { font-size: 11px; line-height: 1.8; }
 .task-step-log .task-step.running { border: 1px solid var(--border-soft); background: var(--bg-elev); padding: 12px 10px; border-radius: var(--r-md); box-shadow: 0 2px 6px var(--shadow-soft); }
 .task-step-log .task-step.running .task-step-title { color: var(--text); font-weight: 400; }
-.task-step-log .task-step.running .task-step-mark { color: var(--accent) !important; }
+.task-step-log .task-step.running .task-step-mark { color: var(--progress-text) !important; }
 .task-step-spinner { width: 14px; height: 14px; animation: spin 1s linear infinite; }
 @media (prefers-reduced-motion: reduce) { .task-step-spinner { animation: none; } }
 .task-step-log .task-step.running .task-step-items button { color: var(--text); }
@@ -14275,7 +14287,7 @@ html.pi-desktop .design-workspace .topbar { height: 48px; min-height: 48px; }
 .design-workspace .process-group-status { flex: none; padding: 2px 10px; border-radius: var(--r-switch); font-size: 11px; line-height: 1.6; }
 .design-workspace .process-group.ok .process-group-status { background: var(--green-soft); color: var(--green); }
 .design-workspace .process-group.err .process-group-status { background: var(--red-soft); color: var(--red); }
-.design-workspace .process-group.run .process-group-status { background: var(--accent-soft); color: var(--accent); }
+.design-workspace .process-group.run .process-group-status { background: var(--progress-soft); color: var(--progress-text); }
 .design-workspace .process-group.empty .process-group-status { background: var(--bg-elev2); color: var(--text-muted); }
 @media (max-width: 600px) {
 	.design-workspace .process-group-head { flex-wrap: wrap; gap: 6px; }
@@ -14305,7 +14317,7 @@ html.pi-desktop .design-workspace .topbar { height: 48px; min-height: 48px; }
 .toolcall-subagents > .toolcall-head > .toolcall-icon { display: inline-flex; align-items: center; justify-content: center; width: 25px; height: 25px; border-radius: var(--r-switch); color: var(--bg-elev); background: var(--term-magenta); }
 .toolcall-subagents > .toolcall-head > .toolcall-status { border-radius: var(--r-switch); padding: 2px 9px; background: var(--green-soft); color: var(--green); }
 .toolcall-subagents:is(.err, .error, .partial) > .toolcall-head > .toolcall-status { background: var(--yellow-bg); color: var(--yellow-fg); }
-.toolcall-subagents:is(.running, .run) > .toolcall-head > .toolcall-status { background: var(--accent-soft); color: var(--accent); }
+.toolcall-subagents:is(.running, .run) > .toolcall-head > .toolcall-status { background: var(--progress-soft); color: var(--progress-text); }
 .subagent-source .subagent-source-task, .subagent-source-head[aria-expanded="true"] + .subagent-source-task { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .subagent-conclusion { padding: 14px 16px; border-left: 3px solid var(--accent); border-radius: var(--r-md); background: var(--accent-soft); }
 .subagent-conclusion h4 { color: var(--accent); }
@@ -14363,9 +14375,9 @@ html.pi-desktop .design-workspace .topbar { height: 48px; min-height: 48px; }
 .design-workspace .header-task-progress { display: inline-flex; align-items: center; gap: 8px; background: transparent; color: var(--accent); border: 0; border-radius: var(--r-sm); }
 .header-task-segments { display: flex; gap: 3px; max-width: 140px; min-width: 60px; flex: 1; }
 .header-task-segments i { flex: 1; height: 4px; min-width: 2px; border-radius: var(--r-sm); background: var(--border-soft); }
-.header-task-segments i:is(.done, .running) { background: var(--accent); }
+.header-task-segments i:is(.done, .running) { background: var(--progress-text); }
 .header-task-segments i:is(.failed, .blocked) { background: var(--red); }
-.design-workspace .task-step-log .task-step.running, .design-workspace .task-sections .task-plan-step.running { background: var(--accent-soft); border: 0; box-shadow: none; border-radius: var(--r-sm); }
+.design-workspace .task-step-log .task-step.running, .design-workspace .task-sections .task-plan-step.running { background: var(--progress-soft); border: 0; box-shadow: none; border-radius: var(--r-sm); }
 .design-workspace .task-step-log .task-step.done .task-step-mark, .design-workspace .task-plan-step.done .task-plan-mark { color: var(--green) !important; }
 .design-workspace .task-plan-step.done .task-plan-step-title { color: var(--text-muted); }
 .design-workspace .usage-meter { width: 80px; height: 6px; border-radius: var(--r-switch); }
@@ -14413,7 +14425,11 @@ html.pi-desktop .design-workspace .topbar { height: 48px; min-height: 48px; }
 .design-workspace .single-command > .process-group-rows { padding: 0; border: 0; }
 .design-workspace .single-command .bash-group, .design-workspace .single-command .bash-group-items, .design-workspace .single-command .bash-row { border: 0; background: transparent; margin: 0; padding: 0; }
 .design-workspace .single-command .bash-row-head { display: flex; gap: 8px; min-height: 28px; padding: 2px 0; background: transparent; }
-.design-workspace .single-command .bash-row.ok .bash-inline-command { display: block; min-width: 0; max-width: 75%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--text-muted); font: 11px/1.7 var(--mono); order: -2; }
+/* 每一行的开头固定是状态点（✓ / ✗ / 转圈），后面才是可读名称/命令，最右是结果
+   计数（docs/ui-design.md 4.2「✓ 绿 / ✗ 红 … 右侧元信息」）。
+   这里曾给命令加 `order: -2` 把文字提到状态点前面，导致同一列里命令行的绿点跑到
+   文字右侧、编辑卡的点却在左侧，两种工具行的起始位置对不齐。 */
+.design-workspace .single-command .bash-row.ok .bash-inline-command { display: block; min-width: 0; max-width: 75%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--text-muted); font: 11px/1.7 var(--mono); }
 .design-workspace .single-command .bash-row.ok .bash-inline-result { display: inline; color: var(--green); font: 11px var(--mono); }
 .design-workspace .single-command .bash-row.ok .bash-state { color: var(--green); }
 .design-workspace .single-command .bash-row.ok :is(.bash-readable-title, .bash-command-secondary, .bash-extra-lines) { display: none; }
@@ -14435,7 +14451,7 @@ html.pi-desktop .design-workspace .topbar { height: 48px; min-height: 48px; }
 
 /* Expanded successful groups expose the original command, with quiet per-row status. */
 :root .design-workspace .process-group.ok:not(.single-command).open { background: transparent; }
-:root .design-workspace .process-group.ok:not(.single-command).open .bash-row.ok .bash-inline-command { display: block; flex: 1; min-width: 0; overflow-x: auto; white-space: pre; color: var(--text-muted); font: 11px/1.8 var(--mono); order: -2; }
+:root .design-workspace .process-group.ok:not(.single-command).open .bash-row.ok .bash-inline-command { display: block; flex: 1; min-width: 0; overflow-x: auto; white-space: pre; color: var(--text-muted); font: 11px/1.8 var(--mono); }
 :root .design-workspace .process-group.ok:not(.single-command).open .bash-row.ok :is(.bash-readable-title, .bash-command-secondary, .bash-extra-lines, .bash-inline-result) { display: none; }
 :root .design-workspace .process-group.ok:not(.single-command).open .bash-row.ok :is(.bash-state, .bash-row-stats) { color: var(--text-muted); flex: none; }
 :root .design-workspace .process-group.ok:not(.single-command).open .bash-row-head { gap: 8px; }
@@ -14704,7 +14720,7 @@ html.pi-desktop .design-workspace .topbar { height: 48px; min-height: 48px; }
 :root .design-workspace .process-group .bash-row.ok .bash-state { color: var(--green); }
 :root .design-workspace .process-group .bash-row.run .bash-state,
 :root .design-workspace .process-group .bash-row.run .bash-row-stats,
-:root .design-workspace .process-group.run .process-group-status { color: var(--accent); }
+:root .design-workspace .process-group.run .process-group-status { color: var(--progress-text); }
 :root .design-workspace .process-group-status { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; white-space: nowrap; }
 .plan-progress-toggle { display: flex; align-items: center; gap: 14px; width: 100%; padding: 16px; border: 0; background: transparent; color: var(--text-muted); font: 13px/1.5 var(--sans); text-align: left; cursor: pointer; }
 .plan-progress-segments { display: flex; gap: 4px; flex: 0 1 144px; min-width: 60px; }
@@ -14734,7 +14750,7 @@ html.pi-desktop .design-workspace .topbar { height: 48px; min-height: 48px; }
 :root .design-workspace :is(.subagent-task-group, .toolcall-subagent-quiet) { background: var(--bg-elev); border: 1px solid var(--border-soft); border-radius: var(--r-lg); }
 .subagent-task-group-head, .subagent-task-row { background: transparent; }
 .subagent-task-counts .completed { color: var(--green); }
-.subagent-task-counts .running, .subagent-task-status.running { color: var(--accent); }
+.subagent-task-counts .running, .subagent-task-status.running { color: var(--progress-text); }
 .subagent-task-counts .unsuccessful, .subagent-task-status.failed, .subagent-task-status.cancelled { color: var(--yellow-fg); }
 .subagent-task-label strong { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
 .subagent-task-failures { border-top: 1px solid var(--border-soft); }
@@ -14750,7 +14766,7 @@ html.pi-desktop .design-workspace .topbar { height: 48px; min-height: 48px; }
 @media (max-width: 600px) { .subagent-failure-action { display: none; } }
 @media (prefers-reduced-motion: reduce) { .subagent-task-group .thinking-spinner, .toolcall-subagent-quiet .thinking-spinner { animation: none; } }
 :root .design-workspace .toolcall-subagent-quiet.ok .toolcall-status { color: var(--green); }
-:root .design-workspace .toolcall-subagent-quiet.run .toolcall-status { color: var(--accent); }
+:root .design-workspace .toolcall-subagent-quiet.run .toolcall-status { color: var(--progress-text); }
 .subagent-task-all-failed > p { color: var(--yellow-fg); }
 .subagent-task-source { display: inline-block; padding: 2px 8px; border-radius: var(--r-switch); background: var(--bg-elev2); color: var(--text-muted); }
 
@@ -14802,7 +14818,7 @@ html.pi-desktop .design-workspace .topbar { height: 48px; min-height: 48px; }
 .cm-record-mark { flex-shrink: 0; color: var(--text-dim); }
 .cm-record-mark.ok { color: var(--green); }
 .cm-record-mark.error, .cm-record-status.failed { color: var(--red); }
-.cm-record-mark.running { color: var(--accent); }
+.cm-record-mark.running { color: var(--progress-text); }
 .cm-record-limit { overflow-wrap: anywhere; line-height: 1.5; }
 
 /* ---- Codemode history ---- */
@@ -15133,9 +15149,14 @@ span.rich-math { display: inline-block; }
 :root .design-workspace .change-card-head, :root .design-workspace .change-group-head { min-height: 26px; gap: 10px; padding: 3px 0; }
 :root .design-workspace .change-card-head:hover, :root .design-workspace .change-group-head:hover { background: transparent; }
 :root .design-workspace .change-card-toggle { gap: 10px; }
-:root .design-workspace .change-card-toggle svg { width: 12px; height: 12px; opacity: 0; transition: opacity .12s; }
-@media (hover: hover) { :root .design-workspace .change-card-head:hover .change-card-toggle svg { opacity: 1; } }
-:root .design-workspace .change-card-toggle svg.open { opacity: 1; }
+/* 箭头只在已展开时出现，悬停不再显示。用 display 而不是 opacity：opacity: 0
+   的元素仍然占 12px 宽度，而 .change-card-toggle 是 gap: 10px 的 flex，于是
+   绿点到「编辑」之间白白多出「10px 间隔 + 12px 空箭头 + 10px 间隔」= 32px，
+   看着像排版漏了。命令行（.bash-row-head）同样只有展开才显示箭头，两处的
+   行首缩进才能对齐。悬停时行首布局必须保持不变，不能因为鼠标移上去就多出
+   一个箭头。 */
+:root .design-workspace .change-card-toggle svg { width: 12px; height: 12px; display: none; }
+:root .design-workspace .change-card-toggle svg.open { display: block; }
 :root .design-workspace .change-card-toggle code { color: var(--text); font: 13px/1.7 var(--mono); }
 :root .design-workspace .change-verb { color: var(--text-dim); font-size: 12.5px; }
 :root .design-workspace .change-state { order: -1; margin-left: 0; }
@@ -15153,7 +15174,7 @@ span.rich-math { display: inline-block; }
    but no pill, wash or badge competes with the rows. */
 :root .design-workspace .process-group-status, :root .design-workspace .process-group:is(.ok, .err, .run, .empty) .process-group-status { padding: 0; border-radius: 0; background: transparent; color: var(--text-faint); }
 :root .design-workspace .process-group.err .process-group-status { color: var(--red); }
-:root .design-workspace .process-group.run .process-group-status { color: var(--accent); }
+:root .design-workspace .process-group.run .process-group-status { color: var(--progress-text); }
 
 /* ---- 29b: conversation rhythm ------------------------------------------------------
    Message spacing used to be padding only (6px/14px) plus a -12px continuation pull,
@@ -15220,8 +15241,12 @@ span.rich-math { display: inline-block; }
 :root .design-workspace .msg { padding-bottom: 0; }
 :root .design-workspace :is(.messages > *, .messages > * > *) > :is(.msg, [data-lazy-id]:has(> .msg)) { margin-top: 36px; }
 :root .design-workspace :is(.messages > *, .messages > * > *, .messages > * > * > *) > .msg.msg { margin-top: 10px; }
-/* A stretch that starts a new turn keeps the paragraph gap the turn boundary earns. */
-:root .design-workspace :is(.messages > *, .messages > * > *):not(:has(~ * > .msg > .msg-body > :is(.process-group, .process-list))) + :is(.messages > *, .messages > * > *) > .msg.msg { margin-top: 18px; }
+/* A stretch that starts a new turn keeps the paragraph gap the turn boundary earns.
+   规格值是 14px（docs/ui-design.md 4.1「继续上一条的回复 14px」），原来写的
+   18px 不属于任何一条规格。注意：这条带 `:not(:has(~ …))` 的特例分支在实测的
+   几种常见布局里都没有命中（真正生效的是上面那条 10px），改它不影响日常看到的
+   消息间距，只是把遗留的错值收回规格。 */
+:root .design-workspace :is(.messages > *, .messages > * > *):not(:has(~ * > .msg > .msg-body > :is(.process-group, .process-list))) + :is(.messages > *, .messages > * > *) > .msg.msg { margin-top: 14px; }
 :root .design-workspace :is(.messages > *, .messages > * > *, .messages > * > * > *):has(> .msg > .msg-body > :is(.process-group, .process-list)) + :is(.messages > *, .messages > * > *, .messages > * > * > *) > .msg.msg:has(> .msg-body > :is(.process-group, .process-list)) { margin-top: 4px; }
 :root .design-workspace .msg:has(> .msg-body > :is(.process-group, .process-list)) .process-group { margin-block: 0; }
 /* ---- 29e: one continuous stream inside a turn -------------------------------------
@@ -15257,8 +15282,7 @@ span.rich-math { display: inline-block; }
 :root .design-workspace .view-pane .main .msg-assistant .msg-text .md > :is(h1, h2, h3, h4, h5, h6, ul, ol, pre, blockquote, table):first-child { margin-block-start: 0; }
 :root .design-workspace .view-pane .main .msg-assistant .msg-text .md > p:last-child,
 :root .design-workspace .view-pane .main .msg-assistant .msg-text .md > :is(ul, ol, pre, blockquote, table):last-child { margin-block-end: 0; }
-/* Between two text blocks of one reply, a real paragraph gap instead of two stacked halves. */
-:root .design-workspace .msg-body > .msg-text + .msg-text { margin-top: 10px; }
+/* 回复内两个文本块的间距统一在下文 29f 一段里只声明一次。 */
 /* Folded rows: same row anatomy, no rule, no card. */
 :root .design-workspace .msg-collapsed { padding: 5px 0; border: 0; border-left: 0; border-radius: 0; background: transparent; }
 :root .design-workspace .msg-collapsed::before { display: none; }
@@ -15270,25 +15294,211 @@ span.rich-math { display: inline-block; }
 :root .design-workspace .time-gap + .msg-collapsed { margin-top: 6px; }
 :root .design-workspace .msg-collapsed:active { scale: 0.995; }
 @media (prefers-reduced-motion: reduce) { :root .design-workspace .msg-collapsed:active { scale: none; } }
-/* 29f: one consistent rhythm inside a reply too. Two text blocks of one reply used to sit
-   36px apart (10px gap + 12px + 12px of their own paragraph margins) while everything
-   around them was 10px. The gap is the only spacing; paragraphs inside a single block
-   still keep their own 12px so multi-paragraph prose stays readable. */
-:root .design-workspace .msg-body > .msg-text + .msg-text { margin-top: 0; }
-/* A real spacer element: ::before on .msg-text does not generate a box here (the markdown
-   root is an inline-flex child), which left the second block touching the first. */
-:root .design-workspace .msg-body > .msg-text + .msg-text { padding-top: 12px; }
-/* 29f: a reply's text block must contain the trailing margin of its last block, or the
-   margin leaks past the block and stacks on the gap to the next one (measured: 10px gap
-   read as 20px under a one-line reply, and under a heading). flow-root does that without
-   touching padding, so every piece in a reply now sits on the same 10px rhythm. */
+/* 29f: 一条回复内部的节奏。
+   `.msg-text` 必须是 flow-root：否则末段图块的 12px 外边距会穿透盒子，叠到下面
+   的间距上（实测 10px 会被读成 20px，单行回复和标题后面都能看到）。包住之后，
+   响应内相邻两个文本块之间的间距就只由下面这一条决定。
+   曾经这里连着写了 6 条同选择器的声明（0 → padding 12px → padding 0 → 10px →
+   18px），靠源码顺序叠出最终值，注释和实际生效值对不上。现在只留一条，值取规格
+   值 10px（docs/ui-design.md 4.1「每一段距上一段 10px」）。 */
 :root .design-workspace .msg-text { display: flow-root; }
-:root .design-workspace .msg-body > .msg-text + .msg-text { padding-top: 0; }
-/* 29f: two text blocks of one reply need a real gap. Once the trailing margin is
-   contained (flow-root), 0 would butt the heading straight into the next line, so the
-   gap is a margin again — 10px, the same step the rest of the turn uses. */
 :root .design-workspace .msg-body > .msg-text + .msg-text { margin-top: 10px; }
-/* 29f: with flow-root the 10px gap is true white space, and next to a heading it reads
-   wider than the same 10px between two lines of text. 18px keeps the two blocks visually
-   connected without merging them. */
-:root .design-workspace .msg-body > .msg-text + .msg-text { margin-top: 18px; }
+
+/* 展开的命令行：正文里的 `.bash-full-command` 已经是完整原命令，头部那份被
+   `max-width: 75%` 截断的摘要（`.bash-inline-command`）在展开状态下只是同一
+   条命令的重复，中间的省略号还会被误读成命令本身坏了。收起时它是这一行的全部
+   信息，必须保留。
+   `.process-group.ok:not(.single-command).open` 对同一元素写了 `display: block`，
+   特异性 (0,10,0)；与其继续堆类名打架（本文件已经被同类问题坑过），这里用一个
+   只控制显隐的 `!important`——不参与间距，不会静默压掉后续规则。 */
+:root .design-workspace .bash-row-head[aria-expanded="true"] > .bash-inline-command { display: none !important; }
+
+/* 中文正文的行高。
+   `line-height: 1.74` 是为西文调的：拉丁字母有升部降部，两行之间留出的那条白
+   才能被眼睛当作呼吸带。汉字、假名、谚文占满整个字身框，同样的 1.74 在纯中文
+   段落里读起来是「行距松散、段落被撑开」——这正是长中文回复看起来「隔得太开」
+   的真正来源（外层 margin 早就是规格值了）。
+   按文本内容而不是界面语言判断：中文界面照样会渲染英文回复。判断放在
+   `web/src/text-script.ts` 的 `isCjkDominant()`，阈值 0.6，混排段落保持西文
+   设置不动——一段里中英交替本来就会产生混合行距，收紧只会挤到英文词。 */
+:root .design-workspace .view-pane:not(.wiki-view) .main .msg-text:has(.md.md-cjk) { line-height: 1.68; }
+
+/* 运行中的命令行（29a）用绿色运行灯，与 bash 卡片头部（`.bash-running-dot`）
+   保持一致：绿色同时表示「正在运行」和「成功」，蓝色只留给选中与链接。
+   14430 / 14717 那两条把 `.bash-row.run` 的圆点和「Running Ns」写成 `--accent`，
+   而 29a 行的成功态早就是绿色，于是同一条命令跑完的一瞬间会由蓝跳绿——看起来
+   像换了状态含义。这里只覆盖运行态的两个属性，并把圆环从共享的
+   `.thinking-spinner`（思考行、subagent、待发标签共用，保持蓝色）现取出来重上色，
+   不改那个全局类。 */
+:root .design-workspace .process-group .bash-row.run :is(.bash-state, .bash-row-stats) { color: var(--progress-text); }
+:root .design-workspace .process-group .bash-row.run .bash-state .thinking-spinner {
+	border-color: color-mix(in srgb, var(--progress-text) 26%, transparent);
+	border-top-color: var(--progress-text);
+}
+/* 同一个圆环在命令行的 `.bash-state` 里被挤成 2px 宽的一条：该元素是
+   `display: inline-grid; width: 12px` 的网格容器，而内部 12px 的圆环作为自动列
+   的最小内容撑不开它，列宽塌到 2px（`place-items` 居中后两侧被裁掉）。以前的蓝色
+   圆环在这里同样残缺，只是不太显眼。给它固定的 12×12 盒子并让圆环留一点边距，
+   绿环才是完整的圆。 */
+:root .design-workspace .process-group .bash-row.run .bash-state {
+	display: inline-grid;
+	place-items: center;
+	width: 12px;
+	height: 12px;
+	overflow: hidden;
+}
+:root .design-workspace .process-group .bash-row.run .bash-state .thinking-spinner {
+	width: 10px;
+	height: 10px;
+	border-width: 1.5px;
+}
+
+/* 折叠行的箭头必须紧贴文字结尾。
+   12549 那条 `flex: 0 100 auto` 把预览撑成父级 100% 宽，`.msg-collapsed-body`
+   于是吃满整行，`>` 被推到容器最右边——用户扫一行时视线停在省略号上，根本注意
+   不到几十个字符外还有一个可展开的提示。这里让 body 退回到按内容宽度收缩：
+   文字短时箭头就在句末，文字长时 body 仍受 `min-width: 0` + `max-width` 约束在
+   行内截断，箭头不会被挤出可视区。 */
+:root .design-workspace .msg-collapsed .msg-collapsed-body { flex: 0 1 auto; max-width: calc(100% - 90px); }
+:root .design-workspace .msg-collapsed .msg-collapsed-preview { flex: 0 1 auto; }
+:root .design-workspace .msg-collapsed:not(.role-user) .msg-collapsed-action { margin-left: 2px; }
+
+/* 时间分隔行（.time-gap）的纵向留白。
+   它只是一条 1px 细线加一个 12px 的时间，却因为 `margin: 17px auto 22px`
+   加上相邻消息自己的上边距，在实测里吃掉 17 + 16 + 22 = 55px 一整块空白。
+   长对话里每隔几轮就出现一次，整列读起来像被切成一段段、每段之间悬着一片
+   没人用的白——这正是「这个 UI 的间隔很开」的直接来源。
+   时间分隔的作用只是「这里是另一轮」，靠细线加时间已经足够，不需要再用
+   大留白表达分段。上下各收到 10px，同时明确前后相邻项的 margin 不再叠加。 */
+:root .design-workspace .time-gap { margin: 10px auto 12px; }
+:root .design-workspace .time-gap + .msg,
+:root .design-workspace .time-gap + .msg.msg,
+:root .design-workspace .time-gap + .msg.msg-user { margin-top: 0; }
+:root .design-workspace .msg + .time-gap,
+:root .design-workspace .msg-collapsed + .time-gap { margin-top: 10px; }
+
+/* 段间距统一到规格值 10px。
+   文档 4.1「每一段距上一段 10px」在 `.msg-body > .msg-text + .msg-text`（相邻
+   文本块之间）上已经是 10px，但**同一条回复内部**的 `.md p` 仍是 `margin-block:
+   12px`——于是同一列里「块与块之间 10px、段与段之间 12px」两种节奏并存，读起来
+   前后不太一致，长回复尤其明显。
+   29f 只清了首尾边距（避免单段回复凭空高出 24px），没有统一段间距本身。这里把
+   段内间距也收到 10px，让整列只有一种节奏。 */
+:root .design-workspace .view-pane:not(.wiki-view) .main .msg-assistant .msg-text .md > p,
+:root .design-workspace .view-pane:not(.wiki-view) .main .msg-user .msg-text .md > p { margin-block: 10px; }
+
+/* 命令行的展开箭头同样紧贴文字，不推到容器最右边。
+   行布局是 `状态 · 命令 · 结果(4.6s) · >`，其中箭头被 `margin-left: auto`
+   （14437 的 single-command 规则）和默认的 flex 排列挤到最右，`4.6s` 后面就
+   空着几十个字符——用户读完命令和耗时，视线不会继续往右扫，等于看不见这个
+   「可展开」的提示。折叠摘要行（.msg-collapsed）之前是同一个毛病，这里保持
+   两处一致：箭头跟在内容后面。
+   箭头仍然只在展开时或悬停时出现（12576 的规则不动），所以收起态的行首和
+   行尾都不会因为鼠标移动而跳动。 */
+:root .design-workspace .process-group .bash-row-head > svg,
+:root .design-workspace .single-command .bash-row-head > svg { margin-left: 0; }
+:root .design-workspace .process-group .bash-row-head > svg { margin-left: 2px; }
+/* 命令名与耗时之间不要再被 flex 拉开：结果留在命令后面，箭头紧跟其后。 */
+:root .design-workspace .process-group .bash-row-head .bash-row-stats { margin-left: 2px; }
+
+/* 展开的命令行：三处让这块读起来松散、还会丢信息的地方。
+   1. 命令超过一行宽时被直接裁掉（实测 scrollWidth 1114 > clientWidth 994），
+      右端既没有省略号也没有滚动提示，用户会以为命令就到这里。`white-space:
+      pre` 保留原样，但要让溢出的部分可横向滚动，并用右侧渐隐暗示「还有」。
+   2. 「收起」按钮原本 `width: 100%; text-align: center`，孤零零悬在整块中间，
+      既不靠近它要折叠的内容，也和下方左对齐的「复制命令／复制输出」对不上。
+      贴左、缩到内容宽度，读起来是这一块的收尾动作。
+   3. 行号与正文的 12px 间距在这套 12.5px 等宽字下显得松，收到 8px；行号列
+      右对齐宽度 3ch 保留，两位数（10、21）仍然对齐。 */
+/* 命令按行宽换行，不横向滚动、也不裁切：这是用户点开这一行想读到的东西，
+   让它必须横着拖动才能看全是最差的选择。换行只在空白处断，长路径仍然整体
+   可复制；`overflow-wrap: anywhere` 兜住没有空白的超长 token。 */
+:root .design-workspace .bash-full-command {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	overflow-x: hidden;
+	max-height: none;
+}
+:root .design-workspace .bash-group-more {
+	width: auto;
+	margin: 2px 0 0;
+	padding: 4px 0;
+	text-align: left;
+	font: 11.5px var(--sans);
+}
+:root .design-workspace .bash-numbered-line { gap: 8px; }
+:root .design-workspace .bash-row-body { padding-bottom: 2px; }
+
+/* 展开的命令行里，头部那 30px 其实只装了 15px 的内容。
+   `.bash-row-head { align-items: baseline; min-height: 26px }`（15121）在基线对齐
+   下会把行高拉到「基线 + 下沉部分」，12px 的展开箭头又把下限顶高，于是状态点和
+   命令文字只占 15px，剩下的一半是空转的行高——点开一条命令时，头部和正文之间
+   就出现一段说不清来源的断档（实测头部 30px、内容 15px）。
+   改成居中对齐并让头部按内容高度收缩：箭头、状态点、命令文字在同一条中线上，
+   头部贴着正文，不再留出这半行空。 */
+/* 特异性要压过 `14439` 的 `.single-command .bash-row.run .bash-row-head`
+   （4 个类 + min-height: 30px），否则运行过的单条命令仍然停在 30px。 */
+:root .design-workspace .process-group:is(.single-command, .ok, .err, .run) .bash-row-head,
+:root .design-workspace .process-group .bash-row:is(.ok, .err, .run) .bash-row-head {
+	align-items: center;
+	min-height: 22px;
+	padding-block: 3px;
+}
+:root .design-workspace .process-group .bash-row-head > svg { align-self: center; }
+
+/* 编辑／写入卡片改用与代码块（`.codeblock`）一致的容器设计。
+   对话里的代码块是有界的：1px 边框 + --r-md 圆角 + 独立的头部栏（32px，底部
+   一条 --border-soft 分隔线）+ 内容区浅底。而编辑卡片在 15147 那段把这套全部
+   去掉了（border: 0 / radius: 0 / 透明底），于是同一列里「代码块是一个框、
+   改动是一堆散行」，看起来像两种不同的组件。
+   这里把编辑卡片对齐到代码块那套：分组框住整体，分组头就是「头部栏」，每个
+   文件行是栏内条目，展开的 diff 是内容区。规格直接取 .codeblock 的实测值
+   （边框 --border、圆角 --r-md、栏高 32px、栏底 --border-soft）。 */
+:root .design-workspace .process-group ~ * .change-group,
+:root .design-workspace .msg-body > .change-group {
+	margin: 10px 0;
+	border: 1px solid var(--border);
+	border-radius: var(--r-md);
+	background: var(--bg-elev);
+	overflow: hidden;
+}
+/* 分组头 = 代码块的头部栏：同高、同左内边距、同一条底线。 */
+:root .design-workspace .change-group > .change-group-head {
+	min-height: 32px;
+	gap: 8px;
+	padding: 0 8px 0 14px;
+	border-bottom: 1px solid var(--border-soft);
+	background: transparent;
+}
+:root .design-workspace .change-group > .change-group-head strong { color: var(--text); font: 500 12px var(--sans); }
+/* 栏内条目：左侧留出与头部栏文字相同的起始位置，右侧与栏的右内边距对齐。 */
+:root .design-workspace .change-group-items .change-card { border: 0; border-radius: 0; background: transparent; margin: 0; padding-inline: 14px; }
+:root .design-workspace .change-group-items .change-card + .change-card { border-top: 1px solid var(--border-soft); }
+:root .design-workspace .change-group-items .change-card > .change-card-head { min-height: 34px; padding: 2px 0; }
+/* 展开的 diff 作为内容区，与头部栏一条分隔线分开。 */
+:root .design-workspace .change-group-items .change-card-body { border-top: 1px solid var(--border-soft); padding-inline: 0; }
+/* 单个编辑（不成分组）也用同一套外框，两种情况视觉一致。 */
+:root .design-workspace .msg-body > .change-card {
+	margin: 10px 0;
+	border: 1px solid var(--border);
+	border-radius: var(--r-md);
+	background: var(--bg-elev);
+	overflow: hidden;
+	padding-inline: 14px;
+}
+:root .design-workspace .msg-body > .change-card > .change-card-head { min-height: 32px; padding: 0; }
+:root .design-workspace .msg-body > .change-card > .change-card-body { border-top: 1px solid var(--border-soft); padding-inline: 0; }
+/* 失败与重试仍用边框颜色区分，但保留框体，不再变回无框散行。 */
+:root .design-workspace .msg-body > .change-card.err,
+:root .design-workspace .msg-body > .change-group.err { border-color: color-mix(in srgb, var(--red) 42%, var(--border)); }
+
+/* 分组头内部对齐：箭头居中、计数靠右。
+   头部栏是一条 32px 的横条，里面的箭头必须垂直居中、计数推到最右（与代码块
+   头部栏的「复制」同一位置），否则「改了 1 个文件  +13 −3」会挤在左边，右侧
+   空出一大片，看起来像没做完。 */
+:root .design-workspace .change-group > .change-group-head { align-items: center; }
+:root .design-workspace .change-group > .change-group-head > svg { align-self: center; color: var(--text-faint); }
+:root .design-workspace .change-group > .change-group-head .change-counts { margin-left: auto; order: 1; flex: none; }
+:root .design-workspace .change-group > .change-group-head > .change-state { order: 2; margin-left: 8px; }
+/* 栏内条目同样把计数推到右边，与分组头右侧对齐。 */
+:root .design-workspace .change-group-items .change-card .change-counts { margin-left: auto; }
