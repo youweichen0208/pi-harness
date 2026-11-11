@@ -45,6 +45,8 @@ try {
 		assert.equal(await page.locator('.process-group-phase').count(),0);
 		await single.locator('.bash-row-head').click();
 		assert.equal(await single.locator('.bash-full-command').textContent(),command);
+		// 展开后头部那份被截断的摘要必须消失，否则同一条命令出现两遍（一遍省略号）。
+		assert.equal(await single.locator('.bash-row-head .bash-inline-command').isVisible(), false);
 		await single.locator('.bash-row-head').click();
 		const toggle=page.locator('.plan-progress-toggle');
 		assert.equal(await toggle.getAttribute('aria-expanded'),'false');

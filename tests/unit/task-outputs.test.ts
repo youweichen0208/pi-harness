@@ -1,6 +1,6 @@
-import { expect, test } from "vitest";
+import { describe, expect, test, it } from "vitest";
 import type { TaskProgress, UiMessage } from "../../server/protocol.js";
-import { taskOutputs } from "../../web/src/task-outputs.js";
+import { outputPath, taskOutputs } from "../../web/src/task-outputs.js";
 
 function fixture() {
 	const messages: UiMessage[] = [];
@@ -37,4 +37,32 @@ test("writes are outputs but content length and truncated diffs are not reliable
 		{ path: "a.ts", added: 0, removed: 0, counted: false },
 		{ path: "b.ts", added: 0, removed: 0, counted: false },
 	]);
+});
+
+describe("outputPath", () => {
+	const cwd = "/Users/me/project";
+
+	it("strips the workspace prefix so the card shows what identifies the file", () => {
+		expect(outputPath("/Users/me/project/docs/ui-design.md", cwd)).toBe("docs/ui-design.md");
+		expect(outputPath("/Users/me/project/web/src/styles.css", cwd)).toBe("web/src/styles.css");
+	});
+
+	it("leaves paths outside the workspace absolute, since relativising them would lie", () => {
+		expect(outputPath("/Users/other/x.ts", cwd)).toBe("/Users/other/x.ts");
+		expect(outputPath("/etc/hosts", cwd)).toBe("/etc/hosts");
+	});
+
+	it("already-relative paths pass through unchanged", () => {
+		expect(outputPath("docs/a.md", cwd)).toBe("docs/a.md");
+	});
+
+	it("normalises lexical aliases without touching the filesystem", () => {
+		expect(outputPath("/Users/me/project/../project/a.ts", cwd)).toBe("a.ts");
+		expect(outputPath("/Users/me/project/./a.ts", cwd)).toBe("a.ts");
+	});
+
+	it("does not treat a sibling directory with a shared prefix as inside the workspace", () => {
+		// `/Users/me/project-old` starts with `/Users/me/project` but is a different tree.
+		expect(outputPath("/Users/me/project-old/a.ts", cwd)).toBe("/Users/me/project-old/a.ts");
+	});
 });
