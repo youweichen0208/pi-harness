@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useContext, useState } from "react";
 import { FiChevronRight, FiMoreHorizontal } from "react-icons/fi";
 import type { UiToolCallBlock } from "../types";
 import { useChatT } from "../i18n";
+import { WorkspacePathContext } from "../workspace-context";
+import { outputPath } from "../task-outputs";
 import { editWriteChange, type ChangeLine, type EditWriteChange } from "../edit-write-presentation";
 import { highlightLine, langFromPath } from "../hljs-lite";
 import type { ToolView } from "./ToolCallBlock";
@@ -68,11 +70,19 @@ export function EditWriteCard({ item, compact = false, retried = false, live = f
 	if (!change) return null;
 	const state = retried ? "retried" : status(item);
 	const noDiff = change.kind === "edit" && change.empty && !change.error && state === "done";
-	const path = change.path || item.block.name;
+	const cwd = useContext(WorkspacePathContext);
+	// 卡片标题栏只给工作区内的相对路径：一张 964px 宽的卡片里，
+	// `/Users/youweichen/projects/pi-web-ui/` 这 35 个字符会把真正要看的那段
+	// （`docs/ui-design.md`）挤到后面去。完整路径保留在悬停说明里，打开文件、
+	// 高亮语言判定仍然用原值。工作区外的文件保持绝对路径——相对化后反而是错的。
+	const absolute = change.path || item.block.name;
+	// 末尾斜杠在某些调用传目录时会出现，渲染前去掉。
+	const trimmed = absolute.replace(/\/+$/, "") || absolute;
+	const path = outputPath(trimmed, cwd);
 	const openFile = () => window.dispatchEvent(new CustomEvent("pi-harness:open-tool-file", { detail: { path: change.path, ...(change.fromArguments ? {} : { line: change.firstChangedLine }) } }));
 	return <div className={`change-card ${state}`} data-tool-call-id={item.block.id} onMouseEnter={() => window.dispatchEvent(new CustomEvent("pi:tool-hover", { detail: { toolCallId: item.block.id } }))} onMouseLeave={() => window.dispatchEvent(new CustomEvent("pi:tool-hover", { detail: { toolCallId: null } }))}>
 		<div className="change-card-head">
-			<button type="button" className="change-card-toggle" aria-expanded={open && !noDiff} disabled={noDiff} onClick={() => setManual(!open)}>{!noDiff && <FiChevronRight className={open ? "open" : ""} />}<span className={`change-state ${state}`} aria-label={retried ? t("changeRetried") : state === "err" ? t("error") : state === "done" ? t("done") : state === "skipped" ? t("toolNotExecuted") : state === "running" ? t("running") : t("toolQueued")}><i /></span><span className="change-verb">{item.block.name === "edit" ? t("changeEdit") : t("changeWrite")}</span><code title={path}>{path}</code></button>
+			<button type="button" className="change-card-toggle" aria-expanded={open && !noDiff} disabled={noDiff} onClick={() => setManual(!open)}>{!noDiff && <FiChevronRight className={open ? "open" : ""} />}<span className={`change-state ${state}`} aria-label={retried ? t("changeRetried") : state === "err" ? t("error") : state === "done" ? t("done") : state === "skipped" ? t("toolNotExecuted") : state === "running" ? t("running") : t("toolQueued")}><i /></span><span className="change-verb">{item.block.name === "edit" ? t("changeEdit") : t("changeWrite")}</span><code title={absolute}>{path}</code></button>
 			<span className="change-counts">{!change.error && <>{change.added > 0 && <span className="add">+{change.added}</span>}{change.removed > 0 && <span className="del">−{change.removed}</span>}</>}</span>
 			{change.path && <button type="button" className="change-open" onClick={openFile}>{t("changeOpen")}</button>}
 			<details className="change-raw"><summary aria-label={t("more")}><FiMoreHorizontal /></summary><div><strong>{t("changeRawArgs")}</strong><pre>{item.block.argumentsText}</pre>{change.output && <><strong>{t("changeRawOutput")}</strong><pre>{change.output}</pre></>}</div></details>

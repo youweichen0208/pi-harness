@@ -73,7 +73,11 @@ export function editWriteChange(block: UiToolCallBlock, result?: UiMessage, cont
 	if (block.name !== "edit" && block.name !== "write") return null;
 	let args: Record<string, unknown> = {};
 	try { args = JSON.parse(block.argumentsText ?? "{}"); } catch { /* streamed arguments may be incomplete */ }
-	const path = typeof args.path === "string" ? args.path : "";
+	// pi 的 edit/write 工具用的是 `file_path`，早期/自定义调用用 `path`。只读 `path`
+	// 会让 path 落空，卡片就退化成 `change.path || item.block.name`，界面上变成
+	// 「编辑 edit」这种没有文件名的行。agent-activity 与 WikiChatPanel 都已兼容两者。
+	const rawPath = args.path ?? args.file_path;
+	const path = typeof rawPath === "string" ? rawPath : "";
 	const output = result?.content.filter((part) => part.type === "text").map((part) => (part as { text: string }).text).join("\n") ?? "";
 	const error = !!result?.isError;
 	if (block.name === "write") {
