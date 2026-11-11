@@ -8,6 +8,7 @@ import type { PluggableList } from "unified";
 import remarkGfm from "remark-gfm";
 import { remarkHighlightBlock } from "../remark-highlight-block";
 import rehypeHighlight from "rehype-highlight";
+import { isCjkDominant } from "../text-script";
 import { remarkCjkAutolink } from "../remark-cjk-autolink";
 import { CopyButton } from "./copy-button";
 import { MermaidDiagram } from "./MermaidDiagram";
@@ -82,8 +83,11 @@ export function MarkdownBody({ text, imageSrc, sourceLines, fileLinks, runnable 
 
 /** GFM markdown with syntax highlighting; code blocks get a copy button. */
 export const Markdown = memo(function Markdown({ text, imageSrc, sourceLines, fileLinks, runnable }: MarkdownProps) {
+	// Chinese prose fills its em box, so the Latin 1.74 leading reads loose on it.
+	// Classified from the text itself: a Chinese UI renders English replies too.
+	const cjk = isCjkDominant(text);
 	return (
-		<div className="md">
+		<div className={cjk ? "md md-cjk" : "md"}>
 			<MarkdownBody text={text} imageSrc={imageSrc} sourceLines={sourceLines} fileLinks={fileLinks} runnable={runnable} />
 		</div>
 	);
