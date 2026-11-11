@@ -54,7 +54,7 @@ export const RightPanel = memo(function RightPanel({ filesOnly = false, selected
 			focusedRequest.current = taskFocusRequest;
 			const panel = document.getElementById(`${tabId}-task`)?.querySelector<HTMLElement>(".task-progress");
 			panel?.focus({ preventScroll: true });
-			panel?.querySelector(".task-plan-step.running, .task-step.running")?.scrollIntoView({ block: "nearest" });
+			panel?.querySelector(".task-step.running")?.scrollIntoView({ block: "nearest" });
 		});
 		return () => cancelAnimationFrame(frame);
 	}, [taskFocusRequest, tabId, tab]);

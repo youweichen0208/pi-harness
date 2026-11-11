@@ -121,7 +121,7 @@ try {
 	await page.locator('.header-task-progress.interrupted').waitFor();
 	await page.locator('.session-item.active .session-dot.interrupted').waitFor();
 	await page.locator('.task-progress-status.interrupted').waitFor();
-	assert.equal(await page.locator('.task-plan-step.interrupted .task-plan-mark').innerText(), '×');
+	assert.equal(await page.locator('.task-plan-step').count(), 0, 'the plan list is gone');
 	const draft = page.locator('.inputbar textarea');
 	await draft.fill('保留我的草稿');
 	await page.locator('.tool-recovery-primary').click();

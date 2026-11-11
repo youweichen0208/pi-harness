@@ -68,12 +68,13 @@ try {
 		}
 		const completed = calls(13).map((call, i) => ({ ...call, id: `cm/${i}`, status: i === 0 ? 'error' : 'ok', durationMs: 15 }));
 		messages = [user, assistant, { id: 'r', role: 'toolResult', toolName: 'codemode', toolCallId: 'cm', content: [], isError: false, codemode: { calls: completed, totalCalls: 13 } }]; streaming = false;
-		plan = { source: 'plan', origin: 'p', status: 'active', awaitingConfirmation: false, items: [{ id: 's', title: 'Existing plan', status: 'pending', toolCallIds: [] }] };
+		// The native plan list is gone; the derived step record is what the sidebar shows.
+		plan = undefined;
 		if (platform === 'web') await socket.close({ code: 1000, reason: 'completed while offline' }); else send();
 		await group.getByText('Completed · contains failed calls', { exact: true }).waitFor();
 		assert.equal(await group.locator('.cm-record-heading').getAttribute('aria-expanded'), 'true');
-		assert.equal(await sidebar.locator('.task-plan-list .cm-record-group').count(), 0);
-		assert.equal(await sidebar.locator('.task-plan-step').count(), 1);
+		// The native plan list is gone, so codemode records are the only sidebar listing.
+		assert.equal(await sidebar.locator('.task-plan-list, .task-plan-step').count(), 0);
 		const large = calls(256).map(call => ({ ...call, status: 'ok' }));
 		messages[2] = { ...messages[2], codemode: { calls: large, totalCalls: 300 } }; send();
 		await group.locator('.cm-record-limit').filter({ hasText: '256/300' }).waitFor();

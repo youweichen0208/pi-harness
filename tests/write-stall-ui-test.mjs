@@ -144,16 +144,13 @@ try {
 	assert.notEqual(await page.locator('.task-current-phase .task-step-duration').textContent(), initialDuration, 'active phase duration advances');
 	const activeBounds = await page.locator('.task-current-phase').evaluate((element) => ({ bottom: element.getBoundingClientRect().bottom, panelBottom: document.querySelector('.panel-lower').getBoundingClientRect().bottom }));
 	assert(activeBounds.bottom <= activeBounds.panelBottom, 'current phase stays above the panel bottom');
-	const planItems = ['读取约定', '实现服务', '补 migrations', '补测试', '运行测试', '更新文档', '提交'].map((title, index) => ({ id: `plan-${index}`, title, status: index < 4 ? 'done' : index === 4 ? 'running' : 'pending', startedAt: Date.now() - (7 - index) * 1000 }));
-	const explicitState = { ...liveState, rev: liveState.rev + 1, taskProgress: { ...liveState.taskProgress, plan: { revision: 1, added: 0, removed: 0, items: planItems } } };
-	socket.send(JSON.stringify({ type: 'snapshot', state: explicitState }));
-	await page.locator('.task-progress-meta', { hasText: '第 5 / 7 步' }).waitFor();
-	assert.equal(await page.locator('.task-progress-track').count(), 0, 'outline has no redundant bar');
-	const plannedBounds = await page.locator('.task-plan-step.running').evaluate((element) => {
-		const row = element.getBoundingClientRect(); const list = element.closest('.task-plan-list').getBoundingClientRect();
+	// The outline was the plan list; with it gone the step log is the record, so the
+	// active step must simply stay visible inside the scrolling panel.
+	const plannedBounds = await page.locator('.task-step.running, .task-step.current').first().evaluate((element) => {
+		const row = element.getBoundingClientRect(); const list = element.closest('.task-sections-scroll').getBoundingClientRect();
 		return { top: row.top, bottom: row.bottom, listTop: list.top, listBottom: list.bottom };
 	});
-	assert(plannedBounds.top >= plannedBounds.listTop && plannedBounds.bottom <= plannedBounds.listBottom, 'active plan step is visible');
+	assert(plannedBounds.top >= plannedBounds.listTop && plannedBounds.bottom <= plannedBounds.listBottom, 'active step is visible');
 	state = { ...state, rev: explicitState.rev + 1 };
 	socket.send(JSON.stringify({ type: 'snapshot', state }));
 	const since = Date.now() - 192000;
@@ -240,54 +237,28 @@ try {
 	await page.locator('.task-step-head').first().click();
 	assert.equal(await page.locator('.task-raw-text').count(), 0, 'expanded steps do not repeat assistant prose');
 	assert.equal(await page.locator('.task-raw-summary').first().textContent(), '读取上次进度');
-	const plannedState = { ...state, rev: state.rev + 1, isStreaming: true, messages: [{ id: 'plan-user', role: 'user', content: [{ type: 'text', text: '完成三步实现' }] }, { id: 'plan-call', role: 'assistant', content: [{ type: 'toolCall', id: 'plan-1', name: 'task_plan', argumentsText: JSON.stringify({ steps: [{ id: 'read', title: '读取约定' }, { id: 'build', title: '实现服务' }, { id: 'test', title: '运行测试' }], currentStepId: 'build', completedStepIds: ['read'] }) }] }], taskProgress: { id: 'planned-task', conversationId: state.conversationId, sourceMessageId: 'plan-user', title: '完成三步实现', status: 'running', startedAt: Date.now() - 1000, completed: 1, steps: [], plan: { revision: 2, added: 1, removed: 1, items: [{ id: 'read', title: '读取约定', status: 'done' }, { id: 'build', title: '实现服务', status: 'running' }, { id: 'test', title: '运行测试', status: 'pending', added: true }, { id: 'old', title: '旧步骤', status: 'removed' }] } } };
-	Object.assign(plannedState.taskProgress.plan, { title: '接入 agent-runtime 子进程', completionCriteria: 'llm_adjusted 走真实子进程，测试全过', changeSummary: '新增第 3 步「运行测试」' });
-	plannedState.taskProgress.plan.items[1].detail = '实现子进程调用并校验返回结果';
-	plannedState.taskProgress.plan.items[1].toolCallIds = ['outline-write'];
-	plannedState.taskProgress.startedAt = Date.now() - 372000;
-	plannedState.taskProgress.plan.items[0].startedAt = Date.now() - 372000;
-	plannedState.taskProgress.plan.items[0].endedAt = Date.now() - 100000;
-	plannedState.taskProgress.plan.items[1].startedAt = Date.now() - 100000;
-	plannedState.taskProgress.steps = [{ id: 'outline-record', messageId: 'outline-message', title: '实现入口', status: 'done', startedAt: Date.now() - 3000, endedAt: Date.now() - 2000, artifacts: [{ toolCallId: 'outline-write', kind: 'write', label: 'youwei_core/api/main.py', path: 'youwei_core/api/main.py' }] }];
-	socket.send(JSON.stringify({ type: 'snapshot', state: plannedState }));
-	await page.locator('.task-plan-card', { hasText: '计划 · 3 步' }).waitFor();
-	assert.equal(await page.locator('.task-plan-step').count(), 4);
-	assert((await page.locator('.task-plan-change').textContent()).includes('计划有变'));
+	// The native plan list is gone (server/plan removed). The step log is now the only
+	// record, so cover what the outline used to prove: running steps expand, a
+	// completed turn keeps its records, and the compact result fits the panel.
+	const stepState = { ...state, rev: state.rev + 1, isStreaming: true, messages: [{ id: 'plan-user', role: 'user', content: [{ type: 'text', text: '完成三步实现' }] }, { id: 'plan-call', role: 'assistant', content: [{ type: 'toolCall', id: 'plan-1', name: 'bash', argumentsText: JSON.stringify({ command: 'npm run build' }) }] }], taskProgress: { id: 'planned-task', conversationId: state.conversationId, sourceMessageId: 'plan-user', title: '完成三步实现', status: 'running', startedAt: Date.now() - 372000, completed: 1, steps: [{ id: 'build-record', messageId: 'plan-call', title: '实现入口', status: 'running', startedAt: Date.now() - 100000, artifacts: [{ toolCallId: 'outline-write', kind: 'write', label: 'youwei_core/api/main.py', path: 'youwei_core/api/main.py' }] }] } };
+	socket.send(JSON.stringify({ type: 'snapshot', state: stepState }));
+	await page.locator('.task-step.running, .task-step.current').first().waitFor();
+	assert.equal(await page.locator('.task-plan-step').count(), 0, 'the plan list is no longer rendered');
 	assert.equal(await page.locator('.task-outline-title').count(), 0, 'task panel starts with status rather than repeating the prompt as a title');
-	assert((await page.locator('.task-outline-criteria').textContent()).includes('llm_adjusted'));
-	assert.equal(await page.locator('.task-plan-step-detail').count(), 0);
-	await page.locator('.task-progress').screenshot({ path: '/private/tmp/pi-task-outline-running.png' });
-	await page.locator('.task-plan-step-head', { hasText: '实现服务' }).click();
-	await page.locator('.task-plan-step-detail button', { hasText: 'youwei_core/api/main.py' }).waitFor();
-	await page.locator('.task-plan-step-head', { hasText: '实现服务' }).click();
-	const acknowledgedPlan = { ...plannedState, rev: plannedState.rev + 1, messages: [...plannedState.messages, { id: 'plan-result', role: 'toolResult', toolCallId: 'plan-1', content: [{ type: 'text', text: 'Plan revision 2 recorded: 3 steps.' }] }] };
-	socket.send(JSON.stringify({ type: 'snapshot', state: acknowledgedPlan }));
-	await page.locator('.task-plan-card-head', { hasText: '计划已调整' }).waitFor();
-	assert.equal(await page.locator('.task-plan-card-head').getAttribute('aria-expanded'), 'false');
-	const completedPlan = { ...acknowledgedPlan, rev: acknowledgedPlan.rev + 1, isStreaming: false, messages: [...acknowledgedPlan.messages, { id: 'plan-final', role: 'assistant', content: [{ type: 'text', text: '提交 f9c3a1e feat: complete\n测试 48 / 48 通过\n7 files changed, 318 insertions(+), 41 deletions(-)' }] }], taskProgress: { ...plannedState.taskProgress, status: 'done', endedAt: Date.now(), plan: { ...plannedState.taskProgress.plan, items: plannedState.taskProgress.plan.items.map((item) => item.status === 'removed' ? item : { ...item, status: 'done' }) } } };
-	socket.send(JSON.stringify({ type: 'snapshot', state: completedPlan }));
+	await page.locator('.task-progress').screenshot({ path: '/private/tmp/pi-task-steps-running.png' });
+	const completedSteps = { ...stepState, rev: stepState.rev + 1, isStreaming: false, messages: [...stepState.messages, { id: 'plan-final', role: 'assistant', content: [{ type: 'text', text: '提交 f9c3a1e feat: complete\n测试 48 / 48 通过\n7 files changed, 318 insertions(+), 41 deletions(-)' }] }], taskProgress: { ...stepState.taskProgress, status: 'done', endedAt: Date.now(), steps: stepState.taskProgress.steps.map(item => ({ ...item, status: 'done', endedAt: Date.now() })) } };
+	socket.send(JSON.stringify({ type: 'snapshot', state: completedSteps }));
 	await page.locator('.task-result', { hasText: 'f9c3a1e' }).waitFor();
-	assert.equal(await page.locator('.task-plan-step').count(), 4, 'completed plans keep their steps visible below the result');
+	assert.equal(await page.locator('.task-step.done').count(), 1, 'a completed turn keeps its step records');
 	assert.equal(await page.locator('.task-outline-criteria').count(), 0);
 	assert.equal(await page.locator('.task-result-actions').count(), 0);
-	await page.locator('.task-plan-step-head', { hasText: '实现服务' }).click();
-	await page.locator('.task-plan-step-detail button', { hasText: 'youwei_core/api/main.py' }).waitFor();
-	await page.locator('.task-progress').screenshot({ path: '/private/tmp/pi-task-outline-complete.png' });
+	await page.locator('.task-progress').screenshot({ path: '/private/tmp/pi-task-steps-complete.png' });
 	const resultBounds = await page.locator('.task-result-inline').evaluate((element) => ({ width: element.clientWidth, scroll: element.scrollWidth }));
 	assert(resultBounds.scroll <= resultBounds.width + 1, 'compact result fits panel in a single row');
 	await page.locator('.task-progress-menu-trigger').click();
 	await page.getByRole('button', { name: '定位到最终回复' }).waitFor();
 	await page.locator('.task-progress-menu-trigger').click();
-	const todoState = { ...plannedState, rev: completedPlan.rev + 1, isStreaming: false, messages: [{ id: 'todo-user', role: 'user', content: [{ type: 'text', text: '实施任务' }] }, { id: 'todo-call', role: 'assistant', content: [{ type: 'toolCall', id: 'todo-update', name: 'todo', argumentsText: '{"action":"update","id":1,"status":"in_progress"}' }] }, { id: 'todo-result', role: 'toolResult', toolCallId: 'todo-update', content: [{ type: 'text', text: 'Updated #1 (pending → in_progress)' }] }], taskProgress: { ...plannedState.taskProgress, id: 'todo-native', status: 'waiting', endedAt: Date.now(), plan: { ...plannedState.taskProgress.plan, source: 'todo', items: [{ id: '1', title: '确认需求', status: 'running' }, { id: '2', title: '实施方案', status: 'pending', blockedBy: ['1'] }] } } };
-	socket.send(JSON.stringify({ type: 'snapshot', state: todoState }));
-	await page.locator('.task-progress-status', { hasText: '计划待继续' }).waitFor();
-	assert.equal(await page.locator('.task-plan-step.done').count(), 0);
-	await page.locator('.task-plan-step-head', { hasText: '实施方案' }).click();
-	await page.getByText('等待步骤 #1 完成', { exact: true }).waitFor();
-	assert.equal(await page.locator('.task-plan-card-head', { hasText: '任务清单更新' }).getAttribute('aria-expanded'), 'false');
-	assert.equal(await page.locator('.task-todo-details').count(), 0);
-	await page.locator('.task-progress').screenshot({ path: '/private/tmp/pi-todo-waiting.png' });
-	assert.equal(await page.locator('.task-progress-source').textContent(), '任务清单', 'native todo state is explicitly labeled as a checklist');
+	state = { ...state, rev: completedSteps.rev + 1 };
 	state = { ...state, rev: todoState.rev + 1 };
 	socket.send(JSON.stringify({ type: 'snapshot', state }));
 	await page.locator('.task-result', { hasText: 'f9c3a1e' }).waitFor();

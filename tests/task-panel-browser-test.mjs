@@ -95,12 +95,12 @@ try {
 		await page.waitForFunction(() => document.querySelectorAll('.task-progress:not([hidden]) .task-step-items').length === 0);
 		assert.equal(await panel.locator('.task-step-items').count(), 0, 'conversation switch resets details even with reused tool IDs');
 		conversationId = undefined;
-		taskOverride = { title: 'A long task title that wraps in the sidebar without hiding the current status or causing horizontal overflow. 检查任务状态与执行结果。', status: 'waiting', plan: { source: 'plan', origin: 'p', status: 'active', revision: 1, added: 0, removed: 1, awaitingConfirmation: true, items: [{ id: 'one', title: 'Read files', status: 'done' }, { id: 'two', title: 'Validate results', status: 'pending' }, { id: 'removed', title: 'Removed step', status: 'removed' }] } }; send();
-		// Lifecycle is still carried by the panel state class; only the header text is gone.
-		await panel.locator('.task-plan-step.pending').first().waitFor();
-		assert.equal(await panel.locator('.task-overview').count(), 0);
-		assert.equal(await panel.locator('.task-plan-step.running').count(), 0);
-		await page.screenshot({ path: `tests/scratch/task-panel-waiting-${platform}.png` });
+		// The native plan list is gone (server/plan removed): a long request title must
+		// still wrap inside the panel without a plan section or horizontal overflow.
+		taskOverride = { title: 'A long task title that wraps in the sidebar without hiding the current status or causing horizontal overflow. 检查任务状态与执行结果。', status: 'running' }; running = true; send();
+		await panel.locator('.task-step.running, .task-step.current').first().waitFor();
+		assert.equal(await panel.locator('.task-plan-step').count(), 0, 'the plan list is no longer rendered');
+		await page.screenshot({ path: `tests/scratch/task-panel-long-title-${platform}.png` });
 		assert(await panel.evaluate(el => el.scrollWidth <= el.clientWidth + 1));
 		const panelState = (status) => page.waitForFunction(expected => {
 			const visible = [...document.querySelectorAll('.task-progress')].find(el => el.getClientRects().length > 0);

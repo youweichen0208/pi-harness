@@ -64,9 +64,11 @@ try {
 		assert.equal(await card.evaluate(el=>getComputedStyle(el).borderTopWidth),'0px');
 		assert.equal(await card.evaluate(el=>getComputedStyle(el).backgroundColor),'rgba(0, 0, 0, 0)');
 		await page.locator('.header-task-progress').click();
-		const planDot=page.locator('.task-plan-step.running .task-plan-mark');
-		await planDot.waitFor();
-		assert.equal(await planDot.evaluate(el=>getComputedStyle(el).animationName),'task-plan-pulse');
+		// The native plan list is gone; a running step shows the spinner instead of the
+		// old pulsing plan mark.
+		const runMark=page.locator('.task-step.running .task-step-spinner, .task-step.current .task-step-spinner').first();
+		await runMark.waitFor();
+		assert.equal(await runMark.evaluate(el=>getComputedStyle(el).animationName),'spin');
 		for(const appearance of ['light','dark']) {
 			await page.evaluate(value=>document.documentElement.dataset.appearance=value,appearance);
 			await page.screenshot({path:`tests/scratch/chat-optimization-${language}-${appearance}.png`});

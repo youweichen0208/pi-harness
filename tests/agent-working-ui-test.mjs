@@ -191,7 +191,7 @@ await page.screenshot({path:app?'/private/tmp/pi-agent-working-desktop.png':'/pr
 const commitCommand=`cd "${cwd}" && git commit -q -m "feat(ledger): wire agent-runtime subprocess boundary for phase1b llm_adjusted"`;
 const gitRows=[' M docs/plan.md', ...Array.from({length:6},(_,i)=>`A  src/new-${i}.ts`), ...Array.from({length:4},(_,i)=>` M src/changed-${i}.ts`)];
 const planStarted=Date.now()-1241000;
-const runningPlan={id:'reference-plan',conversationId:latestState.conversationId,sourceMessageId:'user',title:'Implement ledger',status:'running',startedAt:planStarted,completed:0,steps:[{id:'commit-step',messageId:'commit',title:'提交',status:'running',startedAt:Date.now()-3000,artifacts:[{toolCallId:'call-commit',kind:'bash',label:commitCommand.slice(0,78)}]}],plan:{revision:1,added:0,removed:0,items:[{id:'core',title:'Core: 构建 FrozenEvidence（case plan + evidence snapshot 转换）',status:'running',startedAt:planStarted},{id:'runtime',title:'agent-runtime: 实现子进程入口（stdin FrozenEvidence → stdout proposal）',status:'pending'},{id:'test',title:'test: 测试、验证、记录 S07h',status:'pending'}]}};
+const runningPlan={id:'reference-plan',conversationId:latestState.conversationId,sourceMessageId:'user',title:'Implement ledger',status:'running',startedAt:planStarted,completed:0,steps:[{id:'commit-step',messageId:'commit',title:'提交',status:'running',startedAt:Date.now()-3000,artifacts:[{toolCallId:'call-commit',kind:'bash',label:commitCommand.slice(0,78)}]}]};
 emit({messages:[messages[4],tool('git',`cd "${cwd}" && git status --short`),result('git',gitRows.join('\n')),tool('commit',commitCommand)],taskProgress:runningPlan,isStreaming:true,streamingMessage:null});
 await page.locator('.bash-git-summary',{hasText:'11 个文件'}).waitFor();
 assert((await page.locator('.bash-git-summary').textContent()).includes('6 新增'));
@@ -202,13 +202,9 @@ assert.equal(await page.locator('.bash-git-status').first().textContent(),'M');
 assert.notEqual(await page.locator('.bash-git-status.git-added').first().evaluate(e=>getComputedStyle(e).color),await page.locator('.bash-git-status.git-modified').first().evaluate(e=>getComputedStyle(e).color));
 assert.equal(await page.locator('.bash-directory').count(),0);
 assert.equal(await page.locator('.bash-head-command').first().isDisabled(),true,'short command has no expand affordance');
-await page.locator('.task-plan-current-file',{hasText:'提交中 · git commit'}).waitFor();
-assert.equal(await page.locator('.task-plan-tag').count(),0,'outline has no module prefixes');
-assert.equal(await page.locator('.task-plan-step.running .task-plan-step-title').textContent(),'构建 FrozenEvidence');
-assert.equal(await page.locator('.task-plan-step-detail').count(),0);
-await page.locator('.task-plan-step-head',{hasText:'实现子进程入口'}).click();
-assert.equal(await page.locator('.task-plan-step-detail',{hasText:'stdin FrozenEvidence → stdout proposal'}).count(),1);
-await page.locator('.task-plan-step-head',{hasText:'实现子进程入口'}).click();
+// The native plan list is gone; the running commit step is the panel's record now.
+await page.locator('.task-step.running, .task-step.current').first().waitFor();
+assert.equal(await page.locator('.task-plan-step, .task-plan-tag').count(),0,'the plan list is no longer rendered');
 assert.equal(await page.locator('.status-item.working,.agent-working').count(),0);
 await page.locator('.tree-other-directories').waitFor();
 assert.equal(await page.locator('.file-dir-main',{hasText:'src'}).count(),0,'unchanged directories fold during running tasks');

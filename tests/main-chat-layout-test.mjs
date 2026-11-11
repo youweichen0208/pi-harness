@@ -128,15 +128,16 @@ try {
 		await handle.dblclick();
 		assert.equal(Math.round((await page.locator('.drawer-right').boundingBox()).width), 300);
 		assert.equal(await page.locator('.panel-right .tree-search').evaluate(el => el.getBoundingClientRect().height), 32);
-		snapshot.state.taskProgress = { id: 'layout-task', conversationId: snapshot.state.conversationId, sourceMessageId: 'user', title: '检查布局', status: 'running', startedAt: Date.now(), completed: 0, steps: [], plan: { revision: 1, items: [{ id: 'one', title: '验证任务进度', status: 'running' }] } };
+		// The native plan list is gone, so the running state now comes from a step.
+		snapshot.state.taskProgress = { id: 'layout-task', conversationId: snapshot.state.conversationId, sourceMessageId: 'user', title: '检查布局', status: 'running', startedAt: Date.now(), completed: 0, steps: [{ id: 'layout-step', messageId: 'layout-message', title: '验证任务进度', status: 'running', startedAt: Date.now(), artifacts: [{ toolCallId: 'layout-call', kind: 'bash', label: 'ls' }] }] };
 		snapshot.state.rev += 1;
 		socket.send(JSON.stringify(snapshot));
-		await page.locator('.task-plan-step.running').waitFor();
+		await page.locator('.task-step.running, .task-step.current').first().waitFor();
 		snapshot.state.taskProgress.status = 'done';
-		snapshot.state.taskProgress.plan.items[0].status = 'done';
+		snapshot.state.taskProgress.steps[0].status = 'done';
 		snapshot.state.rev += 1;
 		socket.send(JSON.stringify(snapshot));
-		await page.locator('.task-plan-step.done').waitFor();
+		await page.locator('.task-step.done').first().waitFor();
 		const file = page.locator('.file-item.file', { hasText: 'example.txt' });
 		assert.equal(await page.locator('.panel-right .file-attach.download, .panel-right .file-attach.ref').count(), 0);
 		await file.hover();
