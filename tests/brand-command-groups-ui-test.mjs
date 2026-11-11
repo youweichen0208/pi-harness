@@ -57,20 +57,27 @@ try {
 		});
 	});
 	await page.goto(`http://localhost:${port}`);
-	// An unrelated later success cannot clear cmd-8 failure.
-	await page.locator('.process-group.err.open .process-group-head', { hasText: /Ran 10 commands|已运行 10 条命令/ }).waitFor();
-	// 29a: no right-side "N failed" badge — the ✗ row and its exit code own that state.
+	// Failed bash calls never reach the transcript (user decision 2026-11): the
+	// model moves on to another approach, so a `✗ exit 1` row is noise. cmd-8 is
+	// the error call, so the group counts 9 rendered commands and no error row.
+	await page.locator('.process-group').first().waitFor();
+	// The group counts what is actually rendered after filtering: 10 calls minus
+	// the failed one.
+	assert.match(await page.locator('.process-group').first().innerText(), /Ran 9 commands|已运行 9 条命令/);
+	// 29a: no right-side "N failed" badge — the group header owns the count.
 	assert.equal(await page.locator('.process-group-status').count(), 0);
 	assert.equal(await page.locator('.process-group').count(), 1);
 	assert.equal(await page.locator('.bash-group-head').count(), 0);
+	assert.equal(await page.locator('.bash-row.err').count(), 0);
+	assert.equal(await page.locator('[data-tool-call-id="cmd-8"]').count(), 0);
+	assert.equal(await page.locator('.process-group.err').count(), 0);
+	// A fully successful group collapses; open it to read the rows. The list caps
+	// at the latest 8 attempts, same as before the failure row was filtered out.
+	await page.locator('.process-group-summary-line').first().click();
+	await page.locator('.bash-row').first().waitFor();
 	assert.equal(await page.locator('.bash-row').count(), 8);
-	assert.equal(await page.locator('.bash-row.err .bash-row-head').getAttribute('aria-expanded'), 'false');
-	assert.match(await page.locator('.bash-row.err .bash-row-stats').textContent(), /exit 128/);
-	await page.locator('.bash-row.err .bash-row-head').click();
-	assert.equal(await page.locator('.bash-row.ok .bash-numbered-output').count(), 0);
-	assert.equal(await page.locator('.bash-numbered-line.error').count(), 1);
 	// 29a: rows are borderless; the command reads in monospace with no friendly-name span.
-	assert.equal(await page.locator('.bash-inline-command').first().textContent(), 'git show …/file-2.ts');
+	assert.equal(await page.locator('.bash-inline-command').first().textContent(), 'git show …/file-1.ts');
 	const last = page.locator('[data-tool-call-id="cmd-9"]');
 	await last.locator('.bash-row-head').click();
 	assert.equal(await last.locator('.bash-numbered-line').count(), 6);
@@ -87,7 +94,7 @@ try {
 	assert.equal(await page.locator('.bash-row:visible').count(), 0);
 	await page.evaluate(() => window.dispatchEvent(new CustomEvent('pi:reveal-tool', { detail: { toolCallId: 'cmd-0' } })));
 	await page.locator('[data-tool-call-id="cmd-0"] .bash-numbered-output').waitFor();
-	assert.equal(await page.locator('.bash-row').count(), 10);
+	assert.equal(await page.locator('.bash-row').count(), 9);
 	// Without a native plan the right panel shows the step log, labelled as such.
 	assert.match(await page.locator('.task-section-heading').first().innerText(), /^步骤\s*\d+ 步$/);
 	assert.equal(await page.locator('.task-progress-meta').count(), 0);
@@ -125,14 +132,17 @@ try {
 	snapshot.state.isStreaming = true;
 	snapshot.state.streamingMessage = { id: 'a-live', role: 'assistant', content: [{ type: 'toolCall', id: 'live-call', name: 'bash', argumentsText: '{"command":"sleep 1"}' }] };
 	snapshot.state.rev += 1; socket.send(JSON.stringify(snapshot));
-	await page.locator('.process-group.run .process-group-head', { hasText: /Ran 11 commands|已运行 11 条命令/ }).waitFor();
+	// 9 rendered commands + the live one (the failed call stays filtered out).
+	await page.locator('.process-group.run .process-group-head', { hasText: /Ran 10 commands|已运行 10 条命令/ }).waitFor();
 	assert.equal(await page.locator('.bash-group').count(), 1);
 	assert.equal(await page.locator('.bash-row.run').count(), 1);
-	// A previous interrupted tool must not become running again on a new turn.
+	// A previous interrupted tool must not become running again on a new turn —
+	// and since it never executed it counts as a failed call, so it is filtered
+	// out of the transcript instead of lingering as a ✗ row.
 	snapshot.state.messages.push(snapshot.state.streamingMessage, { id: 'user-next', role: 'user', content: [{ type: 'text', text: 'Next task' }] });
 	snapshot.state.streamingMessage = null;
 	snapshot.state.rev += 1; socket.send(JSON.stringify(snapshot));
-	await page.locator('[data-tool-call-id="live-call"].err').waitFor({ state: 'attached' });
+	await page.locator('[data-tool-call-id="live-call"]').waitFor({ state: 'detached' });
 	assert.equal(await page.locator('.bash-row.run').count(), 0);
 	await page.setViewportSize({ width: 1440, height: 1000 });
 	// Completed tools remain part of a running turn until the model settles.

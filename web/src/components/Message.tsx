@@ -46,7 +46,7 @@ import { splitFrontmatter } from "../read-presentation";
 import { questionPreviewText } from "../question-markers";
 import { preserveUserTree } from "../user-message-presentation";
 import type { PlanPresentation } from "../plan-presentation";
-import { BashGroup, latestAttemptStates } from "./BashGroup";
+import { BashGroup, latestAttemptStates, stateOf } from "./BashGroup";
 import { emptyProcessStats, ProcessGroup, type ProcessStats } from "./ProcessGroup";
 import { WorkspacePathContext } from "../workspace-context";
 import { PlanChecklist } from "./PlanChecklist";
@@ -438,11 +438,18 @@ export const Message = memo(function Message({
 					if (next?.name !== "bash") break;
 					calls.push(next); i++;
 				}
-				const items = calls.map((item) => ({ block: item, view: { ...viewFor(item), streaming: toolsRunning ?? streaming }, messageId: toolMessageIds?.get(item.id) ?? message.id }));
+				// 用户决定（2026-11）：失败的 bash 不进入对话记录。一条命令失败后
+				// 模型会自己换做法继续推进，把 `✗ exit 1` 留在时间线上既占视觉噪音，
+				// 又让人误以为任务没做完。过滤发生在渲染前，所以分组计数、折叠统计、
+				// 本轮命令总数与任务进度都自然一致，不会出现「显示 3 条实际 4 条」。
+				// 仍在运行、排队或从未执行的调用保留：它们的结论还没定。
+				const rendered = calls.filter((call) => stateOf(viewFor(call)) !== "err");
+				if (!rendered.length) continue;
+				const items = rendered.map((item) => ({ block: item, view: { ...viewFor(item), streaming: toolsRunning ?? streaming }, messageId: toolMessageIds?.get(item.id) ?? message.id }));
 				push(<BashGroup flat active={bashActive ?? toolsRunning ?? streaming} key={first.id} items={items} onKill={onKillBash} />, true, stats => {
-					stats.commands += calls.length;
+					stats.commands += rendered.length;
 					if (bashActive ?? toolsRunning ?? streaming) stats.live = true;
-					stats.toolIds.push(...calls.map(call => call.id));
+					stats.toolIds.push(...rendered.map(call => call.id));
 					for (const { state, view } of latestAttemptStates(items, cwd)) {
 						if (state === "err") stats.failed++;
 						if (state === "run") stats.running = true;
