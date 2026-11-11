@@ -100,14 +100,6 @@ export function TopBar({
 	const reminding = incident?.state === "reminding";
 	const task = chat.state?.conversationId === chat.activeConversationId ? chat.state?.taskProgress : null;
 	const hasCodemode = chat.state?.conversationId === chat.activeConversationId && chat.state?.codemode?.history.some(message => message.role === "assistant" && message.content.some(block => block.type === "toolCall" && block.name === "codemode"));
-	// Only a native plan has steps. Tool calls are execution detail: 'task.steps' counts
-	// every tool group in the turn, which turned into "第 107 / 107 步" on a long tool loop
-	// while the task panel showed one phase. Without a plan the header names the task
-	// instead of inventing a position.
-	const planItems = task?.plan?.items.filter((item) => item.status !== "removed") ?? [];
-	const currentStep = planItems.findIndex((item) => item.status === "running");
-	const completedSteps = planItems.filter(item => item.status === "done").length;
-
 	const LANGUAGES: { value: Locale; label: string }[] = [
 		{ value: "zh", label: t("langZh") },
 		{ value: "en", label: t("langEn") },
@@ -193,7 +185,7 @@ export function TopBar({
 			</div>
 
 			{view !== "nodes" && <button type="button" className="project-panel-toggle" title={t(leftCollapsed ? "expandProjects" : "collapseProjects")} aria-label={t(leftCollapsed ? "expandProjects" : "collapseProjects")} aria-expanded={!leftCollapsed} onClick={() => onOpenPanel("left")}><FiSidebar /></button>}
-			<div className="header-location"><button type="button" className="conversation-title-button" title={t("treeTitle")} aria-label={`${t("currentConversation")} · ${t("treeTitle")}`} onClick={() => openSessionTree()}><strong>{t("currentConversation")}</strong><FiChevronDown className="conversation-title-chevron" aria-hidden="true" /></button>{(interrupted || reminding || hasCodemode || planItems.length > 0 || !!task?.plan?.awaitingConfirmation || !!task) && <button type="button" className={`header-task-progress${interrupted ? " interrupted" : reminding ? " reminding" : ""}`} title={t("taskProgress")} onClick={onOpenTask}>{interrupted ? t("toolRecoveryInterrupted") : reminding ? t("working") : task?.plan?.awaitingConfirmation || !planItems.length ? t("taskProgress") : t("taskPlanPosition", { current: currentStep >= 0 ? currentStep + 1 : completedSteps, total: planItems.length })}{planItems.length > 0 && <span className="header-task-segments" aria-hidden="true">{planItems.map(item => <i key={item.id} className={item.status} />)}</span>}</button>}</div>
+			<div className="header-location"><button type="button" className="conversation-title-button" title={t("treeTitle")} aria-label={`${t("currentConversation")} · ${t("treeTitle")}`} onClick={() => openSessionTree()}><strong>{t("currentConversation")}</strong><FiChevronDown className="conversation-title-chevron" aria-hidden="true" /></button>{(interrupted || reminding || hasCodemode || !!task) && <button type="button" className={`header-task-progress${interrupted ? " interrupted" : reminding ? " reminding" : ""}`} title={t("taskProgress")} onClick={onOpenTask}>{interrupted ? t("toolRecoveryInterrupted") : reminding ? t("working") : t("taskProgress")}</button>}</div>
 			<div className="topbar-actions">
 				<div className="panel-tab-bar">
 				<div className="view-switch" role="tablist" aria-label={t("viewSwitch")}>

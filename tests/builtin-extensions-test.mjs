@@ -71,7 +71,7 @@ try {
 	harness = await startIsolatedHarness({ env: { PI_WEB_TOKEN: "", PI_WEB_CWD: root, PI_WEB_DATA_DIR: data, PI_CODING_AGENT_DIR: agent }, onOutput: value => { logs = (logs + value).slice(-16000); } });
 	child = harness.child; port = harness.port;
 	const a = await connect("builtin-a"), b = await connect("builtin-b");
-	const state = await request(a, "builtin-list"); assert.equal(state.items.length, 6);
+	const state = await request(a, "builtin-list"); assert.equal(state.items.length, 5);
 	assert.equal(item(state, "pi-harness-subagents").status, "loaded");
 	await toggle(a, "pi-harness-subagents", false);
 	assert.equal(item(await request(b, "builtin-list"), "pi-harness-subagents").status, "disabled");
@@ -114,7 +114,7 @@ try {
 	const c = await connect("builtin-c"); assert.equal(item(await request(c, "builtin-list"), "pi-harness-database").status, "loaded");
 	const saved = readFileSync(join(data, "document-extensions.json"), "utf8");
 	writeFileSync(join(data, "document-extensions.json"), "broken-json");
-	const broken = await request(a, "builtin-list"); assert.equal(broken.items.length, 6); assert.equal(item(broken, "pi-harness-database").status, "error"); assert.equal(item(broken, "codemode").status, "loaded");
+	const broken = await request(a, "builtin-list"); assert.equal(broken.items.length, 5); assert.equal(item(broken, "pi-harness-database").status, "error"); assert.equal(item(broken, "codemode").status, "loaded");
 	writeFileSync(join(data, "document-extensions.json"), saved);
 	console.log("PASS built-in inventory, removed conversion/OKF, version conflicts, cross-client settings, disabled calls and new chat/reload");
 

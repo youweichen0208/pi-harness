@@ -20,7 +20,10 @@ function status(item: Item) {
 
 function Lines({ lines, path }: { lines: ChangeLine[]; path: string }) {
 	const lang = langFromPath(path);
-	return <div className="change-lines">{lines.map((line, index) => <div key={index} className={`change-line ${line.marker === "+" ? "add" : line.marker === "-" ? "del" : "context"}`}><span className="change-old">{line.oldLine ?? ""}</span><span className="change-new">{line.newLine ?? ""}</span><span className="change-marker">{line.marker === "-" ? "−" : line.marker}</span><code className="hljs" dangerouslySetInnerHTML={{ __html: highlightLine(line.text, lang) || "&#8203;" }} /></div>)}</div>;
+	// 只给小一列行号：新行存在就显示新行号，否则退回旧行号。
+	// 之前并排渲染 `旧 新` 两列，看着就是每个行号写了两遍（`85 85`、`87 -`），
+	// 而读者要的只是「这一段在文件的哪一行」。
+	return <div className="change-lines">{lines.map((line, index) => <div key={index} className={`change-line ${line.marker === "+" ? "add" : line.marker === "-" ? "del" : "context"}`}><span className="change-old">{line.newLine ?? line.oldLine ?? ""}</span><span className="change-marker">{line.marker === "-" ? "−" : line.marker}</span><code className="hljs" dangerouslySetInnerHTML={{ __html: highlightLine(line.text, lang) || "&#8203;" }} /></div>)}</div>;
 }
 
 function ChangeBody({ change, state }: { change: EditWriteChange; state: string }) {
@@ -28,14 +31,10 @@ function ChangeBody({ change, state }: { change: EditWriteChange; state: string 
 	const [expanded, setExpanded] = useState(false);
 	const allLines = change.hunks.reduce((sum, hunk) => sum + hunk.lines.length, 0);
 	let remaining = expanded ? Infinity : 12;
-	const summary = change.error
-		? t("changeFailed")
-		: change.kind === "write"
-			? t("changeWrittenLines", { n: change.added })
-			: t("changeAdded") + " " + change.added + " · " + t("changeRemoved") + " " + change.removed;
+	// 头部已经显示 `+N −M`，hunk 头已经显示行号／函数名，diff 行本身也带红绿和
+	// `+`/`−` 标记。再单独列一行「删除 N · 新增 N」是把同一件事说三遍，正文从这里开始。
 	const failure = change.errorText.split("\n").find((line) => line.trim()) || t("changeFailed");
 	return <div className="change-card-body">
-		<div className="change-card-summary">{summary}</div>
 		{change.error && <div className="change-error">{failure}</div>}
 		{change.empty ? <div className="change-empty">{change.error ? t("changeNoOriginal") : change.kind === "write" ? `${t("emptyFile")} (${change.path.split("/").at(-1)})` : state === "done" ? t("changeNoDiff") : state === "skipped" ? t("changeNotExecuted") : t("changeWaiting")}</div> : change.hunks.map((hunk, index) => {
 			if (remaining <= 0) return null;

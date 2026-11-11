@@ -70,11 +70,25 @@ try {
 	await wiki.keyboard.press('Meta+s');
 	await wiki.locator('.wiki-save-status.saved').waitFor();
 	assert.ok(readFileSync(join(base, 'note.md'), 'utf8').includes('```\nprint("anchored")'));
-	console.log('PASS toolbar positioning and insertion/save');
+		// A header-only table has nowhere to put content and saves as a bare empty header.
+	// The picker must refuse the 1-row cell instead of writing it.
+	await editor.locator('p').last().evaluate(p => { p.closest('[contenteditable]').focus(); const r = document.createRange(); r.selectNodeContents(p); r.collapse(false); getSelection().removeAllRanges(); getSelection().addRange(r); });
+	const beforeEmptyTable = readFileSync(join(base, 'note.md'), 'utf8');
+	await wikiInsert(wiki, '插入表格');
+	const picker = wiki.locator('.wiki-table-picker');
+	await picker.waitFor();
+	assert.equal(await picker.locator('.wiki-table-grid button').first().isDisabled(), true, 'the header-only row is disabled');
+	await picker.locator('.wiki-table-grid button').first().click({ force: true });
+	await wiki.keyboard.press('Escape');
+	await wiki.waitForTimeout(800);
+	assert.equal(readFileSync(join(base, 'note.md'), 'utf8'), beforeEmptyTable, 'a header-only table is never written');
+
+console.log('PASS toolbar positioning and insertion/save');
 	await wiki.screenshot({ path: "/tmp/pi-wiki-toolbar-full.png" });
 	await wiki.setViewportSize({ width: 800, height: 900 });
 	assert.equal(await wiki.locator('.wiki-assistant').isVisible(), false, 'Wiki chat starts collapsed');
-	await wiki.getByRole('button', { name: '问 pi', exact: true }).click();
+	// Both the document toolbar action and the assistant panel header carry this label; open the panel.
+	await wiki.getByRole('button', { name: '问 pi', exact: true }).nth(1).click();
 	await wiki.locator('.wiki-assistant').waitFor({ state: 'visible' });
 	await wiki.locator('.wiki-assistant-header').getByRole('button', { name: '收起对话面板', exact: true }).click();
 	await wiki.locator('.wiki-assistant').waitFor({ state: 'hidden' });

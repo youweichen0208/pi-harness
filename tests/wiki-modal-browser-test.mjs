@@ -176,10 +176,7 @@ try {
 	await wiki.page.screenshot({path: "tests/scratch/wiki-window-changes-1100.png"});
 	await wiki.page.locator(".wiki-changes > header > button").click();
 	await wiki.page.locator(".wiki-changes").waitFor({state: "detached"});
-	if (await wiki.page.locator(".wiki-agent-host").isVisible()) await wiki.page.getByRole("button", {name: "收起对话面板", exact: true}).click();
-	await wiki.page.getByRole("button", {name: "编辑源码", exact: true}).click();
-	await wiki.page.locator(".wiki-document .fp-editor").waitFor();
-	await wiki.page.getByRole("button", {name: "渲染预览", exact: true}).click(); await wiki.editor.waitFor();
+	if (await wiki.page.locator(".wiki-agent-host").isVisible()) { await wiki.page.getByRole("button", {name: "收起对话面板", exact: true}).click(); await wiki.page.locator(".wiki-agent-host").waitFor({state: "hidden"}); }
 	await wikiInsert(wiki.page, '插入表格');
 	await wiki.page.locator(".wiki-table-popover").waitFor();
 	await wiki.page.keyboard.press("Escape"); await wiki.page.locator(".wiki-table-popover").waitFor({state: "detached"});
@@ -310,6 +307,7 @@ try {
 
 	// A page refresh re-enters Wiki mode and reattaches the SAME ephemeral
 	// conversation (Q15); the chat transcript survives the reload.
+	await showChat();
 	responseGate = new Promise(resolve => { releaseReply = resolve; });
 	await wiki.input.fill("Wiki only question"); await wiki.input.press("Enter");
 	await wiki.page.waitForFunction(() => document.querySelector(".wiki-prose [contenteditable=false]"));
@@ -362,7 +360,7 @@ try {
 
 	// Mobile: the Wiki window's chat panel is an overlay toggled from the view header.
 	await open();
-	if (await wiki.page.locator(".wiki-agent-host").isVisible()) await wiki.page.getByRole("button", {name: "收起对话面板", exact: true}).click();
+	if (await wiki.page.locator(".wiki-agent-host").isVisible()) { await wiki.page.getByRole("button", {name: "收起对话面板", exact: true}).click(); await wiki.page.locator(".wiki-agent-host").waitFor({state: "hidden"}); }
 	await wiki.page.setViewportSize({width: 720, height: 800});
 	await wiki.page.reload();
 	await wiki.page.locator(".wiki-window-header").waitFor();

@@ -94,9 +94,11 @@ try {
 	await page.getByRole('button',{name:'Markdown 源码',exact:true}).click();
 	await page.getByLabel('小记正文',{exact:true}).fill('| A | B |\n| --- | --- |\n| one | two |\n');
 	await page.getByRole('button',{name:'富文本',exact:true}).click();
-	await editor.locator('td').first().click();
+	await editor.locator('td:not([data-rich-gutter])').first().click();
 	const rows = await editor.locator('tr').count();
-	await page.locator('.fp-table-select-handle').click();
+	// Whole-table selection is the frame gesture (ui-design.md): click 6px inside the border.
+	const frame = await editor.locator('table').first().evaluate(el => { const rect = el.getBoundingClientRect(); return { x: rect.left + 3, y: rect.top + 3 }; });
+	await page.mouse.click(frame.x, frame.y);
 	await page.keyboard.press('Backspace');
 	assert.equal(await editor.locator('tr').count(),0);
 	await page.getByRole('button',{name:'撤销',exact:true}).click();
@@ -105,7 +107,7 @@ try {
 	assert.equal(await editor.locator('tr').count(),0);
 	await page.getByRole('button',{name:'撤销',exact:true}).click();
 	assert.equal(await editor.locator('tr').count(),rows);
-	await editor.locator('td').first().click();
+	await editor.locator('td:not([data-rich-gutter])').first().click();
 	await page.locator('.rich-format-tools').getByRole('button',{name:'更多',exact:true}).click();
 	await page.getByLabel('对齐',{exact:true}).selectOption('right');
 	await until(async()=> /-+:/.test((await readFormatting()).body));

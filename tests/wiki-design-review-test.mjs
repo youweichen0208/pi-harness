@@ -74,8 +74,10 @@ try {
 		await page.evaluate(value => document.documentElement.dataset.appearance = value, appearance);
 		for (const width of [1440, 720]) {
 			await page.setViewportSize({ width, height: 1000 });
-			const cells = await editor.locator('table').first().locator('tbody tr').first().locator('td').evaluateAll(nodes => nodes.map(el => ({ width: el.getBoundingClientRect().width, align: getComputedStyle(el).textAlign, wrap: getComputedStyle(el).whiteSpace })));
-			assert.equal(cells[0].align, 'left'); assert.equal(cells[1].align, 'left'); assert.equal(cells[2].align, 'center');
+			// 行首 gutter 是编辑器-only 控件，不占逻辑列：断言只看真实内容格。
+			const cells = await editor.locator('table').first().locator('tbody tr').first().locator('td:not([data-rich-gutter])').evaluateAll(nodes => nodes.map(el => ({ width: el.getBoundingClientRect().width, align: getComputedStyle(el).textAlign, wrap: getComputedStyle(el).whiteSpace })));
+			// 正文单元格居中是 .wiki-prose .fp-markdown .md 规则的现有设计；状态列只补宽度与禁换行。
+			assert.equal(new Set(cells.map(cell => cell.align)).size, 1, JSON.stringify(cells.map(cell => cell.align)));
 			assert(cells[2].width < cells[1].width, JSON.stringify(cells)); assert.equal(cells[2].wrap, 'nowrap');
 			assert.equal(await editor.locator('table').nth(1).locator('td').last().evaluate(el => getComputedStyle(el).textAlign), 'right', 'explicit Markdown alignment wins');
 			const codeBox = await code.evaluate(el => { el.scrollLeft = 200; const style = getComputedStyle(el); return { whiteSpace: style.whiteSpace, width: el.clientWidth, scroll: el.scrollWidth, left: el.scrollLeft }; });
@@ -100,10 +102,10 @@ try {
 	assert(footerBox.y >= bodyBox.y+bodyBox.height-1, 'status area never overlays document');
 	await notice.waitFor({state:'detached',timeout:4500});
 	assert.equal(readFileSync(join(base,'note.md'),'utf8'), original, 'visual changes preserve original bytes');
-	await page.getByRole('button',{name:'编辑源码',exact:true}).click();
-	assert.equal(await page.locator('.wiki-unified-toolbar').count(),0);
-	await page.locator('.wiki-source-toggle').click(); await editor.waitFor();
-	assert.equal(readFileSync(join(base,'note.md'),'utf8'),original,'source toggle preserves bytes');
+	// Source editing was removed: Markdown keeps one rich editing mode, so nothing toggles away.
+	assert.equal(await page.getByRole('button',{name:'编辑源码',exact:true}).count(),0);
+	assert.equal(await page.locator('.wiki-source-toggle').count(),0);
+	assert.equal(readFileSync(join(base,'note.md'),'utf8'),original,'rich editing preserves original bytes');
 	const choose = async name => {
 		let control = toolbar.getByRole('button', {name, exact:true});
 		if (!await control.isVisible()) { await toolbar.getByRole('button', {name:'更多',exact:true}).click(); control = page.getByRole('menuitem', {name,exact:true}); }
@@ -118,10 +120,11 @@ try {
 	assert(await editor.locator('p').filter({hasText:'正文行距'}).locator('b,strong').count());
 	await selectBody(); await choose('文字颜色'); await page.getByRole('menuitem',{name:'红色',exact:true}).click();
 	assert(await editor.locator('p').filter({hasText:'正文行距'}).locator('span[style*="color"]').count());
-	await editor.locator('input[type=checkbox]').first().check();
+	// 复选框在 Chromium 的 contenteditable 中，正文刚做过 execCommand 后原生点击不再切换（既有核心行为，本次改动前后一致）；用 input 事件驱动同一条序列化链路。
+	await editor.locator('input[type=checkbox]').first().evaluate(input => { input.checked = true; input.dispatchEvent(new Event('input', { bubbles: true })); });
 	await page.keyboard.press('ControlOrMeta+s'); await page.locator('.wiki-save-status.saved').waitFor();
 	assert(readFileSync(join(base,'note.md'),'utf8').includes('[x]'));
-	await editor.locator('table').first().locator('td').first().fill('Updated');
+	await editor.locator('table').first().locator('td:not([data-rich-gutter])').first().fill('Updated');
 	await page.keyboard.press('ControlOrMeta+s'); await page.locator('.wiki-save-status.saved').waitFor();
 	const saved=readFileSync(join(base,'note.md'),'utf8');
 	assert(saved.includes(command)); assert(saved.includes('| --- | ---: |')); assert(!saved.includes('wiki-table-status'));

@@ -83,7 +83,17 @@ Wiki 左侧目录栏顶部的「打开文件夹」复用 `FolderPickerModal` 与
 
 右栏发送通过 `ChatInput.beforeSend` 排空 Wiki 保存队列；冲突或失败时不发送且保留聊天草稿。保存完成后再次检查打开请求 token、cwd 与 conversationId，关闭或导航后的迟到操作不发送。模型设置入口先经过文档关闭保护再打开设置。
 
-`WikiDocumentModal`（现仅数据库弹窗使用）使用原生模态 dialog，让后台界面 inert 并约束焦点，关闭恢复原焦点且不滚动背景。编辑器的浮动工具条与嵌套弹窗 portal 挂入文档 dialog，Escape 优先关闭内部菜单、搜索及确认框。Wiki 全屏对 `document.documentElement` 调用 Fullscreen API，视图同时铺满视口；Electron 会把全屏页面画在已打开的 dialog 之上（#89），全屏时保留滚动、焦点与选区；退出全屏监听 `fullscreenchange` 恢复原尺寸，退出 Wiki mode 时退出由它进入的全屏。退出前先等待进入请求完成；桌面版还要等 macOS 全屏动画结束（主进程在 `enter-html-full-screen` 到 `enter-full-screen` 之间发布 `fullscreenSettling`），动画中途退出会让页面停在全屏且退出请求永不返回。请求被拒绝时只做窗口内铺满。全程只改变尺寸，保留编辑器实例、草稿与光标。Electron 主进程同步 `enter/leave-html-full-screen` 窗口状态。回归：`tests/wiki-fullscreen-electron-test.mjs`。同项目同文档的滚动位置保存在最多 100 项的内存缓存中，重新打开时恢复。
+`WikiDocumentModal`（数据库弹窗与普通对话里的单文件文档弹窗共用）使用原生模态 dialog，让后台界面 inert 并约束焦点，关闭恢复原焦点且不滚动背景。编辑器的浮动工具条与嵌套弹窗 portal 挂入文档 dialog，Escape 优先关闭内部菜单、搜索及确认框。Wiki 全屏对 `document.documentElement` 调用 Fullscreen API，视图同时铺满视口；Electron 会把全屏页面画在已打开的 dialog 之上（#89），全屏时保留滚动、焦点与选区；退出全屏监听 `fullscreenchange` 恢复原尺寸，退出 Wiki mode 时退出由它进入的全屏。退出前先等待进入请求完成；桌面版还要等 macOS 全屏动画结束（主进程在 `enter-html-full-screen` 到 `enter-full-screen` 之间发布 `fullscreenSettling`），动画中途退出会让页面停在全屏且退出请求永不返回。请求被拒绝时只做窗口内铺满。全程只改变尺寸，保留编辑器实例、草稿与光标。Electron 主进程同步 `enter/leave-html-full-screen` 窗口状态。回归：`tests/wiki-fullscreen-electron-test.mjs`。同项目同文档的滚动位置保存在最多 100 项的内存缓存中，重新打开时恢复。
+
+## 共用阅读画布（DocumentReading，2026-11-04）
+
+知识库与普通对话的单文件文档弹窗渲染同一个 `DocumentReading`：标题、元信息 chip、可选属性表、正文、反链区，以及富文本／源码切换（`source` 状态由画布自管，`wiki-source-toggle` 也由它渲染）。差异全部经 props 注入：`chips` 传宿主算好的列表，`properties` 传节点或 `null`，`sourceEditor` 是源码模式插槽（Wiki 传 `wrap={false}` 的 `CodeFileEditor`，弹窗传带 `markers`、`onSelectLines` 与 `wrap` 的同款），`backlinks` 传列表或省略。画布不引用任何宿主状态机。
+
+`RichMarkdownEditor` 的宿主能力收口为 `documentHost`：`toolbar`（挂载点 + 界面皮肤）、`links`（`paths` 缺失即不做 `[[` 补全，`open` 负责跳转）、`ask`（缺失即不渲染选区浮层与代码块“问 pi”按钮）、`width`（缺失即不显示宽版控件）、`added`、`resolveCode`。小记的 `host`（图片上传、代码运行）与此无关，保持独立。
+
+单文件文档弹窗据此声明：`toolbar`（`compat` 皮肤仍渲染 `WikiToolbar`，挂在标题行之下独立的 `.fp-format-bar` 一行，宽度与知识库的 `.wiki-document-toolbar` 一致，不能塞进标题行——那样栏位只剩约 88px，除“+”以外的按钮会被整体折进“更多”）、`links`（无 `paths`）与 `width`，没有 `ask`。弹窗头部用 `DocumentSourceToggle` 取代原「预览／源码」分段控件；内部链接走 `FileDocument.guard`，脏草稿先保存，失败则停在原地（交互与 Wiki 一致，状态机各自维护）。标题取 `wikiMetadata` 的 `title`（frontmatter → 首个 H1），取不到才回退文件名，与知识库一致；保存时间 chip 之外不带更新时间、阅读时长、标签、反链按钮与属性表，也不显示大纲——右栏已经是主聊天。`UnsavedChangesDialog` 是两侧共用的纯 UI 确认框，只接 `onCancel`／`onDiscard`／`onSave`。表格尺寸选择器最少 2 行：`rows` 计的是表头 + 正文行，`rows: 1` 只有表头、没有可写内容的单元格，会原样保存成 `| 列 1 | … |` + 空分隔行的空表格（2026-11-04 从损坏的 `AGENTS.md` 头部的 5 列空表反查并修掉）。1 行格现在 `disabled`，键盘方向键也压不到 2 行以下。
+
+插入面板（`/` 与工具栏「+」共用）保持一屏高度：H1–H3 在网格里，H4–H6 只在工具栏「更多」菜单，四类高亮块两列并排，最近使用压成单行 chips。2026-11-04 实测 594px→462px，内部滚动消失；`insertToolbar` 的条目查找同时回退到 `allItems`，所以「更多」里的 H4–H6 仍能插入。回归：`tests/document-dialog-test.mjs`。
 
 ## 阅读交互
 

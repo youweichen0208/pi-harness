@@ -32,10 +32,9 @@ import { Message, asText } from "./Message";
 import { collectQuestionAttachments } from "../question-attachments";
 import { repeatedUserMessages } from "../user-message-presentation";
 import { retriedEditIds as findRetriedEditIds } from "../edit-write-presentation";
-import { planPresentation } from "../plan-presentation";
 
 import { parseSkillBlock } from "../skill-block";
-import { buildCollapsedGroups, isEmptyReply } from "../collapsed-groups";
+import { isEmptyReply } from "../collapsed-groups";
 import { messageTimeGaps } from "../time-gaps";
 import { CollapsedGroup } from "./CollapsedGroup";
 import { LazyMount } from "./LazyMount";
@@ -55,11 +54,11 @@ import { useT } from "../i18n";
 const EMPTY_LIVE = new Map<string, { toolName: string; text: string; codemode?: UiMessage["codemode"] }>();
 
 /**
- * Messages beyond the most recent KEEP_RECENT are rendered as cheap collapsed
- * summary rows (no Markdown / thinking / tool output) until clicked. Only kicks
- * in once the chat grows past COLLAPSE_MIN, so short conversations are untouched.
+ * Messages used to collapse to cheap summary rows beyond the most recent
+ * KEEP_RECENT; history now stays fully rendered by default. Long transcripts
+ * are still kept cheap by the lazy window (LazyMount), which only mounts what
+ * is near the viewport.
  */
-const KEEP_RECENT = 15;
 const COLLAPSE_MIN = 30;
 
 /** 惰性窗口化缓冲带：视口上下各多保留 1200px 的真实内容再开始收起。 */
@@ -224,10 +223,6 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 	const retriedEditIds = useMemo(() => findRetriedEditIds(state.messages, toolResults), [state.messages, toolResults]);
 	// Most streaming frames only add text or arguments; keep the shared map stable
 	// so those frames do not force every historical Message to render again.
-	const planStreamingMessage = state.streamingMessage?.content.some((block) => block.type === "toolCall" && typeof block.id === "string" && toolResults.get(block.id)?.planSnapshot) ? state.streamingMessage : null;
-	const planViews = useMemo(() => planPresentation(
-		planStreamingMessage ? [...state.messages, planStreamingMessage] : state.messages, toolResults, state.conversationId,
-	), [state.messages, planStreamingMessage, toolResults, state.conversationId]);
 	/**
 	 * Original attachments per user question (memoized on the stable messages
 	 * array) — restored in the edit composer because the fork drops the
@@ -250,30 +245,12 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 	const lastUserIndex = state.messages.findLastIndex((message) => message.role === "user");
 	const lastAssistantId = state.messages.findLast((message) => message.role === "assistant")?.id;
 	const lastId = messages.length > 0 ? messages[messages.length - 1].id : null;
-	// Only the last KEEP_RECENT persisted messages are fully rendered; older
-	// ones collapse to summary rows (unless the user expanded them).
+	// History stays expanded: every persisted message is fully rendered. The lazy
+	// window below still decides what is mounted, so long chats stay responsive.
 	const answerRounds = useMemo(() => answerHistory(state.messages), [state.messages]);
 	const historyExpanded = useMemo(() => new Set([...expanded, ...answerRounds.protectedIds]), [expanded, answerRounds]);
-	const foldedAnswers = useMemo(() => {
-		const heads = new Map<string, { ids: string[]; count: number }>();
-		const hidden = new Set<string>();
-		for (const group of answerRounds.groups) {
-			if (group.ids.some(id => expanded.has(id))) continue;
-			heads.set(group.ids[0], group);
-			for (const id of group.ids.slice(1)) hidden.add(id);
-		}
-		return { heads, hidden };
-	}, [answerRounds, expanded]);
-	let recentStart =
-		state.messages.length > COLLAPSE_MIN
-			? Math.max(0, state.messages.length - KEEP_RECENT)
-			: 0;
-	// Keep the owner visible whenever a later invocation is in the recent window.
-	for (const calls of new Set(subagentGroups.values())) {
-		if (calls.length < 2) continue;
-		const indices = calls.map(call => state.messages.findIndex(message => message.content.some(block => block.type === "toolCall" && block.id === call.block.id))).filter(index => index >= 0);
-		if (indices.some(index => index >= recentStart)) recentStart = Math.min(recentStart, ...indices);
-	}
+	const foldedAnswers = useMemo(() => ({ heads: new Map<string, { ids: string[]; count: number }>(), hidden: new Set<string>() }), []);
+	const recentStart = state.messages.length;
 	const settledGroups = useMemo(() => groupBashMessages(state.messages, recentStart, new Set(timeGaps.keys())), [state.messages, recentStart, timeGaps]);
 	const bashGroups = useMemo(() => withStreamingMessage(settledGroups, state.messages, state.streamingMessage), [settledGroups, state.messages, state.streamingMessage]);
 	const commandSummaries = useMemo(() => {
@@ -297,13 +274,9 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 		}
 		return continues;
 	}, [state.messages, state.streamingMessage, bashGroups, emptyReplies]);
-	// 相邻的同角色折叠消息并成一条摘要：一次「想一下 → 调几个工具 → 回话」在
-	// transcript 里是 8 条 assistant 消息，一条一行会把历史区堆成 8 条长得一模
-	// 一样的条带。纯逻辑在 collapsed-groups.ts（有单测）。
-	const collapsed = useMemo(
-		() => buildCollapsedGroups(state.messages, recentStart, historyExpanded, new Set(timeGaps.keys()), new Set([...emptyReplies, ...repeatedUsers.hidden.keys()])),
-		[state.messages, recentStart, historyExpanded, timeGaps, emptyReplies, repeatedUsers],
-	);
+	// 相邻的同角色折叠消息并成一条摘要，仅在折叠区生效；历史已恒为展开，所以
+	// 这里只需要一份空结果，保留调用点结构以兼容惰性窗口。
+	const collapsed = useMemo(() => ({ groupAt: new Map<number, UiMessage[]>(), absorbed: new Set<number>() }), []);
 
 	// ---- 惰性窗口化（lazy windowing，纯函数见 lazy-window.ts）----------------
 	// 视口缓冲带之外的重型消息替换为等高占位 div；滚动临近时换回真实内容并
@@ -315,15 +288,11 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 	/** 已实测的消息高度（隐藏时用作占位高度）。 */
 	const heightsRef = useRef(scrollPositions.get(state.conversationId)?.heights ?? new Map<string, number>());
 	// Newly received old rows start as placeholders, even when the first
-	// snapshot arrives after mount. Do not build thousands of summary DOMs
-	// just to measure and immediately remove them.
-	const hidden = useMemo(() => {
-		const next = new Set(hiddenState);
-		for (const message of state.messages.slice(0, recentStart)) {
-			if (!heightsRef.current.has(message.id)) next.add(message.id);
-		}
-		return next;
-	}, [hiddenState, state.messages, recentStart]);
+	// snapshot arrives after mount. Do not build thousands of DOM rows just to
+	// measure and immediately remove them. History is always expanded now, so
+	// recentStart === messages.length and this seeding is a no-op: everything
+	// stays mounted on first paint and the viewport sweep decides what to hide.
+	const hidden = useMemo(() => hiddenState, [hiddenState]);
 	/** 所有受管外层元素（sweep 测量用；挂载时注册，消息移除时清理）。 */
 	const elsRef = useRef(new Map<string, HTMLDivElement>());
 	const sweepRafRef = useRef(0);
@@ -619,9 +588,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 			if (id && messages.some((message) => message.id === id)) jumpTo(id);
 		};
 		const onToolJump = (event: Event) => {
-			let { messageId, toolCallId, todoItemIds } = (event as CustomEvent<{ messageId?: string; toolCallId?: string; todoItemIds?: string[] }>).detail ?? {};
-			const todo = toolCallId ? planViews.get(toolCallId) : undefined;
-			if (todo?.target) ({ messageId, toolCallId } = todo.target);
+			let { messageId, toolCallId } = (event as CustomEvent<{ messageId?: string; toolCallId?: string }>).detail ?? {};
 			const group = toolCallId ? subagentGroups.get(toolCallId) : undefined;
 			if (group && group.length > 1) messageId = messages.find(message => message.content.some(block => block.type === "toolCall" && block.id === group[0].block.id))?.id ?? messageId;
 			if (!messageId || !toolCallId || !messages.some((message) => message.id === messageId)) return;
@@ -631,17 +598,6 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 				requestAnimationFrame(() => {
 				const card = scrollRef.current?.querySelector<HTMLElement>(`[data-tool-call-id="${CSS.escape(toolCallId)}"]`);
 				if (!card) return;
-				if (todoItemIds?.length) {
-					scrollRef.current?.querySelectorAll(".todo-item-flash").forEach((node) => node.classList.remove("todo-item-flash"));
-					const rows = Array.from(card.querySelectorAll<HTMLElement>("[data-todo-item-id]")).filter((row) => todoItemIds.includes(row.dataset.todoItemId ?? ""));
-					if (rows.length) {
-						rows[0].focus({ preventScroll: true });
-						rows[0].scrollIntoView({ block: "center" });
-						for (const row of rows) { void row.offsetWidth; row.classList.add("todo-item-flash"); }
-						window.setTimeout(() => rows.forEach((row) => row.classList.remove("todo-item-flash")), 1800);
-						return;
-					}
-				}
 				card.scrollIntoView({ block: "center" });
 				card.classList.remove("change-card-flash");
 				void card.offsetWidth;
@@ -653,7 +609,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 		window.addEventListener("pi:jump-message", onTaskJump);
 		window.addEventListener("pi:jump-tool", onToolJump);
 		return () => { window.removeEventListener("pi:jump-message", onTaskJump); window.removeEventListener("pi:jump-tool", onToolJump); };
-	}, [jumpTo, messages, planViews, subagentGroups]);
+	}, [jumpTo, messages, subagentGroups]);
 
 	const onScroll = useCallback(() => {
 		const el = scrollRef.current;
@@ -864,7 +820,6 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 							qnActive={qIdx !== undefined ? qIdx === activeIdx : undefined}
 							onJump={jumpTo}
 							toolResults={toolResults}
-							planViews={planViews}
 							retriedEditIds={retriedEditIds}
 							liveOutputs={hasToolCall(m) ? liveOutputs : EMPTY_LIVE}
 							toolStatuses={toolStatuses}
@@ -904,7 +859,6 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 						message={bashGroups.projected.get(state.streamingMessage.id) ?? state.streamingMessage}
 						continuation={!!predecessors.get(state.streamingMessage.id)}
 						toolResults={toolResults}
-						planViews={planViews}
 						retriedEditIds={retriedEditIds}
 						liveOutputs={
 							hasToolCall(state.streamingMessage) ? liveOutputs : EMPTY_LIVE

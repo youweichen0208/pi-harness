@@ -3,22 +3,21 @@ import { FiDatabase, FiList, FiUsers, FiServer, FiCode, FiSearch } from "react-i
 import { useT } from "../i18n";
 import { withToken } from "../auth-token";
 import { getClientId } from "../use-chat";
-import type { BuiltinExtensionsRequest, BuiltinExtensionsState, PlanSettingsState } from "../types";
+import type { BuiltinExtensionsRequest, BuiltinExtensionsState } from "../types";
 
 const labels = {
 	"pi-harness-database": ["dbTitle", "dbExtensionHint"],
-	"pi-harness-plan": ["builtinPlan", "builtinPlanHint"],
 	"pi-harness-subagents": ["builtinSubagents", "builtinSubagentsHint"],
 	mcp: ["builtinMcp", "builtinMcpHint"],
 	codemode: ["builtinCodemode", "builtinCodemodeHint"],
 	"tool-search": ["builtinSearch", "builtinSearchHint"],
 } as const;
 
-const icons = { "pi-harness-database": FiDatabase, "pi-harness-plan": FiList, "pi-harness-subagents": FiUsers, mcp: FiServer, codemode: FiCode, "tool-search": FiSearch };
+const icons = { "pi-harness-database": FiDatabase, "pi-harness-subagents": FiUsers, mcp: FiServer, codemode: FiCode, "tool-search": FiSearch };
 
-export function BuiltinExtensionsPanel({ cwd, conversationId, ready, canReload, plan, togglePlan, reload, openNative }: {
-	cwd: string; conversationId: string; ready: boolean; canReload: boolean; plan?: PlanSettingsState;
-	togglePlan: (enabled: boolean) => void; reload: () => void; openNative: () => void;
+export function BuiltinExtensionsPanel({ cwd, conversationId, ready, canReload, reload, openNative }: {
+	cwd: string; conversationId: string; ready: boolean; canReload: boolean;
+	reload: () => void; openNative: () => void;
 }) {
 	const t = useT();
 	const [state, setState] = useState<BuiltinExtensionsState>();
@@ -63,22 +62,20 @@ export function BuiltinExtensionsPanel({ cwd, conversationId, ready, canReload, 
 		<div className="ext-list">{state?.items.map(item => {
 			const [title, description] = labels[item.id];
 			const Icon = icons[item.id];
-			const planItem = item.id === "pi-harness-plan" ? plan : undefined;
-			const status = planItem ? !planItem.available ? "unavailable" : planItem.pending ? "pending" : planItem.effective ? "loaded" : "disabled" : item.status;
+			const status = item.status;
 			const documentItem = item.id === "pi-harness-database" || item.id === "pi-harness-subagents";
 			const version = item.settingsVersion ?? state.documentVersion;
 			return <article className="ext-row builtin-row" key={item.id} data-builtin-id={item.id}>
 				<span className="builtin-icon" aria-hidden="true"><Icon /></span><div className="builtin-row-content"><div className="builtin-row-head"><div><strong>{t(title)}</strong><p className="settings-description">{t(description)}</p></div>
 					<span className="builtin-status" data-status={status}>{t(({ loaded: "builtinLoaded", disabled: "builtinDisabled", pending: "builtinPending", unavailable: "builtinUnavailable", error: "builtinError" } as const)[status])}</span>
 					{documentItem ? <input className="ext-switch" type="checkbox" role="switch" aria-label={`${t("extEnable")} ${t(title)}`} checked={item.enabled ?? false} disabled={busy || !ready || !version || item.enabled === undefined} onChange={event => void change({ action: "builtin-toggle", conversationId, id: item.id as "pi-harness-database" | "pi-harness-subagents", enabled: event.target.checked, version: version! })} />
-						: planItem ? <input className="ext-switch" type="checkbox" role="switch" aria-label={t("planEnabled")} checked={planItem.enabled} disabled={!ready} onChange={event => togglePlan(event.target.checked)} />
-						: item.id !== "pi-harness-plan" && <button onClick={openNative}>{t("builtinSettings")}</button>}
+						: <button onClick={openNative}>{t("builtinSettings")}</button>}
 				</div>
 				{item.error && <p className="ext-error">{item.error}</p>}
 				{item.reason && <p className="settings-description">{t(item.reason === "conflict" ? "builtinConflict" : item.reason === "filtered" ? "builtinFiltered" : "builtinMissing")}</p>}
-				{status === "pending" && <p className="settings-description">{t(planItem ? "planPending" : "builtinReloadHint")}</p>}
+				{status === "pending" && <p className="settings-description">{t("builtinReloadHint")}</p>}
 				<details><summary>{t("extDetails")}</summary>
-					{(documentItem || planItem) && <p>{t(planItem ? "planEnabledHint" : "builtinDocumentScope")}</p>}
+					{documentItem && <p>{t("builtinDocumentScope")}</p>}
 					<p>{t("builtinTools")}: <code>{item.tools.join(", ") || "—"}</code></p>
 					{item.commands.length > 0 && <p>{t("builtinCommands")}: <code>{item.commands.map(command => `/${command}`).join(", ")}</code></p>}
 					{documentItem && <button disabled={busy || !ready || !canReload || !state.canReload} onClick={reload}>{t("extReload")}</button>}

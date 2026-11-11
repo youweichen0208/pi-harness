@@ -43,8 +43,6 @@ const ALL = [
 	"context-eval-test",
 	"context-session-test",
 	"context-pi-model-test",
-	"plan-sdk-test",
-	"plan-settings-test",
 	"app-updater-test",
 	"desktop-server-auth-test",
 	"client-eviction-test",

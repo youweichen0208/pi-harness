@@ -6,7 +6,6 @@ import {join} from 'node:path';
 import {chromium} from 'playwright-core';
 import {CHROME_PATH} from './lib/chrome.mjs';
 import {startIsolatedHarness} from './lib/isolated-server.mjs';
-import {transition} from '../dist/server/plan/state.js';
 import {deriveTaskProgress} from '../dist/server/task-progress.js';
 const root=mkdtempSync(join(tmpdir(),'pi-chat-optimization-'));
 const command=`cd ${root} && export PATH="/opt/bin:$PATH" && MODE=test pytest -q --require-postgres`;
@@ -16,10 +15,7 @@ const prose='One failure — expected, since I changed the readiness contract. L
 const text=(id,body)=>({id,role:'assistant',timestamp:at+1000,content:[{type:'text',text:body}]});
 const call=(id,cmd)=>({id:'a-'+id,role:'assistant',timestamp:at+2000,content:[{type:'toolCall',id,name:'bash',argumentsText:JSON.stringify({command:cmd})}]});
 const result=id=>({id:'r-'+id,role:'toolResult',toolName:'bash',toolCallId:id,durationMs:1500,content:[{type:'text',text:'12 passed'}]});
-const plan=transition({action:'create',title:'Verify readiness',steps:[{id:'one',title:'Update contract'},{id:'two',title:'Run tests'},{id:'three',title:'Review changes'}],completedStepIds:['one'],currentStepId:'two'},undefined,()=> 'fixture-plan');
 const messages=[user,text('intro','Confirmed. Let me implement the degraded state.'),call('single',command),result('single'),text('prose',prose),
-	{id:'plan-call',role:'assistant',timestamp:at+3000,content:[{type:'toolCall',id:'plan',name:'plan',argumentsText:'{}'}]},
-	{id:'plan-result',role:'toolResult',toolCallId:'plan',toolName:'plan',content:[{type:'text',text:'Recorded'}],planSnapshot:plan},
 	call('first','grep -rn readiness services/alpha-engine'),result('first'),call('live','pytest -q --require-postgres --tb=short')];
 let harness,browser;
 try {

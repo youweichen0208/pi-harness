@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { chromium } from 'playwright-core';
 import { CHROME_PATH } from './lib/chrome.mjs';
 import { portUp } from './lib/port-utils.mjs';
+import { openKnowledge } from './lib/open-knowledge.mjs';
 import { testEnv } from "./lib/test-env.mjs";
 
 const port = 9319;
@@ -27,8 +28,9 @@ try {
 	page.setDefaultTimeout(10000);
 	await page.goto(`http://127.0.0.1:${port}`);
 	await page.locator('.conn-dot.ok').first().waitFor({ state: 'attached' });
+	await page.locator('.setup-modal .modal-close').click({ timeout: 3000 }).catch(() => {});
 	const popup = page.context().waitForEvent('page');
-	await page.locator('.file-name', { hasText: 'note.md' }).click();
+	await openKnowledge(page, base, 'note.md');
 	page = await popup;
 	page.setDefaultTimeout(10000);
 	const editor = page.locator('.wiki-prose .fp-rich-document');
@@ -80,14 +82,11 @@ try {
 	await editor.locator('h2').last().fill('Second updated');
 	await outline.locator('.wiki-outline-link', {hasText:'Second updated'}).waitFor();
 	assert.equal(await fold('First').getAttribute('aria-expanded'), 'false');
-	await page.locator('.wiki-source-toggle').click();
-	await outline.locator('p').waitFor();
-	await page.locator('.wiki-source-toggle').click();
-	await editor.waitFor();
-	await page.waitForFunction(() => document.querySelectorAll('.wiki-outline-link').length === 7);
+	// Source mode is gone: the rich editor is the only body, and it saves directly.
+	assert.equal(await page.locator('.wiki-source-toggle').count(), 0);
 	await page.keyboard.press('ControlOrMeta+s');
 	await page.locator('.wiki-save-status.saved').waitFor();
-	assert(!readFileSync(join(base,'note.md'),'utf8').includes('wiki-outline'));
+	assert(readFileSync(join(base,'note.md'),'utf8').includes('Second updated'));
 	await fold('First').click();
 	await page.locator('.wiki-tree-row[title="table.md"]').click();
 	await page.waitForFunction(() => document.querySelector('.wiki-outline-link')?.textContent === 'Table');

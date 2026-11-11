@@ -45,11 +45,9 @@ import { isRasterImage, fileToProcessedImage } from "../image-paste";
 import { splitFrontmatter } from "../read-presentation";
 import { questionPreviewText } from "../question-markers";
 import { preserveUserTree } from "../user-message-presentation";
-import type { PlanPresentation } from "../plan-presentation";
 import { BashGroup, latestAttemptStates, stateOf } from "./BashGroup";
 import { emptyProcessStats, ProcessGroup, type ProcessStats } from "./ProcessGroup";
 import { WorkspacePathContext } from "../workspace-context";
-import { PlanChecklist } from "./PlanChecklist";
 
 /** 编辑重问编辑器里直接拖入/粘贴文件的上限（与服务端 MAX_UPLOAD_BYTES 一致）。 */
 const MAX_EDIT_UPLOAD_BYTES = 20 * 1024 * 1024;
@@ -129,7 +127,6 @@ interface MessageProps {
 	toolsRunning?: boolean;
 	bashActive?: boolean;
 	toolMessageIds?: ReadonlyMap<string, string>;
-	planViews?: ReadonlyMap<string, PlanPresentation>;
 	continuation?: boolean;
 	conversationId?: string;
 	message: UiMessage;
@@ -188,7 +185,6 @@ export const Message = memo(function Message({
 	toolsRunning,
 	bashActive,
 	toolMessageIds,
-	planViews,
 	continuation,
 	conversationId,
 	message,
@@ -268,7 +264,7 @@ export const Message = memo(function Message({
 	// (otherwise the same output shows twice: formatted card + plain text).
 	if (message.role === "toolResult") return null;
 	if (message.role === "custom" && message.customType === "acp-delegate") return <DelegateNotification message={message} />;
-	if (message.origin === "auto-reminder") return <div className="tool-reminder-event" data-msg-id={message.id} title={message.content.map(b => b.type === "text" ? b.text : "").join("\n")}><span>↻ {t(message.role === "custom" ? "planReminderEvent" : "toolReminderEvent")}{message.timestamp ? ` · ${formatTime(message.timestamp)}` : ""}</span></div>;
+	if (message.origin === "auto-reminder") return <div className="tool-reminder-event" data-msg-id={message.id} title={message.content.map(b => b.type === "text" ? b.text : "").join("\n")}><span>↻ {t("toolReminderEvent")}{message.timestamp ? ` · ${formatTime(message.timestamp)}` : ""}</span></div>;
 	// SDK system messages are system-prompt snapshots: one quiet divider, not a chat row (3a).
 	if (message.role === "system") return <SystemEvent message={message} />;
 	// Attached files are rendered as their own collapsible card, separate from
@@ -406,11 +402,6 @@ export const Message = memo(function Message({
 			const block = message.content[i];
 			if (skipText && block.type === "text") continue;
 			const first = asToolCall(block);
-			const planView = first && planViews?.get(first.id);
-			if (first && planView) {
-				push(<PlanChecklist key={first.id} toolCallId={first.id} view={planView} />);
-				continue;
-			}
 			if (first?.name === "write" || first?.name === "edit") {
 				const changes: UiToolCallBlock[] = [first];
 				while (i + 1 < message.content.length) {
@@ -882,12 +873,13 @@ function stripFileWrapper(text: string): string {
 /**
  * Compact collapsible card for a skill invocation (the SDK's /skill:name
  * expansion) — the web counterpart of the CLI's SkillInvocationMessageComponent.
- * Collapsed shows a book icon + skill name + file path, expanded shows the
+ * Open by default so the invoked instructions are visible without a click;
+ * collapsed shows a book icon + skill name + file path, expanded shows the
  * full SKILL.md content. The user's own question (args) renders separately.
  */
 function SkillCard({ block }: { block: SkillBlock }) {
 	const t = useChatT();
-	const [expanded, setExpanded] = useState(false);
+	const [expanded, setExpanded] = useState(true);
 	const content = splitFrontmatter(block.content);
 	return (
 		<div className={`skillcard${expanded ? " expanded" : ""}`}>

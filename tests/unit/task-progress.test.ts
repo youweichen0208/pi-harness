@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import type { PlanSnapshot, UiMessage } from "../../server/protocol.js";
+import type { UiMessage } from "../../server/protocol.js";
 import { deriveTaskProgress } from "../../server/task-progress.js";
 
 const user = (id: string, text: string): UiMessage => ({ id, role: "user", timestamp: 100, content: [{ type: "text", text }] });
@@ -9,7 +9,6 @@ test("a numeric option reply keeps the task intent and never invents a todo plan
 	const messages: UiMessage[] = [user("u1", "实现预算校验并验证"), user("u2", "1"), { id: "a", role: "assistant", content: [{ type: "text", text: "工作区干净。" }, call("r", "read", { path: "README.md" })] }];
 	const task = deriveTaskProgress("c", messages, null, true);
 	expect(task?.title).toBe("实现预算校验并验证");
-	expect(task?.plan).toBeUndefined();
 });
 
 test("server groups narrative and adjacent tools into a stable current step", () => {
@@ -70,63 +69,6 @@ test("a running turn keeps a pending step between completed tools and the next m
 	expect(deriveTaskProgress("c1", messages, null, false, 200)?.status).toBe("done");
 });
 
-test("explicit plan revisions keep added and removed steps visible", () => {
-	const first = { steps: [{ id: "read", title: "读取约定" }, { id: "build", title: "实现服务" }, { id: "test", title: "运行测试" }], currentStepId: "read" };
-	const revised = { steps: [{ id: "read", title: "读取约定" }, { id: "build", title: "实现服务" }, { id: "migration", title: "补迁移" }], currentStepId: "build", completedStepIds: ["read"] };
-	const messages: UiMessage[] = [user("u", "完成服务实现"), { id: "a1", role: "assistant", timestamp: 110, content: [call("p1", "task_plan", first)] }, { id: "r1", role: "toolResult", timestamp: 111, toolCallId: "p1", content: [{ type: "text", text: "Plan recorded" }] }, { id: "a2", role: "assistant", timestamp: 120, content: [call("p2", "task_plan", revised), call("b1", "bash", { command: "npm test" })] }];
-	const task = deriveTaskProgress("c", messages, null, true);
-	expect(task?.plan).toMatchObject({ revision: 2, added: 1, removed: 1 });
-	expect(task?.plan?.items.map(({ id, status, added }) => [id, status, !!added])).toEqual([["read", "done", false], ["build", "running", false], ["migration", "pending", true], ["test", "removed", false]]);
-	expect(task?.steps.flatMap((step) => step.artifacts.map((item) => item.kind))).toEqual(["bash"]);
-});
-
-test("outline metadata and changes persist while tool ownership follows transcript order", () => {
-	const steps = [{ id: "read", title: "读取约定" }, { id: "build", title: "实现服务", detail: "Add service and tests" }, { id: "test", title: "运行测试" }];
-	const plan = { title: "接入子进程", completionCriteria: "真实子进程可用且测试通过", steps, currentStepId: "read" };
-	const messages: UiMessage[] = [user("u", "实现服务"), { id: "a", role: "assistant", timestamp: 110, content: [call("p1", "task_plan", plan), call("read1", "read", { path: "README.md" }), call("p2", "task_plan", { ...plan, currentStepId: "build", completedStepIds: ["read"] }), call("write1", "write", { path: "service.ts" })] }];
-	let task = deriveTaskProgress("c", messages, null, true)!;
-	expect(task.plan).toMatchObject({ title: plan.title, completionCriteria: plan.completionCriteria });
-	expect(task.plan!.items[0].toolCallIds).toEqual(["read1"]);
-	expect(task.plan!.items[1]).toMatchObject({ toolCallIds: ["write1"], detail: "Add service and tests", actions: { write: 1, read: 0 } });
-	const revised = { ...plan, steps: [...steps.slice(0, 2), { id: "schema", title: "修正校验" }, steps[2]], currentStepId: "schema", completedStepIds: ["read", "build"] };
-	messages.push({ id: "a2", role: "assistant", timestamp: 120, content: [call("p3", "task_plan", { ...revised, changeSummary: "新增校验步骤" })] });
-	messages.push({ id: "a3", role: "assistant", timestamp: 130, content: [call("p4", "task_plan", { ...revised, currentStepId: "test", completedStepIds: ["read", "build", "schema"] })] });
-	task = deriveTaskProgress("c", messages, null, true)!;
-	expect(task.plan).toMatchObject({ changeSummary: "新增校验步骤", changes: [{ kind: "added", position: 3, title: "修正校验" }] });
-	messages.push({ id: "error", role: "toolResult", toolCallId: "p3", isError: true, content: [] }, { id: "error2", role: "toolResult", toolCallId: "p4", isError: true, content: [] });
-	expect(deriveTaskProgress("c", messages, null, true)!.plan!.items).toHaveLength(3);
-});
-
-
-test("an unresolved plan validation error cannot turn successful commands into a completed task", () => {
-	const messages: UiMessage[] = [user("u", "Finish implementation"),
-		{ id: "a", role: "assistant", content: [call("bash", "bash", { command: "git diff --check" }), call("plan", "plan", { action: "update", status: "completed" })] },
-		{ id: "rb", role: "toolResult", toolCallId: "bash", content: [{ type: "text", text: "" }] },
-		{ id: "rp", role: "toolResult", toolCallId: "plan", isError: true, content: [{ type: "text", text: "steps is required" }] },
-	];
-	expect(deriveTaskProgress("c", messages, null, true)?.status).toBe("running");
-	expect(deriveTaskProgress("c", messages, null, false)?.status).toBe("failed");
-	expect(deriveTaskProgress("c", [messages[0], { ...messages[1], content: [call("plan", "plan", {})] }, messages[3]], null, false)?.status).toBe("failed");
-});
-
-const snapshot = (overrides: Partial<PlanSnapshot>): PlanSnapshot => ({ schemaVersion: 3, planId: "p1", revision: 1, status: "active", title: "接入服务", steps: [{ id: "s1", title: "读取约定" }, { id: "s2", title: "实现服务" }], currentStepId: "s1", completedStepIds: [], completionCriteria: "测试通过", changes: [], ...overrides });
-const planTurn = (final: PlanSnapshot, outcome: "ok" | "error", calls: { id: string; name: string }[]): UiMessage[] => [user("u", "完成服务实现"),
-	{ id: "a1", role: "assistant", timestamp: 110, content: [call("p1", "plan", { action: "create" }), call("w1", "write", { path: "README.md", content: "x" })] },
-	{ id: "r1", role: "toolResult", toolCallId: "p1", timestamp: 111, planSnapshot: snapshot({}), content: [{ type: "text", text: "Plan p1, revision 1: active." }] },
-	{ id: "r2", role: "toolResult", toolCallId: "w1", timestamp: 112, content: [{ type: "text", text: "done" }] },
-	{ id: "a3", role: "assistant", timestamp: 130, content: [call("p2", "plan", { action: "update" }), ...calls.map(({ id, name }) => call(id, name, name === "bash" ? { command: "npm test" } : { path: "service.ts", content: "x" }))] },
-	{ id: "r3", role: "toolResult", toolCallId: "p2", timestamp: 131, planSnapshot: final, content: [{ type: "text", text: `Plan p1, revision ${final.revision}: ${final.status}.` }] },
-	{ id: "r4", role: "toolResult", toolCallId: "b1", timestamp: 141, ...(outcome === "error" ? { isError: true } : {}), content: [{ type: "text", text: outcome === "error" ? "exit 1" : "48 passed" }] }];
-
-test("issue #63: the projection never infers completion — only a plan call closes the plan", () => {
-	// The settle reminder asks the model to close the plan; a model pausing
-	// for the user may leave it active, and the panel must reflect that.
-	const messages = planTurn(snapshot({ revision: 2, currentStepId: "s2", completedStepIds: ["s1"] }), "ok", [{ id: "b1", name: "bash" }]);
-	const task = deriveTaskProgress("c", messages, null, false)!;
-	expect(task.status).toBe("waiting");
-	expect(task.plan?.status).toBe("active");
-	expect(task.plan?.items.map((item) => item.status)).toEqual(["done", "running"]);
-});
 
 test("a settled call that never received a result concludes its step as failed, not done", () => {
 	const messages: UiMessage[] = [user("u", "跑测试"), { id: "a1", role: "assistant", timestamp: 110, stopReason: "error", content: [call("b1", "bash", { command: "npm test" })] }];
@@ -136,39 +78,30 @@ test("a settled call that never received a result concludes its step as failed, 
 	expect(deriveTaskProgress("c", messages, null, true)!.steps[0].status).toBe("running");
 });
 
-test("issue #63: a failed attributed call keeps the active plan waiting", () => {
-	const messages = planTurn(snapshot({ revision: 2, currentStepId: "s2", completedStepIds: ["s1"] }), "error", [{ id: "b1", name: "bash" }]);
-	const task = deriveTaskProgress("c", messages, null, false)!;
-	expect(task.status).toBe("failed");
-	expect(task.plan?.status).toBe("active");
-	expect(task.plan?.items.map((item) => item.status)).toEqual(["done", "running"]);
-});
-
-test("issue #63: a running step without attributed calls cannot be inferred complete", () => {
-	const messages = planTurn(snapshot({ revision: 2, currentStepId: "s2", completedStepIds: ["s1"] }), "ok", []);
-	const task = deriveTaskProgress("c", messages, null, false)!;
-	expect(task.status).toBe("waiting");
-	expect(task.plan?.status).toBe("active");
-	expect(task.plan?.items.map((item) => item.status)).toEqual(["done", "running"]);
-});
-
-test.each([{ content: [] }, { content: [{ type: "text", text: "Partial report" }] }])("output limit after successful tools is not successful completion (%j)", ({ content }) => {
-	const messages: UiMessage[] = [user("u", "Write a report"),
-		{ id: "a", role: "assistant", content: [call("r", "read", { path: "README.md" })] },
-		{ id: "r", role: "toolResult", toolCallId: "r", content: [{ type: "text", text: "ok" }] },
-		{ id: "limited", role: "assistant", stopReason: "length", content: [{ type: "thinking", thinking: "Thinking" }, ...content] },
+test("a failure the agent retried or worked around does not fail the turn", () => {
+	// The screenshot case: 4 steps, step 1 fails, step 2 succeeds, step 3 fails,
+	// then step 4 runs an exit command that succeeds. The turn ends on success.
+	const messages: UiMessage[] = [user("u1", "优化任务面板"),
+		{ id: "a1", role: "assistant", timestamp: 110, content: [call("b1", "bash", { command: "sed -n 1,60p missing.ts" })] },
+		{ id: "r1", role: "toolResult", timestamp: 111, toolCallId: "b1", isError: true, content: [{ type: "text", text: "No such file" }] },
+		{ id: "a2", role: "assistant", timestamp: 120, content: [call("b2", "bash", { command: "rg -n table web/src" })] },
+		{ id: "r2", role: "toolResult", timestamp: 121, toolCallId: "b2", content: [{ type: "text", text: "found" }] },
+		{ id: "a3", role: "assistant", timestamp: 130, content: [call("b3", "bash", { command: "npm test" })] },
+		{ id: "r3", role: "toolResult", timestamp: 131, toolCallId: "b3", isError: true, content: [{ type: "text", text: "failed" }] },
+		{ id: "a4", role: "assistant", timestamp: 140, content: [call("b4", "bash", { command: "echo exit 0" })] },
+		{ id: "r4", role: "toolResult", timestamp: 141, toolCallId: "b4", content: [{ type: "text", text: "exit 0" }] },
 	];
-	expect(deriveTaskProgress("c", messages, null, false)?.status).toBe("failed");
-	expect(deriveTaskProgress("c", messages, null, true)?.status).toBe("running");
-	expect(deriveTaskProgress("c", [...messages, { id: "finished", role: "assistant", stopReason: "stop", content: [{ type: "text", text: "Complete report" }] }], null, false)?.status).toBe("done");
+	// Step 4 is the latest completed group and it succeeded, so the turn is done
+	// even though steps 1 and 3 failed on the way here.
+	expect(deriveTaskProgress("c1", messages, null, false)?.status).toBe("done");
 });
 
-test("truncation does not complete or rewrite the native plan", () => {
-	const messages = planTurn(snapshot({ revision: 2, currentStepId: "s2", completedStepIds: ["s1"] }), "ok", [{ id: "b1", name: "bash" }]);
-	messages.push({ id: "limited", role: "assistant", stopReason: "length", content: [] });
-	const task = deriveTaskProgress("c", messages, null, false)!;
-	expect(task.status).toBe("failed");
-	expect(task.plan?.status).toBe("active");
-	expect(task.plan?.items.map(item => item.status)).toEqual(["done", "running"]);
-	expect(deriveTaskProgress("c", [user("chat", "Hello"), messages.at(-1)!], null, false)).toBeNull();
+test("a turn that ends on an unrecovered failure stays failed", () => {
+	const messages: UiMessage[] = [user("u1", "跑测试"),
+		{ id: "a1", role: "assistant", timestamp: 110, content: [call("b1", "bash", { command: "ls" })] },
+		{ id: "r1", role: "toolResult", timestamp: 111, toolCallId: "b1", content: [{ type: "text", text: "ok" }] },
+		{ id: "a2", role: "assistant", timestamp: 120, content: [call("b2", "bash", { command: "npm test" })] },
+		{ id: "r2", role: "toolResult", timestamp: 121, toolCallId: "b2", isError: true, content: [{ type: "text", text: "exit 1" }] },
+	];
+	expect(deriveTaskProgress("c1", messages, null, false)?.status).toBe("failed");
 });

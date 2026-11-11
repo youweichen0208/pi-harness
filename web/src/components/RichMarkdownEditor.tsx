@@ -7,6 +7,19 @@ import { editableDisclosures } from "../rich-content";
 import { RichFormattingToolbar } from "./RichFormattingToolbar";
 import { RichLinkCardDialog } from "./RichLinkCardDialog";
 import { decorateWikiTables } from "../wiki-table-presentation";
+import {
+	canRemoveColumn,
+	canRemoveRow,
+	cellAt,
+	cellIndexFor,
+	COLUMN_TARGET_ATTRIBUTE,
+	dataCells,
+	dataColumn,
+	GUTTER_ATTRIBUTE,
+	isGutter,
+	isHeaderRow,
+	ROW_TARGET_ATTRIBUTE,
+} from "../table-geometry";
 import { WikiTableIcon, WikiQuoteIcon } from "./WikiIcons";
 import { WikiToolbar, WikiInsertPopover, type WikiInsertPopup } from "./WikiToolbar";
 import { TableSizePicker } from "./TableSizePicker";
@@ -25,6 +38,36 @@ import { useT } from "../i18n";
 import { LuHeading2, LuHeading3, LuTableOfContents, LuPanelTop, LuInfo, LuLightbulb, LuTriangleAlert, LuChevronsUpDown, LuListOrdered } from "react-icons/lu";
 import { mountRichDocument, prepareRichDocument, readRichDocument, renderToc } from "../rich-markdown";
 import type { RichDocument, RichLabels } from "../rich-markdown";
+
+/** The gutter cell as HTML, for templates that insert a table string. */
+function gutterHtml(): string {
+	return `<td ${GUTTER_ATTRIBUTE}="" data-rich-ui="" contenteditable="false" aria-hidden="true"></td>`;
+}
+
+/**
+ * Give every data row the editor-only row gutter. Header rows keep plain `th`
+ * cells so a header cell can be clicked (select column) and double-clicked
+ * (rename). The gutter carries `data-rich-ui`, which `readRichDocument` strips,
+ * so it never reaches saved Markdown.
+ */
+function syncGutters(table: HTMLTableElement): void {
+	for (const tr of Array.from(table.rows)) {
+		const first = tr.cells[0];
+		if (!first || first.tagName === "TH") {
+			// Header rows (and stray `th` rows) must not carry a gutter: remove one that a
+			// previous edit or a paste left behind, so header and body stay tellable apart.
+			if (first && isGutter(first)) first.remove();
+			continue;
+		}
+		if (isGutter(first)) continue;
+		const gutter = document.createElement("td");
+		gutter.setAttribute(GUTTER_ATTRIBUTE, "");
+		gutter.setAttribute("data-rich-ui", "");
+		gutter.contentEditable = "false";
+		gutter.setAttribute("aria-hidden", "true");
+		tr.prepend(gutter);
+	}
+}
 
 /** An editable landing line outside the final quote/list/code block; empty UI is not saved. */
 function ensureTrailingParagraph(root: HTMLElement): void {
@@ -47,16 +90,36 @@ export interface RichEditorHost {
 	 *  so the Wiki host deliberately gets no Run control. */
 	runCode?: (code: string) => void;
 }
-export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, readOnly, onChange, file = { cwd: "", path: "" }, wiki, host, compact = false }: {
+/**
+ * Document-canvas capabilities, declared by each host. Wiki and the single-document
+ * dialog both render this editor but offer different ones; an absent field means
+ * that host has none of it, so the editor can drop the whole affordance.
+ */
+export interface DocumentHost {
+	/** Mount point for the single-line format/insert toolbar; `variant` picks the skin. */
+	toolbar?: { host: HTMLElement; variant: "wiki" | "compat" };
+	/** Internal link handling; `paths` missing means no `[[` completion is offered. */
+	links?: { paths?: string[]; open: (href: string) => void };
+	/** Ask pi about a selection. Missing means no floating toolbar and no per-code ask button. */
+	ask?: (text: string) => void;
+	/** Standard/wide width toggle. Missing means no width control anywhere. */
+	width?: { focused: boolean; onToggle: () => void };
+	/** Lines pi just added, highlighted in the body. */
+	added?: Set<string>;
+	/** Resolve a code span to a document path; matched spans become links. */
+	resolveCode?: (value: string) => string | undefined;
+}
+export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, readOnly, onChange, file = { cwd: "", path: "" }, documentHost, host, compact = false }: {
 	file?: { cwd: string; path: string };
 	host?: RichEditorHost;
 	compact?: boolean;
-	wiki?: { paths: string[]; ask: (text: string) => void; followLink: (href: string) => void; resolveCode: (value: string) => string | undefined; added: Set<string>; toolbarHost?: HTMLElement | null; focused?: boolean; onWidth?: () => void };
+	documentHost?: DocumentHost;
 	value: string;
 	readOnly: boolean;
 	onChange: (value: string) => void;
 }) {
 	const t = useT();
+	const wiki = documentHost;
 	const [mathInput, setMathInput] = useState<{ source: string; display: boolean } | null>(null);
 	const mathRange = useRef<Range | null>(null);
 	const openMath = (element: HTMLElement) => {
@@ -183,6 +246,23 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		try { localStorage.setItem("pi-wiki-recent-insertions", JSON.stringify(next)); } catch { /* Storage may be unavailable. */ }
 	};
 	const [tableCell, setTableCell] = useState<HTMLTableCellElement | null>(null);
+	// Any click outside the table menu closes it; the menu is a portal, so it is not a
+	// descendant of the editor root.
+	useEffect(() => {
+		if (!tableMenu) return;
+		const dismiss = (event: Event) => {
+			const target = event.target as HTMLElement | null;
+			if (!target?.closest(".fp-table-menu")) setTableMenu(null);
+		};
+		document.addEventListener("mousedown", dismiss);
+		window.addEventListener("resize", dismiss);
+		window.addEventListener("scroll", dismiss, true);
+		return () => {
+			document.removeEventListener("mousedown", dismiss);
+			window.removeEventListener("resize", dismiss);
+			window.removeEventListener("scroll", dismiss, true);
+		};
+	});
 	useEffect(() => {
 		const refresh = () => {
 			const selection = window.getSelection();
@@ -221,13 +301,16 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		const prepared = prepareRichDocument(value, !!wiki);
 		mountRichDocument(root.current, prepared, labels);
 		editableDisclosures(root.current, t("richCollapse"));
+		// Gutters first: every table-derived decoration counts logical columns.
+		root.current.querySelectorAll<HTMLTableElement>("table").forEach(table => syncGutters(table));
 		if (wiki) decorateWikiTables(root.current);
 		if (wiki) {
 			root.current.querySelectorAll<HTMLElement>("pre:has(> code)").forEach(pre => pre.classList.add("codeblock"));
 			root.current.querySelectorAll<HTMLElement>("h2").forEach((heading, index) => { heading.id = `wiki-heading-${index}`; });
-			root.current.querySelectorAll<HTMLElement>("p").forEach(p => { if ([...wiki.added].some(line => line.trim() && p.textContent?.includes(line))) p.classList.add("wiki-added"); });
+			if (wiki.added) root.current.querySelectorAll<HTMLElement>("p").forEach(p => { if ([...wiki.added!].some(line => line.trim() && p.textContent?.includes(line))) p.classList.add("wiki-added"); });
 			root.current.querySelectorAll<HTMLElement>("code").forEach(code => {
-				if (code.closest("pre") || !wiki.resolveCode(code.textContent ?? "")) return;
+				const resolve = wiki?.resolveCode;
+				if (!resolve || code.closest("pre") || !resolve(code.textContent ?? "")) return;
 				const link = document.createElement("a"); link.href = `#wiki=${encodeURIComponent(code.textContent ?? "")}`;
 				link.textContent = code.textContent; code.replaceChildren(link);
 			});
@@ -239,15 +322,19 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		emitted.current = value;
 	}, [value, t]);
 	useLayoutEffect(() => {
-		if (!wiki || !root.current) return;
-		root.current.querySelectorAll<HTMLElement>("p").forEach(p => p.classList.toggle("wiki-added", [...wiki.added].some(line => line.trim() && p.textContent?.includes(line))));
+		const added = wiki?.added;
+		if (!added || !root.current) return;
+		root.current.querySelectorAll<HTMLElement>("p").forEach(p => p.classList.toggle("wiki-added", [...added].some(line => line.trim() && p.textContent?.includes(line))));
 	}, [wiki?.added, value]);
 	useLayoutEffect(() => {
 		root.current?.querySelectorAll<HTMLTableElement>("table").forEach(table => {
+			// Loaded documents, pasted tables and template inserts all need the same
+			// gutter, or the geometry module would mis-read their columns.
+			syncGutters(table);
 			// A table with no data-cell content is an empty template (fresh /table insert
 			// or fully cleared): stretch it across the prose width instead of leaving a
 			// large blank area to its right. Any content shrinks it back.
-			const empty = [...table.querySelectorAll("td")].every(cell => !cell.textContent?.trim() && !cell.querySelector("img, video, audio"));
+			const empty = [...table.querySelectorAll("td")].every(cell => isGutter(cell) || (!cell.textContent?.trim() && !cell.querySelector("img, video, audio")));
 			table.classList.toggle("rich-table-empty", empty);
 		});
 	}, [value]);
@@ -289,9 +376,24 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 				fold.onclick = () => { pre.toggleAttribute("data-wiki-code-folded"); fold!.focus({ preventScroll: true }); updateFold(); };
 				let width = chrome.querySelector<HTMLButtonElement>("[data-code-width]");
 				if (!width) { width = document.createElement("button"); width.type = "button"; width.dataset.codeWidth = ""; width.textContent = "↔"; chrome.append(width); }
-				width.title = t(wiki.focused ? "wikiStandardWidth" : "wikiWideWidth"); width.setAttribute("aria-label", width.title); width.onmousedown = event => event.preventDefault(); width.onclick = () => wiki.onWidth?.();
+				if (wiki.width) {
+					width.hidden = false;
+					width.title = t(wiki.width.focused ? "wikiStandardWidth" : "wikiWideWidth"); width.setAttribute("aria-label", width.title); width.onmousedown = event => event.preventDefault(); width.onclick = () => wiki.width?.onToggle();
+				} else width.hidden = true;
 			} else {
-				pre.querySelector(".wiki-code-gutter")?.remove(); pre.querySelector("[data-code-fold]")?.remove(); pre.querySelector("[data-code-width]")?.remove(); pre.removeAttribute("data-wiki-code-folded");
+				pre.querySelector(".wiki-code-gutter")?.remove(); pre.querySelector("[data-code-fold]")?.remove(); pre.querySelector("[data-code-width]")?.remove(); pre.querySelector("[data-code-ask]")?.remove(); pre.removeAttribute("data-wiki-code-folded");
+			}
+			// Ask pi only exists when the host declares it; hosts without `ask` get no button at all.
+			{
+				const askCode = wiki?.ask;
+				const languageChrome = pre.querySelector<HTMLElement>(".fp-code-language");
+				if (askCode && languageChrome) {
+					let askButton = languageChrome.querySelector<HTMLButtonElement>("[data-code-ask]");
+					if (!askButton) { askButton = document.createElement("button"); askButton.type = "button"; askButton.dataset.codeAsk = ""; languageChrome.append(askButton); }
+					askButton.textContent = t("wikiAskPi"); askButton.title = t("wikiAskPi"); askButton.setAttribute("aria-label", t("wikiAskPi"));
+					askButton.onmousedown = event => event.preventDefault();
+					askButton.onclick = () => askCode(richCodeText(code));
+				} else languageChrome?.querySelector("[data-code-ask]")?.remove();
 			}
 			const detected = code.className.match(/language-([^\s]+)/)?.[1] ?? "";
 			const language = detected === "plaintext" ? "" : detected;
@@ -313,7 +415,7 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 			}
 			paintCode(code, true);
 		});
-	}, [value, readOnly, t, wiki?.focused, host?.runCode]);
+	}, [value, readOnly, t, wiki?.width?.focused, wiki?.width, wiki?.ask, host?.runCode]);
 	useLayoutEffect(() => {
 		root.current?.querySelectorAll<HTMLImageElement>("img").forEach((img) => {
 			const source = img.dataset.richImageSrc ?? img.getAttribute("src") ?? "";
@@ -388,58 +490,115 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		selection?.removeAllRanges(); selection?.addRange(range);
 		setTableCell(cell);
 	};
-	const editTable = (action: "row" | "column" | "removeRow" | "removeColumn" | "removeTable" | "selectTable" | "left" | "center" | "right", target = tableCell) => {
-		if (readOnly || !target || !root.current?.contains(target)) return;
-		const original = target.closest("table")!;
+	/**
+	 * The table target is editor state, not a text range: selecting a row or a
+	 * column must not move the caret or touch the document. Everything the table
+	 * menu acts on is resolved through this one place (see table-geometry.ts for
+	 * why the gutter makes DOM and logical column indexes differ).
+	 */
+	type TableAction = "rowAbove" | "rowBelow" | "columnLeft" | "columnRight" | "removeRow" | "removeColumn" | "removeTable" | "selectTable" | "left" | "center" | "right";
+	type TableTarget = { table: HTMLTableElement; row: number; column: number };
+	const [rowTarget, setRowTarget] = useState<number | null>(null);
+	const [columnTarget, setColumnTarget] = useState<number | null>(null);
+	const [tableMenu, setTableMenu] = useState<{ x: number; y: number; table: HTMLTableElement; row: number; column: number } | null>(null);
+	/** Logical row / column of a cell, resolved through the geometry module. */
+	const locateCell = (cell: HTMLTableCellElement): TableTarget | null => {
+		const table = cell.closest("table");
+		const tr = cell.parentElement;
+		if (!table || !(tr instanceof HTMLTableRowElement)) return null;
+		return { table, row: tr.rowIndex, column: dataColumn(cell, tr) };
+	};
+	/** Highlight the row/column target without touching the text selection. */
+	const paintTableTarget = (table: HTMLTableElement | null, row: number | null, column: number | null) => {
+		setRowTarget(row); setColumnTarget(column);
+		root.current?.querySelectorAll<HTMLElement>(`[${ROW_TARGET_ATTRIBUTE}], [${COLUMN_TARGET_ATTRIBUTE}]`).forEach(node => { node.removeAttribute(ROW_TARGET_ATTRIBUTE); node.removeAttribute(COLUMN_TARGET_ATTRIBUTE); });
+		if (!table) return;
+		if (row !== null) table.rows[row]?.setAttribute(ROW_TARGET_ATTRIBUTE, "");
+		if (column === null) return;
+		for (const tr of Array.from(table.rows)) {
+			const index = cellIndexFor(tr, column);
+			if (index >= 0) tr.cells[index]?.setAttribute(COLUMN_TARGET_ATTRIBUTE, "");
+		}
+	};
+	/** Clear table targeting when the caret leaves the table or the document reloads. */
+	const clearTableTarget = () => { if (rowTarget !== null || columnTarget !== null) paintTableTarget(null, null, null); };
+	const insertRow = (table: HTMLTableElement, at: number, above: boolean) => {
+		const reference = table.rows[at];
+		const added = document.createElement("tr");
+		const gutter = added.insertCell();
+		gutter.setAttribute(GUTTER_ATTRIBUTE, ""); gutter.setAttribute("data-rich-ui", ""); gutter.contentEditable = "false"; gutter.setAttribute("aria-hidden", "true");
+		// One content cell per logical column, which is what the header row holds.
+		for (let index = 0; index < Math.max(1, dataCells(reference).length); index += 1) added.insertCell().append(document.createElement("br"));
+		const body = table.tBodies[0] ?? table.createTBody();
+		if (above && at === 0 && table.tHead) body.prepend(added);
+		else if (above) reference.before(added);
+		else reference.after(added);
+		return table.rows[above ? at : at + 1];
+	};
+	const insertColumn = (table: HTMLTableElement, column: number, left: boolean) => {
+		const rows = Array.from(table.rows);
+		// The header defines the truth; data rows shift by their gutter.
+		for (const tr of rows) {
+			const index = cellIndexFor(tr, column);
+			if (index < 0) continue;
+			const header = isHeaderRow(tr);
+			const cell = document.createElement(header ? "th" : "td");
+			cell.style.textAlign = tr.cells[index].style.textAlign;
+			// An empty header would be serialized as an empty column name; leave it blank
+			// rather than writing the word "Column" into the user's Markdown.
+			cell.append(document.createElement("br"));
+			if (left) tr.cells[index].before(cell); else tr.cells[index].after(cell);
+		}
+		return left ? column : column + 1;
+	};
+	const editTable = (action: TableAction, targetArg?: TableTarget | null) => {
+		const resolved: TableTarget | null = targetArg ?? tableMenu ?? (tableCell ? locateCell(tableCell) : null);
+		if (readOnly || !resolved || !root.current?.contains(resolved.table)) return;
+		const target: TableTarget = resolved;
+		const original = target.table;
 		const table = original.cloneNode(true) as HTMLTableElement;
-		const row = table.rows[(target.parentElement as HTMLTableRowElement).rowIndex];
-		const column = target.cellIndex;
-		let next = row.cells[column];
+		const row = table.rows[target.row];
+		if (!row) return;
+		const column = target.column;
 		if (action === "removeTable" || action === "selectTable") {
 			const range = document.createRange();
 			range.selectNode(original);
 			const selection = window.getSelection();
 			root.current.focus(); selection?.removeAllRanges(); selection?.addRange(range);
-			if (action === "removeTable") { command("delete"); setTableCell(null); }
+			if (action === "removeTable") { command("delete"); paintTableTarget(null, null, null); setTableCell(null); setTableMenu(null); }
 			return;
 		}
 		if (["left", "center", "right"].includes(action)) {
-			for (const current of Array.from(table.rows)) current.cells[column].style.textAlign = action;
-		} else if (action === "row") {
-			const added = document.createElement("tr");
-			for (const header of Array.from(table.rows[0].cells)) {
-				const cell = added.insertCell();
-				cell.style.textAlign = header.style.textAlign;
-				cell.append(document.createElement("br"));
-			}
-			if (row.parentElement?.tagName === "THEAD") (table.tBodies[0] ?? table.createTBody()).prepend(added);
-			else row.after(added);
-			next = added.cells[0];
-		} else if (action === "column") {
-			for (const current of Array.from(table.rows)) {
-				const cell = document.createElement(current.cells[0].tagName === "TH" ? "th" : "td");
-				cell.style.textAlign = current.cells[column].style.textAlign;
-				if (cell.tagName === "TH") cell.textContent = t("richColumn");
-				else cell.append(document.createElement("br"));
-				current.cells[column].after(cell);
-				if (current === row) next = cell;
-			}
+			const index = cellIndexFor(row, column);
+			if (index < 0) return;
+			for (const current of Array.from(table.rows)) current.cells[index]?.style.setProperty("text-align", action);
+		} else if (action === "rowAbove" || action === "rowBelow") {
+			insertRow(table, target.row, action === "rowAbove");
+		} else if (action === "columnLeft" || action === "columnRight") {
+			insertColumn(table, column, action === "columnLeft");
 		} else if (action === "removeRow") {
-			if (row.rowIndex === 0 || table.rows.length <= 2) return;
-			next = table.rows[row.rowIndex - 1].cells[column];
+			if (!canRemoveRow(table.rows, target.row)) return;
 			row.remove();
-		} else {
-			if (row.cells.length <= 1) return;
-			next = row.cells[column > 0 ? column - 1 : 1];
-			for (const current of Array.from(table.rows)) current.deleteCell(column);
+		} else if (action === "removeColumn") {
+			if (!canRemoveColumn(row)) return;
+			for (const current of Array.from(table.rows)) { const index = cellIndexFor(current, column); if (index >= 0) current.deleteCell(index); }
 		}
-		const rowIndex = (next.parentElement as HTMLTableRowElement).rowIndex, cellIndex = next.cellIndex;
+		// Land the caret on a content cell, never the gutter: inserting a row focuses its
+		// first data cell, inserting a column focuses the first data cell of that column.
+		const nextRow = action === "removeRow" ? Math.max(isHeaderRow(table.rows[0]) ? 1 : 0, Math.min(target.row, table.rows.length - 1)) : (action === "rowAbove" || action === "rowBelow") ? (action === "rowAbove" ? target.row : target.row + 1) : target.row;
+		const nextColumn = action === "removeColumn" ? Math.max(0, Math.min(column, dataCells(table.rows[nextRow] ?? row).length - 1)) : (action === "columnLeft" ? column : action === "columnRight" ? column + 1 : column);
 		table.dataset.richTableChange = "";
 		const range = document.createRange(); range.selectNode(original);
 		root.current.focus(); const selection = window.getSelection(); selection?.removeAllRanges(); selection?.addRange(range);
 		command("insertHTML", table.outerHTML);
+		setTableMenu(null);
 		const inserted = root.current.querySelector<HTMLTableElement>("[data-rich-table-change]");
-		if (inserted) { inserted.removeAttribute("data-rich-table-change"); focusCell(inserted.rows[rowIndex].cells[cellIndex]); }
+		if (inserted) {
+			inserted.removeAttribute("data-rich-table-change");
+			syncGutters(inserted);
+			const landing = cellAt<HTMLTableCellElement>(inserted.rows[Math.min(nextRow, inserted.rows.length - 1)], Math.max(0, nextColumn));
+			if (landing) focusCell(landing);
+		}
 		update();
 	};
 	const uploadImageData = async (data: string, signal: AbortSignal): Promise<string> => {
@@ -487,6 +646,9 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 	const update = () => {
 		if (readOnly || !root.current || !documentState.current) return;
 		editableDisclosures(root.current, t("richCollapse"));
+		// A structural edit replaces the whole table element, so gutters must exist
+		// before anything keyed off logical columns runs.
+		root.current.querySelectorAll<HTMLTableElement>("table").forEach(table => syncGutters(table));
 		if (wiki) decorateWikiTables(root.current);
 		root.current.querySelectorAll<HTMLElement>(".rich-table-boundary").forEach(paragraph => {
 			if (paragraph.textContent || paragraph.querySelector("img, table, pre")) paragraph.classList.remove("rich-table-boundary");
@@ -559,7 +721,7 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		{ label: "richMath", alias: "math", keywords: "math latex formula 公式 数学", action: "math" },
 		{ label: "richLinkCard", alias: "card", keywords: "card link 卡片 链接", action: "card" },
 		{ label: "wikiAddLink", alias: "link", keywords: "url link 链接", action: "link" },
-		{ label: "richTable", alias: "bg", keywords: "table bg biaoge 表格", action: "insertHTML", argument: `<table><thead><tr><th data-slash-insert>${t("richColumn")} 1</th><th>${t("richColumn")} 2</th></tr></thead><tbody><tr><td>…</td><td>…</td></tr></tbody></table><p><br></p>` },
+		{ label: "richTable", alias: "bg", keywords: "table bg biaoge 表格", action: "insertHTML", argument: `<table><thead><tr><th data-slash-insert>${t("richColumn")} 1</th><th>${t("richColumn")} 2</th></tr></thead><tbody><tr>${gutterHtml()}<td>…</td><td>…</td></tr></tbody></table><p><br></p>` },
 		{ label: "richList", alias: "lb", keywords: "bullet list lb liebiao wxlb wuxuliebiao 列表 无序列表", action: "insertUnorderedList" },
 		{ label: "richOrderedList", alias: "bh", keywords: "number ordered bh bianhao yxlb youxuliebiao 编号 有序列表", action: "insertOrderedList" },
 		{ label: "richTaskList", alias: "rw", keywords: "task todo checkbox rw rwlb renwu renwuliebiao 任务", action: "insertHTML", argument: '<ul><li><input type="checkbox"><span data-slash-insert> </span></li></ul><p><br></p>' },
@@ -570,7 +732,10 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		{ label: "richWikiLink", alias: "sl", keywords: "wiki link document sl shuanglian 链接 双链 文档", action: "wikiLink" },
 			{ label: "wikiMentionDate", alias: "date", keywords: "date mention riqi 日期", action: "insertText", get argument() { return new Date().toLocaleDateString("sv-SE"); } }, // read at insert time, not render time
 	] as const;
-	const wikiOrder = ["zw", "bt1", "bt2", "bt3", "bt4", "bt5", "bt6", "lb", "bh", "rw", "link", "dmk", "tp", "bg", "yy", "fgx", "date", "sl", "ml", "glk", "tip", "warning", "collapse", "card", "math"];
+	// Palette order: the six shapes people reach for most stay above the fold; H4–H6 live in the
+	// toolbar overflow menu instead of taking a row here (both entries insert the same blocks).
+	const paletteOrder = ["zw", "bt1", "bt2", "bt3", "lb", "bh", "rw", "link", "dmk"];
+	const wikiOrder = [...paletteOrder, "tp", "bg", "yy", "fgx", "date", "sl", "ml", "glk", "tip", "warning", "collapse", "card", "math"];
 	const items = wiki ? allItems.filter(item => wikiOrder.includes(item.alias)).sort((a, b) => wikiOrder.indexOf(a.alias) - wikiOrder.indexOf(b.alias)) : allItems.filter(item => !["date", "sl", "ml"].includes(item.alias));
 	const icons = { richMath: <FiCode />, richGreenBlock: wiki ? <LuLightbulb /> : <FiSquare />, richYellowBlock: wiki ? <LuTriangleAlert /> : <FiSquare />, richCollapse: wiki ? <LuChevronsUpDown /> : <FiSquare />, richLinkCard: wiki ? <LuPanelTop /> : <FiLink />, wikiAddLink: <FiLink />, wikiMentionDate: <FiCalendar />, richImage: <FiImage />, richWikiLink: <FiLink />, richHighlightBlock: wiki ? <LuInfo /> : <FiSquare />, richHeading: <FiType />, richParagraph: <FiType />, richCodeBlock: <FiCode />, richTable: <WikiTableIcon />, richList: <FiList />, richOrderedList: wiki ? <LuListOrdered /> : <FiList />, richTaskList: <FiCheckSquare />, richQuote: <WikiQuoteIcon />, richDivider: <FiMinus />, richTocInsert: <LuTableOfContents /> };
 	const itemLabel = (item: typeof items[number]) => item.label === "richHeading" ? `${t(item.label)} ${"argument" in item ? item.argument.slice(1) : ""}` : t(item.label);
@@ -613,10 +778,11 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		if (id === "card") { cardRange.current = window.getSelection()?.getRangeAt(0).cloneRange() ?? null; setCardOpen(true); return; }
 		if (id === "link") { linkRange.current = window.getSelection()?.getRangeAt(0).cloneRange() ?? null; setLinkInput(""); return; }
 		if (id === "bg" && dimensions) {
-			command("insertHTML", `<table><thead><tr>${Array.from({ length: dimensions.columns }, (_, i) => `<th ${i === 0 ? 'data-slash-insert' : ''}>${t("richColumn")} ${i + 1}</th>`).join('')}</tr></thead><tbody>${Array.from({ length: dimensions.rows - 1 }, () => `<tr>${'<td><br></td>'.repeat(dimensions.columns)}</tr>`).join('')}</tbody></table><p><br></p>`);
+			command("insertHTML", `<table><thead><tr>${Array.from({ length: dimensions.columns }, (_, i) => `<th ${i === 0 ? 'data-slash-insert' : ''}>${t("richColumn")} ${i + 1}</th>`).join('')}</tr></thead><tbody>${Array.from({ length: dimensions.rows - 1 }, () => `<tr>${gutterHtml()}${'<td><br></td>'.repeat(dimensions.columns)}</tr>`).join('')}</tbody></table><p><br></p>`);
 		} else if (id === "dmk") command("insertHTML", `<pre><code data-slash-insert class="language-${language || 'plaintext'}">${language === 'mermaid' ? 'flowchart LR\n  A --> B' : '<br>'}</code></pre><p><br></p>`);
 		else {
-			const item = items.find(item => item.alias === id); if (!item) return;
+			// H4–H6 are not in the palette but the toolbar overflow still inserts them.
+			const item = items.find(item => item.alias === id) ?? allItems.find(item => item.alias === id); if (!item) return;
 			if (item.action === "card" || item.action === "link" || item.action === "math") return;
 			if (item.action === "image") { imageRange.current = window.getSelection()?.getRangeAt(0).cloneRange() ?? null; imageInput.current?.click(); return; }
 			if (item.action === "toc") { insertToc(); return; }
@@ -640,7 +806,12 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 	const format = (action: string, argument?: string) => {
 		const selection = window.getSelection(); const node = selection?.anchorNode;
 		const element = node instanceof HTMLElement ? node : node?.parentElement;
-		if (action === "text-align" && selectedCell() && ["left", "center", "right"].includes(argument ?? "")) { editTable(argument as "left" | "center" | "right", selectedCell()); return; }
+		// Aligning inside a table selects the whole column's cells; anywhere else the
+		// generic block path below applies. Fall through when the cell cannot be located.
+		if (action === "text-align" && selectedCell() && ["left", "center", "right"].includes(argument ?? "")) {
+			const cell = selectedCell()!, located = locateCell(cell);
+			if (located && located.column >= 0) { editTable(argument as "left" | "center" | "right", located); return; }
+		}
 		if (action === "task") { insertToolbar("rw"); return; }
 		if (action === "highlight") { const color = TEXT_HIGHLIGHT_COLORS.find(c => c.name === argument); command("hiliteColor", color?.hex ?? "transparent"); return; }
 		if (["font-size", "color"].includes(action)) { styledSelection(`${action}: ${argument}`); return; }
@@ -745,7 +916,7 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		if (item.action === "image") { imageRange.current = selection?.getRangeAt(0).cloneRange() ?? null; imageInput.current?.click(); update(); return; }
 		if (item.action === "wikiLink") { linkRange.current = selection?.getRangeAt(0).cloneRange() ?? null; setLinkInput("[["); update(); return; }
 		if (item.action === "toc") { insertToc(); return; }
-		if (wiki && item.alias === "bg") command("insertHTML", `<table><thead><tr>${[1, 2, 3].map(n => `<th ${n === 1 ? "data-slash-insert" : ""}>${t("richColumn")} ${n}</th>`).join("")}</tr></thead><tbody>${[1, 2].map(() => "<tr><td>…</td><td>…</td><td>…</td></tr>").join("")}</tbody></table><p><br></p>`);
+		if (wiki && item.alias === "bg") command("insertHTML", `<table><thead><tr>${[1, 2, 3].map(n => `<th ${n === 1 ? "data-slash-insert" : ""}>${t("richColumn")} ${n}</th>`).join("")}</tr></thead><tbody>${[1, 2].map(() => `<tr>${gutterHtml()}<td>…</td><td>…</td><td>…</td></tr>`).join("")}</tbody></table><p><br></p>`);
 		else command(item.action, "argument" in item ? item.argument : undefined);
 		// Inserted composite blocks carry an explicit caret target; formatBlock retains its native selection.
 		const target = root.current.querySelector("[data-slash-insert]");
@@ -816,12 +987,12 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 	};
 
 	return <div className="fp-rich-editor" onScrollCapture={(event) => { if (!(event.target as HTMLElement).closest(".fp-slash-menu")) { if (menu) inspectSlash(false); } }}>
-		{wiki?.toolbarHost && createPortal(<WikiToolbar readOnly={readOnly} focused={!!wiki.focused} onWidth={wiki.onWidth ?? (() => {})} items={items.map(item => ({ id: item.alias, label: itemLabel(item), hint: hints[item.alias] ?? "", help: t(help[item.alias] ?? item.label), icon: icons[item.label] }))} editor={root.current} commands={commands} />, wiki.toolbarHost)}
+		{wiki?.toolbar?.host && createPortal(<WikiToolbar readOnly={readOnly} focused={!!wiki.width?.focused} onWidth={wiki.width?.onToggle ?? (() => {})} items={items.map(item => ({ id: item.alias, label: item.label === "richHeading" ? `${t("richHeading")} ${"argument" in item ? item.argument.slice(1) : ""}` : itemLabel(item), hint: hints[item.alias] ?? "", help: t(help[item.alias] ?? item.label), icon: item.label === "richHeading" ? <span className="wiki-heading-icon">{`H${"argument" in item ? item.argument.slice(1) : ""}`}</span> : icons[item.label] }))} editor={root.current} commands={commands} />, wiki.toolbar.host)}
 		{diagrams.map(({ host, code }, index) => createPortal(<MermaidDiagram code={code} />, host, String(index)))}
 		{insertPopup && !readOnly && <WikiInsertPopover popup={insertPopup} onClose={() => { setInsertPopup(null); restoreInsert(); }}>
 			<TableSizePicker onInsert={(columns, rows) => insertToolbar("bg", { columns, rows })} />
 		</WikiInsertPopover>}
-		{!wiki && !readOnly && <RichFormattingToolbar compact={compact} commands={commands} onFold={foldSelection} />}
+		{!wiki?.toolbar && !readOnly && <RichFormattingToolbar compact={compact} commands={commands} onFold={foldSelection} />}
 		{cardOpen && <RichLinkCardDialog onClose={() => setCardOpen(false)} onInsert={async (card, signal) => {
 			const range = cardRange.current, editor = root.current;
 			if (!range || !editor?.contains(range.startContainer) || readOnlyRef.current) throw Error();
@@ -838,8 +1009,8 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 
 		{uploading && <div className="fp-notice" role="status">{t("richImageUploading")}</div>}
 		{imageError && <div className="fp-notice" role="alert">{imageError}</div>}
-		{wiki && floating && linkInput === null && createPortal(<div ref={floatingToolbar} className="wiki-format-popover" role="toolbar" aria-label={t("richFormatToolbar")} style={{ left: floating.x, top: floating.y }} onMouseDown={e => e.preventDefault()}>
-			<button className="wiki-ask-selection" onClick={() => { wiki.ask(window.getSelection()?.toString() ?? ""); setFloating(null); }}>{t("wikiAskPi")}</button>
+		{wiki?.ask && floating && linkInput === null && createPortal(<div ref={floatingToolbar} className="wiki-format-popover" role="toolbar" aria-label={t("richFormatToolbar")} style={{ left: floating.x, top: floating.y }} onMouseDown={e => e.preventDefault()}>
+			<button className="wiki-ask-selection" onClick={() => { wiki.ask!(window.getSelection()?.toString() ?? ""); setFloating(null); }}>{t("wikiAskPi")}</button>
 		</div>, document.querySelector(".wiki-document-dialog") ?? document.body)}
 		<input ref={imageInput} type="file" accept="image/*" hidden onChange={event => { const image = event.target.files?.[0], range = imageRange.current; if (image && range && root.current?.contains(range.startContainer)) { root.current.focus(); const selection = window.getSelection(); selection?.removeAllRanges(); selection?.addRange(range); void pasteImage(image); } event.target.value = ""; }} />
 		{mathInput !== null && <WikiReadingDialog title={t("richMath")} onClose={() => setMathInput(null)}>
@@ -857,7 +1028,25 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 				<button type="submit" disabled={!mathInput.source.trim()}>{t("save")}</button>
 			</form>
 		</WikiReadingDialog>}
-		{linkInput !== null && <WikiReadingDialog title={t("wikiAddLink")} onClose={() => setLinkInput(null)}><form className="wiki-link-form" onSubmit={event => { event.preventDefault(); insertLink(linkInput); }}><input aria-label={t("wikiLinkAddress")} placeholder={t("wikiLinkAddress")} value={linkInput} onChange={e => setLinkInput(e.target.value)} /><button type="submit" disabled={!linkInput.trim() || linkInput.startsWith("[[")}>{t("wikiInsertLinkAction")}</button></form>{linkInput.startsWith("[[") && <div className="wiki-link-results">{wiki?.paths.filter(path => /\.(md|markdown|mdown)$/i.test(path) && path.toLowerCase().includes(linkInput.slice(2).toLowerCase())).slice(0, 30).map(path => <button key={path} onClick={() => insertLink(path, true)}>{path}</button>)}</div>}</WikiReadingDialog>}
+		{linkInput !== null && <WikiReadingDialog title={t("wikiAddLink")} onClose={() => setLinkInput(null)}><form className="wiki-link-form" onSubmit={event => { event.preventDefault(); insertLink(linkInput); }}><input aria-label={t("wikiLinkAddress")} placeholder={t("wikiLinkAddress")} value={linkInput} onChange={e => setLinkInput(e.target.value)} /><button type="submit" disabled={!linkInput.trim() || linkInput.startsWith("[[")}>{t("wikiInsertLinkAction")}</button></form>{linkInput.startsWith("[[") && <div className="wiki-link-results">{(wiki?.links?.paths ?? []).filter((path: string) => /\.(md|markdown|mdown)$/i.test(path) && path.toLowerCase().includes(linkInput.slice(2).toLowerCase())) .slice(0, 30).map((path: string) => <button key={path} onClick={() => insertLink(path, true)}>{path}</button>)}</div>}</WikiReadingDialog>}
+		{tableMenu && !readOnly && createPortal(<div className="fp-table-menu" role="menu" aria-label={t("richTableTools")} style={{ left: tableMenu.x, top: tableMenu.y }} onMouseDown={event => event.preventDefault()}>
+			{(() => {
+				const rows = tableMenu.table.rows;
+				const rowOk = canRemoveRow(rows, tableMenu.row), columnOk = canRemoveColumn(rows[tableMenu.row]);
+				const entry = (label: Parameters<typeof t>[0], action: TableAction, disabled = false, reason?: string) => <button type="button" role="menuitem" key={action} disabled={disabled} title={disabled ? reason : undefined} onClick={() => editTable(action)}>{t(label)}</button>;
+				return <>
+					{entry("richAddRowAbove", "rowAbove")}
+					{entry("richAddRow", "rowBelow")}
+					{entry("richAddColumnLeft", "columnLeft")}
+					{entry("richAddColumn", "columnRight")}
+					<hr role="separator" />
+					{entry("richRemoveRow", "removeRow", !rowOk, t("richKeepOneRow"))}
+					{entry("richRemoveColumn", "removeColumn", !columnOk, t("richKeepOneColumn"))}
+					<hr role="separator" />
+					{entry("richRemoveTable", "removeTable")}
+				</>;
+			})()}
+		</div>, document.body)}
 		{menu && !readOnly && createPortal(<div ref={popup} className={`fp-slash-menu ${wiki ? `wiki-slash-menu ${menu.query ? "" : "wiki-slash-grid"}` : ""}`} style={{ left: menu.x, top: menu.y }}>
 			{wiki && !menu.query && recentInsertions.some(id => items.some(item => item.alias === id)) && <div className="wiki-insert-recent"><span>{t("wikiRecentlyUsed")}</span><div>{recentInsertions.map(id => {
 				const index = matches.findIndex(item => item.alias === id), item = matches[index];
@@ -876,8 +1065,24 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 			<div className="fp-markdown-zoom">
 				<div ref={root} className="md fp-rich-document" role="textbox" aria-label={t("richEditMarkdown")} aria-multiline="true"
 					contentEditable={!readOnly} suppressContentEditableWarning spellCheck={false}
+					onContextMenu={(event) => {
+						if (readOnly) return;
+						const cell = (event.target as HTMLElement).closest<HTMLTableCellElement>("th, td");
+						if (!cell || !root.current?.contains(cell)) return;
+						event.preventDefault();
+						const located = locateCell(cell);
+						if (!located) return;
+						// A gutter click already chose the row, so honour it over the clicked cell.
+						const row = isGutter(cell) && rowTarget !== null ? rowTarget : located.row;
+						// An existing column highlight wins, so click-to-select then right-click is one chain.
+						const column = columnTarget ?? located.column;
+						if (column < 0) return;
+						setTableCell(cell);
+						setTableMenu({ x: event.clientX, y: event.clientY, table: located.table, row, column });
+					}}
 					aria-expanded={!!menu} aria-autocomplete="list" aria-activedescendant={menu && matches.length ? `fp-slash-option-${active}` : undefined}
 					onBlur={closeMenu}
+					onMouseLeave={() => setTableMenu(null)}
 					onCompositionStart={closeMenu}
 					onCompositionEnd={() => { const code = selectedCode(); if (code) paintCode(code); update(); inspectSlash(); }}
 					onKeyUp={() => { const cell = selectedCell(); if (cell || window.getSelection()?.isCollapsed) setTableCell(cell); }}
@@ -926,11 +1131,15 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 							const listItem = (node instanceof Element ? node : node?.parentElement)?.closest("li");
 							if (!cell && listItem && root.current?.contains(listItem)) { event.preventDefault(); command(event.shiftKey ? "outdent" : "indent"); return; }
 							if (cell) {
-								const cells = Array.from(cell.closest("table")!.querySelectorAll<HTMLTableCellElement>("th, td"));
+								// Tab walks content cells only: the gutter is not a stop, and passing the
+								// last cell appends a row (kept from the original behaviour).
+								const table = cell.closest("table")!;
+								const cells = table ? Array.from(table.querySelectorAll<HTMLTableCellElement>("th, td")).filter(entry => !isGutter(entry)) : [];
 								const index = cells.indexOf(cell);
 								if (!event.shiftKey || index > 0) {
 									event.preventDefault();
-									if (!event.shiftKey && index === cells.length - 1) editTable("row", cell);
+									const located = locateCell(cell);
+									if (!event.shiftKey && index === cells.length - 1 && located) editTable("rowBelow", located);
 									else focusCell(cells[index + (event.shiftKey ? -1 : 1)]);
 									return;
 								}
@@ -969,6 +1178,21 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 						if (event.button !== 0 || event.shiftKey) return;
 						const target = event.target as HTMLElement;
 						if (target.closest("button, select, input")) return;
+						// The row gutter selects its row as a table target; it never takes a caret.
+						const gutter = target.closest<HTMLTableCellElement>(`[${GUTTER_ATTRIBUTE}]`);
+						if (gutter && root.current?.contains(gutter)) {
+							event.preventDefault();
+							const located = locateCell(gutter);
+							if (located) paintTableTarget(located.table, located.row, null);
+							return;
+						}
+						// A header cell selects its whole column; renaming it is a double-click
+						// (the Excel model). Never hijack a selection the user already holds.
+						const header = target.closest<HTMLTableCellElement>("th");
+						if (header && root.current?.contains(header) && !event.detail && window.getSelection()?.isCollapsed !== false) {
+							const located = locateCell(header);
+							if (located) { event.preventDefault(); paintTableTarget(located.table, null, located.column); return; }
+						}
 						const block = target.closest<HTMLElement>("pre, table");
 						if (!block || !root.current?.contains(block)) return;
 						const rect = block.getBoundingClientRect(), x = event.clientX, y = event.clientY;
@@ -993,6 +1217,12 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 					onClick={(event) => {
 						const formula = (event.target as Element).closest<HTMLElement>("[data-rich-math]");
 						if (formula) { event.preventDefault(); openMath(formula); return; }
+						// Double-clicking a header cell renames it: drop the column target so the
+						// caret lands in the text instead of staying a structural selection.
+						if (event.detail === 2) {
+							const header = (event.target as HTMLElement).closest<HTMLTableCellElement>("th");
+							if (header && root.current?.contains(header)) clearTableTarget();
+						}
 						// A folded diagram is its own reading view: clicking it reveals the
 						// source so the block stays editable.
 						const preview = (event.target as HTMLElement).closest<HTMLElement>(".wiki-mermaid-preview, .fp-mermaid-preview");
@@ -1015,7 +1245,7 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 						if (toc && target.closest("[data-rich-toc-remove]")) { event.preventDefault(); if (!readOnly) { toc.remove(); update(); } return; }
 						const entry = target.closest<HTMLElement>("[data-rich-toc-index]");
 						if (toc && entry) { event.preventDefault(); tocTarget(toc, Number(entry.dataset.richTocIndex))?.scrollIntoView({ block: "start", behavior: "smooth" }); return; }
-						setTableCell(target.closest<HTMLTableCellElement>("th, td") ?? selectedCell()); closeMenu(); if (!window.getSelection()?.isCollapsed) { event.preventDefault(); return; } const link = (event.target as HTMLElement).closest("a"); if (link) { event.preventDefault(); const href = link.getAttribute("href"); if (href) { if (/^(https?:|mailto:)/i.test(href)) window.open(href, "_blank", "noopener,noreferrer"); else wiki?.followLink(href); } } }}
+						setTableCell(target.closest<HTMLTableCellElement>("th, td") ?? selectedCell()); closeMenu(); if (!window.getSelection()?.isCollapsed) { event.preventDefault(); return; } const link = (event.target as HTMLElement).closest("a"); if (link) { event.preventDefault(); const href = link.getAttribute("href"); if (href) { if (/^(https?:|mailto:)/i.test(href)) window.open(href, "_blank", "noopener,noreferrer"); else wiki?.links?.open(href); } } }}
 					onChange={(event) => {
 						const input = event.target as HTMLInputElement;
 						if (input.type === "checkbox") { input.toggleAttribute("checked", input.checked); update(); }

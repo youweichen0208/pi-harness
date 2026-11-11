@@ -8599,6 +8599,22 @@ html.pi-desktop .desktop-window-controls {
 /* Table actions appear only while a cell is selected. */
 .fp-rich-editor { position: relative; }
 
+/* ---------------------------------------------------------------------------
+   Table targeting: the row gutter selects a row, header cells select a column.
+   These highlights are editor state only and never reach saved Markdown.
+   --------------------------------------------------------------------------- */
+.fp-rich-document.md table td[data-rich-gutter] { width: 14px; min-width: 14px; max-width: 14px; padding: 0; cursor: pointer; background: color-mix(in srgb, var(--border) 34%, transparent); background-clip: content-box; border-right: 1px solid var(--border); }
+.fp-rich-document.md table td[data-rich-gutter]:hover { background-color: color-mix(in srgb, var(--accent) 32%, transparent); }
+.fp-rich-document.md table tr[data-row-target] :is(th, td):not([data-rich-gutter]) { background: var(--accent-soft); }
+.fp-rich-document.md table :is(th, td)[data-column-target] { background: var(--accent-soft); }
+
+/* Structural table menu: opened from a cell, acting on the current row/column. */
+.fp-table-menu { position: fixed; z-index: 1500; display: grid; gap: 2px; min-width: 168px; padding: 6px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-elev); color: var(--text); box-shadow: 0 8px 28px color-mix(in srgb, var(--shadow-color) 8%, transparent); font: 13px var(--sans); }
+.fp-table-menu button { display: block; width: 100%; padding: 6px 10px; border: 0; border-radius: var(--r-sm); background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.fp-table-menu button:hover:not(:disabled) { background: var(--bg-elev2); }
+.fp-table-menu button:disabled { color: var(--text-dim); cursor: default; }
+.fp-table-menu hr { height: 0; margin: 4px 2px; border: 0; border-top: 1px solid var(--border); }
+
 /* Read-only SQLite data browser in the file sidebar. */
 .sqlite-preview { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; gap: 10px; padding: 12px; }
 .sqlite-toolbar, .sqlite-pagination { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
@@ -11279,7 +11295,7 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { height: 44px;
 .wiki-prose .fp-markdown .md :not(pre) > code { font-family: var(--mono); background: var(--bg-elev2); color: inherit; border: 0; border-radius: var(--r-wiki-code); padding: 2px 5px; }
 .wiki-prose .fp-markdown .md table { font-size: 14px; border-collapse: collapse; }
 .wiki-prose .fp-markdown .md th { background: var(--bg-elev2); color: var(--text-dim); font-weight: 500; }
-.wiki-prose .fp-markdown .md :is(th, td) { border: 0; border-top: 1px solid var(--border-soft); padding: 10px 14px; }
+.wiki-prose .fp-markdown .md th, .wiki-prose .fp-markdown .md td { border: 0; border-top: 1px solid var(--border-soft); padding: 10px 14px; }
 .wiki-prose .fp-markdown .md thead th { border-top: 0; }
 .wiki-prose .fp-markdown .md blockquote { border-left: 2px solid var(--border); background: transparent; padding: 2px 20px; color: var(--text-dim); }
 @media (max-width: 760px) {
@@ -12838,8 +12854,8 @@ pre.wiki-mermaid-source-hidden > .fp-mermaid-preview { padding-bottom: 0; }
 }
 
 /* Wiki editing regressions #109–112: readable hierarchy and unobstructed controls. */
-.wiki-prose .fp-markdown .md :is(th, td) { text-align: center; }
-.wiki-prose .fp-markdown .md :is(th, td) + :is(th, td) { border-left: 1px solid var(--border); }
+.wiki-prose .fp-markdown .md th, .wiki-prose .fp-markdown .md td { text-align: center; }
+.wiki-prose .fp-markdown .md th + th, .wiki-prose .fp-markdown .md th + td, .wiki-prose .fp-markdown .md td + th, .wiki-prose .fp-markdown .md td + td { border-left: 1px solid var(--border); }
 .wiki-prose .fp-markdown .md h1 { font-family: var(--wiki-heading-font); font-size: 28px; line-height: 1.4; }
 .wiki-prose .fp-markdown .md p { font-size: var(--wiki-body); font-weight: 400; }
 
@@ -12998,7 +13014,7 @@ html.pi-desktop .wiki-window-header .desktop-window-controls { -webkit-app-regio
 .wiki-source-toggle svg, .wiki-insert-toolbar svg { width: 17px; height: 17px; stroke-width: 1.75; }
 .wiki-prose .fp-markdown .md .rich-block:has(> table) { max-width: 100%; overflow-x: auto; }
 .wiki-prose .fp-markdown .md table { display: table; width: 100%; table-layout: auto; margin: .75em 0; }
-.wiki-prose .fp-markdown .md :is(th, td) { text-align: center; padding: 10px 16px; min-width: 110px; line-height: 1.5; }
+.wiki-prose .fp-markdown .md th, .wiki-prose .fp-markdown .md td { text-align: center; padding: 10px 16px; min-width: 110px; line-height: 1.5; }
 .wiki-prose .fp-markdown .md .wiki-table-status { min-width: 0; width: 1%; text-align: center; white-space: nowrap; }
 .wiki-prose .fp-markdown .md table.rich-table-empty { table-layout: fixed; }
 .wiki-prose .fp-markdown .fp-rich-document pre.codeblock { margin: .75em 0; padding-inline: 16px; padding-bottom: 14px; font: 13px/1.6 var(--mono); white-space: normal; }
@@ -13112,19 +13128,21 @@ html.pi-desktop .wiki-window-header .desktop-window-controls { -webkit-app-regio
 
 /* Wiki insertion palette and editable numbered code blocks. */
 .wiki-prose [data-wiki-placeholder]::before { color: var(--text-faint); opacity: .55; font-size: inherit; }
-.fp-slash-menu.wiki-slash-menu.wiki-slash-grid { width: 344px; padding: 16px; }
-.wiki-slash-grid .fp-slash-options { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; max-height: min(320px, calc(100dvh - 180px)); }
+.fp-slash-menu.wiki-slash-menu.wiki-slash-grid { width: 344px; padding: 12px; }
+.wiki-slash-grid .fp-slash-options { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 3px; max-height: min(320px, calc(100dvh - 180px)); }
 .wiki-slash-grid .fp-slash-options > button { justify-content: center; width: 100%; height: 42px; min-height: 42px; padding: 4px; }
 .wiki-slash-grid .fp-slash-label, .wiki-slash-grid kbd { display: none; }
 .wiki-slash-grid .fp-slash-icon { width: 28px; min-width: 28px; color: var(--heading); }
 .wiki-slash-grid .fp-slash-icon svg { width: 24px; height: 24px; stroke-width: 1.7; }
 .wiki-heading-icon { font: 500 20px var(--sans); }
-.wiki-insert-recent { padding: 0 0 16px; margin-bottom: 12px; border-bottom: 1px solid var(--border-soft); }
-.wiki-insert-recent > span { display: block; color: var(--text-faint); font-size: 12px; margin-bottom: 10px; }
-.wiki-insert-recent > div { display: flex; gap: 8px; flex-wrap: wrap; }
+/* Recent insertions are a single scrollable chip row, not a padded section: one chip
+   used to cost a whole block of the palette's height. */
+.wiki-insert-recent { padding: 0 0 8px; margin-bottom: 6px; border-bottom: 1px solid var(--border-soft); }
+.wiki-insert-recent > span { display: block; color: var(--text-faint); font-size: 11.5px; margin-bottom: 6px; }
+.wiki-insert-recent > div { display: flex; gap: 6px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
 .wiki-insert-recent button { border: 0; border-radius: var(--r-sm); padding: 4px 8px; background: var(--bg-elev2); color: var(--text); font: 13px var(--sans); cursor: pointer; }
 .wiki-insert-recent button:hover { background: var(--row-active); }
-.wiki-slash-grid footer { margin-top: 12px; }
+.wiki-slash-grid footer { margin-top: 8px; padding-top: 6px; }
 .wiki-prose .fp-markdown .fp-rich-document pre.codeblock:has(.wiki-code-gutter) { position: relative; padding-left: 56px; min-height: 80px; resize: vertical; overflow: auto; }
 .wiki-code-gutter { position: absolute; top: 40px; left: 0; width: 42px; padding-right: 12px; color: var(--text-faint); font: inherit; text-align: right; white-space: pre; user-select: none; pointer-events: none; }
 .wiki-prose .fp-markdown .fp-rich-document pre.codeblock:focus-within { border-color: var(--accent); }
@@ -13597,15 +13615,16 @@ html.pi-desktop-darwin .compact-navigation .compact-brand { --desktop-brand-inse
 /* Wiki slash palette: compact formats followed by named content blocks. */
 .fp-slash-menu.wiki-slash-menu.wiki-slash-grid { width: 360px; padding: 16px; }
 .wiki-slash-grid .fp-slash-options { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; max-height: min(520px, calc(100dvh - 190px)); }
-.wiki-slash-grid .wiki-palette-section { grid-column: 1 / -1; padding: 18px 8px 8px; color: var(--text-faint); font-size: 12px; }
-.wiki-slash-grid .fp-slash-options > .wiki-palette-format { height: 38px; min-height: 38px; }
-.wiki-slash-grid .fp-slash-options > .wiki-palette-card { grid-column: span 3; display: flex; justify-content: flex-start; gap: 10px; height: 58px; min-height: 58px; padding: 8px; }
-.wiki-slash-grid .wiki-palette-card .fp-slash-icon { width: 36px; max-width: 36px; min-width: 36px; height: 36px; flex-basis: 36px; border: 1px solid var(--border-soft); border-radius: var(--r-md); background: var(--bg-elev); color: var(--text); }
-.wiki-slash-grid .wiki-palette-card .fp-slash-icon svg { width: 21px; height: 21px; }
+.wiki-slash-grid .wiki-palette-section { grid-column: 1 / -1; padding: 8px 6px 3px; color: var(--text-faint); font-size: 11.5px; }
+.wiki-slash-grid .fp-slash-options > .wiki-palette-format { height: 32px; min-height: 32px; }
+.wiki-slash-grid .fp-slash-options > .wiki-palette-card { grid-column: span 3; display: flex; justify-content: flex-start; gap: 8px; height: 40px; min-height: 40px; padding: 4px 6px; }
+.wiki-slash-grid .wiki-palette-card .fp-slash-icon { width: 28px; max-width: 28px; min-width: 28px; height: 28px; flex-basis: 28px; border: 1px solid var(--border-soft); border-radius: var(--r-sm); background: var(--bg-elev); color: var(--text); }
+.wiki-slash-grid .wiki-palette-card .fp-slash-icon svg { width: 18px; height: 18px; }
 .wiki-slash-grid .wiki-palette-card .fp-slash-label { display: block; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .wiki-slash-grid .wiki-palette-card small { display: none; }
-.wiki-slash-grid .fp-slash-options > :is(.wiki-palette-glk, .wiki-palette-tip, .wiki-palette-warning, .wiki-palette-collapse, .wiki-palette-card.wiki-palette-card:last-child) { grid-column: 1 / -1; height: 62px; min-height: 62px; }
-.wiki-slash-grid :is(.wiki-palette-glk, .wiki-palette-tip, .wiki-palette-warning, .wiki-palette-collapse, .wiki-palette-card:last-child) small { display: block; overflow: hidden; text-overflow: ellipsis; margin-top: 3px; }
+/* Callouts are one family, so they sit two-up instead of each taking a full row.
+   Their descriptions stay hidden; the label carries the meaning at this size. */
+.wiki-slash-grid .fp-slash-options > .wiki-palette-card.wiki-palette-card:last-child { grid-column: span 3; height: 40px; min-height: 40px; }
 .wiki-slash-grid .wiki-palette-glk .fp-slash-icon { color: var(--accent); background: var(--rich-callout-note); }
 .wiki-slash-grid .wiki-palette-tip .fp-slash-icon { color: var(--action); background: var(--rich-callout-tip); }
 .wiki-slash-grid .wiki-palette-warning .fp-slash-icon { color: var(--text); background: var(--rich-callout-warning); }
@@ -13883,30 +13902,46 @@ html.pi-desktop .design-workspace .topbar :is(button, input, textarea, select, a
 	app-region: no-drag;
 }
 
-/* Light refinement: reveal records on demand and emphasize the current activity. */
-.task-step-log .task-step-toggle { display: flex; align-items: center; gap: 6px; padding: 0; border: 0; background: transparent; text-align: left; cursor: pointer; }
-.task-step-toggle > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.task-step-toggle > svg { flex: none; width: 12px; height: 12px; color: var(--text-faint); }
-.task-step-toggle > svg.open { transform: rotate(90deg); }
-.task-step-log .task-step-toggle:hover { color: var(--accent); }
-.task-step-log .task-step { padding-block: 10px; }
-.task-step-log .task-step.done .task-step-title { color: var(--text-dim); font-weight: 400; }
-.task-step-log .task-step-time { font-size: 10px; }
-.task-step-log .task-step-items button { font-size: 11px; line-height: 1.8; }
-.task-step-log .task-step.running { border: 1px solid var(--border-soft); background: var(--bg-elev); padding: 12px 10px; border-radius: var(--r-md); box-shadow: 0 2px 6px var(--shadow-soft); }
-.task-step-log .task-step.running .task-step-title { color: var(--text); font-weight: 400; }
-.task-step-log .task-step.running .task-step-mark { color: var(--progress-text) !important; }
+/* Light refinement: reveal records on demand and emphasize the current activity.
+   步骤行本身的排版在文件末尾「任务面板」一节统一维护；这里只保留旧的
+   `.task-step-log > li` 依赖不到的通用规则。 */
 .task-step-spinner { width: 14px; height: 14px; animation: spin 1s linear infinite; }
 @media (prefers-reduced-motion: reduce) { .task-step-spinner { animation: none; } }
-.task-step-log .task-step.running .task-step-items button { color: var(--text); }
-.task-step-log .task-step-items button:hover { color: var(--accent); }
-.task-step-current { display: inline-flex; align-items: center; gap: 5px; padding: 2px 7px; border-radius: var(--r-switch); background: var(--accent-soft); color: var(--accent); font: 10px/1.8 var(--sans); white-space: nowrap; }
-.task-step-current::before { content: ""; width: 4px; height: 4px; border-radius: var(--r-switch); background: currentColor; }
-
 
 /* Single-document editing shares the main conversation through ChatDock. */
 .single-document-editor { display: flex; flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
 .single-document-editor > .fp-embedded { flex: 1; width: 100%; min-width: 0; border: 0; }
+
+/* 单文件弹窗：正文沿用 Wiki 的阅读画布（DocumentReading），只保留弹窗自己的外壳。 */
+.single-document-editor .fp {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	max-width: none;
+	height: 100%;
+	background: var(--bg);
+}
+.single-document-editor .fp-title-row { min-height: 44px; padding: 0 16px; }
+/* 格式工具栏是标题行之下、正文之上的独立一行，与知识库的 .wiki-document-toolbar 对齐。 */
+.single-document-editor .fp-format-bar { flex: none; display: flex; align-items: center; height: 40px; padding: 0 16px; border-bottom: 1px solid var(--border-soft); background: var(--bg); }
+.single-document-editor .fp-format-bar .document-toolbar-slot { flex: 1 1 auto; }
+.single-document-editor .fp > .wiki-document {
+	box-sizing: border-box;
+	flex: 1;
+	width: 100%;
+	max-width: 856px;
+	margin: 0 auto;
+	padding: 32px 48px 96px;
+	overflow: auto;
+}
+.single-document-editor .fp > .wiki-document.is-source { max-width: none; padding-inline: 24px; }
+/* 格式工具栏挂在标题栏的槽位里，与知识库同样是单行 40px。 */
+.document-toolbar-slot { display: flex; align-items: center; flex: 1 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.document-toolbar-slot > .wiki-unified-toolbar { height: 40px; border: 0; background: transparent; padding: 0; }
+@media (max-width: 760px) {
+	.single-document-editor .fp > .wiki-document { padding: 24px 20px 72px; }
+}
 
 /* Direct top-level navigation remains reachable in narrow windows. */
 .design-workspace .topbar-actions { min-width: 0; flex: 0 1 auto; }
@@ -14377,7 +14412,7 @@ html.pi-desktop .design-workspace .topbar { height: 48px; min-height: 48px; }
 .header-task-segments i { flex: 1; height: 4px; min-width: 2px; border-radius: var(--r-sm); background: var(--border-soft); }
 .header-task-segments i:is(.done, .running) { background: var(--progress-text); }
 .header-task-segments i:is(.failed, .blocked) { background: var(--red); }
-.design-workspace .task-step-log .task-step.running, .design-workspace .task-sections .task-plan-step.running { background: var(--progress-soft); border: 0; box-shadow: none; border-radius: var(--r-sm); }
+.design-workspace .task-step-log .task-step.current, .design-workspace .task-sections .task-plan-step.running { background: var(--progress-soft); border: 0; box-shadow: none; border-radius: var(--r-sm); }
 .design-workspace .task-step-log .task-step.done .task-step-mark, .design-workspace .task-plan-step.done .task-plan-mark { color: var(--green) !important; }
 .design-workspace .task-plan-step.done .task-plan-step-title { color: var(--text-muted); }
 .design-workspace .usage-meter { width: 80px; height: 6px; border-radius: var(--r-switch); }
@@ -15502,3 +15537,90 @@ span.rich-math { display: inline-block; }
 :root .design-workspace .change-group > .change-group-head > .change-state { order: 2; margin-left: 8px; }
 /* 栏内条目同样把计数推到右边，与分组头右侧对齐。 */
 :root .design-workspace .change-group-items .change-card .change-counts { margin-left: auto; }
+
+/* ---- 任务面板（右栏「任务」页）：概览头 + 可扫读的步骤列表 ----
+   本段替代 12523-12536 / 13887-13904 / 14380-14381 的旧步骤行样式：
+   旧样式每个步骤上下各 14px 间距、命令按原样换行，15 步就要翻两屏，
+   右栏因此失去了“一眼看完这一轮在干什么”的能力。 */
+.task-overview { flex: none; display: grid; gap: 8px; padding: 12px 14px 11px; border-bottom: 1px solid var(--border-soft); }
+.task-overview-line { display: flex; align-items: baseline; gap: 10px; min-width: 0; }.task-overview-state { display: inline-flex; align-items: center; gap: 6px; flex: none; color: var(--text); font: 500 12.5px/1.4 var(--sans); }
+.task-overview-state > i { width: 7px; height: 7px; border-radius: var(--r-switch); background: var(--text-faint); }
+.task-overview.running .task-overview-state > i { background: var(--progress-text); animation: working-pulse 1.4s ease-in-out infinite; }
+.task-overview.done .task-overview-state > i { background: var(--green); }
+.task-overview.failed .task-overview-state, .task-overview.interrupted .task-overview-state { color: var(--red); }
+.task-overview.failed .task-overview-state > i, .task-overview.interrupted .task-overview-state > i { background: var(--red); }
+.task-overview.reminding .task-overview-state { color: var(--yellow-fg); }
+.task-overview.reminding .task-overview-state > i { background: var(--yellow-fg); }
+.task-overview-meta { display: flex; align-items: baseline; gap: 8px; margin-left: auto; color: var(--text-faint); font: 11px var(--sans); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.task-overview-meta > span + span::before { content: "·"; margin-right: 8px; color: var(--border); }
+.task-overview-meta .failed { color: var(--red); }
+.task-overview-track { display: flex; gap: 2px; height: 3px; }
+.task-overview-track > i { flex: 1 1 0; min-width: 2px; border-radius: var(--r-switch); background: var(--border); }
+.task-overview-track > i:is(.done) { background: color-mix(in srgb, var(--green) 55%, var(--border)); }
+.task-overview-track > i.running { background: var(--progress-text); }
+.task-overview-track > i.failed { background: var(--red); }
+@media (prefers-reduced-motion: reduce) { .task-overview.running .task-overview-state > i { animation: none; } }
+/* 收起态只剩一行状态，高度让给步骤列表；箭头仍在最右，可随时展开时长条。 */
+.task-overview.collapsed { gap: 0; padding-block: 9px; }
+.task-overview-toggle { display: grid; place-items: center; flex: none; width: 18px; height: 18px; padding: 0; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--text-faint); cursor: pointer; }
+.task-overview-toggle > svg { width: 12px; height: 12px; transition: transform .15s; }
+.task-overview-toggle > svg.open { transform: rotate(90deg); }
+/* 收起态用“展开”语义的向下箭头（右转 90°），避免收起后还指着右边说不清方向。 */
+.task-overview.collapsed .task-overview-toggle > svg { transform: rotate(90deg); }
+.task-overview-toggle:hover { background: var(--bg-elev2); color: var(--text); }
+.task-overview-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+@media (prefers-reduced-motion: reduce) { .task-overview-toggle > svg { transition: none; } }
+
+.task-step-log { display: grid; gap: 1px; margin: 0; padding: 2px 8px 8px; list-style: none; }
+.task-step-log .task-step { display: grid; grid-template-columns: 16px minmax(0, 1fr); column-gap: 8px; row-gap: 6px; padding: 7px 6px; border-radius: var(--r-sm); }
+.task-step-log .task-step-mark { grid-column: 1; grid-row: 1; display: grid; place-items: center; width: 16px; height: 18px; color: var(--green) !important; }
+.task-step-mark > svg { width: 13px; height: 13px; }
+.task-step-log .task-step-mark .task-step-spinner { width: 13px; height: 13px; }
+.task-step-log .task-step.done .task-step-mark { color: var(--green) !important; }
+.task-step-log .task-step.failed .task-step-mark { color: var(--red) !important; }
+.task-step-log .task-step.current .task-step-mark { color: var(--progress-text) !important; }
+.task-step-row { grid-column: 2; grid-row: 1; display: flex; align-items: center; gap: 8px; min-width: 0; width: 100%; padding: 0; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.task-step-log .task-step-title { min-width: 0; flex: 1; overflow: hidden; color: var(--text-dim); font: 12.5px/1.45 var(--sans); text-overflow: ellipsis; white-space: nowrap; }
+.task-step-row:hover .task-step-title { color: var(--text); }
+.task-step.failed .task-step-title { color: var(--red); }
+.task-step-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--r-sm); }
+.task-step-meta { display: flex; align-items: center; gap: 6px; flex: none; color: var(--text-faint); }
+.task-step-meta > svg { width: 12px; height: 12px; color: var(--text-faint); transition: transform .15s; }
+.task-step-meta > svg.open { transform: rotate(90deg); }
+.task-step-time { font: 11px var(--sans); font-variant-numeric: tabular-nums; }
+.task-step-count { min-width: 16px; padding: 0 4px; border-radius: var(--r-switch); background: var(--bg-elev2); color: var(--text-faint); font: 10px/16px var(--sans); text-align: center; }
+.task-step.current .task-step-row:hover .task-step-title, .task-step.current .task-step-meta > svg { color: inherit; }
+/* 类型徽标与条目挂在标题列的左侧缩进下，保持“一条竖列读下来”的节奏。 */
+.task-step-kinds { grid-column: 2; grid-row: 2; display: flex; flex-wrap: wrap; gap: 4px; }
+.task-step-kinds > i { padding: 0 5px; border-radius: var(--r-sm); background: var(--bg-elev2); color: var(--text-faint); font: 10px/16px var(--sans); font-style: normal; }
+.task-step-kinds > i.kind-read { color: var(--text-faint); }
+/* 修改用正文深灰而不是蓝色：蓝色在这套界面里代表“选中／链接”，
+   一个过程中性的徽标抢走强调色，会跟选中项抢注意力。 */
+.task-step-kinds > i.kind-write { color: var(--text-dim); background: var(--bg-elev2); }
+.task-step-kinds > i.kind-run { color: var(--text-dim); }
+.task-step-log .task-step-items { grid-column: 2; display: grid; gap: 8px; margin: 6px 0 0; padding: 0 0 0 9px; list-style: none; border-left: 1px solid var(--border-soft); }
+/* 文件与命令各成一组：组间比组内松一级，才能一眼分出“看过什么”和“跑过什么”。 */
+.task-step-log .task-step-group { display: grid; gap: 4px; min-width: 0; }
+.task-step-log .task-step-group > ul { display: grid; gap: 3px; margin: 0; padding: 0; list-style: none; min-width: 0; }
+.task-step-log .task-step-group-label { color: var(--text-faint); font: 10.5px/1.4 var(--sans); letter-spacing: .02em; }
+.task-step-log .task-step-items button { display: block; width: 100%; padding: 2px 0; overflow: hidden; border: 0; background: transparent; color: var(--text-faint); font: 11px/1.65 var(--mono); font-variant-ligatures: none; text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.task-step-log .task-step-items button:hover { color: var(--accent); }
+.task-step-log .task-step-items button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-radius: var(--r-sm); }
+.task-step-log .task-step-items li.command button { white-space: nowrap; overflow: hidden; overflow-wrap: normal; text-overflow: ellipsis; }
+/* 过长命令列表先折到几行，需要时再展开：展开是显式动作，不会自己铺满一屏。 */
+.task-step-log .task-step-more { margin-top: 1px; }
+.task-step-log .task-step-more button { color: var(--text-dim); font: 11px/1.6 var(--sans); }
+/* 运行中的步骤是面板里唯一需要强调的对象：底色 + 当前动作可见。 */
+.task-step-log .task-step.current { grid-template-columns: 16px minmax(0, 1fr) auto; padding: 9px 10px; background: var(--progress-soft); border: 0; box-shadow: none; }
+.task-step-current-row { grid-column: 2; grid-row: 1; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.task-step.current .task-step-current-row .task-step-title { flex: 1; color: var(--text); font-weight: 500; }
+.task-step-toggle { display: flex; align-items: center; gap: 6px; min-width: 0; padding: 0; border: 0; background: transparent; text-align: left; cursor: pointer; }
+.task-step-toggle > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-step-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--r-sm); }
+.task-step.current .task-step-meta { grid-column: 3; grid-row: 1; }
+.task-step.current .task-step-kinds, .task-step.current .task-step-items { grid-column: 2 / -1; }
+.task-step-log .task-step.current .task-step-items button { color: var(--text-dim); }
+.task-step-log .task-step.current .task-step-items button:hover { color: var(--accent); }
+.task-step-log .task-step.current .task-step-items { border-left-color: color-mix(in srgb, var(--progress-text) 30%, transparent); }
+.task-step-current { display: inline-flex; align-items: center; gap: 5px; padding: 1px 7px; border-radius: var(--r-switch); background: var(--bg-elev); color: var(--progress-text); font: 10px/1.7 var(--sans); white-space: nowrap; }
+.task-step-current::before { content: ""; width: 4px; height: 4px; border-radius: var(--r-switch); background: currentColor; }

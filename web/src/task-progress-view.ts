@@ -1,4 +1,5 @@
 import type { TaskProgress, TaskStep, UiMessage } from "../../server/protocol.js";
+import { unrecoveredFailures } from "../../server/task-recovery.js";
 import { compactCommandLabel } from "./bash-presentation.js";
 
 export interface ProgressPhase {
@@ -9,6 +10,8 @@ export interface ProgressPhase {
 	status: TaskStep["status"];
 	startedAt: number;
 	endedAt?: number;
+	/** Wall-clock span of the phase; set even while it is still running. */
+	durationMs?: number;
 	counts: { read: number; write: number; edit: number; command: number };
 }
 
@@ -86,11 +89,15 @@ export function progressPhases(task: TaskProgress): ProgressPhase[] {
 		}
 	}
 	// A failure the agent moved past (a later step succeeded) is part of exploring, not a failed phase.
-	const lastDone = task.steps.findLastIndex(step => step.status === "done");
+	// Same rule the server uses for the task status, so the overview and the list agree.
+	const stuckIndexes = new Set(unrecoveredFailures(task.steps));
+	const now = Date.now();
 	for (const phase of phases) {
 		const running = phase.steps.some(step => step.status === "running");
-		const stuck = phase.steps.some(step => step.status === "failed" && task.steps.indexOf(step) > lastDone);
+		const stuck = phase.steps.some(step => stuckIndexes.has(task.steps.indexOf(step)));
 		phase.status = running ? "running" : stuck ? "failed" : "done";
+		// 概览条按相对时长为每段分配宽度；运行中的步骤按当下时间计，避免宽度为零。
+		phase.durationMs = Math.max(0, (running ? now : phase.endedAt ?? phase.startedAt) - phase.startedAt);
 	}
 	return phases;
 }
@@ -113,30 +120,44 @@ export function progressResult(task: TaskProgress, messages: UiMessage[]): Progr
 	return result;
 }
 
-/** Split authored labels without inventing a phase or rewriting its meaning. */
-export function planStepPresentation(value: string): { tag: string; title: string; detail: string } {
-	let title = plainTitle(value);
-	const prefix = /^([A-Za-z][\w-]{0,24}):\s*(.+)$/.exec(title);
-	const tag = prefix ? prefix[1].toLowerCase().replace(/^agent-runtime$/, "runtime") : "";
-	if (prefix) title = prefix[2];
-	const details = /\s*[（(]([^()（）]+)[）)]\s*$/.exec(title);
-	return { tag, title: details ? title.slice(0, details.index).trim() : title, detail: details?.[1] ?? "" };
-}
-
-/** New snapshots carry transcript-order ownership; old snapshots use their recorded time range. */
-export function planStepArtifacts(task: TaskProgress, item: NonNullable<TaskProgress["plan"]>["items"][number]) {
-	const ids = item.toolCallIds ? new Set(item.toolCallIds) : null;
-	const nextStart = task.plan?.items.filter((other) => other.startedAt && other.startedAt > (item.startedAt ?? Infinity)).map((other) => other.startedAt!).sort((a, b) => a - b)[0];
-	return task.steps.flatMap((step) => step.artifacts.filter((artifact) => ids ? ids.has(artifact.toolCallId) : !!item.startedAt && step.startedAt >= item.startedAt && step.startedAt < (item.endedAt ?? nextStart ?? Infinity)).map((artifact) => ({ messageId: step.messageId, artifact })));
-}
-
 /** One line under a step-log phase: a file to preview or a command to jump to. */
-export interface PhaseItem { key: string; label: string; path?: string; toolCallId: string; messageId: string; kind?: string }
+export interface PhaseItem { key: string; label: string; /** Panel-width label: same thing, compacted for the narrow column. */ short: string; path?: string; toolCallId: string; messageId: string; kind?: string }
 
 /** The command as it ran, on one line: the whole point is reading it back,
  *  so unlike the transcript summary it is not shortened to 80 characters. */
 function commandRecord(command: string): string {
 	return command.replace(/\s+/g, " ").trim();
+}
+
+/** A command prepared for the narrow right panel: drop the `cd <workspace> &&`
+ *  prefix every call carries (the panel already names the workspace), shorten
+ *  long absolute paths to `…/leaf`, and clip the middle when a single command
+ *  chain is still too long. The full text stays on the row's title attribute
+ *  and in the transcript, so nothing is lost — it is only not read out here. */
+export function compactStepCommand(command: string, cwd = ""): string {
+	let line = commandRecord(command);
+	// `cd /abs/path && …` / `cd /abs/path; …` — the directory is context we already show.
+	const root = cwd.replace(/\/$/, "");
+	const cd = /^cd\s+(?:"([^"]+)"|'([^']+)'|(\S+))\s*(?:&&|;)\s*/.exec(line);
+	if (cd) {
+		const target = cd[1] ?? cd[2] ?? cd[3];
+		// Only peel it when it points at the workspace or the home directory: an
+		// unrelated `cd /tmp/x && …` is real information, not noise.
+		if (target === root || target === "~" || (root && target.startsWith(root)) || /^~\//.test(target)) line = line.slice(cd[0].length);
+	}
+	line = line.replace(/(?:[~.]?\/|[A-Za-z]:\\)(?:[\w.@-]+[\/\\]){2,}([\w.@-]+)/g, (_match, leaf: string) => `…/${leaf}`);
+	return line.length > 96 ? `${line.slice(0, 44)}…${line.slice(-48)}` : line;
+}
+
+/** Coarse operation class of a step record, for the row badge. */
+export type StepKindTag = "read" | "write" | "run" | "other";
+
+export function stepKindTag(kind: string | undefined): StepKindTag {
+	if (!kind) return "other";
+	if (kind === "read" || kind === "grep" || kind === "find" || kind === "ls") return "read";
+	if (kind === "write" || kind === "edit") return "write";
+	if (kind === "bash" || kind === "terminal") return "run";
+	return "other";
 }
 
 /** Workspace files read relative; short home paths keep `~/`; anything else shows its file name. */
@@ -155,10 +176,13 @@ export function phaseRecords(steps: TaskStep[], cwd: string): PhaseItem[] {
 	const seen = new Set<string>();
 	for (const step of steps) for (const artifact of step.artifacts) {
 		if (seen.has(artifact.toolCallId)) continue;
+		// `label` stays the command as it ran (copy/verify needs it verbatim);
+		// `short` is what the ~300px panel prints — the `cd <workspace> &&` prefix
+		// is the workspace's own path, already named at the top of the panel.
 		const label = artifact.path ? displayPhasePath(artifact.path, cwd) : commandRecord(artifact.label);
 		if (!label) continue;
 		seen.add(artifact.toolCallId);
-		items.push({ key: artifact.toolCallId, label, path: artifact.path, toolCallId: artifact.toolCallId, messageId: step.messageId, kind: artifact.kind });
+		items.push({ key: artifact.toolCallId, label, short: artifact.path ? label : compactStepCommand(artifact.label, cwd), path: artifact.path, toolCallId: artifact.toolCallId, messageId: step.messageId, kind: artifact.kind });
 	}
 	return items;
 }
@@ -172,7 +196,7 @@ export function phaseItems(phase: ProgressPhase, cwd: string): PhaseItem[] {
 		const key = artifact.path ?? `cmd:${artifact.label}`;
 		if (!label || seen.has(key)) continue;
 		seen.add(key);
-		items.push({ key, label, path: artifact.path, toolCallId: artifact.toolCallId, messageId: step.messageId });
+		items.push({ key, label, short: artifact.path ? label : compactStepCommand(artifact.label, cwd), path: artifact.path, toolCallId: artifact.toolCallId, messageId: step.messageId });
 	}
 	// Two SKILL.md from different folders must not read as a duplicate.
 	const repeated = new Set(items.filter(item => item.path && items.some(other => other !== item && other.label === item.label)));
@@ -180,6 +204,7 @@ export function phaseItems(phase: ProgressPhase, cwd: string): PhaseItem[] {
 		if (!item.path) continue;
 		const parts = item.path.split(/[\\/]/).filter(Boolean);
 		item.label = parts.slice(-2).join("/");
+		item.short = item.label;
 	}
 	return items;
 }

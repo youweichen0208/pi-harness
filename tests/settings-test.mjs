@@ -94,8 +94,7 @@ try {
 	c = await connect();
 	c.send({ type: "hello", clientId: "settings-test-client" });
 	await c.waitFor("ready");
-	// The first snapshot can legitimately defer default-on plan while the tree is verifying.
-	await c.waitFor(["snapshot", "snapshot_delta"], 8000, m => m.state?.planSettings?.effective && !m.state.planSettings.pending);
+	await c.waitFor(["snapshot", "snapshot_delta"], 8000, m => !!m.state?.sessionId);
 	c.received = c.received.filter(m => m.type !== "settings_state");
 	c.send({ type: "get_settings" });
 	const st0 = await c.waitFor("settings_state");

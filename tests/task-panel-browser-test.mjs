@@ -63,10 +63,11 @@ try {
 		// No 本轮文件 section either; the step records are the only listing.
 		assert.equal(await panel.getByRole('button', { name: lang === 'zh' ? /本轮文件/ : /Files this turn/ }).count(), 0);
 		const readPhase = panel.locator('.task-step').first().filter({ hasText: lang === 'zh' ? '读取文件' : 'Read files' });
-		await readPhase.locator('.task-step-toggle').click();
-		// Every read is listed, in order, with no four-row cap.
-		assert.equal(await readPhase.locator('.task-step-items > li').count(), 7);
-		assert.equal(await readPhase.locator('.task-step-more').count(), 0, 'no expand-the-rest control');
+		await readPhase.locator('.task-step-row').first().click();
+		// Every read is listed, in order. A single group needs no heading, and 7 items
+		// stay under the fold threshold so nothing is collapsed.
+		assert.equal(await readPhase.locator('.task-step-items .task-step-group > ul > li, .task-step-items li.command').count(), 7);
+		assert.equal(await readPhase.locator('.task-step-more').count(), 0, 'no expand control below the fold threshold');
 		send();
 		const taskTab = page.getByRole('tab', { name: lang === 'zh' ? '任务' : 'Tasks', exact: true });
 		await taskTab.focus(); await page.keyboard.press('Home'); await page.keyboard.press('End');
@@ -78,10 +79,10 @@ try {
 		// Return to the task drawer if opening a file dismissed it.
 		if (!(await panel.isVisible())) await page.locator('.header-task-progress').click();
 		const commandPhase = panel.locator('.task-step').last();
-		await commandPhase.locator('.task-step-toggle').click();
+		await commandPhase.locator('.task-step-row').first().click();
 		// All six commands are listed in transcript order.
-		assert.equal(await commandPhase.locator('.task-step-items > li').count(), 6);
-		await commandPhase.locator('.task-step-items > li button').last().click();
+		assert.equal(await commandPhase.locator('.task-step-items li.command').count(), 6);
+		await commandPhase.locator('.task-step-items li.command button').last().click();
 		assert.equal((await page.evaluate(() => window.taskJumps)).at(-1).toolCallId, 'cmd-5');
 		if (!(await panel.isVisible())) await page.locator('.header-task-progress').click();
 		// Same plan identity, different request: do not inherit expanded details.
@@ -89,7 +90,7 @@ try {
 		// Component remounts per request; the new instance starts with every phase collapsed.
 		await page.waitForFunction(() => document.querySelectorAll('.task-progress:not([hidden]) .task-step-items').length === 0);
 		assert.equal(await panel.locator('.task-step-items').count(), 0);
-		await panel.locator('.task-step-toggle').first().click();
+		await panel.locator('.task-step-row, .task-step-toggle').first().click();
 		conversationId = `${base.conversationId}-other`; taskOverride = { title: 'Other conversation' }; send();
 		await page.waitForFunction(() => document.querySelectorAll('.task-progress:not([hidden]) .task-step-items').length === 0);
 		assert.equal(await panel.locator('.task-step-items').count(), 0, 'conversation switch resets details even with reused tool IDs');

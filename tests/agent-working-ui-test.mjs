@@ -227,8 +227,9 @@ emit({messages:[messages[4],editCall,editResult],isStreaming:false,streamingMess
 await page.locator('.change-card-toggle code',{hasText:'web/index.html'}).waitFor();
 assert((await page.locator('.change-card .change-counts').textContent()).includes('+1'));
 assert((await page.locator('.change-card .change-counts').textContent()).includes('−1'));
-assert.equal((await page.locator('.change-card .change-old').allTextContents()).join(','),'3,');
-assert.equal((await page.locator('.change-card .change-new').allTextContents()).join(','),',3');
+// One line-number column: the removed row and the added row both sit on file line 3.
+assert.equal((await page.locator('.change-card .change-old').allTextContents()).join(','),'3,3');
+assert.equal(await page.locator('.change-card .change-new').count(),0);
 const diffWidths=await page.locator('.change-lines').evaluate(e=>({line:e.querySelector('.change-line.add').getBoundingClientRect().width,container:e.getBoundingClientRect().width}));
 assert(diffWidths.line>=diffWidths.container-2,'diff tint spans the block width');
 await page.screenshot({path:app?'/private/tmp/pi-edit-diff-desktop.png':'/private/tmp/pi-edit-diff.png'});

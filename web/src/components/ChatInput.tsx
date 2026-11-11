@@ -715,7 +715,6 @@ ${t("wikiProjectPrompt", { workspace: selectedProject.workspaceName, path: JSON.
 			{wikiReferences && wikiReferences.length > 0 && <div className="wiki-reference-chips">{wikiReferences.filter(path => path !== autoFile?.path).map(path => <button key={path} title={path} aria-label={`${t("removeAttachment")} ${path}`} onClick={() => onRemoveWikiReference?.(path)}><span>{path.split("/").at(-1)}</span><span aria-hidden="true">×</span></button>)}</div>}
 			<div className={`inputbox${text.length > 0 ? " has-draft" : ""}`}>
 			{receiptWarning && <div className="composer-receipt-status" role="status"><FiInfo aria-hidden="true" /> {t(receiptWarning === "unknown" ? "promptReceiptUnknown" : "promptReceiptAcceptedElsewhere")}</div>}
-			{promptResult?.commandExecuted && promptResult.conversationId === activeConversationId && attachments.length > 0 && <div role="status">{t("commandAttachmentsRetained")}</div>}
 			{(attachments.length > 0 || databaseReferences.length > 0 || autoFile) && (
 				<div className="attach-row">
 					{databaseReferences.map(db => <span key={db.id} className="attach-chip reference" title={t("dbAttachmentHint")}>◫ {db.name}<button type="button" className="attach-remove" aria-label={`${t("dbRevoke")} ${db.name}`} onClick={() => onRemoveDatabase?.(db.id)}>×</button></span>)}

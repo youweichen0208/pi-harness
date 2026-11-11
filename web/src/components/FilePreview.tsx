@@ -16,6 +16,9 @@ import type { ClientMessage, FileContent, ServerMessage } from "../types";
 import { SqlitePreview } from "./SqlitePreview";
 import { CodeFileEditor } from "./CodeFileEditor";
 import { RichMarkdownEditor } from "./RichMarkdownEditor";
+import { DocumentReading, DocumentToolbarSlot, documentChips } from "./DocumentReading";
+import { UnsavedChangesDialog } from "./UnsavedChangesDialog";
+import { wikiMetadata } from "../wiki-document";
 import { Markdown } from "./Markdown";
 import { highlightLines, langFromPath } from "../hljs-lite";
 import { useT } from "../i18n";
@@ -44,6 +47,10 @@ export type FileNavigationGuard = (action: () => void) => void;
 interface FilePreviewProps {
 	/** Single-document dialogs save on idle and before leaving. */
 	autoSave?: boolean;
+	/** Single-document dialog: render the shared DocumentReading canvas instead of the preview chrome. */
+	dialog?: boolean;
+	/** Dialog only: hand an internal link target back to the host, which reopens the dialog there. */
+	onOpenTarget?: (path: string) => void;
 	contextReader?: MutableRefObject<ReadCurrentFile | null>;
 	/** 发送即保存：提交携带当前文件的消息前，把未保存草稿落盘。 */
 	contextSaver?: MutableRefObject<SaveCurrentFile | null>;
@@ -95,6 +102,9 @@ export const FilePreviewContent = memo(function FilePreviewContent(props: FilePr
 
 const WorkspaceFilePreviewContent = memo(function WorkspaceFilePreviewContent({
 	result, guard, disabled, connected, contextReader, contextSaver, onContextChange, autoSave = false,
+	/** The single-document dialog renders the shared reading canvas instead of the preview chrome. */
+	dialog,
+	onOpenTarget,
 	file,
 	content,
 	send,
@@ -128,6 +138,16 @@ const WorkspaceFilePreviewContent = memo(function WorkspaceFilePreviewContent({
 	// Code lines scroll horizontally unless the user enables wrapping.
 	const [wrap, setWrap] = useState(false);
 	const [codeTheme, setCodeThemeState] = useState(getCodeTheme);
+	const [toolbarHost, setToolbarHost] = useState<HTMLElement | null>(null);
+	// A link inside the document saves the draft (or raises the leave prompt) and then hands the
+	// target to the host, which closes this dialog and reopens it on that document.
+	const openDialogLink = (href: string) => {
+		let reference = href;
+		try { if (href.startsWith("#wiki=")) reference = decodeURIComponent(href.slice(6)); } catch { return; }
+		if (!reference.trim() || /^https?:|^mailto:/i.test(reference)) return;
+		const target = resolveRelativePath(file.path, reference.split("#")[0]);
+		guard.current?.(() => onOpenTarget?.(target));
+	};
 	useEffect(() => {
 		const sync = () => setCodeThemeState(getCodeTheme());
 		window.addEventListener(CODE_THEME_EVENT, sync);
@@ -175,6 +195,13 @@ const WorkspaceFilePreviewContent = memo(function WorkspaceFilePreviewContent({
 		diffReqId.current = --filePreviewScmRequestId;
 		send({ type: "scm_filediff", reqId: diffReqId.current, path: file.path });
 	}, [gitChanged, scmDirty, fileChanged, loaded?.version, disabled, connected, file.path, send]);
+	// The dialog titles the document the way the library does: frontmatter `title`, then the first
+	// H1, and only then the filename. Long-form prose reads as a document, not as a path.
+	const dialogTitle = useMemo(() => {
+		if (!dialog) return file.name;
+		const title = wikiMetadata(draft).title?.trim();
+		return title || file.name;
+	}, [dialog, draft, file.name]);
 	const diffMarkers = useMemo(() => gitUntracked
 		? new Map((loaded?.text.split("\n") ?? []).map((_, index) => [index + 1, "added" as const]))
 		: fileDiffMarkers(gitDiff), [gitDiff, gitUntracked, loaded?.text]);
@@ -336,7 +363,8 @@ const WorkspaceFilePreviewContent = memo(function WorkspaceFilePreviewContent({
 					<span className="fp-file-path" title={location.fullPath}><span className="fp-project-name">{file.cwd.split(/[\\/]/).filter(Boolean).at(-1)}</span><span className="fp-path-separator"> / </span>{location.relativePath.split("/").join(" / ")}</span>
 					{canEdit && <span className="fp-header-status" role="status">{status === "saving" ? t("fileSaving") : status === "failed" ? t("fileSaveFailed") : dirty ? t("fileUnsaved") : loaded ? t("fileSaved") : ""}{loaded && !dirty && status === "saved" && <time> · {savedAt.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}</time>}</span>}
 					<div className="fp-header-actions">
-						{isMarkdown && kind === "text" && <div className="fp-view-switch" role="group" aria-label={t("fileViewMode")}><button type="button" aria-pressed={!diffMode && markdownPreview} onClick={() => { setDiffMode(null); setMarkdownPreview(true); setEditing(true); setSel(null); }}>{t("fileViewPreview")}</button><button type="button" aria-pressed={!diffMode && !markdownPreview} disabled={!canEdit} onClick={() => { setDiffMode(null); setMarkdownPreview(false); setEditing(true); setSel(null); }}>{t("fileViewSource")}</button></div>}
+						{/* 弹窗里 Markdown 只有富文本编辑，源码切换已移除；右栏预览保留自己的「预览／源码」分段控件。 */}
+						{isMarkdown && kind === "text" && !dialog && <div className="fp-view-switch" role="group" aria-label={t("fileViewMode")}><button type="button" aria-pressed={!diffMode && markdownPreview} onClick={() => { setDiffMode(null); setMarkdownPreview(true); setEditing(true); setSel(null); }}>{t("fileViewPreview")}</button><button type="button" aria-pressed={!diffMode && !markdownPreview} disabled={!canEdit} onClick={() => { setDiffMode(null); setMarkdownPreview(false); setEditing(true); setSel(null); }}>{t("fileViewSource")}</button></div>}
 						{!isMarkdown && canEdit && <div className="fp-view-switch" role="group" aria-label={t("fileEditMode")}><button type="button" aria-pressed={!editing} onClick={() => { setDiffMode(null); setEditing(false); }}>{t("fileReadOnly")}</button><button type="button" aria-pressed={editing} onClick={() => { setDiffMode(null); setEditing(true); }}>{t("fileEditShort")}</button></div>}
 						{gitChanged && <button type="button" className="fp-header-action" aria-pressed={diffMode === "git"} onClick={() => diffMode === "git" ? setDiffMode(null) : requestGitDiff()}>{t("fileChangesCount", { n: 1 })}</button>}
 						{canRunFile && <button type="button" className="fp-header-action" title={t("playgroundRunEditorBuffer")} aria-label={t("playgroundRunEditorBuffer")} onClick={runEditorBuffer}><FiPlay /> {t("playgroundRun")}</button>}
@@ -353,6 +381,8 @@ const WorkspaceFilePreviewContent = memo(function WorkspaceFilePreviewContent({
 						{canEdit && dirty && status !== "saving" && <button className="btn primary fp-header-save" disabled={disabled} onClick={() => saveEditing()}><FiSave /> {t("saveFile")}</button>}
 					</div>
 				</div>
+				{/* 弹窗里格式工具栏单独占一行，和知识库一样是正文上方的 40px 工具栏，而不是挤在标题行里。 */}
+				{isMarkdown && kind === "text" && dialog && canEdit && diffMode === null && <div className="fp-format-bar"><DocumentToolbarSlot onHost={setToolbarHost} /></div>}
 				{lastRun && <PlaygroundResult runKey={lastRun.key} stale={!draft.includes(lastRun.code)} />}
 				{externalChanged && dirty && <div className="fp-external-banner" role="alert">{t("fileExternalChanged")}<button type="button" onClick={() => guard.current?.(requestContent)}>{t("fileReload")}</button><button type="button" disabled={remoteText === null} onClick={() => setDiffMode("external")}>{t("fileCompare")}</button></div>}
 				{truncated && kind === "text" && !isBinary && (
@@ -364,10 +394,7 @@ const WorkspaceFilePreviewContent = memo(function WorkspaceFilePreviewContent({
 					{conflict && <button className="btn" disabled={disabled} onClick={() => { if (window.confirm(t("fileOverwriteConfirm"))) saveEditing(true); }}>{t("fileOverwrite")}</button>}
 				</div>}
 				{leave && <div className="fp-leave" role="alertdialog" aria-label={t("fileUnsaved")}>
-					<p>{t("fileLeavePrompt")}</p>
-					<button className="btn primary" disabled={disabled} onClick={() => document.resolveLeave("save")}>{t("fileSaveContinue")}</button>
-					<button className="btn" onClick={() => document.resolveLeave("discard")}>{t("fileDiscard")}</button>
-					<button className="btn" onClick={() => document.resolveLeave("cancel")}>{t("cancel")}</button>
+					<UnsavedChangesDialog title={t("fileUnsaved")} hint={t("fileLeavePrompt")} saving={disabled} busy={status === "saving"} onCancel={() => document.resolveLeave("cancel")} onDiscard={() => document.resolveLeave("discard")} onSave={() => document.resolveLeave("save")} />
 				</div>}
 				{loading && !loaded && <div className="fp-empty">{t("loading")}</div>}
 
@@ -398,7 +425,15 @@ const WorkspaceFilePreviewContent = memo(function WorkspaceFilePreviewContent({
 					</div>
 				)}
 
-				{!loading && showMarkdown && loaded && (editing && canEdit ?
+				{!loading && showMarkdown && loaded && (dialog && canEdit ?
+					<DocumentReading
+						title={dialogTitle}
+						chips={documentChips({ updatedAt: savedAt }, { updatedAt: date => t("fileSavedAt", { time: date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }) }) })}
+						source={diffMode !== null}
+						sourceLabel={""}
+						editor={<div className="wiki-prose md"><RichMarkdownEditor file={file} value={draft} readOnly={disabled || status === "saving"} onChange={setDraft} documentHost={{ toolbar: toolbarHost ? { host: toolbarHost, variant: "compat" } : undefined, links: { open: openDialogLink }, added: undefined }} /></div>}
+						sourceEditor={<CodeFileEditor name={file.name} value={draft} readOnly={disabled || status === "saving"} onChange={setDraft} onSelectLines={(start, end) => { setSel({ start, end }); setSelectionAnchor(null); }} wrap={wrap} markers={dirty ? undefined : diffMarkers} />}
+					/> : editing && canEdit ?
 					<RichMarkdownEditor file={file} value={draft} readOnly={disabled || status === "saving"} onChange={setDraft} /> : (
 					<div className="fp-markdown msg-text">
 						<div className="fp-markdown-zoom">
@@ -511,7 +546,21 @@ const WorkspaceFilePreviewContent = memo(function WorkspaceFilePreviewContent({
 
 /** Optional modal shell for consumers outside the sidebar. */
 export function FilePreview(props: FilePreviewProps) {
-	return <div className="fp-overlay"><FilePreviewContent {...props} /></div>;
+	return props.dialog
+		? <div className="single-document-editor"><FilePreviewContent {...props} dialog /></div>
+		: <div className="fp-overlay"><FilePreviewContent {...props} /></div>;
+}
+
+/** Resolve a link inside `from` to a workspace path; absolute-looking targets pass through. */
+function resolveRelativePath(from: string, target: string): string {
+	const clean = target.replace(/\\/g, "/").replace(/^\.\//, "");
+	if (!clean || clean.startsWith("/")) return clean;
+	const base = from.split("/").slice(0, -1);
+	for (const part of clean.split("/")) {
+		if (part === "..") base.pop();
+		else if (part !== "." && part) base.push(part);
+	}
+	return base.join("/");
 }
 
 function isMarkdownFile(name: string): boolean {

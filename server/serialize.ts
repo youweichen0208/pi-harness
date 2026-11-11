@@ -9,7 +9,6 @@ import { createHash } from "node:crypto";
  */
 import type { AgentSession } from "@earendil-works/pi-coding-agent";
 import type { UiContentBlock, UiMessage } from "./protocol.js";
-import { PLAN_REMINDER_TYPE, snapshotFromDetails } from "./plan/state.js";
 
 /** AgentMessage is not re-exported from the package root; derive it from AgentSession. */
 export type AgentMessage = AgentSession["messages"][number];
@@ -174,7 +173,6 @@ export function serializeMessage(
 				.map((c) => (c.type === "text" ? c.text : ""))
 				.join("\n");
 			const { text, truncated } = truncate(raw, TOOL_OUTPUT_CAP);
-			const plan = m.toolName === "plan" && !m.isError ? snapshotFromDetails(m.details) : undefined;
 			let nestedComplete = m.nestedCalls?.complete === true && m.nestedCalls.calls.length <= 256;
 			const nestedCalls = m.nestedCalls?.calls.slice(0, 256).map(call => {
 				const args = call.arguments ? truncate(JSON.stringify(call.arguments), ARGS_CAP) : undefined;
@@ -195,7 +193,6 @@ export function serializeMessage(
 				...(m.toolName === "codemode" ? { codemode: codemodeDetails(m.details) } : {}),
 				isError: m.isError,
 				...(typeof m.durationMs === "number" && Number.isFinite(m.durationMs) ? { durationMs: m.durationMs } : {}),
-				...(plan ? { planSnapshot: plan } : {}),
 				timestamp: m.timestamp,
 			};
 		}
@@ -231,8 +228,6 @@ export function serializeMessage(
 				role: "custom",
 				content,
 				customType: m.customType,
-				// The plan settle reminder is host-initiated: show it as an event row.
-				...(m.customType === PLAN_REMINDER_TYPE ? { origin: "auto-reminder" as const } : {}),
 				details: (m as { details?: unknown }).details,
 				timestamp: m.timestamp,
 			};

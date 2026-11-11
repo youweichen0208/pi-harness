@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { displayPhasePath, phaseHeadline, phaseItems, phaseRecords, type ProgressPhase } from "../../web/src/task-progress-view.js";
+import { compactStepCommand, displayPhasePath, phaseHeadline, phaseItems, phaseRecords, stepKindTag, type ProgressPhase } from "../../web/src/task-progress-view.js";
 
 const phase = (artifacts: { kind: string; label: string; path?: string }[], kind: ProgressPhase["kind"] = "read"): ProgressPhase => ({
 	id: "p", kind, title: "读取文件", status: "done", startedAt: 0, endedAt: 400, counts: { read: 0, write: 0, edit: 0, command: 0 },
@@ -70,4 +70,40 @@ test("the step record keeps every command and edit in order, untruncated", () =>
 	expect(records[3].label).toBe(long);
 	// Multiline commands read back as one line.
 	expect(phaseRecords([{ id: "d", messageId: "m4", title: "", status: "done", startedAt: 0, artifacts: [{ toolCallId: "c4", kind: "bash", label: "git add -A &&\n  git commit -m x" }] }], "").at(0)?.label).toBe("git add -A && git commit -m x");
+});
+
+
+test("panel commands drop the workspace cd prefix and shorten deep paths", () => {
+	// The exact command from the screenshot: 6 wrapped lines in a 300px column.
+	expect(compactStepCommand(`cd /Users/me/proj && grep -n "change-summary" web/src/styles.css | head -20`, "/Users/me/proj"))
+		.toBe(`grep -n "change-summary" web/src/styles.css | head -20`);
+	// Quoted and single-string cd forms peel the same way.
+	expect(compactStepCommand(`cd "/Users/me/proj" && npm test`, "/Users/me/proj")).toBe("npm test");
+	expect(compactStepCommand(`cd '/Users/me/proj'; npm test`, "/Users/me/proj")).toBe("npm test");
+	expect(compactStepCommand(`cd ~ && ls`, "/Users/me/proj")).toBe("ls");
+	// A cd into somewhere unrelated is real information and stays.
+	expect(compactStepCommand(`cd /tmp/build && make`, "/Users/me/proj")).toBe("cd /tmp/build && make");
+	// Long absolute paths anywhere in the line collapse to their leaf.
+	expect(compactStepCommand(`cat /Users/alice/projects/app/config.json`, "")).toBe("cat …/config.json");
+	// A still-gigantic chain is clipped in the middle, keeping both ends readable.
+	const huge = compactStepCommand(`rg -n "${"x".repeat(120)}" web/src`, "");
+	expect(huge.length).toBeLessThanOrEqual(96);
+	expect(huge).toContain("…");
+});
+
+test("step records keep the command verbatim while the panel gets the short form", () => {
+	const command = `cd /Users/me/proj && npm run typecheck`;
+	const [record] = phaseRecords([{ id: "a", messageId: "m", title: "", status: "done", startedAt: 0, artifacts: [{ toolCallId: "c1", kind: "bash", label: command }] }], "/Users/me/proj");
+	expect(record.label).toBe(command);
+	expect(record.short).toBe("npm run typecheck");
+});
+
+test("step kinds map to the three row badges", () => {
+	expect(stepKindTag("read")).toBe("read");
+	expect(stepKindTag("grep")).toBe("read");
+	expect(stepKindTag("edit")).toBe("write");
+	expect(stepKindTag("write")).toBe("write");
+	expect(stepKindTag("bash")).toBe("run");
+	expect(stepKindTag("terminal")).toBe("run");
+	expect(stepKindTag(undefined)).toBe("other");
 });

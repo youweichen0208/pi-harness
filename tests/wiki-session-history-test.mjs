@@ -47,8 +47,10 @@ try {
 	for (const dirty of [false]) {
 		const send = page.getByRole('button', { name: '发送', exact: true });
 		if (dirty) {
-			await page.locator('.wiki-toolbar-actions').getByRole('button', { name: '编辑源码', exact: true }).click();
-			await page.locator('.fp-editor').fill('# Edited before hello\n');
+			// Dirty the draft through the rich editor: there is no source mode to type into.
+			const body = page.locator('.wiki-prose [contenteditable="true"]');
+			await body.locator('p').last().click();
+			await page.keyboard.type(' Edited before hello');
 		}
 		await page.getByRole('textbox', { name: '问 pi', exact: true }).fill('hello');
 		await send.waitFor();

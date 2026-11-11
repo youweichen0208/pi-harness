@@ -53,35 +53,9 @@ export type UiContentBlock =
 	| UiBashBlock
 	| { type: string; [k: string]: unknown };
 
-export interface PlanState {
-	title: string;
-	status: "active" | "completed" | "cancelled" | "failed";
-	steps: { id: string; title: string; detail?: string }[];
-	currentStepId: string | null;
-	completedStepIds: string[];
-	completionCriteria: string;
-	changeSummary?: string;
-}
-export type PlanChange =
-	| { kind: "added" | "updated" | "removed" | "started" | "completed" | "pending"; stepId: string; title: string; position?: number }
-	| { kind: "status"; status: PlanState["status"] }
-	| { kind: "replaced"; planId: string; revision: number; reason: string };
-export interface PlanSnapshot extends PlanState {
-	schemaVersion: 3;
-	planId: string;
-	revision: number;
-	changes: PlanChange[];
-}
 export interface OpenAIProxyConfig { enabled: boolean; url: string }
 export interface OpenAIProxyState extends OpenAIProxyConfig { version: string; restartRequired: boolean }
 
-export interface PlanSettingsState {
-	enabled: boolean;
-	available: boolean;
-	effective: boolean;
-	pending: boolean;
-	reason?: "conflict" | "missing";
-}
 
 export interface UiCodemodeDetails {
 	calls: { id: string; name: string; args: string; status: "running" | "ok" | "error" | "cancelled"; durationMs?: number; error?: string; cost?: number }[];
@@ -226,7 +200,8 @@ export interface UiMessage {
 	durationMs?: number;
 	toolOutputUrl?: string;
 	isError?: boolean;
-	planSnapshot?: PlanSnapshot;
+	/** Legacy plan tool results may still carry this; ignored by the UI. */
+	planSnapshot?: unknown;
 	nestedCalls?: { calls: UiNestedToolCall[]; complete: boolean };
 	codemode?: UiCodemodeDetails;
 	/** Extension-injected custom messages. */
@@ -235,7 +210,7 @@ export interface UiMessage {
 	details?: unknown;
 }
 
-/** Current task projected from the authoritative transcript and native plan snapshots. */
+/** Current task projected from the authoritative transcript. */
 export interface TaskProgress {
 	id: string;
 	conversationId: string;
@@ -247,21 +222,6 @@ export interface TaskProgress {
 	endedAt?: number;
 	completed: number;
 	steps: TaskStep[];
-	/** Native plan state, or a legacy task_plan transcript. */
-	plan?: {
-		source?: "plan";
-		status?: PlanState["status"];
-		awaitingConfirmation?: boolean;
-		origin?: string;
-		revision: number;
-		added: number;
-		removed: number;
-		title?: string;
-		completionCriteria?: string;
-		changeSummary?: string;
-		changes?: { kind: "added" | "removed" | "updated"; title: string; position?: number }[];
-		items: { id: string; title: string; detail?: string; toolCallIds?: string[]; blockedBy?: string[]; status: "pending" | "running" | "done" | "removed"; added?: boolean; startedAt?: number; endedAt?: number; actions?: { read: number; write: number; edit: number; command: number } }[];
-	};
 }
 
 export interface TaskStep {
@@ -311,7 +271,6 @@ export interface UiRecovery {
 
 export interface UiState {
 	subagentTasks?: { toolCallId: string; tasks: UiSubagentProgress[] }[];
-	planSettings?: PlanSettingsState;
 	tree?: UiTreeState;
 	recovery?: UiRecovery;
 	runSettings?: { autoCompaction: boolean; autoRetry: boolean };
@@ -656,7 +615,6 @@ export type ClientMessage =
 	| { type: "clone_provider"; provider: string; reqId: number }
 	// -- display preferences and native resource views ------------
 	/** Request the current settings state (also pushed automatically on attach). */
-	| { type: "set_plan_enabled"; enabled: boolean; conversationId: string }
 	| { type: "get_settings" }
 	/** Apply a partial settings update: main-session prompt/toggles or isolated
 	 *  reviewer prompt/skill toggles. Each change is persisted per client; main
@@ -1500,7 +1458,7 @@ export interface ExtensionPackage {
 }
 export interface ExtensionsState { packages: ExtensionPackage[]; version: string; trusted: boolean; checkedAt?: number; autoCheck?: boolean; }
 
-export type BuiltinExtensionId = "pi-harness-database" | "pi-harness-plan" | "pi-harness-subagents" | "codemode" | "tool-search" | "mcp";
+export type BuiltinExtensionId = "pi-harness-database" | "pi-harness-subagents" | "codemode" | "tool-search" | "mcp";
 export interface BuiltinExtensionState {
 	id: BuiltinExtensionId;
 	settingsVersion?: string;

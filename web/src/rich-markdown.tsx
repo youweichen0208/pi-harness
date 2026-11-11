@@ -18,6 +18,7 @@ import { renderWikiLinks, wikiMetadata } from "./wiki-document";
 
 import { wikiProperties } from "./wiki-properties";
 import { findToc, TOC_END, TOC_START, tocItems, updateToc } from "./markdown-toc";
+import { COLUMN_TARGET_ATTRIBUTE as COLUMN_TARGET, ROW_TARGET_ATTRIBUTE as ROW_TARGET } from "./table-geometry";
 
 interface SourceBlock {
 	raw: string;
@@ -388,6 +389,8 @@ export function readRichDocument(root: HTMLElement, document: RichDocument): str
 	root = root.cloneNode(true) as HTMLElement;
 	root.querySelectorAll("[data-rich-math]").forEach(element => { for (const attribute of ["tabindex", "role", "aria-label"]) element.removeAttribute(attribute); });
 	root.querySelectorAll("[data-table-selected]").forEach(table => table.removeAttribute("data-table-selected"));
+	// Table targeting is editor state: the highlight must never reach saved Markdown.
+	root.querySelectorAll(`[${ROW_TARGET}], [${COLUMN_TARGET}]`).forEach(node => { node.removeAttribute(ROW_TARGET); node.removeAttribute(COLUMN_TARGET); });
 	root.querySelectorAll<HTMLElement>("[data-rich-tail]").forEach(paragraph => {
 		if (!paragraph.textContent && !paragraph.querySelector("img,table,pre,hr,input")) paragraph.remove();
 		else paragraph.removeAttribute("data-rich-tail");
@@ -434,7 +437,10 @@ export function readRichDocument(root: HTMLElement, document: RichDocument): str
 			// A disclosure is normalized the same way whether or not it carried the editor
 			// attribute; `block.bare` alone decides what the saved source looks like.
 			else if (baseline.includes("<details")) { const holder = root.ownerDocument.createElement("div"); holder.innerHTML = baseline; canonicalDisclosures(holder); holder.querySelectorAll("[data-rich-ui]").forEach(el => el.remove()); baseline = holder.innerHTML; }
-			const unchanged = child instanceof HTMLElement && child.tagName === "DIV" && child.innerHTML === baseline;
+			// The row gutter is editor chrome: comparing it would make every table look
+			// edited on load and force a re-serialization that loses source alignment.
+			const withoutGutter = (html: string) => html.replace(/<td[^>]*\bdata-rich-gutter\b[^>]*>\s*(?:<br\s*\/?>)?\s*<\/td>/g, "");
+			const unchanged = child instanceof HTMLElement && child.tagName === "DIV" && withoutGutter(child.innerHTML) === withoutGutter(baseline);
 			const text = unchanged || block.protected ? block.raw : block.bare ? stripEditorDisclosure(serializeElement(child, root)) : serializeElement(child, root);
 			parts.push((parts.length ? block.prefix || "\n\n" : block.prefix) + text);
 		} else if (child instanceof HTMLElement && child.hasAttribute("data-rich-toc")) {

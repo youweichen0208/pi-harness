@@ -1,7 +1,14 @@
 /* Collapse/lazy-render E2E: seeds a >30-message chat via WS (same clientId the
  * browser will use), then verifies old messages render as collapsed summary
  * rows and expand on click.
- * Run: npm run build && node collapse-test.mjs */
+ * Run: npm run build && node collapse-test.mjs
+ *
+ * OBSOLETE: history is now always expanded (MessageList keeps recentStart at
+ * messages.length), so no message collapses to a summary row and this script
+ * has nothing left to assert. Kept only as a reference for the CollapsedGroup
+ * component, which is still in the tree. Do not add it to the smoke runner.
+ * Separately, its seed phase also times out against the `fastfail` provider.
+ */
 import { CHROME_PATH } from "./lib/chrome.mjs";
 import { spawn } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";

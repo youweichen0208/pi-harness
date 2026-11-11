@@ -32,29 +32,29 @@ try {
 	});
 	await page.goto(`${fixture.base}/?token=${fixture.token}`);
 	await page.locator('.answer-summary').first().waitFor();
-	assert.equal(await page.locator('.answer-summary').count(), 2);
-	assert.equal(await page.locator('.answer-summary-item').count(), 4);
-	assert.match(await page.locator('.answer-history-expand').textContent(), /2/);
+	// History is always expanded: every round renders, and the "expand older
+	// rounds" control no longer exists. Four rounds → 4 summary blocks, each
+	// carrying the 2 questions answered that round.
+	assert.equal(await page.locator('.answer-summary').count(), 4);
+	assert.equal(await page.locator('.answer-summary-item').count(), 8);
+	assert.equal(await page.locator('.answer-history-expand').count(), 0);
 	assert.equal(await page.locator('.process-group.ok').count(), 1);
-	const head = page.locator('.process-group-head');
-	assert.equal(await head.getAttribute('aria-expanded'), 'false');
-	await head.click();
-	assert.equal(await head.getAttribute('aria-expanded'), 'true');
-	await head.click();
-	assert.equal(await page.locator('.msg-assistant .msg-model:visible').count(), 2, 'one model header per assistant turn');
+	// A single tool call renders headless: the summary line stands in for the
+	// toggle head, and the tool row is visible without a click.
+	assert.equal(await page.locator('.process-group-head').count(), 0);
+	assert.equal(await page.locator('.process-group-summary-line').count(), 1);
+	// Every round is present as its own assistant message (4 replies + the tool
+	// call message), all mounted without any click.
+	assert.equal(await page.locator('.msg-assistant').count(), 5);
 	await page.locator('.messages').evaluate(el => el.scrollTop = 0);
 	mkdirSync('tests/scratch', { recursive: true });
 	await page.screenshot({ path: 'tests/scratch/answer-history-desktop.png' });
-	await page.locator('.answer-history-expand').click();
-	assert.equal(await page.locator('.answer-summary').count(), 4);
-	assert.equal(await page.locator('.answer-history-expand').count(), 0);
+	// Oldest round is rendered from the start, with its original user prompt.
 	assert.match(await page.locator('.msg-user').first().textContent(), /补充说明：保持原有部署/);
-	await page.reload();
-	await page.locator('.answer-history-expand').waitFor();
 	await page.keyboard.press('Control+f');
 	await page.locator('.search-bar input').fill('第 1 轮回复完整正文');
 	await page.locator('.msg-assistant[data-msg-id="a0"]').waitFor();
-	assert.equal(await page.locator('.answer-summary').count(), 4, 'search reveals the complete older group');
+	assert.equal(await page.locator('.answer-summary').count(), 4, 'oldest group renders without unfolding');
 	await page.keyboard.press('Escape');
 	await page.evaluate(() => document.documentElement.setAttribute('data-appearance', 'dark'));
 	await page.screenshot({ path: 'tests/scratch/answer-history-dark.png' });
@@ -63,5 +63,5 @@ try {
 	assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
 	await page.screenshot({ path: 'tests/scratch/answer-history-mobile.png' });
 	assert.deepEqual(errors, []);
-	console.log('PASS answer summaries, round folding, full replies, shared model header, tool expansion, dark and mobile');
+	console.log('PASS answer summaries, full history rendering, full replies, shared model header, tool expansion, search, dark and mobile');
 } finally { await browser?.close(); await fixture.stop(); }

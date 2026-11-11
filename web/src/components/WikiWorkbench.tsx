@@ -1,7 +1,6 @@
 import { isKnowledgeLibraryWindow } from "../wiki-window";
 import type { WikiCoordinator } from "../wiki-coordinator";
 import { WikiReadingOutline } from "../wiki-reading-outline";
-import { LuCode, LuMoveHorizontal } from "react-icons/lu";
 import { useDialogFocus } from "../use-dialog-focus";
 import { wikiProperties } from "../wiki-properties";
 import ReactMarkdown from "react-markdown";
@@ -17,6 +16,8 @@ import { CreateFileForm } from "./CreateFileForm";
 import type { CurrentFileContext, ReadCurrentFile, SaveCurrentFile } from "../current-file";
 import type { ChatReferenceRequest } from "../chat-reference";
 import { RichMarkdownEditor } from "./RichMarkdownEditor";
+import { DocumentReading } from "./DocumentReading";
+import { UnsavedChangesDialog } from "./UnsavedChangesDialog";
 import { CodeFileEditor } from "./CodeFileEditor";
 import { desktopAPI, registerWindowSave } from "../desktop";
 import { getClientId } from "../use-chat";
@@ -52,7 +53,7 @@ export function WikiWorkbench({ coordinator, cwd, conversationId, streaming, act
 	const [referencesReady, setReferencesReady] = useState(false);
 	const [backlinkLimit, setBacklinkLimit] = useState(100);
 	const [doc, setDoc] = useState<WikiDocument | null>(null), [draft, setDraft] = useState("");
-	const [source, setSource] = useState(false), [loading, setLoading] = useState(false), [restoring, setRestoring] = useState(false);
+	const [loading, setLoading] = useState(false), [restoring, setRestoring] = useState(false);
 	const [error, setError] = useState(""), [nav, setNav] = useState<(() => void) | null>(null);
 	const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
 	const [showHidden, setShowHidden] = useState(() => localStorage.getItem(`pi-wiki-hidden:${cwd}`) === "true");
@@ -115,7 +116,7 @@ export function WikiWorkbench({ coordinator, cwd, conversationId, streaming, act
 		} catch (e) { if (alive.current) setError((e as Error).message); }
 	}, [cwd]);
 	useEffect(() => {
-		setFocused(false); setDrawer(null); setPath(fileRequest.path); setSource(false); setSearch(false); setSelectionMenu(null); setZoomImage(null);
+		setFocused(false); setDrawer(null); setPath(fileRequest.path); setSearch(false); setSelectionMenu(null); setZoomImage(null);
 	}, [fileRequest]);
 	useEffect(() => { if (active) void loadDirectory(""); }, [active, loadDirectory]);
 	const refresh = useCallback(async (fresh = false) => {
@@ -249,7 +250,7 @@ export function WikiWorkbench({ coordinator, cwd, conversationId, streaming, act
 	const open = (target: string) => {
 		if (target !== path) { void openDocument(target); return; }
 		navigate(() => {
-			setPath(target); setSource(false); setSearch(false); setSelectionMenu(null);
+			setPath(target); setSearch(false); setSelectionMenu(null);
 			setExpanded(prev => { const next = new Set(prev), parts = target.split("/"); for (let i = 1; i < parts.length; i++) next.add(parts.slice(0, i).join("/")); return next; });
 			if (target === path) void load(target, true);
 		});
@@ -334,7 +335,6 @@ export function WikiWorkbench({ coordinator, cwd, conversationId, streaming, act
 		return () => { element.removeEventListener("scroll", remember); };
 	}, [cwd, path, loading, doc?.entry.path]);
 	const saveStatus = doc?.editable && <button className={`wiki-save-status ${autosave.failure ? "failed" : saving || dirty ? "saving" : "saved"}`} onClick={() => void save()} title={autosave.failure || undefined} disabled={!autosave.failure || autosave.conflict} aria-live="polite"><i />{t(autosave.failure ? "wikiSaveFailedRetry" : saving || dirty ? "wikiSaving" : "wikiSaved")}</button>;
-	const sourceButton = <button className="wiki-source-toggle" disabled={!doc?.editable || loading || doc.entry.path !== path} aria-pressed={source} onClick={() => setSource(s => !s)}><LuCode />{t(source ? "wikiPreview" : "wikiSource")}</button>;
 	const toolbar = <>
 		<div className="wiki-breadcrumb" title={`${cwd}/${path}`}><span className="wiki-path-parent">{path.includes("/") && <><span className="wiki-path-segment">{path.split("/").slice(0, -2).map(part => `${part} / `).join("")}</span><span className="wiki-path-tail">{path.split("/").at(-2)} / </span></>}</span><b>{path.split("/").at(-1) || t("wikiMode")}</b>{saveStatus}</div>
 		<div className="wiki-toolbar-actions">
@@ -371,18 +371,35 @@ export function WikiWorkbench({ coordinator, cwd, conversationId, streaming, act
 		<div className="wiki-main">
 			<div className="wiki-document-toolbar">
 				<div className="wiki-editor-toolbar-slot" ref={setEditorToolbarHost} />
-				{doc?.text !== undefined && <div className="wiki-toolbar-actions">{source && <button aria-label={t(focused ? "wikiStandardWidth" : "wikiWideWidth")} title={t(focused ? "wikiStandardWidth" : "wikiWideWidth")} aria-pressed={focused} onClick={() => setFocused(!focused)}><LuMoveHorizontal /></button>}{sourceButton}</div>}
+				{/* 源码切换已移除：Markdown 始终是富文本编辑，代码文件始终只读，没有可切换的状态。 */}
 			</div>
 			{errorBanner}
 			{autosave.conflict && <div className="wiki-conflict" role="alert"><span>{t("wikiExternalChanged")}</span><button disabled={editorBusy} onClick={() => void load(path)}>{t("wikiReload")}</button><button disabled={editorBusy || saving} onClick={() => void autosave.keepMine()}>{t("wikiKeepMine")}</button></div>}
 
 			<div className="wiki-scroll" ref={scrollRef} onScroll={() => setSelectionMenu(null)}>
 				<div className="wiki-reading-layout">
-				{loading ? <div className="wiki-empty">{t("loading")}</div> : doc ? <article className={`wiki-document ${source || doc.entry.kind === "code" ? "is-source" : ""}`} ref={article} onClick={peekImage} onMouseUp={source ? selectText : undefined} onKeyUp={source ? selectText : undefined}>
-					<header className="wiki-document-heading"><h1>{metadata.title || doc.entry.name.replace(/\.(md|txt)$/i, "")}</h1><div className="wiki-document-meta"><span className="wiki-meta-chip"><FiCalendar />{updatedLabel}</span>{doc.text !== undefined && <span className="wiki-meta-chip"><FiClock />{t("wikiReadingTime", { minutes: metadata.minutes })}</span>}{metadata.tags.map(tag => <span className="wiki-meta-chip wiki-meta-tag" key={tag}>#{tag}</span>)}{(!referencesReady || backlinkCount > 0) && <button className="wiki-meta-chip wiki-meta-link" onClick={() => article.current?.querySelector(".wiki-backlinks")?.scrollIntoView({ behavior: "smooth" })}><FiLink />{referencesReady ? t("wikiCitations", { count: backlinkCount }) : t("wikiReferencesLoading")}</button>}</div>{doc?.entry.kind === "document" && properties.length > 0 && <details key={`${cwd}:${path}`} className="wiki-properties"><summary>{t("wikiProperties")}</summary><dl>{properties.map((property, index) => <div key={index}><dt>{property.key}</dt><dd><ReactMarkdown>{property.value}</ReactMarkdown></dd></div>)}</dl></details>}</header>
-					{doc.text !== undefined ? (source || doc.entry.kind === "code" ? <><div className="wiki-code-hint">{doc.entry.kind === "code" && !source ? t("wikiCodeReadOnly") : t("wikiEditingSource")}</div><CodeFileEditor value={draft} name={path} readOnly={editorBusy || !doc.editable || (!source && doc.entry.kind === "code")} wrap={false} onChange={setDraft} /></> : <div className="wiki-prose md"><RichMarkdownEditor key={`${cwd}:${path}`} file={{ cwd, path }} value={draft} readOnly={editorBusy || !doc.editable} onChange={setDraft} wiki={{ toolbarHost: editorToolbarHost, focused, onWidth: () => { setFocused(!focused); setDrawer(null); }, paths, ask: text => { void ask(text); }, followLink, resolveCode: value => resolveWikiLink(path, value, paths), added: NO_ADDED_LINES }} /></div>) : doc.entry.kind === "image" ? <img className="wiki-image" src={wikiMedia(cwd, path)} alt={doc.entry.name} /> : doc.entry.kind === "pdf" ? <iframe className="wiki-pdf" title={doc.entry.name} src={wikiMedia(cwd, path)} /> : <div className="wiki-empty"><FiFile /><p>{doc.entry.name} · {Math.ceil(doc.entry.size / 1024)} KB</p>{desktopAPI?.openWikiFile ? <button onClick={() => void desktopAPI!.openWikiFile!({ clientId: getClientId(), cwd, path }).catch(e => setError(e.message))}>{t("wikiOpenDefault")}</button> : <a href={wikiMedia(cwd, path, true)} download>{t("wikiDownloadOpen")}</a>}</div>}
-					{(!referencesReady || doc.backlinks.length > 0) && <section className="wiki-backlinks"><h2><FiLink />{t("wikiBacklinks")} <span>{referencesReady ? doc.backlinks.length : t("loading")}</span></h2>{doc.backlinks.slice(0, backlinkLimit).map((link, index) => <button key={`${link.path}:${index}`} onClick={() => open(link.path)}><strong>{link.path}</strong><span>{link.snippet}</span></button>)}{doc.backlinks.length > backlinkLimit && <button onClick={() => setBacklinkLimit(n => n + 100)}>{t("wikiLoadMore")}</button>}{!referencesReady && <p>{t("wikiReferencesLoading")}</p>}{referencesReady && !doc.backlinks.length && <p>{t("wikiNoBacklinks")}</p>}</section>}
-				</article> : <div className="wiki-empty"><FiBookOpen /><h1>{t("wikiWelcome")}</h1><p>{t("wikiWelcomeHint")}</p><button onClick={() => setSearch(true)}>{t("wikiSearchAll")}</button></div>}
+				{loading ? <div className="wiki-empty">{t("loading")}</div> : doc ? <DocumentReading
+						articleRef={article}
+						title={metadata.title || doc.entry.name.replace(/\.(md|txt)$/i, "")}
+						chips={[
+							{ icon: "calendar", label: updatedLabel },
+							...(doc.text !== undefined ? [{ icon: "clock" as const, label: t("wikiReadingTime", { minutes: metadata.minutes }) }] : []),
+							...metadata.tags.map(tag => ({ icon: "tag" as const, label: `#${tag}` })),
+							...(!referencesReady || backlinkCount > 0 ? [{ icon: "citations" as const, label: referencesReady ? t("wikiCitations", { count: backlinkCount }) : t("wikiReferencesLoading"), onClick: () => article.current?.querySelector(".wiki-backlinks")?.scrollIntoView({ behavior: "smooth" }) }] : []),
+						]}
+						properties={doc.entry.kind === "document" && properties.length > 0 ? <details key={`${cwd}:${path}`} className="wiki-properties"><summary>{t("wikiProperties")}</summary><dl>{properties.map((property, index) => <div key={index}><dt>{property.key}</dt><dd><ReactMarkdown>{property.value}</ReactMarkdown></dd></div>)}</dl></details> : null}
+						/* Code files have no rich rendering: the read-only source editor is their body. */
+						source={doc.entry.kind === "code"}
+						sourceLabel={doc.entry.kind === "code" ? t("wikiCodeReadOnly") : ""}
+						sourceEditor={<CodeFileEditor value={draft} name={path} readOnly={editorBusy || !doc.editable} wrap={false} onChange={setDraft} />}
+						editor={<div className="wiki-prose md"><RichMarkdownEditor key={`${cwd}:${path}`} file={{ cwd, path }} value={draft} readOnly={editorBusy || !doc.editable} onChange={setDraft} documentHost={{ toolbar: editorToolbarHost ? { host: editorToolbarHost, variant: "wiki" } : undefined, width: { focused, onToggle: () => { setFocused(!focused); setDrawer(null); } }, links: { paths, open: followLink }, ask: text => { void ask(text); }, resolveCode: value => resolveWikiLink(path, value, paths), added: NO_ADDED_LINES }} /></div>}
+						backlinks={doc.backlinks.slice(0, backlinkLimit)}
+						backlinksReady={referencesReady}
+						onShowMoreBacklinks={doc.backlinks.length > backlinkLimit ? () => setBacklinkLimit(n => n + 100) : undefined}
+						onMouseUp={doc.entry.kind === "code" ? selectText : peekImage}
+						onKeyUp={doc.entry.kind === "code" ? selectText : undefined}
+					/>
+				: <div className="wiki-empty"><FiBookOpen /><h1>{t("wikiWelcome")}</h1><p>{t("wikiWelcomeHint")}</p><button onClick={() => setSearch(true)}>{t("wikiSearchAll")}</button></div>}
 					{readingOutline}
 				</div>
 			</div>
@@ -391,7 +408,7 @@ export function WikiWorkbench({ coordinator, cwd, conversationId, streaming, act
 		{drawer && <aside className="wiki-changes"><header><div><h2>{t(drawer === "recent" ? "wikiRecent" : "wikiRelatedChanges")}</h2><span>{cwd.split(/[\\/]/).at(-1)}</span></div><button aria-label={t("close")} onClick={() => setDrawer(null)}><FiX /></button></header><div className="wiki-changes-scroll">{state.revisions.filter(r => drawer === "recent" || r.id === drawer).map((revision, index, list) => <div key={revision.id} className="wiki-revision">{(index === 0 || new Date(list[index - 1].at).toDateString() !== new Date(revision.at).toDateString()) && <time>{new Date(revision.at).toLocaleDateString(locale === "zh" ? "zh-CN" : "en-US")}</time>}<div className="wiki-revision-title"><span className={`wiki-avatar ${revision.author}`}>{revision.author === "pi" ? <img src="/icon/1a-mark.svg" alt="pi" /> : t("wikiMe")}</span><div><strong>{revision.title.split("\n")[0]}</strong><small>{new Date(revision.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · {t("wikiFileCount", { count: revision.changes.length })}</small></div></div><div className="wiki-revision-actions"><button disabled={busy || revision.changes.every(c => c.undone)} onClick={() => void restore(revision, true)}><FiCornerUpLeft />{t("wikiUndoAll")}</button><button disabled={busy || revision.changes.every(c => !c.undone)} onClick={() => void restore(revision, false)}><FiCornerUpRight />{t("wikiRedoAll")}</button></div>{revision.changes.map(summary => { const change = { ...summary, ...(fullChanges[`${revision.id}:${summary.path}`] ?? {}), undone: summary.undone }; return <div className={`wiki-file-change ${change.undone ? "undone" : ""}`} key={change.path}><div><button title={change.path} onClick={() => open(change.path)}>{change.path}</button><button disabled={busy} onClick={() => void restore(revision, !change.undone, change.path)}>{t(change.undone ? "wikiRedo" : "wikiUndo")}</button></div><small><em>+{change.additions}</em> <b>−{change.deletions}</b></small><details onToggle={e => { if (e.currentTarget.open && change.truncated) void wikiRequest<WikiChange>(cwd, "change", { id: revision.id, path: change.path }).then(result => { if (alive.current) setFullChanges(previous => ({ ...previous, [`${revision.id}:${change.path}`]: result })); }).catch(e => setError(e.message)); }}><summary>{t("wikiViewDiff")}</summary>{change.binary ? <p>{t("wikiBinaryChange")}</p> : <><pre className="wiki-diff-before">{change.before ?? t("wikiNewFile")}</pre><pre className="wiki-diff-after">{change.after ?? t("wikiDeletedFile")}</pre></>}</details></div>; })}{revision.skipped.length > 0 && <p className="wiki-skipped">{t("wikiUntracked")}: {revision.skipped.join(", ")}</p>}</div>)}{!state.revisions.length && <p className="wiki-muted">{t("wikiNoChanges")}</p>}</div></aside>}
 		{selectionMenu && createPortal(<div className="wiki-selection-menu" style={{ left: selectionMenu.x, top: selectionMenu.y }} onMouseDown={e => e.preventDefault()}><button onClick={() => { void ask(selectionMenu.text); setSelectionMenu(null); }}>{t("wikiAskPi")}</button></div>, document.querySelector(".wiki-document-dialog") ?? document.body)}
 		{search && <div className="wiki-modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) setSearch(false); }}><section ref={searchDialogRef} className="wiki-search-modal" role="dialog" aria-modal="true" aria-label={t("wikiSearchAll")}><div><FiSearch /><input autoFocus aria-label={t("wikiSearchAll")} placeholder={t("wikiSearchHint")} value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => { if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); setCursor(i => Math.max(0, Math.min(results.length - 1, i + (e.key === "ArrowDown" ? 1 : -1)))); } if (e.key === "Enter" && results[cursor]) { e.preventDefault(); if (e.metaKey || e.ctrlKey) attachResult(results[cursor]); else open(results[cursor].path); } }} /><button aria-label={t("close")} onClick={() => setSearch(false)}><FiX /></button></div><div className="wiki-search-results">{searching && <p role="status">{t("loading")}</p>}{results.map((result, i) => <div key={`${result.path}:${result.line}:${i}`}>{(i === 0 || results[i - 1].kind !== result.kind) && <h3>{t(result.kind === "document" ? "wikiDocuments" : result.kind === "pdf" ? "wikiPdf" : result.kind === "code" ? "wikiCode" : "wikiFiles")}</h3>}<button className={cursor === i ? "selected" : ""} onMouseEnter={() => setCursor(i)} onClick={e => e.metaKey || e.ctrlKey ? attachResult(result) : open(result.path)}><strong>{result.path}{result.page ? ` · ${t("wikiPage", { page: result.page })}` : ""}</strong><span>{result.snippet}</span></button></div>)}{query && !searching && !results.length && <p>{t("wikiNoResults")}</p>}{searchLimited && <p>{t("wikiSearchLimited")}</p>}</div><footer>{t("wikiSearchKeys")}</footer></section></div>}
-		{nav && <div className="wiki-modal-backdrop"><section ref={navigationDialogRef} className="wiki-confirm" role="dialog" aria-modal="true" aria-label={t("wikiUnsaved")}><h2>{t("wikiUnsaved")}</h2><p>{t("wikiUnsavedHint")}</p><div><button disabled={saving} onClick={() => { cancelNavigation.current?.(); setNav(null); }}>{t("cancel")}</button><button disabled={saving} onClick={() => { const next = nav; setDraft(doc?.text ?? ""); setNav(null); next(); }}>{t("wikiDiscard")}</button><button disabled={busy} onClick={() => void (async () => { if (await save()) { const next = nav; setNav(null); next(); } })()}>{t("wikiSaveContinue")}</button></div></section></div>}
+		{nav && <UnsavedChangesDialog dialogRef={navigationDialogRef} saving={saving} busy={busy} onCancel={() => { cancelNavigation.current?.(); setNav(null); }} onDiscard={() => { const next = nav; setDraft(doc?.text ?? ""); setNav(null); next(); }} onSave={() => void (async () => { if (await save()) { const next = nav; setNav(null); next(); } })()} />}
 		{zoomImage && <WikiImageZoom image={zoomImage} onClose={() => setZoomImage(null)} />}
 	</section>;
 }

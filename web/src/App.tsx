@@ -1270,6 +1270,8 @@ export function App() {
 	}, [chat.terminals.length, createShell, view]);
 
 	const filePreview = previewFile && <FilePreviewContent autoSave={documentPreview}
+		dialog={documentPreview}
+		onOpenTarget={path => { if (documentPreview) setPreviewFile({ path, name: path.split("/").at(-1) ?? path, cwd: previewFile.cwd }); }}
 		key={`${previewFile.cwd}:${previewFile.path}`}
 		file={previewFile}
 		contextReader={contextReader}

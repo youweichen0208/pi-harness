@@ -137,7 +137,7 @@ try {
   const composer = page.locator(".inputbox textarea");
   await page.locator('.inputbox input[type="file"]').setInputFiles({name:"retain.txt",mimeType:"text/plain",buffer:Buffer.from("frozen upload")});
   await composer.fill("/fixture-retain"); await page.locator(".inputbox .btn.send:visible").click();
-  await page.getByText("命令已执行，附件未发送，已保留在输入框。", {exact:true}).waitFor();
+  await page.waitForFunction(() => document.querySelector(".inputbox textarea")?.value === "" && document.querySelectorAll(".attach-chip.file").length === 1);
   assert.equal(await composer.inputValue(), ""); assert.equal(await page.locator(".attach-chip.file").count(), 1);
   await composer.fill("/fixture-retain fail"); await page.locator(".inputbox .btn.send:visible").click(); await sleep(650);
   assert.equal(await composer.inputValue(), "/fixture-retain fail"); assert.equal(await page.locator(".attach-chip.file").count(), 1);

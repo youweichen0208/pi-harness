@@ -17,7 +17,7 @@ interface SettingsModalProps {
 	chat: {
 		ready: boolean;
 		settings: UiSettingsState | null;
-		state?: { isStreaming?: boolean; cwd: string; conversationId: string; planSettings?: import("../types").PlanSettingsState; tree?: import("../types").UiTreeState } | null;
+		state?: { isStreaming?: boolean; cwd: string; conversationId: string; tree?: import("../types").UiTreeState } | null;
 		dialog: { id: string; conversationId: string; kind: "select" | "confirm" | "input" | "editor"; title: string; args: unknown[] } | null;
 	};
 	send: (message: ClientMessage) => boolean;
@@ -57,7 +57,6 @@ export function SettingsModal({ chat, send, onClose, onInstallPiCli, initialTab 
 							builtins={<BuiltinExtensionsPanel
 								key={chat.state.conversationId} cwd={chat.state.cwd} conversationId={chat.state.conversationId}
 								ready={chat.ready} canReload={!chat.state.isStreaming && !chat.state.tree?.verifying && !chat.state.tree?.externallyModified && !chat.state.tree?.busy}
-								plan={chat.state.planSettings} togglePlan={enabled => send({ type: "set_plan_enabled", conversationId: chat.state!.conversationId, enabled })}
 								reload={() => send({ type: "extensions_reload" })} openNative={() => setTab("native-mcp")}
 							/>}
 						/>}

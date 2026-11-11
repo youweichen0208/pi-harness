@@ -136,7 +136,6 @@ App 按 chat.plugins 动态 import 各插件的 client bundle（`/* @vite-ignore
 
 ## 可选原生计划扩展
 
-服务通过可替换 inline extension 注册 plan，默认关闭且不加入 CLI 自动发现。全局开关、来源冲突、模型专用工具与压缩背景的契约见 [计划扩展](architecture-plan.md)。
 
 后台任务面板与注册接口已移除；插件在自身 deactivate 中清理计时器、连接与 worker。
 

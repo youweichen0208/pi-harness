@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 import type { AgentSession } from "@earendil-works/pi-coding-agent";
 import { nativeExtensionRegistry } from "./native-tools.js";
 import { getDocumentSettings, updateDocumentSettings } from "./document-extension-settings.js";
-import { planSettings } from "./plan/settings.js";
 import { subagentSettings, toggleSubagents } from "./subagents/settings.js";
 import { subagentDefaultActive } from "./subagents/extension.js";
 import type { BuiltinExtensionId, BuiltinExtensionsState, BuiltinExtensionState } from "./protocol.js";
@@ -10,7 +9,7 @@ import type { BuiltinExtensionId, BuiltinExtensionsState, BuiltinExtensionState 
 const expectedTools: Partial<Record<BuiltinExtensionId, string[]>> = {
 	"pi-harness-database": ["database_read"],
 	"pi-harness-subagents": ["subagent"],
-	"pi-harness-plan": ["plan"], codemode: ["codemode"], "tool-search": ["tool_search"],
+	codemode: ["codemode"], "tool-search": ["tool_search"],
 };
 const owns = (path: string, id: string) => path === `<inline:${id}>` || path === `builtin:${id}`;
 export function documentSettingsVersion(): string {
@@ -41,10 +40,6 @@ export function builtinExtensionsState(session: AgentSession, conversationId: st
 		const failure = resources.errors.find(error => owns(error.path, id));
 		const item: BuiltinExtensionState = { id, status: "loaded", tools: ownedTools.map(tool => tool.name), commands: extension ? [...extension.commands.keys()] : [] };
 		if (failure) return { ...item, status: "error", error: failure.error };
-		if (id === "pi-harness-plan") {
-			const plan = planSettings().state(session);
-			return { ...item, enabled: plan.enabled, status: !plan.available ? "unavailable" : plan.pending ? "pending" : plan.effective ? "loaded" : "disabled", reason: plan.reason };
-		}
 		if (id === "pi-harness-database") {
 			if (!documentSettings) return { ...item, status: "error", error: documentError };
 			item.enabled = documentSettings.databaseEnabled;

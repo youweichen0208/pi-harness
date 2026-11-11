@@ -1,6 +1,5 @@
 import { createDatabaseExtension } from "./database/extension.js";
 import type { BuiltinExtensionId } from "./protocol.js";
-import { createPlanExtension } from "./plan/extension.js";
 import { createSubagentExtension, type SubagentHost } from "./subagents/extension.js";
 import { SettingsManager, createCodemodeExtension, createMcpExtension, createToolSearchExtension, type InlineExtension, type ExtensionFactory } from "@earendil-works/pi-coding-agent";
 
@@ -25,7 +24,6 @@ export function conversationSettings(cwd: string, agentDir: string): SettingsMan
 
 /** Shared by resource loading and the built-in extension inventory. */
 export const nativeExtensionRegistry = [
-	{ name: "pi-harness-plan", replaceable: true, factory: createPlanExtension },
 	{ name: "pi-harness-subagents", replaceable: true, factory: createSubagentExtension },
 	{ name: "pi-harness-database", replaceable: true, factory: createDatabaseExtension },
 	{ name: "codemode", builtin: true, replaceable: true, factory: createCodemodeExtension },

@@ -81,7 +81,14 @@ export function WikiToolbar({ readOnly, focused, onWidth, items, commands, edito
 	}, [menu]);
 	const execute = (action: Action) => { if (action.options) { setMenu(action.options); return; } setMenu(null); if (action.id) commands.insert(action.id); else if (action.command) commands.execute(action.command, action.value); };
 	const button = (action: Action, index: number) => <button key={index} type="button" disabled={readOnly} title={action.label} aria-label={action.label} aria-haspopup={action.options ? "menu" : undefined} aria-expanded={action.options ? !!menu && trigger.current?.getAttribute("aria-label") === action.label : undefined} aria-pressed={typeof state[action.command ?? ""] === "boolean" ? !!state[action.command!] : undefined} onMouseDown={e => { e.preventDefault(); commands.prepare(); }} onClick={e => { commands.prepare(); if (action.options) { trigger.current = e.currentTarget; setMenu(action.options); } else execute(action); }}>{action.icon}</button>;
-	const overflow = [...groups.slice(count).flat(), a("superscript", <Icon.LuSuperscript />), a("subscript", <Icon.LuSubscript />), a("plainBlock", <Icon.LuType />)];
+	// H4–H6 are rare enough to live in the overflow menu instead of taking a row in the
+	// palette; both entries insert the same blocks, so the palette stays one screen tall.
+	const overflowHeadings = ["bt4", "bt5", "bt6"].map(id => {
+		const item = insert(id);
+		// Palette items carry `help` (a description); the menu needs the item label itself.
+		return { ...item, label: `${t("richHeading")} ${id.slice(2)}` };
+	});
+	const overflow = [...groups.slice(count).flat(), ...overflowHeadings, a("superscript", <Icon.LuSuperscript />), a("subscript", <Icon.LuSubscript />), a("plainBlock", <Icon.LuType />)];
 	return <div ref={bar} className="wiki-insert-toolbar wiki-unified-toolbar" role="toolbar" aria-label={t("richFormatToolbar")}>
 		<div className="wiki-toolbar-insert">{button(choices("richInsertMenu", <Icon.LuPlus />, ["tp","bg","dmk","glk","tip","warning","collapse","card","sl","date","ml"].map(insert)), 0)}</div>
 		{groups.slice(0,count).map((group,i) => <div className="wiki-tool-group" key={i}>{group.map(button)}</div>)}
