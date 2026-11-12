@@ -7,6 +7,7 @@ on:
       - 'electron/**'
       - 'server/extensions-*.ts'
       - 'tests/windows-rendering-test.mjs'
+      - 'scripts/compare-desktop-rendering.mjs'
       - 'tests/extensions-worker-test.mjs'
       - '.github/workflows/verify-rendering.yml'
 permissions:
@@ -58,3 +59,18 @@ jobs:
           name: rendering-${{ matrix.os }}
           path: tests/scratch/rendering
           if-no-files-found: warn
+
+  compare:
+    needs: rendering
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: rendering-*
+          path: rendering
+      - name: Compare Windows with native macOS reference
+        run: node scripts/compare-desktop-rendering.mjs rendering

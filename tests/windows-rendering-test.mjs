@@ -1,5 +1,6 @@
 /** Actual Electron/OS rendering; CI runs this on macOS and Windows at 100%/125%/150%. */
 import assert from 'node:assert/strict';
+import { testEnv } from './lib/test-env.mjs';
 import { _electron as electron } from 'playwright-core';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -23,7 +24,7 @@ const transcript = [
 let app;
 try {
 	for (const scale of process.platform === 'win32' ? [1, 1.25, 1.5] : [1]) {
-		app = await electron.launch({ ...(process.argv[2] ? { executablePath: resolve(process.argv[2]) } : {}), args: [...(process.argv[2] ? [] : ['.']), `--force-device-scale-factor=${scale}`, `--user-data-dir=${join(base, `profile-${scale}`)}`], env: { ...process.env, PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(base, `data-${scale}`), PI_CODING_AGENT_DIR: agent } });
+		app = await electron.launch({ ...(process.argv[2] ? { executablePath: resolve(process.argv[2]) } : {}), args: [...(process.argv[2] ? [] : ['.']), `--force-device-scale-factor=${scale}`, `--user-data-dir=${join(base, `profile-${scale}`)}`], env: { ...testEnv(), PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(base, `data-${scale}`), PI_CODING_AGENT_DIR: agent } });
 		let page;
 		for (let i = 0; i < 200; i++) { page = app.windows().find(p => p.url().startsWith('http://127.0.0.1:')); if (page) break; await sleep(100); }
 		assert(page, 'local app window starts'); page.setDefaultTimeout(15000);
@@ -141,7 +142,13 @@ try {
 		assert(dragged.pixel[0] < hovered.pixel[0], `dragging darkens the thumb: ${JSON.stringify({ hovered, dragged })}`);
 
 
-		const typography = {};
+		const ui = await page.evaluate(() => Object.fromEntries(['.inputbox textarea', '.file-name', '.msg-text h2', '.msg-text pre code'].map(selector => {
+			const el = document.querySelector(selector); if (!el) throw new Error(`Missing ${selector}`);
+			const cs = getComputedStyle(el);
+			return [selector, Object.fromEntries(['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color', 'backgroundColor', 'borderRadius', 'padding'].map(key => [key, cs[key]]))];
+		})));
+		const electronVersion = await app.evaluate(() => process.versions.electron);
+		const typography = {}, surfaces = {};
 		for (const appearance of ['light', 'dark']) {
 			await page.evaluate(appearance => { document.documentElement.dataset.appearance = appearance; }, appearance);
 			typography[appearance] = await page.evaluate(async () => {
@@ -158,11 +165,43 @@ try {
 				}
 				return samples;
 			});
+			// Measure real stylesheet contexts at a fixed width, excluding native titlebar geometry.
+			surfaces[appearance] = await page.evaluate(async () => {
+				const host = document.createElement('div');
+				host.style.cssText = 'position:fixed;left:0;top:0;width:640px;visibility:hidden';
+				const text = '项目文档 Workspace：检查文件与任务进度，运行完成 123。';
+				const contexts = {
+					wiki: '<div class="wiki-prose md"><p></p><h2></h2><table><tbody><tr><td></td></tr></tbody></table></div>',
+					notes: '<div class="notes-preview md"><p></p><h2></h2></div>',
+					file: '<div class="fp-markdown"><div class="md"><p></p><h2></h2></div></div>',
+					settings: '<div class="system-prompt-panel"><p></p></div>',
+					extensions: '<div class="extensions-panel"><p></p></div>',
+					search: '<div class="wiki-search-modal"><input></div>',
+					insert: '<div class="fp-slash-menu"><span></span></div>',
+				};
+				document.body.append(host);
+				try {
+					const result = {};
+					for (const [name, html] of Object.entries(contexts)) {
+						host.innerHTML = html;
+						for (const el of host.querySelectorAll('p,h2,td,span,input')) {
+							if (el instanceof HTMLInputElement) el.value = text; else el.textContent = text;
+						}
+						await document.fonts.ready;
+						result[name] = [...host.querySelectorAll('p,h2,td,span,input')].map(el => {
+							const cs = getComputedStyle(el), rect = el.getBoundingClientRect();
+							const range = document.createRange(); range.selectNodeContents(el);
+							return { tag: el.tagName, family: cs.fontFamily, size: cs.fontSize, weight: cs.fontWeight, lineHeight: cs.lineHeight, color: cs.color, background: cs.backgroundColor, radius: cs.borderRadius, width: rect.width, height: rect.height, lines: [...range.getClientRects()].map(r => ({ width: r.width, height: r.height })) };
+						});
+					}
+					return result;
+				} finally { host.remove(); }
+			});
 			await page.mouse.move(720, 880);
 			await page.screenshot({ path: join(output, `${prefix}-${appearance}.png`) });
 		}
 
-		writeFileSync(join(output, `${prefix}-metrics.json`), JSON.stringify({ ...metrics, typography, nativeWindow, fonts, renderedFonts: rendered.fonts, monoFonts: monoFonts.fonts, scrollbar: { resting, hovered, dragged } }, null, 2));
+		writeFileSync(join(output, `${prefix}-metrics.json`), JSON.stringify({ ...metrics, electron: electronVersion, ui, typography, surfaces, nativeWindow, fonts, renderedFonts: rendered.fonts, monoFonts: monoFonts.fonts, scrollbar: { resting, hovered, dragged } }, null, 2));
 		await app.close(); app = undefined;
 		console.log(`PASS actual ${prefix} Electron: platform, fonts, SVG icons, labels, 1440x900 screenshots`);
 	}

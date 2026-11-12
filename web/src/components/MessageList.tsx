@@ -18,7 +18,7 @@ import { goalEventText, goalCompletedText, groupGoalEvents } from "../goal-event
 import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
 
-import type { ReactNode } from "react";
+import type { ReactNode, WheelEvent as ReactWheelEvent } from "react";
 import { FiArrowDown } from "react-icons/fi";
 import type {
 	PromptAttachment,
@@ -622,8 +622,8 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 			// 用户永远逃不出去（表现为「自己滚动一直弹回来」）。
 			// 大幅负跳变（<-500）不算：那是布局塌缩（finalize 一帧收起巨消息）
 			// 引发的原生 clamp，不是用户手势。
-						escapedRef.current = true;
-		} else if (nearBottom && dSt >= 0) {
+			escapedRef.current = true;
+		} else if (distance <= 2 && dSt > 0) {
 			escapedRef.current = false; // 滚回了底部
 		}
 		stickRef.current = nearBottom && !escapedRef.current;
@@ -632,6 +632,15 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 		updateMarkerPositions();
 		scheduleSweep();
 	}, [updateActiveFromScroll, updateMarkerPositions, scheduleSweep]);
+	const onWheelCapture = useCallback((event: ReactWheelEvent<HTMLDivElement>) => {
+		const el = scrollRef.current;
+		if (!el || event.deltaY >= 0 || el.scrollTop <= 0) return;
+		// 滚轮意图先于 scroll 事件到达；流式更新可能在两者之间重绘。
+		escapedRef.current = true;
+		stickRef.current = false;
+		setStickBottom(false);
+		setScrollingUp(true);
+	}, []);
 
 	// 流结束兜底：finalize 瞬间 streaming→persisted 切换可能让内容高度塌缩一帧，
 	// 浏览器把视口 clamp 到半路；若用户并未主动离开（!escaped），等布局稳定后吸回底部。
@@ -722,7 +731,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 
 	return (
 		<SubagentTurnContext.Provider key={`${state.conversationId}:${state.sessionId}`} value={subagentGroups}><div className="messages-wrap">
-			<div className="messages" ref={scrollRef} onScroll={onScroll}>
+			<div className="messages" ref={scrollRef} onScroll={onScroll} onWheelCapture={onWheelCapture}>
 				{timeline.length === 0 && !state.streamingMessage && (
 					<div className="empty-state">
 						<div className="empty-logo-wrap"><img className="empty-logo" src="/icon/1a-mark.svg" alt="pi-harness" /></div>
