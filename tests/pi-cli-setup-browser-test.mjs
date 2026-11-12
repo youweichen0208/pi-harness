@@ -93,7 +93,7 @@ try {
 		await page.locator('.pi-cli-command .copy-btn').click();
 		assert.equal(await page.evaluate(() => window.__copiedCommand), 'npm install -g --ignore-scripts @earendil-works/pi-coding-agent@latest');
 		await page.locator('.builtin-icon').first().waitFor();
-		assert.equal(await page.locator('.builtin-icon').count(), 6);
+		assert.equal(await page.locator('.builtin-icon').count(), 5, 'native plan is no longer listed');
 		mkdirSync('tests/scratch/extensions-layout', { recursive: true });
 		await page.screenshot({ path: `tests/scratch/extensions-layout/${lang}-light.png` });
 		await page.locator('.builtin-extensions').scrollIntoViewIfNeeded();
