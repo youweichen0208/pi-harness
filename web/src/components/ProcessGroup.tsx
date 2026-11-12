@@ -1,3 +1,4 @@
+import { RunningIndicator } from "./RunningIndicator";
 import { useEffect, useState, type ReactNode } from "react";
 import { FiChevronRight } from "react-icons/fi";
 import { useChatT } from "../i18n";
@@ -40,9 +41,9 @@ export function ProcessGroup({ stats, children }: { stats: ProcessStats; childre
 			<span className="process-group-summary"><span>{parts.join(" · ")}</span></span>
 			{thought && <><span className="process-group-dot" aria-hidden="true">·</span><span className="process-group-thought">{thought}</span></>}
 			{/* 29a: no "N failed" / "Completed" badge on the right — the ✗ rows and their
-			   exit code already say it. Only a running turn shows its spinner. */}
+			   exit code already say it. Only a running turn shows its breathing dot. */}
 			{stats.running && <span className="process-group-status">
-				<i className="thinking-spinner" aria-hidden="true" />{t("processRunning")}
+				<RunningIndicator />{t("processRunning")}
 			</span>}
 		</button>}
 		{headless && <button type="button" className="process-group-summary-line" aria-expanded={false} onClick={() => setManual(true)}>{parts.join(" · ")}{thought && <> · {thought}</>}</button>}

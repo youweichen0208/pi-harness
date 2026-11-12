@@ -1,3 +1,4 @@
+import { RunningIndicator } from "./RunningIndicator";
 import { useState, type ReactNode } from "react";
 import { FiPlay, FiSquare } from "react-icons/fi";
 import { useT } from "../i18n";
@@ -26,7 +27,7 @@ export function PlaygroundResult({ runKey: key, onSendToPi, stale = false, showC
 
 	return <div className={`playground-result${variant === "scratch" ? " scratch-result" : ""}`} role="region" aria-label={t("playgroundRun")}>
 		<button type="button" className="playground-result-head" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>
-			<span className={`playground-dot ${running ? "running" : run.stopped ? "stopped" : failed ? "failed" : "ok"}`} aria-hidden="true" />
+			{running ? <RunningIndicator /> : <span className={`playground-dot ${run.stopped ? "stopped" : failed ? "failed" : "ok"}`} aria-hidden="true" />}
 			<strong>{t(running ? "playgroundRunning" : run.stopped ? "pgRunStopped" : failed ? variant === "scratch" ? "pgRunError" : "pgRunFailed" : "pgRunFinished")}</strong>
 			{stale && <span className="playground-badge stale">{t(run.cases.length ? "pgChanged" : "playgroundCodeChanged")}</span>}
 			{run.timedOut && <span className="playground-badge">{t("playgroundTimedOut")}</span>}

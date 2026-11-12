@@ -1,3 +1,5 @@
+import { OutputColor } from "./OutputColor";
+import { RunningIndicator } from "./RunningIndicator";
 import { SubagentTurnContext, SubagentTurnPanel } from "./SubagentTurnPanel";
 import { FiGitBranch } from "react-icons/fi";
 import { copyText } from "../clipboard";
@@ -87,7 +89,7 @@ export function ReadGroup({ items, wrap }: { items: { block: UiToolCallBlock; vi
 			<span aria-hidden="true">{open ? "⌄" : "›"}</span><UiIcon name="file" />
 			<strong>{t("readFiles", { n: items.length })}</strong>
 			<span className="read-group-paths" title={paths.join("\n")}>{paths.map((path) => path.split("/").slice(-2).join("/")).join(", ")}</span>
-			<span className="read-group-status">{failed ? t("error") : pending ? t("running") : skipped ? t("toolNotExecuted") : completed ? `${t("done")}${duration ? ` · ${formatDuration(duration)}` : ""}` : t("toolQueued")}</span>
+			<span className="read-group-status">{pending && !failed && <RunningIndicator />} {failed ? t("error") : pending ? t("running") : skipped ? t("toolNotExecuted") : completed ? `${t("done")}${duration ? ` · ${formatDuration(duration)}` : ""}` : t("toolQueued")}</span>
 		</button>
 		{open && <div className="read-group-items">{items.map(({ block, view }) => <ToolCallBlock key={block.id} block={block} view={view} wrap={wrap} />)}</div>}
 	</div>;
@@ -327,7 +329,7 @@ function BashCommandHeader({ command, original, directory, running, elapsed, sta
 		return () => observer.disconnect();
 	}, [command]);
 	return <div className="toolcall-head bash-command-head">
-		{running && <span className="bash-running-dot" aria-label={t("running")} />}
+		{running && <RunningIndicator label={t("running")} />}
 		<button type="button" className="bash-head-command" title={original} disabled={!clipped && !full} aria-expanded={full} aria-label={full ? t("collapseCode") : clipped ? t("bashExpandFullCommand") : command} onClick={onFull}><span className="bash-prompt">$</span>{commit && <span className="bash-command-verb">git commit</span>}<span ref={label} className={`bash-command-text${commit ? " bash-commit-subject" : ""}`}>{commit ? commit[1] ?? commit[2] : command}</span>{(clipped || full) && <FiChevronDown className={full ? "open" : ""} />}</button>
 		{directory && <span className="bash-directory" title={directory}>{directory}</span>}
 		<span className="toolcall-status">{running ? `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, "0")}` : status}</span>
@@ -512,7 +514,7 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true, rawSubagen
 					<div className="toolcall-output-label">
 						{isError ? t("errorOutput") : block.name === "read" ? t("modelReadOnly") : t("output")}
 						{running && (
-							<span className="thinking-spinner" aria-hidden="true" />
+							<RunningIndicator />
 						)}
 						<span className="toolcall-output-spacer" />
 						{isMarkdown && !isError && (
@@ -566,9 +568,10 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true, rawSubagen
 				{compactBash ? <code className="bash-head-command" title={command ?? ""}>$ {displayBashCommand(command!, cwd)}</code> : generic ? <button type="button" className="toolcall-name toolcall-name-toggle" title={block.name} aria-expanded={open} onClick={() => setOpen(v => !v)}><span>{block.name}</span>{action && <small className="toolcall-action" title={action}>action: {action}</small>}</button> : targetPath ? <span className="toolcall-read-title"><span>{t("readVerb")}</span><code title={targetPath}>{displayReadPath(targetPath)}</code></span> : <span className="toolcall-name">{block.name}</span>}
 				{compactBash && output && <span className="bash-head-count">{t("toolLineCount", { n: outputLines.length })}</span>}
 				<span className="toolcall-status">
-					{quietSubagent && (statusClass === "ok" ? <FiCheck aria-hidden="true" /> : statusClass === "run" ? <i className="thinking-spinner" aria-hidden="true" /> : statusClass === "err" ? <FiX aria-hidden="true" /> : null)}
+					{running && !quietSubagent && <RunningIndicator />}
+					{quietSubagent && (statusClass === "ok" ? <FiCheck aria-hidden="true" /> : statusClass === "run" ? <RunningIndicator /> : statusClass === "err" ? <FiX aria-hidden="true" /> : null)}
 					{statusLabel}
-					{running && block.name === "bash" && <span className="working-dots" aria-hidden="true"><i /><i /><i /></span>}
+
 					{exitHint && <em className="toolcall-exit">{exitHint}</em>}
 				</span>
 				<span className="toolcall-spacer" />
@@ -749,7 +752,7 @@ function BashOutput({ output, wrap, cwd, searchOutput, compact = false, command 
 			const path = /^(?:[.~/\w-]+\/)*[.\w-]+(?:\.[\w-]+)$/.test(line);
 			const split = path ? line.lastIndexOf("/") + 1 : 0;
 			const git = gitSummary ? gitStatusLine(line) : null;
-			return <Fragment key={index}>{position > 0 && index > visible[position - 1] + 1 && <button type="button" className="bash-output-gap bash-output-gap-button" onClick={() => setAll(true)}>⋯ {t("toolMoreLines", { n: index - visible[position - 1] - 1 })}</button>}<div className={`bash-output-line${git ? " git-row" : ""}${isLikelyErrorLine(rawLine) ? " error" : ""}`}><span className="bash-line-number">{lineNumber}</span>{git ? <><span className={`bash-git-status git-${git.kind}`}>{git.status}</span><span className="bash-line-text">{git.path}</span></> : <span className="bash-line-text">{path ? <><span className="bash-path-dir">{line.slice(0, split)}</span><span className={split ? "bash-path-file" : "bash-root-file"}>{line.slice(split)}</span></> : line || " "}</span>}</div></Fragment>;
+			return <Fragment key={index}>{position > 0 && index > visible[position - 1] + 1 && <button type="button" className="bash-output-gap bash-output-gap-button" onClick={() => setAll(true)}>⋯ {t("toolMoreLines", { n: index - visible[position - 1] - 1 })}</button>}<div className={`bash-output-line${git ? " git-row" : ""}${isLikelyErrorLine(rawLine) ? " error" : ""}`}><span className="bash-line-number">{lineNumber}</span>{git ? <><span className={`bash-git-status git-${git.kind}`}>{git.status}</span><span className="bash-line-text">{git.path}</span></> : <span className="bash-line-text">{path ? <><span className="bash-path-dir">{line.slice(0, split)}</span><span className={split ? "bash-path-file" : "bash-root-file"}>{line.slice(split)}</span></> : <OutputColor text={line || " "} />}</span>}</div></Fragment>;
 		})}</div>
 		{lines.length > (gitSummary ? 6 : 8) && (all || !hasGap) && <button type="button" className="bash-output-more" onClick={() => setAll((value) => !value)}>{all ? t("collapseCode") : t("toolMoreLines", { n: lines.length - visible.length })}</button>}
 	</div>;

@@ -4335,16 +4335,11 @@ span.msg-editor-hint svg {
 	border-top: 1px solid var(--border-soft);
 }
 
-/* Spinning ring + brightened label on the thinking header while reasoning
-   is streaming live — was a text "..." tick before; a spinner reads as
-   "actively working" at a glance instead of needing to notice text change.
-   (Selector fixed to match the actual class list on .thinking — it used to
-   be `.thinking-live .thinking-toggle`, which never matched because the
-   element carries "thinking" and "live" as two separate class tokens, not
-   one "thinking-live" token, so this brightening never actually applied.) */
+/* Live reasoning shares the green breathing mark; completed thoughts stay muted. */
 .thinking.live .thinking-toggle {
 	color: var(--text);
 }
+.thinking.live .thinking-label { color: var(--progress-text); }
 
 .thinking-live-label {
 	display: inline-flex;
@@ -9899,10 +9894,10 @@ html.pi-desktop .design-workspace .topbar-actions > .topbar-more .chip > svg { f
 .bash-directory { max-width: 22%; overflow: hidden; text-overflow: ellipsis; padding: 2px 5px; border-radius: var(--r-sm); background: var(--bg-elev2); color: var(--text-dim); font: 10px var(--mono); }
 .bash-running-dot, .task-progress-status > i { display: inline-block; flex: none; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 .bash-running-dot { color: var(--progress-text); animation: bash-running-bloom 1.5s ease-in-out infinite; }
-/* Claude Code 式运行灯：内核深绿随明暗呼吸，外圈浅绿光晕周期性涨缩，合成「正在运行」的活体感。 */
+/* Center and halo brighten together, then fade together without disappearing. */
 @keyframes bash-running-bloom {
-	0%, 100% { background: var(--progress-text); box-shadow: 0 0 0 0 color-mix(in srgb, var(--progress-text) 0%, transparent); }
-	45% { background: color-mix(in srgb, var(--progress-text) 62%, var(--bg)); box-shadow: 0 0 0 3px var(--progress-soft); }
+	0%, 100% { opacity: .25; background: var(--progress-text); box-shadow: 0 0 0 0 transparent; }
+	50% { opacity: 1; background: var(--progress-text); box-shadow: 0 0 0 3px var(--progress-soft); }
 }
 .design-workspace .toolcall-bash.run .toolcall-status { color: var(--progress-text); font: 12px var(--mono); padding: 0; }
 .design-workspace .toolcall-bash.run .toolcall-status::before { display: none; }
@@ -12368,7 +12363,7 @@ pre.wiki-mermaid-source-hidden > .fp-mermaid-preview { padding-bottom: 0; }
 .process-list .thinking-body { max-height: 320px; overflow-y: auto; padding: 2px 12px 10px 34px; border-top: 0; font-size: 12.5px; line-height: 1.6; }
 /* Long thinking rows recede behind a light gray band so tool rows stay scannable. */
 .process-list > .thinking, .process-list .thinking { background: var(--output-bg); }
-.process-list .thinking.live .thinking-label { color: var(--accent); font-weight: 600; }
+.process-list .thinking.live .thinking-label { color: var(--progress-text); font-weight: 600; }
 /* A thinking block that stands on its own (no neighbouring tool call, so it is
    not wrapped in a process list) keeps the base `.thinking` card. When such a
    row sits directly above or below a completed run it must not stack its 8px
@@ -15949,3 +15944,15 @@ span.rich-math { display: inline-block; }
 	.missing-session-dialog .missing-session-actions { flex-direction: column; }
 	.wiki-confirm.missing-session-dialog .missing-session-actions button { min-height: 44px; }
 }
+
+/* Running work shares the green breathing dot; waiting keeps the brand mark. */
+.running-indicator { vertical-align: middle; }
+:root .design-workspace .process-group .bash-row.run .bash-state { width: 16px; overflow: visible; }
+.design-workspace .toolcall.run .toolcall-status::before { display: none; }
+
+/* Terminal semantics retain their original text and whitespace. */
+.bash-output-section { color: var(--link); font-weight: 600; }
+.bash-output-key { color: var(--link); }
+.bash-output-value, .bash-output-warning { color: var(--yellow-fg); }
+.bash-output-meta { color: var(--text-dim); }
+.bash-output-filename { color: var(--text); font-weight: 500; }

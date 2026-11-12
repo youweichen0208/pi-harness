@@ -73,7 +73,7 @@ export function EditWriteCard({ item, compact = false, retried = false, live = f
 	const state = retried ? "retried" : status(item);
 	const noDiff = change.kind === "edit" && change.empty && !change.error && state === "done";
 	// 卡片标题栏只给工作区内的相对路径：一张 964px 宽的卡片里，
-	// `/Users/youweichen/projects/pi-web-ui/` 这 35 个字符会把真正要看的那段
+	// `/Users/youweichen/projects/pi-harness/` 这 38 个字符会把真正要看的那段
 	// （`docs/ui-design.md`）挤到后面去。完整路径保留在悬停说明里，打开文件、
 	// 高亮语言判定仍然用原值。工作区外的文件保持绝对路径——相对化后反而是错的。
 	const absolute = change.path || item.block.name;

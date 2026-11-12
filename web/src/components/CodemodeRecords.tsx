@@ -1,3 +1,4 @@
+import { RunningIndicator } from "./RunningIndicator";
 import type { ClientMessage, UiMessage } from "../types";
 import { CodemodeHistoryDialog } from "./CodemodeHistoryDialog";
 import { useEffect, useState } from "react";
@@ -23,7 +24,7 @@ function Group({ group, index, onJump }: { group: CodemodeGroup; index: number; 
 			{!group.calls.length && <p className="ext-muted">{t(group.status === "running" || group.status === "queued" ? "cmWaitingCalls" : "cmNoCalls")}</p>}
 			<ul>{(all ? group.calls : group.calls.slice(-8)).map(call => <li key={call.key} data-codemode-record={call.key}>
 				<button type="button" className="cm-record-row" onClick={jump} title={t("taskJumpToChat")}>
-					<span className={`cm-record-mark ${call.status}`} aria-label={t(call.status === "ok" ? "done" : call.status === "error" ? "error" : call.status === "cancelled" ? "cmCancelled" : call.status === "unfinished" ? "cmUnfinished" : "running")}>{call.status === "ok" ? "✓" : call.status === "error" ? "×" : call.status === "running" ? "●" : "−"}</span>
+					<span className={`cm-record-mark ${call.status}`} aria-label={t(call.status === "ok" ? "done" : call.status === "error" ? "error" : call.status === "cancelled" ? "cmCancelled" : call.status === "unfinished" ? "cmUnfinished" : "running")}>{call.status === "ok" ? "✓" : call.status === "error" ? "×" : call.status === "running" ? <RunningIndicator /> : "−"}</span>
 					<span className="cm-record-description"><code>{call.name}</code><small>{call.args.replace(/\s+/g, " ").slice(0, 160)}</small></span>
 					{call.durationMs !== undefined && <small className="cm-record-duration">{commandDuration(call.durationMs)}</small>}
 				</button>

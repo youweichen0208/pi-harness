@@ -1,3 +1,5 @@
+import { OutputColor } from "./OutputColor";
+import { RunningIndicator } from "./RunningIndicator";
 import { formatBashOutput, formattedOutputCanExpand } from "../bash-output-format";
 import { BashFormattedOutput } from "./BashFormattedOutput";
 import { highlightLine } from "../hljs-lite";
@@ -8,7 +10,7 @@ import { commandReading, consecutiveAttempts } from "../command-reading";
 import { useChatT, useI18n } from "../i18n";
 import { WorkspacePathContext } from "../workspace-context";
 import { bashCommand } from "../bash-steps";
-import { hasNumberedPipelineOutput, hasSearchSourceNumbers, searchSourceNumberParts, commandPresentation, commandPreview, isLikelyErrorLine, compactCommandLabel, commandDuration, elapsedLabel } from "../bash-presentation";
+import { hasNumberedPipelineOutput, hasSearchSourceNumbers, commandPresentation, commandPreview, isLikelyErrorLine, compactCommandLabel, commandDuration, elapsedLabel } from "../bash-presentation";
 import { latestOutputLine } from "../live-tool-output";
 import type { UiToolCallBlock } from "../types";
 import { toolDuration, type ToolView } from "./ToolCallBlock";
@@ -73,7 +75,7 @@ export function BashGroup({ items, onKill, active = false, flat = false }: { ite
 	}, [items]);
 	return <section className={`bash-group ${state} ${!open ? "historical-step" : ""}`}>
 		{!flat && <button type="button" className="bash-group-head" aria-expanded={open} onClick={() => setOpen(!open)}>
-			<span className={`bash-state ${state}`} aria-label={t(failed ? "error" : running ? "running" : skipped ? "toolNotExecuted" : "done")}>{failed ? "✗" : running ? <i className="thinking-spinner" /> : skipped ? "−" : "✓"}</span>
+			<span className={`bash-state ${state}`} aria-label={t(failed ? "error" : running ? "running" : skipped ? "toolNotExecuted" : "done")}>{failed ? "✗" : running ? <RunningIndicator /> : skipped ? "−" : "✓"}</span>
 			<strong>{!open ? commandReading(commandPresentation(bashCommand(items[0].block.argumentsText) ?? "", cwd).command).title : t(running ? "bashGroupRunning" : "bashGroupCount", { n: items.length })}</strong>{!open && items.length > 1 && <span className="bash-group-count">{t("changesCommands", { n: items.length })}</span>}
 			{failed > 0 && <span className="bash-state err">{t("bashGroupFailed", { n: failed })}</span>}
 			{measured && seconds(durations.reduce<number>((sum, ms) => sum + (ms ?? 0), 0)) && <span className="bash-group-duration">{seconds(durations.reduce<number>((sum, ms) => sum + (ms ?? 0), 0))}</span>}
@@ -134,7 +136,7 @@ function BashRow({ block, view, onKill, revealed, messageId, attempts, historica
 	};
 	return <div className={`bash-row ${state}`} data-tool-call-id={block.id} data-msg-id={messageId} onMouseEnter={() => window.dispatchEvent(new CustomEvent("pi:tool-hover", { detail: { toolCallId: block.id } }))} onMouseLeave={() => window.dispatchEvent(new CustomEvent("pi:tool-hover", { detail: { toolCallId: null } }))}>
 		<button type="button" className="bash-row-head" title={command} aria-expanded={open} onClick={() => setOpen(!open)}>
-			<span className={`bash-state ${state}`} aria-label={t(state === "run" ? "running" : state === "err" ? "error" : state === "empty" && view.abandoned ? "toolNotExecuted" : "done")}>{state === "run" ? <i className="thinking-spinner" /> : state === "err" ? "✗" : state === "empty" ? "−" : "✓"}</span>
+			<span className={`bash-state ${state}`} aria-label={t(state === "run" ? "running" : state === "err" ? "error" : state === "empty" && view.abandoned ? "toolNotExecuted" : "done")}>{state === "run" ? <RunningIndicator /> : state === "err" ? "✗" : state === "empty" ? "−" : "✓"}</span>
 			<code className="bash-inline-command" title={command}>{commandPreview(command, cwd)}</code>
 			{attempts && <span className="bash-attempt-count">{t("commandAttempts", { n: attempts })}</span>}{reading.title !== compactCommandLabel(reading.command) && <code className="bash-command-secondary">{reading.command}</code>}
 			{commandLines.length > 1 && <span className="bash-extra-lines">{t("bashExtraLines", { n: commandLines.length - 1 })}</span>}
@@ -161,14 +163,4 @@ function BashRow({ block, view, onKill, revealed, messageId, attempts, historica
 			{history}
 		</div>}
 	</div>;
-}
-
-/** Small, conservative accents; React escapes every part and preserves the source text. */
-function OutputColor({ text, searchNumbers = false }: { text: string; searchNumbers?: boolean }) {
-	const source = searchNumbers ? searchSourceNumberParts(text) : null;
-	if (source) return <>{source.prefix}<OutputColor text={source.rest.trimStart()} /></>;
-	if (isLikelyErrorLine(text)) return <>{text}</>;
-	const stat = /^(\s*.+?)(\s+\|\s+\d+\s+)([+\-]+)(\s*)$/.exec(text);
-	if (stat) return <>{stat[1]}{stat[2]}{stat[3].split(/(\++|-+)/).filter(Boolean).map((part, i) => <span key={i} className={part[0] === "+" ? "bash-color-add" : "bash-color-delete"}>{part}</span>)}{stat[4]}</>;
-	return <>{text.split(/(\b\d+ insertions?\(\+\)|\b\d+ deletions?\(-\)|\b(?:PASS|passed|SUCCESS)\b)/g).map((part, i) => <span key={i} className={/^\d+ insertions?/.test(part) || /^(PASS|passed|SUCCESS)$/.test(part) ? "bash-color-add" : /^\d+ deletions?/.test(part) ? "bash-color-delete" : undefined}>{part}</span>)}</>;
 }

@@ -1,5 +1,5 @@
 import { useChatT } from "../i18n";
-import { isLikelyErrorLine } from "../bash-presentation";
+import { OutputColor } from "./OutputColor";
 import { useMemo } from "react";
 import { highlightLine } from "../hljs-lite";
 import { alignOutputCode, SEARCH_PREVIEW_LIMIT, TEXT_PREVIEW_LIMIT, type OutputFormat } from "../bash-output-format";
@@ -21,7 +21,7 @@ export function BashFormattedOutput({ format, all }: { format: OutputFormat; all
 		}
 	}
 	return <div className="bash-formatted-output">
-		{format.kind === "mixed" && <><section className="bash-mixed-log"><div className="bash-search-location">{t("bashExecutionLog")}</div><pre>{format.log.split("\n").slice(0, all ? undefined : SEARCH_PREVIEW_LIMIT).map((line, i) => <span key={i} className={isLikelyErrorLine(line) ? "bash-color-delete" : undefined}>{line}{"\n"}</span>)}</pre></section><div className="bash-search-location">{t("bashCodeMatches")}</div></>}
+		{format.kind === "mixed" && <><section className="bash-mixed-log"><div className="bash-search-location">{t("bashExecutionLog")}</div><pre>{format.log.split("\n").slice(0, all ? undefined : SEARCH_PREVIEW_LIMIT).map((line, i) => <span key={i}><OutputColor text={line} />{"\n"}</span>)}</pre></section><div className="bash-search-location">{t("bashCodeMatches")}</div></>}
 		{format.kind === "search" || format.kind === "mixed" ? groups.map((group, i) => <section className="bash-search-file" key={i}>
 			{group.path && <div className="bash-search-location">{group.path}</div>}
 			{group.records.map((record, index) => <div className={`bash-search-result${record.markdown ? " prose" : ""}`} key={index}>

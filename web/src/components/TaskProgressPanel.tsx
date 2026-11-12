@@ -1,3 +1,4 @@
+import { RunningIndicator } from "./RunningIndicator";
 import { isToolTextContinuation } from "../../../server/tool-text";
 import { currentCodemodeGroups, type CodemodeActivity } from "../codemode-records";
 import { CodemodeRecords } from "./CodemodeRecords";
@@ -106,7 +107,7 @@ function TaskProgressContent({ send, codemode, liveOutputs, toolStatuses, conver
 		const kinds = (["read", "write", "run"] as const).filter(kind => items.some(item => stepKindTag(item.kind) === kind));
 		const open = current ? !compactActive : expandedPhase === phase.id;
 		return <li key={phase.id} className={`task-step ${phase.status}${current ? " current" : ""}`}>
-			<span className="task-step-mark" aria-hidden="true">{phase.status === "done" ? <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3.5 8.5 6.5 11.5 12.5 4.5" /></svg> : phase.status === "failed" ? <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 4l8 8M12 4l-8 8" /></svg> : <svg className="task-step-spinner" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeDasharray="29 9" /></svg>}</span>
+			<span className="task-step-mark" aria-hidden="true">{phase.status === "done" ? <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3.5 8.5 6.5 11.5 12.5 4.5" /></svg> : phase.status === "failed" ? <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 4l8 8M12 4l-8 8" /></svg> : <RunningIndicator />}</span>
 			{current
 				? <div className="task-step-current-row">
 					<button type="button" className="task-step-title task-step-toggle" title={phaseHeadline(phase, locale)} aria-expanded={!compactActive} onClick={() => setCompactActive(value => !value)}><span>{phaseHeadline(phase, locale, true)}</span></button>
@@ -144,14 +145,14 @@ function TaskProgressContent({ send, codemode, liveOutputs, toolStatuses, conver
 	};
 	return <div className={`task-progress task-sections ${state ?? "empty"}`} tabIndex={-1} aria-label={t("taskProgress")}>
 		{overviewStatus && !empty && <div className={`task-overview ${overviewStatus}${overviewOpen ? "" : " collapsed"}`}>
-			<div className="task-overview-line"><span className="task-overview-state"><i aria-hidden="true" />{t(overviewStatus === "pending" ? "taskOverviewQueued" : overviewStatus === "running" ? "taskOverviewRunning" : overviewStatus === "failed" ? "taskStateFailed" : overviewStatus === "interrupted" ? "taskStateInterrupted" : overviewStatus === "reminding" ? "taskStateReminding" : "taskOverviewDone")}</span>
+			<div className="task-overview-line"><span className="task-overview-state">{overviewStatus === "running" ? <RunningIndicator /> : <i aria-hidden="true" />}{t(overviewStatus === "pending" ? "taskOverviewQueued" : overviewStatus === "running" ? "taskOverviewRunning" : overviewStatus === "failed" ? "taskStateFailed" : overviewStatus === "interrupted" ? "taskStateInterrupted" : overviewStatus === "reminding" ? "taskStateReminding" : "taskOverviewDone")}</span>
 				<span className="task-overview-meta">{tally.total > 0 && <span>{t("taskStepsCount", { n: tally.total })}</span>}{tally.failed > 0 && <span className="failed">{t("taskOverviewFailedCount", { n: tally.failed })}</span>}{tally.elapsed >= 1000 && <span>{elapsedLabel(tally.elapsed / 1000)}</span>}</span>
 				<button type="button" className="task-overview-toggle" aria-expanded={overviewOpen} aria-label={t(overviewOpen ? "collapseOverview" : "expandOverview")} title={t(overviewOpen ? "collapseOverview" : "expandOverview")} onClick={() => setOverviewChoice(!overviewOpen)}><FiChevronRight className={overviewOpen ? "open" : ""} /></button>
 			</div>
 			{overviewOpen && <div className="task-overview-track" aria-hidden="true">{phases.map(phase => <i key={phase.id} className={phase.status} style={{ flexGrow: Math.max(400, phase.durationMs ?? 0) }} />)}</div>}
 		</div>}
 		<div className="task-sections-scroll" ref={scrollRef} onPointerDown={() => { userScrolled.current = true; }} onWheel={() => { userScrolled.current = true; }} onTouchMove={() => { userScrolled.current = true; }} onKeyDown={event => { if (["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End"].includes(event.key)) userScrolled.current = true; }}>
-			{empty ? <p className="task-panel-empty">{t("taskPanelEmpty")}</p> : <>
+			{!empty && <>
 			<section className="task-section">
 				<button type="button" className="task-section-heading" aria-expanded={progressOpen} onClick={() => setProgressOpen(value => !value)}><FiChevronRight className={progressOpen ? "open" : ""} />{t(stepLog ? "taskStepsHeading" : "taskProgressHeading")}{stepLog && <span className="task-section-count">{t("completedOfTotal", { done: tally.done, total: tally.total })}</span>}</button>
 				{progressOpen && <div className="task-section-content">

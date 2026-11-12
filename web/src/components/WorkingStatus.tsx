@@ -1,3 +1,4 @@
+import { RunningIndicator } from "./RunningIndicator";
 import type { UiState, ToolStatus } from "../types";
 import { useEffect, useRef, useState } from "react";
 import { useChatT } from "../i18n";
@@ -17,7 +18,7 @@ function WaitingIndicator({ stage, onStop }: { stage: WaitStage; onStop?: () => 
 	if (elapsed < stage.delay) return null;
 	const seconds = Math.floor(elapsed / 1000);
 	return <div className="waiting-indicator" role="status">
-		<span className="waiting-brand" aria-hidden="true"><i /><i /><i /></span>
+		<RunningIndicator variant="waiting" />
 		<span className="waiting-label">{t(stage.label)}</span>
 		{seconds >= 4 && <span className="waiting-duration" aria-live="off">{seconds < 60 ? t("waitSeconds", { n: seconds }) : t("waitMinutes", { m: Math.floor(seconds / 60), s: String(seconds % 60).padStart(2, "0") })}</span>}
 		{seconds >= 60 && onStop && <button className="waiting-stop" onClick={onStop}>· {t("waitStop")}</button>}

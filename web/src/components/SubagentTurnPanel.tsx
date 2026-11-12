@@ -1,3 +1,4 @@
+import { RunningIndicator } from "./RunningIndicator";
 import { createContext, useEffect, useState } from "react";
 import { FiChevronRight, FiGitBranch, FiCheck, FiX, FiClock, FiAlertTriangle } from "react-icons/fi";
 import { commandDuration } from "../bash-presentation";
@@ -14,7 +15,7 @@ export const subagentTerminal = (item: SubagentItemView) => ["completed", "faile
 export function SubagentStatus({ item }: { item: SubagentItemView }) {
 	const t = useChatT();
 	const key = ({ queued: "toolQueued", running: "processRunning", stopping: "subagentStopping", completed: "executionCompleted", failed: "error", cancelled: "subagentCancelled" } as const)[item.phase];
-	return <span className={`subagent-task-status ${item.phase}`}>{item.phase === "running" || item.phase === "stopping" ? <i className="thinking-spinner" /> : item.phase === "completed" ? <FiCheck /> : subagentFailed(item) ? <FiX /> : <FiClock />}{t(key)}</span>;
+	return <span className={`subagent-task-status ${item.phase}`}>{item.phase === "running" || item.phase === "stopping" ? <RunningIndicator /> : item.phase === "completed" ? <FiCheck /> : subagentFailed(item) ? <FiX /> : <FiClock />}{t(key)}</span>;
 }
 export function SubagentTurnPanel({ calls, fallback }: { calls: SubagentTurnCall[]; fallback: (call: SubagentTurnCall) => React.ReactNode }) {
 	const t = useChatT();

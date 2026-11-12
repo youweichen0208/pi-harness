@@ -1,3 +1,4 @@
+import { RunningIndicator } from "./RunningIndicator";
 import { useEffect, useRef, useState } from "react";
 import { FiChevronDown, FiChevronRight } from "react-icons/fi";
 import { useChatT } from "../i18n";
@@ -38,10 +39,10 @@ export function ThinkingBlock({ thinking, durationMs, streaming, wrap = true }: 
 
 	if (streaming) {
 		if (!thinking.trim()) return null;
-		// 3a: one row — spinner, "思考中 N 秒" and the latest line, ellipsized.
+		// 3a: one row — running dot, "思考中 N 秒" and the latest line, ellipsized.
 		return <div className={`thinking live${expanded ? " open" : ""}`}>
 			<button type="button" className="thinking-toggle" aria-expanded={expanded} onClick={() => setOpen(!expanded)}>
-				<span className="thinking-spinner" aria-hidden="true" />
+				<RunningIndicator />
 				<span className="thinking-label">{t("thinkingLive", { d: elapsedLabel(seconds) })}</span>
 				{!expanded && <span className="thinking-live-label">{thinking.trim().split("\n").at(-1)}</span>}
 			</button>
