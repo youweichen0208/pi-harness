@@ -296,7 +296,11 @@ export function renderToc(wrapper: HTMLElement, source: string, labels: RichLabe
 	const top = Math.min(...items.map(item => item.depth));
 	items.forEach((item, index) => {
 		const entry = doc.createElement("li");
-		entry.style.setProperty("--toc-level", String(item.depth - top));
+		const level = item.depth - top;
+		entry.style.setProperty("--toc-level", String(level));
+		// A data attribute as well: the level drives weight/colour, and matching on a
+		// serialized custom property in CSS is brittle.
+		entry.dataset.tocLevel = String(level);
 		const link = doc.createElement("a");
 		link.href = `#${item.slug}`;
 		link.dataset.richTocIndex = String(index);

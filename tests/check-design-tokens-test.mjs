@@ -33,6 +33,16 @@ test("keeps palette exceptions narrow and ignores selector IDs and quoted commen
 	assert.equal(errors(checkCss('.card { --file-code-bg: #123; }')).length, 1);
 });
 
+test("keeps the Playground code palette declaration-only", () => {
+	assert.deepEqual(errors(checkCss(`
+.scratch-page { --pg-code-kw: #a626a4; --pg-code-rail: #e3e3e8; }
+:root[data-appearance="dark"] .scratch-page { --pg-code-kw: #c98bdb; }
+`)), []);
+	// The same hex outside the palette block still needs a token.
+	assert.equal(errors(checkCss('.scratch-page .cm-line { color: #a626a4; }')).length, 1);
+	assert.equal(errors(checkCss('.other-page { --pg-code-kw: #a626a4; }')).length, 1);
+});
+
 test("detects purple OKLCH including alpha and hue units without flagging neutral colors", () => {
 	assert.equal(errors(checkCss('.card { color: oklch(60% 0.2 280 / .5); background: oklch(.6 .1 .8turn); border-color: oklch(.6 .1 300deg); }')).length, 3);
 	assert.deepEqual(errors(checkCss('.card { color: oklch(.6 0 280); background: oklch(.97 .003 80); }')), []);

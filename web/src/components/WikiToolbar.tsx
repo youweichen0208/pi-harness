@@ -21,10 +21,11 @@ export function WikiInsertPopover({ popup, onClose, children }: { popup: WikiIns
 	}, [onClose]);
 	return createPortal(<div ref={ref} className={`wiki-insert-popover wiki-${popup.kind}-popover`} role="dialog" onKeyDown={e => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onClose(); } }} style={{ left: popup.x, top: popup.y }}>{children}</div>, document.querySelector(".wiki-document-dialog") ?? document.body);
 }
-type Action = { label: string; icon?: ReactNode; command?: RichCommand; value?: string; id?: string; options?: Action[] };
-export function WikiToolbar({ readOnly, focused, onWidth, items, commands, editor }: {
+type Action = { label: string; icon?: ReactNode; command?: RichCommand; value?: string; id?: string; options?: Action[]; disabled?: boolean; hint?: string };
+export function WikiToolbar({ readOnly, focused, onWidth, items, commands, editor, painter, painterDisabled, onPaint }: {
 	readOnly: boolean; focused: boolean; onWidth: () => void; items: WikiInsertItem[];
 	commands: RichCommands; editor: HTMLElement | null;
+	painter: boolean; painterDisabled: boolean; onPaint: (sticky: boolean) => void;
 }) {
 	const t = useT(), bar = useRef<HTMLDivElement>(null), menuRef = useRef<HTMLDivElement>(null);
 	const trigger = useRef<HTMLButtonElement | null>(null);
@@ -40,7 +41,7 @@ export function WikiToolbar({ readOnly, focused, onWidth, items, commands, edito
 	const groups: Action[][] = [
 		[a("undo", <Icon.LuUndo2 />), a("redo", <Icon.LuRedo2 />)],
 		[select("formatBlock", <span>{state.block === "p" ? t("richParagraph") : state.block || "—"}</span>), select("font-size", <span>{state.size || "—"}</span>)],
-		[a("bold", <Icon.LuBold />), a("italic", <Icon.LuItalic />), a("strikeThrough", <Icon.LuStrikethrough />), a("underline", <Icon.LuUnderline />)],
+		[a("bold", <Icon.LuBold />), a("italic", <Icon.LuItalic />), a("strikeThrough", <Icon.LuStrikethrough />), a("underline", <Icon.LuUnderline />), { ...a("paint", <Icon.LuPaintbrush />), disabled: painterDisabled, hint: painterDisabled ? t("richPainterNothingToCopy") : t("richPainterSticky") }, a("clear", <Icon.LuRemoveFormatting />)],
 		[select("color", <Icon.LuBaseline />), select("highlight", <Icon.LuHighlighter />)],
 		[select("text-align", <Icon.LuAlignLeft />), a("insertUnorderedList", <Icon.LuList />), a("insertOrderedList", <Icon.LuListOrdered />), a("outdent", <Icon.LuIndentDecrease />), a("indent", <Icon.LuIndentIncrease />), select("line-height", <Icon.LuChevronsUpDown />)],
 		[a("task", <Icon.LuSquareCheck />), { ...insert("link"), icon: <Icon.LuLink /> }, { ...insert("yy"), icon: <Icon.LuTextQuote /> }, { ...insert("fgx"), icon: <Icon.LuMinus /> }],
@@ -80,7 +81,7 @@ export function WikiToolbar({ readOnly, focused, onWidth, items, commands, edito
 		document.addEventListener("pointerdown", outside); return () => document.removeEventListener("pointerdown", outside);
 	}, [menu]);
 	const execute = (action: Action) => { if (action.options) { setMenu(action.options); return; } setMenu(null); if (action.id) commands.insert(action.id); else if (action.command) commands.execute(action.command, action.value); };
-	const button = (action: Action, index: number) => <button key={index} type="button" disabled={readOnly} title={action.label} aria-label={action.label} aria-haspopup={action.options ? "menu" : undefined} aria-expanded={action.options ? !!menu && trigger.current?.getAttribute("aria-label") === action.label : undefined} aria-pressed={typeof state[action.command ?? ""] === "boolean" ? !!state[action.command!] : undefined} onMouseDown={e => { e.preventDefault(); commands.prepare(); }} onClick={e => { commands.prepare(); if (action.options) { trigger.current = e.currentTarget; setMenu(action.options); } else execute(action); }}>{action.icon}</button>;
+	const button = (action: Action, index: number) => <button key={index} type="button" disabled={readOnly || !!action.disabled} title={action.hint ?? action.label} aria-label={action.label} aria-haspopup={action.options ? "menu" : undefined} aria-expanded={action.options ? !!menu && trigger.current?.getAttribute("aria-label") === action.label : undefined} aria-pressed={action.command === "paint" ? painter : typeof state[action.command ?? ""] === "boolean" ? !!state[action.command!] : undefined} onMouseDown={e => { e.preventDefault(); commands.prepare(); }} onClick={e => { commands.prepare(); if (action.command === "paint") { onPaint(e.detail > 1); return; } if (action.options) { trigger.current = e.currentTarget; setMenu(action.options); } else execute(action); }}>{action.icon}</button>;
 	// H4–H6 are rare enough to live in the overflow menu instead of taking a row in the
 	// palette; both entries insert the same blocks, so the palette stays one screen tall.
 	const overflowHeadings = ["bt4", "bt5", "bt6"].map(id => {

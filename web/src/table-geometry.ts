@@ -1,13 +1,19 @@
 /**
  * Table geometry for the rich editor.
  *
- * A table in the editor carries a **row gutter**: the first cell of every data
- * row is an editor-only control (`data-rich-ui`, not editable) that selects that
- * row. Header rows carry no gutter, so the header row and a data row have
- * different cell counts on purpose:
+ * A table in the editor carries a **row gutter**: the first cell of every row is
+ * an editor-only control (`data-rich-ui`, not editable) that selects that row.
+ * Every row has one — header rows included — so a header row and a data row hold
+ * the same number of cells and the browser aligns their columns:
  *
- *     <tr> <th>A</th> <th>B</th> </tr>      2 cells, 2 logical columns
- *     <tr> <td/>  <td>1</td>  <td>2</td> </tr>  3 cells, 2 logical columns
+ *     <tr> <th gutter/> <th>A</th> <th>B</th> </tr>   3 cells, 2 logical columns
+ *     <tr> <td gutter/> <td>1</td>  <td>2</td> </tr>   3 cells, 2 logical columns
+ *
+ * Header rows always did without one, which cost the alignment: the first visual
+ * column then held both the header's first cell and the data row's gutter, so the
+ * gutter was stretched to that cell's width and every header label sat one column
+ * to the left of the body it named (ADR 0007, tenth item). The header gutter is a
+ * `th` so `isHeaderRow` and the marker semantics stay intact.
  *
  * Every DOM index (`cell.cellIndex`, `row.cells[i]`, `deleteCell(i)`) counts the
  * gutter; users and Markdown count logical columns. Mixing the two silently
@@ -15,7 +21,7 @@
  * saved and reopened. So this module is the **only** place allowed to convert,
  * and the editor must go through it rather than touching `cells` directly.
  *
- * The row gutter carries `data-rich-ui`, so `readRichDocument` strips it and it
+ * The gutter carries `data-rich-ui`, so `readRichDocument` strips it and it
  * never reaches saved Markdown.
  */
 
@@ -38,17 +44,22 @@ export function isGutter(cell: CellLike | null | undefined): boolean {
 	return !!cell && cell.hasAttribute?.(GUTTER_ATTRIBUTE) === true;
 }
 
-/** True when this row is a header row (its cells are `th`). */
+/**
+ * True when this row is a header row: its first content cell is a `th`. The
+ * leading gutter is skipped because header rows carry one too, and it is a `th`
+ * itself — reading `cells[0]` would otherwise call every data row a header.
+ */
 export function isHeaderRow(row: RowLike | null | undefined): boolean {
 	if (!row || !row.cells.length) return false;
-	return String(row.cells[0]?.tagName ?? "").toUpperCase() === "TH";
+	const cells = Array.from(row.cells);
+	const first = cells.length && isGutter(cells[0]) ? cells[1] : cells[0];
+	return String(first?.tagName ?? "").toUpperCase() === "TH";
 }
 
 /**
  * The cells that hold real content, i.e. everything but a leading gutter.
- * Header rows are returned unchanged because they never carry one.
- */
-export function dataCells<T extends CellLike>(row: RowLike | null | undefined): T[] {
+ * Every row carries one gutter, header rows included.
+ */export function dataCells<T extends CellLike>(row: RowLike | null | undefined): T[] {
 	if (!row) return [];
 	const cells = Array.from(row.cells) as T[];
 	return cells.length && isGutter(cells[0]) ? cells.slice(1) : cells;
@@ -87,7 +98,7 @@ export function cellAt<T extends CellLike>(row: RowLike | null | undefined, colu
 	return index < 0 ? null : (Array.from(row!.cells)[index] as T);
 }
 
-/** The gutter cell of a data row, or null for header rows and gutter-less rows. */
+/** The gutter cell of a row, or null when the row has none. */
 export function gutterCell<T extends CellLike>(row: RowLike | null | undefined): T | null {
 	if (!row || !row.cells.length) return null;
 	const first = row.cells[0] as T;
@@ -118,10 +129,17 @@ export function canRemoveRow(rows: ArrayLike<RowLike> | null | undefined, rowInd
 export const ROW_TARGET_ATTRIBUTE = "data-row-target";
 /** Attribute marking a column as the current table target. */
 export const COLUMN_TARGET_ATTRIBUTE = "data-column-target";
+/**
+ * Attribute marking the single cell the structure menu was opened on. This is
+ * what a right-click paints: the menu acts on that cell's row and column, and
+ * the caret already sits in it, so banding the whole row and column only added
+ * colour the user had to interpret (see ADR 0007, ninth item).
+ */
+export const CELL_TARGET_ATTRIBUTE = "data-cell-target";
 
 /**
  * Which logical column a DOM cell belongs to, used when stamping column-target
- * attributes. Header rows have no gutter, so their index is already logical.
+ * attributes. Every row carries a leading gutter, so the offset is uniform.
  */
 export function isInLogicalColumn(cell: CellLike, row: RowLike, column: number): boolean {
 	const cells = Array.from(row.cells);

@@ -23,7 +23,7 @@ Playground 使用宿主 Python 3.9+ 运行聊天、小记中的 `python` / `py` 
 
 新草稿保存到 `<dataDir>/playground-python-scratch.json`；旧 Java 的 `playground-scratch.json` 原样保留作备份，不自动翻译或覆盖。GET/PUT scratch 保持原接口，执行关闭时仍可编辑保存。600ms 去抖、串行保存、失败内存保留与卸载 flush 由 `playground-scratch-store.ts` 统一管理。
 
-草稿有「运行脚本」和「函数测试」两种模式，默认脚本，模式随草稿保存。运行脚本以 `__name__ == "__main__"` 执行；函数测试以独立模块名加载，因此 main guard 不执行，其他顶层语句正常执行。
+草稿不再有「运行脚本」与「函数测试」两种模式，运行也不是二选一。一次运行同时跑脚本和使用例：服务端 `/api/playground/run` 传 `tests` 时只跑用例、不传时只跑脚本，所以合并运行是客户端串行的两次请求，各自一个 run key。脚本先跑，输出先出现，用例批次随后。服务端对每个客户端只放行一个 Run（`gate.acquire(clientId, maxConcurrent, 1)`），两个请求不能并行，否则第二个会被拒为「已有运行在进行」。草稿仍保存 `tests.mode` 字段以兼容旧草稿，但界面不再读取它。
 
 - Lezer Python 语法树发现顶层 `def` / `async def`，不包含类方法和嵌套函数；服务端执行前重新发现和校验，Python 负责最终语法检查。
 - 签名为 `函数名(参数名列表)`，代码变化后旧签名的用例保留。普通位置参数均需填写（即使声明默认值）；可变参数与 keyword-only 参数明确标注不支持，仍可通过脚本调用。异步返回值使用 `asyncio.run`。
@@ -50,7 +50,7 @@ export PI_WEB_PYTHON=/path/to/venv/bin/python
 
 聊天只为 Python 围栏提供运行，工具输出／流式片段仍不提供入口。小记不改正文，文件预览运行未保存缓冲区、不自动保存；Java 围栏／文件不再显示运行。结果维持 stdout/stderr 分离、过期标记、取消和复制。
 
-回归：`npm run typecheck && npm run build && npm test`；`node tests/playground-test.mjs` 验证真实 Python 与 HTTP 边界，`node tests/playground-methods-test.mjs --browser` 验证函数用例、脚本模式和草稿保存。无 Python 时执行测试明确 skip，浏览器模式要求 Python。`tests/playground-python-language-test.mjs` 需选择装有 Jedi / Black 的解释器，验证真实分析与格式化。
+回归：`npm run typecheck && npm run build && npm test`；`node tests/playground-test.mjs` 验证真实 Python 与 HTTP 边界，`node tests/playground-methods-test.mjs --browser` 验证函数用例、合并运行、脚本输出和草稿保存，`node tests/playground-merged-run-test.mjs` 验证一次点击产生脚本与用例两次请求以及当前参数编辑、无效输入禁用、精简输出和异常展示。无 Python 时执行测试明确 skip，浏览器模式要求 Python。`tests/playground-python-language-test.mjs` 需选择装有 Jedi / Black 的解释器，验证真实分析与格式化。
 
 ## 一键安装编辑工具
 
@@ -62,4 +62,4 @@ export PI_WEB_PYTHON=/path/to/venv/bin/python
 
 `POST /api/playground/indent` 接受 `{code, fromLine?, toLine?}`（1 起始，包含末行，未传为全文），返回 `{code}`，共用分析的大小、鉴权、并发、超时与取消限制。使用 Python 标准库，不依赖 Jedi/Black、不执行源码。支持两类局部修复：unexpected indent 前一条语句的缩进断裂（要求前后缩进一致），以及 expected an indented block 时紧随块头的首条简单语句缺少缩进。后者只移动首条逻辑语句，不猜测后续语句归属或拍平的嵌套复合语句；不修改选区外的行。最多 16 次。校验后以 tokenize 归一化逻辑语句为 4 空格，保留续行和字符串内容，再验证编译与 AST 一致。失败返回 422；前端只修改行首空白、保留选区、可撤销，源文变化则丢弃迟到结果。
 
-函数用例编辑区仅展示参数输入与运行操作，移除空值复选框、预期值断言编辑和格式说明段落。JSON 参数可直接输入 null；历史 isNull 参数以 null 显示且允许直接修改。运行单条及整批用例均只提交 id/args，不执行历史保存的预期值断言，不改写已有草稿中的历史字段；结果与用例增删保留。
+函数参数区使用“参数／输出”页签，每个函数仅编辑和运行当前一组参数，不提供用例列表、新增或删除入口。旧草稿的额外用例保留存储但不参与执行；无参数记录时自动建立一组空参数。顶部统一“运行”按钮并内嵌平台快捷键，参数无效时禁止运行。脚本与当前函数仍串行执行，停止脚本时不继续启动函数。输出仅显示一次整体状态、返回值、非空 stdout 及必要错误，保留过期标记；不显示批次统计、输入回显、解释器和入口等重复信息。运行完成表示执行结束，不代表通过断言。运行使用独立 key 避免闪现上次输出。

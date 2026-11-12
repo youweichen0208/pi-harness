@@ -371,16 +371,22 @@ if (existsSync(webDist)) {
 	app.use(compression());
 	app.use(
 		express.static(webDist, {
-			// Vite 产物文件名带内容 hash，可永久强缓存——业务发版后 hash 变化自然失效，
-			// index.html 由下方 catch-all 处理（sendFile 不走这里）
+			// Vite 产物文件名带内容 hash，可永久强缓存——业务发版后 hash 变化自然失效。
+			// 其余文件（index.html 及任何未带 hash 的静态文件）必须每次回源校验：
+			// 浏览器若沿用旧 index.html，它会继续引用旧 hash 的 JS/CSS，构建了却看不到新版。
 			setHeaders(res, filePath) {
 				if (filePath.includes(`${sep}assets${sep}`)) {
 					res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+				} else {
+					res.setHeader("Cache-Control", "no-cache");
 				}
 			},
 		}),
 	);
 	app.get(/^\/(?!api\/|ws).*/, (_req, res) => {
+		// The SPA entry point must revalidate on every load, for the same reason:
+		// a stale copy pins the browser to the previous build's asset hashes.
+		res.setHeader("Cache-Control", "no-cache");
 		// Callback form: a failed stat here (npm i -g is mid-replacement of the
 		// package dir) responds 503 instead of crashing the request pipeline
 		// with an unhandled ENOENT stack trace.

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useT } from "../i18n";
 import type { RichCommands, RichCommand } from "../rich-commands";
-export function RichFormattingToolbar({ compact, commands, onFold }: { compact: boolean; commands: RichCommands; onFold?: () => void }) {
+export function RichFormattingToolbar({ compact, commands, onFold, painter, painterDisabled, onPaint }: { compact: boolean; commands: RichCommands; onFold?: () => void; painter: boolean; painterDisabled: boolean; onPaint: (sticky: boolean) => void }) {
 	const t = useT(); const [more, setMore] = useState(!compact && window.innerWidth > 700);
 	const disabled = !commands.enabled;
 	useEffect(() => {
@@ -14,6 +14,7 @@ export function RichFormattingToolbar({ compact, commands, onFold }: { compact: 
 		return <button type="button" disabled={disabled} title={label} aria-label={label} onMouseDown={e => { e.preventDefault(); commands.prepare(); }} onClick={() => commands.execute(id)}>{text ?? label}</button>;
 	};
 	const foldButton = onFold ? <button type="button" disabled={disabled} title={t("richFoldSelection")} aria-label={t("richFoldSelection")} onMouseDown={e => e.preventDefault()} onClick={() => onFold()}>{t("richFoldSelection")}</button> : null;
+	const paintButton = <button type="button" disabled={disabled || painterDisabled} title={painterDisabled ? t("richPainterNothingToCopy") : t("richPainterSticky")} aria-label={t("richPainter")} aria-pressed={painter} onMouseDown={e => e.preventDefault()} onClick={e => onPaint(e.detail > 1)}>🖌</button>;
 	const select = (id: RichCommand, initial = "") => {
 		const definition = commands.describe(id), label = t(definition.label);
 		return <select aria-label={label} defaultValue={initial} disabled={disabled} onFocus={commands.prepare} onChange={e => { commands.execute(id, e.target.value); if (!initial) e.target.value = ""; }}>
@@ -29,6 +30,7 @@ export function RichFormattingToolbar({ compact, commands, onFold }: { compact: 
 		{more && <div className="rich-format-more">
 			{select("font-size", "15px")}
 			{button("underline", "U")}{button("strikeThrough", "S̶")}{button("superscript", "x²")}{button("subscript", "x₂")}
+			{paintButton}{button("clear", "⌫")}
 			{select("color")}{select("highlight")}{select("text-align")}{select("line-height", "1.74")}
 			{button("insertOrderedList", "1. ≡")}{button("indent", "→")}{button("outdent", "←")}
 			{(['yy','fgx','bg','dmk'] as const).map((id,i) => <button key={id} type="button" disabled={disabled} onMouseDown={e => { e.preventDefault(); commands.prepare(); }} onClick={() => commands.insert(id)}>{t((['richQuote','richDivider','richTable','richCodeBlock'] as const)[i])}</button>)}

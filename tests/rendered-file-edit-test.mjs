@@ -314,10 +314,10 @@ try {
 	assert.equal(await rich.locator("tr").count(), 3);
 	assert.equal(await rich.locator("th").count(), 3);
 	await rich.locator("td").last().click();
-	await tableTools.getByRole("button", { name: "删除当前行" }).click();
+	await tableTools.getByRole("button", { name: "删除所选行" }).click();
 	assert.equal(await rich.locator("tr").count(), 2);
 	await rich.locator("td").nth(1).click();
-	await tableTools.getByRole("button", { name: "删除当前列" }).click();
+	await tableTools.getByRole("button", { name: "删除所选列" }).click();
 	assert.equal(await rich.locator("th").count(), 2);
 	await rich.locator("td").last().click();
 	await page.keyboard.press("Tab");

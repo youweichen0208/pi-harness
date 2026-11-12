@@ -8551,16 +8551,28 @@ html.pi-desktop .desktop-window-controls {
 .fp-rich-document pre { white-space: pre-wrap; }
 .rich-source-block { border: 1px solid var(--border); border-radius: var(--r-sm); padding: 8px; margin-block: 12px; background: var(--bg-elev); }
 .rich-source-block small { color: var(--text-dim); }
-.rich-toc { margin-block: 16px 24px; padding: 12px 16px; border: 1px solid var(--border-soft); border-radius: var(--r-md); background: var(--bg-elev); }
-.rich-toc-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
-.rich-toc-head strong { font-size: 13px; color: var(--text-dim); }
-.rich-toc-head button { padding: 2px 8px; border: 0; border-radius: var(--r-sm); background: transparent; font-size: 12px; color: var(--text-faint); cursor: pointer; }
+/* Table of contents: a reading aid, so it stays quiet next to the prose while each
+   level remains tellable without measuring indentation. The label is a caption, not
+   a heading; the remove action is chrome and sits to the side. */
+.rich-toc { margin-block: 18px 24px; padding: 14px 18px; border: 1px solid var(--border-soft); border-radius: var(--r-md); background: var(--bg-elev); }
+.rich-toc-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.rich-toc-head strong { font-size: 12px; font-weight: 600; letter-spacing: .04em; color: var(--text-faint); }
+.rich-toc-head button { flex: none; padding: 3px 8px; border: 0; border-radius: var(--r-sm); background: transparent; font-size: 12px; color: var(--text-faint); cursor: pointer; }
 .rich-toc-head button:hover, .rich-toc-head button:focus-visible { background: var(--row-hover); color: var(--text); }
 .fp-rich-document[contenteditable="false"] .rich-toc-head button { display: none; }
 .fp-markdown .fp-rich-document .rich-toc ul { margin: 0; padding: 0; list-style: none; }
-.fp-markdown .fp-rich-document .rich-toc li { margin: 0; padding-left: calc(var(--toc-level, 0) * 18px); line-height: 1.9; }
-.rich-toc a { color: var(--accent); text-decoration: none; cursor: pointer; }
+/* The whole row is the target (>=24px tall, per WCAG 2.2 pointer size) and the indent
+   lives on the link, so the clickable area grows with the level instead of the text. */
+.fp-markdown .fp-rich-document .rich-toc li { margin: 0; }
+.rich-toc a { position: relative; display: flex; align-items: center; min-height: 26px; padding-left: calc(var(--toc-level, 0) * 16px); color: var(--accent); font-size: 13.5px; line-height: 1.5; text-decoration: none; cursor: pointer; border-radius: var(--r-sm); }
 .rich-toc a:hover { text-decoration: underline; }
+/* Level is carried by weight as well as indent, so a nested entry is readable at a
+   glance instead of requiring the eye to measure how far it is inset. */
+/* Level 1 entries are links like any other, so they keep the accent; deeper levels
+   recede to the body ink instead of a second, nearly identical blue. */
+.rich-toc li[data-toc-level="0"] > a { font-weight: 500; }
+.rich-toc li[data-toc-level="1"] > a { font-weight: 400; }
+.rich-toc li:not([data-toc-level="0"]):not([data-toc-level="1"]) > a { color: var(--text-dim); font-size: 13px; }
 .rich-toc p { margin: 0; font-size: 13px; color: var(--text-faint); }
 
 .fp-rich-document .rich-block:not(.rich-source-block) pre {
@@ -8603,17 +8615,34 @@ html.pi-desktop .desktop-window-controls {
    Table targeting: the row gutter selects a row, header cells select a column.
    These highlights are editor state only and never reach saved Markdown.
    --------------------------------------------------------------------------- */
-.fp-rich-document.md table td[data-rich-gutter] { width: 14px; min-width: 14px; max-width: 14px; padding: 0; cursor: pointer; background: color-mix(in srgb, var(--border) 34%, transparent); background-clip: content-box; border-right: 1px solid var(--border); }
+.fp-rich-document.md table :is(td, th)[data-rich-gutter] { width: 14px; min-width: 14px; max-width: 14px; padding: 0; background: color-mix(in srgb, var(--border) 34%, transparent); background-clip: content-box; border-right: 1px solid var(--border); }
+/* A data row's strip is a control: pointer cursor, hover tint, and a title. The
+   header's strip is alignment chrome only, so it must not look clickable — the two
+   used to share every state while doing different things. */
+.fp-rich-document.md table td[data-rich-gutter] { cursor: pointer; }
 .fp-rich-document.md table td[data-rich-gutter]:hover { background-color: color-mix(in srgb, var(--accent) 32%, transparent); }
+.fp-rich-document.md table th[data-rich-gutter] { cursor: default; }
 .fp-rich-document.md table tr[data-row-target] :is(th, td):not([data-rich-gutter]) { background: var(--accent-soft); }
+/* The gutter belongs to its row: a targeted row highlights as one continuous band.
+   `background-color` (not the `background` shorthand) keeps the base rule's
+   `background-clip: content-box`, so the inset gutter keeps its shape. */
+.fp-rich-document.md table tr[data-row-target] :is(td, th)[data-rich-gutter] { background-color: var(--accent-soft); }
 .fp-rich-document.md table :is(th, td)[data-column-target] { background: var(--accent-soft); }
+/* The structure menu marks the one cell it was opened on; the caret sits there too,
+   so no row/column band is painted along with it. */
+.fp-rich-document.md table :is(th, td)[data-cell-target] { background: var(--accent-soft); }
 
 /* Structural table menu: opened from a cell, acting on the current row/column. */
-.fp-table-menu { position: fixed; z-index: 1500; display: grid; gap: 2px; min-width: 168px; padding: 6px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-elev); color: var(--text); box-shadow: 0 8px 28px color-mix(in srgb, var(--shadow-color) 8%, transparent); font: 13px var(--sans); }
-.fp-table-menu button { display: block; width: 100%; padding: 6px 10px; border: 0; border-radius: var(--r-sm); background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.fp-table-menu { position: fixed; z-index: 1500; display: grid; gap: 2px; width: 292px; max-width: calc(100vw - 16px); max-height: calc(100dvh - 16px); overflow-y: auto; padding: 8px 6px; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--bg-elev); color: var(--text); box-shadow: 0 8px 28px color-mix(in srgb, var(--shadow-color) 10%, transparent); font: 14px var(--sans); }
+.fp-table-menu button { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 38px; padding: 5px 8px; border: 0; border-radius: var(--r-md); background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; white-space: nowrap; }
 .fp-table-menu button:hover:not(:disabled) { background: var(--bg-elev2); }
 .fp-table-menu button:disabled { color: var(--text-dim); cursor: default; }
-.fp-table-menu hr { height: 0; margin: 4px 2px; border: 0; border-top: 1px solid var(--border); }
+.fp-table-menu hr { height: 0; margin: 6px 4px; border: 0; border-top: 1px solid var(--border); }
+.fp-table-menu .fp-table-icon { display: inline-flex; align-items: center; justify-content: center; width: 18px; color: var(--text-dim); }
+.fp-table-menu .fp-table-count { flex: 0 0 auto; width: 44px; height: 26px; margin-left: auto; padding: 0 6px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--bg); color: var(--text); font: inherit; text-align: center; }
+.fp-table-menu .fp-table-number .fp-table-count { margin-left: 0; }
+.fp-table-menu .fp-table-count:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
+.fp-table-menu .fp-table-unit { flex: 0 0 auto; color: var(--text-dim); }
 
 /* Read-only SQLite data browser in the file sidebar. */
 .sqlite-preview { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; gap: 10px; padding: 12px; }
@@ -8821,9 +8850,11 @@ img.brand-logo, img.empty-logo { background: transparent; object-fit: contain; }
 .design-workspace .project-count { color: var(--text-faint); font-size: 11px; white-space: nowrap; }
 .design-workspace .project-path { font: 11px var(--mono); }
 .design-workspace .project-time { font-size: 11.5px; }
-.design-workspace .panel-sessions { flex: none; border: 0; margin: 0 0 8px 10px; padding: 4px 0 0 14px; border-left: 0; }
+.design-workspace .panel-sessions { flex: none; border: 0; margin: 0 0 8px 8px; padding: 4px 0 0 10px; border-left: 0; }
 .design-workspace .sessions-scroll { max-height: none; overflow: visible; padding: 0; }
-.design-workspace .session-item { font-size: 13px; padding: 7px 8px; min-height: 32px; width: calc(100% - 6px); margin-right: 6px; }
+/* 宽度由容器决定（block-level 按钮占满一行），不要再用 width:auto 让 flex 按内容撑开——
+   那样长标题会把行挤出 240px 侧栏。 */
+.design-workspace .session-item { font-size: 13px; padding: 7px 8px; min-height: 32px; width: 100%; max-width: 100%; margin-right: 0; box-sizing: border-box; }
 .design-workspace .session-item.active { font-weight: 400; }
 .design-workspace .session-item.active { background: var(--bg-elev); box-shadow: 0 0 0 1px var(--border); }
 .design-workspace .session-time { font-size: 11px; }
@@ -11519,7 +11550,6 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { height: 44px;
 .wiki-prose.md h3, .wiki-prose .fp-markdown .md h3 { font-family: inherit; font-size: var(--wiki-h3); font-weight: 600; line-height: 1.5; margin: 28px 0 8px; }
 .wiki-prose .fp-markdown .md :not(pre) > code { font-size: 12.5px; border-radius: var(--r-wiki-code); background: var(--bg-elev2); }
 .wiki-prose .fp-markdown .md table { font-size: 13.5px; }
-.wiki-prose .fp-markdown .md th { font-size: 12.5px; }
 .wiki-prose .fp-markdown .md th, .wiki-prose .fp-markdown .md td { padding: 8px 14px; border-color: var(--border-soft); }
 .wiki-insert-popover { position: fixed; z-index: 3200; max-width: calc(100vw - 16px); max-height: calc(100vh - 16px); overflow: auto; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-elev); color: var(--text); box-shadow: 0 8px 24px color-mix(in srgb, var(--shadow-color) 12%, transparent); }
 .wiki-table-picker { padding: 14px; outline: none; }
@@ -11531,7 +11561,9 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { height: 44px;
 .wiki-code-popover { width: 200px; padding: 6px; }
 .wiki-mermaid-preview { background: var(--bg); border-bottom: 1px solid var(--border-soft); margin-bottom: 12px; white-space: normal; }
 /* Mermaid source folds away by default; the diagram is the reading view. */
-pre.wiki-mermaid-source-hidden > code { display: none; }
+/* Match the document code rule specificity so its display:block cannot expose folded source. */
+pre.wiki-mermaid-source-hidden > code,
+.wiki-prose .fp-markdown .fp-rich-document pre.wiki-mermaid-source-hidden > code { display: none; }
 pre.wiki-mermaid-source-hidden > .wiki-mermaid-preview { border-bottom: 0; margin-bottom: 0; }
 /* Plain file previews render the same folded diagram, with their own padding. */
 .fp-mermaid-preview { padding: 8px 0; white-space: normal; }
@@ -11558,7 +11590,11 @@ pre.wiki-mermaid-source-hidden > .fp-mermaid-preview { padding-bottom: 0; }
 .wiki-prose .fp-markdown .md ul, .wiki-prose .fp-markdown .md ol { padding-left: 24px; }
 
 .wiki-prose .fp-markdown .md table { display: block; max-width: 100%; overflow-x: auto; line-height: 1.6; border-radius: var(--r-md); }
-.wiki-prose .fp-markdown .md th { background: var(--bg-elev); color: var(--text-dim); }
+/* The rich editor root also carries `.msg-text` (chat transcript styling), so the
+   chat table rule `.msg-text thead th { font-size: 12px }` used to win over the
+   document table: column names rendered smaller than the body they head. Keep the
+   document table at its own size and let the grey ground carry the hierarchy. */
+.wiki-prose .fp-markdown .md th { background: color-mix(in srgb, var(--bg-elev2) 60%, var(--bg)); color: var(--text); font-size: 13.5px; font-weight: 500; }
 .wiki-prose .fp-markdown .md a { color: var(--accent); text-underline-offset: 3px; text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent); }
 
 .wiki-prose .fp-markdown .md tbody tr { background: transparent; }
@@ -12940,7 +12976,15 @@ html.pi-desktop .wiki-window-header .desktop-window-controls { -webkit-app-regio
 .wiki-source-toggle svg, .wiki-insert-toolbar svg { width: 17px; height: 17px; stroke-width: 1.75; }
 .wiki-prose .fp-markdown .md .rich-block:has(> table) { max-width: 100%; overflow-x: auto; }
 .wiki-prose .fp-markdown .md table { display: table; width: 100%; table-layout: auto; margin: .75em 0; }
-.wiki-prose .fp-markdown .md th, .wiki-prose .fp-markdown .md td { text-align: center; padding: 10px 16px; min-width: 110px; line-height: 1.5; }
+.wiki-prose .fp-markdown .md th, .wiki-prose .fp-markdown .md td { text-align: center; padding: 7px 12px; min-width: 110px; height: 36px; box-sizing: border-box; line-height: 1.5; border-color: var(--border-soft); vertical-align: middle; }
+/* Paragraph margins belong to document prose, not to each editable table cell. */
+.wiki-prose .fp-markdown .md :is(th, td) > p { margin: 0; line-height: inherit; }
+.wiki-prose .fp-markdown .md :is(th, td) > p + p { margin-top: 4px; }
+.wiki-prose .fp-markdown .md table { border-color: var(--border-soft); box-shadow: none; }
+.wiki-prose .fp-markdown .md table:not([data-table-selected]) tbody tr:hover:not([data-row-target]) > td:not([data-rich-gutter]):not([data-column-target]):not([data-cell-target]) { background-color: color-mix(in srgb, var(--row-hover) 45%, var(--bg)); }
+/* Selection stays stronger than the quiet row hover. */
+.wiki-prose .fp-markdown .md table tr[data-row-target] > :is(th, td),
+.wiki-prose .fp-markdown .md table[data-table-selected] :is(th, td) { background-color: var(--accent-soft); }
 .wiki-prose .fp-markdown .md .wiki-table-status { min-width: 0; width: 1%; text-align: center; white-space: nowrap; }
 .wiki-prose .fp-markdown .md table.rich-table-empty { table-layout: fixed; }
 .wiki-prose .fp-markdown .fp-rich-document pre.codeblock { margin: .75em 0; padding-inline: 16px; padding-bottom: 14px; font: 13px/1.6 var(--mono); white-space: normal; }
@@ -13036,7 +13080,7 @@ html.pi-desktop .wiki-window-header .desktop-window-controls { -webkit-app-regio
 .workspace-directory-label { display: flex; align-items: center; gap: 10px; color: var(--text); font-size: 14px; font-weight: 500; }
 .workspace-directory-label svg { width: 18px; height: 18px; }
 .design-workspace .panel-projects .panel-section-title { min-height: 40px; padding-inline: 14px; }
-.design-workspace .project-item { min-height: 42px; padding: 9px 66px 9px 10px; font-size: 14px; }
+.design-workspace .project-item { min-height: 42px; padding: 9px 56px 9px 10px; font-size: 14px; }
 .design-workspace .project-item .project-count { display: none; }
 .design-workspace .project-item .project-time { font-size: 11px; }
 .design-workspace .project-item .project-chevron { width: 14px; height: 14px; }
@@ -13045,8 +13089,21 @@ html.pi-desktop .wiki-window-header .desktop-window-controls { -webkit-app-regio
 .lp-project-new svg { width: 18px; height: 18px; }
 .lp-project-new:hover { background: var(--row-hover); color: var(--heading); }
 .lp-project-new:disabled { opacity: .4; cursor: default; }
-.design-workspace .panel-left .session-item { min-height: 38px; padding-block: 8px; font-size: 14px; }
+/* 正文 13px / 行高 32px 是 ui-design.md 的单栏导航基准；把它抬到 14px 只会让
+   240px 的侧栏更早截断标题（三个汉字后就是省略号）。 */
+.design-workspace .panel-left .session-item { min-height: 32px; padding-block: 6px; font-size: 13px; }
 .design-workspace .panel-left .session-item.active .session-title { font-weight: 600; }
+/* A two-line row needs breathing room between the title and its note, and the
+   14px body needs more than a 34px box. Rows without a second line keep the
+   compact height, so a list of plain titles stays easy to scan. */
+.design-workspace .panel-left .session-item:has(.session-info small) { padding-block: 7px; }
+.design-workspace .panel-left .session-info { gap: 3px; }
+.design-workspace .panel-left .session-info small { font-size: 11.5px; line-height: 1.3; color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The timestamp sits on the title line, not centred against a taller row, so a
+   two-line row keeps its time level with the name. It is sized by its own text
+   with a small floor — padding it to a fixed wide column only stole width from
+   the title without buying alignment. */
+.design-workspace .panel-left .session-time { align-self: flex-start; margin-top: 2px; min-width: 30px; text-align: right; }
 @media (hover: none) {
 	.lp-row > .project-item + .lp-menu-zone { visibility: visible; pointer-events: auto; }
 	.lp-row > .project-item .project-time { visibility: hidden; }
@@ -13446,7 +13503,7 @@ html.pi-desktop .wiki-window-header .desktop-window-controls { -webkit-app-regio
 .compact-navigation .panel-section-title:hover .lp-add-project, .compact-navigation .panel-section-title:focus-within .lp-add-project { opacity: 1; }
 .design-workspace .compact-navigation .project-item { min-height: 30px; padding: 5px 30px 5px 8px; font-size: 13px; border-radius: var(--r-md); }
 /* Active projects have both New chat and More actions; reserve their full width. */
-.design-workspace .compact-navigation .project-item.active { padding-right: 66px; }
+.design-workspace .compact-navigation .project-item.active { padding-right: 56px; }
 .compact-navigation .project-time { display: none; }
 .compact-navigation .lp-row > .project-item + .lp-menu-zone { top: 2px; }
 .compact-navigation .sidebar-footer { flex: none; margin-top: auto; padding: 8px; }
@@ -13562,7 +13619,12 @@ html.pi-desktop-darwin .compact-navigation .compact-brand { --desktop-brand-inse
 /* Main chat: quiet navigation and one shared reading/composer rail. */
 .compact-workspace-switcher { display: flex; align-items: center; }
 .compact-workspace-trigger { min-width: 0; }
-.design-workspace .compact-navigation :is(.project-item, .session-item, .global-entries button) { min-height: 32px; height: 32px; border: 0; border-radius: var(--r-sm); }
+/* Rows grow with their content instead of being pinned to one row height.
+   A fixed `height: 32px` is what cropped two-line rows (title + branch note):
+   the content needed ~37px, so the note's descenders were cut off. Single-line
+   rows still come out at 32px through min-height; only rows that carry a
+   second line get taller. */
+.design-workspace .compact-navigation :is(.project-item, .session-item, .global-entries button) { min-height: 32px; height: auto; border: 0; border-radius: var(--r-sm); }
 .compact-navigation .workspace-directory { margin-top: 8px; }
 .design-workspace .panel-right .tree-search { min-height: 32px; height: 32px; padding-block: 0; }
 .design-workspace .panel-lower:not(:has(.task-progress)) { display: none; }
@@ -13710,7 +13772,6 @@ html.pi-desktop-darwin .compact-navigation .compact-brand { --desktop-brand-inse
 .method-toolbar { display: flex; align-items: end; gap: 12px; flex-wrap: wrap; }
 .method-toolbar > label { flex: 1; min-width: 180px; display: flex; flex-direction: column; gap: 6px; color: var(--text-muted); font-size: 12px; }
 .method-toolbar select { font-family: var(--mono); }
-.method-case { min-width: 0; margin: 0; border-bottom: 1px solid var(--border-soft); background: var(--bg); }
 .method-parameters { display: flex; flex-wrap: wrap; align-items: start; gap: 12px; }
 .method-value, .method-expected { flex: 1; min-width: 150px; }
 .method-value > label:first-child { display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
@@ -13719,7 +13780,6 @@ html.pi-desktop-darwin .compact-navigation .compact-brand { --desktop-brand-inse
 .method-value input:disabled { opacity: .5; }
 .method-check { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); margin: 6px 0; }
 .method-check input { accent-color: var(--accent); }
-.method-case-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 10px; }
 .method-validation { flex: 1; font-size: 12px; color: var(--red); }
 .method-results { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
 .method-summary { color: var(--text-muted); font-size: 12px; }
@@ -13754,26 +13814,49 @@ html.pi-desktop-darwin .compact-navigation .compact-brand { --desktop-brand-inse
 .scratch-test-pane .playground-result { border: 0; border-radius: 0; border-top: 1px solid var(--border-soft); }
 .scratch-test-pane .playground-result-head { flex-wrap: wrap; padding: 12px 16px; }
 .scratch-test-pane .playground-meta { color: var(--text-muted); }
-.method-case-toggle { width: 100%; display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 12px 16px; border: 0; background: transparent; color: var(--text); text-align: left; font: 13px var(--sans); cursor: pointer; transition: background 120ms ease; }
-.method-case-toggle:hover { background: var(--bg-elev); }
-.method-case-toggle > svg { flex: none; transition: transform 140ms ease; color: var(--text-muted); }
-.method-case-toggle[aria-expanded="true"] > svg { transform: rotate(90deg); }
-.method-case-toggle > span:first-of-type { flex: none; }
-.method-case-toggle > code { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); font: 12px var(--mono); }
-.method-case-status { flex: none; font-size: 12px; color: var(--text-muted); }
+/* 用例表：一行一条用例，参数编辑在该行下方展开。
+   旧结构是卡片套卡片（用例卡里再嵌一份结果块），同一条用例要重复出现在
+   列表、卡片结果和整批结果三处；现在状态只存在于行里，整批汇总归父级。 */
+.case-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.case-table thead th { position: sticky; top: 0; z-index: 1; padding: 8px 12px; background: var(--bg-elev); border-bottom: 1px solid var(--border-soft); color: var(--text-muted); font: 500 11px var(--sans); text-align: left; text-transform: none; }
+.case-table thead th:nth-child(1) { width: 84px; }
+.case-table thead th:nth-child(3) { width: 88px; }
+.case-table thead th:nth-child(4) { width: 76px; }
+.case-row { border-bottom: 1px solid var(--border-soft); }
+.case-row > th { padding: 0; text-align: left; font-weight: 400; }
+.case-row > td { padding: 10px 12px; vertical-align: middle; min-width: 0; }
+.case-row[data-status="failed"], .case-row[data-status="error"] { background: color-mix(in srgb, var(--red) 5%, transparent); }
+.case-row:has(.case-toggle[aria-expanded="true"]) { background: var(--bg-elev); }
+.case-toggle { width: 100%; display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 10px 12px; border: 0; background: transparent; color: var(--text); text-align: left; font: 13px var(--sans); cursor: pointer; transition: background 120ms ease; }
+.case-toggle:hover { background: var(--bg-elev); }
+.case-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.case-toggle > svg { flex: none; color: var(--text-muted); transition: transform 140ms ease; }
+.case-toggle[aria-expanded="true"] > svg { transform: rotate(90deg); }
+.case-summary { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font: 12px var(--mono); }
+.case-row-error { display: block; margin-top: 3px; color: var(--red); font-size: 11px; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.case-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.case-actions .btn { padding: 6px 8px; min-width: 32px; min-height: 32px; }
+.case-detail > td { padding: 0 12px 16px; background: var(--bg-elev); border-bottom: 1px solid var(--border-soft); }
+.case-detail .method-parameters { gap: 14px; }
+.case-detail .method-value { min-width: 110px; }
+.case-detail .method-validation { margin: 12px 0 0; line-height: 1.6; }
+.case-detail .method-result { margin-top: 12px; font-size: 13px; }
+.case-detail .method-result pre { margin: 6px 0 0; line-height: 1.6; }
+.method-case-status { display: block; font-size: 12px; color: var(--text-muted); white-space: nowrap; }
 .method-case-status.passed { color: var(--green); }
 .method-case-status.failed, .method-case-status.error { color: var(--red); }
 .method-case-status.stale { color: var(--yellow-fg); }
 .method-case-status.running { color: var(--progress-text); }
-.method-case-body { padding: 0 16px 16px; animation: scratch-enter 140ms ease-out; }
-.method-case-body > .playground-hint { margin-bottom: 14px; line-height: 1.6; color: var(--text-muted); }
-.method-case-body .method-parameters { gap: 14px; }
-.method-case-body .method-value { min-width: 110px; }
-.method-case-body .method-expected { flex-basis: 100%; }
-.method-case-body .method-case-actions { margin: 16px 0; justify-content: flex-start; }
-.method-case-body .method-validation { flex-basis: 100%; line-height: 1.6; }
-.method-case-body .method-result { font-size: 13px; }
-.method-case-body .method-result pre { line-height: 1.6; }
+.case-row .playground-meta { display: block; margin-top: 2px; font-size: 11px; }
+
+/* 结果分区：用例结果与脚本输出各自一块，一次点击同时产生两份。 */
+.scratch-run-region { display: flex; flex-direction: column; gap: 12px; padding: 16px; }
+.scratch-run-block > h3 { margin: 0 0 8px; color: var(--text-muted); font: 500 11px var(--sans); }
+.scratch-run-block .playground-result { border: 1px solid var(--border-soft); border-radius: var(--r-md); }
+
+/* Screen-reader-only text; visible tooltips must not replace accessible names. */
+.visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+
 .scratch-example { margin: 12px 16px; }
 .scratch-head .btn { transition: transform 100ms ease, background 120ms ease; }
 .scratch-head .btn:active:not(:disabled) { transform: translateY(1px); }
@@ -13790,11 +13873,13 @@ html.pi-desktop-darwin .compact-navigation .compact-brand { --desktop-brand-inse
 	.scratch-head { gap: 8px; }
 	.scratch-head h2 { font-size: 16px; }
 	.scratch-save-status { order: 4; flex-basis: 100%; }
-	.method-case-body .method-value { width: 100%; min-width: 0; }
+	.case-detail .method-value { width: 100%; min-width: 0; }
+	.case-table thead th:nth-child(3) { width: 72px; }
+	.case-table thead th:nth-child(4) { width: 76px; }
 }
 @media (prefers-reduced-motion: reduce) {
-	.scratch-workspace, .method-case-body { animation: none; }
-	.scratch-head .btn, .method-case-toggle, .method-case-toggle > svg { transition: none; }
+	.scratch-workspace, .case-detail { animation: none; }
+	.scratch-head .btn, .case-toggle, .case-toggle > svg { transition: none; }
 	.scratch-head .btn:active:not(:disabled) { transform: none; }
 }
 
@@ -15549,3 +15634,142 @@ span.rich-math { display: inline-block; }
 .task-step-log .task-step.current .task-step-items { border-left-color: color-mix(in srgb, var(--progress-text) 30%, transparent); }
 .task-step-current { display: inline-flex; align-items: center; gap: 5px; padding: 1px 7px; border-radius: var(--r-switch); background: var(--bg-elev); color: var(--progress-text); font: 10px/1.7 var(--sans); white-space: nowrap; }
 .task-step-current::before { content: ""; width: 4px; height: 4px; border-radius: var(--r-switch); background: currentColor; }
+
+/* ---------------------------------------------------------------------------
+   Playground · 参考稿代码面（浅色纸面 + 缩进导轨 + 分层语法色）
+   只作用于 .scratch-page，不改变应用其它代码块与文件编辑器。
+   Light 2026 是代码面自己的浅色基准，不跟随应用外观：白纸底、灰阶行号、
+   低对比缩进导轨，语法色拉开色相（紫关键字／海军蓝字符串／绿数字／蓝函数名）。
+--------------------------------------------------------------------------- */
+.scratch-page {
+	--pg-font: "JetBrains Mono", "Sarasa Mono SC", Menlo, monospace;
+	--pg-tab-size: 4;
+	--pg-code-bg: #ffffff;
+	--pg-code-gutter: #ffffff;
+	--pg-code-gutter-active: #f8f8f8;
+	--pg-code-rail: #eeeeee;
+	--pg-code-rail-active: #d8d8d8;
+	--pg-code-chip: #d9e6f8;
+	--pg-code-fg: #24292f;
+	--pg-code-line: #ececf0;
+	--pg-code-kw: #af00db;
+	--pg-code-str: #0b3275;
+	--pg-code-num: #008a55;
+	--pg-code-fn: #7952cc;
+	--pg-code-builtin: #267f99;
+	--pg-code-definition: #e51424;
+	--pg-code-bracket: #0433ff;
+	--pg-code-line-number: #666666;
+	--pg-code-active-line: #f8f8f8;
+	--pg-code-comment: #647167;
+}
+:root[data-appearance="dark"] .scratch-page {
+	--pg-code-bg: #22242a;
+	--pg-code-gutter: #1d1f24;
+	--pg-code-gutter-active: #2e323a;
+	--pg-code-rail: #3a3f49;
+	--pg-code-rail-active: #566377;
+	--pg-code-chip: #33506f;
+	--pg-code-fg: #e6e8ef;
+	--pg-code-line: #2b2f36;
+	--pg-code-kw: #c98bdb;
+	--pg-code-str: #8fb8e8;
+	--pg-code-num: #8ec88f;
+	--pg-code-fn: #7fb0f5;
+	--pg-code-builtin: #8ec88f;
+	--pg-code-comment: #9aaa99;
+	--pg-code-definition: #f08080;
+	--pg-code-bracket: #82aaff;
+	--pg-code-line-number: #a0a6b1;
+	--pg-code-active-line: #2b2f36;
+}
+
+/* 代码面：整块纸面，去掉重描边，只留一条极淡分隔。 */
+.scratch-workspace .scratch-code-pane,
+.scratch-workspace .scratch-test-pane { border-color: var(--pg-code-line); }
+.scratch-workspace .scratch-editor-cm {
+	background: var(--pg-code-bg);
+	color: var(--pg-code-fg);
+	border-radius: 0;
+}
+.scratch-editor-cm .cm-scroller { padding: 10px 0 24px; font: 14px/22px var(--pg-font); tab-size: var(--pg-tab-size); }
+.scratch-editor-cm .cm-line { padding: 0 20px; position: relative; }
+.scratch-editor-cm .cm-line.cm-activeLine { background: var(--pg-code-active-line); }
+/* 缩进导轨：每行在所属块的缩进列画一根竖线（插件按行给出 --rail-depth，一级 = 4 空格）。 */
+.scratch-editor-cm .cm-line.cm-indent-rail::before {
+	content: "";
+	position: absolute;
+	inset-block: 0;
+	left: calc(20px + (var(--rail-depth, 1) - 1) * 4ch);
+	width: 1px;
+	background: var(--pg-code-rail);
+	pointer-events: none;
+}
+.scratch-editor-cm .cm-line.cm-indent-rail.cm-activeLine::before { background: var(--pg-code-rail-active); }
+/* 行号为「纸面」上的一列浅色数字，不是侧栏。
+   padding-top 必须为 0：.cm-gutters 就在 scroller 的内容盒里，顶部那 10px 已由
+   .cm-scroller 的 padding 推开，再给 10px 会让整列行号整齐地往下错一行高度。 */
+.scratch-editor-cm .cm-gutters {
+	background: var(--pg-code-gutter);
+	border: 0;
+	padding: 0 0 24px;
+}
+/* 行号字号比正文小，但行盒必须与 .cm-line 完全同高，否则每行都错开一点、越往下偏得越多。
+   行高统一为 22px（与 .cm-scroller 的 font 简写一致），不随 font-size 变化。 */
+.scratch-editor-cm .cm-lineNumbers .cm-gutterElement { min-width: 40px; padding: 0 10px 0 8px; color: var(--pg-code-line-number); font-family: var(--pg-font); font-size: 14px; line-height: 22px; }
+.scratch-editor-cm .cm-gutterElement.cm-activeLineGutter { background: transparent; color: var(--pg-code-fg); font-weight: 500; }
+/* 参考稿没有折叠箭头；基础主题给 .cm-gutter 用了 display:flex !important。 */
+.scratch-editor-cm .cm-gutter.cm-foldGutter { display: none !important; }
+.scratch-editor-cm .cm-cursor { border-left-color: var(--pg-code-fg); }
+.scratch-editor-cm .cm-selectionBackground { background: var(--pg-code-chip) !important; }
+.scratch-page .scratch-code-foot { border-top-color: var(--pg-code-line); background: var(--pg-code-bg); }
+
+/* A pane that failed to lazy-load: keep the shell usable instead of a blank page. */
+.pane-error {
+	flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+	gap: 16px; padding: 32px 24px; text-align: center; background: var(--bg-elev2);
+}
+.pane-error p { margin: 0; max-width: 42ch; color: var(--text-dim); font: 13px/1.7 var(--sans); overflow-wrap: anywhere; }
+.pane-error .btn { color: var(--accent); border-color: var(--border); background: var(--bg-elev); }
+
+/* Playground inspector: compact controls, segmented navigation and output surfaces. */
+.scratch-test-pane .lc-panel-head { min-height: 48px; padding: 8px 12px; gap: 12px; background: var(--bg-elev); border-bottom: 1px solid var(--border-soft); }
+.lc-panel-head > [role="tablist"] { display: flex; gap: 4px; padding: 3px; border-radius: var(--r-md); background: var(--bg-elev2); }
+.lc-panel-head [role="tab"] { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 30px; padding: 4px 12px; border: 1px solid transparent; border-radius: var(--r-sm); background: transparent; color: var(--text-dim); font: 500 12px/1.5 var(--sans); cursor: pointer; white-space: nowrap; }
+.lc-panel-head [role="tab"][aria-selected="true"] { color: var(--text); border-color: var(--border-soft); background: var(--bg-elev); }
+.lc-panel-head [role="tab"]:hover { color: var(--text); }
+.lc-panel-head [role="tab"] svg { width: 14px; height: 14px; }
+.scratch-test-pane .lc-panel-head > .btn { margin-left: auto; border: 0; background: transparent; color: var(--text-dim); }
+#pg-test-panel { min-height: 0; overflow: auto; flex: 1; }
+/* Author display rules must not override the browser's hidden attribute. */
+#pg-test-panel > [hidden] { display: none !important; }
+.scratch-test-pane .lc-method-tests { padding: 20px 16px; gap: 20px; }
+.lc-method-tests .method-toolbar { padding: 0 0 16px; margin: 0; border: 0; border-bottom: 1px solid var(--border-soft); }
+.lc-method-tests .method-toolbar label { display: grid; grid-template-columns: 56px minmax(0, 1fr); align-items: center; gap: 12px; color: var(--text-dim); font: 12px/1.5 var(--sans); }
+.lc-method-tests .method-toolbar select { width: 100%; min-width: 0; min-height: 36px; padding: 6px 10px; border: 1px solid var(--border-soft); border-radius: var(--r-sm); background: var(--bg-elev); color: var(--text); font: 13px var(--pg-font); }
+.lc-case-panel .method-parameters { display: flex; flex-direction: column; align-items: stretch; gap: 12px; }
+.lc-case-panel .method-value { width: 100%; min-width: 0; }
+.lc-case-panel .method-value label { display: grid; grid-template-columns: 56px minmax(0, 1fr); align-items: start; gap: 12px; font: 13px/1.5 var(--pg-font); color: var(--text-dim); }
+.lc-case-panel .method-value label > span { padding-top: 9px; overflow-wrap: anywhere; }
+.lc-case-panel .method-value textarea { box-sizing: border-box; width: 100%; min-height: 38px; max-height: 200px; resize: vertical; padding: 8px 10px; border: 1px solid var(--border-soft); border-radius: var(--r-sm); background: var(--bg-elev2); color: var(--text); font: 13px/20px var(--pg-font); }
+.lc-case-panel .method-value textarea:focus-visible, .lc-method-tests select:focus-visible, .lc-panel-head [role="tab"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.scratch-test-pane .scratch-run-region { padding: 20px 16px; }
+.scratch-output { display: flex; flex-direction: column; gap: 16px; }
+.scratch-output .lc-result-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; color: var(--text-dim); }
+.scratch-output .lc-result-summary strong { font: 500 13px/1.5 var(--sans); }
+.scratch-output .lc-result-summary > svg { width: 16px; height: 16px; }
+.scratch-output .lc-result-summary.success > svg { color: var(--action); }
+.scratch-output .lc-result-summary.error { color: var(--red); }
+.scratch-output .lc-result-summary span { margin-left: auto; color: var(--text-dim); font: 11px/1.5 var(--sans); }
+.scratch-output .lc-result-value { margin: 0; overflow: hidden; border: 1px solid var(--border-soft); border-radius: var(--r-md); background: var(--bg-elev2); }
+.scratch-output .lc-result-value label { display: block; padding: 8px 12px; border-bottom: 1px solid var(--border-soft); color: var(--text-dim); font: 11px/1.5 var(--sans); }
+.scratch-output .lc-result-value pre { margin: 0; padding: 12px; min-height: 44px; max-height: 320px; overflow: auto; background: transparent; color: var(--text); font: 13px/1.7 var(--pg-font); white-space: pre-wrap; overflow-wrap: anywhere; }
+.scratch-output .method-validation { padding: 12px; margin: 0; border: 1px solid var(--border-soft); border-radius: var(--r-md); background: var(--red-soft); color: var(--red); font: 12px/1.7 var(--pg-font); white-space: pre-wrap; overflow-wrap: anywhere; }
+.lc-result-empty { padding: 24px 8px; margin: 0; color: var(--text-dim); text-align: center; font: 13px/1.6 var(--sans); }
+.scratch-head .scratch-results-toggle { border-color: transparent; background: transparent; }
+.scratch-head .btn.primary { min-height: 34px; padding: 6px 12px; gap: 8px; font: 500 13px/1.5 var(--sans); border-radius: var(--r-md); }
+.scratch-head .scratch-run-shortcut { margin-left: 4px; padding: 1px 4px; border: 0; border-radius: var(--r-sm); background: color-mix(in srgb, var(--action-fg) 14%, transparent); font: 11px/1.5 var(--sans); opacity: .85; }
+@media (max-width: 600px) {
+	.lc-case-panel .method-value textarea { font-size: 16px; }
+	.lc-panel-head [role="tab"] { min-height: 36px; }
+}

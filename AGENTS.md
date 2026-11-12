@@ -31,6 +31,13 @@ Windows 计划任务部署。
 -   Node 要求：**\>= 22.19.0**（pi SDK 的 dist 使用了 `import … with { type: "json" }` 语法）
 -   版本：`package.json` 与 `package-lock.json` 两处同步维护。
 
+  
+
+| 列 1 | 列 2 | 列 3 | 列 4 |
+| --- | --- | --- | --- |
+| <br> | <br> | <br> | <br> |
+| <br> | <br> | <br> | <br> |
+
 ## 2. 技术栈
 
 | 层 | 技术 |
@@ -45,7 +52,7 @@ SDK 与 pi-ai 精确锁定 1.5.0，不应用本项目的 SDK 补丁。升级契�
 系统提示词：修改分段来源、原生文件编辑或重载时，读取 `docs/architecture-system-prompt.md`。
 Extensions：修改内置扩展清单/状态、包安装、启停、更新、作用域迁移、目录浏览或单文件编辑时，读取 `docs/architecture-extensions.md`。
 Codemode 卡片与 MCP/Codemode 设置遵循 15a/15b 设计；状态、项目覆盖、费用及输出限制读取 `docs/architecture-plugins.md`。
-Playground：修改 Python 代码块运行入口、草稿页脚本／函数测试／用例保存、执行限制、Python 探测、编辑工具安装或总开关时，读取 `docs/architecture-playground.md`；首次检测到可用 Python 默认开启，保留已保存开关、明确非沙箱、结果不进模型上下文。
+Playground：修改 Python 代码块运行入口、草稿页运行／用例保存、执行限制、Python 探测、编辑工具安装或总开关时，读取 `docs/architecture-playground.md`；首次检测到可用 Python 默认开启，保留已保存开关、明确非沙箱、结果不进模型上下文。草稿一次运行同时跑脚本与用例（服务端传 tests 时只跑用例，因此是串行的两次请求），用例面板是一行一条的表格，参数在该行下方展开。
 工程上下文：修改跨仓来源、OpenViking 接入或本地评测时，读取 `docs/engineering-context.md`；先验证检索收益，再增加产品界面。
 Subagents：修改 Workspace 分工、来源简介、知识库来源、报告证据核验、子会话工具/取消/预算或排队范围时，读取 `docs/architecture-subagents.md`。内置 `subagent` 默认开启，由父模型按问题调用；按显式任务分派，每项含 title/task/sourceIds；同仓任务不合并，一个任务可读取最多 8 个指定来源，不默认遍历全部仓库；支持独立停止、持久化执行记录与任务详情抽屉；`inspect` 提供有界本地简介，子会话只读调查并提交区分实现/文档/推断的报告，引用回读核对行号和指纹；不开后台任务、不递归、不改代码，沿用父模型并产生额外用量。
 

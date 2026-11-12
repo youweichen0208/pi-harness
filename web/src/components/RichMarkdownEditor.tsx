@@ -3,15 +3,15 @@ import { classifyPaste } from "../paste-format";
 import { pasteHtml } from "../paste-format-html";
 import { copyText } from "../clipboard";
 import { RichCommands } from "../rich-commands";
-import { editableDisclosures } from "../rich-content";
+import { editableDisclosures, cleanStyle } from "../rich-content";
+import { diffAgainstBaseline, canReplaceBlockTag, mergeBlockFormat, paintedBlockStyle, sampleFormat, type FormatSample, type InlineKey } from "../format-painter";
 import { RichFormattingToolbar } from "./RichFormattingToolbar";
 import { RichLinkCardDialog } from "./RichLinkCardDialog";
 import { decorateWikiTables } from "../wiki-table-presentation";
 import {
-	canRemoveColumn,
-	canRemoveRow,
 	cellAt,
 	cellIndexFor,
+	CELL_TARGET_ATTRIBUTE,
 	COLUMN_TARGET_ATTRIBUTE,
 	dataCells,
 	dataColumn,
@@ -28,7 +28,7 @@ import { createPortal } from "react-dom";
 import { WikiReadingDialog } from "./WikiReading";
 import { TEXT_HIGHLIGHT_COLORS } from "../remark-text-highlight";
 import { Fragment, memo, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { FiCalendar, FiBold, FiItalic, FiSquare, FiType, FiCode, FiList, FiCheckSquare, FiMinus, FiLink, FiImage } from "react-icons/fi";
+import { FiCalendar, FiBold, FiItalic, FiSquare, FiType, FiCode, FiList, FiCheckSquare, FiMinus, FiLink, FiImage, FiArrowUp, FiArrowDown, FiArrowLeft, FiArrowRight } from "react-icons/fi";
 import { markdownImageUrl } from "../markdown-image";
 import { withToken } from "../auth-token";
 import { getClientId } from "../use-chat";
@@ -45,26 +45,31 @@ function gutterHtml(): string {
 }
 
 /**
- * Give every data row the editor-only row gutter. Header rows keep plain `th`
- * cells so a header cell can be clicked (select column) and double-clicked
- * (rename). The gutter carries `data-rich-ui`, which `readRichDocument` strips,
- * so it never reaches saved Markdown.
+ * Give every row the editor-only row gutter. Header rows get one too — a `th`
+ * so `isHeaderRow` and header-cell semantics stay intact — because a header row
+ * without it put the header's first cell and the body's gutter in the same visual
+ * column: the gutter stretched to that cell's width and every header label sat one
+ * column left of the body it named. The gutter carries `data-rich-ui`, which
+ * `readRichDocument` strips, so it never reaches saved Markdown.
  */
-function syncGutters(table: HTMLTableElement): void {
+function syncGutters(table: HTMLTableElement, selectRowLabel: string): void {
 	for (const tr of Array.from(table.rows)) {
+		const header = isHeaderRow(tr);
 		const first = tr.cells[0];
-		if (!first || first.tagName === "TH") {
-			// Header rows (and stray `th` rows) must not carry a gutter: remove one that a
-			// previous edit or a paste left behind, so header and body stay tellable apart.
-			if (first && isGutter(first)) first.remove();
+		if (first && isGutter(first)) {
+			// Keep the hint in step with the row kind: only a data row's strip selects a row.
+			if (header) first.removeAttribute("title");
+			else if (!first.getAttribute("title")) first.setAttribute("title", selectRowLabel);
 			continue;
 		}
-		if (isGutter(first)) continue;
-		const gutter = document.createElement("td");
+		const gutter = document.createElement(header ? "th" : "td");
 		gutter.setAttribute(GUTTER_ATTRIBUTE, "");
 		gutter.setAttribute("data-rich-ui", "");
 		gutter.contentEditable = "false";
 		gutter.setAttribute("aria-hidden", "true");
+		// A data row's strip is a control: say what it does. The header's strip only
+		// aligns the columns, so it stays silent and non-interactive.
+		if (!header) gutter.setAttribute("title", selectRowLabel);
 		tr.prepend(gutter);
 	}
 }
@@ -156,6 +161,32 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		return code && root.current?.contains(code) && selection?.focusNode && code.contains(selection.focusNode) ? code : null;
 	};
 	const [floating, setFloating] = useState<{ x: number; y: number } | null>(null);
+	// Format painter: `sampled` holds one capture and is applied on the next gesture;
+	// `sticky` keeps it armed after painting until Escape or a second toggle. Both live
+	// outside RichCommands because they outlive a single command execution.
+	const [painter, setPainter] = useState<{ sampled: FormatSample; sticky: boolean } | null>(null);
+	const painterRef = useRef(painter);
+	painterRef.current = painter;
+	// Whether the caret currently sits somewhere a sample can be taken. `null` means
+	// "not measured yet", which keeps the button enabled rather than flickering off.
+	const [samplable, setSamplable] = useState<boolean | null>(null);
+	// Cheap, side-effect free version of "would sampling find anything?". A block with no
+	// text and no marked formatting has nothing to copy; anything else can be sampled.
+	const canSample = (selection: Selection | null): boolean => {
+		if (!root.current || !selection?.rangeCount || !root.current.contains(selection.anchorNode)) return false;
+		const anchor = selection.anchorNode;
+		const element = anchor instanceof HTMLElement ? anchor : anchor?.parentElement;
+		const block = element?.closest<HTMLElement>("p,h1,h2,h3,h4,h5,h6,li,td,th,blockquote,div");
+		return !!block && root.current.contains(block) && !!block.textContent?.trim();
+	};
+	useEffect(() => {
+		if (!painter) return;
+		const escape = (event: KeyboardEvent) => {
+			if (event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); setPainter(null); }
+		};
+		window.addEventListener("keydown", escape);
+		return () => window.removeEventListener("keydown", escape);
+	}, [!!painter]);
 	useEffect(() => {
 		if (!wiki || !floating) return;
 		const escape = (event: KeyboardEvent) => {
@@ -201,6 +232,40 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 			editor.removeEventListener("compositionend", compositionEnd);
 		};
 	}, [wikiPlaceholder, readOnly]);
+	// Sampling reads the live style of whatever the caret touches. It stays here, not in
+	// format-painter.ts, so that module remains DOM-free and unit-testable.
+	const sampleAt = (): FormatSample | null => {
+		const selection = window.getSelection();
+		if (!root.current || !selection?.rangeCount || !root.current.contains(selection.anchorNode)) return null;
+		let node: Node | null = selection.anchorNode;
+		if (!node) return null;
+		if (node.nodeType === Node.ELEMENT_NODE && selection.isCollapsed) node = node.childNodes[selection.anchorOffset] ?? node;
+		const startsInBlock = (value: Node) => value instanceof HTMLElement && !!value.closest("p,h1,h2,h3,h4,h5,h6,li,td,th,blockquote");
+		while (node.firstChild && !startsInBlock(node)) node = node.firstChild;
+		const element = node instanceof HTMLElement ? node : node?.parentElement;
+		const block = element?.closest<HTMLElement>("p,h1,h2,h3,h4,h5,h6,li,td,th,blockquote") ?? element?.closest<HTMLElement>("div");
+		if (!block || !root.current.contains(block)) return null;
+		const sampled = sampleFormat(cleanStyle(getComputedStyle(element ?? block)), block.tagName);
+		// Resolved styles carry inherited defaults; diff them against a pristine block of
+		// the same tag so painting copies intent rather than the document's baseline.
+		const baseline = baselineFor(block);
+		const trimmed = baseline ? diffAgainstBaseline(sampled, baseline) : sampled;
+		return block.textContent?.trim() ? trimmed : null;
+	};
+	// A detached clone measures what "unformatted" looks like here. The baseline is a
+	// plain paragraph on purpose: comparing against the same tag would hide a heading's
+	// own styling and leave nothing to copy.
+	const baselineFor = (block: HTMLElement): FormatSample | null => {
+		const holder = document.createElement("div");
+		holder.style.cssText = "position: absolute; visibility: hidden; pointer-events: none; width: 0; height: 0; overflow: hidden";
+		const copy = document.createElement("p");
+		copy.textContent = "x";
+		holder.append(copy);
+		(block.parentElement ?? root.current ?? document.body).append(holder);
+		const measured = sampleFormat(cleanStyle(getComputedStyle(copy)), block.tagName);
+		holder.remove();
+		return measured;
+	};
 	const [linkInput, setLinkInput] = useState<string | null>(null);
 	const linkRange = useRef<Range | null>(null), imageRange = useRef<Range | null>(null);
 	const imageInput = useRef<HTMLInputElement>(null);
@@ -216,6 +281,11 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		const changed = () => {
 			const selection = window.getSelection();
 			if (selection?.rangeCount && root.current?.contains(selection.anchorNode) && root.current.contains(selection.focusNode)) savedRange.current = selection.getRangeAt(0).cloneRange();
+			// Mirror the painter's own reachability test so an unreachable caret disables
+			// the button instead of letting the click silently do nothing.
+			// An empty block has nothing worth copying, so it disables too. This mirrors
+			// `sampleAt`, which also returns null for the same case.
+			setSamplable(canSample(selection));
 			const range = highlightSelection();
 			if (!range) { setFloating(null); return; }
 			const rect = range.getBoundingClientRect();
@@ -247,24 +317,53 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 	};
 	const [tableCell, setTableCell] = useState<HTMLTableCellElement | null>(null);
 	// Any click outside the table menu closes it; the menu is a portal, so it is not a
-	// descendant of the editor root.
+	// descendant of the editor root. Escape closes it too: the key handler lives on the
+	// editor root, which the portal never reaches.
 	useEffect(() => {
 		if (!tableMenu) return;
 		const dismiss = (event: Event) => {
+			// A scroll event targets the element that scrolled, which is routinely the editor
+			// root or the block holding the cell the menu was opened on. Only a press may
+			// keep the menu: inside it, or on a cell of the table it acts on. Everything
+			// else — including every scroll — closes it.
+			// Every scroll closes the menu, as it always has: the editor scrolls itself to
+			// keep the caret visible, which is exactly when a stale menu is in the way.
+			if (event.type !== "mousedown") { closeTableMenu(); return; }
+			// A press inside the menu belongs to the menu. A press on any cell of the table
+			// it acts on is a right-click re-target, and that press is handled by the
+			// editor root first — closing here would tear the menu down under its own
+			// opening event, exactly what a second press on the same cell does.
+			const target = event.target as Node | null;
+			if (target instanceof Element && target.closest(".fp-table-menu")) return;
+			const cell = target instanceof Element ? target.closest<HTMLTableCellElement>("th, td") : null;
+			if (cell && tableMenu.table.contains(cell)) return;
+			closeTableMenu();
+		};
+		const onKey = (event: KeyboardEvent) => {
+			// While one of the menu's count fields has focus the user is typing a number,
+			// not editing the document; everything else is a menu shortcut.
 			const target = event.target as HTMLElement | null;
-			if (!target?.closest(".fp-table-menu")) setTableMenu(null);
+			if (event.key !== "Escape" && target?.closest(".fp-table-count")) return;
+			if (event.key !== "Escape" || event.isComposing) return;
+			event.preventDefault(); event.stopPropagation();
+			closeTableMenu();
 		};
 		document.addEventListener("mousedown", dismiss);
+		document.addEventListener("keydown", onKey, true);
 		window.addEventListener("resize", dismiss);
 		window.addEventListener("scroll", dismiss, true);
 		return () => {
 			document.removeEventListener("mousedown", dismiss);
+			document.removeEventListener("keydown", onKey, true);
 			window.removeEventListener("resize", dismiss);
 			window.removeEventListener("scroll", dismiss, true);
 		};
 	});
 	useEffect(() => {
 		const refresh = () => {
+			// While the structure menu holds focus (its count fields), the caret belongs to
+			// the menu: the document must not act on a selection change or a stale range.
+			if (inTableMenu.current) return;
 			const selection = window.getSelection();
 			const range = selection?.rangeCount && !selection.isCollapsed ? selection.getRangeAt(0) : null;
 			root.current?.querySelectorAll<HTMLTableElement>("table").forEach(table => {
@@ -302,7 +401,7 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		mountRichDocument(root.current, prepared, labels);
 		editableDisclosures(root.current, t("richCollapse"));
 		// Gutters first: every table-derived decoration counts logical columns.
-		root.current.querySelectorAll<HTMLTableElement>("table").forEach(table => syncGutters(table));
+		root.current.querySelectorAll<HTMLTableElement>("table").forEach(table => syncGutters(table, t("richSelectRow")));
 		if (wiki) decorateWikiTables(root.current);
 		if (wiki) {
 			root.current.querySelectorAll<HTMLElement>("pre:has(> code)").forEach(pre => pre.classList.add("codeblock"));
@@ -330,7 +429,7 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		root.current?.querySelectorAll<HTMLTableElement>("table").forEach(table => {
 			// Loaded documents, pasted tables and template inserts all need the same
 			// gutter, or the geometry module would mis-read their columns.
-			syncGutters(table);
+			syncGutters(table, t("richSelectRow"));
 			// A table with no data-cell content is an empty template (fresh /table insert
 			// or fully cleared): stretch it across the prose width instead of leaving a
 			// large blank area to its right. Any content shrinks it back.
@@ -482,13 +581,12 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		const cell = element?.closest<HTMLTableCellElement>("th, td") ?? null;
 		return cell && root.current?.contains(cell) ? cell : null;
 	};
-	const focusCell = (cell: HTMLTableCellElement) => {
-		root.current?.focus();
-		const range = document.createRange();
-		range.selectNodeContents(cell); range.collapse(true);
+	const focusCell = (cell: HTMLTableCellElement) => placeCaretIn(cell);
+	/** The caret as it stands, or null when there is none in the document. */
+	const caretRange = () => {
 		const selection = window.getSelection();
-		selection?.removeAllRanges(); selection?.addRange(range);
-		setTableCell(cell);
+		const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+		return range && root.current?.contains(range.startContainer) ? range : null;
 	};
 	/**
 	 * The table target is editor state, not a text range: selecting a row or a
@@ -496,11 +594,44 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 	 * menu acts on is resolved through this one place (see table-geometry.ts for
 	 * why the gutter makes DOM and logical column indexes differ).
 	 */
-	type TableAction = "rowAbove" | "rowBelow" | "columnLeft" | "columnRight" | "removeRow" | "removeColumn" | "removeTable" | "selectTable" | "left" | "center" | "right";
-	type TableTarget = { table: HTMLTableElement; row: number; column: number };
+	type TableAction = "numberRows" | "numberColumn" | "clearCells" | "rowAbove" | "rowBelow" | "columnLeft" | "columnRight" | "removeRow" | "removeColumn" | "removeTable" | "selectTable" | "left" | "center" | "right";
+	type TableTarget = { table: HTMLTableElement; row: number; column: number; selectedRows?: number[]; selectedColumns?: number[] };
 	const [rowTarget, setRowTarget] = useState<number | null>(null);
 	const [columnTarget, setColumnTarget] = useState<number | null>(null);
-	const [tableMenu, setTableMenu] = useState<{ x: number; y: number; table: HTMLTableElement; row: number; column: number } | null>(null);
+	const [tableMenu, setTableMenu] = useState<(TableTarget & { x: number; y: number }) | null>(null);
+	// The menu's count fields, one per axis, reset every time the menu opens.
+	const [insertCount, setInsertCount] = useState({ row: "1", column: "1" });
+	const [numberStart, setNumberStart] = useState("1");
+	const pressedSelection = useRef<TableTarget | null>(null);
+	const selectedTableRange = (target: TableTarget): TableTarget | null => {
+		const selection = window.getSelection();
+		if (!selection?.rangeCount || selection.isCollapsed) return null;
+		const range = selection.getRangeAt(0);
+		const cellOf = (node: Node) => (node instanceof Element ? node : node.parentElement)?.closest<HTMLTableCellElement>("th,td");
+		if (range.intersectsNode(target.table)) {
+			const whole = document.createRange(); whole.selectNode(target.table);
+			if (range.compareBoundaryPoints(Range.START_TO_START, whole) <= 0 && range.compareBoundaryPoints(Range.END_TO_END, whole) >= 0) return { ...target, selectedRows: Array.from(target.table.rows, (_, i) => i), selectedColumns: dataCells(target.table.rows[0]).map((_, i) => i) };
+		}
+		const first = cellOf(range.startContainer), last = cellOf(range.endContainer);
+		const a = first && locateCell(first), b = last && locateCell(last);
+		if (!a || !b || a.table !== target.table || b.table !== target.table || a.column < 0 || b.column < 0) return null;
+		const rows = Array.from({ length: Math.abs(a.row - b.row) + 1 }, (_, i) => Math.min(a.row, b.row) + i);
+		const columns = Array.from({ length: Math.abs(a.column - b.column) + 1 }, (_, i) => Math.min(a.column, b.column) + i);
+		return rows.includes(target.row) && columns.includes(target.column) ? { ...target, selectedRows: rows, selectedColumns: columns } : null;
+	};
+	/** True while the structure menu is mounted: its fields are chrome, not content. */
+	const inTableMenu = useRef(false);
+	// The menu lives in a portal and takes focus when a count field is clicked: the
+	// editor's blur handler must not read that as "the user left the document".
+	useEffect(() => {
+		inTableMenu.current = !!tableMenu;
+		return () => { inTableMenu.current = false; };
+	}, [!!tableMenu]);
+	// A right-click is a press and a release. Our root listeners are native, so the
+	// press is handled before the browser collapses the caret and before the release
+	// runs; freezing the target on the press keeps the choice that was already on
+	// screen instead of trading a selected column for the row that was just clicked.
+	const pressedTarget = useRef<{ table: HTMLTableElement; row: number | null; column: number | null } | null>(null);
 	/** Logical row / column of a cell, resolved through the geometry module. */
 	const locateCell = (cell: HTMLTableCellElement): TableTarget | null => {
 		const table = cell.closest("table");
@@ -508,11 +639,17 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		if (!table || !(tr instanceof HTMLTableRowElement)) return null;
 		return { table, row: tr.rowIndex, column: dataColumn(cell, tr) };
 	};
-	/** Highlight the row/column target without touching the text selection. */
-	const paintTableTarget = (table: HTMLTableElement | null, row: number | null, column: number | null) => {
+	/**
+	 * Highlight the table target without touching the text selection. Three shapes:
+	 * a row band, a column band, or — when `cell` is given — that one cell only.
+	 * The right-click menu uses the cell: it acts on that cell's row and column, and
+	 * the caret is already in it, so banding both axes only added colour to read.
+	 */
+	const paintTableTarget = (table: HTMLTableElement | null, row: number | null, column: number | null, cell?: HTMLTableCellElement | null) => {
 		setRowTarget(row); setColumnTarget(column);
-		root.current?.querySelectorAll<HTMLElement>(`[${ROW_TARGET_ATTRIBUTE}], [${COLUMN_TARGET_ATTRIBUTE}]`).forEach(node => { node.removeAttribute(ROW_TARGET_ATTRIBUTE); node.removeAttribute(COLUMN_TARGET_ATTRIBUTE); });
+		root.current?.querySelectorAll<HTMLElement>(`[${ROW_TARGET_ATTRIBUTE}], [${COLUMN_TARGET_ATTRIBUTE}], [${CELL_TARGET_ATTRIBUTE}]`).forEach(node => { node.removeAttribute(ROW_TARGET_ATTRIBUTE); node.removeAttribute(COLUMN_TARGET_ATTRIBUTE); node.removeAttribute(CELL_TARGET_ATTRIBUTE); });
 		if (!table) return;
+		if (cell && table.contains(cell)) { cell.setAttribute(CELL_TARGET_ATTRIBUTE, ""); return; }
 		if (row !== null) table.rows[row]?.setAttribute(ROW_TARGET_ATTRIBUTE, "");
 		if (column === null) return;
 		for (const tr of Array.from(table.rows)) {
@@ -521,22 +658,67 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		}
 	};
 	/** Clear table targeting when the caret leaves the table or the document reloads. */
-	const clearTableTarget = () => { if (rowTarget !== null || columnTarget !== null) paintTableTarget(null, null, null); };
-	const insertRow = (table: HTMLTableElement, at: number, above: boolean) => {
-		const reference = table.rows[at];
+	const clearTableTarget = () => {
+		if (rowTarget !== null || columnTarget !== null || root.current?.querySelector(`[${CELL_TARGET_ATTRIBUTE}]`)) paintTableTarget(null, null, null);
+	};
+	/**
+	 * Close the structure menu and drop the targets it painted. Every closing path
+	 * (Escape, scroll, outside press, the toggling second right-click) goes through
+	 * here: a menu that vanishes must not leave its L-shaped highlight behind, or the
+	 * document keeps a state the user can no longer act on.
+	 */
+	const closeTableMenu = () => { setTableMenu(null); paintTableTarget(null, null, null); };
+	/**
+	 * Give an empty cell the `<br>` placeholder the editor builds its own cells with:
+	 * a cell with no node at all has no position the typing engine can hold on to,
+	 * which is why a freshly added cell used to look focused and swallow the caret.
+	 */
+	const caretIn = (cell: HTMLTableCellElement) => {
+		if (!cell.firstChild) cell.append(document.createElement("br"));
+	};
+	/** Move the caret to the start of a cell's content without rewriting it. */
+	const placeCaretIn = (cell: HTMLTableCellElement | null | undefined) => {
+		if (!cell || !root.current?.contains(cell)) return null;
+		root.current.focus({ preventScroll: true });
+		caretIn(cell);
+		const range = document.createRange();
+		range.selectNodeContents(cell); range.collapse(true);
+		const selection = window.getSelection();
+		selection?.removeAllRanges(); selection?.addRange(range);
+		setTableCell(cell);
+		return range;
+	};
+	const insertRow = (table: HTMLTableElement, at: number, above: boolean, after?: HTMLTableRowElement | null) => {
+		const reference = at < 0 ? table.rows[0] : table.rows[at];
 		const added = document.createElement("tr");
 		const gutter = added.insertCell();
 		gutter.setAttribute(GUTTER_ATTRIBUTE, ""); gutter.setAttribute("data-rich-ui", ""); gutter.contentEditable = "false"; gutter.setAttribute("aria-hidden", "true");
 		// One content cell per logical column, which is what the header row holds.
 		for (let index = 0; index < Math.max(1, dataCells(reference).length); index += 1) added.insertCell().append(document.createElement("br"));
 		const body = table.tBodies[0] ?? table.createTBody();
-		if (above && at === 0 && table.tHead) body.prepend(added);
+		// Repeated inserts (a count above one) chain after the row this call just added.
+		if (after) after.after(added);
+		else if (above && at === 0 && table.tHead) body.prepend(added);
 		else if (above) reference.before(added);
 		else reference.after(added);
-		return table.rows[above ? at : at + 1];
+		return added;
+	};
+	/** The next unused `<column word> N` for this table's header row. */
+	const nextColumnNumber = (row: HTMLTableRowElement) => {
+		const prefix = t("richColumn");
+		let highest = 0;
+		for (const cell of Array.from(row.cells)) {
+			if (isGutter(cell)) continue;
+			const label = cell.textContent?.trim() ?? "";
+			const match = label.startsWith(prefix) ? label.slice(prefix.length).trim() : null;
+			const value = match && /^\d+$/.test(match) ? Number(match) : 0;
+			highest = Math.max(highest, value);
+		}
+		return highest + 1;
 	};
 	const insertColumn = (table: HTMLTableElement, column: number, left: boolean) => {
 		const rows = Array.from(table.rows);
+		const next = left ? column : column + 1;
 		// The header defines the truth; data rows shift by their gutter.
 		for (const tr of rows) {
 			const index = cellIndexFor(tr, column);
@@ -544,14 +726,25 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 			const header = isHeaderRow(tr);
 			const cell = document.createElement(header ? "th" : "td");
 			cell.style.textAlign = tr.cells[index].style.textAlign;
-			// An empty header would be serialized as an empty column name; leave it blank
-			// rather than writing the word "Column" into the user's Markdown.
-			cell.append(document.createElement("br"));
+			if (header) {
+				// A nameless column reads as a broken table — that is exactly what a blank
+				// header cell looked like once it spanned the page next to real column names.
+				// Name it the way the /table template names its columns, continuing from the
+				// highest existing number so a grown table never repeats a name.
+				cell.textContent = `${t("richColumn")} ${nextColumnNumber(tr)}`;
+			} else {
+				// A cell with no node has no caret position to hold on to.
+				cell.append(document.createElement("br"));
+			}
+			// `column` is logical while `cells` counts the gutter: the new cell sits at that
+			// index on the left and one past it on the right, so it never lands on the
+			// gutter and is never appended after a column further right.
 			if (left) tr.cells[index].before(cell); else tr.cells[index].after(cell);
 		}
-		return left ? column : column + 1;
+		return next;
 	};
-	const editTable = (action: TableAction, targetArg?: TableTarget | null) => {
+	/** Insert actions repeat: one gesture for "insert 2 rows" like Yuque's count field. */
+	const editTable = (action: TableAction, targetArg?: TableTarget | null, amount?: { row: string; column: string }) => {
 		const resolved: TableTarget | null = targetArg ?? tableMenu ?? (tableCell ? locateCell(tableCell) : null);
 		if (readOnly || !resolved || !root.current?.contains(resolved.table)) return;
 		const target: TableTarget = resolved;
@@ -560,12 +753,14 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		const row = table.rows[target.row];
 		if (!row) return;
 		const column = target.column;
+		const selectedRows = target.selectedRows ?? [target.row];
+		const selectedColumns = target.selectedColumns ?? [column];
 		if (action === "removeTable" || action === "selectTable") {
 			const range = document.createRange();
 			range.selectNode(original);
 			const selection = window.getSelection();
 			root.current.focus(); selection?.removeAllRanges(); selection?.addRange(range);
-			if (action === "removeTable") { command("delete"); paintTableTarget(null, null, null); setTableCell(null); setTableMenu(null); }
+			if (action === "removeTable") { command("delete"); paintTableTarget(null, null, null); setTableCell(null); closeTableMenu(); }
 			return;
 		}
 		if (["left", "center", "right"].includes(action)) {
@@ -573,31 +768,64 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 			if (index < 0) return;
 			for (const current of Array.from(table.rows)) current.cells[index]?.style.setProperty("text-align", action);
 		} else if (action === "rowAbove" || action === "rowBelow") {
-			insertRow(table, target.row, action === "rowAbove");
+			// Counts are clamped: one row is the floor, eight the ceiling, so a stray
+			// keystroke cannot turn one menu action into two hundred rows.
+			const times = Math.max(1, Math.min(8, Number(amount?.row) || 1));
+			let last: HTMLTableRowElement | null = null;
+			for (let index = 0; index < times; index += 1) last = insertRow(table, action === "rowAbove" ? target.row : last ? -1 : target.row, action === "rowAbove", last);
 		} else if (action === "columnLeft" || action === "columnRight") {
-			insertColumn(table, column, action === "columnLeft");
+			const times = Math.max(1, Math.min(8, Number(amount?.column) || 1));
+			for (let index = 0; index < times; index += 1) insertColumn(table, action === "columnLeft" ? column : column + index, action === "columnLeft");
+		} else if (action === "numberRows" || action === "numberColumn") {
+			const body = Array.from(table.rows).filter(tr => !isHeaderRow(tr));
+			const start = action === "numberColumn" ? 1 : Number(numberStart);
+			if (!Number.isInteger(start) || start < 1 || start > body.length) return;
+			if (action === "numberColumn") {
+				insertColumn(table, 0, true);
+				const header = cellAt<HTMLTableCellElement>(table.rows[0], 0);
+				if (header && isHeaderRow(table.rows[0])) header.textContent = t("richSequenceColumn");
+			}
+			body.slice(start - 1).forEach((tr, index) => {
+				const cell = cellAt<HTMLTableCellElement>(tr, action === "numberColumn" ? 0 : column);
+				if (cell) cell.textContent = String(index + 1);
+			});
+		} else if (action === "clearCells") {
+			for (const rowIndex of selectedRows) for (const col of selectedColumns) {
+				cellAt<HTMLTableCellElement>(table.rows[rowIndex], col)?.replaceChildren(document.createElement("br"));
+			}
 		} else if (action === "removeRow") {
-			if (!canRemoveRow(table.rows, target.row)) return;
-			row.remove();
+			const removable = selectedRows.filter(index => table.rows[index] && !isHeaderRow(table.rows[index]));
+			if (!removable.length || removable.length >= Array.from(table.rows).filter(tr => !isHeaderRow(tr)).length) return;
+			removable.sort((a, b) => b - a).forEach(index => table.rows[index].remove());
 		} else if (action === "removeColumn") {
-			if (!canRemoveColumn(row)) return;
-			for (const current of Array.from(table.rows)) { const index = cellIndexFor(current, column); if (index >= 0) current.deleteCell(index); }
+			if (selectedColumns.length >= dataCells(row).length) return;
+			for (const current of Array.from(table.rows)) for (const col of [...selectedColumns].sort((a, b) => b - a)) {
+				const index = cellIndexFor(current, col); if (index >= 0) current.deleteCell(index);
+			}
 		}
 		// Land the caret on a content cell, never the gutter: inserting a row focuses its
 		// first data cell, inserting a column focuses the first data cell of that column.
 		const nextRow = action === "removeRow" ? Math.max(isHeaderRow(table.rows[0]) ? 1 : 0, Math.min(target.row, table.rows.length - 1)) : (action === "rowAbove" || action === "rowBelow") ? (action === "rowAbove" ? target.row : target.row + 1) : target.row;
 		const nextColumn = action === "removeColumn" ? Math.max(0, Math.min(column, dataCells(table.rows[nextRow] ?? row).length - 1)) : (action === "columnLeft" ? column : action === "columnRight" ? column + 1 : column);
+		// Where the caret already is decides what happens next: inside the text of a cell
+		// the edit left alone, it goes back there; otherwise it lands in the new cell.
+		const carried = caretRange();
+		if (carried && original.contains(carried.startContainer)) carried.collapse(true);
 		table.dataset.richTableChange = "";
 		const range = document.createRange(); range.selectNode(original);
 		root.current.focus(); const selection = window.getSelection(); selection?.removeAllRanges(); selection?.addRange(range);
+		root.current.querySelectorAll<HTMLTableElement>("table[data-table-selected]").forEach(other => other.removeAttribute("data-table-selected"));
 		command("insertHTML", table.outerHTML);
-		setTableMenu(null);
+		closeTableMenu();
 		const inserted = root.current.querySelector<HTMLTableElement>("[data-rich-table-change]");
 		if (inserted) {
 			inserted.removeAttribute("data-rich-table-change");
-			syncGutters(inserted);
+			syncGutters(inserted, t("richSelectRow"));
 			const landing = cellAt<HTMLTableCellElement>(inserted.rows[Math.min(nextRow, inserted.rows.length - 1)], Math.max(0, nextColumn));
-			if (landing) focusCell(landing);
+			// Put the caret back in the same text when the edit did not touch it (adding a
+			// row, adding a column elsewhere); otherwise land at the start of the new cell.
+			if (!(carried && landing?.contains(carried.startContainer))) placeCaretIn(landing);
+			else { root.current.focus(); selection?.removeAllRanges(); selection?.addRange(carried); setTableCell(landing); }
 		}
 		update();
 	};
@@ -648,7 +876,7 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		editableDisclosures(root.current, t("richCollapse"));
 		// A structural edit replaces the whole table element, so gutters must exist
 		// before anything keyed off logical columns runs.
-		root.current.querySelectorAll<HTMLTableElement>("table").forEach(table => syncGutters(table));
+		root.current.querySelectorAll<HTMLTableElement>("table").forEach(table => syncGutters(table, t("richSelectRow")));
 		if (wiki) decorateWikiTables(root.current);
 		root.current.querySelectorAll<HTMLElement>(".rich-table-boundary").forEach(paragraph => {
 			if (paragraph.textContent || paragraph.querySelector("img, table, pre")) paragraph.classList.remove("rich-table-boundary");
@@ -803,6 +1031,67 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		const inserted = root.current?.querySelector<HTMLElement>("[data-rich-selection]");
 		if (inserted) { inserted.removeAttribute("data-rich-selection"); const range = document.createRange(); range.selectNodeContents(inserted); if (collapsed) range.collapse(false); selection.removeAllRanges(); selection.addRange(range); prepareInsert(); update(); }
 	};
+	// One replacement path for both painting and clearing: inline declarations are
+	// stripped or applied element by element, block declarations are replaced wholesale.
+	const paintBlocks = (sample: FormatSample | null) => {
+		const selection = window.getSelection();
+		if (!selection?.rangeCount) return;
+		const collapsed = selection.isCollapsed;
+		const start = selection.getRangeAt(0).startContainer, end = selection.getRangeAt(0).endContainer;
+		const within = (node: Node | null) => node instanceof HTMLElement ? node : node?.parentElement ?? null;
+		const first = within(start)?.closest<HTMLElement>("p,h1,h2,h3,h4,h5,h6,li,td,th,blockquote"), last = within(end)?.closest<HTMLElement>("p,h1,h2,h3,h4,h5,h6,li,td,th,blockquote");
+		if (!first || !last || !root.current?.contains(first)) return;
+		// Collect every block between the two ends so a cross-block selection paints each one.
+		const blocks: HTMLElement[] = [];
+		for (const candidate of root.current.querySelectorAll<HTMLElement>("p,h1,h2,h3,h4,h5,h6,li,td,th,blockquote")) {
+			// The tail placeholder and editor chrome are not document content, and a table's
+			// own wrapper is not a paintable block.
+			if (candidate.hasAttribute("data-rich-tail") || candidate.closest("[data-rich-ui], table[contenteditable=false]")) continue;
+			blocks.push(candidate);
+		}
+		const startIndex = blocks.indexOf(first), endIndex = blocks.indexOf(last);
+		const targets = collapsed || startIndex < 0 || endIndex < startIndex ? [first] : blocks.slice(startIndex, endIndex + 1);
+		// Build every replacement before touching the document: replacing nodes one at a
+		// time invalidates the references still held for the remaining targets.
+		const replacements = targets.map(block => {
+			const clone = block.cloneNode(true) as HTMLElement;
+			clone.removeAttribute("style");
+			clone.querySelectorAll<HTMLElement>("[style]").forEach(el => el.removeAttribute("style"));
+			// Remove semantic formatting too; clearing CSS alone leaves bold/highlight behind.
+			clone.querySelectorAll("strong,b,em,i,u,s,strike,del,mark").forEach(el => el.replaceWith(...el.childNodes));
+			const style = sample ? paintedBlockStyle(sample) : "";
+			if (style) clone.setAttribute("style", style);
+			if (style) clone.dataset.richFormat = "";
+			else clone.removeAttribute("data-rich-format");
+			if (sample && Object.keys(sample.inline).length) {
+				for (const child of [clone, ...clone.querySelectorAll<HTMLElement>("*")]) {
+					if (child !== clone && child.tagName !== "SPAN") continue;
+					for (const [key, value] of Object.entries(sample.inline)) child.style.setProperty(key as InlineKey, value);
+				}
+			}
+			return clone;
+		});
+		for (const [index, block] of targets.entries()) {
+			const clone = replacements[index];
+			if (!block.isConnected) continue;
+			const range = document.createRange(); range.selectNode(block); selection.removeAllRanges(); selection.addRange(range);
+			if (sample && canReplaceBlockTag(block.tagName, sample.tag)) insertTagged(clone, sample.tag); else command("insertHTML", clone.outerHTML);
+		}
+		prepareInsert(); update();
+	};
+	// `insertHTML` unwraps or keeps the outer element depending on Chromium's mood; writing
+	// the replacement node directly makes an intent-to-promote block an actual heading.
+	const insertTagged = (clone: HTMLElement, tag: string) => {
+		const selection = window.getSelection();
+		if (!selection?.rangeCount) return;
+		const range = selection.getRangeAt(0);
+		const replacement = document.createElement(tag);
+		replacement.innerHTML = clone.innerHTML;
+		for (const { name, value } of [...clone.attributes]) replacement.setAttribute(name, value);
+		range.deleteContents(); range.insertNode(replacement);
+		const after = document.createRange(); after.selectNodeContents(replacement); after.collapse(false);
+		selection.removeAllRanges(); selection.addRange(after);
+	};
 	const format = (action: string, argument?: string) => {
 		const selection = window.getSelection(); const node = selection?.anchorNode;
 		const element = node instanceof HTMLElement ? node : node?.parentElement;
@@ -813,6 +1102,30 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 			if (located && located.column >= 0) { editTable(argument as "left" | "center" | "right", located); return; }
 		}
 		if (action === "task") { insertToolbar("rw"); return; }
+		if (action === "paint") {
+			// Clicking an armed painter cancels it; clicking again with nothing sampled arms one.
+			if (painterRef.current) { setPainter(argument === "sticky" ? { ...painterRef.current, sticky: true } : null); return; }
+			const sampled = sampleAt();
+			if (sampled) setPainter({ sampled, sticky: argument === "sticky" });
+			return;
+		}
+		if (action === "clear") {
+			// Capture the target before the native command runs: `removeFormat` rewrites the
+			// selection, so resolving the block afterwards can land on the wrong node.
+			const selection = window.getSelection();
+			const anchor = selection?.anchorNode;
+			const target = (anchor instanceof HTMLElement ? anchor : anchor?.parentElement)?.closest<HTMLElement>("p,h1,h2,h3,h4,h5,h6,li,td,th,blockquote");
+			// Two stages on purpose: the native command handles inline cleanup well, the
+			// block stage below removes block-level declarations it cannot reach.
+			command("removeFormat");
+			if (target && root.current?.contains(target)) {
+				target.removeAttribute("style");
+				target.removeAttribute("data-rich-format");
+				target.querySelectorAll<HTMLElement>("[style]").forEach(el => el.removeAttribute("style"));
+				update(); prepareInsert();
+			}
+			return;
+		}
 		if (action === "highlight") { const color = TEXT_HIGHLIGHT_COLORS.find(c => c.name === argument); command("hiliteColor", color?.hex ?? "transparent"); return; }
 		if (["font-size", "color"].includes(action)) { styledSelection(`${action}: ${argument}`); return; }
 		if (action === "line-height" || action === "text-align" || action === "plainBlock") {
@@ -846,6 +1159,8 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		captureSelection: prepareInsert, restoreSelection: restoreInsert, execute: format,
 		insert: id => insertToolbar(id),
 		color: variable => getComputedStyle(document.documentElement).getPropertyValue(variable).trim(),
+		armed: () => painterRef.current !== null,
+		sticky: () => painterRef.current?.sticky ?? false,
 	});
 	const inspectSlash = (resetActive = true) => {
 		if (readOnly) return closeMenu();
@@ -987,12 +1302,12 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 	};
 
 	return <div className="fp-rich-editor" onScrollCapture={(event) => { if (!(event.target as HTMLElement).closest(".fp-slash-menu")) { if (menu) inspectSlash(false); } }}>
-		{wiki?.toolbar?.host && createPortal(<WikiToolbar readOnly={readOnly} focused={!!wiki.width?.focused} onWidth={wiki.width?.onToggle ?? (() => {})} items={items.map(item => ({ id: item.alias, label: item.label === "richHeading" ? `${t("richHeading")} ${"argument" in item ? item.argument.slice(1) : ""}` : itemLabel(item), hint: hints[item.alias] ?? "", help: t(help[item.alias] ?? item.label), icon: item.label === "richHeading" ? <span className="wiki-heading-icon">{`H${"argument" in item ? item.argument.slice(1) : ""}`}</span> : icons[item.label] }))} editor={root.current} commands={commands} />, wiki.toolbar.host)}
+		{wiki?.toolbar?.host && createPortal(<WikiToolbar readOnly={readOnly} focused={!!wiki.width?.focused} onWidth={wiki.width?.onToggle ?? (() => {})} items={items.map(item => ({ id: item.alias, label: item.label === "richHeading" ? `${t("richHeading")} ${"argument" in item ? item.argument.slice(1) : ""}` : itemLabel(item), hint: hints[item.alias] ?? "", help: t(help[item.alias] ?? item.label), icon: item.label === "richHeading" ? <span className="wiki-heading-icon">{`H${"argument" in item ? item.argument.slice(1) : ""}`}</span> : icons[item.label] }))} editor={root.current} commands={commands} painter={!!painter} painterDisabled={samplable === false} onPaint={sticky => format("paint", sticky ? "sticky" : undefined)} />, wiki.toolbar.host)}
 		{diagrams.map(({ host, code }, index) => createPortal(<MermaidDiagram code={code} />, host, String(index)))}
 		{insertPopup && !readOnly && <WikiInsertPopover popup={insertPopup} onClose={() => { setInsertPopup(null); restoreInsert(); }}>
 			<TableSizePicker onInsert={(columns, rows) => insertToolbar("bg", { columns, rows })} />
 		</WikiInsertPopover>}
-		{!wiki?.toolbar && !readOnly && <RichFormattingToolbar compact={compact} commands={commands} onFold={foldSelection} />}
+		{!wiki?.toolbar && !readOnly && <RichFormattingToolbar compact={compact} commands={commands} onFold={foldSelection} painter={!!painter} painterDisabled={samplable === false} onPaint={sticky => format("paint", sticky ? "sticky" : undefined)} />}
 		{cardOpen && <RichLinkCardDialog onClose={() => setCardOpen(false)} onInsert={async (card, signal) => {
 			const range = cardRange.current, editor = root.current;
 			if (!range || !editor?.contains(range.startContainer) || readOnlyRef.current) throw Error();
@@ -1029,24 +1344,40 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 			</form>
 		</WikiReadingDialog>}
 		{linkInput !== null && <WikiReadingDialog title={t("wikiAddLink")} onClose={() => setLinkInput(null)}><form className="wiki-link-form" onSubmit={event => { event.preventDefault(); insertLink(linkInput); }}><input aria-label={t("wikiLinkAddress")} placeholder={t("wikiLinkAddress")} value={linkInput} onChange={e => setLinkInput(e.target.value)} /><button type="submit" disabled={!linkInput.trim() || linkInput.startsWith("[[")}>{t("wikiInsertLinkAction")}</button></form>{linkInput.startsWith("[[") && <div className="wiki-link-results">{(wiki?.links?.paths ?? []).filter((path: string) => /\.(md|markdown|mdown)$/i.test(path) && path.toLowerCase().includes(linkInput.slice(2).toLowerCase())) .slice(0, 30).map((path: string) => <button key={path} onClick={() => insertLink(path, true)}>{path}</button>)}</div>}</WikiReadingDialog>}
-		{tableMenu && !readOnly && createPortal(<div className="fp-table-menu" role="menu" aria-label={t("richTableTools")} style={{ left: tableMenu.x, top: tableMenu.y }} onMouseDown={event => event.preventDefault()}>
+		{/* The menu is chrome, not content: a press on it must neither move the caret nor
+		 *  count as a click the editor turns into "select" — which a portal inside the
+		 *  dialog fails to prevent by itself. Modelled on Yuque: the counts are fields, so
+		 *  "insert 2 rows" is one gesture instead of two clicks, and the destructive block
+		 *  is separated and stays last. */}
+		{tableMenu && !readOnly && createPortal(<div className="fp-table-menu" role="menu" aria-label={t("richTableTools")} style={{ left: Math.max(8, Math.min(tableMenu.x, window.innerWidth - 300)), top: Math.max(8, Math.min(tableMenu.y, window.innerHeight - 440)) }} onMouseDown={(event) => { event.preventDefault(); event.stopPropagation(); }}>
 			{(() => {
 				const rows = tableMenu.table.rows;
-				const rowOk = canRemoveRow(rows, tableMenu.row), columnOk = canRemoveColumn(rows[tableMenu.row]);
-				const entry = (label: Parameters<typeof t>[0], action: TableAction, disabled = false, reason?: string) => <button type="button" role="menuitem" key={action} disabled={disabled} title={disabled ? reason : undefined} onClick={() => editTable(action)}>{t(label)}</button>;
+				const bodyCount = Array.from(rows).filter(row => !isHeaderRow(row)).length;
+				const selectedRows = (tableMenu.selectedRows ?? [tableMenu.row]).filter(index => !isHeaderRow(rows[index]));
+				const rowOk = selectedRows.length > 0 && selectedRows.length < bodyCount;
+				const columnOk = (tableMenu.selectedColumns?.length ?? 1) < dataCells(rows[tableMenu.row]).length;
+				const count = (id: "row" | "column", value: string) => <input key={id} className="fp-table-count" inputMode="numeric" aria-label={t(id === "row" ? "richRowCount" : "richColumnCount")} value={value} onChange={event => setInsertCount(current => ({ ...current, [id]: event.target.value.replace(/\D/g, "").slice(0, 2) }))} onMouseDown={event => event.stopPropagation()} onPointerDown={event => event.stopPropagation()} onClick={event => event.stopPropagation()} />;
+				const unit = (id: "row" | "column") => <span className="fp-table-unit">{t(id === "row" ? "richRowUnit" : "richColumnUnit")}</span>;
+				const insert = (label: Parameters<typeof t>[0], action: TableAction, icon: React.ReactNode, id: "row" | "column") => <button type="button" role="menuitem" key={action} onClick={() => editTable(action, undefined, insertCount)}><span className="fp-table-icon" aria-hidden="true">{icon}</span>{t(label)}{count(id, insertCount[id])}{unit(id)}</button>;
+				const entry = (label: Parameters<typeof t>[0], action: TableAction, disabled = false, reason?: string, icon?: React.ReactNode) => <button type="button" role="menuitem" key={action} disabled={disabled} title={disabled ? reason : undefined} onClick={() => editTable(action)}>{icon && <span className="fp-table-icon" aria-hidden="true">{icon}</span>}{t(label)}</button>;
 				return <>
-					{entry("richAddRowAbove", "rowAbove")}
-					{entry("richAddRow", "rowBelow")}
-					{entry("richAddColumnLeft", "columnLeft")}
-					{entry("richAddColumn", "columnRight")}
+					{insert("richInsertRowAbove", "rowAbove", <FiArrowUp aria-hidden="true" />, "row")}
+					{insert("richInsertRowBelow", "rowBelow", <FiArrowDown aria-hidden="true" />, "row")}
+					{insert("richInsertColumnLeft", "columnLeft", <FiArrowLeft aria-hidden="true" />, "column")}
+					{insert("richInsertColumnRight", "columnRight", <FiArrowRight aria-hidden="true" />, "column")}
+					<button className="fp-table-number" type="button" role="menuitem" onClick={() => editTable("numberRows")} aria-disabled={!Number.isInteger(Number(numberStart)) || Number(numberStart) < 1 || Number(numberStart) > bodyCount}>
+						<span className="fp-table-icon" aria-hidden="true"><FiList /></span>{t("richNumberFrom")}<input className="fp-table-count" aria-label={t("richNumberStart")} inputMode="numeric" value={numberStart} onChange={event => setNumberStart(event.target.value.replace(/\D/g, "").slice(0, 6))} onMouseDown={event => event.stopPropagation()} onClick={event => event.stopPropagation()} /><span>{t("richNumberRows")}</span>
+					</button>
+					{entry("richInsertSequence", "numberColumn", false, undefined, <FiList />)}
 					<hr role="separator" />
 					{entry("richRemoveRow", "removeRow", !rowOk, t("richKeepOneRow"))}
 					{entry("richRemoveColumn", "removeColumn", !columnOk, t("richKeepOneColumn"))}
-					<hr role="separator" />
 					{entry("richRemoveTable", "removeTable")}
+					<hr role="separator" />
+					{entry("richClearCells", "clearCells")}
 				</>;
 			})()}
-		</div>, document.body)}
+		</div>, document.querySelector(".wiki-document-dialog") ?? document.body)}
 		{menu && !readOnly && createPortal(<div ref={popup} className={`fp-slash-menu ${wiki ? `wiki-slash-menu ${menu.query ? "" : "wiki-slash-grid"}` : ""}`} style={{ left: menu.x, top: menu.y }}>
 			{wiki && !menu.query && recentInsertions.some(id => items.some(item => item.alias === id)) && <div className="wiki-insert-recent"><span>{t("wikiRecentlyUsed")}</span><div>{recentInsertions.map(id => {
 				const index = matches.findIndex(item => item.alias === id), item = matches[index];
@@ -1064,7 +1395,9 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		<div className="fp-markdown msg-text">
 			<div className="fp-markdown-zoom">
 				<div ref={root} className="md fp-rich-document" role="textbox" aria-label={t("richEditMarkdown")} aria-multiline="true"
-					contentEditable={!readOnly} suppressContentEditableWarning spellCheck={false}
+					contentEditable={!readOnly} suppressContentEditableWarning spellCheck={false} tabIndex={-1}
+					aria-modal={!!tableMenu}
+					
 					onContextMenu={(event) => {
 						if (readOnly) return;
 						const cell = (event.target as HTMLElement).closest<HTMLTableCellElement>("th, td");
@@ -1072,21 +1405,71 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 						event.preventDefault();
 						const located = locateCell(cell);
 						if (!located) return;
-						// A gutter click already chose the row, so honour it over the clicked cell.
-						const row = isGutter(cell) && rowTarget !== null ? rowTarget : located.row;
-						// An existing column highlight wins, so click-to-select then right-click is one chain.
-						const column = columnTarget ?? located.column;
+						// The header's gutter is alignment chrome, not a target: it names no column
+						// and no deletable row, so it opens nothing.
+						if (isGutter(cell) && isHeaderRow(cell.parentElement as HTMLTableRowElement | null)) return;
+						// The press already froze what the menu acts on; the release that follows
+						// it must read the same state instead of the caret it just collapsed.
+						const frozen = pressedTarget.current?.table === located.table ? pressedTarget.current : null;
+						// A gutter press chose the row; an existing column highlight wins for the
+						// column, so click-to-select then right-click stays one chain.
+						const row = isGutter(cell) && frozen?.row != null ? frozen.row : located.row;
+						const column = (columnTarget ?? frozen?.column ?? located.column) as number;
 						if (column < 0) return;
-						setTableCell(cell);
-						setTableMenu({ x: event.clientX, y: event.clientY, table: located.table, row, column });
+						// A second right-click on the very target the menu is about is a dismiss, not
+						// a re-target: it is the gesture users expect to close what the first click
+						// opened (and the only one available, since a press on a cell of the target
+						// table deliberately keeps the menu alive instead of tearing it down).
+						if (tableMenu && tableMenu.table === located.table && tableMenu.row === row && tableMenu.column === column) {
+							pressedTarget.current = null;
+							closeTableMenu();
+							return;
+						}
+						// The menu moves the caret onto the cell it is about to act on. The action
+						// then resolves from that cell, so "当前行 / 当前列" are always what the
+						// menu showed rather than a target that changed while it was open.
+						pressedTarget.current = null;
+						const selected = pressedSelection.current?.table === located.table ? pressedSelection.current : selectedTableRange(located);
+						pressedSelection.current = null;
+						placeCaretIn(cell);
+						// Only the cell is painted: the menu acts on that cell's row and column and the
+						// caret is already in it, so a full row band plus column band was more colour
+						// than the gesture needs.
+						paintTableTarget(located.table, row, column, cell);
+						setInsertCount({ row: "1", column: "1" });
+						setNumberStart("1");
+						if (selected) for (const r of selected.selectedRows ?? []) for (const c of selected.selectedColumns ?? []) cellAt<HTMLTableCellElement>(located.table.rows[r], c)?.setAttribute(CELL_TARGET_ATTRIBUTE, "");
+						setTableMenu({ ...selected, x: event.clientX, y: event.clientY, table: located.table, row, column });
 					}}
 					aria-expanded={!!menu} aria-autocomplete="list" aria-activedescendant={menu && matches.length ? `fp-slash-option-${active}` : undefined}
-					onBlur={closeMenu}
-					onMouseLeave={() => setTableMenu(null)}
+					onBlurCapture={(event) => {
+						// Focus moving into the menu's count field is part of the same gesture:
+						// closing the slash menu there would also tear down the structure menu.
+						const next = event.relatedTarget as HTMLElement | null;
+						if (next?.closest(".fp-table-menu")) event.stopPropagation();
+					}}
+					onBlur={() => { if (!inTableMenu.current) closeMenu(); }}
+					onMouseLeave={() => {
+						// Moving the pointer into the menu (or into its count field) leaves the
+						// editor root: that is still the same gesture, so the menu stays.
+						if (!inTableMenu.current) closeTableMenu();
+					}}
+					onMouseUp={() => {
+						// The painter reads the selection the gesture just made, applies once, then
+						// disarms unless it was armed in sticky mode (double click).
+						const armed = painterRef.current;
+						if (!armed || readOnlyRef.current) return;
+						paintBlocks(armed.sampled);
+						if (!armed.sticky) setPainter(null);
+					}}
 					onCompositionStart={closeMenu}
 					onCompositionEnd={() => { const code = selectedCode(); if (code) paintCode(code); update(); inspectSlash(); }}
 					onKeyUp={() => { const cell = selectedCell(); if (cell || window.getSelection()?.isCollapsed) setTableCell(cell); }}
 					onKeyDown={(event) => {
+						// The structure menu owns the keyboard while it is open: its count fields
+						// take digits, and nothing typed there may reach the document behind it.
+						const typingInMenu = (event.target as HTMLElement).closest?.(".fp-table-count");
+						if (tableMenu && typingInMenu) return;
 						const formula = (event.target as Element).closest<HTMLElement>("[data-rich-math]");
 						if (formula && ["Enter", " "].includes(event.key)) { event.preventDefault(); openMath(formula); return; }
 						if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === "a" && !event.nativeEvent.isComposing) {
@@ -1175,32 +1558,88 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 						}
 					}}
 					onMouseDown={(event) => {
+						pressedTarget.current = null;
+						pressedSelection.current = null;
+						if (event.button === 2) {
+							const cell = (event.target as HTMLElement).closest<HTMLTableCellElement>("th,td");
+							const located = cell && locateCell(cell);
+							if (located) pressedSelection.current = selectedTableRange(located);
+						}
 						if (event.button !== 0 || event.shiftKey) return;
 						const target = event.target as HTMLElement;
 						if (target.closest("button, select, input")) return;
+						// Freeze what the structure menu would act on before the press changes it.
+						const holder: HTMLTableCellElement | null = target.closest<HTMLTableCellElement>("th, td");
+						if (holder && root.current?.contains(holder) && !isGutter(holder)) {
+							const located = locateCell(holder);
+							if (located) {
+								pressedTarget.current = { table: located.table, row: located.row, column: columnTarget ?? located.column };
+								pressedSelection.current = null;
+							}
+						}
 						// The row gutter selects its row as a table target; it never takes a caret.
+						// A read-only document (streaming, loading, saving) paints no structural
+						// targets: the press falls through to the frame gesture, which still
+						// selects the whole table — a copy gesture that stays useful read-only.
 						const gutter = target.closest<HTMLTableCellElement>(`[${GUTTER_ATTRIBUTE}]`);
-						if (gutter && root.current?.contains(gutter)) {
+						// The header's gutter is a 14px spacer that only aligns the columns: it names no
+						// deletable row and no column, so a press there is deliberately a no-op rather
+						// than a hidden shortcut. It is styled as chrome (no pointer cursor, no hover
+						// tint) so it never looks like the interactive strip below it.
+						const headerGutter = !!gutter && isHeaderRow(gutter.parentElement as HTMLTableRowElement | null);
+						if (headerGutter && root.current?.contains(gutter)) { event.preventDefault(); return; }
+						if (gutter && root.current?.contains(gutter) && !readOnly) {
 							event.preventDefault();
 							const located = locateCell(gutter);
-							if (located) paintTableTarget(located.table, located.row, null);
+							if (located) {
+								// The row is the target; the caret still has to end up somewhere the
+								// following gesture can act on, so it waits in the row's first cell.
+								setTableCell(cellAt<HTMLTableCellElement>(located.table.rows[located.row], 0));
+								paintTableTarget(located.table, located.row, null);
+							}
 							return;
 						}
-						// A header cell selects its whole column; renaming it is a double-click
-						// (the Excel model). Never hijack a selection the user already holds.
-						const header = target.closest<HTMLTableCellElement>("th");
-						if (header && root.current?.contains(header) && !event.detail && window.getSelection()?.isCollapsed !== false) {
+						// A header cell is the table's first row of text: a press takes the caret like
+						// any other cell, so clicking a column name and typing edits it. Column
+						// selection keeps its own affordance — the 6px band along the header's top
+						// edge, the same band the table frame uses — plus the structure menu.
+						// The gutter is a `th` on header rows, so it must be excluded explicitly.
+						const headerCell = target.closest<HTMLTableCellElement>("th");
+						const header = headerCell && !isGutter(headerCell) ? headerCell : null;
+						if (header && root.current?.contains(header)) {
 							const located = locateCell(header);
-							if (located) { event.preventDefault(); paintTableTarget(located.table, null, located.column); return; }
+							// A read-only document paints no column target: the surface must not pretend
+							// to offer structural actions it will refuse, so the press falls through to the
+							// frame gesture, which still selects the table for copying.
+							const band = event.clientY - header.getBoundingClientRect().top <= 6;
+							if (located && band && !readOnly) {
+								event.preventDefault(); paintTableTarget(located.table, null, located.column);
+								return;
+							}
 						}
-						const block = target.closest<HTMLElement>("pre, table");
+						// Any other press in the document drops a structural table selection: it is a
+						// one-shot target for the structure menu, not a mode to stay in while editing.
+						if (!readOnly && (rowTarget !== null || columnTarget !== null)) clearTableTarget();
+						// A header cell can already be detached here (its column highlight replaced it),
+						// so fall back to the cell the press started on instead of the press target.
+						const block = target.closest<HTMLElement>("pre, table") ?? holder?.closest<HTMLElement>("table") ?? null;
 						if (!block || !root.current?.contains(block)) return;
 						const rect = block.getBoundingClientRect(), x = event.clientX, y = event.clientY;
 						// Code gutters and header padding are part of the selectable frame.
 						if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) return;
 						const codeRect = block.tagName === "PRE" ? block.querySelector("code")?.getBoundingClientRect() : null;
 						const codeFrame = codeRect && (x < codeRect.left || x > codeRect.right || y < codeRect.top || y > codeRect.bottom);
-						if (!codeFrame && Math.min(x - rect.left, rect.right - x, y - rect.top, rect.bottom - y) > 6) return;
+						// The whole-table frame is the outer 6px of the table, plus the row gutter.
+						// A header names a column instead, so the two never fight over one press.
+						// `holder` is the cell this press started on: a header highlight may already
+						// have replaced it, taking the press target out of the document.
+						let frame: boolean;
+						if (block.tagName === "TABLE") {
+							const start = holder?.closest("table") === block ? holder : target.closest<HTMLTableCellElement>("th, td");
+							const edge = Math.min(x - rect.left, rect.right - x, y - rect.top, rect.bottom - y);
+							frame = edge <= 6 || (!!start && isGutter(start));
+						} else frame = !!codeFrame || Math.min(x - rect.left, rect.right - x, y - rect.top, rect.bottom - y) <= 6;
+						if (!frame) return;
 						// Keep the native code-block resize grip usable.
 						if (block.tagName === "PRE" && rect.right - x < 16 && rect.bottom - y < 16) return;
 						event.preventDefault();
@@ -1217,11 +1656,26 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 					onClick={(event) => {
 						const formula = (event.target as Element).closest<HTMLElement>("[data-rich-math]");
 						if (formula) { event.preventDefault(); openMath(formula); return; }
-						// Double-clicking a header cell renames it: drop the column target so the
-						// caret lands in the text instead of staying a structural selection.
-						if (event.detail === 2) {
-							const header = (event.target as HTMLElement).closest<HTMLTableCellElement>("th");
-							if (header && root.current?.contains(header)) clearTableTarget();
+						// Double-clicking a header cell renames it. Every press on a header is a
+						// column select, and each of those presses canceled the caret — the native
+						// gesture never places one. The caret is put back here with the whole name
+						// selected (the context menu's pattern: whoever cancels the native caret
+						// places it by hand), so one double-click plus typing replaces the name.
+						if (event.detail >= 2) {
+							// The gutter is a `th` on header rows: double-clicking the spacer must not
+							// start renaming a column that does not exist.
+							const headerCell = (event.target as HTMLElement).closest<HTMLTableCellElement>("th");
+							const header = headerCell && !isGutter(headerCell) ? headerCell : null;
+							if (header && root.current?.contains(header)) {
+								clearTableTarget();
+								if (!readOnly) {
+									root.current.focus({ preventScroll: true });
+									caretIn(header);
+									const range = document.createRange(); range.selectNodeContents(header);
+									const selection = window.getSelection(); selection?.removeAllRanges(); selection?.addRange(range);
+									setTableCell(header);
+								}
+							}
 						}
 						// A folded diagram is its own reading view: clicking it reveals the
 						// source so the block stays editable.
@@ -1241,6 +1695,10 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 							}
 							return;
 						}
+						// The structure-menu press already chose what to act on; the click that
+						// follows it must not also re-derive the caret's table cell (an empty
+						// cell with no text would hand the next edit to its neighbour).
+						if ((event.target as HTMLElement).closest(".fp-table-menu")) return;
 						const target = event.target as HTMLElement, toc = target.closest<HTMLElement>("[data-rich-toc]");
 						if (toc && target.closest("[data-rich-toc-remove]")) { event.preventDefault(); if (!readOnly) { toc.remove(); update(); } return; }
 						const entry = target.closest<HTMLElement>("[data-rich-toc-index]");

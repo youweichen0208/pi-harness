@@ -15,6 +15,7 @@ const definitions = {
 	"line-height": define("richLineHeight", LINE_HEIGHTS.map(n => ({ value: String(n), text: `${n}×` }))),
 	insertUnorderedList: define("richList"), insertOrderedList: define("richOrderedList"),
 	task: define("richTaskList"), indent: define("richIndent"), outdent: define("richOutdent"), plainBlock: define("richPlainBlock"),
+	paint: define("richPainter"), clear: define("richClearFormat"),
 };
 export type RichCommand = keyof typeof definitions;
 export type RichCommandLabel = typeof definitions[RichCommand]["label"] | OptionLabel;
@@ -26,11 +27,19 @@ interface EditorAdapter {
 	execute(command: RichCommand, value?: string): void;
 	insert(id: string): void;
 	color(variable: string): string;
+	/** Whether a painted sample is currently armed; toolbars show this as a pressed button. */
+	armed?(): boolean;
+	/** Sticky mode keeps the sample armed across many applications. */
+	sticky?(): boolean;
 }
 /** One command catalogue and selection protocol for both toolbar adapters. */
 export class RichCommands {
 	constructor(private readonly editor: EditorAdapter) {}
 	get enabled() { return this.editor.editable(); }
+	/** True while the format painter holds a sample. */
+	get painted() { return !!this.editor.armed?.(); }
+	/** True when the held sample survives an application (double-click mode). */
+	get sticky() { return !!this.editor.sticky?.(); }
 	describe(id: RichCommand) { return definitions[id]; }
 	prepare = () => { if (this.enabled) this.editor.captureSelection(); };
 	execute = (id: RichCommand, value?: string): boolean => {

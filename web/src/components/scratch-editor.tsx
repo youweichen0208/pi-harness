@@ -5,49 +5,105 @@ import { indentWithTab, isolateHistory, toggleComment } from "@codemirror/comman
 import { python } from "@codemirror/lang-python";
 import { tags as t } from "@lezer/highlight";
 import { HighlightStyle, syntaxHighlighting, indentUnit } from "@codemirror/language";
-import { Compartment, EditorState, Prec, type Extension } from "@codemirror/state";
-import { EditorView, keymap, placeholder as cmPlaceholder } from "@codemirror/view";
+import { Compartment, EditorState, Prec, type Extension, type Range } from "@codemirror/state";
+import { Decoration, EditorView, ViewPlugin, keymap, placeholder as cmPlaceholder, type DecorationSet, type ViewUpdate } from "@codemirror/view";
 import { basicSetup } from "codemirror";
 import { THEME_CHANGE_EVENT } from "../theme";
 
-/** Build a CodeMirror theme from the app's CSS variables, like buildTermTheme. */
-function buildEditorTheme(): Extension {
-	const cs = getComputedStyle(document.documentElement);
+/** The code surface's own font stack (Light 2026); Sarasa Mono SC covers CJK
+ * code comments, Menlo is the last resort when neither webfont loads. */
+export const PLAYGROUND_FONT = '"JetBrains Mono", "Sarasa Mono SC", Menlo, monospace';
+export const PLAYGROUND_TAB_SIZE = 4;
+
+/**
+ * Build a CodeMirror theme from the Playground's own --pg-code-* tokens.
+ *
+ * The editor deliberately does not reuse the app's --bg/--code-* variables: the
+ * Playground reads like a printed code page (soft paper, recessed gutter, hairline
+ * indentation rails), which the shared chat code-island palette cannot express.
+ * Tokens live in styles.css next to `.scratch-page`.
+ */
+function buildEditorTheme(surface: HTMLElement): Extension {
+	const cs = getComputedStyle(surface);
 	const v = (name: string) => cs.getPropertyValue(name).trim();
 	// "dark" must match what the stylesheet actually applied, not the stored
 	// preference: light/dark decided by luminance of the resolved background.
 	const [r, g, b] = [0, 2, 4].map(i => parseInt(v("--bg").slice(1 + i * 2, 3 + i * 2), 16) || 0);
 	const dark = 0.299 * r + 0.587 * g + 0.114 * b < 128;
+	const paper = v("--pg-code-bg") || v("--bg-elev");
+	const ink = v("--pg-code-fg") || v("--text");
 	return EditorView.theme({
-		"&": { backgroundColor: v("--bg-elev"), color: v("--text") },
-		".cm-content": { caretColor: v("--text") },
-		".cm-cursor, .cm-dropCursor": { borderLeftColor: v("--text") },
-		"&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection": { backgroundColor: v("--code-chip-bg") },
-		".cm-gutters": { backgroundColor: v("--bg-elev"), color: v("--text-faint"), border: "none" },
-		".cm-activeLine": { backgroundColor: v("--row-hover") },
-		".cm-activeLineGutter": { backgroundColor: v("--row-hover"), color: v("--text") },
-		".cm-selectionMatch": { backgroundColor: v("--code-chip-bg") },
+		"&": { backgroundColor: paper, color: ink },
+		// CodeMirror measures layout from these declarations; the stylesheet's
+		// .cm-scroller rule must agree or the caret drifts from the glyphs.
+		".cm-scroller": { fontFamily: PLAYGROUND_FONT, tabSize: String(PLAYGROUND_TAB_SIZE) },
+		".cm-content": { caretColor: ink, padding: "0" },
+		".cm-cursor, .cm-dropCursor": { borderLeftColor: ink },
+		"&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection": { backgroundColor: v("--pg-code-chip") },
+		".cm-selectionMatch": { backgroundColor: v("--pg-code-chip") },
+		// Keep the active line subtle and continuous with the reference code surface.
+		".cm-activeLine": { backgroundColor: v("--pg-code-active-line") },
 		".cm-tooltip": {
 			backgroundColor: v("--bg-elev"),
 			border: `1px solid ${v("--border")}`,
 			borderRadius: v("--r-md"),
 			color: v("--text"),
+			shadow: "var(--card-shadow)",
 		},
-		".cm-tooltip-autocomplete ul li[aria-selected]": { backgroundColor: v("--code-chip-bg"), color: v("--text") },
+		".cm-tooltip-autocomplete ul li[aria-selected]": { backgroundColor: v("--accent-soft"), color: v("--accent") },
 	}, { dark });
 }
 
-/** Syntax colors reuse the --code-* variables, so highlighted code matches the
- * highlight.js palette used by every other code block in the app. */
+/** Syntax colors come from the reference sheet: purple keywords, navy strings,
+ * teal types, green numbers, violet call names, grey italic comments. */
 const highlightStyle = HighlightStyle.define([
-	{ tag: t.keyword, color: "var(--code-keyword)" },
-	{ tag: [t.string, t.special(t.string)], color: "var(--code-string)" },
-	{ tag: [t.number, t.bool, t.null], color: "var(--code-number)" },
-	{ tag: [t.comment, t.lineComment, t.blockComment], color: "var(--code-comment)", fontStyle: "italic" },
-	{ tag: [t.function(t.variableName), t.function(t.propertyName)], color: "var(--code-title)" },
-	{ tag: [t.typeName, t.className, t.namespace], color: "var(--code-title)" },
-	{ tag: t.variableName, color: "var(--text)" },
+	{ tag: [t.keyword, t.controlKeyword, t.moduleKeyword, t.operatorKeyword, t.self], color: "var(--pg-code-kw)" },
+	{ tag: [t.string, t.special(t.string), t.docString], color: "var(--pg-code-str)" },
+	{ tag: [t.number, t.atom], color: "var(--pg-code-num)" },
+	{ tag: [t.comment, t.lineComment, t.blockComment], color: "var(--pg-code-comment)", fontStyle: "italic" },
+	{ tag: [t.function(t.variableName), t.function(t.definition(t.variableName)), t.function(t.propertyName)], color: "var(--pg-code-fn)" },
+	{ tag: [t.standard(t.variableName), t.standard(t.propertyName), t.special(t.variableName)], color: "var(--pg-code-builtin)" },
+	{ tag: [t.typeName, t.className, t.namespace], color: "var(--pg-code-builtin)" },
+	// `__name__` and friends arrive as t.heading from the Python parser, not as a
+	// name tag; unstyled they would inherit the app's bold heading rule.
+	{ tag: [t.definition(t.variableName), t.local(t.variableName), t.heading], color: "var(--pg-code-fg)" },
+	{ tag: t.variableName, color: "var(--pg-code-fg)" },
+	{ tag: [t.operator, t.punctuation, t.separator], color: "var(--pg-code-fg)" },
+	{ tag: t.definitionKeyword, color: "var(--pg-code-definition)" },
+	{ tag: [t.paren, t.bracket, t.brace, t.bool, t.null], color: "var(--pg-code-bracket)" },
+	{ tag: [t.meta, t.processingInstruction], color: "var(--pg-code-comment)" },
+	{ tag: t.invalid, color: "var(--red)" },
 ]);
+
+function railDecorations(view: EditorView): DecorationSet {
+	const doc = view.state.doc;
+	const marks: Range<Decoration>[] = [];
+	// Python indents with spaces only, so the leading whitespace width is the block
+	// depth. A blank line owns no indent of its own; it borrows the next statement's
+	// depth so a gap inside a block keeps the rail continuous, exactly like a guide.
+	for (let n = 1; n <= doc.lines; n++) {
+		const line = doc.line(n);
+		let depth = /^\s*/.exec(line.text)![0].length;
+		if (!line.text.trim()) {
+			depth = 0;
+			for (let next = n + 1; next <= doc.lines; next++) {
+				const text = doc.line(next).text;
+				if (!text.trim()) continue;
+				depth = /^\s*/.exec(text)![0].length;
+				break;
+			}
+		}
+		if (depth < 4) continue;
+		marks.push(Decoration.line({ class: "cm-indent-rail", attributes: { style: `--rail-depth:${Math.floor(depth / 4)}` } }).range(line.from));
+	}
+	return Decoration.set(marks);
+}
+
+const indentRails = ViewPlugin.fromClass(class {
+	decorations: DecorationSet;
+	constructor(view: EditorView) { this.decorations = railDecorations(view); }
+	update(update: ViewUpdate) { if (update.docChanged || update.viewportChanged) this.decorations = railDecorations(update.view); }
+}, { decorations: plugin => plugin.decorations });
 
 function toggleEditorComment(view: EditorView): boolean {
 	return toggleComment({ state: view.state, dispatch: transaction => view.dispatch({
@@ -117,11 +173,13 @@ export const ScratchEditor = forwardRef<ScratchEditorHandle, {
 				extensions: [
 					basicSetup,
 					python(),
-					indentUnit.of("    "),
-					EditorState.tabSize.of(4),
+					indentUnit.of(" ".repeat(PLAYGROUND_TAB_SIZE)),
+					EditorState.tabSize.of(PLAYGROUND_TAB_SIZE),
 					syntaxHighlighting(highlightStyle),
+					indentRails,
+					EditorView.contentAttributes.of({ spellcheck: "false" }),
 					pythonLanguageSupport(onLanguageStatus),
-					theme.of(buildEditorTheme()),
+					theme.of(buildEditorTheme(holder.current!)),
 					cmPlaceholder(placeholder),
 					Prec.highest(keymap.of([
 						{
@@ -154,7 +212,7 @@ export const ScratchEditor = forwardRef<ScratchEditorHandle, {
 		// Rebuild the theme when the app appearance changes; the CSS variables
 		// have already been swapped by the time this event fires.
 		const onThemeChange = () => {
-			view.dispatch({ effects: theme.reconfigure(buildEditorTheme()) });
+			view.dispatch({ effects: theme.reconfigure(buildEditorTheme(holder.current!)) });
 		};
 		window.addEventListener(THEME_CHANGE_EVENT, onThemeChange);
 

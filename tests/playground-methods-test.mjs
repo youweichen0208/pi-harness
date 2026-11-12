@@ -46,13 +46,17 @@ try {
 		await page.locator(".setup-modal .modal-close").click();
 		await page.getByRole("button", { name: "Playground", exact: true }).click();
 		await page.locator('.scratch-editor-cm .cm-content').waitFor();
-		assert.equal(await page.locator('.method-case input[type="checkbox"], .method-expected').count(), 0);
-		assert.equal(await page.locator('.method-case-body .playground-hint').count(), 0);
-		const request = page.waitForRequest(r => new URL(r.url()).pathname === '/api/playground/run' && r.method() === 'POST');
+		assert.equal(await page.locator('.case-detail input[type="checkbox"], .method-expected').count(), 0);
+		assert.equal(await page.locator('.case-detail .playground-hint').count(), 0);
+		// One click is a merged Run: the script first, then the case batch, because the
+		// server allows a single Run per client.
+		const requests = [];
+		page.on('request', r => { if (new URL(r.url()).pathname === '/api/playground/run' && r.method() === 'POST') requests.push(r.postDataJSON()); });
 		await page.locator('.scratch-head .primary').click();
-		assert((await request).postDataJSON().tests.cases.every(c => !Object.hasOwn(c, 'expected')), 'hidden legacy assertions must not run');
-		await page.waitForFunction(() => document.querySelector('.method-case')?.getAttribute('data-status') === 'unasserted');
-		await page.locator('.scratch-head select').selectOption('program');
+		await page.waitForFunction(() => document.querySelector('.scratch-output .lc-result-value pre')?.textContent === '3');
+		assert.equal(requests.length, 2, 'the merged Run sends the script and the case batch');
+		const caseRequest = requests.find(body => body.tests);
+		assert(caseRequest.tests.cases.every(c => !Object.hasOwn(c, 'expected')), 'hidden legacy assertions must not run');
 		const editor = page.locator('.scratch-editor-cm .cm-content');
 		await editor.fill('print("Python browser works")');
 		await editor.press('ControlOrMeta+a');
@@ -76,7 +80,7 @@ try {
 		await page.locator(".setup-modal .modal-close").click();
 		await page.getByRole("button", { name: "Playground", exact: true }).click();
 		await page.waitForFunction(() => document.querySelector('.scratch-editor-cm .cm-content')?.textContent?.includes('Python browser works'));
-		assert.equal(await page.locator('.scratch-head select').inputValue(), 'program');
+		assert.equal(await page.locator('.scratch-head select').count(), 0, 'run mode is no longer a choice');
 		await page.screenshot({ path: "/tmp/pi-python-playground-desktop.png" });
 		const noteBody = '```python\nprint("note Python")\n```\n\n```java\nSystem.out.println("legacy");\n```';
 		const note = (await (await fetch(`${fixture.base}/api/notes?token=${fixture.token}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: "Python note", body: noteBody, pinned: false }) })).json()).note;
@@ -98,11 +102,16 @@ try {
 		await fileRun.click();
 		await page.waitForFunction(() => document.querySelector('.fp .playground-result .playground-stream pre')?.textContent?.includes('buffer Python'));
 		assert.equal(readFileSync(join(fixture.root, "demo.py"), "utf8"), onDisk);
+		// Leaving the buffer with unsaved edits correctly asks first; this test only
+		// needs the Playground page again, so reload rather than dismiss the guard.
+		await page.reload();
+		await page.locator(".setup-modal .modal-close").click();
 		await page.getByRole("button", { name: "Playground", exact: true }).click();
+		await page.locator(".scratch-editor-cm .cm-content").waitFor();
 		await page.setViewportSize({ width: 390, height: 844 });
 		assert(await page.locator('.scratch-head .primary').isVisible());
 		await page.screenshot({ path: "/tmp/pi-python-playground-mobile.png" });
-		console.log("PASS Python browser: function cases, script mode, output, saved draft/mode and mobile");
+		console.log("PASS Python browser: function cases, merged run, output, saved draft and mobile");
 	}
 	console.log("PASS Python function tests: assertions, JSON, arbitrary integers, async, state isolation, exceptions, timeout and persisted cases");
 } finally { await browser?.close(); await fixture.stop(); }

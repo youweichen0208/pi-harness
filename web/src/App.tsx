@@ -54,6 +54,7 @@ import { PlaygroundProvider } from "./playground-context";
 import { appendComposerText } from "./composer-text";
 import { NotesList, NotesEditor } from "./components/Notes";
 import { PlaygroundScratch } from "./components/PlaygroundScratch";
+import { PaneErrorBoundary } from "./components/PaneErrorBoundary";
 import { LeftPanel } from "./components/LeftPanel";
 import { RightPanel } from "./components/RightPanel";
 import { MessageList } from "./components/MessageList";
@@ -1455,8 +1456,8 @@ export function App() {
 				</div>}
 				{notesOpen && drawer && isNarrow && <div className="drawer-backdrop" onClick={() => setDrawer(null)} />}
 				{scratchOpen && drawer && isNarrow && <div className="drawer-backdrop" onClick={() => setDrawer(null)} />}
-				{notesOpen && <NotesEditor notes={notes} />}
-				{scratchOpen && <PlaygroundScratch />}
+				{notesOpen && <PaneErrorBoundary name={t("notesTitle")}><NotesEditor notes={notes} /></PaneErrorBoundary>}
+				{scratchOpen && <PaneErrorBoundary name="Playground"><PlaygroundScratch /></PaneErrorBoundary>}
 				<div
 					className={`layout ${notesOpen || scratchOpen ? "notes-chat-hidden" : ""}`}
 					style={{ "--left-w": `${leftWidth}px`, "--right-w": `${rightWidth}px`, "--editor-share": editorShare } as CSSProperties}

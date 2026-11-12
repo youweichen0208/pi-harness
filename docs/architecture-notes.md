@@ -14,7 +14,7 @@
 
 ## 共用编辑与资源（2026-10-20）
 
-`RichMarkdownEditor` 的 `RichEditorHost` 提供图片上传和解析；Wiki 使用项目内 `.assets`，小记使用独立 HTTP 宿主。小记不传 cwd 或 Wiki/Agent 回调。精简工具栏默认展开常用格式及插入，表格、代码、字号、颜色、对齐和行距放入“更多”。修改文档序列化时同时验证 Wiki 和小记，不能只验证编辑 DOM。
+`RichMarkdownEditor` 的 `RichEditorHost` 提供图片上传和解析；Wiki 使用项目内 `.assets`，小记使用独立 HTTP 宿主。小记不传 cwd 或 Wiki/Agent 回调。精简工具栏默认展开常用格式及插入，表格、代码、字号、颜色、对齐和行距放入“更多”；格式刷与清除格式在 Wiki 主工具栏格式组（窄屏自动收进“更多”），小记在“更多”内。修改格式刷行为前读 `docs/adr/0008-format-painter.md`。修改文档序列化时同时验证 Wiki 和小记，不能只验证编辑 DOM。
 
 普通格式保存为 Markdown；蓝／绿／黄高亮块使用 `[!NOTE]`／`[!TIP]`／`[!WARNING]`。特殊格式由 `rich-content.ts` 的白名单处理：字号、文字颜色、背景、对齐、行距、下划线及上下标；折叠块为 `<details data-rich-collapse><summary>…</summary>…</details>`；链接卡片为 `<figure data-rich-card="1">`，内部保存链接、标题、摘要和可选图片。未知 HTML 保留源码，不执行脚本或事件属性。编辑态折叠块使用普通 div/p，规避 Chromium insertHTML 拆散 summary；保存时还原 details，展开状态不持久化。浏览器生成的兄弟嵌套列表仅在序列化副本中归一化，保留原生撤销记录。
 

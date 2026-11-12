@@ -54,42 +54,84 @@ try {
 
 	const save = async () => { await page.keyboard.press('ControlOrMeta+s'); await page.locator('.wiki-save-status.saved').waitFor(); };
 	const menu = page.locator('.fp-table-menu');
-	/** Right-click a content cell, then pick a structural action. */
-	const act = async label => {
+	/** Right-click a content cell, then pick a structural action (the menu shows counts). */
+	const act = async (label, times) => {
 		await table.locator('tbody td:not([data-rich-gutter])').first().click({ button: 'right' });
 		await menu.waitFor();
-		await menu.getByRole('menuitem', { name: label }).click();
-		await menu.waitFor({ state: 'detached' });
+		if (times) await menu.locator('.fp-table-count').first().fill(String(times));
+		await menu.getByRole('menuitem', { name: new RegExp(`^${label}`) }).click();
+		if (!times) await menu.waitFor({ state: 'detached' });
 	};
 
 	// The gutter is editor chrome: present, not editable, absent from the header.
 	assert.equal(await table.locator('tbody td[data-rich-gutter][contenteditable="false"]').count(), 1, 'each data row carries one row gutter');
-	assert.equal(await table.locator('thead td[data-rich-gutter]').count(), 0, 'header rows carry no gutter');
-	assert.equal(await table.locator('th').count(), 2, 'header keeps its two editable cells');
+	// The header carries a gutter too, as a `th`: without it the header's first cell
+	// and the body's gutter shared one visual column, which stretched the gutter and
+	// shifted every header label one column left of the body it named.
+	assert.equal(await table.locator('thead th[data-rich-gutter][contenteditable="false"]').count(), 1, 'the header carries one alignment gutter');
+	assert.equal(await table.locator('th:not([data-rich-gutter])').count(), 2, 'header keeps its two editable cells');
 
-	// Add a column on the right.
-	await act('右侧加列');
+	// Double-clicking a header renames the column: the presses that selected the
+	// column canceled the native caret, so the release places it back with the
+	// whole name selected and typing replaces it in one gesture.
+	await table.locator('th:not([data-rich-gutter])').first().dblclick();
+	await page.keyboard.type('Renamed');
+	await save();
+	const renamed = readFileSync(join(base, 'note.md'), 'utf8');
+	assert(renamed.includes('| Renamed |'), `double-click rename must reach the saved header:\n${renamed}`);
+	assert(!renamed.includes('| Name |'), `the old column name is replaced, not appended:\n${renamed}`);
+
+	// Add a column on the right. A new column is named the way the template names its
+	// columns: a blank header reads as a broken table next to real column names.
+	await act('向右插入');
 	await save();
 	let markdown = readFileSync(join(base, 'note.md'), 'utf8');
 	assert.equal(columnsOf(markdown), 3, `adding a column must write a three-column delimiter row:\n${markdown}`);
+	const headerRow = markdown.split('\n').find(line => /^\s*\|/.test(line)) ?? '';
+	assert.equal(headerRow.split('|').slice(1, -1).filter(cell => !cell.trim()).length, 0, `the inserted column carries a name, so no header cell is blank:\n${markdown}`);
 	assert(!markdown.includes('data-rich-gutter'), 'the gutter must never be serialized');
 	assert(!markdown.includes('data-row-target'), 'the row highlight must never be serialized');
 	assert(!markdown.includes('data-column-target'), 'the column highlight must never be serialized');
+	assert(!markdown.includes('data-cell-target'), 'the cell mark must never be serialized');
 
 	// Add a row below.
-	await act('下方加行');
+	await act('向下插入');
 	await save();
 	markdown = readFileSync(join(base, 'note.md'), 'utf8');
 	assert.equal(rowsIn(markdown), 2, `adding a row must write two data rows:\n${markdown}`);
 
+	// The caret stays in the cell the menu acted on: what is typed next lands in the
+	// same place the menu said "当前行 / 当前列" about.
+	await page.keyboard.type('typed');
+	await save();
+	markdown = readFileSync(join(base, 'note.md'), 'utf8');
+	assert(markdown.includes('typed'), `typing after a structural edit lands in the target cell:\n${markdown}`);
+	// Undo the typed text so the assertions below count columns and rows only.
+	await table.locator('tbody td:not([data-rich-gutter])').first().click();
+	await page.keyboard.press('ControlOrMeta+z');
+	await save();
+	markdown = readFileSync(join(base, 'note.md'), 'utf8');
+	assert(!markdown.includes('typed'), `the probe text is removed again:\n${markdown}`);
+
+	// The count field inserts several rows in one action (Yuque's model).
+	await act('向下插入', 2);
+	await save();
+	markdown = readFileSync(join(base, 'note.md'), 'utf8');
+	assert.equal(rowsIn(markdown), 4, `a count of 2 must add two rows:\n${markdown}`);
+	await act('删除所选行');
+	await act('删除所选行');
+	await save();
+	markdown = readFileSync(join(base, 'note.md'), 'utf8');
+	assert.equal(rowsIn(markdown), 2, `deleting rows again returns to two:\n${markdown}`);
+
 	// Delete the column again.
-	await act('删除当前列');
+	await act('删除所选列');
 	await save();
 	markdown = readFileSync(join(base, 'note.md'), 'utf8');
 	assert.equal(columnsOf(markdown), 2, `deleting a column must return to two:\n${markdown}`);
 
 	// Delete the row again.
-	await act('删除当前行');
+	await act('删除所选行');
 	await save();
 	markdown = readFileSync(join(base, 'note.md'), 'utf8');
 	assert.equal(rowsIn(markdown), 1, `deleting a row must leave one data row:\n${markdown}`);
@@ -97,16 +139,39 @@ try {
 	// The limit is visible rather than a silent no-op.
 	await table.locator('tbody td:not([data-rich-gutter])').first().click({ button: 'right' });
 	await menu.waitFor();
-	const removeRow = menu.getByRole('menuitem', { name: '删除当前行' });
+	const removeRow = menu.getByRole('menuitem', { name: '删除所选行' });
 	assert(await removeRow.isDisabled(), 'the last data row cannot be deleted');
 	assert.equal(await removeRow.getAttribute('title'), '表格至少保留一行数据', 'the disabled action explains its limit');
+
+	// A second right-click on the same target dismisses the menu instead of re-opening
+	// it, and closing always drops the painted targets: a menu that vanishes must not
+	// leave an L-shaped highlight the user can no longer act on.
+	const target = table.locator('tbody td:not([data-rich-gutter])').first();
+	// The menu is already open on this target from the limit check above, so the very
+	// next right-click on it is the dismiss.
+	assert.equal(await page.locator('[data-cell-target]').count(), 1, 'the open menu marks the cell it acts on');
+	assert.equal(await page.locator('table [data-column-target]').count(), 0, 'the menu paints no column band');
+	assert.equal(await page.locator('table tr[data-row-target]').count(), 0, 'the menu paints no row band');
+	assert(!(await page.locator('table[data-table-selected]').count()), 'the menu does not select the whole table');
+	await target.click({ button: 'right' });
+	await menu.waitFor({ state: 'detached' });
+	assert.equal(await page.locator('[data-cell-target]').count(), 0, 'dismissing the menu clears the cell mark');
+	// Re-opening on the same target works normally afterwards.
+	await target.click({ button: 'right' });
+	await menu.waitFor();
+	await target.click({ button: 'right' });
+	await menu.waitFor({ state: 'detached' });
+
+	// Escape closes the menu: it lives in a portal the editor's own key handler never sees.
+	await page.keyboard.press('Escape');
+	await menu.waitFor({ state: 'detached' });
 
 	// Everything survives a save and reopen. The Wiki window reloads in place.
 	await save();
 	await page.reload();
 	const reopened = page.locator('.wiki-prose .fp-rich-document table').first();
 	await reopened.waitFor();
-	assert.equal(await reopened.locator('th').count(), 2, 'reopened table keeps two header cells');
+	assert.equal(await reopened.locator('th:not([data-rich-gutter])').count(), 2, 'reopened table keeps two header cells');
 	assert.equal(await reopened.locator('td:not([data-rich-gutter])').count(), 2, 'reopened table keeps two content cells');
 	assert.equal(await reopened.locator('td[data-rich-gutter]').count(), 1, 'the gutter is rebuilt on reopen');
 	assert.equal(readFileSync(join(base, 'note.md'), 'utf8').includes('data-rich-gutter'), false, 'saved file stays clean');
