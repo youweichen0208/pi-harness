@@ -755,34 +755,6 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 						{event.ids.slice(1).map((id) => <span key={id} data-msg-id={id} />)}
 					</div>);
 
-					const isOld = i < recentStart && !answerRounds.protectedIds.has(m.id);
-					const isExpandedOld = isOld && expanded.has(m.id);
-					if (isOld && !isExpandedOld) {
-						// Folded into an earlier group's summary row (or a toolResult,
-						// whose content lives inside its toolCall card) — render nothing.
-						if (collapsed.absorbed.has(i)) return null;
-						const group = collapsed.groupAt.get(i);
-						if (!group) return null;
-						return withGap(
-							<LazyMount key={m.id} id={m.id}
-								show={!virtualOn || alwaysSet.has(m.id) || pinned.has(m.id) || !hidden.has(m.id)}
-								height={heightsRef.current.get(m.id) ?? 30}
-								containerRef={scrollRef} onMeasured={storeHeight} lazyRef={attachEl}>
-								<CollapsedGroup
-									messages={group}
-									onExpand={expandGroup}
-									// When the user expands one message out of a folded turn, the rest
-									// of that turn re-groups behind it. Its role label would print the
-									// turn identity a second time, right under the expanded header.
-									turnAlreadyIdentified={(() => {
-										const previous = state.messages[i - 1];
-										return !!previous && previous.role === m.role && i - 1 < recentStart && expanded.has(previous.id);
-									})()}
-									repeatCount={repeatedUsers.counts.get(group[0].id)}
-								/>
-							</LazyMount>
-						);
-					}
 					// Repeats keep an anchor so search and question jumps still land on the shown copy.
 					if (repeatedUsers.hidden.has(m.id) || emptyReplies.has(m.id) && m.id !== state.streamingMessage?.id) return <span key={m.id} data-msg-id={m.id} hidden />;
 					if (bashGroups.owners.has(m.id)) return changeSummaries.has(m.id) ? <ChangeSummaryCard key={m.id} files={changeSummaries.get(m.id)!} /> : null;
@@ -813,8 +785,8 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 							continuation={(() => {
 								const previous = predecessors.get(m.id);
 								if (!previous || emptyReplies.has(previous)) return false;
-								// The predecessor folded into a summary row no longer shows a pi header above this turn.
-								return !((messageIndex.get(previous) ?? -1) < recentStart && !historyExpanded.has(previous));
+								// Persisted history is rendered directly; its predecessor already shows the header.
+								return true;
 							})()}
 							qnIndex={qIdx}
 							qnActive={qIdx !== undefined ? qIdx === activeIdx : undefined}
@@ -839,7 +811,6 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 							// The edit cards hold their diff open only at the live edge of the
 							// conversation: the newest assistant reply, with nothing said after it.
 							settledTail={m.id === lastAssistantId && !streamingHasContent && !state.streamingMessage?.content.some((block) => block.type === "toolCall")}
-							onCollapse={isExpandedOld ? collapse : undefined}
 						/>
 						{commandSummaries.has(m.id) && <CommandTurnSummary summary={commandSummaries.get(m.id)!} />}
 						{changeSummaries.has(m.id) && <ChangeSummaryCard files={changeSummaries.get(m.id)!} />}

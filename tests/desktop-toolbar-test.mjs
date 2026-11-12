@@ -60,7 +60,7 @@ try {
 			assert.equal(await page.locator('.inputbox').evaluate(el => getComputedStyle(el).boxShadow), 'none');
 			await input.fill('');
 			await page.keyboard.press('Escape');
-			assert.equal(await page.locator('.header-task-progress').textContent(), '第 2 / 5 步');
+			assert.equal(await page.locator('.header-task-progress').textContent(), '任务进度');
 			assert.equal(await page.locator('.view-switch').evaluate(el => getComputedStyle(el).borderTopWidth), '1px');
 			assert.equal(await page.locator('.project-panel-toggle').evaluate(el => getComputedStyle(el).borderTopWidth), '0px');
 			assert.equal(await page.locator('.topbar-actions > .panel-toggle').count(), 0);

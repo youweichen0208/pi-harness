@@ -58,9 +58,8 @@ try {
 	await page.waitForFunction(count => document.querySelectorAll(".msg-lazy-ph").length > count - 200, count);
 	assert(await page.locator(".msg-collapsed").count() < 200, "summary DOM is limited to the viewport buffer");
 	await page.locator(".messages").evaluate(el => { el.scrollTop = 0; });
-	await page.waitForFunction(id => document.querySelector(`[data-msg-id="${id}"]`)?.classList.contains("msg-collapsed"), state.messages[0].id);
-	await page.locator(`[data-msg-id="${state.messages[0].id}"]`).click();
 	await page.locator(`.msg[data-msg-id="${state.messages[0].id}"]`).waitFor();
+	assert.equal(await page.locator('.msg-collapsed').count(), 0, 'history remains expanded');
 	const target = state.messages[Math.floor(count / 2 / 2) * 2];
 	await page.evaluate(id => window.dispatchEvent(new CustomEvent("pi:jump-message", { detail: { messageId: id } })), target.id);
 	await page.locator(`.msg[data-msg-id="${target.id}"]`).waitFor();
