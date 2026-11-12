@@ -791,4 +791,4 @@ SCM 更改列表（2026-11-12）：界面不再展示工作树清单；仓库工
 
 以 Mac Desktop 的主界面字体与风格为基准，Windows 共用 UI SC、JetBrains Mono 和主题令牌。插入菜单、Wiki 搜索／格式控件及设置面板统一走 `--sans`，不独立指定系统字体。保留现有 400／500／600 字体文件与 700 字重映射，不为 Windows 单独加粗或放大文字。窗口按钮、快捷键和标题栏避让保留平台习惯。
 
-`tests/windows-rendering-test.mjs` 在真实 Electron 中输出字体、聊天与文件栏样式、文档／小记／设置的 CSS 场景测量和明暗截图。`verify-rendering.yml` 汇总同版本 Mac 与 Windows 100%／125%／150% 产物，由 `scripts/compare-desktop-rendering.mjs` 检查字体、换行数、颜色与布局；数值尺寸容差为 1 CSS px。系统抗锯齿、Emoji、字体子集外字符和原生窗口控制不做逐像素比较。CSS 场景测量不替代各页面已有的交互回归。
+`tests/windows-rendering-test.mjs` 在真实 Electron 中输出字体、聊天与文件栏样式、文档／小记／设置的 CSS 场景测量和明暗截图。`verify-rendering.yml` 汇总同版本 Mac 与 Windows 100%／125%／150% 产物，由 `scripts/compare-desktop-rendering.mjs` 检查字体、换行数、文字宽度、颜色与控件盒尺寸；数值尺寸容差为 1 CSS px。`Range.getClientRects()` 的字形像素高度受系统字体栅格化影响，不作为 CSS 盒尺寸比较。系统抗锯齿、Emoji、字体子集外字符和原生窗口控制不做逐像素比较。CSS 场景测量不替代各页面已有的交互回归。
