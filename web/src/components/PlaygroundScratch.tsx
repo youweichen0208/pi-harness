@@ -8,9 +8,10 @@ import { runKey, startRun, stopRun, usePlaygroundRun } from "../playground-run-s
 import { usePlaygroundScratch } from "../use-playground-scratch";
 import { SCRATCH_EXAMPLE as EXAMPLE, EMPTY_SCRATCH_TESTS as EMPTY_TESTS } from "../playground-scratch-store";
 import type { PlaygroundTestConfig, PlaygroundFormatResult } from "../types";
-import { discoverPythonMethods } from "../../../server/playground-methods";
+import { discoverPythonMethods, defaultParameterValue } from "../../../server/playground-methods";
 import { PlaygroundToolsInstall } from "./PlaygroundToolsInstall";
 import { ScratchOutput } from "./ScratchOutput";
+import { reconcileMethodSelection } from "../playground-method-selection";
 import { randomUuid } from "../uuid";
 import { PlaygroundMethodCases, caseError } from "./PlaygroundMethodCases";
 
@@ -48,6 +49,18 @@ export function PlaygroundScratch() {
 	const snapshot = doc ? JSON.stringify(doc) : "";
 	const tests = doc?.tests ?? EMPTY_TESTS;
 	const discovered = useMemo(() => discoverPythonMethods(doc?.content ?? ""), [doc?.content]);
+	const previousMethods = useRef(discovered.methods);
+	useEffect(() => {
+		const timer = setTimeout(() => {
+			const previous = previousMethods.current;
+			setDoc(current => {
+				const next = reconcileMethodSelection(current.tests, discovered.methods, previous);
+				return next === current.tests ? current : { ...current, tests: next };
+			});
+			if (discovered.methods.length) previousMethods.current = discovered.methods;
+		}, 500);
+		return () => clearTimeout(timer);
+	}, [discovered, setDoc]);
 	const method = discovered.methods.find(m => m.id === tests.selectedMethod);
 	const cases = Object.hasOwn(tests.casesByMethod, tests.selectedMethod) ? tests.casesByMethod[tests.selectedMethod] : [];
 
@@ -56,7 +69,7 @@ export function PlaygroundScratch() {
 	}, [tests.selectedMethod, discovered, setDoc]);
 
 	useEffect(() => {
-		if (method && !cases.length) setDoc(current => ({ ...current, tests: { ...current.tests, casesByMethod: { ...current.tests.casesByMethod, [method.id]: [{ id: randomUuid(), args: method.parameters.map(() => ({ text: "" })) }] } } }));
+		if (method && !cases.length) setDoc(current => ({ ...current, tests: { ...current.tests, casesByMethod: { ...current.tests.casesByMethod, [method.id]: [{ id: randomUuid(), args: method.parameters.map(parameter => defaultParameterValue(parameter.type)) }] } } }));
 	}, [method, cases.length, setDoc]);
 
 	const reason = !status ? t("playgroundChecking") : status.locked ? t("playgroundLocked") : !status.enabled ? t("playgroundDisabled") : !status.python.available ? [t("playgroundNoPython"), status.python.reason].filter(Boolean).join(" — ") : "";
@@ -119,7 +132,7 @@ export function PlaygroundScratch() {
 
 	return <div className="scratch-page method-mode">
 		<header className="scratch-head">
-			<h2>Playground · Python</h2>
+			<h2>Playground <span className="scratch-language-badge">Python</span></h2>
 
 			<span className={`scratch-save-status${saveState === "error" ? " error" : ""}`} role={saveState === "error" ? "alert" : undefined}>{saveState === "error" ? t("fileSaveFailed") : saveState === "pending" || saveState === "saving" ? t("playgroundSaving") : savedAt ? `${t("playgroundSaved")} · ${savedAt}` : doc ? t("playgroundSaved") : ""}</span>
 			<button ref={resultsToggle} type="button" className="btn scratch-results-toggle" aria-label={t(resultsOpen ? "pgResultHide" : "pgResultShow")} title={t(resultsOpen ? "pgResultHide" : "pgResultShow")} aria-expanded={resultsOpen} aria-controls="scratch-results" onClick={() => setResultsOpen(open => !open)}>{resultsOpen ? <FiChevronsRight /> : <FiChevronsLeft />}</button>
@@ -128,6 +141,7 @@ export function PlaygroundScratch() {
 				<button type="button" className="btn primary" disabled={!!reason || !!(method && caseBatchError) || !doc?.content.trim()} title={reason || caseBatchError || "⌘/Ctrl+Enter"} onClick={() => void start()}><FiPlay aria-hidden="true" />{t("playgroundRun")}<kbd className="scratch-run-shortcut" aria-hidden="true">{navigator.platform.includes("Mac") ? "⌘" : "Ctrl"} ↵</kbd></button>
 			</>}
 		</header>
+		{(reason || (method && caseBatchError)) && <p className="scratch-run-hint" role="status">{reason || t("pgParametersRequired")}</p>}
 		{loadFailed && <p className="playground-notice" role="alert">{t("pgLoadFailed")}</p>}
 		<div className={`scratch-workspace${resultsOpen ? "" : " results-collapsed"}`}>
 			<section className="scratch-code-pane" aria-label={t("pgSource")}>

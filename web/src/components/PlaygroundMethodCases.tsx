@@ -1,10 +1,12 @@
 import { useT } from "../i18n";
 import type { PlaygroundCase, PlaygroundMethod, PlaygroundValue } from "../types";
-import { isJsonType, validateCases, valuePlaceholder } from "../../../server/playground-methods";
+import { defaultParameterValue, isJsonType, validateCases } from "../../../server/playground-methods";
 
 export function methodErrorText(message: string, t: ReturnType<typeof useT>): string {
 	const casePrefix = /^Case (\d+): (.*)$/.exec(message);
-	if (casePrefix) return `${t("pgCase")} ${casePrefix[1]}: ${methodErrorText(casePrefix[2], t)}`;
+	if (casePrefix) return methodErrorText(casePrefix[2], t);
+	const parameter = /^Invalid JSON parameter: (.+)$/.exec(message);
+	if (parameter) return t("pgParameterInvalid").replace("{name}", parameter[1]);
 	const exact = {
 		"Provide between 1 and 50 test cases": "pgCaseCount",
 		"Parameter count does not match the method": "pgParamCount",
@@ -19,7 +21,7 @@ export function methodErrorText(message: string, t: ReturnType<typeof useT>): st
 function ValueInput({ type, value, onChange, label }: { type: string; value: PlaygroundValue; onChange: (value: PlaygroundValue) => void; label: string }) {
 	return <div className="method-value">
 		<label><span>{label}</span>
-			<textarea rows={Math.min(6, Math.max(1, value.text.split("\n").length))} aria-label={label} value={value.isNull ? "null" : value.text} onChange={event => onChange({ text: event.target.value })} spellCheck={false} placeholder={isJsonType(type) ? valuePlaceholder(type) : ""} />
+			<textarea rows={Math.min(6, Math.max(1, value.text.split("\n").length))} aria-label={label} value={value.isNull ? "null" : value.text} onChange={event => onChange({ text: event.target.value })} onBlur={() => { if (!value.isNull && !value.text.trim() && isJsonType(type)) onChange(defaultParameterValue(type)); }} spellCheck={false} placeholder={isJsonType(type) ? defaultParameterValue(type).text : ""} />
 		</label>
 	</div>;
 }
@@ -46,7 +48,7 @@ export function PlaygroundMethodCases({ methods, selected, cases, onSelect, onCh
 		{!methods.length && !selected && <p className="playground-hint">{t("pgNoMethods")}</p>}
 		{selected && !method && <p className="playground-notice">{t("pgMissingMethod")}</p>}
 		{method?.unsupported && <p className="playground-notice">{methodErrorText(method.unsupported, t)}</p>}
-		{active && <div className="lc-case-panel"><div className="method-parameters">
+		{active && <div className="lc-case-panel"><p className="scratch-parameter-hint">{t("pgParameterHint")}</p><div className="method-parameters">
 			{active.args.map((value, i) => <ValueInput key={i} type={method?.parameters[i]?.type ?? "JSON"} label={method?.parameters[i]?.name || `arg${i + 1}`} value={value} onChange={next => onChange([{ ...active, args: active.args.map((v, j) => j === i ? next : v) }, ...cases.slice(1)])} />)}
 		</div>{error && active.args.some(value => value.text.trim()) && <p className="method-validation" role="status">{methodErrorText(error, t)}</p>}</div>}
 	</section>;

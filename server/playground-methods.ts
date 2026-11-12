@@ -21,7 +21,7 @@ export function discoverPythonMethods(code: string): { methods: PlaygroundMethod
 			if (text === ",") { expectName = true; continue; }
 			if (part.name === "VariableName" && expectName) {
 				const annotation = parts[i + 1]?.name === "TypeDef" ? code.slice(parts[i + 1].from, parts[i + 1].to).replace(/^:\s*/, "").trim() : "JSON";
-				parameters.push({ name: text, type: annotation === "str" ? "str" : "JSON" });
+				parameters.push({ name: text, type: annotation });
 				expectName = false;
 			}
 		}
@@ -30,6 +30,16 @@ export function discoverPythonMethods(code: string): { methods: PlaygroundMethod
 		methods.push({ id: `${name}(${parameters.map(p => p.name).join(",")})`, name, parameters, returnType, unsupported });
 	}
 	return { methods };
+}
+/** Editable starting values, not Python signature defaults or runtime coercion. */
+export function defaultParameterValue(type: string): PlaygroundValue {
+	const base = type.replace(/^['"]|['"]$/g, "").split("[")[0].trim();
+	if (base === "str") return { text: "" };
+	if (base === "int" || base === "float") return { text: "0" };
+	if (base === "bool") return { text: "false" };
+	if (["list", "List", "typing.List"].includes(base)) return { text: "[]" };
+	if (["dict", "Dict", "typing.Dict"].includes(base)) return { text: "{}" };
+	return { text: "null" };
 }
 export const isReferenceType = (_type: string): boolean => true;
 export const isJsonType = (type: string): boolean => type !== "str";
@@ -42,7 +52,9 @@ export function validateCases(method: PlaygroundMethod, cases: PlaygroundCase[])
 			if (test.args.length !== method.parameters.length) throw new Error("Parameter count does not match the method");
 			const values: [string, PlaygroundValue][] = method.parameters.map((p, i) => [p.type, test.args[i]]);
 			if (test.expected) values.push([method.returnType, test.expected]);
-			for (const [type, value] of values) if (!value.isNull && type !== "str") JSON.parse(value.text);
+			for (const [i, [type, value]] of values.entries()) if (!value.isNull && type !== "str") {
+				try { JSON.parse(value.text); } catch { throw new Error(`Invalid JSON parameter: ${method.parameters[i]?.name ?? "expected"}`); }
+			}
 		} catch (error) { throw new Error(`Case ${index + 1}: ${error instanceof Error ? error.message : error}`); }
 	}
 }

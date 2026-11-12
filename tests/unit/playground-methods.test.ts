@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { discoverPythonMethods, isCaseList, isTestConfig, validateCases } from "../../server/playground-methods.js";
+import { defaultParameterValue, discoverPythonMethods, isCaseList, isTestConfig, validateCases } from "../../server/playground-methods.js";
 it("discovers only top-level Python functions, ignoring strings, nested functions and class methods", () => {
 	const { methods } = discoverPythonMethods('"def fake(x): pass"\n# def comment(x): pass\ndef add(a: int, b: int = 2) -> int:\n    def nested(): pass\n    return a+b\nclass C:\n    def f(self): pass\nasync def label(value: str) -> str:\n    return value\n');
 	expect(methods.map(m => m.id)).toEqual(["add(a,b)", "label(value)"]);
@@ -22,4 +22,11 @@ it("preserves raw str and validates persisted case configuration", () => {
 	expect(() => validateCases(method, cases)).not.toThrow();
 	expect(isCaseList([...cases, ...cases])).toBe(false);
 	expect(isTestConfig({ mode: "program", selectedMethod: "f(value)", casesByMethod: { "f(value)": cases } })).toBe(true);
+});
+
+it("provides typed editable defaults while preserving annotations", () => {
+	const method = discoverPythonMethods("def f(a: int, b: float, c: bool, d: str, e: list[int], f: dict[str, int], g): pass").methods[0];
+	const args = method.parameters.map(p => defaultParameterValue(p.type));
+	expect(args.map(v => v.text)).toEqual(["0", "0", "false", "", "[]", "{}", "null"]);
+	expect(() => validateCases(method, [{ id: "defaults", args }])).not.toThrow();
 });

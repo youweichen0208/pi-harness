@@ -27,7 +27,7 @@ export function PlaygroundToolsInstall({ available }: { available: boolean }) {
 		}
 	};
 	return <div className="playground-tools-install">
-		<p className="playground-hint">{t("pgToolsInstallHint")}</p>
+		<details className="scratch-tools-details"><summary>{t("pgToolsOptional")}</summary><p className="playground-hint">{t("pgToolsInstallHint")}</p></details>
 		<button type="button" className="btn" disabled={!available || busy} onClick={() => void install()}>{t(busy ? "pgToolsInstalling" : "pgToolsInstall")}</button>
 		<span role="status" aria-live="polite">{busy ? t("pgToolsInstallingHint") : done ? t("pgToolsInstalled") : ""}</span>
 		{error && <p className="playground-error" role="alert">{t("pgToolsInstallFailed")} {error}</p>}
