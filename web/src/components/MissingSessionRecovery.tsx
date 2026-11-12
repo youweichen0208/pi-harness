@@ -17,25 +17,36 @@ export interface MissingSessionRecoveryProps {
 	result: Extract<ServerMessage, { type: "missing_session_result" }> | null;
 }
 
-/** The exceptional recovery path stays collapsed until requested, outside ordinary project history. */
+/** Discover on connection/context changes; empty recovery stays out of ordinary navigation. */
 export function MissingSessionRecovery({ cwd, conversationId, ready, send, listing, result }: MissingSessionRecoveryProps) {
 	const t = useT(), id = useId();
 	const [expanded, setExpanded] = useState(false);
+	const [hasSessions, setHasSessions] = useState(false);
 	const [requestId, setRequestId] = useState("");
 	const [selected, setSelected] = useState<MissingSessionSummary | null>(null);
 	const [pending, setPending] = useState("");
 	const [error, setError] = useState("");
 	const dialog = useDialogFocus(!!selected);
 	const current = listing?.reqId === requestId && listing.conversationId === conversationId && listing.cwd === cwd ? listing : null;
-	useEffect(() => { setExpanded(false); setSelected(null); setPending(""); setRequestId(""); setError(""); }, [cwd, conversationId]);
+	useEffect(() => { setExpanded(false); setHasSessions(false); setSelected(null); setPending(""); setRequestId(""); setError(""); }, [cwd, conversationId]);
 	useEffect(() => {
 		if (!ready) { setPending(""); setRequestId(""); setSelected(null); }
 	}, [ready]);
 	useEffect(() => {
+		if (!ready || !conversationId || !cwd) return;
+		const reqId = randomUuid();
+		if (send({ type: "list_missing_sessions", reqId, conversationId })) setRequestId(reqId);
+	}, [ready, cwd, conversationId, send]);
+	useEffect(() => {
+		if (!current || current.error) return;
+		setHasSessions(current.sessions.length > 0);
+		if (!current.sessions.length) setExpanded(false);
+	}, [current]);
+	useEffect(() => {
 		if (!pending || result?.reqId !== pending) return;
 		setPending("");
 		if (result.status === "error") setError(result.error ?? t("missingSessionFailed"));
-		else { setSelected(null); setExpanded(false); setRequestId(""); }
+		else { setSelected(null); setExpanded(false); refresh(); }
 	}, [pending, result, t]);
 	const refresh = () => {
 		const reqId = randomUuid();
@@ -48,10 +59,11 @@ export function MissingSessionRecovery({ cwd, conversationId, ready, send, listi
 		const reqId = randomUuid();
 		if (send({ type: "recover_missing_session", reqId, conversationId, token: selected.token, action })) {
 			setError("");
-			if (action === "cancel") { setSelected(null); setRequestId(""); setExpanded(false); }
+			if (action === "cancel") { setSelected(null); setExpanded(false); refresh(); }
 			else setPending(reqId);
 		} else setError(t("missingSessionFailed"));
 	};
+	if (!hasSessions && !selected) return null;
 	return <section className="missing-sessions">
 		<button type="button" className="missing-sessions-toggle" disabled={!ready} aria-expanded={expanded} aria-controls={`${id}-list`} onClick={() => { setExpanded(value => !value); if (!expanded) refresh(); }}>
 			{expanded ? <FiChevronDown aria-hidden="true" /> : <FiChevronRight aria-hidden="true" />}<span>{t("missingSessions")}</span>
@@ -59,7 +71,6 @@ export function MissingSessionRecovery({ cwd, conversationId, ready, send, listi
 		{expanded && <div id={`${id}-list`} className="missing-sessions-list" aria-busy={!!requestId && !current}>
 			{!current && requestId && <p role="status">{t("loading")}</p>}
 			{(current?.error || error) && !selected && <p role="alert">{current?.error || error}</p>}
-			{current && !current.error && current.sessions.length === 0 && <p>{t("missingSessionsEmpty")}</p>}
 			{current?.sessions.map(session => <button className="missing-session-item" type="button" key={session.token} onClick={() => { setSelected(session); setError(""); }} title={session.cwd}>
 				<span>{session.name || skillAwarePreview(session.firstMessage) || t("missingSessionUntitled")}</span><small>{session.cwd}</small>
 			</button>)}

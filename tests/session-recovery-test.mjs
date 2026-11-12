@@ -119,7 +119,7 @@ try {
 		browser = await chromium.launch({ executablePath: CHROME_PATH, headless: true });
 		const page = await browser.newPage({ viewport: { width: 1280, height: 850 } });
 		await page.goto(`http://127.0.0.1:${harness.port}`);
-		const toggle = page.getByRole("button", { name: "原目录已失效的会话", exact: true });
+		const toggle = page.getByRole("button", { name: "恢复历史会话", exact: true });
 		await toggle.waitFor(); await wait(() => toggle.isEnabled());
 		assert.equal(await toggle.getAttribute("aria-expanded"), "false");
 		await toggle.click(); await page.getByRole("button", { name: "Missing project history" }).click();
@@ -130,7 +130,7 @@ try {
 		await toggle.click(); await page.getByRole("button", { name: "Missing project history" }).click();
 		await dialog.getByRole("button", { name: "复制到当前项目", exact: true }).click();
 		await dialog.waitFor({ state: "hidden" });
-		assert(await toggle.isVisible());
+		await toggle.waitFor({ state: "visible" });
 		await page.setViewportSize({ width: 390, height: 844 });
 		// Capture the reusable recovery modal at a narrow viewport for visual inspection.
 		await page.setViewportSize({ width: 1280, height: 850 });
@@ -142,12 +142,21 @@ try {
 		await page.keyboard.press("Escape");
 		await page.evaluate(() => { localStorage.setItem("pi-harness:lang", "en"); localStorage.setItem("pi-harness:theme", "graphite"); localStorage.setItem("pi-harness:theme-follow", "0"); });
 		await page.setViewportSize({ width: 1280, height: 850 }); await page.reload();
-		const englishToggle = page.getByRole("button", { name: "Sessions with missing folders", exact: true });
+		const englishToggle = page.getByRole("button", { name: "Restore past sessions", exact: true });
 		await wait(() => englishToggle.isEnabled()); await englishToggle.click();
 		await page.getByRole("button", { name: "Missing project history" }).click();
 		const englishDialog = page.getByRole("dialog", { name: "Restore in the current project" });
 		await englishDialog.waitFor(); await page.screenshot({ path: "tests/scratch/session-recovery-dark-en.png" });
 		await englishDialog.getByRole("button", { name: "Cancel", exact: true }).click(); await englishDialog.waitFor({ state: "hidden" });
+		mkdirSync(old, { recursive: true });
+		let emptyListing = false;
+		page.once("websocket", socket => socket.on("framereceived", ({ payload }) => {
+			const message = JSON.parse(String(payload));
+			if (message.type === "missing_sessions") emptyListing = message.sessions.length === 0;
+		}));
+		await page.reload();
+		await wait(() => emptyListing);
+		assert.equal(await page.locator(".missing-sessions").count(), 0, "empty recovery must not occupy the sidebar");
 	}
 	for (const connected of clients) connected.ws.close();
 	await harness.stop();

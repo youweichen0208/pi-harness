@@ -17,7 +17,7 @@ const STORAGE_KEY = "pi-harness:lang";
 /* ------------------------------------------------------------------ */
 
 const zh = {
-	missingSessions: "原目录已失效的会话",
+	missingSessions: "恢复历史会话",
 	missingSessionsEmpty: "没有需要恢复的会话",
 	missingSessionsRefresh: "刷新列表",
 	missingSessionUntitled: "未命名会话",
@@ -2548,7 +2548,7 @@ const zh = {
 /* ------------------------------------------------------------------ */
 
 const en: Record<keyof typeof zh, string> = {
-	missingSessions: "Sessions with missing folders",
+	missingSessions: "Restore past sessions",
 	missingSessionsEmpty: "No sessions need recovery",
 	missingSessionsRefresh: "Refresh list",
 	missingSessionUntitled: "Untitled session",
