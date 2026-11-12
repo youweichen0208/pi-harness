@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FiList, FiSearch, FiChevronsDown, FiX, FiChevronDown, FiChevronRight, FiExternalLink } from "react-icons/fi";
-import { changedWords, foldDiff, parseUnifiedDiff, type ChangedFile } from "../changes";
+import { parseUnifiedDiff, type ChangedFile } from "../changes";
 import { useChanges, type ChangesScope } from "../changes-context";
 import type { ClientMessage, ServerMessage, ScmBranchEntry } from "../types";
 import { useT } from "../i18n";
+import { ChangeDiff } from "./ChangeDiff";
 import { ChangeCounts } from "./ChangeSummaryCard";
 
 let diffRequestId = -1000000;
@@ -90,32 +91,10 @@ function DiffFile({ file, selected, collapsed, toggle, gaps, expandGap, query }:
 	const signature = file.toolIds?.join(",") ?? "";
 	const previous = useRef(signature);
 	useEffect(() => { if (previous.current === signature) return; previous.current = signature; setRecent(true); const timer = setTimeout(() => setRecent(false), 3000); return () => clearTimeout(timer); }, [signature]);
-	const peers = useMemo(() => {
-		const pairs = new Map<number, string>();
-		for (let index = 0; index < file.lines.length;) {
-			if (file.lines[index].marker !== "-") { index++; continue; }
-			const start = index; while (file.lines[index]?.marker === "-") index++;
-			const added = index; while (file.lines[index]?.marker === "+") index++;
-			for (let n = 0; n < Math.min(added - start, index - added); n++) { pairs.set(start + n, file.lines[added + n].text); pairs.set(added + n, file.lines[start + n].text); }
-		}
-		return pairs;
-	}, [file.lines]);
-	const renderLine = (index: number) => {
-		const line = file.lines[index];
-		const kind = line.marker === "+" ? "add" : line.marker === "-" ? "del" : "context";
-		const peer = peers.get(index);
-		const parts = peer === undefined ? [{ text: line.text, changed: false }] : changedWords(line.text, peer);
-		return <div key={index} className={`changes-line ${kind}${query && line.text.toLowerCase().includes(query.toLowerCase()) ? " search-match" : ""}`} data-change-hunk={line.marker !== " " && (index === 0 || file.lines[index - 1].marker === " ") ? "" : undefined}><span className="changes-line-number">{line.newLine ?? line.oldLine}</span><span className="changes-line-sign">{line.marker}</span><code className={/^#{1,6} /.test(line.text) ? "markdown-heading" : ""}>{parts.map((part, n) => part.changed ? <mark key={n}>{part.text}</mark> : part.text)}</code></div>;
-	};
 	const firstChanged = file.lines.find(line => line.marker !== " ");
 	return <section className={`changes-file ${selected ? "selected" : ""}`} data-change-file={file.path}>
 		<header className="changes-file-head"><button aria-expanded={!collapsed} onClick={toggle}>{collapsed ? <FiChevronRight /> : <FiChevronDown />}<code title={file.path}>{file.oldPath && file.oldPath !== file.path ? `${file.oldPath} → ${file.path}` : file.path.split("/").at(-1)}</code><span className="change-directory">{file.path.split("/").slice(0, -1).join("/")}</span><ChangeCounts files={[file]} />{recent && <span className="changes-recent" title={t("changesRecent")}>●</span>}</button><button className="changes-open-file" title={t("changeOpen")} onClick={() => { changesClose(); window.dispatchEvent(new CustomEvent("pi-harness:open-tool-file", { detail: { path: file.path, line: firstChanged?.newLine ?? firstChanged?.oldLine ?? 1 } })); }}>{t("changeOpen")} <FiExternalLink /></button></header>
 		{collapsed && file.lines.filter(line => line.marker !== " ").length > 400 && <button className="changes-gap" onClick={toggle}>{t("changesLarge")}</button>}
-		{!collapsed && (file.binary ? <p className="changes-empty">{t("changesBinary")}</p> : <div className="changes-file-lines">
-			{!file.lines.length && <p className="changes-meta">{t("changesUnavailable")}</p>}
-			{file.unlocated && <p className="changes-meta">{t("changesUnlocated")}</p>}
-			{foldDiff(file.lines).map(row => row.kind === "line" ? renderLine(row.index) : gaps.has(`${file.path}:${row.start}`) || query ? Array.from({ length: row.end - row.start }, (_, n) => renderLine(row.start + n)) : <button key={`gap:${row.start}`} className="changes-gap" onClick={() => expandGap(`${file.path}:${row.start}`)}>{t(row.end === file.lines.length ? "changesTrailing" : "changesUnchanged", { n: row.end - row.start })}</button>)}
-			{file.truncated && <p className="changes-meta">{t("changesTruncated")}</p>}
-		</div>)}
+		{!collapsed && <ChangeDiff file={file} gaps={gaps} expandGap={expandGap} query={query} />}
 	</section>;
 }

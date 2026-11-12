@@ -1,11 +1,14 @@
+import { formatBashOutput, formattedOutputCanExpand } from "../bash-output-format";
+import { BashFormattedOutput } from "./BashFormattedOutput";
+import { highlightLine } from "../hljs-lite";
 import { copyText } from "../clipboard";
-import { useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { FiChevronDown, FiChevronRight } from "react-icons/fi";
+import { useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { FiChevronDown, FiChevronRight, FiCopy, FiTerminal } from "react-icons/fi";
 import { commandReading, consecutiveAttempts } from "../command-reading";
 import { useChatT, useI18n } from "../i18n";
 import { WorkspacePathContext } from "../workspace-context";
 import { bashCommand } from "../bash-steps";
-import { commandPresentation, commandPreview, isLikelyErrorLine, compactCommandLabel, commandDuration, elapsedLabel } from "../bash-presentation";
+import { hasNumberedPipelineOutput, hasSearchSourceNumbers, searchSourceNumberParts, commandPresentation, commandPreview, isLikelyErrorLine, compactCommandLabel, commandDuration, elapsedLabel } from "../bash-presentation";
 import { latestOutputLine } from "../live-tool-output";
 import type { UiToolCallBlock } from "../types";
 import { toolDuration, type ToolView } from "./ToolCallBlock";
@@ -91,21 +94,29 @@ function BashRow({ block, view, onKill, revealed, messageId, attempts, historica
 	// In a process group the group opens on failure; rows stay compact until clicked or revealed.
 	const [open, setOpen] = useState(state === "err" && !compact);
 	const [all, setAll] = useState(false);
+	const [fullCommand, setFullCommand] = useState(false);
+	const [wrapOutput, setWrapOutput] = useState(true);
 	const [copyError, setCopyError] = useState<"command" | "output" | null>(null);
 	const [copied, setCopied] = useState<"command" | "output" | null>(null);
 	const copyTimer = useRef<ReturnType<typeof setTimeout>>();
 	useEffect(() => () => clearTimeout(copyTimer.current), []);
 	useEffect(() => { if (state === "err" && !compact || revealed) setOpen(true); }, [state, revealed, compact]);
 	useEffect(() => {
-		const jump = (event: Event) => { if ((event as CustomEvent).detail?.toolCallId === block.id) { setOpen(true); if ((event as CustomEvent).detail?.search) setAll(true); } };
+		const jump = (event: Event) => { if ((event as CustomEvent).detail?.toolCallId === block.id) { setOpen(true); if ((event as CustomEvent).detail?.search) { setAll(true); setFullCommand(true); } } };
 		window.addEventListener("pi:reveal-tool", jump);
 		return () => window.removeEventListener("pi:reveal-tool", jump);
 	}, [block.id]);
 	const command = bashCommand(block.argumentsText) ?? block.argumentsText ?? "bash";
 	const display = commandPresentation(command, cwd);
+	const searchNumbers = useMemo(() => hasSearchSourceNumbers(command) || hasNumberedPipelineOutput(command), [command]);
 	const reading = commandReading(display.command, locale === "en");
 	const commandLines = display.command.trimEnd().split(/\r?\n/);
+	const rawCommandLines = command.trimEnd().split(/\r?\n/);
+	const visibleCommand = fullCommand ? command : rawCommandLines.slice(0, 6).join("\n");
+	const commandHtml = useMemo(() => highlightLine(visibleCommand, "bash"), [visibleCommand]);
 	const output = view.result?.content.map((part) => part.type === "text" && typeof part.text === "string" ? part.text : "").join("") ?? view.liveOutput ?? "";
+	const format = useMemo(() => formatBashOutput(command, output, !!view.result && state !== "err"), [command, output, view.result, state]);
+	const formatted = format.kind !== "terminal";
 	const lines = output ? output.replace(/\r\n/g, "\n").replace(/\n$/, "").split("\n") : [];
 	// issue #106: a running command shows its elapsed time and latest output
 	// line right on the row, and tails (not heads) the output when expanded.
@@ -133,12 +144,16 @@ function BashRow({ block, view, onKill, revealed, messageId, attempts, historica
 		</button>
 		{open && <div className="bash-row-body">
 			{display.directory && <div className="bash-row-directory">{t("bashGroupCwd", { path: display.directory })}</div>}
-			<pre className="bash-full-command">{command}</pre>
-			{lines.length > 0 && <div className="bash-numbered-output" data-msg-id={view.result?.id}>{shownLines.map((line, i) => <div key={lineOffset + i} className={`bash-numbered-line${isLikelyErrorLine(line) ? " error" : /(?:\bPASS\b|\bpassed\b|\bsummary\b)/i.test(line) ? " important" : ""}`}><span aria-hidden="true">{lineOffset + i + 1}</span><code>{line || " "}</code></div>)}</div>}
-			{lines.length > 6 && <button type="button" className="bash-group-more" onClick={() => setAll(!all)}>{all ? t("collapseCode") : t("bashRemainingLines", { n: lines.length - 6 })}</button>}
+			<section className="bash-detail-command">
+				<header className="bash-detail-heading"><strong><FiTerminal aria-hidden="true" />{t("command")}</strong><div className="bash-detail-controls"><button type="button" onClick={event => void copy("command", event.currentTarget.ownerDocument)}><FiCopy aria-hidden="true" />{t(copyError === "command" ? "copyFailed" : copied === "command" ? "copied" : "bashCopyCommand")}</button>{rawCommandLines.length > 6 && <button type="button" aria-expanded={fullCommand} onClick={() => setFullCommand(value => !value)}>{t(fullCommand ? "collapseCode" : "bashExpandFullCommand")}</button>}</div></header>
+				<div className="bash-command-with-prompt"><span className="bash-detail-prompt" aria-hidden="true">&gt;</span><pre className="bash-full-command bash-syntax" dangerouslySetInnerHTML={{ __html: commandHtml }} /></div>
+				{!fullCommand && rawCommandLines.length > 6 && <button type="button" className="bash-group-more" onClick={() => setFullCommand(true)}>{t("bashRemainingLines", { n: rawCommandLines.length - 6 })}</button>}
+			</section>
+			{lines.length > 0 && <header className="bash-detail-heading bash-output-heading"><strong>{t("output")}</strong><div className="bash-detail-controls">{!formatted && <button type="button" aria-pressed={wrapOutput} onClick={() => setWrapOutput(value => !value)}>{t("toolWrap")}</button>}<button type="button" disabled={!output} onClick={event => void copy("output", event.currentTarget.ownerDocument)}><FiCopy aria-hidden="true" />{t(copyError === "output" ? "copyFailed" : copied === "output" ? "copied" : "bashCopyOutput")}</button></div></header>}
+			{formatted && <BashFormattedOutput format={format} all={all} />}
+			{lines.length > 0 && !formatted && <div className={`bash-numbered-output${wrapOutput ? " wrap" : ""}`} data-msg-id={view.result?.id}>{shownLines.map((line, i) => <div key={lineOffset + i} className={`bash-numbered-line${isLikelyErrorLine(line) ? " error" : ""}`}><code><OutputColor text={line} searchNumbers={searchNumbers} /></code></div>)}</div>}
+			{(formatted ? formattedOutputCanExpand(format) : lines.length > 6) && <button type="button" className="bash-group-more" aria-expanded={all} onClick={() => setAll(value => !value)}>{all ? t("collapseCode") : t("expandCode")}</button>}
 			<div className="bash-row-actions">
-				<button type="button" onClick={event => void copy("command", event.currentTarget.ownerDocument)}>{t(copyError === "command" ? "copyFailed" : copied === "command" ? "copied" : "bashCopyCommand")}</button>
-				<button type="button" disabled={!output} onClick={event => void copy("output", event.currentTarget.ownerDocument)}>{t(copyError === "output" ? "copyFailed" : copied === "output" ? "copied" : "bashCopyOutput")}</button>
 				{truncated && view.result?.toolOutputUrl && <ToolOutputDownload url={view.result.toolOutputUrl} />}
 				<button type="button" title={t("bashOpenTerminalHint")} onClick={() => window.dispatchEvent(new CustomEvent("pi-harness:plugin-run-command", { detail: { title: compactCommandLabel(commandLines[0]), command } }))}>{t("bashOpenTerminal")}</button>
 				{state === "run" && onKill && <button type="button" onClick={onKill}>{t("stopBash")}</button>}
@@ -146,4 +161,14 @@ function BashRow({ block, view, onKill, revealed, messageId, attempts, historica
 			{history}
 		</div>}
 	</div>;
+}
+
+/** Small, conservative accents; React escapes every part and preserves the source text. */
+function OutputColor({ text, searchNumbers = false }: { text: string; searchNumbers?: boolean }) {
+	const source = searchNumbers ? searchSourceNumberParts(text) : null;
+	if (source) return <>{source.prefix}<OutputColor text={source.rest.trimStart()} /></>;
+	if (isLikelyErrorLine(text)) return <>{text}</>;
+	const stat = /^(\s*.+?)(\s+\|\s+\d+\s+)([+\-]+)(\s*)$/.exec(text);
+	if (stat) return <>{stat[1]}{stat[2]}{stat[3].split(/(\++|-+)/).filter(Boolean).map((part, i) => <span key={i} className={part[0] === "+" ? "bash-color-add" : "bash-color-delete"}>{part}</span>)}{stat[4]}</>;
+	return <>{text.split(/(\b\d+ insertions?\(\+\)|\b\d+ deletions?\(-\)|\b(?:PASS|passed|SUCCESS)\b)/g).map((part, i) => <span key={i} className={/^\d+ insertions?/.test(part) || /^(PASS|passed|SUCCESS)$/.test(part) ? "bash-color-add" : /^\d+ deletions?/.test(part) ? "bash-color-delete" : undefined}>{part}</span>)}</>;
 }

@@ -161,7 +161,7 @@ assert.equal(await page.locator('.thinking-spinner:visible,.working-spin:visible
 emit({messages:[...conversation,{id:'read-step',role:'assistant',model:'glm-5.3',content:[{type:'toolCall',id:'read-active',name:'read',argumentsText:JSON.stringify({path:'web/src/components/LeftPanel.tsx'})}]}],isStreaming:true,streamingMessage:null});
 await page.locator('.agent-working',{hasText:'正在读取 LeftPanel.tsx…'}).waitFor();
 socket.send(JSON.stringify({type:'tool_status',toolCallId:'read-active',toolName:'read',isError:false,durationMs:300}));
-await page.locator('.read-group-head',{hasText:'完成 · 0.3s'}).waitFor();
+await page.locator('.toolcall-read .toolcall-status',{hasText:'完成 · 0.3s'}).waitFor();
 await page.locator('.agent-working',{hasText:'等待模型'}).waitFor();
 const reads={id:'reads',role:'assistant',model:'glm-5.3',content:[
 {type:'toolCall',id:'read-one',name:'read',argumentsText:JSON.stringify({path:join(cwd,'CONTEXT.md')})},
@@ -173,9 +173,8 @@ await page.locator('.read-group-head',{hasText:'读取 2 个文件'}).waitFor();
 assert.equal(await page.locator('.read-group .toolcall:visible').count(),0);
 await page.mouse.move(0,0);
 await page.locator('.read-group-head').click();
-assert.equal(await page.locator('.read-file-row:visible').count(),2);
-await page.locator('.read-file-head').first().click();
-assert.equal(await page.locator('.read-group .toolcall:visible').count(),1);
+assert.equal(await page.locator('.read-file-row:visible').count(),0);
+assert.equal(await page.locator('.read-group .toolcall:visible').count(),2);
 assert.equal(await page.locator('.toolcall-args pre',{hasText:'{"path"'}).count(),0,'read arguments do not expose JSON');
 assert.equal(await page.locator('.toolcall-frontmatter dt',{hasText:'name'}).count(),1);
 assert.equal(await page.locator('.toolcall-markdown h1',{hasText:'grilling'}).count(),0,'frontmatter does not become a heading');

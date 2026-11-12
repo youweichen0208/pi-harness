@@ -15,6 +15,8 @@ try {
 	writeFileSync(join(repo, 'a.txt'), 'base'); git('add', '.'); git('commit', '-m', 'initial'); git('branch', 'feature');
 	git('worktree', 'add', '-b', 'linked', join(root, 'linked tree'));
 	execFileSync('git', ['init', '--bare', join(root, 'remote.git')], { stdio: 'ignore' });
+	writeFileSync(join(repo, 'Search-Example.txt'), 'search fixture');
+	mkdirSync(join(repo, 'nested')); writeFileSync(join(repo, 'nested', 'other.txt'), 'other fixture');
 	git('remote', 'add', 'origin', join(root, 'remote.git')); git('push', '-u', 'origin', 'main');
 	server = await startIsolatedHarness({ env: { PI_WEB_CWD: repo, PI_WEB_DATA_DIR: join(root, 'data'), PI_CODING_AGENT_DIR: join(root, 'agent') } });
 	browser = await chromium.launch({ executablePath: CHROME_PATH || chromium.executablePath() });
@@ -29,8 +31,32 @@ try {
 			upstream.onMessage(raw => { const msg = JSON.parse(String(raw)); if (msg.type === 'snapshot') msg.state.piConfigured = true; route.send(JSON.stringify(msg)); if (msg.type === "scm_data" && msg.kind === "status" && msg.reqId > 0) route.send(JSON.stringify({ ...msg, reqId: -999 })); });
 		});
 		await page.goto(`http://127.0.0.1:${server.port}`); await page.locator('.view-switch button', { hasText: 'Git' }).click();
-		await page.locator('.scm-worktrees summary').click().catch(async error => { console.error(await page.locator('body').innerText()); throw error; }); assert.equal(await page.locator('.scm-worktrees li').count(), 2);
-		assert.match(await page.locator('.scm-worktrees').innerText(), /linked tree/);
+		await page.locator('.scm-file').first().waitFor();
+		assert.equal(await page.locator('.scm-worktrees').count(), 0);
+		const search = page.locator('.scm-file-search input');
+		await search.fill('SEARCH-example');
+		await page.waitForFunction(() => document.querySelectorAll('.scm-file').length === 1);
+		assert.match(await page.locator('.scm-file-path').innerText(), /Search-Example/);
+		await page.locator('.scm-file').click();
+		await search.fill('no-such-file');
+		await page.getByText(lang === 'zh' ? '没有匹配的更改文件' : 'No matching changed files', {exact:true}).waitFor();
+		assert.match(await page.locator('.scm-diff-header').innerText(), /Search-Example/);
+		await search.press('Escape');
+		await page.waitForFunction(() => document.querySelectorAll('.scm-file').length === 2);
+		await search.fill('nested/');
+		await page.waitForFunction(() => document.querySelectorAll('.scm-file').length === 1);
+		await page.getByRole('button', {name: lang === 'zh' ? '清空搜索' : 'Clear search', exact:true}).click();
+		assert.equal(await search.inputValue(), '');
+		assert(await search.evaluate(el => el === document.activeElement));
+		for (const appearance of ['light', 'dark']) {
+			await page.evaluate(value => document.documentElement.dataset.appearance = value, appearance);
+			await search.focus();
+			assert.equal(await search.evaluate(el => getComputedStyle(el).outlineStyle), 'none', 'input must not add a second focus ring');
+			assert.equal(await page.locator('.scm-file-search').evaluate(el => getComputedStyle(el).outlineStyle), 'solid', 'search container keeps visible focus');
+			await page.locator('.scm-files').screenshot({path: `/tmp/pi-scm-search-${lang}-${appearance}.png`});
+		}
+		await page.evaluate(() => document.documentElement.dataset.appearance = 'light');
+
 		const switchBranch = async branch => { await page.locator('.scm-select').selectOption(branch); await page.getByRole('button', { name: lang === 'zh' ? '切换' : 'Switch', exact: true }).click(); };
 		const done = () => page.locator('.scm-operation strong', { hasText: lang === 'zh' ? '已完成' : 'completed' }).waitFor();
 		await switchBranch('feature'); await done(); await page.locator('.scm-branch-current', { hasText: 'feature' }).waitFor(); assert.equal(git('branch', '--show-current'), 'feature');
@@ -41,6 +67,6 @@ try {
 		const wrongSession = await page.request.post(`http://127.0.0.1:${server.port}/api/scm-operation`, { data: { ...identity, conversationId: 'stale' } }); assert.equal(wrongSession.status(), 409);
 		await switchBranch('linked'); await page.locator('.scm-operation[role="alert"]').waitFor(); assert.equal(git('branch', '--show-current'), 'main');
 		await page.locator('.scm-operation button').click(); await page.locator('.view-switch button[aria-selected="true"]', { hasText: lang === 'zh' ? '终端' : 'Terminal' }).waitFor(); assert.equal(terminalCommands.length, 0, 'recovery never replays the operation');
-		await page.close(); console.log(`PASS ${lang}: worktrees, switch/push/pull in SCM, failed switch, manual recovery, workspace/session admission`);
+		await page.close(); console.log(`PASS ${lang}: hidden worktrees, file search, switch/push/pull in SCM, failed switch, manual recovery, workspace/session admission`);
 	}
 } finally { await browser?.close(); await server?.stop(); rmSync(root, { recursive: true, force: true }); }

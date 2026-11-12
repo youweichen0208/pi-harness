@@ -86,7 +86,6 @@ pi-harness/
 │   ├── session-reload.ts         # 提示词、设置、MCP 与斜杠命令共用的按会话重载队列
 │   ├── settings-service.ts     # 界面偏好与原生资源只读视图（扩展命名见 extension-display.ts）
 │   ├── task-progress.ts        # 从当前轮次工具记录推断任务进度与显式计划
-│   ├── plan/                   # 可选原生 plan 扩展、全局开关与分支快照投影；见 docs/architecture-plan.md
 │   ├── slash-commands.ts       # 斜杠命令（NATIVE_COMMANDS 内置命令拦截执行 + 目录推送）
 │   ├── model-admin.ts          # 模型/服务商配置管理
 │   ├── model-config-merge.ts   # 聊天模型表单合并；保留 typed models 和未知字段
@@ -171,7 +170,6 @@ pi-harness/
 | `RightPanel.tsx` / `TaskProgressPanel.tsx` | 可展开目录树、Git 改动标记、文件预览；当前任务进度由服务端 transcript 推断，右栏只展示执行阶段与 Codemode 记录（不显示请求标题、生命周期状态文字，也没有本轮文件分区），展开阶段按顺序列出全部命令与编辑；布局见 `docs/ui-design.md` |
 | `ChatInput.tsx` | 输入框 + 附件 chips（inline/reference/lines 三色）+ 当前文件 chip（镜像预览面板，发送取编辑器快照）；全窗口拖放目标；followUp 排队/steer 插队；斜杠命令选择器 |
 | `Message.tsx` / `MessageList.tsx` / `WorkingStatus.tsx` | 消息渲染、流式等待标题与静默状态、tool 结果关联；编辑重问、惰性窗口化、问题导航；等待态切换与间距见 `docs/ui-design.md` |
-| `PlanChecklist.tsx` | Web/桌面共用清单卡和变化行；修改计划更新合并、替换隔离或步骤跳转时，读取 `web/src/plan-presentation.ts`、`docs/architecture-plan.md` 和 `docs/ui-design.md` |
 | `ToolCallBlock.tsx` / `BashGroup.tsx` / `EditWriteCard.tsx` / `ThinkingBlock.tsx` | 通用工具卡片、连续命令分组、编辑与写入的逐行 diff 卡片、思考块；修改命令合并/折叠/跳转时读取 `web/src/bash-groups.ts` 和 `docs/ui-design.md` 的 27a 规则；编辑卡片的数据整理在 `web/src/edit-write-presentation.ts`，交互规则见 `docs/ui-design.md` |
 | `ChangesPanel.tsx` / `ChangeSummaryCard.tsx` | 35a 对话改动面板及每轮汇总；修改范围、定位、折叠、搜索或轮次统计前读取 `docs/chat-diff-design.md` 与 `docs/architecture-terminal.md`；本轮共用 `task-outputs.ts`，Git 范围走 `scm_diff`（协议 v41） |
 | `TerminalPanel.tsx` / `TermXterm.tsx` | 终端视图 + xterm 实例桥接 |
@@ -194,7 +192,7 @@ pi-harness/
 
 ## 原生代理边界
 
-pi SDK 和 pi-ai 精确锁定 1.5.0，使用原版 SDK，不应用本项目的 SDK 补丁。会话加载 pi 原生配置、上下文文件、技能、扩展与官方 Codemode/tool_search/MCP。WebUI 不覆盖 bash，不自动续跑或发起额外模型调用；仅两个例外，界面均显示为自动提醒事件、每条用户请求最多 1 次：回复以“写成文本、未执行的工具调用”结尾时，请模型重新调用（见 `docs/architecture-core.md`「未执行的工具调用」）；本轮工具已全部完成但计划仍为 active 时，原生 plan 扩展在 settle 前提醒模型补一次终态调用（见 `docs/architecture-plan.md`）；原生 plan 扩展默认开启（保留已保存的关闭选择），启用时由扩展提供工具规则与条件性历史背景。修改工具、全局开关、压缩恢复或计划投影时读取 `docs/architecture-plan.md`。设置中的提示词支持原生文件编辑与空闲时 reload，技能支持原生发现、筛选和启停（见 docs/architecture-extensions.md）；Extensions 管理原生包声明及资源过滤规则，变更通过新会话或用户重载生效。界面偏好不改变模型上下文。SSH 工作台连接后自动准备本机隔离 pi 会话，复用本机模型、仅启用 SSH 节点工具；节点会话不加载本机上下文、扩展、技能或 MCP。修改启动、消息流、工具或断开清理时读取 `docs/architecture-nodes.md`。
+pi SDK 和 pi-ai 精确锁定 1.5.0，使用原版 SDK，不应用本项目的 SDK 补丁。会话加载 pi 原生配置、上下文文件、技能、扩展与官方 Codemode/tool_search/MCP。WebUI 不覆盖 bash，不自动续跑或发起额外模型调用；仅保留一个例外，界面显示为自动提醒事件、每条用户请求最多 1 次：回复以“写成文本、未执行的工具调用”结尾时，请模型重新调用（见 `docs/architecture-core.md`「未执行的工具调用」）。内置 plan 扩展、开关和自动收尾提醒已移除，不应重新注册。设置中的提示词支持原生文件编辑与空闲时 reload，技能支持原生发现、筛选和启停（见 docs/architecture-extensions.md）；Extensions 管理原生包声明及资源过滤规则，变更通过新会话或用户重载生效。界面偏好不改变模型上下文。SSH 工作台连接后自动准备本机隔离 pi 会话，复用本机模型、仅启用 SSH 节点工具；节点会话不加载本机上下文、扩展、技能或 MCP。修改启动、消息流、工具或断开清理时读取 `docs/architecture-nodes.md`。
 
 ## 4. 核心架构（摘要）
 
@@ -215,7 +213,7 @@ pi SDK 和 pi-ai 精确锁定 1.5.0，使用原版 SDK，不应用本项目的 S
 | **SSH 节点** | `docs/architecture-nodes.md` | 修改 Xshell 7 全量同步、保存密码/主密码复用、本机认证覆盖、SSH config、执行确认或终端引用时阅读；本机隔离 Agent 与 ssh2 节点工具 |
 | **工具结束实时状态** | `docs/architecture-core.md` | tool_status 先于快照落盘，浏览器卡片立即从「执行中」→「已结束」 |
 | **运行静默状态** | `docs/architecture-core.md` | 改模型无响应或长时间工具运行提示时，使用 conversationId 绑定的 agent_silence；恢复响应即清除，重试只适用于本轮未调用工具的纯文本请求 |
-| **当前任务进度** | `docs/architecture-core.md`、`docs/ui-design.md` | 修改任务判定、提纲布局或计划触发时阅读：可选原生 `plan` 管理分支版本化计划，尊重用户／skill 的执行与等待规则；步骤按工具 ID 展开记录，暂停不自动完成，兼容历史 `task_plan`；历史任务列表尚未实现 |
+| **当前任务进度** | `docs/architecture-core.md`、`docs/ui-design.md` | 从本轮工具调用推导执行阶段；内置 plan 已移除，不注入计划工具或提醒 |
 | **扩展 UI 桥** | `docs/architecture-core.md` | setWidget/setStatus/notify/select/confirm/input → 浏览器消息；dialog_response 回传 |
 | **Playground（Python 运行）** | `docs/architecture-playground.md` | 修改代码块运行入口、限制或开关时阅读：宿主自备 Python 3.9+、裸子进程（非沙箱）、首次检测到可用 Python 默认开启，保留已保存开关、HTTP+SSE、结果不持久化、不进模型上下文 |
 

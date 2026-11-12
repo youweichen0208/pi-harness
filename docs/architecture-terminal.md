@@ -78,3 +78,5 @@ macOS 下若服务由 launchd 拉起（`process.ppid === 1`，LaunchAgent/孤儿
 回归：`tests/unit/scm-status.test.ts`、`tests/scm-features-test.mjs`。
 
 SCM 工作树与操作回归：`tests/unit/scm-operations.test.ts` 使用本地仓库及 bare 远端验证切换、推拉、脏文件拒绝、固定参数与工作树解析；`tests/scm-operations-browser-test.mjs` 覆盖中英文、顶栏状态响应交错、原地结果、终端恢复不重跑及工作区／会话拒绝。Windows 工作区外路径继续由 `tests/external-file-preview-browser-test.mjs` 验证，不把另一个工作树路径拼到当前工作区名称后。
+
+SCM 更改列表（2026-11-12）：界面不再展示工作树清单；仓库工作树本身与服务端协议保留。更改列表顶部提供文件名／相对路径搜索，不区分大小写，显示匹配数／总数，支持清空和 Escape；无匹配有独立提示。过滤保留当前 diff，切换工作区清空搜索。搜索不改变提交与暂存的操作范围。

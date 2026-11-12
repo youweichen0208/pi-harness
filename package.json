@@ -1,6 +1,6 @@
 {
   "name": "@youweichen/pi-harness",
-  "version": "1.26.0",
+  "version": "1.27.0",
   "description": "Web chat interface for the pi coding agent, powered by the pi SDK (@earendil-works/pi-coding-agent) — one-command run, Docker/systemd/launchd deployable",
   "license": "MIT",
   "author": {
@@ -52,7 +52,7 @@
     "dev:web": "vite --config web/vite.config.ts",
     "build": "npm run build:web && npm run build:server",
     "build:web": "vite build --config web/vite.config.ts",
-    "build:server": "tsc -p tsconfig.server.json && npm run build:jdbc",
+    "build:server": "node scripts/clean-retired-plan.mjs && tsc -p tsconfig.server.json && npm run build:jdbc",
     "build:jdbc": "node scripts/build-database-jdbc.mjs",
     "typecheck": "tsc -p tsconfig.server.json --noEmit && tsc -p web/tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit",
     "test": "node --test tests/check-design-tokens-test.mjs && npm run check:design && vitest run",

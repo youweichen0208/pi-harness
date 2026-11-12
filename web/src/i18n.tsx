@@ -1449,7 +1449,7 @@ const zh = {
 	taskStepCommands: "命令",
 	taskStepFiles: "文件",
 	taskProgressEmpty: "较长任务的进度会显示在此处。",
-	taskPlanOpen: "本轮已结束 · 计划待继续",
+
 	taskFailed: "任务失败",
 	taskCompletedCount: "已完成 {n}",
 	taskRunningCount: "进行中 {n}",
@@ -1486,22 +1486,14 @@ const zh = {
 	componentInstall: "更新扩展",
 
 	taskTodoUpdate: "任务清单更新",
-	planUnassignedRecords: "本轮执行记录 · 未归入计划",
-	planEnabled: "原生计划工具（服务全局）",
-	planEnabledHint: "默认开启，保留已保存的选择；所有客户端共用。运行中的会话在任务结束后应用。",
-	planPending: "等待会话空闲或恢复可写后应用",
-	planConflict: "当前会话存在第三方同名工具，开关不会修改它。",
-	planMissing: "当前会话未加载原生计划扩展",
-	planReplaced: "计划 {id}（版本 {revision}）已被新计划替换并取消",
-	planStatusChanged: "计划状态：{status}",
-	planRecorded: "计划已记录",
-	planActive: "未结束",
-	planPrevious: "此前未完成计划",
+
+
+
 	executionCompleted: "已完成",
-	planProgressCount: "任务进度 · {completed}/{total} 已完成",
+
 	planExpandDetails: "展开详情",
 	planCollapseDetails: "收起详情",
-	planUpdateDetails: "计划变化",
+
 	todoCounts: "{total} 项 · 已完成 {completed}",
 	todoCreated: "已建立",
 	todoPending: "待执行",
@@ -1517,8 +1509,7 @@ const zh = {
 	todoItemCompleted: "第 {n} 项完成",
 	todoItemDeleted: "第 {n} 项已移除",
 	taskWaitingContinue: "等待继续",
-	taskPlanSource: "任务清单",
-	taskPlanSourceHint: "按 agent 创建的清单跟踪步骤",
+
 	taskObservedSource: "执行记录 · 未创建计划",
 	taskObservedSourceHint: "由实际工具调用归纳，不代表 agent 已创建任务清单",
 	taskBlockedBy: "等待步骤 {steps} 完成",
@@ -1548,11 +1539,8 @@ const zh = {
 	taskArtifactRun: "运行",
 	taskLines: "行",
 	taskExplicitPlan: "pi 计划",
-	taskPlanSteps: "步",
-	taskPlanPosition: "第 {current} / {total} 步",
-	taskPlanChanged: "计划已调整",
-	taskPlanAdded: "新增",
-	taskPlanCard: "计划",
+
+
 	taskUnderSecond: "<1 秒",
 	taskReadCount: "读取 {n}",
 	taskWriteCount: "写入 {n}",
@@ -1592,6 +1580,10 @@ const zh = {
 	readVerb: "读取",
 	modelReadOnly: "文件内容 · 仅供模型读取",
 	readRaw: "原文",
+	bashRawOutput: "原始输出",
+	bashExecutionLog: "执行日志",
+	bashCodeMatches: "代码匹配",
+	bashAutoFormat: "自动排版",
 	skillLabel: "技能",
 	bashSteps: "步骤",
 	bashRaw: "原始",
@@ -2253,7 +2245,7 @@ const zh = {
 	toolReminderEvent: "已自动提醒 pi 用工具调用重新发起",
 	delegateNotificationFailed: "扩展委派失败",
 	delegateNotificationCompleted: "扩展委派完成",
-	planReminderEvent: "已自动提醒 pi 更新计划的收尾状态",
+
 	toolRecoverySwitch: "换个模型",
 	toolRecoveryRaw: "查看原始输出",
 	toolRecoveryRawHide: "收起原始输出",
@@ -2325,6 +2317,9 @@ const zh = {
 	scmCommitTip: "在终端中执行 git add -A && git commit -m \"…\"（提交全部更改，含未跟踪）",
 	scmCommitPlaceholder: "输入提交信息…",
 	scmChanges: "更改",
+	scmSearchFiles: "搜索更改文件或路径…",
+	scmClearSearch: "清空搜索",
+	scmNoMatchingFiles: "没有匹配的更改文件",
 	scmHistory: "提交树",
 	scmCommitDetail: "提交详情",
 	scmSelectCommitHint: "点击左侧提交查看详情",
@@ -3932,7 +3927,7 @@ const en: Record<keyof typeof zh, string> = {
 	taskStepCommands: "Commands",
 	taskStepFiles: "Files",
 	taskProgressEmpty: "Progress for longer tasks will appear here.",
-	taskPlanOpen: "Turn ended · plan to continue",
+
 	taskFailed: "Task failed",
 	taskCompletedCount: "{n} completed",
 	taskRunningCount: "{n} running",
@@ -3969,22 +3964,14 @@ const en: Record<keyof typeof zh, string> = {
 	componentInstall: "Update extension",
 
 	taskTodoUpdate: "Task list update",
-	planUnassignedRecords: "This turn’s execution records · outside the plan",
-	planEnabled: "Native plan tool (whole service)",
-	planEnabledHint: "On by default; saved preferences are preserved. Shared by all clients; running sessions apply changes after settling.",
-	planPending: "Applies when the session is idle and writable",
-	planConflict: "A third-party plan tool is present. This switch does not change it.",
-	planMissing: "The native plan extension is unavailable in this session",
-	planReplaced: "Plan {id} (revision {revision}) was replaced and cancelled",
-	planStatusChanged: "Plan status: {status}",
-	planRecorded: "Plan recorded",
-	planActive: "Active",
-	planPrevious: "Previous unfinished plan",
+
+
+
 	executionCompleted: "Completed",
-	planProgressCount: "Progress · {completed}/{total} completed",
+
 	planExpandDetails: "Expand details",
 	planCollapseDetails: "Collapse details",
-	planUpdateDetails: "Plan changes",
+
 	todoCounts: "{total} items · {completed} completed",
 	todoCreated: "Created",
 	todoPending: "Pending",
@@ -4000,8 +3987,7 @@ const en: Record<keyof typeof zh, string> = {
 	todoItemCompleted: "Item {n} completed",
 	todoItemDeleted: "Item {n} removed",
 	taskWaitingContinue: "Waiting to continue",
-	taskPlanSource: "Task checklist",
-	taskPlanSourceHint: "Steps tracked from the checklist created by the agent",
+
 	taskObservedSource: "Activity · No plan created",
 	taskObservedSourceHint: "Summarized from tool calls; the agent has not created a task checklist",
 	taskBlockedBy: "Waiting for steps {steps}",
@@ -4031,11 +4017,8 @@ const en: Record<keyof typeof zh, string> = {
 	taskArtifactRun: "Run",
 	taskLines: "lines",
 	taskExplicitPlan: "Pi plan",
-	taskPlanSteps: "steps",
-	taskPlanPosition: "Step {current} / {total}",
-	taskPlanChanged: "Plan updated",
-	taskPlanAdded: "Added",
-	taskPlanCard: "Plan",
+
+
 	taskUnderSecond: "<1s",
 	taskReadCount: "{n} reads",
 	taskWriteCount: "{n} writes",
@@ -4075,6 +4058,10 @@ const en: Record<keyof typeof zh, string> = {
 	readVerb: "Read",
 	modelReadOnly: "File content · read by model only",
 	readRaw: "Source",
+	bashRawOutput: "Raw output",
+	bashExecutionLog: "Execution log",
+	bashCodeMatches: "Code matches",
+	bashAutoFormat: "Formatted view",
 	skillLabel: "Skill",
 	bashSteps: "Steps",
 	bashRaw: "Raw",
@@ -4744,7 +4731,7 @@ const en: Record<keyof typeof zh, string> = {
 	toolReminderEvent: "Asked pi to retry with a real tool call",
 	delegateNotificationFailed: "Extension delegation failed",
 	delegateNotificationCompleted: "Extension delegation completed",
-	planReminderEvent: "Asked pi to record the plan's final status",
+
 	toolRecoverySwitch: "Switch model",
 	toolRecoveryRaw: "View original output",
 	toolRecoveryRawHide: "Hide original output",
@@ -4818,6 +4805,9 @@ const en: Record<keyof typeof zh, string> = {
 		"Runs git add -A && git commit -m \"…\" in the terminal (commits all changes incl. untracked)",
 	scmCommitPlaceholder: "Type a commit message…",
 	scmChanges: "Changes",
+	scmSearchFiles: "Search changed files or paths…",
+	scmClearSearch: "Clear search",
+	scmNoMatchingFiles: "No matching changed files",
 	scmHistory: "Commit tree",
 	scmCommitDetail: "Commit details",
 	scmSelectCommitHint: "Click a commit on the left to view its details",
@@ -5070,7 +5060,7 @@ const chatStatusKeys = new Set<keyof typeof en>([
 	"thinkingLive", "thinkingFor", "thinkingDone", "thinkingNow", "thinkingUnrecorded",
 	"processThought", "processThoughtUnmeasured", "processRunning", "processFailed", "processAllPassed",
 	"done", "running", "error", "cancelled", "executionCompleted", "toolQueued", "toolNotExecuted", "toolDoneWaitingModel", "waitingOutput",
-	"bashRunning", "bashPartial", "bashFailed", "working", "planActive", "todoPending", "taskCancelled",
+	"bashRunning", "bashPartial", "bashFailed", "working", "todoPending", "taskCancelled",
 	"subagentStopping", "subagentCancelled", "cmCancelled", "cmUnfinished", "cmRecordsPartial",
 	"waitWorking", "waitUnderstanding", "waitResults", "waitFile", "waitThinking", "waitTests", "waitBuild", "waitSteer", "waitSeconds", "waitMinutes",
 ]);

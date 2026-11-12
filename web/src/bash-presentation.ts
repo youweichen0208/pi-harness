@@ -19,7 +19,7 @@ export function numberedOutputLine(raw: string, index: number, searchOutput: boo
 /** The SDK flattens stdout and stderr into one string, so this is a visual
  * hint for recognizable failures, not a claim about the original stream. */
 export function isLikelyErrorLine(line: string): boolean {
-	return /^(?:stderr\b|fatal:|error:|[^:\n]+:\s.*(?:No such file or directory|Permission denied|command not found|not found|cannot access|failed|error))/i.test(line.trim());
+	return /^(?:stderr\b|fatal:|error:|[\w.]*Error(?:\s*\[[^\]]+\])?:|[\w.]*Exception:|Traceback \(most recent call last\):|(?:code:\s*[\'\"])?ERR_[A-Z_]+\b|[^:\n]+:\s.*(?:No such file or directory|Permission denied|command not found|not found|cannot access|failed|error))/i.test(line.trim());
 }
 
 export function selectVisibleOutputLines(lines: string[], expanded: boolean): number[] {
@@ -142,4 +142,41 @@ export function elapsedLabel(seconds: number): string {
 	if (total < 60) return `${total}s`;
 	if (total < 3600) return `${Math.floor(total / 60)}m ${total % 60}s`;
 	return `${Math.floor(total / 3600)}h ${Math.floor(total % 3600 / 60)}m`;
+}
+
+/** Restrict source-number accents to a search, optionally after cd and before head/tail. */
+export function hasSearchSourceNumbers(command: string): boolean {
+	const source = commandPresentation(command, "/").command;
+	const unquoted = source.replace(/"(?:\\.|[^"\\])*"|'[^']*'/g, "ARG");
+	return /^(?:rg|grep)\s+(?:(?:-[A-Za-z]*n[A-Za-z]*|--line-number)(?:\s|$))/.test(unquoted)
+		&& !/[;&`\n]/.test(unquoted)
+		&& unquoted.split("|").slice(1).every(part => /^\s*(?:head|tail)(?:\s+-\d+|\s+-n\s+\d+)?\s*$/.test(part));
+}
+
+export function searchSourceNumberParts(line: string): { prefix: string; number: string; rest: string } | null {
+	const match = /^(.*?:)?(\d+:)(.*)$/.exec(line);
+	return match ? { prefix: match[1] ?? "", number: match[2], rest: match[3] } : null;
+}
+
+/** Numbered grep in a pipeline labels input-log lines, not source-file locations. */
+export function hasNumberedPipelineOutput(command: string): boolean {
+	const source = commandPresentation(command, "/").command;
+	if (/[\n`]|\$\(/.test(source)) return false;
+	let quote = "";
+	let escaped = false;
+	const pipes: number[] = [];
+	for (let i = 0; i < source.length; i++) {
+		const char = source[i];
+		if (escaped) { escaped = false; continue; }
+		if (char === "\\" && quote !== "'") { escaped = true; continue; }
+		if (quote) { if (char === quote) quote = ""; continue; }
+		if (char === '"' || char === "'") { quote = char; continue; }
+		if (char === ";" || char === "&" && source[i - 1] !== ">") return false;
+		if (char === "|") {
+			if (source[i + 1] === "|" || source[i - 1] === "|") return false;
+			pipes.push(i);
+		}
+	}
+	if (quote) return false;
+	return pipes.some(index => hasSearchSourceNumbers(source.slice(index + 1).trim()));
 }

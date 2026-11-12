@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import type { UiMessage } from "../../server/protocol.js";
 import { conversationFileEntries, conversationFiles, mentionedHiddenDirs } from "../../web/src/conversation-files.js";
-import { numberedOutputLine, selectVisibleOutputLines, displayBashCommand, isLikelyErrorLine, isSearchCommand, searchOutputKind } from "../../web/src/bash-presentation.js";
+import { hasNumberedPipelineOutput, hasSearchSourceNumbers, searchSourceNumberParts, numberedOutputLine, selectVisibleOutputLines, displayBashCommand, isLikelyErrorLine, isSearchCommand, searchOutputKind } from "../../web/src/bash-presentation.js";
 import { existingConversationFiles } from "../../server/files-service.js";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -76,9 +76,33 @@ test("bash presentation keeps copy text intact while shortening the displayed ho
 	expect(displayBashCommand("ls /Users/alice/projects/app", "/Users/alice/projects/app")).toBe("ls ~/projects/app");
 	expect(isLikelyErrorLine("ls: missing: No such file or directory")).toBe(true);
 	expect(isLikelyErrorLine("total 104")).toBe(false);
+	expect(isLikelyErrorLine("AssertionError [ERR_ASSERTION]: expected true")).toBe(true);
+	expect(isLikelyErrorLine("TypeError: cannot read properties")).toBe(true);
+	expect(isLikelyErrorLine("  code: 'ERR_ASSERTION',")).toBe(true);
+	expect(isLikelyErrorLine("  at file:///tmp/test.mjs:91:2")).toBe(false);
+	expect(isLikelyErrorLine("0 errors, 0 warnings")).toBe(false);
 });
 
 test("hidden folders named by a command remain discoverable in the tree", () => {
 	const messages = [{ id: "1", role: "assistant", content: [{ type: "toolCall", id: "t1", name: "bash", argumentsText: JSON.stringify({ command: "ls -la .assets .scratch; echo done" }) }] }] as UiMessage[];
 	expect([...mentionedHiddenDirs(messages)]).toEqual([".assets", ".scratch"]);
+});
+
+test("source-number accents only apply to explicit numbered searches", () => {
+	expect(hasSearchSourceNumbers('cd /tmp && rg -n "foo|bar" file.ts | head -20')).toBe(true);
+	expect(hasSearchSourceNumbers('grep -rn pattern src')).toBe(true);
+	expect(hasSearchSourceNumbers('rg pattern file.ts')).toBe(false);
+	expect(hasSearchSourceNumbers('echo "12:34: log"; rg -n pattern file.ts')).toBe(false);
+	expect(hasSearchSourceNumbers('rg -n pattern file.ts | sed s/x/y/')).toBe(false);
+	expect(searchSourceNumberParts('123:    const x = 1;')).toEqual({ prefix: '', number: '123:', rest: '    const x = 1;' });
+	expect(searchSourceNumberParts('src/file.ts:16:import x')).toEqual({ prefix: 'src/file.ts:', number: '16:', rest: 'import x' });
+	expect(searchSourceNumberParts('ordinary output')).toBeNull();
+});
+
+test("numbered pipeline filters are recognized without changing ordinary numeric logs", () => {
+	expect(hasNumberedPipelineOutput('cd /tmp && npm test 2>&1 | rg -n "Test Files|Tests |check:design" | head -3')).toBe(true);
+	expect(hasNumberedPipelineOutput('npm test | grep -n passed')).toBe(true);
+	expect(hasNumberedPipelineOutput('npm test | rg passed')).toBe(false);
+	expect(hasNumberedPipelineOutput('echo "foo | rg -n bar"')).toBe(false);
+	expect(hasNumberedPipelineOutput('npm test | rg -n passed; echo 3:plain')).toBe(false);
 });

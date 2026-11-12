@@ -49,13 +49,11 @@ try {
 		});
 	});
 	await page.goto(`http://localhost:${port}`);
-	await page.locator('.change-summary').waitFor();
-	assert.equal(await page.locator('.change-summary').count() > 0, true);
-	// A settled edit keeps its card in the stream as one folded row. It used to be
-	// filtered out as soon as `toolResults` had it, which erased the card right
-	// after `tool_status` (which arrives first) turned its dot green.
+	await page.locator('.change-summary:not(.change-summary-inline)').waitFor();
+	assert.equal(await page.locator('.change-summary:not(.change-summary-inline)').count() > 0, true);
+	// Settled edits retain an inline diff; the turn summary opens the separate panel.
 	assert.equal(await page.locator('.change-card.done').count(), 1, 'a settled edit stays visible');
-	assert.equal(await page.locator('.change-card.done .change-card-body').count(), 0, 'a settled edit folds to one row');
+	assert.equal(await page.locator('.change-card.done .change-card-body').count(), 1, 'a settled edit shows its diff');
 	assert.equal(await page.locator('.bash-group.historical-step').count(),1);
 	assert.equal(await page.locator('.process-group-head, .bash-group-head').count(), 0, 'a single successful command does not add a redundant group toggle');
 	assert.match(await page.locator('.command-turn-summary').innerText(), /本轮共 1 commands/, 'the turn summary includes the command count');
@@ -68,7 +66,7 @@ try {
 		await page.evaluate(value => document.documentElement.dataset.appearance = value, appearance);
 		for (const width of [1440, 1000, 390]) {
 			await page.setViewportSize({ width, height: 1000 });
-			assert(await page.locator('.change-summary-file').isVisible());
+			assert(await page.locator('.change-summary:not(.change-summary-inline) .change-summary-file').isVisible());
 			assert(await page.locator('.inputbox textarea').isVisible());
 			assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'no horizontal page overflow');
 			await sleep(350);
@@ -85,19 +83,19 @@ try {
 	}
 	await page.evaluate(() => { document.documentElement.dataset.theme = 'warm'; document.documentElement.dataset.appearance = 'light'; });
 	await page.setViewportSize({ width: 1440, height: 1000 });
-	await page.locator('.change-summary-file').click();
-	await page.locator('.changes-line mark').first().waitFor();
-	assert.equal(await page.locator('.change-summary-file.selected').count(),1);
+	await page.locator('.change-summary:not(.change-summary-inline) .change-summary-file').click();
+	await page.locator('.changes-panel .changes-line mark').first().waitFor();
+	assert.equal(await page.locator('.change-summary:not(.change-summary-inline) .change-summary-file.selected').count(),1);
 	await page.locator('.app.left-collapsed').waitFor();
 	let box=await page.locator('.changes-panel').boundingBox(); assert.equal(box.x,656); assert.equal(box.width,784);
 	await page.locator('.changes-panel').getByRole('button',{name:'文件列表',exact:true}).click();
 	assert.equal(await page.locator('.changes-files .selected').count(),1);
 	await page.getByRole('button',{name:'整个分支',exact:true}).click();
-	await page.locator('.changes-gap').first().waitFor();
-	assert.equal(await page.locator('.changes-line.add').count(),2);
-	await page.locator('.changes-gap').first().click();
-	assert((await page.locator('.changes-line.context').count())>10);
-	while (await page.locator('.changes-gap').count()) await page.locator('.changes-gap').first().click();
+	await page.locator('.changes-panel .changes-gap').first().waitFor();
+	assert.equal(await page.locator('.changes-panel .changes-line.add').count(),2);
+	await page.locator('.changes-panel .changes-gap').first().click();
+	assert((await page.locator('.changes-panel .changes-line.context').count())>10);
+	while (await page.locator('.changes-panel .changes-gap').count()) await page.locator('.changes-panel .changes-gap').first().click();
 	await page.locator('.changes-diffs').evaluate(el=>el.scrollTop=0);
 	await page.locator('.changes-panel').focus(); await page.keyboard.press('j'); await page.keyboard.press('j');
 	const afterNext = await page.locator('.changes-diffs').evaluate(el=>el.scrollTop); assert(afterNext > 0);
@@ -111,7 +109,7 @@ try {
 	await page.keyboard.press('Escape');
 	assert(await page.locator('.inputbox textarea').evaluate(el => el === document.activeElement));
 	await page.getByRole('button',{name:'本轮',exact:true}).click();
-	await page.locator('.changes-line mark').first().waitFor();
+	await page.locator('.changes-panel .changes-line mark').first().waitFor();
 	await page.screenshot({path:'/tmp/pi-changes-35a-wide.png'});
 	await page.setViewportSize({width:1100,height:850});
 	box=await page.locator('.changes-panel').boundingBox(); assert.equal(box.width,720); assert.equal(box.x,380);
@@ -141,7 +139,7 @@ try {
 	assert.equal(await page.locator('[data-change-file="large.txt"] .changes-line').count(),0);
 	await page.locator('[data-change-file="large.txt"] .changes-gap').click();
 	assert.equal(await page.locator('[data-change-file="large.txt"] .changes-line').count(),401);
-	assert.equal(await page.locator('.change-summary').count(),0);
+	assert.equal(await page.locator('.change-summary:not(.change-summary-inline)').count(),0, 'turn summary stays hidden while streaming; inline tool diffs remain available');
 	// Preferences are isolated per conversation and restored when returning.
 	const original = snapshot.state.conversationId;
 	upstreamSocket.send(JSON.stringify({type:'terminal_create',terminalId:'changes-fixture',cwd,cols:80,rows:24,conversationId:original}));

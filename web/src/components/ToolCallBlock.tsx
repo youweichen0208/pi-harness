@@ -81,6 +81,7 @@ export function ReadGroup({ items, wrap }: { items: { block: UiToolCallBlock; vi
 	const completed = items.every(({ view }) => view.result || view.status);
 	const failed = items.some(({ view }) => view.result?.isError || view.status?.isError);
 	const duration = items.reduce((sum, { view }) => sum + (toolDuration(view) ?? 0), 0);
+	if (items.length === 1) return <ToolCallBlock block={items[0].block} view={items[0].view} wrap={wrap} />;
 	return <div className={`read-group ${failed ? "err" : pending ? "run" : completed ? "ok" : "idle"}`}>
 		<button type="button" className="read-group-head" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
 			<span aria-hidden="true">{open ? "⌄" : "›"}</span><UiIcon name="file" />
@@ -88,17 +89,8 @@ export function ReadGroup({ items, wrap }: { items: { block: UiToolCallBlock; vi
 			<span className="read-group-paths" title={paths.join("\n")}>{paths.map((path) => path.split("/").slice(-2).join("/")).join(", ")}</span>
 			<span className="read-group-status">{failed ? t("error") : pending ? t("running") : skipped ? t("toolNotExecuted") : completed ? `${t("done")}${duration ? ` · ${formatDuration(duration)}` : ""}` : t("toolQueued")}</span>
 		</button>
-		{open && <div className="read-group-items">{items.map(({ block, view }) => <ReadFileRow key={block.id} block={block} view={view} wrap={wrap} />)}</div>}
+		{open && <div className="read-group-items">{items.map(({ block, view }) => <ToolCallBlock key={block.id} block={block} view={view} wrap={wrap} />)}</div>}
 	</div>;
-}
-
-function ReadFileRow({ block, view, wrap }: { block: UiToolCallBlock; view: ToolView; wrap?: boolean }) {
-	const t = useChatT();
-	const [open, setOpen] = useState(false);
-	const path = readPath(block.argumentsText) ?? block.name;
-	const content = view.result?.content.map((part) => part.type === "text" && typeof part.text === "string" ? part.text : "").join("") ?? view.liveOutput ?? "";
-	const count = content ? content.replace(/\r\n/g, "\n").replace(/\n$/, "").split("\n").length : 0;
-	return <div className="read-file-row" onMouseEnter={() => notifyToolHover(block.id)} onMouseLeave={() => notifyToolHover(null)}><button type="button" className="read-file-head" title={path} aria-expanded={open} onClick={() => setOpen((value) => !value)}><FiChevronRight className={open ? "open" : ""} /><span>{t("readVerb")}</span><code>{displayReadPath(path)}</code>{count > 0 && <span>{t("toolLineCount", { n: count })}</span>}<i className={view.result?.isError || view.status?.isError ? "error" : view.result || view.status ? "done" : "pending"} /></button>{open && <ToolCallBlock block={block} view={view} wrap={wrap} />}</div>;
 }
 
 export function GrepSummary({ block, view, wrap }: { block: UiToolCallBlock; view: ToolView; wrap?: boolean }) {
@@ -412,6 +404,8 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true, rawSubagen
 	const output = view.result
 		? view.result.content.map((b) => (b.type === "text" ? b.text : "")).join("")
 		: (view.liveOutput ?? "");
+	const resultImages = view.result?.content.flatMap(part => part.type === "image" && "dataUrl" in part && typeof part.dataUrl === "string" ? [part.dataUrl] : []) ?? [];
+	const imageReadNotice = block.name === "read" && resultImages.length > 0 && !isError && /^Read image file \[image\/[^\]\r\n]+\](?:\s*\[Image: original \d+x\d+, displayed at \d+x\d+\. Multiply coordinates by [\d.]+ to map to original image\.\])?$/.test(output.trim());
 	const nativeExitCode = (view.result?.details as { exitCode?: number } | undefined)?.exitCode ?? view.status?.exitCode;
 	const bashRun = block.name === "bash" ? parseLabeledBashSteps(block.argumentsText, output, done || waitingModel, isError, nativeExitCode) : null;
 	const bashDiagnostics = block.name === "bash" && isError && !bashRun ? parseBashDiagnostics(output) : [];
@@ -479,7 +473,7 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true, rawSubagen
 	const bodyContent = (
 		<>
 
-			{block.argumentsText && !subagent && (!compactBash || fullCommand || zoomed) && (
+			{block.argumentsText && (!targetPath || zoomed) && !subagent && (!compactBash || fullCommand || zoomed) && (
 				<div className="toolcall-args">
 					{generic ? <ToolArguments text={block.argumentsText} /> : targetPath ? (
 						<button type="button" className="toolcall-read-path" title={targetPath} onClick={() => setZoomed(true)}>{displayReadPath(targetPath)}</button>
@@ -507,10 +501,13 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true, rawSubagen
 				</details>)}
 				{view.result && !nestedCalls.complete && <p>{t("nestedToolCallsIncomplete")}</p>}
 			</details>}
-			{!generic && view.result?.toolOutputUrl && <ToolOutputDownload url={view.result.toolOutputUrl} />}
-			{view.result?.content.flatMap(block => block.type === "image" && "dataUrl" in block && typeof block.dataUrl === "string" ? [block.dataUrl] : []).map((url, index) => <div key={index}><a href={url} target="_blank" rel="noreferrer" className="tool-result-image"><img src={url} alt={t("toolResultImage")} loading="lazy" /></a><a href={url} download={`generated-${index}.png`}>{t("downloadImage")}</a></div>)}
+			{!generic && block.name !== "read" && view.result?.toolOutputUrl && <ToolOutputDownload url={view.result.toolOutputUrl} />}
+			{resultImages.map((url, index) => <div className="tool-image-preview" key={index}>
+				<a href={url} target="_blank" rel="noreferrer" className="tool-result-image" aria-label={t("zoomCode")}><img src={url} alt={targetPath || t("toolResultImage")} loading="lazy" /></a>
+				<div className="tool-image-actions"><a href={url} download={`generated-${index}.png`}>{t("downloadImage")}</a></div>
+			</div>)}
 			{structured && output && <ToolStructuredOutput key={block.id} output={output} url={view.result?.toolOutputUrl} error={isError} truncated={!!view.result?.content.some(part => part.type === "text" && part.truncated)} />}
-			{output.length > 0 && !subagent && !structured && (block.name === "bash" ? bashRun && bashView === "steps" ? <BashSteps run={bashRun} wrap={lineWrap} /> : bashDiagnostics.length > 0 ? <BashFailure diagnostics={bashDiagnostics} output={output} wrap={lineWrap} /> : <BashOutput output={output} wrap={lineWrap} cwd={differentCommandDirectory(block.argumentsText, cwd) ?? ""} searchOutput={searchOutputKind(block.argumentsText)} command={commandDisplay?.command ?? ""} /> : (
+			{output.length > 0 && !imageReadNotice && !subagent && !structured && (block.name === "bash" ? bashRun && bashView === "steps" ? <BashSteps run={bashRun} wrap={lineWrap} /> : bashDiagnostics.length > 0 ? <BashFailure diagnostics={bashDiagnostics} output={output} wrap={lineWrap} /> : <BashOutput output={output} wrap={lineWrap} cwd={differentCommandDirectory(block.argumentsText, cwd) ?? ""} searchOutput={searchOutputKind(block.argumentsText)} command={commandDisplay?.command ?? ""} /> : (
 				<div className="toolcall-output">
 					<div className="toolcall-output-label">
 						{isError ? t("errorOutput") : block.name === "read" ? t("modelReadOnly") : t("output")}
@@ -555,7 +552,7 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true, rawSubagen
 	);
 
 	return (
-		<div className={`toolcall ${generic ? "toolcall-generic" : ""} ${structured ? "toolcall-structured" : ""} ${statusClass} ${block.name === "bash" ? "toolcall-bash" : ""} ${bashRun ? "toolcall-steps" : ""} ${bashDiagnostics.length ? "toolcall-diagnostics" : ""} ${subagent ? "toolcall-subagents" : ""} ${quietSubagent ? "toolcall-subagent-quiet" : ""}`} onMouseEnter={() => notifyToolHover(block.id)} onMouseLeave={() => notifyToolHover(null)}>
+		<div className={`toolcall ${block.name === "read" ? "toolcall-read" : ""} ${generic ? "toolcall-generic" : ""} ${structured ? "toolcall-structured" : ""} ${statusClass} ${block.name === "bash" ? "toolcall-bash" : ""} ${bashRun ? "toolcall-steps" : ""} ${bashDiagnostics.length ? "toolcall-diagnostics" : ""} ${subagent ? "toolcall-subagents" : ""} ${quietSubagent ? "toolcall-subagent-quiet" : ""}`} onMouseEnter={() => notifyToolHover(block.id)} onMouseLeave={() => notifyToolHover(null)}>
 			{commandDisplay ? <BashCommandHeader command={commandDisplay.command} original={command!} directory={commandDisplay.directory ?? differentCommandDirectory(block.argumentsText, cwd)} running={isBashRunning} elapsed={elapsed} status={statusLabel} full={fullCommand} onFull={() => { setFullCommand((value) => !value); setOpen(true); }} onKill={onKillBash}>
 				{bashRun && <span className="bash-view-switch"><button type="button" className={bashView === "steps" ? "active" : ""} onClick={() => setBashView("steps")}>{t("bashSteps")}</button><button type="button" className={bashView === "raw" ? "active" : ""} onClick={() => setBashView("raw")}>{t("bashRaw")}</button></span>}
 				<button type="button" className="toolcall-wrap" aria-pressed={lineWrap} onClick={() => setLineWrap((value) => !value)}>{t("toolWrap")}</button>
@@ -566,7 +563,7 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true, rawSubagen
 			</BashCommandHeader> : (
 			<div className="toolcall-head">
 				<span className="toolcall-icon">{block.name === "subagent" ? <FiGitBranch aria-hidden="true" /> : generic ? <FiTool aria-hidden="true" /> : toolIcon(block.name)}</span>
-				{compactBash ? <code className="bash-head-command" title={command ?? ""}>$ {displayBashCommand(command!, cwd)}</code> : generic ? <button type="button" className="toolcall-name toolcall-name-toggle" title={block.name} aria-expanded={open} onClick={() => setOpen(v => !v)}><span>{block.name}</span>{action && <small className="toolcall-action" title={action}>action: {action}</small>}</button> : <span className="toolcall-name">{block.name}</span>}
+				{compactBash ? <code className="bash-head-command" title={command ?? ""}>$ {displayBashCommand(command!, cwd)}</code> : generic ? <button type="button" className="toolcall-name toolcall-name-toggle" title={block.name} aria-expanded={open} onClick={() => setOpen(v => !v)}><span>{block.name}</span>{action && <small className="toolcall-action" title={action}>action: {action}</small>}</button> : targetPath ? <span className="toolcall-read-title"><span>{t("readVerb")}</span><code title={targetPath}>{displayReadPath(targetPath)}</code></span> : <span className="toolcall-name">{block.name}</span>}
 				{compactBash && output && <span className="bash-head-count">{t("toolLineCount", { n: outputLines.length })}</span>}
 				<span className="toolcall-status">
 					{quietSubagent && (statusClass === "ok" ? <FiCheck aria-hidden="true" /> : statusClass === "run" ? <i className="thinking-spinner" aria-hidden="true" /> : statusClass === "err" ? <FiX aria-hidden="true" /> : null)}

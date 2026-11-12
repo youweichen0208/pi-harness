@@ -6,6 +6,7 @@ import { WorkspacePathContext } from "../workspace-context";
 import { outputPath } from "../task-outputs";
 import { editWriteChange, type ChangeLine, type EditWriteChange } from "../edit-write-presentation";
 import { highlightLine, langFromPath } from "../hljs-lite";
+import { ChangeSummaryCard } from "./ChangeSummaryCard";
 import type { ToolView } from "./ToolCallBlock";
 
 type Item = { block: UiToolCallBlock; view: ToolView };
@@ -26,9 +27,14 @@ function Lines({ lines, path }: { lines: ChangeLine[]; path: string }) {
 	return <div className="change-lines">{lines.map((line, index) => <div key={index} className={`change-line ${line.marker === "+" ? "add" : line.marker === "-" ? "del" : "context"}`}><span className="change-old">{line.newLine ?? line.oldLine ?? ""}</span><span className="change-marker">{line.marker === "-" ? "−" : line.marker}</span><code className="hljs" dangerouslySetInnerHTML={{ __html: highlightLine(line.text, lang) || "&#8203;" }} /></div>)}</div>;
 }
 
-function ChangeBody({ change, state }: { change: EditWriteChange; state: string }) {
+function ChangeBody({ change, state, path, toolId }: { change: EditWriteChange; state: string; path: string; toolId: string }) {
 	const t = useChatT();
 	const [expanded, setExpanded] = useState(false);
+	if (!change.error && !change.empty && state === "done") return <div className="change-card-body"><ChangeSummaryCard inlineDiff files={[{
+		path, added: change.added, removed: change.removed, counted: true,
+		lines: change.hunks.flatMap(hunk => hunk.lines), unlocated: change.fromArguments,
+		truncated: change.diffTruncated, toolIds: [toolId],
+	}]} /></div>;
 	const allLines = change.hunks.reduce((sum, hunk) => sum + hunk.lines.length, 0);
 	let remaining = expanded ? Infinity : 12;
 	// 头部已经显示 `+N −M`，hunk 头已经显示行号／函数名，diff 行本身也带红绿和
@@ -50,14 +56,10 @@ function ChangeBody({ change, state }: { change: EditWriteChange; state: string 
 export function EditWriteCard({ item, compact = false, retried = false, live = false }: { item: Item; compact?: boolean; retried?: boolean; live?: boolean }) {
 	const t = useChatT();
 	const change = useMemo(() => editWriteChange(item.block, item.view.result), [item.block, item.view.result]);
-	// 29a: the row opens on click. A live call stays open while its diff streams.
-	// A settled edit now stays open too while the reader is still on that part of
-	// the turn, and folds once the reply has moved past it — otherwise the green
-	// dot appeared and the diff was yanked away in the same breath. A failure, an
-	// explicit jump or an explicit toggle always wins over the automatic fold.
+	// Show the change directly, including historical edits; an explicit collapse wins.
 	const [manual, setManual] = useState<boolean | null>(null);
 	const running = !retried && status(item) === "running";
-	const open = manual ?? ((running || live) && !change?.empty);
+	const open = manual ?? (!change?.empty && (running || live || status(item) === "done"));
 	useEffect(() => { if (running) setManual(null); }, [running]);
 	useEffect(() => {
 		const onJump = (event: Event) => {
@@ -66,10 +68,10 @@ export function EditWriteCard({ item, compact = false, retried = false, live = f
 		window.addEventListener("pi:jump-tool", onJump);
 		return () => window.removeEventListener("pi:jump-tool", onJump);
 	}, [item.block.id]);
+	const cwd = useContext(WorkspacePathContext);
 	if (!change) return null;
 	const state = retried ? "retried" : status(item);
 	const noDiff = change.kind === "edit" && change.empty && !change.error && state === "done";
-	const cwd = useContext(WorkspacePathContext);
 	// 卡片标题栏只给工作区内的相对路径：一张 964px 宽的卡片里，
 	// `/Users/youweichen/projects/pi-web-ui/` 这 35 个字符会把真正要看的那段
 	// （`docs/ui-design.md`）挤到后面去。完整路径保留在悬停说明里，打开文件、
@@ -78,15 +80,13 @@ export function EditWriteCard({ item, compact = false, retried = false, live = f
 	// 末尾斜杠在某些调用传目录时会出现，渲染前去掉。
 	const trimmed = absolute.replace(/\/+$/, "") || absolute;
 	const path = outputPath(trimmed, cwd);
-	const openFile = () => window.dispatchEvent(new CustomEvent("pi-harness:open-tool-file", { detail: { path: change.path, ...(change.fromArguments ? {} : { line: change.firstChangedLine }) } }));
 	return <div className={`change-card ${state}`} data-tool-call-id={item.block.id} onMouseEnter={() => window.dispatchEvent(new CustomEvent("pi:tool-hover", { detail: { toolCallId: item.block.id } }))} onMouseLeave={() => window.dispatchEvent(new CustomEvent("pi:tool-hover", { detail: { toolCallId: null } }))}>
 		<div className="change-card-head">
 			<button type="button" className="change-card-toggle" aria-expanded={open && !noDiff} disabled={noDiff} onClick={() => setManual(!open)}>{!noDiff && <FiChevronRight className={open ? "open" : ""} />}<span className={`change-state ${state}`} aria-label={retried ? t("changeRetried") : state === "err" ? t("error") : state === "done" ? t("done") : state === "skipped" ? t("toolNotExecuted") : state === "running" ? t("running") : t("toolQueued")}><i /></span><span className="change-verb">{item.block.name === "edit" ? t("changeEdit") : t("changeWrite")}</span><code title={absolute}>{path}</code></button>
 			<span className="change-counts">{!change.error && <>{change.added > 0 && <span className="add">+{change.added}</span>}{change.removed > 0 && <span className="del">−{change.removed}</span>}</>}</span>
-			{change.path && <button type="button" className="change-open" onClick={openFile}>{t("changeOpen")}</button>}
 			<details className="change-raw"><summary aria-label={t("more")}><FiMoreHorizontal /></summary><div><strong>{t("changeRawArgs")}</strong><pre>{item.block.argumentsText}</pre>{change.output && <><strong>{t("changeRawOutput")}</strong><pre>{change.output}</pre></>}</div></details>
 		</div>
-		{open && !noDiff && <ChangeBody change={change} state={state} />}
+		{open && !noDiff && <ChangeBody change={change} state={state} path={path} toolId={item.block.id} />}
 	</div>;
 }
 

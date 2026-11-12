@@ -8,6 +8,7 @@ import { UiIcon } from "./UiIcon";
 import { ReplyActions } from "./ReplyActions";
 import { turnChangeSummaries } from "../changes";
 import { ChangeSummaryCard } from "./ChangeSummaryCard";
+import { withoutRetiredPlans } from "../retired-plan";
 import { projectToolTextMessages, toolTextIncidents } from "../tool-text";
 import type { ToolRecoveryActions } from "./ToolRecoveryCard";
 import { ConversationWorkingStatus } from "./WorkingStatus";
@@ -129,7 +130,7 @@ function ReloadEvent({ event }: { event: ReloadStatus }) {
 
 export const MessageList = memo(function MessageList({ recovery, state, connected = true, silenceNotified = false, liveOutputs, toolStatuses, onEdit, onKillBash, onStop, thinkingWrap, toolsWrap, pendingEcho, reloadEvents = [] }: MessageListProps) {
 	const t = useT();
-	const projectedMessages = useMemo(() => projectToolTextMessages(state.messages), [state.messages]);
+	const projectedMessages = useMemo(() => projectToolTextMessages(withoutRetiredPlans(state.messages)), [state.messages]);
 	state = { ...state, messages: projectedMessages };
 	const incidentState = useMemo(() => toolTextIncidents(state.streamingMessage ? [...state.messages, state.streamingMessage] : state.messages, state.isStreaming), [state.messages, state.streamingMessage, state.isStreaming]);
 	const incidentFor = new Map(incidentState.incidents.flatMap(incident => [...incident.leaks, incident.last].map(message => [message.id, incident] as const)));

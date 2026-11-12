@@ -1,18 +1,4 @@
-/**
- * An edit card must show its diff after the call settles.
- *
- * `tool_status` is pushed on `tool_execution_end`, before the tool result reaches
- * the transcript, so the card used to fold the instant `running` went false —
- * the reader saw the dot turn green and the diff disappear in the same breath.
- *
- * Option B: a settled edit keeps its diff open while it is the live edge of the
- * conversation (newest assistant reply, nothing after it), and folds once the
- * reply has moved past it. An explicit toggle always wins.
- *
- * The browser gets hand-built snapshots: the first one for the real conversation,
- * the rest as full `snapshot` frames so the reducer replaces the transcript
- * instead of applying a delta the fixture never sent.
- */
+/** Edits show changes directly and retain explicit collapse/expand controls. */
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
@@ -63,6 +49,11 @@ try {
 		await page.reload();
 		await page.locator('.change-card').waitFor();
 		await sleep(400);
+		for (const theme of ['light', 'dark']) {
+			await page.evaluate(value => document.documentElement.dataset.appearance = value, theme);
+			assert.equal(await page.locator('.change-card').first().evaluate(el => getComputedStyle(el).borderTopWidth), '0px', 'normal edit rows have no outer border');
+		}
+		await page.evaluate(() => document.documentElement.dataset.appearance = 'light');
 	};
 	const body = () => page.locator('.change-card[data-tool-call-id="edit1"] .change-card-body');
 	const card = () => page.locator('.change-card[data-tool-call-id="edit1"]');
@@ -101,14 +92,17 @@ try {
 	assert.equal(await page.locator('.change-card[data-tool-call-id="edit1"].done').count(), 1, 'it keeps the settled state');
 	assert.equal(await body().count(), 1, 'the diff is still open after the result lands');
 
-	// 4) The reply moves past it: now it folds to one row (option B).
+	// 4) Historical edits still show their changes directly.
 	await show(movedOn);
-	assert.equal(await body().count(), 0, 'it folds once the reply has moved past it');
+	assert.equal(await body().count(), 1, 'historical edit content remains visible');
+	assert.equal(await card().locator('.change-open').count(), 0, 'no redundant open-file action');
 	assert.match(await page.locator('.change-card[data-tool-call-id="edit1"] .change-card-head').innerText(), /app\.ts/);
-	assert.match(await page.locator('.change-card[data-tool-call-id="edit1"] .change-counts').innerText(), /\+1/);
+	assert.match(await card().locator('.change-card-head .change-counts').innerText(), /\+1/);
 
-	// 5) An explicit toggle beats the automatic fold.
+	// 5) Explicit collapse and expand remain available.
 	await page.locator('.change-card[data-tool-call-id="edit1"] .change-card-toggle').click();
+	assert.equal(await body().count(), 0);
+	await card().locator('.change-card-toggle').click();
 	await body().waitFor();
 	await show(settled);
 	assert.equal(await body().count(), 1, 'an explicit expand survives later updates');
@@ -116,7 +110,25 @@ try {
 	assert.equal(await body().count(), 0, 'an explicit collapse keeps it folded');
 
 	assert.deepEqual(errors, [], 'no page errors');
-	console.log('PASS a settled edit keeps its diff open until the reply moves past it');
+	await card().locator('.change-card-toggle').click();
+	const summary = body().locator('.change-summary-inline');
+	await summary.waitFor();
+	assert.equal(await summary.locator('.change-summary-file').count(), 1, 'expanded edit reuses the summary file row');
+	assert.match(await summary.locator('.changes-line.add').innerText(), /new/);
+	assert.match(await summary.locator('.changes-line.del').innerText(), /old/);
+	await summary.locator('.change-summary-file').click();
+	assert.equal(await summary.locator('.changes-file-lines').count(), 0, 'file row folds the inline diff');
+	await summary.locator('.change-summary-file').click();
+	await summary.locator('.changes-file-lines').waitFor();
+	for (const theme of ['light', 'dark']) {
+		await page.evaluate(value => document.documentElement.dataset.appearance = value, theme);
+		await summary.screenshot({ path: `/tmp/pi-edit-summary-${theme}.png` });
+	}
+	await summary.locator('header button').click();
+	await page.locator('.changes-panel .changes-line.add').waitFor();
+	assert.match(await page.locator('.changes-panel .changes-line.add').innerText(), /new/, 'view all opens the same historical edit');
+	assert.deepEqual(errors, [], 'no browser errors');
+	console.log('PASS edits show changes directly and support collapse, expand and historical review');
 } finally {
 	await browser?.close().catch(() => {});
 	server?.kill('SIGTERM');

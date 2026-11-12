@@ -20,12 +20,14 @@ import {
 	FiGitBranch,
 	FiRefreshCw,
 	FiTerminal,
+	FiSearch,
+	FiX,
 } from "react-icons/fi";
 import type { ChatState, TerminalMeta } from "../use-chat";
 import type { ClientMessage, CommandDef, ServerMessage } from "../types";
 import { withToken } from "../auth-token";
 import { getClientId } from "../use-chat";
-import type { ScmWorktree, ScmOperationRequest, ScmOperationResult } from "../types";
+import type { ScmOperationRequest, ScmOperationResult } from "../types";
 import { randomUuid } from "../uuid";
 import { useT } from "../i18n";
 
@@ -118,13 +120,10 @@ export function ScmPanel({
 }: ScmPanelProps) {
 	const t = useT();
 	const [status, setStatus] = useState<ScmStatus | null>(null);
-	const [worktrees, setWorktrees] = useState<ScmWorktree[]>([]);
-	const [worktreesError, setWorktreesError] = useState("");
 	const [operation, setOperation] = useState<{ running: boolean; error?: string; text?: string }>();
 	const operationRef = useRef(false);
 	const operationEpoch = useRef(0);
 	useEffect(() => { operationEpoch.current++; operationRef.current = false; setOperation(undefined); return () => { operationEpoch.current++; }; }, [chat.state?.cwd, chat.state?.conversationId]);
-	useEffect(() => { setWorktrees([]); setWorktreesError(""); }, [chat.state?.cwd]);
 	const branchSelectionEdited = useRef(false);
 	const [branches, setBranches] = useState<ScmBranch[]>([]);
 	const [branchSel, setBranchSel] = useState("");
@@ -149,6 +148,11 @@ export function ScmPanel({
 	const [historyLoading, setHistoryLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [notRepo, setNotRepo] = useState(false);
+	const [fileQuery, setFileQuery] = useState("");
+	const fileSearchRef = useRef<HTMLInputElement>(null);
+	useEffect(() => setFileQuery(""), [chat.state?.cwd]);
+	const normalizedQuery = fileQuery.trim().toLocaleLowerCase();
+	const filteredFiles = (status?.files ?? []).filter(file => file.path.toLocaleLowerCase().includes(normalizedQuery));
 	const [commitMsg, setCommitMsg] = useState("");
 
 	/** Monotonic request id — responses are matched per pending slot below. */
@@ -181,8 +185,6 @@ export function ScmPanel({
 				}
 				if (data.notRepo) {
 					setNotRepo(true);
-					setWorktrees([]);
-					setWorktreesError("");
 					setStatus(null);
 					setBranches([]);
 					setStatMap(new Map());
@@ -207,8 +209,6 @@ export function ScmPanel({
 				for (const [path, pair] of Object.entries(data.stats ?? {})) {
 					stats.set(path, { add: pair[0], del: pair[1] });
 				}
-				setWorktrees(data.worktrees ?? []);
-				setWorktreesError(data.worktreesError ?? "");
 				setStatus(st);
 				setBranches(brs);
 				setStatMap(stats);
@@ -621,11 +621,7 @@ export function ScmPanel({
 					{(operation.error || operation.text) && <pre>{operation.error || operation.text}</pre>}
 					{operation.error && <button className="btn" disabled={!chat.ready} onClick={openRecoveryTerminal}>{t("scmOperationTerminal")}</button>}
 				</div>}
-				{worktrees.length > 0 && <details className="scm-worktrees"><summary>{t("scmWorktrees", { n: worktrees.length })} · {t("scmWorktreeCurrent")}: {worktrees.find(tree => tree.current)?.path}</summary>
-					<p>{t("scmWorktreesHint")}</p>
-					<ul>{worktrees.map(tree => <li key={tree.path}><code>{tree.path}</code><span>{tree.current ? `${t("scmWorktreeCurrent")} · ` : ""}{tree.branch || (tree.bare ? "bare" : "detached")}{tree.locked ? ` · locked: ${tree.locked}` : ""}{tree.prunable ? ` · prunable: ${tree.prunable}` : ""}</span></li>)}</ul>
-				</details>}
-				{worktreesError && <p className="scm-worktrees" role="status">{t("scmWorktreesFailed")} {worktreesError}</p>}
+
 				{/* branch + push/pull */}
 				<div className="scm-row">
 					<span className="scm-branch-current" title={t("scmCurrentBranch")}>
@@ -776,8 +772,13 @@ export function ScmPanel({
 					<div className="scm-files-header">
 						<span>{t("scmChanges")}</span>
 						{status && status.files.length > 0 && (
-							<span className="scm-files-count">{status.files.length}</span>
+							<span className="scm-files-count" role="status">{normalizedQuery ? `${filteredFiles.length} / ${status.files.length}` : status.files.length}</span>
 						)}
+					</div>
+					<div className="scm-file-search">
+						<FiSearch aria-hidden="true" />
+						<input ref={fileSearchRef} type="search" value={fileQuery} aria-label={t("scmSearchFiles")} placeholder={t("scmSearchFiles")} onChange={event => setFileQuery(event.target.value)} onKeyDown={event => { if (event.key === "Escape") { event.preventDefault(); setFileQuery(""); } }} />
+						{fileQuery && <button type="button" aria-label={t("scmClearSearch")} title={t("scmClearSearch")} onClick={() => { setFileQuery(""); fileSearchRef.current?.focus(); }}><FiX aria-hidden="true" /></button>}
 					</div>
 					<div className="scm-files-list">
 						{notRepo ? (
@@ -788,8 +789,10 @@ export function ScmPanel({
 							</div>
 						) : status.files.length === 0 ? (
 							<div className="scm-empty">{t("scmNoChanges")}</div>
+						) : filteredFiles.length === 0 ? (
+							<div className="scm-empty" role="status">{t("scmNoMatchingFiles")}</div>
 						) : (
-							status.files.map((f) => {
+							filteredFiles.map((f) => {
 								const kind = fileKind(f);
 								const st = statMap.get(f.path);
 								return (
