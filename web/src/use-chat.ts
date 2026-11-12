@@ -89,8 +89,6 @@ export interface ChatState {
 	serverVersion?: string;
 	/** Persisted session list for the left panel. */
 	sessions: SessionSummary[];
-	missingSessions: Extract<ServerMessage, { type: "missing_sessions" }> | null;
-	missingSessionResult: Extract<ServerMessage, { type: "missing_session_result" }> | null;
 	/** Open conversations (each runs its own session in parallel). */
 	conversations: ConversationSummary[];
 	/** Id of the conversation the current snapshot belongs to. */
@@ -240,7 +238,6 @@ type Action =
 	| { type: "dismiss_notice"; id: number }
 	| { type: "ready"; serverVersion: string; protocolVersion?: number }
 	| { type: "sessions"; sessions: SessionSummary[] }
-	| Extract<ServerMessage, { type: "missing_sessions" | "missing_session_result" }>
 	| {
 			type: "conversations";
 			conversations: ConversationSummary[];
@@ -570,8 +567,6 @@ function reducer(state: ChatState, action: Action): ChatState {
 			return { ...state, pendingEcho: null };
 		case "sessions":
 			return { ...state, sessions: action.sessions };
-		case "missing_sessions": return { ...state, missingSessions: action };
-		case "missing_session_result": return { ...state, missingSessionResult: action };
 		case "conversations":
 			return {
 				...state,
@@ -757,8 +752,6 @@ export function useChat() {
 		agentSilence: null,
 		agentSilenceByConversation: {},
 		sessions: [],
-		missingSessions: null,
-		missingSessionResult: null,
 		conversations: [],
 		activeConversationId: "",
 		projects: [],
@@ -1094,10 +1087,6 @@ export function useChat() {
 				case "sessions":
 					if (msg.cwd !== confirmedCwd.current) break;
 					dispatch({ type: "sessions", sessions: msg.sessions });
-					break;
-				case "missing_sessions":
-				case "missing_session_result":
-					dispatch(msg);
 					break;
 				case "conversations":
 					if (authoritative.current.state?.conversationId !== msg.activeId) scheduleResync();

@@ -19,7 +19,7 @@ import { resolveNativeAttachments } from "./user-attachments.js";
 import { estimateTokens } from "@earendil-works/pi-coding-agent";
 import { SessionTreeController } from "./session-tree-controller.js";
 import { SessionBranchCounts } from "./session-file-read.js";
-import { isSessionDirectory, SessionRecovery } from "./session-recovery.js";
+import { isSessionDirectory } from "./session-directory.js";
 import type { TreeRequest } from "./protocol.js";
 import { createHash, randomUUID } from "node:crypto";
 import { recoveryEvent, isRecovering, recoverySnapshot } from "./recovery-state.js";
@@ -2408,63 +2408,9 @@ export class ClientSession {
 		this.projectQueries.clear();
 	}
 
-	/** Exceptional history restoration stays separate from ordinary per-project listing. */
+	/** Wiki clients and ordinary history opening share this switch guard. */
 	private wikiClient = false;
-	private missingSessionRecovery?: SessionRecovery;
-	private sessionRecoveryOpening = false;
 	private openingHistory = false;
-	async recoverMissingSession(msg: Extract<ClientMessage, { type: "list_missing_sessions" | "recover_missing_session" }>): Promise<void> {
-		const context = { reqId: msg.reqId, conversationId: msg.conversationId }, cwd = this.cwd;
-		let forkFile: string | undefined;
-		let ownsOpening = false;
-		try {
-			if (typeof msg.reqId !== "string" || msg.reqId.length > 200 || !msg.reqId) throw new Error("Invalid request ID");
-			const origin = this.conv;
-			const validateContext = () => {
-				if (this.disposed || this.wikiClient || origin.wiki || this.activeIsWiki) throw new Error("知识库会话不支持普通历史恢复。");
-				if (this.conv !== origin || msg.conversationId !== origin.id || this.cwd !== cwd || this.switchingWorkspace) throw new Error("项目或对话已切换，请重新选择会话。");
-				if (!isSessionDirectory(cwd)) throw new Error("当前项目目录已失效，请先打开一个有效项目。");
-				if (this.restartingSession || this.creatingConversation || origin.tree?.busy) throw new Error("等待当前会话操作完成后重试。");
-			};
-			validateContext();
-			const recovery = this.missingSessionRecovery ??= new SessionRecovery(this.agentDir);
-			if (msg.type === "list_missing_sessions") {
-				const sessions = await recovery.list(origin.id, cwd);
-				validateContext();
-				this.emit({ type: "missing_sessions", ...context, cwd, sessions });
-				return;
-			}
-			if (msg.action === "cancel") {
-				recovery.cancel(msg.token);
-				this.emit({ type: "missing_session_result", ...context, status: "cancelled" });
-				return;
-			}
-			if (msg.action !== "continue" && msg.action !== "fork") throw new Error("Invalid recovery action");
-			if (this.sessionRecoveryOpening || this.quiesceBlocked()) throw new Error("暂时无法恢复会话，请稍后重试。");
-			const selected = recovery.validate(msg.token, origin.id, cwd);
-			this.sessionRecoveryOpening = ownsOpening = true;
-			// Never create a second writer for a transcript already open in this client.
-			const existing = [...this.convs.values()].find(conv => conv.session.sessionFile && resolve(conv.session.sessionFile) === selected.path);
-			if (existing && msg.action === "continue") {
-				if (existing.cwd !== cwd || !isSessionDirectory(existing.cwd)) throw new Error("原会话已在其他目录打开，请选择「复制到当前项目」，或先关闭原对话。");
-				await this.switchConversation(existing.id);
-			} else {
-				const manager = msg.action === "fork" ? SessionManager.forkFrom(selected.path, cwd) : SessionManager.open(selected.path, undefined, cwd);
-				if (msg.action === "fork") forkFile = manager.getSessionFile();
-				if (!await this.switchSession(manager.getSessionFile()!, { manager, validate: validateContext })) throw new Error("会话恢复未完成，请重试。");
-				forkFile = undefined;
-			}
-			recovery.cancel(msg.token);
-			this.invalidateLists();
-			void this.pushSessions();
-			this.emit({ type: "missing_session_result", ...context, status: "ok" });
-		} catch (error) {
-			if (forkFile) rmSync(forkFile, { force: true });
-			const text = error instanceof Error ? error.message : String(error);
-			if (msg.type === "list_missing_sessions") this.emit({ type: "missing_sessions", ...context, cwd, sessions: [], error: text });
-			else this.emit({ type: "missing_session_result", ...context, status: "error", error: text });
-		} finally { if (ownsOpening) this.sessionRecoveryOpening = false; }
-	}
 
 	async refreshSessions(): Promise<void> {
 		this.sessionsRequested = true;
@@ -2618,9 +2564,9 @@ export class ClientSession {
 	 * current runtime, which would otherwise stop a response merely because the
 	 * user opened history while it was streaming.
 	 */
-	async switchSession(path: string, recovery?: { manager: SessionManager; validate: () => void }): Promise<boolean> {
+	async switchSession(path: string): Promise<boolean> {
 		if (this.wikiClient || this.activeIsWiki) { this.emitNotice("warning", "请在知识库中恢复文档会话。"); return false; }
-		if (this.openingHistory || this.restartingSession || (this.sessionRecoveryOpening && !recovery)) { this.emitNotice("warning", "当前会话正在切换，请稍后重试。"); return false; }
+		if (this.openingHistory || this.restartingSession) { this.emitNotice("warning", "当前会话正在切换，请稍后重试。"); return false; }
 		if (this.conv.tree?.busy) { this.emitNotice("warning", "等待当前切换完成。"); return false; }
 		if (this.quiesceBlocked()) return false;
 		let openedRuntime: AgentSessionRuntime | null = null;
@@ -2638,7 +2584,7 @@ export class ClientSession {
 			for (const conv of this.convs.values()) {
 				const sessionFile = conv.session.sessionFile;
 				if (sessionFile && resolve(sessionFile) === targetPath) {
-					if (!isSessionDirectory(conv.cwd)) throw new Error("该会话仍绑定失效目录，请使用「复制到当前项目」。");
+					if (!isSessionDirectory(conv.cwd)) throw new Error("该会话仍绑定失效目录，请恢复原目录后重新打开。");
 					await this.switchConversation(conv.id);
 					return true;
 				}
@@ -2646,9 +2592,9 @@ export class ClientSession {
 
 			const sourceStat = statSync(targetPath);
 			if (!sourceStat.isFile() || sourceStat.size === 0) throw new Error("会话文件已失效，请刷新历史列表。");
-			const sessionManager = recovery?.manager ?? SessionManager.open(targetPath);
+			const sessionManager = SessionManager.open(targetPath);
 			const targetCwd = sessionManager.getCwd();
-			if (!isSessionDirectory(targetCwd)) throw new Error("原项目目录已失效，请展开左栏「原目录已失效的会话」选择恢复方式。");
+			if (!isSessionDirectory(targetCwd)) throw new Error("原项目目录已失效，请恢复原目录后重新打开此会话。");
 			const conversationId = this.nextConversationId();
 			openedTerminals = this.makeTerminalManager(conversationId, targetCwd);
 			openedRuntime = await createAgentSessionRuntime(
@@ -2659,7 +2605,6 @@ export class ClientSession {
 					sessionManager,
 				},
 			);
-			recovery?.validate();
 
 			// Only displace the old active conversation after the replacement runtime
 			// is known-good. This keeps a failed history open entirely non-destructive.
@@ -2724,7 +2669,6 @@ export class ClientSession {
 			}
 			openedTerminals?.killAll();
 			if (openedRuntime) await openedRuntime.dispose().catch(() => {});
-			if (recovery && !installed) throw err;
 			this.emit({
 				type: "notice",
 				level: "error",

@@ -26,7 +26,7 @@ type DeltaContentBlock = DeltaTextBlock | DeltaThinkingBlock | { type: string };
 /** Structural subset of UiState used here (loose on purpose: real callers
  *  pass the full protocol UiState; tests pass a minimal lookalike). */
 export interface MessageDeltaUiState {
-	streamingMessage?: { id: string; content: DeltaContentBlock[] } | null;
+	streamingMessage?: { id: string; role?: string; content: DeltaContentBlock[] } | null;
 	stats: { tokens: object };
 }
 
@@ -61,10 +61,10 @@ export function applyMessageDelta<S extends MessageDeltaUiState>(
 	if (!deltaText) return stats === ui.stats ? ui : { ...ui, stats };
 
 	const prev = ui.streamingMessage ?? null;
-	const base: { id: string; content: DeltaContentBlock[] } =
+	const base: { id: string; role?: string; content: DeltaContentBlock[] } =
 		prev && prev.id === msg.messageId
 			? prev
-			: { id: msg.messageId, content: [] };
+			: { id: msg.messageId, role: "assistant", content: [] };
 	const content = [...base.content];
 	const blockType = ame.type === "thinking_delta" ? "thinking" : "text";
 	const idx = ame.contentIndex ?? content.length - 1;

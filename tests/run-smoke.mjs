@@ -63,7 +63,6 @@ const ALL = [
 	"extension-ui-test",
 	"delegate-notification-test",
 	"session-tree-test",
-	"session-recovery-test",
 	"tool-output-test",
 	"recovery-service-test",
 	"gateway-error-test",

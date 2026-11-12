@@ -720,10 +720,6 @@ wss.on("connection", (ws) => {
 			case "list_sessions":
 				void cs.refreshSessions();
 				break;
-			case "list_missing_sessions":
-			case "recover_missing_session":
-				void cs.recoverMissingSession(msg);
-				break;
 			case "list_project_workspaces":
 				workspaceSubscribers.add(send);
 				send({ type: "project_workspaces", catalog: projectWorkspaces.read() });

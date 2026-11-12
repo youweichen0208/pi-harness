@@ -554,8 +554,6 @@ export type ClientMessage =
 	| { type: "cycle_thinking" }
 	| { type: "get_state" }
 	| { type: "list_sessions" }
-	| { type: "list_missing_sessions"; reqId: string; conversationId: string }
-	| { type: "recover_missing_session"; reqId: string; conversationId: string; token: string; action: "continue" | "fork" | "cancel" }
 	| { type: "switch_session"; path: string }
 	| { type: "switch_conversation"; id: string }
 	| { type: "list_projects" }
@@ -683,14 +681,6 @@ export type ClientMessage =
 // ---------------------------------------------------------------------------
 // Server -> Client
 // ---------------------------------------------------------------------------
-
-export interface MissingSessionSummary {
-	token: string;
-	name?: string;
-	firstMessage: string;
-	cwd: string;
-	modified: number;
-}
 
 export interface SessionSummary {
 	branchPoints?: number;
@@ -1183,8 +1173,6 @@ export type ServerMessage =
 	| { type: "heartbeat" }
 	| { type: "cwd_result"; requestId: string; cwd: string; ok: boolean; error?: string; timing?: { startedAt: number; preparedAt: number; snapshotAt: number } }
 	| { type: "sessions"; cwd: string; sessions: SessionSummary[] }
-	| { type: "missing_sessions"; reqId: string; conversationId: string; cwd: string; sessions: MissingSessionSummary[]; error?: string }
-	| { type: "missing_session_result"; reqId: string; conversationId: string; status: "ok" | "cancelled" | "error"; error?: string }
 	/** Filename matches for the global search panel (reqId echo). Always sent
 	 *  in reply to a search_files request — ok:false means the walk failed. */
 	| {

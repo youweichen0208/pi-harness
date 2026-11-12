@@ -17,19 +17,6 @@ const STORAGE_KEY = "pi-harness:lang";
 /* ------------------------------------------------------------------ */
 
 const zh = {
-	missingSessions: "恢复历史会话",
-	missingSessionsEmpty: "没有需要恢复的会话",
-	missingSessionsRefresh: "刷新列表",
-	missingSessionUntitled: "未命名会话",
-	missingSessionTitle: "在当前项目恢复会话",
-	missingSessionHint: "原项目目录已不存在。复制会保留完整历史，并在当前项目创建新会话，原会话保留。",
-	missingSessionOriginal: "原项目",
-	missingSessionTarget: "当前项目",
-	missingSessionContinueHint: "也可以继续使用原会话：仅本次使用当前目录，下次打开仍会询问。",
-	missingSessionFork: "复制到当前项目",
-	missingSessionContinue: "继续使用原会话",
-	missingSessionOpening: "正在恢复…",
-	missingSessionFailed: "恢复失败，请检查连接后刷新列表重试。",
 	piCliCheckFailed: "Pi CLI 检测失败，请重试。",
 	piCliMissing: "未检测到",
 	piCliDetected: "已检测到",
@@ -2548,19 +2535,6 @@ const zh = {
 /* ------------------------------------------------------------------ */
 
 const en: Record<keyof typeof zh, string> = {
-	missingSessions: "Restore past sessions",
-	missingSessionsEmpty: "No sessions need recovery",
-	missingSessionsRefresh: "Refresh list",
-	missingSessionUntitled: "Untitled session",
-	missingSessionTitle: "Restore in the current project",
-	missingSessionHint: "The original project folder is unavailable. Copy the full history into a new session in this project, keeping the original session.",
-	missingSessionOriginal: "Original project",
-	missingSessionTarget: "Current project",
-	missingSessionContinueHint: "You can also continue the original session here for this visit. You will be asked again next time.",
-	missingSessionFork: "Copy into this project",
-	missingSessionContinue: "Continue original session",
-	missingSessionOpening: "Restoring…",
-	missingSessionFailed: "Recovery failed. Check the connection and refresh the list to retry.",
 	piCliCheckFailed: "Pi CLI detection failed. Please retry.",
 	piCliMissing: "Not detected",
 	piCliDetected: "Detected",

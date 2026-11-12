@@ -34,6 +34,13 @@ function delta(partial: Partial<MessageDeltaMsg> = {}): MessageDeltaMsg {
 }
 
 describe("applyMessageDelta", () => {
+	it("identifies a new assistant before its first snapshot arrives", () => {
+		for (const type of ["thinking_delta", "text_delta"]) {
+			const next = applyMessageDelta(makeUi(), delta({ assistantMessageEvent: { type, delta: "first" } }));
+			expect(next.streamingMessage).toMatchObject({ role: "assistant" });
+		}
+	});
+
 	it("appends text deltas onto an empty streaming message", () => {
 		const next = applyMessageDelta(
 			makeUi(),

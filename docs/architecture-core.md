@@ -32,7 +32,7 @@ OpenAI 代理由 `server/openai-proxy.ts` 在服务启动时安装，默认关�
 
 ### `message_delta` 实时增量通道
 
-`message_update` 事件 → 只对**活动对话**推 `message_delta`（`conversationId` + 每对话单调 `seq` + `messageId = stream-<ts>`（与 `serializeStreamingMessage` 的稳定 id 一致）+ 实时 usage + 剥离 `partial` 后的 thinking/text delta）。它**不经 snapshot 通道**——`send()` 背压只丢 snapshot，增量永远可达，大会话不再因背压停更。前端 `applyMessageDelta`（`web/src/message-delta.ts` 纯函数、不可变——StrictMode 双调 reducer 会把原地 mutation 加倍）patch `streamingMessage` + `stats.tokens`；seq 缺口触发防抖 `get_state` 重同步；snapshot 权威收敛。
+`message_update` 事件 → 只对**活动对话**推 `message_delta`（`conversationId` + 每对话单调 `seq` + `messageId = stream-<ts>`（与 `serializeStreamingMessage` 的稳定 id 一致）+ 实时 usage + 剥离 `partial` 后的 thinking/text delta）。它**不经 snapshot 通道**——`send()` 背压只丢 snapshot，增量永远可达，大会话不再因背压停更。前端 `applyMessageDelta`（`web/src/message-delta.ts` 纯函数、不可变——StrictMode 双调 reducer 会把原地 mutation 加倍）patch `streamingMessage` + `stats.tokens`；seq 缺口触发防抖 `get_state` 重同步；snapshot 权威收敛。首个增量先于快照到达时，新建流式消息必须带 `role: "assistant"`，确保思考块和命令归入同一回复，避免快照补齐前出现空白头部与间距跳变。
 
 输入框用量入口使用 SDK `getSessionStats()` 的当前上下文总量、窗口大小和累计 token 用量；每条 assistant 消息仍序列化其模型返回的 `input/cacheRead/cacheWrite/output`。弹窗只显示上下文窗口总量与缓存命中率，后者按 `cacheRead / (input + cacheRead + cacheWrite)` 计算。模型接口不返回「系统提示、工具、对话、附件」四类上下文精确值；`server/context-breakdown.ts` 保留归一化估算供协议数据使用，界面不展示分类估算。缓存数据不能推断服务商缓存失效的具体原因。
 

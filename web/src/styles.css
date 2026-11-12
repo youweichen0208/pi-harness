@@ -15912,39 +15912,6 @@ span.rich-math { display: inline-block; }
 
 .bash-search-result pre.bash-syntax { white-space: pre-wrap; overflow-wrap: anywhere; }
 
-/* Missing-project session recovery: exceptional history, loaded only on demand. */
-.missing-sessions { padding: 8px 4px; border-top: 1px solid var(--border-soft); }
-.missing-sessions-toggle { display: flex; align-items: center; gap: 6px; width: 100%; min-height: 32px; padding: 6px; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--text-dim); font: inherit; text-align: left; cursor: pointer; }
-.missing-sessions-toggle svg { flex: 0 0 14px; }
-.missing-sessions-toggle span { min-width: 0; overflow-wrap: anywhere; }
-.missing-sessions-toggle:hover, .missing-session-item:hover { background: var(--bg-elev2); color: var(--text); }
-.missing-sessions-list { padding: 4px 6px; }
-.missing-sessions-list p { margin: 8px 0; font-size: 12px; color: var(--text-dim); }
-.missing-session-item { display: flex; flex-direction: column; gap: 3px; width: 100%; padding: 8px; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--text); text-align: left; cursor: pointer; }
-.missing-session-item span, .missing-session-item small { display: block; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.missing-session-item span { font-size: 13px; }
-.missing-session-item small { color: var(--text-dim); font-size: 11px; }
-.missing-sessions-refresh { padding: 6px 8px; border: 0; background: transparent; color: var(--accent); font: inherit; cursor: pointer; }
-.missing-session-dialog { width: min(520px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); overflow: auto; }
-.missing-session-dialog h2 { font-size: 18px; margin: 0 0 12px; }
-.missing-session-dialog p { margin: 12px 0; line-height: 1.6; }
-.missing-session-dialog dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 16px; padding: 12px; background: var(--bg-elev2); border-radius: var(--r-sm); }
-.missing-session-dialog dt { color: var(--text-dim); }
-.missing-session-dialog dd { margin: 0; overflow-wrap: anywhere; font-family: var(--mono); }
-.missing-session-continue-hint { color: var(--text-dim); }
-.missing-session-dialog .missing-session-actions { display: flex; justify-content: flex-start; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
-.wiki-confirm.missing-session-dialog .missing-session-actions button { min-height: 36px; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--bg-elev); color: var(--text); cursor: pointer; }
-.wiki-confirm.missing-session-dialog .missing-session-actions .primary { background: var(--action); color: var(--action-fg); border-color: var(--action); }
-.missing-sessions button:disabled, .missing-session-actions button:disabled { cursor: default; opacity: .55; }
-.missing-session-dialog [role="alert"], .missing-sessions-list [role="alert"] { color: var(--red); }
-@media (pointer: coarse) {
-	.missing-sessions button, .missing-session-actions button { min-height: 44px; }
-}
-@media (max-width: 520px) {
-	.missing-session-dialog .missing-session-actions { flex-direction: column; }
-	.wiki-confirm.missing-session-dialog .missing-session-actions button { min-height: 44px; }
-}
-
 /* Running work shares the green breathing dot; waiting keeps the brand mark. */
 .running-indicator { vertical-align: middle; }
 :root .design-workspace .process-group .bash-row.run .bash-state { width: 16px; overflow: visible; }

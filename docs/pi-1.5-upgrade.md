@@ -6,7 +6,6 @@
 
 | 能力 | 实现与边界 |
 | --- | --- |
-| 原目录失效的历史恢复 | 普通聊天左栏默认折叠、按需加载；继续临时使用当前有效项目，复制使用原生 `SessionManager.forkFrom` 保留整棵历史树。短期 token 绑定来源、目标和对话，确认时重检；Wiki 拒绝。见 [会话树](architecture-session-tree.md) |
 | 缓存预热 | 模型菜单全局三态：off / streaming / idle。未配置时由宿主 getter 保持 streaming，不在启动时写配置；尊重原有显式值，项目配置不能开启全局预热。已打开普通/Wiki/SSH 会话同步，调查子代理保持 off。费用详情按需每 5 秒读取原生状态，原生 usage 只计费一次，不插入聊天或重置任务看门狗。见 [核心架构](architecture-core.md) |
 | Anthropic message threads | 由原生提供官方端点默认策略、增量续接及历史/系统提示/工具变化后的完整上下文回退。模型配置兼容选项可显式覆盖，不改写已有配置 |
 | OpenAI 兼容项 | 服务商及模型提供 `promptCacheKeyMode`、`requiresNonNullAssistantContent`、`requiresToolsWithToolHistory`，并提供 `supportsMessageThreads`；缺省继承、布尔三态，白名单投影，未知字段与凭据保留。见 [模型来源](architecture-model-sources.md) |
@@ -19,13 +18,12 @@
 
 CLI 的 `pi auth login/logout`、Radius MCP、TUI 快捷键/终端图表及示例扩展不另造 Web 对应界面；保留现有官方登录与 MCP 配置入口。上游 plan/subagent 示例不会替换宿主 Workspace 子代理，也不会恢复已移除的 plan 扩展。
 
-协议版本升为 53；`protocol.ts` 保持唯一类型源。两个提示词私有入口继续精确保护 1.5.2，并校验原生输出与分段全文一致；MCP 校验使用 SDK 兼容入口，不直接复制其实现。会话恢复不批量迁移 JSONL；缓存费用不另建账本。
+1.5.2 初次接入使用协议 v53；v54 已移除宿主的失效目录历史恢复入口。`protocol.ts` 保持唯一类型源。两个提示词私有入口继续精确保护 1.5.2，并校验原生输出与分段全文一致；MCP 校验使用 SDK 兼容入口，不直接复制其实现。原生 JSONL 保持不变；缓存费用不另建账本。
 
 ## 1.5.2 验证（2026-11-12）
 
 测试使用临时配置、隔离端口、本地模型/SSH/HTTP 夹具，不访问真实账号，不产生模型费用。新增回归：
 
-- `session-recovery-test.mjs` 与 `unit/session-recovery.test.ts`：继续/复制/取消、完整树、失效请求、目录变化、Wiki 拒绝、失败清理及中英文恢复界面。
 - `cache-warming-test.mjs` / `cache-warming-browser-test.mjs`：全局与项目优先级、多会话同步、原生费用持久化、SSH 凭据等待、详情轮询生命周期及窄屏。
 - `pi152-model-compat-test.mjs`：本地 HTTP 检查实际 null/空字符串、tools 省略/空列表和 prompt cache key；Anthropic thread 首次创建、增量续接、系统/工具变化回退与显式关闭。
 - `pi152-model-ui-test.mjs`：三态/继承/保存/重开、中英文、375px 明暗模式、新语言与原语言并存、Mermaid 饼图/样式/安全回调。
