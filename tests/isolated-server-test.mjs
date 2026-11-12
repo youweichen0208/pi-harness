@@ -15,7 +15,7 @@ const args = ["--input-type=module", "--eval", fixture];
 const close = server => new Promise(resolve => { server.closeAllConnections(); server.close(resolve); });
 function occupiedFirst(port) {
 	let first = true;
-	return () => { if (first) { first = false; return port; } return randomInt(20000, 60000); };
+	return () => { if (first) { first = false; return port; } return randomInt(20000, 48000); };
 }
 
 test("listeners bind high ports and retry collisions without releasing successful sockets", async () => {

@@ -4,7 +4,9 @@ import { spawn } from "node:child_process";
 import { setTimeout as sleep } from "node:timers/promises";
 import { testEnv } from "./test-env.mjs";
 
-const nextTestPort = () => randomInt(20000, 60000);
+// Windows reserves the default dynamic port range from 49152 upward; a random
+// candidate there can fail with EACCES rather than EADDRINUSE on CI runners.
+const nextTestPort = () => randomInt(20000, 48000);
 function checkedPort(port) {
 	if (!Number.isInteger(port) || port < 8900 || port > 65535) throw Error("Test ports must be integers from 8900 to 65535");
 	return port;
