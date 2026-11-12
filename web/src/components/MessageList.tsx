@@ -251,8 +251,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 	const answerRounds = useMemo(() => answerHistory(state.messages), [state.messages]);
 	const historyExpanded = useMemo(() => new Set([...expanded, ...answerRounds.protectedIds]), [expanded, answerRounds]);
 	const foldedAnswers = useMemo(() => ({ heads: new Map<string, { ids: string[]; count: number }>(), hidden: new Set<string>() }), []);
-	const recentStart = state.messages.length;
-	const settledGroups = useMemo(() => groupBashMessages(state.messages, recentStart, new Set(timeGaps.keys())), [state.messages, recentStart, timeGaps]);
+	const settledGroups = useMemo(() => groupBashMessages(state.messages, 0, new Set(timeGaps.keys())), [state.messages, timeGaps]);
 	const bashGroups = useMemo(() => withStreamingMessage(settledGroups, state.messages, state.streamingMessage), [settledGroups, state.messages, state.streamingMessage]);
 	const commandSummaries = useMemo(() => {
 		const summaries = commandTurnSummaries(state.messages, state.isStreaming);
@@ -288,11 +287,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 	const [pinned, setPinned] = useState<Set<string>>(() => new Set());
 	/** 已实测的消息高度（隐藏时用作占位高度）。 */
 	const heightsRef = useRef(scrollPositions.get(state.conversationId)?.heights ?? new Map<string, number>());
-	// Newly received old rows start as placeholders, even when the first
-	// snapshot arrives after mount. Do not build thousands of DOM rows just to
-	// measure and immediately remove them. History is always expanded now, so
-	// recentStart === messages.length and this seeding is a no-op: everything
-	// stays mounted on first paint and the viewport sweep decides what to hide.
+	// History starts mounted; the viewport sweep decides what to hide.
 	const hidden = useMemo(() => hiddenState, [hiddenState]);
 	/** 所有受管外层元素（sweep 测量用；挂载时注册，消息移除时清理）。 */
 	const elsRef = useRef(new Map<string, HTMLDivElement>());
@@ -517,7 +512,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 			const toolIds = source?.toolCallId ? [source.toolCallId] : source?.content.flatMap((block) => block.type === "toolCall" && block.name === "bash" && typeof block.id === "string" ? [block.id] : []) ?? [];
 			for (const toolCallId of toolIds) flushSync(() => window.dispatchEvent(new CustomEvent("pi:reveal-tool", { detail: { toolCallId, search: true } })));
 		},
-		[state.messages, recentStart, expanded, expand, bashGroups, subagentGroups],
+		[state.messages, expanded, expand, bashGroups, subagentGroups],
 	);
 
 	// Ctrl+F / Cmd+F 打开搜索（可编辑元素内不抢占）
@@ -581,7 +576,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 				}
 			});
 		},
-		[state.messages, recentStart, expanded, expand, bashGroups, subagentGroups],
+		[state.messages, expanded, expand, bashGroups, subagentGroups],
 	);
 	useEffect(() => {
 		const onTaskJump = (event: Event) => {

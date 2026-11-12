@@ -106,9 +106,9 @@ spawn 后记录 `server.pid`，测试收尾（含异常 catch 路径）用 `proc
 
 1.2.0 → 1.4.0 的变更映射、配置兼容和验证记录见 [Pi 1.4 升级说明](pi-1.4-upgrade.md)。新增 `pi-140-sdk-test.mjs` 验证跨会话 Codemode 排队、取消与 worker 释放、摘要指令和截断调用恢复；`native-tools-desktop-test.mjs` 同时验证图片分类、空引号模板和 transcript 工具集恢复。
 
-1.4.0 → 1.5.0 的适配与实际验证见 [Pi 1.5 升级说明](pi-1.5-upgrade.md)。
+1.5.2 的适配与实际验证见 [Pi 1.5 升级说明](pi-1.5-upgrade.md)。
 
-SDK / pi-ai 当前精确锁定 1.5.0。升级前必须验证内部 prompt-templates 适配器：`tests/unit/prompt-delivery.test.ts` 覆盖 `$@`、位置参数、无占位符、带引号参数、空格/换行/Tab/CRLF 分隔、同名扩展优先级、input 钩子一次、原生两种队列模式及撤回；`tests/current-file-protocol-test.mjs --browser` 验证模型实际输入和冻结附件编辑。`tests/native-tools-desktop-test.mjs` 在普通 Node 和三平台打包产物中验证模块定位与展开契约。只有这些检查通过才能更新适配器版本保护；加载或版本不兼容时保留失败和草稿保护，禁止回退到独立 custom message 投递。
+SDK / pi-ai 当前精确锁定 1.5.2。升级前必须验证内部 prompt-templates 适配器：`tests/unit/prompt-delivery.test.ts` 覆盖 `$@`、位置参数、无占位符、带引号参数、空格/换行/Tab/CRLF 分隔、同名扩展优先级、input 钩子一次、原生两种队列模式及撤回；`tests/current-file-protocol-test.mjs --browser` 验证模型实际输入和冻结附件编辑。`tests/native-tools-desktop-test.mjs` 在普通 Node 和三平台打包产物中验证模块定位与展开契约。只有这些检查通过才能更新适配器版本保护；加载或版本不兼容时保留失败和草稿保护，禁止回退到独立 custom message 投递。
 
 1.0.4 → 1.2.0 升级（2026-10-13）：`dist/core/prompt-templates.js`、`system-prompt.js`、`mcp-servers.js` 与 1.0.4 字节一致，两处版本保护随之改为 1.2.0。适配：`agent_settled.aborted` 为真时不触发未执行工具调用提醒；工具耗时优先使用 SDK 记录的 `durationMs`（`tool_execution_end` 与持久化的 toolResult，重载后保留，UiMessage 新增可选字段）；codemode 运行中显示经过时间；模型配置写回保留 `$schema` 等顶层字段。
 

@@ -4,11 +4,14 @@ import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { parse as toml } from "smol-toml";
 import { parse as jsonc, type ParseError } from "jsonc-parser";
-import type { ModelSourceId, ModelSourceStatus } from "./protocol.js";
+import type { ModelSourceId, ModelSourceStatus, UiModelCompat } from "./protocol.js";
 
 export const capabilityFields = ["reasoning", "input", "contextWindow", "maxTokens"] as const;
 export type Capability = typeof capabilityFields[number];
 export type Connection = {
+	/** Explicit compatibility overrides in an independently edited copy. */
+	compat?: UiModelCompat;
+	providerCompat?: UiModelCompat;
 	/** Missing declarations, distinct from runtime defaults. Server-only. */
 	unknownCapabilities?: Capability[];
 	source: ModelSourceId;

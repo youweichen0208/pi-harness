@@ -71,6 +71,11 @@ files:
   - "!deploy/**"
   - "!dev/**"
   - "!.context-eval/**"
+  # Local worktrees may contain previous .app bundles; .gitignore is not a packaging filter.
+  - "!.claude/**"
+  - "!.playwright-mcp/**"
+  - "!.scratch/**"
+  - "!*.tgz"
   - "!Dockerfile"
   - "!docker-compose.yml"
   - "!.dockerignore"

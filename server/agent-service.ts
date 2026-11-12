@@ -1,4 +1,5 @@
 import { inheritedTaskDetail } from "./subagents/history.js";
+import { bindCacheWarming, cacheWarmingView, setGlobalCacheWarming } from "./cache-warming.js";
 import { CodemodeHistory } from "./codemode-history.js";
 import { withOutputTokenFloor } from "./model-output-floor.js";
 import { modelConfigurationChanged, modelSourcesFor, type ModelSourceSync } from "./model-source-sync.js";
@@ -18,6 +19,7 @@ import { resolveNativeAttachments } from "./user-attachments.js";
 import { estimateTokens } from "@earendil-works/pi-coding-agent";
 import { SessionTreeController } from "./session-tree-controller.js";
 import { SessionBranchCounts } from "./session-file-read.js";
+import { isSessionDirectory, SessionRecovery } from "./session-recovery.js";
 import type { TreeRequest } from "./protocol.js";
 import { createHash, randomUUID } from "node:crypto";
 import { recoveryEvent, isRecovering, recoverySnapshot } from "./recovery-state.js";
@@ -569,6 +571,7 @@ export class ClientSession {
 		const agentDir = process.env.PI_CODING_AGENT_DIR ?? getAgentDir();
 
 		const cs = new ClientSession(clientId, cwd, agentDir, stateStore, thinkingDurationStore);
+		cs.wikiClient = wiki;
 		const conversationId = cs.nextConversationId();
 		const terminals = cs.makeTerminalManager(conversationId, cwd);
 		const runtime = await createAgentSessionRuntime(cs.makeRuntimeFactory(), {
@@ -835,6 +838,7 @@ export class ClientSession {
 
 		const runtime = conv.runtime;
 		const session = conv.session;
+		await bindCacheWarming(session, this.agentDir, () => this.scheduleSnapshot());
 		await session.bindExtensions({
 			mode: "rpc",
 			uiContext: conv.webUi,
@@ -898,6 +902,10 @@ export class ClientSession {
 		conv.recovery = recoveryEvent(conv.recovery, event, Date.now(), contextTokens);
 		if (event.type === "agent_settled" || event.type === "message_end") conv.tree?.refresh();
 
+		// Background cache usage updates accounting without implying progress on a user task.
+		if (event.type === "entry_appended" && event.entry.type === "usage" && event.entry.kind === "cache_warm") {
+			this.scheduleSnapshot(); this.scheduleSessionsRefresh(); return;
+		}
 		// Any SDK event proves the run is alive — feeds the stall watchdog below.
 		if (conv.stallNoticed) this.emit({ type: "agent_silence", conversationId: conv.id, phase: "active", since: Date.now(), activity: conv.runningToolNames.size ? "tool" : "model" });
 		conv.lastSdkEventAt = Date.now();
@@ -1219,6 +1227,7 @@ export class ClientSession {
 				totalMessages: s.totalMessages,
 				tokens: s.tokens,
 				cost: s.cost,
+				cacheWarming: cacheWarmingView(this.session),
 				contextUsage: s.contextUsage
 					? {
 							tokens: s.contextUsage.tokens,
@@ -1254,7 +1263,7 @@ export class ClientSession {
 			isStreaming: this.session.isStreaming,
 			wiki: !!conv.wiki,
 			recovery: recoverySnapshot(conv.recovery),
-			runSettings: { autoCompaction: conv.session.autoCompactionEnabled, autoRetry: conv.session.autoRetryEnabled },
+			runSettings: { autoCompaction: conv.session.autoCompactionEnabled, autoRetry: conv.session.autoRetryEnabled, cacheWarming: conv.session.settingsManager.getCacheWarmingMode() },
 			model: model
 				? {
 						id: model.id,
@@ -1369,6 +1378,7 @@ export class ClientSession {
 	}
 
 	async treeRequest(message: TreeRequest): Promise<void> {
+		if (this.openingHistory) { this.emit({ type: "tree_navigate_result", conversationId: message.conversationId, reqId: message.reqId, status: "busy" }); return; }
 		const conv = this.convs.get(message.conversationId);
 		if (!conv?.tree || conv.id !== this.activeId) {
 			this.emit({ type: "tree_navigate_result", conversationId: message.conversationId, reqId: message.reqId, status: "error", error: "只能操作当前活动对话。" }); return;
@@ -1381,6 +1391,13 @@ export class ClientSession {
 		if (!conv || conv.id !== this.activeId) return;
 		setConversationRunSettings(conv.session.settingsManager, message);
 		this.flushSnapshot();
+	}
+	async setCacheWarming(mode: Extract<ClientMessage, { type: "set_cache_warming" }>["mode"]): Promise<void> {
+		try { await setGlobalCacheWarming(this.agentDir, mode); this.flushSnapshot(); }
+		catch (error) { this.emitNotice("error", (error as Error).message); }
+	}
+	refreshCacheWarming(conversationId: string): void {
+		if (conversationId === this.activeId) this.flushSnapshot();
 	}
 
 	private readonly recalledQueues = new Map<string, Extract<ServerMessage, { type: "queue_recalled" }>>();
@@ -1723,7 +1740,7 @@ export class ClientSession {
 			onAccepted?.(ok);
 		};
 		try {
-			if (this.creatingConversation) throw new Error("Conversation is changing; retry when ready");
+			if (this.creatingConversation || this.openingHistory) throw new Error("Conversation is changing; retry when ready");
 			if (this.restartingSession) throw new Error("当前会话正在重启，请稍后重试。");
 			// Issue #65: a force-rebuilt conversation whose old runtime was
 			// disposed must not accept prompts — they would be delivered to a
@@ -2075,6 +2092,7 @@ export class ClientSession {
 
 	/** /new delegates session creation and history persistence to the SDK; the Web slot is reused. */
 	async startNewSession(): Promise<void> {
+		if (this.openingHistory) { this.emitNotice("warning", "等待历史会话恢复完成。"); return; }
 		if (this.restartingSession) { this.emitNotice("warning", "当前会话正在重启，请稍后重试。"); return; }
 		if (this.conv.tree?.busy) { this.emitNotice("warning", "等待当前切换完成。"); return; }
 		if (this.quiesceBlocked()) return;
@@ -2107,6 +2125,7 @@ export class ClientSession {
 	}
 
 	async newChat(fresh = false, wiki = false, manager?: SessionManager): Promise<boolean> {
+		if (this.openingHistory) { this.emitNotice("warning", "等待历史会话恢复完成。"); return false; }
 		if (this.restartingSession) { this.emitNotice("warning", "当前会话正在重启，请稍后重试。"); return false; }
 		if (this.conv.tree?.busy) { this.emitNotice("warning", "等待当前切换完成。"); return false; }
 		if (this.creatingConversation) return false;
@@ -2313,6 +2332,7 @@ export class ClientSession {
 
 	/** Switch the ACTIVE conversation without interrupting any other chat. */
 	async switchConversation(id: string): Promise<void> {
+		if (this.openingHistory) { this.emitNotice("warning", "等待历史会话恢复完成。"); return; }
 		if (this.restartingSession) { this.emitNotice("warning", "当前会话正在重启，请稍后重试。"); return; }
 		if (this.conv.tree?.busy) { this.emitNotice("warning", "等待当前切换完成。"); return; }
 		if (!this.convs.has(id) || id === this.activeId) return;
@@ -2388,7 +2408,64 @@ export class ClientSession {
 		this.projectQueries.clear();
 	}
 
-	/** Push the persisted session list to the client (client-requested). */
+	/** Exceptional history restoration stays separate from ordinary per-project listing. */
+	private wikiClient = false;
+	private missingSessionRecovery?: SessionRecovery;
+	private sessionRecoveryOpening = false;
+	private openingHistory = false;
+	async recoverMissingSession(msg: Extract<ClientMessage, { type: "list_missing_sessions" | "recover_missing_session" }>): Promise<void> {
+		const context = { reqId: msg.reqId, conversationId: msg.conversationId }, cwd = this.cwd;
+		let forkFile: string | undefined;
+		let ownsOpening = false;
+		try {
+			if (typeof msg.reqId !== "string" || msg.reqId.length > 200 || !msg.reqId) throw new Error("Invalid request ID");
+			const origin = this.conv;
+			const validateContext = () => {
+				if (this.disposed || this.wikiClient || origin.wiki || this.activeIsWiki) throw new Error("知识库会话不支持普通历史恢复。");
+				if (this.conv !== origin || msg.conversationId !== origin.id || this.cwd !== cwd || this.switchingWorkspace) throw new Error("项目或对话已切换，请重新选择会话。");
+				if (!isSessionDirectory(cwd)) throw new Error("当前项目目录已失效，请先打开一个有效项目。");
+				if (this.restartingSession || this.creatingConversation || origin.tree?.busy) throw new Error("等待当前会话操作完成后重试。");
+			};
+			validateContext();
+			const recovery = this.missingSessionRecovery ??= new SessionRecovery(this.agentDir);
+			if (msg.type === "list_missing_sessions") {
+				const sessions = await recovery.list(origin.id, cwd);
+				validateContext();
+				this.emit({ type: "missing_sessions", ...context, cwd, sessions });
+				return;
+			}
+			if (msg.action === "cancel") {
+				recovery.cancel(msg.token);
+				this.emit({ type: "missing_session_result", ...context, status: "cancelled" });
+				return;
+			}
+			if (msg.action !== "continue" && msg.action !== "fork") throw new Error("Invalid recovery action");
+			if (this.sessionRecoveryOpening || this.quiesceBlocked()) throw new Error("暂时无法恢复会话，请稍后重试。");
+			const selected = recovery.validate(msg.token, origin.id, cwd);
+			this.sessionRecoveryOpening = ownsOpening = true;
+			// Never create a second writer for a transcript already open in this client.
+			const existing = [...this.convs.values()].find(conv => conv.session.sessionFile && resolve(conv.session.sessionFile) === selected.path);
+			if (existing && msg.action === "continue") {
+				if (existing.cwd !== cwd || !isSessionDirectory(existing.cwd)) throw new Error("原会话已在其他目录打开，请选择「复制到当前项目」，或先关闭原对话。");
+				await this.switchConversation(existing.id);
+			} else {
+				const manager = msg.action === "fork" ? SessionManager.forkFrom(selected.path, cwd) : SessionManager.open(selected.path, undefined, cwd);
+				if (msg.action === "fork") forkFile = manager.getSessionFile();
+				if (!await this.switchSession(manager.getSessionFile()!, { manager, validate: validateContext })) throw new Error("会话恢复未完成，请重试。");
+				forkFile = undefined;
+			}
+			recovery.cancel(msg.token);
+			this.invalidateLists();
+			void this.pushSessions();
+			this.emit({ type: "missing_session_result", ...context, status: "ok" });
+		} catch (error) {
+			if (forkFile) rmSync(forkFile, { force: true });
+			const text = error instanceof Error ? error.message : String(error);
+			if (msg.type === "list_missing_sessions") this.emit({ type: "missing_sessions", ...context, cwd, sessions: [], error: text });
+			else this.emit({ type: "missing_session_result", ...context, status: "error", error: text });
+		} finally { if (ownsOpening) this.sessionRecoveryOpening = false; }
+	}
+
 	async refreshSessions(): Promise<void> {
 		this.sessionsRequested = true;
 		await this.pushSessions();
@@ -2541,12 +2618,18 @@ export class ClientSession {
 	 * current runtime, which would otherwise stop a response merely because the
 	 * user opened history while it was streaming.
 	 */
-	async switchSession(path: string): Promise<void> {
-		if (this.restartingSession) { this.emitNotice("warning", "当前会话正在重启，请稍后重试。"); return; }
-		if (this.conv.tree?.busy) { this.emitNotice("warning", "等待当前切换完成。"); return; }
-		if (this.quiesceBlocked()) return;
+	async switchSession(path: string, recovery?: { manager: SessionManager; validate: () => void }): Promise<boolean> {
+		if (this.wikiClient || this.activeIsWiki) { this.emitNotice("warning", "请在知识库中恢复文档会话。"); return false; }
+		if (this.openingHistory || this.restartingSession || (this.sessionRecoveryOpening && !recovery)) { this.emitNotice("warning", "当前会话正在切换，请稍后重试。"); return false; }
+		if (this.conv.tree?.busy) { this.emitNotice("warning", "等待当前切换完成。"); return false; }
+		if (this.quiesceBlocked()) return false;
 		let openedRuntime: AgentSessionRuntime | null = null;
 		let openedTerminals: TerminalManager | null = null;
+		let installed = false;
+		let candidate: Conversation | undefined;
+		let previous: Conversation | undefined;
+		let previousCwd = this.cwd;
+		let previousListed = false;
 		try {
 			const targetPath = resolve(path);
 
@@ -2555,13 +2638,17 @@ export class ClientSession {
 			for (const conv of this.convs.values()) {
 				const sessionFile = conv.session.sessionFile;
 				if (sessionFile && resolve(sessionFile) === targetPath) {
+					if (!isSessionDirectory(conv.cwd)) throw new Error("该会话仍绑定失效目录，请使用「复制到当前项目」。");
 					await this.switchConversation(conv.id);
-					return;
+					return true;
 				}
 			}
 
-			const sessionManager = SessionManager.open(targetPath);
+			const sourceStat = statSync(targetPath);
+			if (!sourceStat.isFile() || sourceStat.size === 0) throw new Error("会话文件已失效，请刷新历史列表。");
+			const sessionManager = recovery?.manager ?? SessionManager.open(targetPath);
 			const targetCwd = sessionManager.getCwd();
+			if (!isSessionDirectory(targetCwd)) throw new Error("原项目目录已失效，请展开左栏「原目录已失效的会话」选择恢复方式。");
 			const conversationId = this.nextConversationId();
 			openedTerminals = this.makeTerminalManager(conversationId, targetCwd);
 			openedRuntime = await createAgentSessionRuntime(
@@ -2572,10 +2659,14 @@ export class ClientSession {
 					sessionManager,
 				},
 			);
+			recovery?.validate();
 
 			// Only displace the old active conversation after the replacement runtime
 			// is known-good. This keeps a failed history open entirely non-destructive.
 			const oldListed = this.conv.listed;
+			previous = this.conv;
+			previousCwd = this.cwd;
+			previousListed = oldListed;
 			const displaced = this.displaceActive();
 			const openInProject =
 				[...this.convs.values()].filter((c) => c.cwd === targetCwd).length +
@@ -2595,7 +2686,7 @@ export class ClientSession {
 					level: "warning",
 					text: `当前项目运行的对话已达上限（${MAX_OPEN_CONVERSATIONS} 个），请先打开某个对话并离开（不继续对话）以移出列表`,
 				});
-				return;
+				return false;
 			}
 
 			const conv = this.makeConversation(
@@ -2606,13 +2697,16 @@ export class ClientSession {
 			// Deliberately resumed — must not be dismissed when the user later
 			// switches away without sending a new message.
 			conv.promptedSinceActive = true;
+			candidate = conv;
+			this.openingHistory = true;
 			this.convs.set(conv.id, conv);
 			this.activeId = conv.id;
+			this.cwd = targetCwd;
+			await this.bindSession(conv);
+			installed = true;
 			openedRuntime = null;
 			openedTerminals = null;
 			if (displaced) this.removeConversation(displaced.id);
-			await this.bindSession();
-			this.cwd = targetCwd;
 			this.conv.lastActiveAt = Date.now();
 			this.webUi.refresh();
 			this.emitConversations();
@@ -2620,16 +2714,24 @@ export class ClientSession {
 			this.pushTerminals();
 			// The restored conversation has a fresh project-bound resource cache.
 			void this.pushSlashCommands();
+			return true;
 		} catch (err) {
+			if (candidate && !installed) {
+				if (previous && this.activeId === candidate.id) { this.activeId = previous.id; this.cwd = previousCwd; previous.listed = previousListed; }
+				candidate.unsubscribe?.(); candidate.tree?.dispose(); candidate.webUi.dispose();
+				this.convs.delete(candidate.id);
+				if (!this.disposed) { this.emitConversations(); this.pushTerminals(); }
+			}
 			openedTerminals?.killAll();
 			if (openedRuntime) await openedRuntime.dispose().catch(() => {});
+			if (recovery && !installed) throw err;
 			this.emit({
 				type: "notice",
 				level: "error",
 				text: `切换会话失败：${(err as Error).message}`,
 			});
-		}
-		this.flushSnapshot();
+			return installed;
+		} finally { this.openingHistory = false; this.flushSnapshot(); }
 	}
 
 	/**
@@ -2837,10 +2939,10 @@ export class ClientSession {
 
 	private cwdQueue: { path: string; id?: string; source?: "ui"; done: () => void } | null = null;
 	private cwdSwitchRunning = false;
-	get switchingWorkspace(): boolean { return this.cwdSwitchRunning || this.restartingSession; }
+	get switchingWorkspace(): boolean { return this.cwdSwitchRunning || this.restartingSession || this.openingHistory; }
 
 	async setCwd(path: string, id?: string, source?: "ui"): Promise<void> {
-		if (this.restartingSession) {
+		if (this.restartingSession || this.openingHistory) {
 			if (id) this.emit({ type: "cwd_result", requestId: id, cwd: this.cwd, ok: false, error: "当前会话正在重启，请稍后重试。" });
 			else this.emitNotice("warning", "当前会话正在重启，请稍后重试。");
 			return;
@@ -3306,6 +3408,7 @@ export class AgentService {
 					}
 				}
 				// Sessions use the SDK default per-project dir — no per-client dir.
+				if (!isSessionDirectory(cwd)) throw new Error(`工作目录已失效：${cwd}。请用 pi-harness --cwd <有效目录> 重新启动服务，再从历史列表恢复会话。`);
 				const creating = ClientSession.create(
 					clientId,
 					cwd,

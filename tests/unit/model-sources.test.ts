@@ -150,7 +150,12 @@ describe("runtime synchronization", () => {
 			busy = false; await sync.ready(mr); expect((await mr.getAuth(pid))?.auth.apiKey).toBe("secret-two");
 			expect(sync.configs()[0].providerId).toBe(pid);
 			if (process.platform !== "win32") expect(statSync(join(dataDir, "model-sources.json")).mode & 0o777).toBe(0o600);
-			await sync.edit(pid, config); f.claude("secret-three"); await sync.sync();
+			await sync.edit(pid, { ...config, compat: { supportsMessageThreads: true }, models: config.models.map(m => ({ ...m, compat: { supportsMessageThreads: false, promptCacheKeyMode: "disabled" } })) }); f.claude("secret-three"); await sync.sync();
+			expect(sync.configs()[0].compat).toEqual({ supportsMessageThreads: true });
+			expect(mr.getModel(pid, config.models[0].id)?.compat).toMatchObject({ supportsMessageThreads: false, promptCacheKeyMode: "disabled" });
+			const local = sync.configs()[0];
+			await sync.edit(pid, { ...local, models: local.models.map(m => ({ ...m, compat: { supportsMessageThreads: null } })) });
+			expect(mr.getModel(pid, config.models[0].id)?.compat).toMatchObject({ supportsMessageThreads: true, promptCacheKeyMode: "disabled" });
 			expect((await mr.getAuth(pid))?.auth.apiKey).toBe("secret-two");
 			expect(sync.configs()[0].origin?.mode).toBe("local");
 			await sync.edit(pid); await sync.sync(); expect(sync.configs()).toHaveLength(0);

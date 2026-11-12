@@ -6,11 +6,13 @@ import { remarkTextHighlight, textHighlightColor } from "./remark-text-highlight
 import { richCodeText } from "./rich-code-text";
 import { renderToStaticMarkup } from "react-dom/server";
 import ReactMarkdown from "react-markdown";
-import { unified } from "unified";
+import { unified, type PluggableList } from "unified";
 import remarkParse from "remark-parse";
 import remarkGfm from "remark-gfm";
 import { remarkHighlightBlock } from "./remark-highlight-block";
 import rehypeHighlight from "rehype-highlight";
+import { common } from "lowlight";
+import { extraCodeLanguages } from "./hljs-lite";
 import TurndownService from "turndown";
 import { gfm } from "turndown-plugin-gfm";
 import type { Root, RootContent } from "mdast";
@@ -19,6 +21,8 @@ import { renderWikiLinks, wikiMetadata } from "./wiki-document";
 import { wikiProperties } from "./wiki-properties";
 import { findToc, TOC_END, TOC_START, tocItems, updateToc } from "./markdown-toc";
 import { COLUMN_TARGET_ATTRIBUTE as COLUMN_TARGET, ROW_TARGET_ATTRIBUTE as ROW_TARGET } from "./table-geometry";
+
+const codeHighlightPlugins: PluggableList = [[rehypeHighlight, { languages: { ...common, ...extraCodeLanguages } }]];
 
 interface SourceBlock {
 	raw: string;
@@ -214,7 +218,7 @@ function disclosureMarkup(raw: string, wiki: boolean, definitions: string): stri
 	const summary = body.match(/^\s*<summary(?:\s[^>]*)?>([\s\S]*?)<\/summary>/i);
 	const rest = summary ? body.slice(summary[0].length) : body;
 	const title = summary ? summary[1] : "";
-	const rendered = renderToStaticMarkup(<ReactMarkdown remarkPlugins={[remarkGfm, remarkMath, remarkRichMath, remarkTextHighlight, controlledBlocks, controlledInline, preserveInlineHtml, remarkHighlightBlock]} rehypePlugins={wiki ? [] : [rehypeHighlight]}>{(wiki ? renderWikiLinks(rest) : rest) + "\n\n" + definitions}</ReactMarkdown>);
+	const rendered = renderToStaticMarkup(<ReactMarkdown remarkPlugins={[remarkGfm, remarkMath, remarkRichMath, remarkTextHighlight, controlledBlocks, controlledInline, preserveInlineHtml, remarkHighlightBlock]} rehypePlugins={wiki ? [] : codeHighlightPlugins}>{(wiki ? renderWikiLinks(rest) : rest) + "\n\n" + definitions}</ReactMarkdown>);
 	// No attribute is written here: `bare` decides at save time whether the source keeps
 	// its hand-written `<details>` or the editor's own controlled format.
 	return `<details><summary>${title}</summary>${rendered}</details>`;
@@ -268,7 +272,7 @@ export function prepareRichDocument(source: string, wiki = false): RichDocument 
 		if (node.type === "heading" && node.depth === 1) firstHeading = false;
 		blocks.push({
 			raw, prefix: source.slice(end, start), protected: protectedBlock, hidden,
-			html: controlled ?? (protectedBlock ? "" : renderToStaticMarkup(<ReactMarkdown remarkPlugins={[remarkGfm, remarkMath, remarkRichMath, remarkTextHighlight, controlledBlocks, controlledInline, preserveInlineHtml, remarkHighlightBlock]} rehypePlugins={wiki ? [] : [rehypeHighlight]}>{(wiki ? renderWikiLinks(raw) : raw) + "\n\n" + definitions}</ReactMarkdown>)),
+			html: controlled ?? (protectedBlock ? "" : renderToStaticMarkup(<ReactMarkdown remarkPlugins={[remarkGfm, remarkMath, remarkRichMath, remarkTextHighlight, controlledBlocks, controlledInline, preserveInlineHtml, remarkHighlightBlock]} rehypePlugins={wiki ? [] : codeHighlightPlugins}>{(wiki ? renderWikiLinks(raw) : raw) + "\n\n" + definitions}</ReactMarkdown>)),
 		});
 		end = stop;
 	}

@@ -3,6 +3,7 @@ import { copyText } from "../clipboard";
 import { useDialogFocus } from "../use-dialog-focus";
 import { UiIcon } from "./UiIcon";
 import { ExtensionCatalogList, extensionResourceKeys } from "./ExtensionCatalogList";
+import { ExtensionJobResult } from "./ExtensionJobResult";
 import { extensionDownloads, extensionErrorMessage } from "../extensions-presentation";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { FiPlus, FiRefreshCw, FiSearch, FiChevronDown, FiChevronRight, FiExternalLink, FiFolder, FiLock, FiX, FiDownload } from "react-icons/fi";
@@ -52,7 +53,7 @@ export function ExtensionsPanel({ cwd, reload, onUpdateCount, mode = "manage", c
 	const [installScope,setInstallScope]=useState<"user"|"project">("user"),[pin,setPin]=useState(false);
 	const [confirm,setConfirm]=useState<{ operation:ExtensionOperation; name:string }>();
 	const lastOperation=useRef<ExtensionOperation>();
-	const [job,setJob]=useState<ExtensionJob>(),[showLog,setShowLog]=useState(false),[changed,setChanged]=useState(false);
+	const [job,setJob]=useState<ExtensionJob>(),[changed,setChanged]=useState(false);
 	const [auto,setAuto]=useState(()=>localStorage.getItem("pi-extensions-autocheck")!=="false");
 	const mounted=useRef(true), loadSequence=useRef(0);
 	useEffect(()=>{if(!editor||editor.content===editor.original)return;const prevent=(e:BeforeUnloadEvent)=>{e.preventDefault();e.returnValue="";};window.addEventListener("beforeunload",prevent);return()=>window.removeEventListener("beforeunload",prevent);},[editor]);
@@ -123,7 +124,7 @@ export function ExtensionsPanel({ cwd, reload, onUpdateCount, mode = "manage", c
 			{directoryError && <div className="ext-error" role="alert">{t("extLocalUnavailable", { error: directoryError })}<button onClick={() => setDirectoryAttempt(value => value + 1)}>{t("extRetry")}</button></div>}
 		</div>}
 		{error&&!installOpen&&<div className="ext-error" role="alert">{errorMessage(error)}<button onClick={()=>void load()}>{t("extRefresh")}</button></div>}
-		{job&&!installOpen&&<div className={`ext-job ${job.phase==="error"?"ext-error":""}`} role="status"><div><strong>{t(job.phase==="running"?"extRunning":job.phase==="done"?"extDone":"extFailed")}</strong><button onClick={()=>setShowLog(!showLog)}>{t("extLog")}</button></div>{job.error&&<p>{errorMessage(job.error)}</p>}{job.phase==="error"&&lastOperation.current&&<button disabled={working} onClick={()=>lastOperation.current?.action==="install"?void inspect(source):void start(lastOperation.current!)}>{t("extRetry")}</button>}<pre>{showLog?job.log:job.log.split("\n").filter(Boolean).slice(-3).join("\n")}</pre></div>}
+		{job&&!installOpen&&<ExtensionJobResult key={job.id} job={job} onRetry={!working&&lastOperation.current?()=>lastOperation.current?.action==="install"?void inspect(source):void start(lastOperation.current!):undefined}/>}
 		{changed&&<div className="ext-notice">{t("extReloadHint")} <button disabled={working} onClick={()=>{reload();setChanged(false);}}>{t("extReload")}</button></div>}
 		{tab==="installed"?<>
 			{mode==="manage" && builtins}

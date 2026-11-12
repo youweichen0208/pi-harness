@@ -202,7 +202,7 @@ try {
 	const reopened = new NodeAgent(agent.sessionDir, "/srv/ops", { command: async () => { throw new Error("unused"); }, read: async () => "", write: async () => {} }, () => {});
 	await reopened.start();
 	assert.equal(reopened.snapshot().messages.length, 0);
-	reopened.close();
+	await reopened.close();
 	assert.equal(agent.snapshot().model.id, "other");
 	assert.equal((await call("agent_prompt", nodeId, { text: "slow request" }, agentId)).event, "result");
 	await waitFor(() => agent.session.isStreaming);
@@ -289,7 +289,7 @@ try {
 	}
 } finally {
 	await browser?.close(); if (web) { web.kill("SIGTERM"); if (web.exitCode === null) await new Promise(resolve => web.once("exit", resolve)); }
-	service.dispose(); for (const child of children) child.kill(); for (const client of clients) client.end();
+	await service.dispose(); for (const child of children) child.kill(); for (const client of clients) client.end();
 	await new Promise(resolve => ssh.close(resolve)); model.closeAllConnections(); await new Promise(resolve => model.close(resolve));
 	rmSync(root, { recursive: true, force: true });
 }

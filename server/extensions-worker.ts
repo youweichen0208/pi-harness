@@ -3,13 +3,15 @@ import { DefaultPackageManager, SettingsManager, ProjectTrustStore, type Package
 import { writeFileSync, mkdirSync, renameSync } from "node:fs";
 import { join, relative } from "node:path";
 import { createHash } from "node:crypto";
-import type { ExtensionOperation, ExtensionPackage, ExtensionsState, ExtensionScope } from "./protocol.js";
+import type { ExtensionOperation, ExtensionPackage, ExtensionsState, ExtensionScope, ExtensionUpdateResult } from "./protocol.js";
 import { readJson, textField, resourceTypes, sourceOf, sourceInfo, packageDisabled, settingsVersion } from "./extensions-model.js";
 import { extensionDisplay } from "./extension-display.js";
-import { gitOutput, latestNpmVersion } from "./component-updates.js";
+import { latestNpmVersion } from "./component-updates.js";
+import { updateExtensionPackages } from "./extension-updates.js";
 export interface WorkerRequest { cwd: string; agentDir: string; action: "list" | "check" | "mutate"; operation?: ExtensionOperation; source?: string; version?: string; }
 const blankResources = () => ({ extensions: [] as string[], skills: [] as string[], prompts: [] as string[], themes: [] as string[] });
-export async function extensionWork(input: WorkerRequest, progress: (message: string) => void = () => {}): Promise<ExtensionsState> {
+export async function extensionWork(input: WorkerRequest, progress: (message: string) => void = () => {}, onResult: (result: ExtensionUpdateResult) => void = () => {}): Promise<ExtensionsState> {
+	let updateResults: ExtensionUpdateResult[] | undefined;
 	const { cwd, agentDir } = input;
 	const trusted = new ProjectTrustStore(agentDir).get(cwd) === true;
 	const settings = SettingsManager.create(cwd, agentDir, { projectTrusted: trusted });
@@ -121,21 +123,19 @@ export async function extensionWork(input: WorkerRequest, progress: (message: st
 			setPackages(scope, entries.filter((_,i) => i !== index));
 			const oldBackup = backup[backupKey(target!.id)]; if (oldBackup) { backup[backupKey(`${destination}:${movedSource}`)] = typeof oldBackup === "string" ? movedSource : { ...oldBackup, source: movedSource }; saveBackup(); }
 		} else if (op.action === "update" || op.action === "update-all") {
-			const updates = await checkUpdates(op.action === "update" ? target!.id : undefined);
-			const eligible = state.packages.filter(p => !p.protected && p.trusted && !p.pinned && updates.some(u => u.source === p.source && u.scope === p.scope) && (op.action === "update-all" || p.id === target!.id));
-			if (!eligible.length) throw Error("No updates available");
-			for (const [i,p] of eligible.entries()) {
-				if (p.kind === "git" && p.path && await gitOutput(p.path,["status","--porcelain"])) throw Error(`Local changes in ${p.name}; commit or save them before updating`);
-				progress(`${i+1}/${eligible.length} ${p.name}`);
-				// A scope-isolated native manager prevents update(source) from also updating another declaration.
-				const updater = scopedManager(p.scope,[p.source]);
-				updater.setProgressCallback(event => progress(`${event.type}: ${event.message ?? event.source}`));
-				await updater.update(p.source);
-			}
+			// Native update performs its own version checks. A preflight check can lose offline,
+			// unchanged and warning outcomes, or hide a partial success behind a later failure.
+			updateResults = await updateExtensionPackages(
+				state.packages.filter(p => op.action === "update-all" ? p.kind !== "file" : p.id === target!.id),
+				p => scopedManager(p.scope, [p.source]),
+				source => requireTools(source, "check"), progress, onResult,
+				["1", "true", "yes"].includes(process.env.PI_OFFLINE?.toLowerCase() ?? ""),
+			);
 		} else throw Error("Unsupported operation");
 		await flush();
 	}
 	const state = await list();
+	if (updateResults) state.updateResults = updateResults;
 	if (input.action === "check") {
 		const updates = await checkUpdates();
 		for (const item of state.packages) {
@@ -161,7 +161,7 @@ if (process.send && process.argv.includes("--extensions-worker")) {
 				if (process.connected) process.disconnect();
 			});
 		};
-		void extensionWork(input, message => process.send?.({ progress: message })).then(
+		void extensionWork(input, message => process.send?.({ progress: message }), result => process.send?.({ updateResult: result })).then(
 			state => finish({ state }),
 			error => finish({ error: error instanceof Error ? error.message : String(error) }),
 		);

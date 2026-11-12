@@ -137,6 +137,8 @@ export class NodeWorkbench {
 		const cwd = safePath(req.payload?.cwd ?? this.node(req.nodeId).defaultDir);
 		connection.agentStarting = true;
 		try {
+			await connection.agent?.close();
+			this.ensureCurrent(connection);
 			const sessionDir = join(this.dataDir, "node-sessions", createHash("sha256").update(clientId).digest("hex"), connection.nodeId);
 			const check = (signal?: AbortSignal) => { signal?.throwIfAborted(); this.ensureCurrent(connection); };
 			const agent = new NodeAgent(sessionDir, cwd, {
@@ -319,13 +321,14 @@ export class NodeWorkbench {
 					if (node.fingerprint && node.fingerprint !== fp) throw new Error("主机密钥已变化；请重新核实节点身份");
 					node.fingerprint = fp; this.save(); await this.connect(clientId, node, undefined, req); break;
 				}
-				case "disconnect": this.pendingConnections.delete(identity(clientId, req.nodeId ?? "")); this.disconnect(clientId, req.nodeId); break;
+				case "disconnect": this.pendingConnections.delete(identity(clientId, req.nodeId ?? "")); await this.disconnect(clientId, req.nodeId); break;
 				case "agent_start": result = { agent: await this.startAgent(clientId, req) }; break;
+				case "agent_status": this.agent(clientId, req).refresh(); break;
 				case "agent_prompt": await this.agent(clientId, req).prompt(field(p.text, "消息", 200000), p.queue === "steer" || p.queue === "followUp" ? p.queue : undefined); break;
 				case "agent_abort": await this.agent(clientId, req).abort(); break;
 				case "agent_new": await this.agent(clientId, req).newSession(); break;
 				case "agent_model": await this.agent(clientId, req).model(field(p.provider, "服务商"), field(p.modelId, "模型")); break;
-				case "agent_close": this.agent(clientId, req).close(); break;
+				case "agent_close": await this.agent(clientId, req).close(); break;
 				case "agent_dialog": this.agent(clientId, req).dialog(field(p.id, "对话框"), { cancelled: p.cancelled === true, confirmed: p.confirmed === true, remember: p.remember === true, value: typeof p.value === "string" ? p.value : undefined }); break;
 				case "terminal_open": result = await this.openTerminal(clientId, req); break;
 
@@ -439,12 +442,14 @@ export class NodeWorkbench {
 		finally { this.syncing.delete(source.id); if (!this.disposed) { this.save(); this.broadcastState(); } }
 	}
 
-	dispose(): void {
+	private readonly pendingAgentCleanup = new Set<Promise<void>>();
+	async dispose(): Promise<void> {
 		this.disposed = true;
 		this.xshellCredentials.clear(); this.pendingConnections.clear(); this.authStates.clear();
 		clearInterval(this.timer);
 
 		for (const c of [...this.connections.values()]) this.drop(c);
+		await Promise.all([...this.pendingAgentCleanup]);
 
 		this.transientSecrets.clear();
 	}
@@ -511,7 +516,7 @@ export class NodeWorkbench {
 			if (ssh2.utils.parseKey(opts.privateKey, secret) instanceof Error) throw new NodeCredentialError("用户密钥格式不支持或口令不正确，请选择 OpenSSH 私钥并填写正确口令。");
 			if (secret) opts.passphrase = secret;
 		}
-		this.disconnect(clientId, node.id);
+		await this.disconnect(clientId, node.id);
 		const client = new Client();
 		const c: Connection = { client, clientId, nodeId: node.id, terminals: new Map(), ready: false, startedAt: Date.now() };
 		const key = identity(clientId, node.id);
@@ -535,14 +540,18 @@ export class NodeWorkbench {
 			catch (error) { this.ensureCurrent(c); this.emit(clientId, "failure", { action: "agent_start", message: (error as Error).message }, { nodeId: node.id }); }
 		} catch (e) { this.drop(c); client.end(); if (keyChanged) throw new Error("主机密钥已变化，连接已阻止；请核实节点身份"); if ((e as { level?: string }).level === "client-authentication") throw new NodeCredentialError("身份验证失败，请检查用户名、密码或用户密钥。"); throw e; }
 	}
-	private drop(c: Connection): void {
-		if (this.connections.get(identity(c.clientId, c.nodeId)) !== c) return;
+	private drop(c: Connection): Promise<void> {
+		if (this.connections.get(identity(c.clientId, c.nodeId)) !== c) return Promise.resolve();
 
 		this.connections.delete(identity(c.clientId, c.nodeId));
 		for (const t of c.terminals.values()) { t.pending?.reject(new Error("SSH 已断开")); this.emit(c.clientId, "terminal_exit", {}, { nodeId: c.nodeId, terminalId: t.id, conversationId: t.conversationId }); }
-		c.agent?.close(); c.terminals.clear(); c.client.end(); this.broadcastState();
+		const closing = c.agent?.close() ?? Promise.resolve();
+		this.pendingAgentCleanup.add(closing);
+		void closing.finally(() => this.pendingAgentCleanup.delete(closing)).catch(error => console.error("SSH Agent cleanup failed:", error));
+		c.terminals.clear(); c.client.end(); this.broadcastState();
+		return closing;
 	}
-	private disconnect(clientId: string, nodeId: string | undefined): void { const c = this.connections.get(identity(clientId, nodeId ?? "")); if (c) this.drop(c); }
+	private disconnect(clientId: string, nodeId: string | undefined): Promise<void> { const c = this.connections.get(identity(clientId, nodeId ?? "")); return c ? this.drop(c) : Promise.resolve(); }
 	private async openTerminal(clientId: string, req: Request): Promise<Record<string, unknown>> {
 		const c = this.connection(clientId, req.nodeId);
 		const id = req.terminalId || randomUUID(), conversationId = `node:${c.nodeId}`;

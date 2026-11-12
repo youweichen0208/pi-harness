@@ -38,6 +38,10 @@ pi-harness 使用内置 Pi SDK 执行对话，无需安装 Pi CLI。在「管理
 
 模型管理保留原生 Pi 文件编辑行为；外部同步条目每项对应一个模型，编辑生成独立副本，后续来源更新不覆盖。删除会抑制该入口所有已合并来源槽位；恢复同步清除删除墓碑，不覆盖仍存在的独立副本。来源文件始终只读。
 
+Pi 1.5.2 的兼容选项在服务商和模型表单中默认收起，允许编辑 `supportsMessageThreads`、`promptCacheKeyMode`、`requiresNonNullAssistantContent`、`requiresToolsWithToolHistory`。模型值优先于服务商；未设置沿用原生默认，显式 `false` 不退化为未设置。协议只投影这四个非敏感字段，`null` 表示删除该项覆盖、缺省表示保留；后端只合并白名单，不接受额外字段覆盖原配置，其他 compat、headers、密钥和 image/classifier 条目继续保留。来源条目编辑后的独立副本在本地保存服务商与模型两层覆盖，注册时按字段合并，来源文件不变。
+
+回归：`tests/pi152-model-compat-test.mjs` 使用本地模拟接口检查实际请求中的空内容、工具历史、缓存键、Anthropic 增量消息线程以及修改 system/tools 后的完整上下文回退；不使用真实账号或产生模型费用。`tests/model-config-preservation-test.mjs` 验证生产读写路径与未知字段保留；`tests/pi152-model-ui-test.mjs` 验证三态控件、重新打开、中英文和窄屏主题，并检查新增代码语言及 Mermaid 饼图、样式和严格模式下禁用回调。
+
 ## 执行边界
 
 主聊天与独立 Wiki 客户端、SSH 节点绑定同一目录；子代理沿用父模型运行时。工具、扩展与 SSH 隔离不变。注册通过公开 registerProvider/setRuntimeApiKey，不把外部 apiKey 放入 SDK 命令解析字段；header 的 `$` 在注册边界转义为字面内容。

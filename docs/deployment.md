@@ -104,7 +104,7 @@ npm run publish:electron       # 同 build，但 --publish always——本地跑
 - 主进程 `fork()` 一个隐藏子进程跑 `dist/server/index.js`（`ELECTRON_RUN_AS_NODE=1`，
   即用 Electron 自带的 Node 运行时跑纯 Node 代码，不是渲染进程）。
 - 桌面 Pi SDK 精确锁定为 1.4.0；终端 `pi update` 只更新外部 CLI。
-- 打包排除仓库里的 `.pi`、`.omp` 和 `.env*`。产物运行 `tests/packaged-server-start-test.mjs`、`tests/native-tools-desktop-test.mjs`、`tests/provider-auth-test.mjs`，检查终端、Codemode worker、SDK 文档、OAuth lazy 模块。
+- 打包排除仓库里的 `.pi`、`.omp`、`.env*`，以及本地 `.claude` 工作树、`.playwright-mcp`、`.scratch` 和 npm 压缩包。electron-builder 不读取 `.gitignore`，这些目录必须在 `files` 中显式排除，避免嵌套旧安装包和调试产物。产物运行 `tests/packaged-server-start-test.mjs`、`tests/native-tools-desktop-test.mjs`、`tests/provider-auth-test.mjs`，检查开发目录未被带入、终端、Codemode worker、SDK 文档、OAuth lazy 模块。
 
 - 通过 stdout 里的 `⚡ pi-harness` 标记（见 `server/index.ts` 的 `httpServer.listen` 回调）
   判断 server 就绪，再让 `BrowserWindow` 加载 `http://127.0.0.1:{随机空闲端口}`。

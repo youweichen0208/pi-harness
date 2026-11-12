@@ -25,7 +25,11 @@ async function fixture() {
 		const off = subscribe(listener);
 		return () => { listeners.delete(listener); off(); };
 	});
-	const emit = (event: AgentSessionEvent) => { for (const listener of listeners) listener(event); };
+	const emit = (event: AgentSessionEvent) => {
+		if (event.type === "agent_settled") streaming.mockReturnValue(false);
+		if (event.type === "agent_start") streaming.mockReturnValue(true);
+		for (const listener of listeners) listener(event);
+	};
 	const user = (text: string) => emit({ type: "message_start", message: { role: "user", content: [{ type: "text", text }], timestamp: 1 } });
 	const streaming = vi.spyOn(session, "isStreaming", "get").mockReturnValue(true);
 	return { session, emit, user, subscription, listeners, streaming };
@@ -103,7 +107,10 @@ test("started preflight binds and clears scope without changing prompt text or i
 	expect(getSubagentWorkspace(session.sessionManager)).toBeUndefined();
 	expect(prompt.mock.calls.map(([text]) => text)).toEqual(["first", "next"]);
 	expect(subscription).toHaveBeenCalledTimes(1);
+	await expect(session.reload()).rejects.toThrow(/Wait for the current response/);
+	expect(listeners.size).toBe(1);
 	emit({ type: "agent_settled", aborted: false });
+	expect(session.isStreaming).toBe(false);
 	expect(listeners.size).toBe(0);
 	await session.reload();
 	await deliverPrompt(session, "after reload", [], false, () => {}, "new");

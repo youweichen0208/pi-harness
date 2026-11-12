@@ -10,7 +10,7 @@ const endpoint = createServer((request, response) => response.writeHead(200, { '
 try {
 	const image = { id: 'picture', type: 'image', maxImages: 3 };
 	const classifier = { id: 'label', type: 'classifier', compat: { imageInput: true, sendImageOptInHeader: true }, samplingParams: { temperature: 0 } };
-	const chat = { id: 'chat', type: 'chat', cost: { input: 2 }, samplingParams: { temperature: 0.4 } };
+	const chat = { id: 'chat', type: 'chat', cost: { input: 2 }, samplingParams: { temperature: 0.4 }, compat: { supportsMessageThreads: false, promptCacheKeyMode: 'auto', futureField: { token: 'SECRET_COMPAT' } } };
 	const original = { compat: { imageInput: true, sendImageOptInHeader: false }, futureField: { preserve: true }, api: 'openai-completions', headers: { Authorization: 'FIXTURE_SECRET' }, operations: { image: { enabled: true } }, models: [chat, image, classifier] };
 	const path = join(directory, 'models.json');
 	writeFileSync(path, JSON.stringify({ providers: { fixture: original } }));
@@ -21,6 +21,8 @@ try {
 	const form = wire.at(-1).providers[0];
 	assert.deepEqual(form.models.map(model => model.id), ['chat']);
 	assert(!JSON.stringify(wire).includes('FIXTURE_SECRET'));
+	assert(!JSON.stringify(wire).includes('SECRET_COMPAT'));
+	assert.deepEqual(form.models[0].compat, { supportsMessageThreads: false, promptCacheKeyMode: 'auto' });
 	form.models[0].name = 'Renamed';
 	await service.saveModelConfig('fixture', form);
 	assert.equal(refreshes, 1);
@@ -29,6 +31,12 @@ try {
 	await service.saveModelConfig('fixture', { providerId: 'fixture', models: [{ id: 'chat' }, { id: 'chat' }] });
 	assert.equal(readFileSync(path, 'utf8'), before);
 	assert.equal(wire.at(-1).level, 'error');
+	form.models[0].compat = { supportsMessageThreads: null, promptCacheKeyMode: 'disabled', requiresNonNullAssistantContent: true, requiresToolsWithToolHistory: false };
+	form.compat = { supportsMessageThreads: true };
+	await service.saveModelConfig('fixture', form);
+	const saved = JSON.parse(readFileSync(path)).providers.fixture;
+	assert.deepEqual(saved.compat, { ...original.compat, supportsMessageThreads: true });
+	assert.deepEqual(saved.models[0].compat, { futureField: chat.compat.futureField, promptCacheKeyMode: 'disabled', requiresNonNullAssistantContent: true, requiresToolsWithToolHistory: false });
 	await new Promise((resolve, reject) => { endpoint.once('error', reject); endpoint.listen(0, '127.0.0.1', resolve); });
 	const configured = JSON.parse(readFileSync(path));
 	configured.providers.fixture.baseUrl = `http://127.0.0.1:${endpoint.address().port}`;

@@ -7326,6 +7326,15 @@ span.msg-editor-hint svg {
 	align-items: center;
 	margin-bottom: 8px;
 }
+.model-compat { grid-column: 1 / -1; min-width: 0; margin-block: 4px 12px; }
+.model-compat > summary { cursor: pointer; color: var(--text-dim); font-size: 12px; padding-block: 6px; }
+.model-compat > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--r-sm); }
+.model-compat .hint { margin-block: 4px 8px; }
+.model-compat-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 12px; }
+.model-compat-fields .field { min-width: 0; }
+.model-compat-fields .field-label { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+.model-compat-fields code { font-size: 11px; overflow-wrap: anywhere; }
+.model-compat-fields select { width: 100%; }
 .model-row input,
 .model-row select {
 	background: var(--bg-elev);
@@ -10418,6 +10427,17 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { height: 44px;
 .ext-error button { margin-left: 10px; }
 .ext-job > div { display: flex; justify-content: space-between; align-items: center; }
 .ext-job pre { font-size: 10px; max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ext-update-results { list-style: none; padding: 0; margin: 8px 0 0; max-height: 320px; overflow: auto; }
+.ext-update-results li { padding: 8px 0; border-top: 1px solid var(--border-soft); overflow-wrap: anywhere; }
+.ext-update-result-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+.ext-update-result-heading strong { color: var(--text); }
+.ext-update-result-heading span, .ext-update-results code { color: var(--text-dim); }
+.ext-update-status { margin-inline-start: auto; }
+.ext-job[data-phase="partial"] > div > strong { color: var(--yellow-fg); }
+.ext-update-results [data-status="error"] .ext-update-status { color: var(--red); }
+.ext-update-results [data-status="warning"] .ext-update-status { color: var(--yellow-fg); }
+.ext-update-results [data-status="updated"] .ext-update-status { color: var(--progress-text); }
+.ext-update-results p { color: var(--text-dim); margin: 4px 0 0; white-space: pre-wrap; }
 .ext-dialog-backdrop { position: fixed; inset: 0; z-index: 100; background: color-mix(in srgb, var(--shadow-color) 31.37%, transparent); backdrop-filter: blur(2px); display: flex; align-items: center; justify-content: center; padding: 20px; }
 .ext-dialog { width: 520px; max-width: 100%; max-height: 85vh; overflow: auto; background: var(--bg-elev); border-radius: var(--r-lg); padding: 24px; box-shadow: 0 20px 80px color-mix(in srgb, var(--shadow-color) 18.82%, transparent); }
 .ext-dialog header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
@@ -11136,6 +11156,13 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { height: 44px;
 .model-run-settings { border-top: 1px solid var(--border); padding: 8px 12px; }
 .model-run-settings label { display: flex; align-items: center; gap: 8px; padding: 7px 0; font-size: 12px; color: var(--text); cursor: pointer; }
 .model-run-settings input { accent-color: var(--accent); }
+.model-cache-warming { justify-content: space-between; flex-wrap: wrap; }
+.model-cache-warming select { min-height: 28px; max-width: 100%; padding: 3px 6px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--bg); color: var(--text); font: inherit; }
+.model-cache-hint { margin: 0 0 4px; color: var(--text-dim); font-size: 12px; line-height: 1.5; }
+.usage-warming { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+.usage-warming .usage-head { gap: 12px; margin-bottom: 6px; }
+.usage-warming .usage-head > span:first-child { min-width: 0; white-space: normal; }
+.usage-warming-reason { margin: 4px 0; color: var(--text-dim); overflow-wrap: anywhere; }
 .workspace-stat-path { max-width: 34ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .task-progress-track span.running { background: var(--progress-text); }
 
@@ -15889,3 +15916,36 @@ span.rich-math { display: inline-block; }
 :root .design-workspace .bash-formatted-output pre.bash-syntax { padding: 0; margin: 0; }
 
 .bash-search-result pre.bash-syntax { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* Missing-project session recovery: exceptional history, loaded only on demand. */
+.missing-sessions { padding: 8px 4px; border-top: 1px solid var(--border-soft); }
+.missing-sessions-toggle { display: flex; align-items: center; gap: 6px; width: 100%; min-height: 32px; padding: 6px; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--text-dim); font: inherit; text-align: left; cursor: pointer; }
+.missing-sessions-toggle svg { flex: 0 0 14px; }
+.missing-sessions-toggle span { min-width: 0; overflow-wrap: anywhere; }
+.missing-sessions-toggle:hover, .missing-session-item:hover { background: var(--bg-elev2); color: var(--text); }
+.missing-sessions-list { padding: 4px 6px; }
+.missing-sessions-list p { margin: 8px 0; font-size: 12px; color: var(--text-dim); }
+.missing-session-item { display: flex; flex-direction: column; gap: 3px; width: 100%; padding: 8px; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--text); text-align: left; cursor: pointer; }
+.missing-session-item span, .missing-session-item small { display: block; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.missing-session-item span { font-size: 13px; }
+.missing-session-item small { color: var(--text-dim); font-size: 11px; }
+.missing-sessions-refresh { padding: 6px 8px; border: 0; background: transparent; color: var(--accent); font: inherit; cursor: pointer; }
+.missing-session-dialog { width: min(520px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); overflow: auto; }
+.missing-session-dialog h2 { font-size: 18px; margin: 0 0 12px; }
+.missing-session-dialog p { margin: 12px 0; line-height: 1.6; }
+.missing-session-dialog dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 16px; padding: 12px; background: var(--bg-elev2); border-radius: var(--r-sm); }
+.missing-session-dialog dt { color: var(--text-dim); }
+.missing-session-dialog dd { margin: 0; overflow-wrap: anywhere; font-family: var(--mono); }
+.missing-session-continue-hint { color: var(--text-dim); }
+.missing-session-dialog .missing-session-actions { display: flex; justify-content: flex-start; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+.wiki-confirm.missing-session-dialog .missing-session-actions button { min-height: 36px; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--bg-elev); color: var(--text); cursor: pointer; }
+.wiki-confirm.missing-session-dialog .missing-session-actions .primary { background: var(--action); color: var(--action-fg); border-color: var(--action); }
+.missing-sessions button:disabled, .missing-session-actions button:disabled { cursor: default; opacity: .55; }
+.missing-session-dialog [role="alert"], .missing-sessions-list [role="alert"] { color: var(--red); }
+@media (pointer: coarse) {
+	.missing-sessions button, .missing-session-actions button { min-height: 44px; }
+}
+@media (max-width: 520px) {
+	.missing-session-dialog .missing-session-actions { flex-direction: column; }
+	.wiki-confirm.missing-session-dialog .missing-session-actions button { min-height: 44px; }
+}

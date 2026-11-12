@@ -269,11 +269,21 @@ export interface UiRecovery {
 	summary?: { id: string; source: "compaction" | "branchSummary"; phase: "waiting" | "running"; attempt?: number; maxAttempts?: number; remainingMs?: number; deadline?: number; error?: string };
 }
 
+export type CacheWarmingMode = "off" | "streaming" | "idle";
+export interface UiCacheWarming {
+	mode: CacheWarmingMode;
+	state: "inactive" | "scheduled" | "refreshing";
+	reason?: string;
+	nextWarmAt?: number;
+	/** Included in native session total cost, never an additional charge. */
+	cost: number;
+}
+
 export interface UiState {
 	subagentTasks?: { toolCallId: string; tasks: UiSubagentProgress[] }[];
 	tree?: UiTreeState;
 	recovery?: UiRecovery;
-	runSettings?: { autoCompaction: boolean; autoRetry: boolean };
+	runSettings?: { autoCompaction: boolean; autoRetry: boolean; cacheWarming?: CacheWarmingMode };
 	clientId: string;
 	cwd: string;
 	sessionId: string;
@@ -332,6 +342,7 @@ export interface UiState {
 	piAgentInstalled: boolean;
 	/** Live session stats for the footer status bar. */
 	stats: {
+		cacheWarming?: UiCacheWarming;
 		totalMessages: number;
 		tokens: {
 			input: number;
@@ -543,6 +554,8 @@ export type ClientMessage =
 	| { type: "cycle_thinking" }
 	| { type: "get_state" }
 	| { type: "list_sessions" }
+	| { type: "list_missing_sessions"; reqId: string; conversationId: string }
+	| { type: "recover_missing_session"; reqId: string; conversationId: string; token: string; action: "continue" | "fork" | "cancel" }
 	| { type: "switch_session"; path: string }
 	| { type: "switch_conversation"; id: string }
 	| { type: "list_projects" }
@@ -562,6 +575,8 @@ export type ClientMessage =
 	| { type: "complete_path"; path: string }
 	| { type: "cancel_recovery"; conversationId: string; operationId: string }
 	| { type: "set_run_settings"; conversationId: string; autoCompaction?: boolean; autoRetry?: boolean }
+	| { type: "set_cache_warming"; mode: CacheWarmingMode }
+	| { type: "get_cache_warming"; conversationId: string }
 	| { type: "dialog_response"; conversationId: string; id: string; value: string | boolean | null }
 	// -- self-update ----------------------------------------------------------
 	/** Check the npm registry for a newer pi-harness version. */
@@ -668,6 +683,14 @@ export type ClientMessage =
 // ---------------------------------------------------------------------------
 // Server -> Client
 // ---------------------------------------------------------------------------
+
+export interface MissingSessionSummary {
+	token: string;
+	name?: string;
+	firstMessage: string;
+	cwd: string;
+	modified: number;
+}
 
 export interface SessionSummary {
 	branchPoints?: number;
@@ -839,6 +862,14 @@ export interface ModelInfo {
 // Custom model configuration (agentDir/models.json) — browser-editable shape
 // ---------------------------------------------------------------------------
 
+/** Safe editable compatibility fields. null removes an override; omission preserves it. */
+export interface UiModelCompat {
+	supportsMessageThreads?: boolean | null;
+	promptCacheKeyMode?: "auto" | "enabled" | "disabled" | null;
+	requiresNonNullAssistantContent?: boolean | null;
+	requiresToolsWithToolHistory?: boolean | null;
+}
+
 /** One model definition inside a custom provider. */
 export interface UiModelConfigEntry {
 	id: string;
@@ -847,10 +878,12 @@ export interface UiModelConfigEntry {
 	input?: string[];
 	contextWindow?: number;
 	maxTokens?: number;
+	compat?: UiModelCompat;
 }
 
 /** A custom provider block in models.json (providers.<id>). */
 export interface UiProviderConfig {
+	compat?: UiModelCompat;
 	origin?: ModelOrigin;
 	/** Typed image/classifier entries are retained server-side by the chat editor. */
 	nonChatModelCount?: number;
@@ -1150,6 +1183,8 @@ export type ServerMessage =
 	| { type: "heartbeat" }
 	| { type: "cwd_result"; requestId: string; cwd: string; ok: boolean; error?: string; timing?: { startedAt: number; preparedAt: number; snapshotAt: number } }
 	| { type: "sessions"; cwd: string; sessions: SessionSummary[] }
+	| { type: "missing_sessions"; reqId: string; conversationId: string; cwd: string; sessions: MissingSessionSummary[]; error?: string }
+	| { type: "missing_session_result"; reqId: string; conversationId: string; status: "ok" | "cancelled" | "error"; error?: string }
 	/** Filename matches for the global search panel (reqId echo). Always sent
 	 *  in reply to a search_files request — ok:false means the walk failed. */
 	| {
@@ -1456,7 +1491,7 @@ export interface ExtensionPackage {
 	resources: Record<"extensions" | "skills" | "prompts" | "themes", string[]>;
 	latest?: string; update?: boolean; checkError?: string; protected?: boolean;
 }
-export interface ExtensionsState { packages: ExtensionPackage[]; version: string; trusted: boolean; checkedAt?: number; autoCheck?: boolean; }
+export interface ExtensionsState { packages: ExtensionPackage[]; version: string; trusted: boolean; checkedAt?: number; autoCheck?: boolean; updateResults?: ExtensionUpdateResult[]; }
 
 export type BuiltinExtensionId = "pi-harness-database" | "pi-harness-subagents" | "codemode" | "tool-search" | "mcp";
 export interface BuiltinExtensionState {
@@ -1483,7 +1518,13 @@ export interface ExtensionCatalog { items: ExtensionCatalogItem[]; page: number;
 export interface ExtensionPackageDetails { source: string; name: string; version?: string; description?: string; author?: string; repository?: string; license?: string; resources: Record<string, string[]>; canPin: boolean; }
 export interface ExtensionPreview extends ExtensionPackageDetails { ticket: string; }
 export interface ExtensionOperation { action: "install" | "remove" | "toggle" | "update" | "update-all" | "unpin" | "move"; id?: string; scope?: ExtensionScope; enabled?: boolean; ticket?: string; pin?: boolean; }
-export interface ExtensionJob { id: string; phase: "running" | "done" | "error"; log: string; error?: string; }
+export interface ExtensionUpdateResult {
+	id: string; name: string; scope: ExtensionScope;
+	status: "updated" | "unchanged" | "skipped" | "warning" | "error";
+	from?: string; to?: string; message?: string;
+	reason?: "offline" | "pinned" | "protected" | "untrusted" | "local" | "unverified";
+}
+export interface ExtensionJob { id: string; phase: "running" | "done" | "partial" | "error"; log: string; error?: string; results?: ExtensionUpdateResult[]; }
 
 // Native system prompt inspection/file editing HTTP API.
 export interface PromptSectionView { name: string; text: string; }
@@ -1500,6 +1541,7 @@ export interface SystemPromptState {
 
 /** One local native Pi session with SSH-only tools, isolated from the main chat. */
 export interface NodeAgentState {
+	stats?: UiState["stats"];
 	id: string;
 	cwd: string;
 	phase: "starting" | "ready" | "closed";

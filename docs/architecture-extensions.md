@@ -2,7 +2,7 @@
 
 文档转 Markdown 与 OKF 知识蒸馏扩展均已移除，不再提供聊天工具、命令或设置条目；实现、Python 资源和打包支持也已删除。
 
-设置 › Extensions 对接 Pi 1.5.0 的 `DefaultPackageManager`、`SettingsManager` 和 `ProjectTrustStore`。安装、移除、更新与资源发现运行在独立 Node worker；浏览页面不执行扩展入口，缺失依赖采用 `resolve(() => "skip")`，不会因浏览自动安装。包变更在新会话生效，当前会话仅在用户点击重载时通过已有 `extensions_reload` 生效。宿主不向模型注册工具、注入消息或系统提示词。
+设置 › Extensions 对接 Pi 1.5.2 的 `DefaultPackageManager`、`SettingsManager` 和 `ProjectTrustStore`。安装、移除、更新与资源发现运行在独立 Node worker；浏览页面不执行扩展入口，缺失依赖采用 `resolve(() => "skip")`，不会因浏览自动安装。包变更在新会话生效，当前会话仅在用户点击重载时通过已有 `extensions_reload` 生效。宿主不向模型注册工具、注入消息或系统提示词。
 
 扩展代码刷新（issue #64）：jiti 对原生 .js/.mjs 走 Node import()/require()，进程内缓存会让 `/restart`、`/reload` 和 `extensions_reload` 重建扩展工厂后仍命中旧代码——扩展内的 MCP 连接等顶层状态也随之遗留。`server/extension-module-cache.ts` 在每次创建 runtime 前注册受控目录（agentDir/extensions、agentDir/npm、cwd/.pi/extensions、cwd/.pi/npm，realpath 双形式匹配），并仅在用户显式触发的重建前（restartSession、`/reload` 命令、`reloadExtensions`）bump 代数——ESM 缓存不可释放，每次刷新多留一份模块实例，所以设置、提示词、MCP 保存共用的 `session.reload()` 不刷新；代数进程全局，刷新后其他对话懒加载受控模块也拿到新实例。bump 机制：resolve 钩子给受控模块 URL 追加 `?piextgen=<代数>` 绕开 ESM loader 永久缓存（CJS 的 require 会剥掉 search，无副作用），同时清空受控目录下的 require.cache 条目刷新 CJS 本体；`module.registerHooks` 不可用时 ESM 优雅降级为旧行为。.ts 由 jiti 每次实例化重新转译，天然新鲜。回归：`tests/restart-extension-cache-test.mjs` 覆盖 .ts 文件、npm CJS 包、npm ESM 包在 /restart、二次重启与 reloadExtensions() 下拿到新代码与新状态，普通 session.reload() 保持旧代码。
 
@@ -43,6 +43,8 @@ Desktop 不打包应用自己的 `extensions/` 或声明其扩展入口。会话
 未信任项目仅显示 settings.json 中的包声明，不读取项目包安装目录，不安装或启用。Extensions 不隐式授予信任。信任需要在原生 Pi 或已有 MCP 设置中明确操作。
 
 更新检查、更新操作使用按范围隔离的原生内存 SettingsManager，避免原生 update(source) 同时更新两个范围或检查时被项目声明去重。SDK 判断版本和 ref 可更新性；固定 npm 版本、带 Git ref 的来源及本地文件不纳入更新。Git 工作树有未提交改动时阻止更新。范围/tag npm 来源只显示可更新标记，不把 registry/latest 当成满足范围的目标版本。
+
+Pi 1.5.2 更新结果由 `extension-updates.ts` 按包收集：更新前后读取实际安装版本或 Git HEAD，保留原生 `result` 和警告事件；离线、锁定、未信任、本地及受保护包明确标记跳过。更新动作直接交给原生 update 做版本判断，不用另一次检查过滤掉无变化或警告结果。一个包失败后继续处理其余包，增量结果经 worker IPC 保留在任务中；`partial` 表示部分失败，崩溃时也保留已收到结果。界面每包一行摘要，警告/错误保留说明，详细日志默认收起，版本未验证不声称更新成功。
 
 ## 目录和展示
 

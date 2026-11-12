@@ -8,6 +8,8 @@ import type { PluggableList } from "unified";
 import remarkGfm from "remark-gfm";
 import { remarkHighlightBlock } from "../remark-highlight-block";
 import rehypeHighlight from "rehype-highlight";
+import { common } from "lowlight";
+import { extraCodeLanguages } from "../hljs-lite";
 import { isCjkDominant } from "../text-script";
 import { remarkCjkAutolink } from "../remark-cjk-autolink";
 import { CopyButton } from "./copy-button";
@@ -36,7 +38,7 @@ interface MarkdownProps {
 // 标点吞进 URL 的结果。
 export const remarkPlugins = [remarkGfm, remarkCjkAutolink, remarkHighlightBlock, remarkTextHighlight];
 export const rehypePlugins: PluggableList = [
-	[rehypeHighlight, { detect: true, ignoreMissing: true }],
+	[rehypeHighlight, { detect: true, ignoreMissing: true, languages: { ...common, ...extraCodeLanguages } }],
 ];
 
 const sourceLineComponents: Components = {

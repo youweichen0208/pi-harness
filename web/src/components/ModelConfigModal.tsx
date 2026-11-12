@@ -17,6 +17,7 @@ import type {
 	ModelSourceStatus,
 	ProviderStatus,
 	UiModelConfigEntry,
+	UiModelCompat,
 	UiProviderConfig,
 } from "../types";
 import { useT } from "../i18n";
@@ -61,6 +62,7 @@ const API_TYPES = [
 ];
 
 interface DraftModel {
+	compat?: UiModelCompat;
 	id: string;
 	name: string;
 	reasoning: boolean;
@@ -70,6 +72,7 @@ interface DraftModel {
 }
 
 interface Draft {
+	compat?: UiModelCompat;
 	nonChatModelCount?: number;
 	providerId: string;
 	name: string;
@@ -102,6 +105,7 @@ const emptyDraft = (): Draft => ({
 function toDraft(p: UiProviderConfig): Draft {
 	return {
 		providerId: p.providerId,
+		compat: p.compat,
 		nonChatModelCount: p.nonChatModelCount,
 		name: p.name ?? "",
 		api: p.api ?? "openai-completions",
@@ -110,6 +114,7 @@ function toDraft(p: UiProviderConfig): Draft {
 		authHeader: p.authHeader ?? false,
 		models: (p.models.length ? p.models : [emptyModel()]).map((m) => ({
 			id: m.id,
+			compat: m.compat,
 			name: m.name ?? "",
 			reasoning: m.reasoning ?? false,
 			input: m.input?.includes("image") ? "text-image" : "text",
@@ -117,6 +122,33 @@ function toDraft(p: UiProviderConfig): Draft {
 			maxTokens: m.maxTokens ? String(m.maxTokens) : "",
 		})),
 	};
+}
+
+/** Native details keeps advanced controls out of the compact model rows by default. */
+function ModelCompatibility({ value = {}, model = false, onChange }: { value?: UiModelCompat; model?: boolean; onChange: (value: UiModelCompat) => void }) {
+	const t = useT();
+	const booleanFields = [
+		["supportsMessageThreads", "compatMessageThreads"],
+		["requiresNonNullAssistantContent", "compatNonNullContent"],
+		["requiresToolsWithToolHistory", "compatToolHistory"],
+	] as const;
+	return <details className="model-compat">
+		<summary>{t(model ? "modelCompatOverride" : "modelCompatTitle")}</summary>
+		<p className="hint">{t(model ? "modelCompatModelHint" : "modelCompatHint")}</p>
+		<div className="model-compat-fields">
+			{booleanFields.map(([key, label]) => <label className="field" key={key}>
+				<span className="field-label">{t(label)} <code>{key}</code></span>
+				<select value={value[key] == null ? "" : String(value[key])} onChange={e => onChange({ ...value, [key]: e.target.value === "" ? null : e.target.value === "true" })}>
+					<option value="">{t("compatInherit")}</option><option value="true">{t("compatEnabled")}</option><option value="false">{t("compatDisabled")}</option>
+				</select>
+			</label>)}
+			<label className="field"><span className="field-label">{t("compatCacheKey")} <code>promptCacheKeyMode</code></span>
+				<select value={value.promptCacheKeyMode ?? ""} onChange={e => onChange({ ...value, promptCacheKeyMode: (e.target.value || null) as UiModelCompat["promptCacheKeyMode"] })}>
+					<option value="">{t("compatInherit")}</option><option value="auto">{t("compatAuto")}</option><option value="enabled">{t("compatEnabled")}</option><option value="disabled">{t("compatDisabled")}</option>
+				</select>
+			</label>
+		</div>
+	</details>;
 }
 
 export function ModelConfigModal({
@@ -264,6 +296,7 @@ export function ModelConfigModal({
 			.filter((m) => m.id.trim())
 			.map((m) => ({
 				id: m.id.trim(),
+				compat: m.compat,
 				name: m.name.trim() || undefined,
 				reasoning: m.reasoning || undefined,
 				input: m.input === "text-image" ? ["text", "image"] : undefined,
@@ -271,6 +304,7 @@ export function ModelConfigModal({
 				maxTokens: m.maxTokens ? Number(m.maxTokens) : undefined,
 			}));
 		const config: UiProviderConfig = {
+			compat: editing.compat,
 			providerId,
 			name: editing.name.trim() || undefined,
 			api: editing.api.trim() || undefined,
@@ -543,6 +577,7 @@ export function ModelConfigModal({
 							</label>
 						</div>
 
+						<ModelCompatibility value={editing.compat} onChange={compat => setEditing({ ...editing, compat })} />
 						{!!editing.nonChatModelCount && <p className="hint">{t("nonChatModelsPreserved", { n: editing.nonChatModelCount })}</p>}
 						<div className="model-section-head">
 							<span className="form-section-title">{t("modelsTitle")}</span>
@@ -631,6 +666,7 @@ export function ModelConfigModal({
 								>
 									<FiTrash2 />
 								</button>
+								<ModelCompatibility value={m.compat} model onChange={compat => setModel(i, { compat })} />
 							</div>
 						))}
 						<button

@@ -1,5 +1,9 @@
 # 内置 SSH 节点工作台
 
+节点 Agent 使用与主聊天相同的全局缓存预热模式，原生设置缺省为仅运行时；模型、工具与上下文隔离规则不变。用量详情复用 `UsagePopover`，仅打开时每 5 秒通过 `agent_status` 刷新原生状态和费用。预热 usage 只刷新统计，不生成任务、工具或聊天消息。
+
+`NodeAgent.close()` 返回可等待且幂等的 Promise：立即取消操作与订阅，等待已开始的创建过程结束、原生 abort/dispose，以及 `ModelRuntime.settleCredentialWrites()`。替换会话同样等待旧会话凭据落盘，关闭与创建交错时销毁迟到的会话。`NodeWorkbench` 跟踪断开后的清理 Promise，`dispose()` 和 server shutdown 等待全部完成，避免 SSH-only OAuth 刷新凭据因退出丢失。回归：`tests/cache-warming-test.mjs`。
+
 顶栏「节点」打开节点来源与分组详情，连接后提供 Agent 工作台和 SSH PTY/SFTP 手动工作台。Windows/macOS 客户端都由本机 Node 服务通过 `ssh2` 连接 Linux/macOS SSH 服务；远端账号或容器决定实际权限。
 
 ## 数据与认证

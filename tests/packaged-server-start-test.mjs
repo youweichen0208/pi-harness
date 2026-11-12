@@ -18,6 +18,9 @@ const [executable, appRoot] = process.argv.slice(2).map((p) => realpathSync(reso
 assert(executable && appRoot, "Usage: node tests/packaged-server-start-test.mjs <executable> <resources/app>");
 assert(!existsSync(join(appRoot, "extensions")), "Desktop must not ship application extensions");
 assert(!existsSync(join(appRoot, ".context-eval")), "Desktop must not ship local evaluation data");
+for (const directory of [".claude", ".playwright-mcp", ".scratch"]) {
+	assert(!existsSync(join(appRoot, directory)), `Desktop must not ship local development directory ${directory}`);
+}
 assert(!JSON.parse(readFileSync(join(appRoot, "package.json"), "utf8")).pi?.extensions?.length, "Desktop must not declare application extensions");
 // A checkout-local package can otherwise hide missing runtime dependencies by
 // resolving them from the repository's parent node_modules directory.
@@ -32,7 +35,7 @@ execFileSync(executable, ["--input-type=module", "--eval", `
 	import assert from 'node:assert/strict';
 	import {relative, isAbsolute, sep} from 'node:path';
 	import {fileURLToPath} from 'node:url';
-	for (const name of ['@earendil-works/pi-schema','@earendil-works/pi-ai','@earendil-works/pi-coding-agent']) {
+	for (const name of ['@earendil-works/pi-schema','@earendil-works/pi-ai','@earendil-works/pi-coding-agent','@earendil-works/pi-mcp','@earendil-works/pi-codemode']) {
 		const resolved = import.meta.resolve(name);
 		const inside = relative(process.cwd(), fileURLToPath(resolved));
 		assert(!isAbsolute(inside) && inside !== '..' && !inside.startsWith('..' + sep), name + ' escaped the package');

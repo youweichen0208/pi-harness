@@ -18,6 +18,10 @@ import cpp from "highlight.js/lib/languages/cpp";
 import csharp from "highlight.js/lib/languages/csharp";
 import css from "highlight.js/lib/languages/css";
 import diff from "highlight.js/lib/languages/diff";
+import dart from "highlight.js/lib/languages/dart";
+import nix from "highlight.js/lib/languages/nix";
+import groovy from "highlight.js/lib/languages/groovy";
+import gradle from "highlight.js/lib/languages/gradle";
 import go from "highlight.js/lib/languages/go";
 import graphql from "highlight.js/lib/languages/graphql";
 import ini from "highlight.js/lib/languages/ini";
@@ -67,6 +71,10 @@ hljs.registerLanguage("swift", swift);
 hljs.registerLanguage("typescript", typescript);
 hljs.registerLanguage("xml", xml);
 hljs.registerLanguage("yaml", yaml);
+
+/** Extend the Markdown pipeline with the same grammars as file/tool views. */
+export const extraCodeLanguages = { dart, nix, groovy, gradle };
+for (const [name, language] of Object.entries(extraCodeLanguages)) hljs.registerLanguage(name, language);
 
 function escapeHtml(s: string): string {
 	return s
@@ -150,6 +158,12 @@ const EXT_LANG: Record<string, string> = {
 	makefile: "makefile",
 	diff: "diff",
 	patch: "diff",
+	dart: "dart",
+	nix: "nix",
+	groovy: "groovy",
+	gvy: "groovy",
+	gsh: "groovy",
+	gradle: "gradle",
 };
 
 /** hljs language for a file path by extension, or null when unrecognized. */

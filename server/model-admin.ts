@@ -1,7 +1,7 @@
 import type { ModelSourceSync } from "./model-source-sync.js";
 import { isSelectableProvider } from "./provider-catalog.js";
 import { updateAuthFile } from "./auth-file.js";
-import { isChatModelConfig, mergeChatProvider } from "./model-config-merge.js";
+import { isChatModelConfig, mergeChatProvider, readModelCompat } from "./model-config-merge.js";
 /**
  * model-admin — 模型/服务商配置管理，从 agent-service.ts 抽出。
  *
@@ -286,6 +286,7 @@ export class ModelAdminService {
 						api: m.api,
 						entry: {
 							id: m.id,
+							compat: readModelCompat(m.compat),
 							...(m.name && m.name !== m.id ? { name: m.name } : {}),
 							...(m.reasoning ? { reasoning: true } : {}),
 							...(m.input?.includes("image")
@@ -456,6 +457,7 @@ export class ModelAdminService {
 					? (p.models as Record<string, unknown>[]).filter(isChatModelConfig).map((m) => ({
 							id: String(m.id ?? ""),
 							name: m.name as string | undefined,
+							compat: readModelCompat(m.compat),
 							reasoning: m.reasoning as boolean | undefined,
 							input: Array.isArray(m.input) ? (m.input as string[]) : undefined,
 							contextWindow: m.contextWindow as number | undefined,
@@ -466,6 +468,7 @@ export class ModelAdminService {
 					providerId,
 					origin: this.host.sources?.()?.origin(providerId),
 					name: p.name as string | undefined,
+					compat: readModelCompat(p.compat),
 					api: p.api as string | undefined,
 					baseUrl: p.baseUrl as string | undefined,
 					nonChatModelCount: Array.isArray(p.models) ? p.models.filter(model => !isChatModelConfig(model)).length : 0,
@@ -798,6 +801,7 @@ static async probeModelsEndpoint(
 			.filter((m) => m.id && m.id.trim())
 			.map((m) => ({
 				id: m.id.trim(),
+				compat: m.compat,
 				...(m.name?.trim() ? { name: m.name.trim() } : {}),
 				...(m.reasoning ? { reasoning: true } : {}),
 				...(m.input?.length ? { input: m.input } : {}),

@@ -111,4 +111,4 @@ assert(!terminal.buffer.includes('__PI_BEGIN_'));
 assert(!terminal.buffer.includes('must-not-steal'));
 assert(!terminal.welcome.includes('__pi_prompt='));
 console.log('PASS actual Bash PTY: UTF-8, output framing, exit code, abort, timeout, manual-to-agent handoff (#96), manual ownership, prompt-marker recovery (#120)');
-}finally{service.dispose();client.end();for(const c of peers)c.end();for(const t of terms)t.kill();await new Promise(r=>ssh.close(r));rmSync(root,{recursive:true,force:true});}
+}finally{await service.dispose();client.end();for(const c of peers)c.end();for(const t of terms)t.kill();await new Promise(r=>ssh.close(r));rmSync(root,{recursive:true,force:true});}

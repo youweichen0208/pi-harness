@@ -1,6 +1,6 @@
 import { MODEL_SOURCE_NAMES } from "./ModelSources";
 import { UiIcon } from "./UiIcon";
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useId, useMemo, useState } from "react";
 import { FiCpu, FiSearch } from "react-icons/fi";
 import type { ClientMessage, ModelInfo, UiState } from "../types";
 import { Dropdown, DropdownItem } from "./Dropdown";
@@ -10,6 +10,7 @@ import { useT } from "../i18n";
 export type ModelPickerMsg =
 	| { type: "list_models" }
 	| { type: "set_model"; modelId: string }
+	| Extract<ClientMessage, { type: "set_cache_warming" }>
 	| Extract<ClientMessage, { type: "set_run_settings" }>;
 
 /** Props are deliberately NARROW (no whole-ChatState object): every field is
@@ -29,6 +30,7 @@ interface Props {
 /** Shared model picker and native run settings. */
 export const ModelPicker = memo(function ModelPicker({ state, models, modelsLoading, send, onManageModels, compact = false }: Props) {
 	const t = useT();
+	const warmingHint = useId();
 	const model = state?.model;
 	// snapshot model.id is the bare id; list ids are "provider/id".
 	const currentModelId = model ? `${model.provider}/${model.id}` : null;
@@ -57,6 +59,15 @@ export const ModelPicker = memo(function ModelPicker({ state, models, modelsLoad
 			<input type="checkbox" checked={state.runSettings![key]} onChange={event => send({ type: "set_run_settings", conversationId: state.conversationId, [key]: event.target.checked })} />
 			{t(key === "autoCompaction" ? "conversationAutoCompaction" : "conversationAutoRetry")}
 		</label>)}
+		<label className="model-cache-warming">
+			<span>{t("cacheWarmingGlobal")}</span>
+			<select value={state.runSettings.cacheWarming ?? "streaming"} aria-label={t("cacheWarmingGlobal")} aria-describedby={warmingHint} onChange={event => send({ type: "set_cache_warming", mode: event.target.value as "off" | "streaming" | "idle" })}>
+				<option value="off">{t("cacheWarmingOff")}</option>
+				<option value="streaming">{t("cacheWarmingStreaming")}</option>
+				<option value="idle">{t("cacheWarmingIdle")}</option>
+			</select>
+		</label>
+		<p id={warmingHint} className="model-cache-hint">{t("cacheWarmingHint")}</p>
 	</div>;
 
 	// Lazily fetch the model list when the dropdown opens for the first time.

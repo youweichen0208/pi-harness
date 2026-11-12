@@ -1384,6 +1384,8 @@ export function App() {
 					projects={chat.projects}
 					projectWorkspaces={chat.projectWorkspaces}
 					projectWorkspaceResult={chat.projectWorkspaceResult}
+					missingSessions={chat.missingSessions}
+					missingSessionResult={chat.missingSessionResult}
 					dirBrowse={chat.dirBrowse}
 					activeConversationId={chat.activeConversationId}
 				/>

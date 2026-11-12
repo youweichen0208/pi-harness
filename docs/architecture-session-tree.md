@@ -1,5 +1,19 @@
 # 原生会话树
 
+## 原目录失效后的历史恢复（Pi 1.5.2）
+
+普通聊天左栏的「原目录已失效的会话」默认折叠。协议 v53 的 `list_missing_sessions` 按需调用原生 `SessionManager.listAll()`，只返回原目录不存在或不再是目录的历史，最多 200 条，按最近修改排序。普通项目列表继续隐藏失效目录，常规项目历史查询不扩大范围。Wiki 客户端和活动 Wiki 会话在服务端拒绝此列表与恢复动作。
+
+`server/session-recovery.ts` 为每条结果生成客户端独享、十分钟有效的随机 token，绑定源文件及文件状态、发起对话和当前有效目录；真实路径必须位于原生 sessions 根目录。浏览器不提交恢复文件路径或目标路径。刷新、取消、源文件变化或删除、目标目录失效、切换活动对话都使确认失效。`recover_missing_session` 回复带 conversationId/reqId，前端按请求匹配，断线清除待确认视图。
+
+弹窗显示原目录与当前目录，以「复制到当前项目」为主操作。复制直接使用原生 `SessionManager.forkFrom()`，完整保留全部分支、条目 ID 与标签，创建新会话 ID/目标 cwd，并记录 parentSession；原历史不改动。继续使用 `SessionManager.open(path, undefined, currentCwd)`，只覆盖本次运行目录，不修改原 header，下次打开仍提示。取消不创建会话。过期和未知 token 不允许退化为任意路径恢复。
+
+宿主仍为每个打开的对话创建独立 runtime，确认归属后绑定扩展，绑定完成才正式接管并释放被替换的空闲 runtime；绑定期间阻止新会话、切项目、树操作与新 prompt，绑定失败恢复旧活动对话和 cwd。已有运行中的对话继续执行，同文件已在当前客户端且绑定当前有效目录时复用其 runtime；如果仍绑定失效的旧目录，继续操作被拒绝并提示复制，避免回到失效目录或重复写入。失败只清理本次创建但尚未接管的副本。保留项目并发上限、quiesce 和重启/树操作准入。这里不调用 `runtime.switchSession()`，避免打开历史时中断当前工作。普通历史入口也在原生 open 前验证文件存在且非空，避免源文件被删除后静默创建新历史。
+
+启动继续优先使用有效的上次目录，再回退服务配置目录；两者失效时，返回 `pi-harness --cwd <有效目录>` 重启指引，不创建虚构目录或覆盖历史。该流程不添加会话初始化前的目录选择器。
+
+回归：`node tests/session-recovery-test.mjs`（独立端口/数据目录、零外部模型调用，纳入冒烟）；`--browser` 覆盖展开、恢复弹窗、Escape/复制、中文窄屏与英文深色。`tests/unit/session-recovery.test.ts` 覆盖过期/目录变更/真实路径边界、fork 后失败清理、扩展绑定失败事务回滚与旧 cwd runtime 复用拒绝。
+
 会话条目、label 和分支仍由 pi SDK 1.4.0 的 SessionManager 保存在原生 JSONL 中。WebUI 不建立树存储、不迁移旧的派生会话。协议版本 40。
 
 ## 投影与读取

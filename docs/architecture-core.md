@@ -54,6 +54,14 @@ SDK `tool_execution_update.partialResult` 是累计输出快照，服务端发�
 
 `hello` 可带 `protocolVersion`，`ready.serverVersion` 回带运行中 pi-harness 包的版本（不是 pi SDK 的 `VERSION`，底栏也显示此值）；前端比对协议不一致时显示持久刷新横幅（应用原地更新后「界面新的/WS 旧的」混跑防护）。常量在 server/ 与 web/ 各一份 protocol-version.ts，`check:protocol` 校验两份一致——改协议时必须同步 bump。
 
+## 全局缓存预热（Pi 1.5.2）
+
+`cache-warming.ts` 只调整原生全局 `cacheWarming` 的缺省读取：没有明确值时使用 `streaming`，显式 `off` / `streaming` / `idle` 保留；项目配置不能开启付费预热。界面通过 `set_cache_warming` 请求原生 SettingsManager 持久化，并串行同步普通、Wiki、后台及 SSH 的已加载会话；新创建与替换的会话也登记，dispose 时注销。子代理继续使用独立显式 `off`。原生 SDK 负责调度，宿主不增加预热模型请求。
+
+快照 `runSettings.cacheWarming` 是全局模式，`stats.cacheWarming` 投影原生状态、原因、nextWarmAt 与本会话费用。费用只从原生 SessionManager 的 `usage/kind=cache_warm` 累计，范围与原生 `getSessionStats()` 一致，已包含在总费用中；不会写第二份账本或插入聊天记录。`entry_appended` 更新快照，但预热用量不能重置任务静默计时或伪造任务活动。输入框用量详情打开时，每 5 秒发送所属 conversationId 的 `get_cache_warming`；关闭、切会话或卸载即取消，隐藏页面不发送。
+
+回归：`tests/cache-warming-test.mjs`（原生设置优先级、并发写入、普通/Wiki/SSH 同步、费用与活动隔离、持久历史及 SSH 退出竞态，零模型请求）。
+
 ## 协议单源（types.ts 是 re-export shim，不再手工同步）
 
 `server/protocol.ts` 是唯一事实源；`web/src/types.ts` 用 `export type * from "../../server/protocol"` 全量再导出（纯类型，构建时擦除），前端本地类型（FileListing/ToolStatus）附在 shim 下方；FileContent 直接从 ServerMessage 提取。

@@ -1,7 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { mergeChatProvider } from "../../server/model-config-merge.js";
+import { mergeChatProvider, readModelCompat } from "../../server/model-config-merge.js";
 
 describe("chat provider editing", () => {
+	it("projects only safe compatibility fields including explicit false", () => {
+		expect(readModelCompat({ supportsMessageThreads: false, promptCacheKeyMode: "disabled", headers: { Authorization: "secret" }, futureField: "secret", requiresToolsWithToolHistory: "true" })).toEqual({ supportsMessageThreads: false, promptCacheKeyMode: "disabled" });
+	});
+	it("patches selected compatibility fields and removes only explicit inheritance overrides", () => {
+		const compat = { futureField: { keep: true }, supportsMessageThreads: true, promptCacheKeyMode: "enabled" };
+		const previous = { compat, models: [{ id: "chat", compat }] };
+		const modelCompat = { supportsMessageThreads: false, promptCacheKeyMode: null, requiresToolsWithToolHistory: true } as const;
+		expect(mergeChatProvider(previous, { providerId: "fixture", compat: { supportsMessageThreads: null }, models: [{ id: "chat", compat: modelCompat }] })).toEqual({ compat: { futureField: { keep: true }, promptCacheKeyMode: "enabled" }, models: [{ id: "chat", compat: { futureField: { keep: true }, supportsMessageThreads: false, requiresToolsWithToolHistory: true } }] });
+		expect(mergeChatProvider(previous, { providerId: "fixture", models: [{ id: "chat" }] })).toEqual(previous);
+		expect(mergeChatProvider({}, { providerId: "fixture", compat: { supportsMessageThreads: null }, models: [{ id: "chat" }] })).toEqual({ models: [{ id: "chat" }] });
+	});
+	it("rejects malformed compatibility input without applying it", () => {
+		const config = JSON.parse('{"providerId":"fixture","models":[{"id":"chat","compat":{"requiresToolsWithToolHistory":"false"}}]}');
+		expect(() => mergeChatProvider({}, config)).toThrow("Invalid compatibility");
+	});
 	it("preserves typed operations, provider metadata and unknown chat fields", () => {
 		const image = { id: "picture", type: "image", api: "openai-images", maxImages: 3 };
 		const classifier = { id: "label", type: "classifier", samplingParams: { temperature: 0 } };

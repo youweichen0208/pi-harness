@@ -35,7 +35,10 @@ try {
 	assert.deepEqual(wire.at(-1).providers.map(p => p.providerId), ["openai", "custom-codex"]);
 	await ClientSession.prototype.listModels.call({ runtime: { services: { modelRuntime: runtime } }, emit: m => wire.push(m) });
 	assert.deepEqual(wire.at(-1).models.map(m => m.provider), ["openai", "custom-codex"]);
-	const session = { model: models[0], messages: [], modelRuntime: runtime };
+	const session = { model: models[0], messages: [], modelRuntime: runtime,
+		settingsManager: { getCacheWarmingMode: () => "off" }, sessionManager: { getEntries: () => [] },
+		getSessionStats: () => ({ totalMessages: 0, tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 }, cost: 0 }),
+	};
 	let nodeState;
 	NodeAgent.prototype.refresh.call({ session, retain: m => m, set: s => { nodeState = s; } });
 	assert.deepEqual(nodeState.models.map(m => m.provider), ["openai", "custom-codex"]);

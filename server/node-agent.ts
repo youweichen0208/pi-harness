@@ -1,4 +1,5 @@
 import { withOutputTokenFloor } from "./model-output-floor.js";
+import { bindCacheWarming, cacheWarmingSettings, cacheWarmingView } from "./cache-warming.js";
 import { modelConfigurationChanged, modelSourcesFor, type ModelSourceSync } from "./model-source-sync.js";
 import { isSelectableProvider } from "./provider-catalog.js";
 /** Local native Pi session whose only tools operate on one captured SSH connection. */
@@ -22,6 +23,9 @@ export class NodeAgent {
 	private state: NodeAgentState;
 	private readonly approvals = new NodeCommandApprovals(pending => this.set({ dialogs: pending.map(item => ({ id: item.id, method: "confirm", title: "请求执行 · 写入或未识别的操作", message: item.command })) }, true));
 	private session?: AgentSession;
+	private creating?: Promise<void>;
+	private closing?: Promise<void>;
+	private readonly modelRuntimes = new Set<ModelRuntime>();
 	private sources?: ModelSourceSync;
 	private sourceUnbind?: () => void;
 	private unsubscribe?: () => void;
@@ -71,24 +75,42 @@ export class NodeAgent {
 		return [command, read, write];
 	}
 	/** `fresh` starts a new conversation; a string reopens a pending new conversation's file. */
-	private async create(fresh: boolean | string) {
+	private create(fresh: boolean | string): Promise<void> {
+		const creating = this.createSession(fresh);
+		this.creating = creating;
+		void creating.finally(() => { if (this.creating === creating) this.creating = undefined; }).catch(() => {});
+		return creating;
+	}
+	private async disposeSession(session: AgentSession): Promise<void> {
+		try { await session.abort(); }
+		finally { session.dispose(); await session.modelRuntime.settleCredentialWrites(); }
+	}
+	private async createSession(fresh: boolean | string) {
 		const generation = ++this.generation;
 		mkdirSync(this.sessionDir, { recursive: true, mode: 0o700 });
 		const agentDir = process.env.PI_CODING_AGENT_DIR ?? getAgentDir();
-		const settings = SettingsManager.create(this.sessionDir, agentDir);
+		const settings = cacheWarmingSettings(SettingsManager.create(this.sessionDir, agentDir));
 		const loader = new DefaultResourceLoader({ cwd: this.sessionDir, agentDir, settingsManager: settings, noExtensions: true, noSkills: true, noPromptTemplates: true, noContextFiles: true,
 			systemPrompt: `You are the assistant for one connected SSH node. All provided tools operate only on that node. Remote working directory: ${JSON.stringify(this.state.cwd)}. Use remote_command, remote_read and remote_write for node tasks. Commands run with the SSH user's permissions. You have no local filesystem or local shell tools. Run read-only Linux queries directly using the provided tools. Every deletion, write or state-changing operation requires the tool approval dialog; never treat a previous approval as authorization for another operation. Prefer simple read-only commands over shell scripts for diagnostics. Never assume a previous command's cd persists.`, appendSystemPrompt: [] });
 		await loader.reload();
 		const modelRuntime = this.session?.modelRuntime ?? withOutputTokenFloor(await ModelRuntime.create({ authPath: join(agentDir, "auth.json"), modelsPath: join(agentDir, "models.json") }));
+		this.modelRuntimes.add(modelRuntime);
+		if (this.lifetime.signal.aborted || generation !== this.generation) throw new Error("节点 Agent 已关闭");
 		if (this.dataDir && !this.sources) {
 			this.sources = modelSourcesFor(this.dataDir, agentDir);
 			this.sourceUnbind = await this.sources.bind(modelRuntime, () => this.state.running, () => { if (this.session) this.refresh(); });
 		}
+		if (this.lifetime.signal.aborted || generation !== this.generation) { this.sourceUnbind?.(); throw new Error("节点 Agent 已关闭"); }
 		const { session } = await createAgentSession({ cwd: this.sessionDir, agentDir, modelRuntime, resourceLoader: loader, settingsManager: settings,
 			sessionManager: typeof fresh === "string" ? SessionManager.open(fresh, this.sessionDir, this.sessionDir) : fresh ? SessionManager.create(this.sessionDir, this.sessionDir) : SessionManager.continueRecent(this.sessionDir, this.sessionDir),
 			model: this.session?.model, noTools: "all", tools: ["remote_command", "remote_read", "remote_write"], excludeTools: ["mcp__*"], customTools: this.tools() });
-		if (this.state.phase === "closed" || generation !== this.generation) { session.dispose(); throw new Error("节点 Agent 已关闭"); }
-		this.unsubscribe?.(); this.session?.dispose();
+		if (this.lifetime.signal.aborted || generation !== this.generation) { await this.disposeSession(session); throw new Error("节点 Agent 已关闭"); }
+		try {
+			await bindCacheWarming(session, agentDir, () => this.refresh());
+			this.unsubscribe?.();
+			if (this.session) await this.disposeSession(this.session);
+		} catch (error) { await this.disposeSession(session); throw error; }
+		if (this.lifetime.signal.aborted || generation !== this.generation) { await this.disposeSession(session); throw new Error("节点 Agent 已关闭"); }
 		this.session = session;
 		// The SDK writes a new session file only after the first reply, so remember
 		// an explicit "new conversation" until then; otherwise a reconnect would
@@ -110,16 +132,21 @@ export class NodeAgent {
 	}
 	async start() {
 		try { await this.create(this.pendingFresh()); }
-		catch (error) { if (this.state.phase !== "closed") { this.set({ error: (error as Error).message }); this.close(); } throw error; }
+		catch (error) { if (this.state.phase !== "closed") { this.set({ error: (error as Error).message }); await this.close(); } throw error; }
 	}
-	close() {
-		if (this.state.phase === "closed") return;
+	close(): Promise<void> {
+		if (this.closing) return this.closing;
 		this.sourceUnbind?.();
 		this.generation++; this.lifetime.abort(); this.approvals.reset();
 		this.unsubscribe?.(); this.unsubscribe = undefined;
 		const session = this.session; this.session = undefined;
-		if (session) void session.abort().catch(() => {}).finally(() => session.dispose());
 		this.set({ phase: "closed", running: false, streamingMessage: undefined, dialogs: [], tools: this.state.tools.map(tool => ({ ...tool, running: false })) }, true);
+		this.closing = (async () => {
+			await Promise.allSettled([this.creating, session ? this.disposeSession(session) : undefined]);
+			this.sourceUnbind?.();
+			await Promise.all([...this.modelRuntimes].map(runtime => runtime.settleCredentialWrites()));
+		})();
+		return this.closing;
 	}
 	private ready(): AgentSession {
 		if (this.state.phase !== "ready" || !this.session || this.changing) throw new Error("节点 Agent 尚未就绪");
@@ -134,10 +161,12 @@ export class NodeAgent {
 		}
 		return messages.slice(start);
 	}
-	private refresh() {
+	refresh() {
 		const session = this.session;
 		if (!session) return;
-		this.set({ messages: this.retain(session.messages.slice(-200).map((message, index) => serializeMessage(message, Math.max(0, session.messages.length - 200) + index)).filter((message): message is UiMessage => !!message)),
+		const stats = session.getSessionStats();
+		this.set({ stats: { totalMessages: stats.totalMessages, tokens: stats.tokens, cost: stats.cost, contextUsage: stats.contextUsage ?? { tokens: null, contextWindow: 0, percent: null }, cacheWarming: cacheWarmingView(session) },
+			messages: this.retain(session.messages.slice(-200).map((message, index) => serializeMessage(message, Math.max(0, session.messages.length - 200) + index)).filter((message): message is UiMessage => !!message)),
 			model: session.model ? { id: session.model.id, provider: session.model.provider, name: session.model.name } : undefined,
 			models: session.modelRuntime.getAvailableSnapshot().filter(model => this.sources?.visible(model.provider) ?? isSelectableProvider(model.provider)).map(model => ({ id: model.id, provider: model.provider, name: model.name })) });
 	}
@@ -203,6 +232,7 @@ export class NodeAgent {
 	}
 	dialog(id: string, response: { cancelled?: boolean; value?: string; confirmed?: boolean; remember?: boolean }) { this.approvals.respond(id, response.confirmed === true && !response.cancelled, response.remember); }
 	private event(event: AgentSessionEvent) {
+		if (event.type === "entry_appended" && event.entry.type === "usage") this.refresh();
 		if (["agent_start", "compaction_start", "auto_retry_start"].includes(event.type)) this.set({ running: true });
 		if (event.type === "message_start" && event.message.role === "assistant") this.set({ streamingMessage: serializeMessage(event.message, this.session!.messages.length) ?? undefined });
 		if (event.type === "message_update") this.set({ streamingMessage: serializeMessage(event.message, this.session!.messages.length) ?? undefined });

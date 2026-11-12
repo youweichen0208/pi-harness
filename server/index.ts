@@ -720,6 +720,10 @@ wss.on("connection", (ws) => {
 			case "list_sessions":
 				void cs.refreshSessions();
 				break;
+			case "list_missing_sessions":
+			case "recover_missing_session":
+				void cs.recoverMissingSession(msg);
+				break;
 			case "list_project_workspaces":
 				workspaceSubscribers.add(send);
 				send({ type: "project_workspaces", catalog: projectWorkspaces.read() });
@@ -831,6 +835,10 @@ wss.on("connection", (ws) => {
 				cs.cancelRecovery(msg.conversationId, msg.operationId); break;
 			case "set_run_settings":
 				cs.setRunSettings(msg); break;
+			case "set_cache_warming":
+				void cs.setCacheWarming(msg.mode); break;
+			case "get_cache_warming":
+				cs.refreshCacheWarming(msg.conversationId); break;
 			case "dialog_response":
 				cs.resolveDialog(msg.conversationId, msg.id, msg.value);
 				break;
@@ -1097,7 +1105,7 @@ async function shutdown(): Promise<void> {
 	clearInterval(heartbeatTimer);
 	stopControl();
 	await stopPlayground();
-	nodeWorkbench.dispose();
+	await nodeWorkbench.dispose();
 	pluginMgr.dispose();
 
 

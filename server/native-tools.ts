@@ -1,4 +1,5 @@
 import { createDatabaseExtension } from "./database/extension.js";
+import { cacheWarmingSettings } from "./cache-warming.js";
 import type { BuiltinExtensionId } from "./protocol.js";
 import { createSubagentExtension, type SubagentHost } from "./subagents/extension.js";
 import { SettingsManager, createCodemodeExtension, createMcpExtension, createToolSearchExtension, type InlineExtension, type ExtensionFactory } from "@earendil-works/pi-coding-agent";
@@ -11,7 +12,7 @@ export function setConversationRunSettings(settings: SettingsManager, values: { 
 
 /** A native manager with conversation-local overrides; native writes stay native. */
 export function conversationSettings(cwd: string, agentDir: string): SettingsManager {
-	const settings = SettingsManager.create(cwd, agentDir);
+	const settings = cacheWarmingSettings(SettingsManager.create(cwd, agentDir));
 	const getCompactionEnabled = settings.getCompactionEnabled.bind(settings);
 	const getRetryEnabled = settings.getRetryEnabled.bind(settings);
 	const getDefaultTools = settings.getDefaultTools.bind(settings);

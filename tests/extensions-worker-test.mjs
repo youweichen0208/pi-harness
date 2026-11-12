@@ -5,6 +5,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync
 import { pathToFileURL } from 'node:url';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { testEnv } from './lib/test-env.mjs';
 const appRoot = resolve(process.argv[2] || '.');
 const sdk = pathToFileURL(join(appRoot, 'node_modules/@earendil-works/pi-coding-agent/dist/index.js')).href;
 const root = mkdtempSync(join(tmpdir(), 'pi-package-worker-'));
@@ -25,7 +26,7 @@ writeFileSync(join(packagePath, 'index.js'), 'export default () => {};');
 writeFileSync(join(prefix, 'package.json'), JSON.stringify({ private: true, dependencies: { 'pi-worker-fixture': '1.0.0' } }));
 writeFileSync(join(agentDir, 'settings.json'), JSON.stringify({ packages: ['npm:pi-worker-fixture'] }));
 async function run(input, env = {}, expectedError) {
-	const child = fork(join(appRoot, 'dist/server/extensions-worker.js'), ['--extensions-worker'], { execArgv: input.action === 'mutate' ? ['--import', pathToFileURL(preload).href] : [], stdio: ['ignore', 'pipe', 'pipe', 'ipc'], env: { ...process.env, npm_config_offline: 'true', npm_config_audit: 'false', npm_config_fund: 'false', ...env } });
+	const child = fork(join(appRoot, 'dist/server/extensions-worker.js'), ['--extensions-worker'], { execArgv: input.action === 'mutate' ? ['--import', pathToFileURL(preload).href] : [], stdio: ['ignore', 'pipe', 'pipe', 'ipc'], env: { ...testEnv(), npm_config_offline: 'true', npm_config_audit: 'false', npm_config_fund: 'false', ...env } });
 	let result, error, logs = '';
 	child.stdout.on('data', value => logs += value); child.stderr.on('data', value => logs += value);
 	child.on('message', message => { if (message.progress) logs += message.progress + '\n'; if (message.state) result = message.state; if (message.error) error = message.error; });
@@ -49,6 +50,9 @@ try {
 	await run({ action: 'check' }, withoutTools, '[extension-tool-missing:npm]');
 	await run({ action: 'mutate', version: state.version, operation: { action: 'remove', id: item.id } }, withoutTools, '[extension-tool-missing:npm]');
 	assert.equal(readFileSync(join(agentDir, 'settings.json'), 'utf8'), before);
+	const offline = await run({ action: 'mutate', version: state.version, operation: { action: 'update-all' } }, { ...withoutTools, PI_OFFLINE: 'true' });
+	assert.deepEqual(offline.updateResults, [{ id: item.id, name: item.name, scope: 'user', status: 'skipped', reason: 'offline' }]);
+	assert.equal(readFileSync(join(agentDir, 'settings.json'), 'utf8'), before, 'offline update reports skipped and never changes packages');
 	const after = await run({ action: 'mutate' , version: state.version, operation: { action: 'remove', id: item.id } });
 	assert(!after.packages.some(candidate => candidate.id === item.id));
 	assert(!existsSync(packagePath));

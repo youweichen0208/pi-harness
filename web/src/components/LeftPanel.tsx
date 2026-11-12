@@ -28,6 +28,7 @@ import { workspaceProjects, selectedProjectWorkspace, selectProjectWorkspace } f
 import { useDialogFocus } from "../use-dialog-focus";
 import { randomUuid } from "../uuid";
 import { FolderPickerModal } from "./FolderPickerModal";
+import { MissingSessionRecovery, type MissingSessionRecoveryProps } from "./MissingSessionRecovery";
 import type { ConnStatus } from "../use-chat";
 import { skillAwarePreview } from "../skill-block";
 import { conversationDisplayTitle } from "../conversation-display-title";
@@ -53,6 +54,8 @@ interface LeftPanelProps {
 	sessionFile: string | null;
 	conversations: ConversationSummary[];
 	sessions: SessionSummary[];
+	missingSessions: MissingSessionRecoveryProps["listing"];
+	missingSessionResult: MissingSessionRecoveryProps["result"];
 	projects: ProjectSummary[];
 	projectWorkspaces: ProjectWorkspaceCatalog | null;
 	projectWorkspaceResult: Extract<ServerMessage, { type: "project_workspace_result" }> | null;
@@ -63,6 +66,7 @@ interface LeftPanelProps {
 		msg:
 			| { type: "new_chat" }
 			| { type: "list_sessions" }
+			| Extract<ClientMessage, { type: "list_missing_sessions" | "recover_missing_session" }>
 			| { type: "list_projects" }
 			| Extract<ClientMessage, { type: "list_project_workspaces" | "project_workspace_action" }>
 			| { type: "switch_session"; path: string }
@@ -96,7 +100,7 @@ function WorkspaceBook() {
 }
 
 export const LeftPanel = memo(function LeftPanel({
-	directoryCollapsed, onToggleDirectory, notesOpen, scratchOpen, onNavigate, notesList, onOpenSettings, onNewChat, ready, status, cwd, sessionFile, conversations, sessions, projects, projectWorkspaces, projectWorkspaceResult, dirBrowse, activeConversationId, send, active }: LeftPanelProps) {
+	directoryCollapsed, onToggleDirectory, notesOpen, scratchOpen, onNavigate, notesList, onOpenSettings, onNewChat, ready, status, cwd, sessionFile, conversations, sessions, missingSessions, missingSessionResult, projects, projectWorkspaces, projectWorkspaceResult, dirBrowse, activeConversationId, send, active }: LeftPanelProps) {
 	const { t, locale } = useI18n();
 	const [selectedWorkspace, setSelectedWorkspace] = useState(selectedProjectWorkspace);
 	const [workspaceForm, setWorkspaceForm] = useState<"create" | string | null>(null);
@@ -511,6 +515,7 @@ export const LeftPanel = memo(function LeftPanel({
 					})}
 				</div>
 			</div>}
+			<MissingSessionRecovery cwd={cwd} conversationId={activeConversationId} ready={ready && status === "open"} send={send} listing={missingSessions} result={missingSessionResult} />
 			</>}
 			</div>
 				<div className="sidebar-footer"><span className="sidebar-connection"><i className={ready ? "ok" : "busy"} />{t(ready ? "connected" : "connecting")}</span><span id="sidebar-settings-slot"><button type="button" title={t("settings")} onClick={onOpenSettings}><FiSettings /><span>{t("settings")}</span></button></span></div>

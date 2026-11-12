@@ -11,7 +11,7 @@ import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import type { AgentService } from "./agent-service.js";
-import type { ExtensionsState, ExtensionJob, ExtensionPreview, ExtensionOperation } from "./protocol.js";
+import type { ExtensionsState, ExtensionJob, ExtensionPreview, ExtensionOperation, ExtensionUpdateResult } from "./protocol.js";
 import type { WorkerRequest } from "./extensions-worker.js";
 import { readJson, textField, resourceTypes, sourceInfo, validateSource } from "./extensions-model.js";
 import { browseCatalog, cachedFetch, safeUrl, packageReleaseNotes } from "./extensions-catalog.js";
@@ -34,7 +34,7 @@ const backgroundTimer = setInterval(() => {
 	void runWorker({cwd,agentDir:target.agentDir,action:"check"}).then(state=>states.set(cwd,state)).catch(()=>{}).finally(()=>{readers--;});
 },60000);
 backgroundTimer.unref();
-function runWorker(input: WorkerRequest, log: (line: string) => void = () => {}): Promise<ExtensionsState> {
+function runWorker(input: WorkerRequest, log: (line: string) => void = () => {}, onResult: (result: ExtensionUpdateResult) => void = () => {}): Promise<ExtensionsState> {
 	return new Promise((resolve, reject) => {
 		const child = fork(new URL(import.meta.url.endsWith(".ts") ? "./extensions-worker.ts" : "./extensions-worker.js", import.meta.url), ["--extensions-worker"], { detached: process.platform !== "win32", stdio: ["ignore","pipe","pipe","ipc"], execArgv: process.execArgv.filter(a => !a.startsWith("--watch")), env: { ...process.env, ELECTRON_RUN_AS_NODE: "1", GIT_TERMINAL_PROMPT: "0" } });
 		let result: ExtensionsState | undefined, failure: Error | undefined;
@@ -42,7 +42,7 @@ function runWorker(input: WorkerRequest, log: (line: string) => void = () => {})
 		let output = "";
 		const capture = (chunk: unknown) => { output = (output + String(chunk)).slice(-12000); log(String(chunk)); };
 		child.stdout?.on("data", capture); child.stderr?.on("data", capture);
-		child.on("message", (message: { progress?: string; state?: ExtensionsState; error?: string; extensionToolPid?: number; active?: boolean }) => { if (message.extensionToolPid && Number.isInteger(message.extensionToolPid) && message.extensionToolPid > 0) { if (message.active) toolPids.add(message.extensionToolPid); else toolPids.delete(message.extensionToolPid); } if (message.progress) log(message.progress); if (message.state) result = message.state; if (message.error) failure = Error(message.error); });
+		child.on("message", (message: { progress?: string; state?: ExtensionsState; error?: string; extensionToolPid?: number; active?: boolean; updateResult?: ExtensionUpdateResult }) => { if (message.extensionToolPid && Number.isInteger(message.extensionToolPid) && message.extensionToolPid > 0) { if (message.active) toolPids.add(message.extensionToolPid); else toolPids.delete(message.extensionToolPid); } if (message.progress) log(message.progress); if (message.state) result = message.state; if (message.error) failure = Error(message.error); if (message.updateResult) onResult(message.updateResult); });
 		const stopTools = () => { for (const pid of toolPids) killPidTree(pid); toolPids.clear(); };
 		const stop = () => { stopTools(); if (child.pid) killPidTree(child.pid); };
 		process.once("exit", stop);
@@ -150,7 +150,21 @@ export function installExtensionsRoutes(app: Express, service: () => AgentServic
 				}
 				const id = randomUUID(), job = { id,phase: "running" as const,log: "",cwd,clientId } as ExtensionJob & { cwd:string;clientId:string };
 				if (jobs.size >= 32) jobs.delete(jobs.keys().next().value!); jobs.set(id,job); mutation=id;
-				void Promise.allSettled([...pendingReads.values()]).then(() => runWorker({ cwd,agentDir,action:"mutate",operation:op,source,version:req.body.version }, line => { job.log = (job.log + line + "\n").slice(-128000); })).then(() => { states.delete(cwd); job.phase="done"; }, error => { job.phase="error";job.error=error.message;job.log += `\n${error.message}`; }).finally(() => { mutation=undefined; });
+				void Promise.allSettled([...pendingReads.values()]).then(() => runWorker(
+					{ cwd, agentDir, action: "mutate", operation: op, source, version: req.body.version },
+					line => { job.log = (job.log + line + "\n").slice(-128000); },
+					result => { (job.results ??= []).push(result); },
+				)).then(state => {
+					states.delete(cwd);
+					job.results = state.updateResults;
+					const failures = job.results?.filter(result => result.status === "error").length ?? 0;
+					job.phase = failures ? job.results?.some(result => result.status === "updated" || result.status === "warning" || result.status === "unchanged" || !!result.to && result.from !== result.to) ? "partial" : "error" : "done";
+				}, error => {
+					states.delete(cwd);
+					job.phase = job.results?.some(result => result.status === "updated" || !!result.to && result.from !== result.to) ? "partial" : "error";
+					job.error = error.message;
+					job.log = (job.log + `\n${error.message}`).slice(-128000);
+				}).finally(() => { mutation = undefined; });
 				res.json(job); return;
 			}
 			if (action !== "list" && action !== "check" && !["open-info","file","save-file","notes"].includes(action)) throw Error("Unknown action");

@@ -131,7 +131,7 @@ try {
 	assert.equal((await call("source_toggle", undefined, { id: sourceId, enabled: false })).event, "result");
 	const restored = new NodeWorkbench(dataDir);
 	assert.equal(restored.sources.find((s) => s.id === sourceId).enabled, false);
-	restored.dispose();
+	await restored.dispose();
 	// Saved Xshell 7 passwords: real SSH auth, with a synthetic Windows identity.
 	const autoDir = join(dataDir, "auto", "Xshell", "Sessions"); mkdirSync(autoDir, { recursive: true });
 	const autoFile = join(autoDir, "auto.xsh");
@@ -173,7 +173,7 @@ try {
 	const restarted = new NodeWorkbench(dataDir, new XshellCredentials(async () => cryptoFixture.identity));
 	const restartedEvents = []; restarted.attach("client-a", event => restartedEvents.push(event));
 	await restarted.handle("client-a", { type: "node_request", requestId: "restart-lock", action: "connect", nodeId: masterNode.id });
-	assert.equal(restartedEvents.findLast(e => e.requestId === "restart-lock").data.credentialReason, "locked"); restarted.dispose();
+	assert.equal(restartedEvents.findLast(e => e.requestId === "restart-lock").data.credentialReason, "locked"); await restarted.dispose();
 
 	const encryptedKeyPath = join(dataDir, "encrypted-key");
 	writeFileSync(encryptedKeyPath, createPrivateKey(privateKey).export({ type: "pkcs1", format: "pem", cipher: "aes-256-cbc", passphrase: "key-passphrase" }));
@@ -212,7 +212,7 @@ try {
 	assert.equal((await call("connect", keyNode.id)).event, "result");
 	const keyRestored = new NodeWorkbench(dataDir);
 	assert.equal(keyRestored.nodes.find((n) => n.id === keyNode.id).localKeyPath, keyPath);
-	keyRestored.dispose();
+	await keyRestored.dispose();
 	keyNode.unsupported.push("proxy");
 	assert.equal((await call("connect", keyNode.id)).event, "failure");
 	keyNode.unsupported.pop();
@@ -233,7 +233,7 @@ try {
 	assert.equal(events.findLast((e) => e.event === "state").data.nodes.find((n) => n.id === passwordNode.id).auth, "key");
 	const authRestored = new NodeWorkbench(dataDir);
 	assert.equal(authRestored.nodes.find((n) => n.id === passwordNode.id).localAuth, "key");
-	authRestored.dispose();
+	await authRestored.dispose();
 	await call("source_sync", undefined, { id: keySource.data.sourceId });
 	assert.equal(passwordNode.localAuth, "key");
 	assert.equal((await call("connect", passwordNode.id)).event, "result");
@@ -271,10 +271,10 @@ try {
 	assert.deepEqual(service.nodes.filter(n => n.sourceId === selectedSource.data.sourceId).map(n => n.sourceKey).sort(), ["blocked.xsh", "new.xsh", "one.xsh", "two.xsh"]);
 	const selectionRestored = new NodeWorkbench(dataDir);
 	assert.deepEqual(selectionRestored.sources.find(s => s.id === selectedSource.data.sourceId).selectedKeys, undefined);
-	selectionRestored.dispose();
+	await selectionRestored.dispose();
 
 	console.log("✓ SSH trust, key change, authentication, terminal command/interrupt/truncation, SFTP and node isolation");
 } finally {
 	for (const c of [...service.connections.values()]) await call("disconnect", c.nodeId);
-	service.dispose(); detach(); mock.close(); rmSync(dataDir, { recursive: true, force: true });
+	await service.dispose(); detach(); mock.close(); rmSync(dataDir, { recursive: true, force: true });
 }

@@ -832,7 +832,7 @@ ${t("wikiProjectPrompt", { workspace: selectedProject.workspaceName, path: JSON.
 
 					</div>
 					<div className="input-tools-right">
-						<UsagePopover stats={stats} />
+						<UsagePopover stats={stats} conversationId={activeConversationId} send={send} />
 						<button
 							type="button"
 							className="btn attach-img"

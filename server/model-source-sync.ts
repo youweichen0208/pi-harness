@@ -1,4 +1,5 @@
 import { outputTokenLimit } from "./model-output-floor.js";
+import { mergeModelCompat, readModelCompat } from "./model-config-merge.js";
 import { parse as jsonc, type ParseError } from "jsonc-parser";
 import { createHash } from "node:crypto";
 import { readFileSync, watch, type FSWatcher } from "node:fs";
@@ -81,6 +82,9 @@ function validState(value: unknown): value is SavedState {
 		if (typeof c.baseUrl !== "string" || typeof c.reasoning !== "boolean" || typeof c.authHeader !== "boolean" || !Array.isArray(c.input) || c.input.some(v => v !== "text" && v !== "image")) return false;
 		if (![c.contextWindow, c.maxTokens].every(v => typeof v === "number" && Number.isFinite(v) && v > 0)) return false;
 		if (!c.headers || typeof c.headers !== "object" || Object.values(c.headers).some(v => typeof v !== "string" || /[\r\n]/.test(v))) return false;
+		for (const compat of [c.compat, c.providerCompat]) {
+			if (compat !== undefined && JSON.stringify(sorted(compat)) !== JSON.stringify(sorted(readModelCompat(compat)))) return false;
+		}
 		try { const url = new URL(c.baseUrl); return ["http:", "https:"].includes(url.protocol) && !url.username && !url.password && !url.hash; } catch { return false; }
 	});
 }
@@ -219,7 +223,7 @@ export class ModelSourceSync {
 				const e = { ...entry, provider };
 				const c = e.connection;
 				b.runtime.registerProvider(e.provider, { name: `${c.name || c.id} · ${e.origin.sources.join(" / ")}`, baseUrl: c.baseUrl, api: c.api, headers: Object.fromEntries(Object.entries(c.headers).map(([key, value]) => [key, (value.startsWith("!") ? "$" : "") + value.split("$").join("$$")])), authHeader: c.authHeader,
-					models: [{ id: c.id, name: c.name || c.id, reasoning: c.reasoning, input: c.input, contextWindow: c.contextWindow, maxTokens: c.maxTokens, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } }] });
+					models: [{ id: c.id, name: c.name || c.id, reasoning: c.reasoning, input: c.input, contextWindow: c.contextWindow, maxTokens: c.maxTokens, compat: { ...readModelCompat(c.providerCompat), ...readModelCompat(c.compat) }, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } }] });
 				if (c.authentication === "bearer") {
 					// Header-owned Anthropic auth must not also send x-api-key. This native
 					// provider uses the public credential resolver and bypasses config strings.
@@ -356,8 +360,8 @@ export class ModelSourceSync {
 	configs(): UiProviderConfig[] {
 		return this.entries.map(({ provider, connection: c, origin }) => ({ providerId: provider, name: c.name || c.id, api: c.api,
 			// Query parameters may hold credentials. Editing an unchanged redacted URL preserves it.
-			baseUrl: c.baseUrl.split("?")[0], authHeader: c.authHeader, origin,
-			models: [{ id: c.id, name: c.name, reasoning: c.reasoning, input: c.input, contextWindow: c.contextWindow, maxTokens: c.maxTokens }] }));
+			baseUrl: c.baseUrl.split("?")[0], authHeader: c.authHeader, origin, compat: readModelCompat(c.providerCompat),
+			models: [{ id: c.id, name: c.name, reasoning: c.reasoning, input: c.input, contextWindow: c.contextWindow, maxTokens: c.maxTokens, compat: readModelCompat(c.compat) }] }));
 	}
 	owns(provider: string) { return /^sync-[a-f0-9]{24}$/.test(provider); }
 	async edit(provider: string, config?: UiProviderConfig) {
@@ -369,13 +373,16 @@ export class ModelSourceSync {
 		else {
 			if (config.models.length !== 1 || !["anthropic-messages", "openai-responses", "openai-completions"].includes(config.api || "")) { this.state = previous; throw new Error("独立配置需要一个受支持的模型"); }
 			const c = entry.connection, m = config.models[0];
+			let compat, providerCompat;
+			try { compat = readModelCompat(mergeModelCompat(c.compat, m.compat)); providerCompat = readModelCompat(mergeModelCompat(c.providerCompat, config.compat)); }
+			catch (error) { this.state = previous; throw error; }
 			const baseUrl = config.baseUrl === c.baseUrl.split("?")[0] ? c.baseUrl : config.baseUrl || c.baseUrl;
 			try { const u = new URL(baseUrl); if (!["http:", "https:"].includes(u.protocol) || u.username || u.password) throw new Error(); }
 			catch { this.state = previous; throw new Error("接口地址无效"); }
 			const key = config.apiKey?.trim() || c.key;
 			const headers = { ...c.headers };
 			if (!c.authHeader && headers.Authorization === `Bearer ${c.key}`) headers.Authorization = `Bearer ${key}`;
-			this.state.local[provider] = { ...c, unknownCapabilities: [], headers, authHeader: config.authHeader ?? c.authHeader, id: m.id, name: config.name || m.name, api: config.api as Connection["api"], baseUrl, key,
+			this.state.local[provider] = { ...c, compat, providerCompat, unknownCapabilities: [], headers, authHeader: config.authHeader ?? c.authHeader, id: m.id, name: config.name || m.name, api: config.api as Connection["api"], baseUrl, key,
 				reasoning: m.reasoning ?? false, input: m.input?.includes("image") ? ["text", "image"] : ["text"], contextWindow: m.contextWindow || c.contextWindow, maxTokens: m.maxTokens || c.maxTokens };
 		}
 		if (config) this.state.localAliases = { ...this.state.localAliases, ...Object.fromEntries(entry.aliases.filter(id => id !== provider).map(id => [id, provider])) };

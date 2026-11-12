@@ -137,6 +137,30 @@ try {
 	await card.locator('.bash-numbered-output').waitFor();
 	assert.deepEqual(await card.locator('.bash-numbered-line code').allTextContents(), ['> node --test', '> check:design', 'Test Files 182 passed (182)']);
 	assert.equal(await card.locator('.bash-color-add').textContent(), 'passed');
+	// #167: successive model/tool cycles form one disclosure, not a wall of summaries.
+	const cycles = [running[0], ...Array.from({length:13}, (_, i) => {
+		const calls = [0,1].map(n => ({type:'toolCall', id:`cycle-${i}-${n}`, name:'bash', argumentsText:JSON.stringify({command:`echo cycle-${i}-${n}`})}));
+		return [{id:`cycle-${i}`,role:'assistant',content:[{type:'thinking',thinking:`Check ${i}`,durationMs:1000}, ...calls]}, ...calls.map(call => ({id:`result-${call.id}`,role:'toolResult',toolCallId:call.id,content:[{type:'text',text:'ok'}]}))];
+	}).flat()];
+	socket.send(JSON.stringify({type:'snapshot',state:{...baseState,messages:cycles}}));
+	await page.locator('.process-group-summary-line').first().waitFor();
+	assert.equal(await page.locator('.process-group').count(), 1, '13 command/thinking cycles share one group');
+	const summary = page.locator('.process-group-summary-line');
+	assert.match(await summary.textContent(), /26/);
+	assert.equal(await page.locator('.bash-row:visible').count(), 0);
+	for (const theme of ['light','dark']) for (const width of [1440,375]) {
+		await page.setViewportSize({width,height:1000});
+		await page.evaluate(value => document.documentElement.dataset.appearance = value, theme);
+		assert((await summary.boundingBox()).height < 48, 'completed activity occupies a compact summary');
+		await page.locator('.process-group').screenshot({path:`/tmp/pi-issue167-${theme}-${width}.png`});
+	}
+	await summary.focus(); await page.keyboard.press('Enter');
+	assert.equal(await page.locator('.bash-row:visible').count(), 26);
+	await page.locator('.process-group-head').click();
+	assert.equal(await page.locator('.bash-row:visible').count(), 0);
+	await page.evaluate(() => window.dispatchEvent(new CustomEvent('pi:reveal-tool',{detail:{toolCallId:'cycle-12-1',search:true}})));
+	await page.locator('[data-tool-call-id="cycle-12-1"] .bash-row-body').waitFor();
+	assert.equal(await page.locator('.bash-row:visible').count(), 26);
 	assert.deepEqual(errors, []);
 	console.log('PASS command preview, full expansion, output expansion, search reveal and responsive themes');
 } finally {
