@@ -57,8 +57,12 @@ try {
 			});
 		});
 		const open = async () => {
+			// The terminal view collapses the left sidebar to a 56px rail, and the rail's
+			// settings button opens the dialog directly instead of the workspace dropdown
+			// (the dropdown is only portalled into the slot while the sidebar is expanded).
+			const collapsed = await page.evaluate(() => document.querySelector('.app')?.classList.contains('left-collapsed') ?? false);
 			await page.locator('#sidebar-settings-slot button:visible').click();
-			await page.locator('#sidebar-settings-slot .dd-item', { hasText: lang === 'zh' ? '设置' : 'Settings' }).click();
+			if (!collapsed) await page.locator('#sidebar-settings-slot .dd-item', { hasText: lang === 'zh' ? '设置' : 'Settings' }).click();
 			assert.equal(await page.locator('.settings-tab').count(), 5);
 			assert.equal(await page.locator('.settings-tab', { hasText: lang === 'zh' ? /代码运行|更新/ : /Playground|Updates/ }).count(), 0);
 			await page.locator('.settings-tab', { hasText: 'Extensions' }).click();
@@ -118,7 +122,9 @@ try {
 		assert.equal(await page.locator('.settings-modal').count(), 0);
 		// The settings backdrop can outlive the modal for a frame and swallow the click.
 		await page.locator('.modal-backdrop').waitFor({ state: 'detached' });
-		await page.getByTitle(lang === 'zh' ? '新建终端' : 'New terminal', { exact: true }).click();
+		// The terminal sidebar labels this row with its workspace path in the title, so
+		// match the stable aria-label instead of an exact tooltip.
+		await page.getByRole('button', { name: lang === 'zh' ? '新建终端' : 'New terminal', exact: true }).click();
 		await open(); await install().click();
 		await page.locator('.term-tab.active', { hasText: 'Install Pi CLI' }).waitFor();
 		assert.equal(commands.length, 1, 'reopening must not restart installation');
