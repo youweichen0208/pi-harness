@@ -56,7 +56,7 @@ try {
 	assert.equal(await page.locator('.change-card.done .change-card-body').count(), 1, 'a settled edit shows its diff');
 	assert.equal(await page.locator('.bash-group.historical-step').count(),1);
 	assert.equal(await page.locator('.process-group-head, .bash-group-head').count(), 0, 'a single successful command does not add a redundant group toggle');
-	assert.match(await page.locator('.command-turn-summary').innerText(), /本轮共 1 commands/, 'the turn summary includes the command count');
+	assert.equal(await page.locator('.command-turn-summary').count(), 0);
 	await page.locator('.bash-row').waitFor({state:'visible'});
 	assert.match(await page.locator('.bash-row').textContent(), /git status/);
 	// Reference redesign: both appearances and compact layouts keep real content reachable.

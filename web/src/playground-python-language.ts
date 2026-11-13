@@ -48,7 +48,17 @@ export function pythonLanguageSupport(onStatus: (state: "loading" | "ready" | "e
 			})) };
 		} catch { return null; }
 	};
-	return [signatureField, autocompletion({ override: [completions] }), ViewPlugin.fromClass(class {
+	return [signatureField, autocompletion({ override: [completions], icons: false, addToOptions: [{ position: 20, render(completion, _state, view) {
+		const svg = view.dom.ownerDocument.createElementNS("http://www.w3.org/2000/svg", "svg");
+		const method = completion.type === "function" || completion.type === "class";
+		svg.setAttribute("class", `scratch-completion-icon${method ? " method" : ""}`);
+		svg.setAttribute("viewBox", "0 0 24 24");
+		svg.setAttribute("aria-hidden", "true");
+		const path = view.dom.ownerDocument.createElementNS("http://www.w3.org/2000/svg", "path");
+		path.setAttribute("d", method ? "M21 7 12 2 3 7v10l9 5 9-5ZM3 7l9 5 9-5M12 12v10" : "M14.7 6.3a5.5 5.5 0 0 0-7 7L2.8 18.2a2.1 2.1 0 0 0 3 3l4.9-4.9a5.5 5.5 0 0 0 7-7l-3.4 3.4-3-3Z");
+		svg.append(path);
+		return svg;
+	} }] }), ViewPlugin.fromClass(class {
 		private timer: ReturnType<typeof setTimeout> | undefined;
 		private revision = 0;
 		private busy = false;

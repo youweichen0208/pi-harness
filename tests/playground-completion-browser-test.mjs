@@ -21,6 +21,8 @@ try {
 	await editor.press('.');
 	const options = page.locator('.cm-tooltip-autocomplete .cm-completionLabel');
 	await options.first().waitFor();
+	await page.locator('.scratch-completion-icon').first().waitFor();
+	await page.locator('.cm-tooltip-autocomplete').screenshot({ path: '/tmp/pi-completion-light.png' });
 	const labels = await options.allTextContents();
 	console.log('First completions:', labels.slice(0, 8));
 	assert(labels.every(name => !name.startsWith('_')), 'a. only shows public string members');

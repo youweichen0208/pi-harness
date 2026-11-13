@@ -1,3 +1,5 @@
+import { playgroundMinimap } from "../playground-minimap";
+import { useT } from "../i18n";
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import { pythonLanguageSupport } from "../playground-python-language";
 import { acceptCompletion } from "@codemirror/autocomplete";
@@ -130,6 +132,7 @@ export const ScratchEditor = forwardRef<ScratchEditorHandle, {
 	onLanguageStatus: (state: "loading" | "ready" | "error", reason?: string) => void;
 	placeholder: string;
 }>(function ScratchEditor({ value, onChange, onRun, onFormat, onSave, onLanguageStatus, onCursorChange, placeholder }, ref) {
+	const t = useT();
 	const editor = useRef<EditorView | null>(null);
 	useImperativeHandle(ref, () => ({
 		applyProposal(base, code) {
@@ -184,6 +187,7 @@ export const ScratchEditor = forwardRef<ScratchEditorHandle, {
 					EditorState.tabSize.of(PLAYGROUND_TAB_SIZE),
 					syntaxHighlighting(highlightStyle),
 					indentRails,
+					playgroundMinimap(t("pgMinimap")),
 					EditorView.contentAttributes.of({ spellcheck: "false" }),
 					pythonLanguageSupport(onLanguageStatus),
 					theme.of(buildEditorTheme(holder.current!)),

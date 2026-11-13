@@ -4,7 +4,6 @@ import { PI_CLI_INSTALL_COMMAND } from "./pi-cli-install";
 import { useWikiCoordinator } from "./use-wiki-coordinator";
 import { WikiCoordinationError, type WikiOperation } from "./wiki-coordinator";
 import type { WikiProjectReference } from "./types";
-import { ModelPicker } from "./components/ModelPicker";
 import { FluidDrawer } from "./components/FluidDrawer";
 import { UiIcon } from "./components/UiIcon";
 import { DatabaseWorkbench } from "./components/DatabaseWorkbench";
@@ -1397,7 +1396,6 @@ export function App() {
 					onOpenDatabase={openDatabase}
 					leftCollapsed={leftCollapsed}
 					gitChangeCount={workspaceScm.files.length}
-					onOpenTask={openTask}
 					chat={chat}
 					send={send}
 					terminal={terminal}
@@ -1590,7 +1588,6 @@ export function App() {
 							onReferences={updateWikiReferences}
 							onChatAction={wikiChatAction}
 							empty={!conversationState?.messages.some(message => message.role === "user") && !conversationState?.isStreaming}
-							modelControls={<ModelPicker state={modelState} models={chat.models} accounts={chat.accounts} modelsLoading={chat.modelsLoading} send={send} onManageModels={openManageModels} />}
 							notices={chat.notices.length > 0 && <div className="notices wiki-status-notices">{chat.notices.map(n => <NoticeToast key={n.id} notice={n} onDismiss={dismissNotice} onOpenExtensions={openExtensionSettings} onSelectDirectory={() => setCwdNoticePicker(n.id)} />)}</div>}
 							chatOpen={wikiChatOpen}
 							chatWidth={wikiChatWidth}

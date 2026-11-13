@@ -9955,9 +9955,6 @@ html.pi-desktop .design-workspace .topbar { height: 44px; min-height: 44px; gap:
 .design-workspace .topbar-actions > .panel-toggle,
 html.pi-desktop .design-workspace .topbar-actions > .panel-toggle { position: relative; width: 28px; height: 28px; margin-left: 8px; border: 0; border-radius: var(--r-sm); background: var(--row-hover); }
 .design-workspace .topbar-actions > .panel-toggle::before { content: ""; position: absolute; left: -11px; top: 4px; bottom: 4px; width: 1px; background: var(--border); }
-.header-task-progress { display: inline-flex; align-items: center; gap: 5px; flex: none; padding: 3px 0; border: 0; background: transparent; color: var(--progress-text); font: 11px var(--sans); white-space: nowrap; cursor: pointer; -webkit-app-region: no-drag; app-region: no-drag; }
-.header-task-progress > span { font-size: 8px; }
-.header-task-progress:hover { text-decoration: underline; text-underline-offset: 3px; }
 .task-progress:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .design-workspace .panel-right .right-files-pane > .panel-title { height: 40px; min-height: 40px; max-height: 40px; }
 .design-workspace .panel-right .tree-filter { padding: 0 7px; border-color: transparent; font-size: 11px; }
@@ -11421,7 +11418,7 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { height: 44px;
 /* ---- Design 19: manual recovery and consistent workspace tokens ---- */
 .wiki-composer-pill .wiki-pill-send:disabled { background: var(--send-disabled-bg); color: var(--text-faint); cursor: default; }
 .wiki-composer-pill .wiki-pill-send.stop { background: var(--bg-elev); color: var(--text); }
-.header-task-progress.interrupted, .task-progress-status.interrupted { color: var(--red); }
+.task-progress-status.interrupted { color: var(--red); }
 /* The current phase reads like one: mark beside the title, inner padding, one-line summary. */
 .task-phase-body { min-width: 0; }
 .task-phase-summary { margin-top: 1px; font: 11px/1.5 var(--sans); }
@@ -11459,7 +11456,7 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { height: 44px;
 .tool-model-menu .dd-item.active { background: var(--accent-soft); color: var(--accent); }
 .tool-model-empty { display: block; padding: 12px; color: var(--text-dim); }
 .task-progress-status.reminding > i { margin-right: 6px; }
-.header-task-progress.reminding, .task-progress-status.reminding { color: var(--yellow-fg); }
+.task-progress-status.reminding { color: var(--yellow-fg); }
 /* Running dot: the darker in-progress tone keeps a 5px dot visible on warm
    white (light --yellow was ~1.7:1); a matching soft halo replaces the green one. */
 .design-workspace .session-item.active .session-dot.streaming, .session-dot.streaming { width: 6px; height: 6px; background: var(--progress-text); box-shadow: 0 0 0 3px var(--progress-soft); }
@@ -11470,8 +11467,6 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { height: 44px;
 .task-interrupted-hint p { margin: 6px 0 0; color: var(--text); }
 
 @media (max-width: 768px) {
-	.design-workspace:not(.wiki-mode) .header-location:has(.header-task-progress.interrupted, .header-task-progress.reminding) { display: flex; flex: none; }
-	.design-workspace .header-location:has(.header-task-progress.interrupted, .header-task-progress.reminding) > strong { display: none; }
 }
 
 /* 34a — Wiki document v2. Toolbar editing shares the native autosave path. */
@@ -13258,14 +13253,6 @@ html.pi-desktop .wiki-window-header .desktop-window-controls { -webkit-app-regio
 
 /* Document-bound assistant: actual model and an explicit additional project scope. */
 .wiki-analysis-welcome { inset: 100px 20px 205px; }
-.wiki-analysis-mode { display: flex; align-items: center; gap: 4px; padding: 4px; border-radius: var(--r-lg); background: var(--row-active); pointer-events: auto; max-width: 100%; }
-.wiki-analysis-mode .wiki-assistant-model { min-width: 0; flex: 1; }
-.wiki-analysis-mode .wiki-assistant-model > .dropdown + .dropdown { display: none; }
-.wiki-analysis-mode .chip-model { display: inline !important; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wiki-analysis-mode .chip-sub, .wiki-analysis-mode .chip-vision { display: none; }
-.wiki-analysis-mode .chip { border: 0; background: transparent; font-size: 14px; }
-.wiki-analysis-scope { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border: 0; border-radius: var(--r-md); background: var(--bg-elev); color: var(--text); font: inherit; cursor: pointer; white-space: nowrap; }
-.wiki-analysis-scope > svg:first-child { color: var(--accent); }
 .wiki-analysis-heading { width: 100%; margin-top: 56px; color: var(--text-dim); font-size: 23px; line-height: 1.7; }
 .wiki-analysis-heading > div { display: flex; justify-content: center; align-items: baseline; gap: 8px; }
 .wiki-analysis-heading strong { max-width: 70%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
@@ -13513,9 +13500,9 @@ html.pi-desktop .wiki-window-header .desktop-window-controls { -webkit-app-regio
 .compact-navigation .global-navigation { position: relative; width: var(--left-w, 240px); height: 100%; padding: 12px 8px 8px; background: var(--sidebar-bg); border-right: 1px solid var(--border-soft); font-size: 13px; }
 .compact-workspace-switcher { position: relative; flex: none; margin-bottom: 12px; }
 .compact-workspace-trigger { display: flex; align-items: center; gap: 10px; width: 100%; height: 34px; padding: 4px 8px; border: 0; background: transparent; color: var(--text); font: inherit; cursor: pointer; }
-.compact-brand { display: flex; align-items: center; gap: 10px; height: 34px; padding: 4px 8px; margin-bottom: 8px; flex: none; }
-.compact-brand img { width: 20px; height: 20px; flex: none; }
-.compact-brand > span { font-size: 14px; font-weight: 600; color: var(--text); white-space: nowrap; }
+.compact-brand { display: flex; align-items: center; gap: 10px; height: 40px; padding: 4px 8px; margin-bottom: 8px; flex: none; }
+.compact-brand img { width: 24px; height: 24px; flex: none; }
+.compact-brand > span { font-size: 17px; font-weight: 600; color: var(--text); white-space: nowrap; }
 .compact-navigation.directory-collapsed:not(:hover):not(:focus-within) .compact-brand > span { display: none; }
 @media (max-width: 900px) {
 	.drawer-left.open .compact-navigation.directory-collapsed .compact-brand > span { display: inline; }
@@ -14009,7 +13996,6 @@ html.pi-desktop .design-workspace .topbar :is(button, input, textarea, select, a
 
 /* Panel tabs: icon labels and raised selection. */
 .design-workspace .header-location > .conversation-title-button { min-width: 0; }
-.design-workspace .header-location:has(.header-task-progress) { min-width: 80px; }
 .design-workspace .topbar,
 html.pi-desktop .design-workspace .topbar { height: 48px; min-height: 48px; }
 .design-workspace .panel-tab-bar { display: flex; align-items: center; min-width: 0; height: 40px; padding: 4px 6px; gap: 8px; background: var(--bg-elev); border-radius: var(--r-lg); }
@@ -14465,7 +14451,6 @@ html.pi-desktop .design-workspace .topbar { height: 48px; min-height: 48px; }
 :root .design-workspace .topbar-actions .panel-tab-bar .view-switch > button { border-radius: var(--r-sm); }
 :root .design-workspace .topbar-actions .panel-tab-bar .view-switch > button.active { color: var(--accent); background: var(--accent-soft); box-shadow: none; font-weight: 500; }
 :root .design-workspace .tab-change-count { color: var(--green); background: var(--green-soft); border: 0; }
-.design-workspace .header-task-progress { display: inline-flex; align-items: center; gap: 8px; background: transparent; color: var(--accent); border: 0; border-radius: var(--r-sm); }
 .header-task-segments { display: flex; gap: 3px; max-width: 140px; min-width: 60px; flex: 1; }
 .header-task-segments i { flex: 1; height: 4px; min-width: 2px; border-radius: var(--r-sm); background: var(--border-soft); }
 .header-task-segments i:is(.done, .running) { background: var(--progress-text); }
@@ -14486,8 +14471,6 @@ html.pi-desktop .design-workspace .topbar { height: 48px; min-height: 48px; }
 @media (max-width: 1100px) {
 	.header-task-segments { display: none; }
 }
-.design-workspace .header-task-progress.interrupted { color: var(--red); }
-.design-workspace .header-task-progress.reminding { color: var(--yellow-fg); }
 .design-workspace .compact-navigation .global-entries button.active { background: var(--bg-elev); }
 
 /* Failure summaries keep recovery actions visible and technical details quiet. */
@@ -15664,7 +15647,7 @@ span.rich-math { display: inline-block; }
 	--pg-code-bg: #ffffff;
 	--pg-code-gutter: #ffffff;
 	--pg-code-gutter-active: #f8f8f8;
-	--pg-code-rail: #eeeeee;
+	--pg-code-rail: #d3d3d3;
 	--pg-code-rail-active: #d8d8d8;
 	--pg-code-chip: #d9e6f8;
 	--pg-code-fg: #24292f;
@@ -15793,7 +15776,6 @@ span.rich-math { display: inline-block; }
 .scratch-page.method-mode { padding: 16px 20px; gap: 12px; }
 .scratch-head { min-height: 40px; }
 .scratch-head h2 { display: flex; align-items: center; gap: 10px; font-size: 17px; }
-.scratch-language-badge { padding: 3px 8px; border: 1px solid var(--border-soft); border-radius: var(--r-sm); color: var(--text-muted); font: 12px/1.5 var(--mono); background: var(--bg-elev); }
 .method-mode .scratch-workspace { gap: 12px; grid-template-columns: minmax(0, 1fr) minmax(280px, 30%); }
 .scratch-workspace .scratch-pane-head { min-height: 48px; padding: 8px 12px; gap: 8px; }
 .scratch-pane-head .btn { min-width: 32px; min-height: 32px; }
@@ -16067,9 +16049,6 @@ span.rich-math { display: inline-block; }
 .pg-chat-messages { min-height: 0; overflow: auto; overscroll-behavior: contain; }
 .pg-chat-messages.is-empty { display: flex; align-items: center; justify-content: center; }
 .pg-chat-welcome { width: 100%; display: flex; align-items: center; flex-direction: column; gap: 24px; padding: 24px 0; }
-.pg-chat-mode { display: flex; align-items: center; gap: 4px; max-width: 100%; border-radius: var(--r-lg); background: var(--bg-elev2); padding: 4px; }
-.pg-chat-mode > span { display: flex; flex: none; align-items: center; gap: 6px; padding: 8px; font-size: 12px; border-radius: var(--r-md); background: var(--bg-elev); color: var(--text); }
-.pg-chat-mode > span svg { color: var(--link); }
 .pg-chat .welcome-plain { background: none; padding: 0; }
 .pg-chat .welcome-motto { font-size: clamp(22px, 6.8cqw, 36px); }
 .pg-chat > :is([role="alert"], [role="status"]) { flex: none; margin: 0; font: 12px/1.6 var(--sans); overflow-wrap: anywhere; max-height: 100px; overflow: auto; }
@@ -16088,9 +16067,6 @@ span.rich-math { display: inline-block; }
 /* Use the Wiki assistant's message and composer classes; only scope layout here. */
 .pg-chat .pg-chat-messages { width: 100%; max-width: none; padding: 8px 16px 16px; }
 .pg-chat .pg-chat-history { margin: 0 16px 8px; }
-.pg-chat .pg-chat-mode .dropdown { min-width: 0; }
-.pg-chat .pg-chat-mode .chip { max-width: 100%; }
-.pg-chat .pg-chat-mode .chip-model { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pg-chat .pg-chat-inputbar { flex: none; width: 100%; min-width: 0; }
 .pg-chat .pg-chat-references { padding: 12px 12px 0; }
 .pg-chat .pg-chat-references pre { max-height: 100px; }
@@ -16099,7 +16075,6 @@ span.rich-math { display: inline-block; }
 :root .design-workspace .pg-chat .inputbox:has(textarea:focus-visible) { border-color: var(--text-faint); }
 .pg-chat .input-tools-left { flex: 1; min-width: 0; }
 .pg-chat .input-tools-left > .dropdown { min-width: 0; }
-.pg-chat .input-tools-left .chip-model { display: none; }
 .pg-chat .input-tools .dd-menu { max-width: min(320px, calc(100cqw - 32px)); min-width: min(220px, calc(100cqw - 32px)); max-height: min(300px, 45dvh); overflow-y: auto; }
 .pg-chat .pg-chat-messages > .msg { margin-inline: 0; }
 .pg-chat > :is([role="alert"], [role="status"]) { margin: 8px 16px; }
@@ -16130,3 +16105,132 @@ span.rich-math { display: inline-block; }
 	.subagent-task-group-head > .running-indicator { order: 0; flex-basis: auto; }
 	.subagent-task-group-head > .subagent-task-counts { flex-basis: auto; margin-left: 6px; }
 }
+
+:root .design-workspace .pg-chat .input-tools-left .dropdown { flex: 1; min-width: 0; }
+:root .design-workspace .pg-chat .input-tools-left .chip { max-width: 100%; }
+:root .design-workspace .pg-chat .input-tools-left .chip-model { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Keep the knowledge assistant model readable in narrow floating windows. */
+:root .design-workspace .wiki-assistant .input-tools-left .chip-model { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Context window occupancy stays visible even in narrow composers. */
+:root .input-tools .usage-trigger .usage-meter { display: block; width: 48px; height: 6px; border-radius: var(--r-switch); }
+:root .usage-trigger .usage-meter > i { min-width: 0; }
+:root .usage-trigger .usage-meter > i.warn { background: var(--yellow-fg); }
+.usage-popover::before { content: ""; position: absolute; left: 0; right: 0; top: 100%; height: 8px; }
+
+/* Usage detail: one primary metric, quiet rows, a single warming divider. */
+.usage-popover { width: min(288px, calc(100vw - 24px)); padding: 16px; border-radius: var(--r-lg); }
+.usage-overview { align-items: baseline; }
+.usage-overview > strong { font-size: 13px; font-weight: 500; }
+.usage-capacity { margin-top: 4px; color: var(--text-dim); font: 12px/1.5 var(--mono); }
+.usage-capacity > span { font-family: var(--sans); }
+.usage-popover .usage-progress { margin: 12px 0 16px; height: 4px; }
+.usage-popover .usage-cache-section { margin-top: 10px; padding: 0; border: 0; }
+.usage-cache-section > strong { color: var(--text-dim); font-size: 12px; font-weight: 400; }
+.usage-popover .usage-warming { margin-top: 16px; padding-top: 12px; border-color: var(--border-soft); }
+.usage-warming .usage-head { margin-bottom: 8px; font-size: 12px; }
+.usage-warming .usage-head strong { font-size: 12px; font-weight: 500; }
+.usage-warming .usage-head > span { font-family: var(--sans); }
+.usage-warming .usage-head > span:first-child { color: var(--text-dim); }
+.usage-warming .usage-warming-reason, .usage-warming-note { margin: 6px 0 0; color: var(--text-dim); font: 12px/1.5 var(--sans); overflow-wrap: anywhere; }
+.usage-warming .usage-warming-reason { margin-bottom: 10px; }
+
+/* The always-visible occupancy pairs a short bar with a stable numeric label. */
+:root .input-tools .usage-trigger { gap: 6px; }
+:root .input-tools .usage-trigger .usage-meter { width: 32px; height: 4px; }
+.usage-trigger .usage-percent { display: inline-block; min-width: 4ch; text-align: right; font: 12px/1 var(--sans); font-variant-numeric: tabular-nums; }
+.usage-popover .usage-capacity { margin-bottom: 16px; }
+
+.scratch-pane-head .scratch-run-button { width: 36px; height: 36px; min-height: 36px; padding: 8px; border: 0; background: transparent; box-shadow: none; border-radius: var(--r-md); flex-shrink: 0; }
+.scratch-pane-head .scratch-run-button.is-run { color: var(--action); }
+.scratch-pane-head .scratch-run-button:hover:not(:disabled) { background: var(--row-hover); }
+.scratch-pane-head .scratch-run-button svg { width: 20px; height: 20px; }
+.scratch-pane-head .scratch-run-button.is-run svg { width: 16px; height: 16px; fill: currentColor; stroke: none; }
+@media (pointer: coarse) { .scratch-pane-head .scratch-run-button { width: 44px; height: 44px; } }
+
+/* Python completion list, styled like an editor suggestion palette. */
+.scratch-editor-cm .cm-tooltip.cm-tooltip-autocomplete { background: var(--bg-elev); color: var(--text); border: 1px solid var(--border-soft); border-radius: var(--r-lg); box-shadow: 0 6px 18px color-mix(in srgb, var(--shadow-color) 14%, transparent); overflow: hidden; }
+.scratch-editor-cm .cm-tooltip.cm-tooltip-autocomplete > ul { min-width: min(360px, calc(100vw - 32px)); max-width: min(480px, calc(100vw - 32px)); max-height: 264px; padding: 0; font: 14px/22px var(--mono); }
+.scratch-editor-cm .cm-tooltip-autocomplete > ul > li { display: flex; align-items: center; gap: 6px; min-height: 24px; padding: 0 8px; cursor: pointer; }
+.scratch-editor-cm .cm-tooltip-autocomplete > ul > li[aria-selected] { background: var(--accent-soft); color: var(--text); }
+.scratch-editor-cm .cm-tooltip-autocomplete > ul > li:not([aria-selected]):hover { background: var(--row-hover); }
+.scratch-completion-icon { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; color: var(--text-dim); }
+.scratch-completion-icon.method { color: var(--editor-keyword, var(--code-keyword)); }
+.scratch-editor-cm .cm-completionLabel { overflow: hidden; text-overflow: ellipsis; }
+.scratch-editor-cm .cm-completionDetail { margin-left: auto; padding-left: 12px; font: 11px/1.5 var(--sans); color: var(--text-dim); max-width: 140px; overflow: hidden; text-overflow: ellipsis; }
+.scratch-editor-cm .cm-completionMatchedText { text-decoration: none; font-weight: 600; }
+
+/* Reference editor geometry: no ligatures, continuous nested guides, slim overview. */
+.scratch-editor-cm .cm-scroller { font-variant-ligatures: none; padding-top: 4px; }
+.scratch-editor-cm .cm-lineNumbers .cm-gutterElement { min-width: 48px; }
+.scratch-editor-cm .cm-line.cm-indent-rail::before { left: 20px; width: calc(var(--rail-depth, 1) * 4ch); background: repeating-linear-gradient(to right, var(--pg-code-rail) 0 1px, transparent 1px 4ch); }
+.scratch-editor-cm .cm-line.cm-indent-rail.cm-activeLine::before { background: repeating-linear-gradient(to right, var(--pg-code-rail) 0 1px, transparent 1px 4ch); }
+.scratch-editor-cm .cm-editor { padding-right: 96px; position: relative; }
+.scratch-minimap { position: absolute; right: 0; top: 4px; bottom: 0; width: 88px; height: calc(100% - 4px); cursor: pointer; }
+.scratch-minimap:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+@media (max-width: 760px) { .scratch-editor-cm .cm-editor { padding-right: 0; } .scratch-minimap { display: none; } }
+
+/* Match the user's VS Code editor typography; avoid inherited UI smoothing. */
+.scratch-editor-cm { -webkit-font-smoothing: auto; }
+.scratch-editor-cm .cm-scroller { font: 400 14px/22.4px var(--pg-font); letter-spacing: .3px; font-variant-ligatures: normal; font-feature-settings: "liga" 1, "calt" 1; }
+.scratch-editor-cm .cm-lineNumbers .cm-gutterElement { font-size: 14px; line-height: 22.4px; font-weight: 400; }
+.scratch-editor-cm .cm-tooltip.cm-tooltip-autocomplete > ul { font: 400 14px/22.4px var(--pg-font); letter-spacing: .3px; }
+
+.scratch-editor-cm .cm-line.cm-indent-rail::before { width: calc(var(--rail-depth, 1) * (4ch + 1.2px)); }
+.scratch-editor-cm .cm-line.cm-indent-rail::before, .scratch-editor-cm .cm-line.cm-indent-rail.cm-activeLine::before { background: repeating-linear-gradient(to right, var(--pg-code-rail) 0 1px, transparent 1px calc(4ch + 1.2px)); }
+
+/* Function selection shares the app menu and keeps long signatures readable. */
+.lc-method-tests .method-toolbar.method-picker { display: block; padding: 0; border: 0; }
+.method-picker .dropdown { display: block; width: 100%; }
+.method-picker .chip { display: flex; width: 100%; min-width: 0; min-height: 40px; padding: 8px 10px; gap: 10px; border: 1px solid var(--border-soft); border-radius: var(--r-md); background: var(--bg-elev); color: var(--text); }
+.method-picker-label { color: var(--text-dim); font: 12px/1.5 var(--sans); flex: none; }
+.method-picker .chip > svg:not(.dd-caret) { color: var(--text-dim); width: 16px; flex: none; }
+.method-picker-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; text-align: left; font: 13px/1.5 var(--pg-font); }
+.method-picker .dropdown.left .method-picker-menu { position: absolute; bottom: auto; max-width: none; top: calc(100% + 6px); left: 0; right: 0; width: auto; min-width: 0; max-height: 240px; padding: 4px; }
+.method-picker-menu .dd-item { display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 8px; font: 13px/1.5 var(--pg-font); }
+.method-picker-menu .dd-item > span { min-width: 0; overflow-wrap: anywhere; white-space: normal; }
+.method-picker-menu .dd-item > svg { flex: none; width: 16px; }
+.method-picker-check { margin-left: auto; color: var(--action); }
+.method-picker-empty { margin: 8px; color: var(--text-dim); font-size: 12px; }
+.method-picker .chip:focus-visible, .method-picker-menu .dd-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.lc-case-panel .scratch-parameter-hint { color: var(--text-dim); margin-bottom: 16px; font-size: 12px; }
+
+.method-picker .chip > span { display: inline-block; }
+
+.method-picker-menu .dd-item > span { flex: 1; text-align: left; }
+.method-picker-menu .dd-item.active::after { content: none; }
+
+/* Sidebar reading scale below the brand: navigation and list items 14px. */
+.compact-navigation .global-navigation { font-size: 14px; }
+.compact-navigation .compact-workspace-trigger { height: 38px; line-height: 22px; }
+.compact-navigation .global-entries button { height: 36px; font-size: 14px; line-height: 22px; }
+.compact-navigation .global-entries svg, .compact-navigation .sidebar-footer svg { width: 16px; height: 16px; }
+.compact-navigation .navigation-search { height: 34px; font-size: 14px; }
+.design-workspace .compact-navigation .panel-section-title { font-size: 13px; letter-spacing: 0; min-height: 36px; }
+.design-workspace .compact-navigation .project-item { min-height: 38px; font-size: 14px; line-height: 22px; }
+.design-workspace .compact-navigation .session-item { min-height: 38px; font-size: 14px; line-height: 22px; }
+.design-workspace .compact-navigation .session-title { font-size: 14px; }
+.design-workspace .compact-navigation .session-time { font-size: 12px; }
+.compact-navigation .sidebar-footer button { min-height: 36px; font-size: 14px; }
+.compact-navigation .workspace-picker .workspace-list-row > button { min-height: 36px; font-size: 14px; }
+
+.design-workspace .statusbar :is(.status-connection, .status-version) { font-size: 12px; }
+
+/* Balanced chat shell: reading 16px, controls 14px, secondary actions 13px. */
+.design-workspace .compact-navigation .project-item.active .project-name,
+.design-workspace .compact-navigation .panel-left .session-item.active .session-title,
+.design-workspace .compact-navigation .session-item.active .session-title { font-weight: 500; }
+.design-workspace .topbar .header-location,
+.design-workspace .topbar .view-switch button,
+.design-workspace .panel-right .right-panel-tabs > button,
+.design-workspace .panel-right .tree-search,
+.design-workspace .panel-right .tree-root,
+.design-workspace .panel-right .file-item > .file-name,
+.design-workspace .panel-right .file-dir-main { font-size: 14px; }
+.design-workspace .msg-assistant .msg-text:not(.process-narration) .md,
+.design-workspace .msg-user .msg-text .md { font-size: 16px; line-height: 1.7; }
+.design-workspace .msg-assistant .msg-text:not(.process-narration) .md > :is(p, ul, ol, blockquote) { max-width: 88ch; }
+.design-workspace .inputbox textarea { font-size: 16px; line-height: 1.6; }
+.design-workspace .input-tools .chip { font-size: 13px; }
+.design-workspace .reply-actions { font-size: 13px; }

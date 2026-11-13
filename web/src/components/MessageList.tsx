@@ -1,7 +1,5 @@
 import { subagentTurns } from "../subagent-turns";
 import { SubagentTurnContext, type SubagentTurnCall } from "./SubagentTurnPanel";
-import { commandTurnSummaries } from "../command-turns";
-import { CommandTurnSummary } from "./CommandTurnSummary";
 import { answerHistory } from "../answer-history";
 import { WelcomeMotto } from "./WelcomeMotto";
 import { UiIcon } from "./UiIcon";
@@ -182,9 +180,9 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 	/** 会话内搜索栏（Ctrl+F / Cmd+F）。 */
 	const [searchOpen, setSearchOpen] = useState(false);
 	/** Persisted messages + the live in-progress assistant message (if any). */
-	const messages = state.streamingMessage
+	const messages = useMemo(() => (state.streamingMessage
 		? [...state.messages, state.streamingMessage]
-		: state.messages;
+		: state.messages).filter(message => message.role !== "system"), [state.messages, state.streamingMessage]);
 	/**
 	 * toolResult lookup, memoized on the messages array. The server keeps the
 	 * array reference stable while the message set is unchanged, so this Map is
@@ -253,14 +251,6 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 	const foldedAnswers = useMemo(() => ({ heads: new Map<string, { ids: string[]; count: number }>(), hidden: new Set<string>() }), []);
 	const settledGroups = useMemo(() => groupBashMessages(state.messages, 0, new Set(timeGaps.keys())), [state.messages, timeGaps]);
 	const bashGroups = useMemo(() => withStreamingMessage(settledGroups, state.messages, state.streamingMessage), [settledGroups, state.messages, state.streamingMessage]);
-	const commandSummaries = useMemo(() => {
-		const summaries = commandTurnSummaries(state.messages, state.isStreaming);
-		for (const [id, summary] of [...summaries]) {
-			const owner = bashGroups.owners.get(id);
-			if (owner) { summaries.delete(id); summaries.set(owner, summary); }
-		}
-		return summaries;
-	}, [state.messages, state.isStreaming, bashGroups]);
 	/** Replies after which the agent kept going in the same turn. */
 	const turnContinues = useMemo(() => {
 		const continues = new Set<string>();
@@ -817,7 +807,6 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 							// conversation: the newest assistant reply, with nothing said after it.
 							settledTail={m.id === lastAssistantId && !streamingHasContent && !state.streamingMessage?.content.some((block) => block.type === "toolCall")}
 						/>
-						{commandSummaries.has(m.id) && <CommandTurnSummary summary={commandSummaries.get(m.id)!} />}
 						{changeSummaries.has(m.id) && <ChangeSummaryCard files={changeSummaries.get(m.id)!} />}
 						{m.role === "assistant" && <ReplyActions message={m} last={m.id === state.messages.findLast(message => message.role === "assistant")?.id} regenerate={!state.isStreaming && connected && !state.tree?.verifying && onEdit ? () => {
 							const user = state.messages.slice(0, i).findLast(message => message.role === "user" && message.origin !== "auto-reminder");

@@ -6,7 +6,7 @@ import type { PlaygroundChatContext, UiMessage } from "../types";
 import { Markdown } from "./Markdown";
 import { Message } from "./Message";
 import { Dropdown, DropdownItem } from "./Dropdown";
-import { FiArrowUp, FiClock, FiCode, FiCpu, FiPlus } from "react-icons/fi";
+import { FiArrowUp, FiClock, FiCpu, FiPlus } from "react-icons/fi";
 import { WelcomeMotto } from "./WelcomeMotto";
 import { CopyButton } from "./copy-button";
 
@@ -25,7 +25,6 @@ export function PlaygroundChat({ context, apply }: { context: PlaygroundChatCont
 	const { state, draft, pending, error, connected } = usePlaygroundChat();
 	const [dismissed, setDismissed] = useState<string[]>([]);
 	const [modelOpen, setModelOpen] = useState(false);
-	const [thinkingOpen, setThinkingOpen] = useState(false);
 	const [historyOpen, setHistoryOpen] = useState(false);
 	const input = useRef<HTMLTextAreaElement>(null);
 	const messages = useRef<HTMLDivElement>(null);
@@ -40,11 +39,10 @@ export function PlaygroundChat({ context, apply }: { context: PlaygroundChatCont
 	const modelReady = !!state?.model && state.models.some(m => m.provider === state.model!.provider && m.id === state.model!.id);
 	const locked = !connected || !!pending || !!state?.running;
 	const empty = !state?.messages.some(m => m.role === "user" || m.role === "assistant") && !state?.streaming;
-	const modelSelect = <Dropdown keyboardNavigation align="left" direction={empty ? "down" : "up"} trigger={<><FiCpu aria-hidden="true" /><span className="chip-model">{state?.model?.name ?? t("pgChatModel")}</span></>} open={modelOpen} onOpenChange={open => { if (!locked) setModelOpen(open); }}>
+	const modelSelect = <Dropdown keyboardNavigation align="left" direction="up" trigger={<><FiCpu aria-hidden="true" /><span className="chip-model" title={state?.model?.name}>{state?.model?.name ?? t("pgChatModel")}</span></>} open={modelOpen} onOpenChange={open => { if (!locked) setModelOpen(open); }}>
 		<div className="dd-header">{t("pgChatModel")}</div>
 		{state?.models.map(m => <DropdownItem disabled={locked} key={JSON.stringify([m.provider, m.id])} active={m.provider === state.model?.provider && m.id === state.model?.id} onClick={() => { playgroundChatRequest("model", { model: { provider: m.provider, id: m.id } }); setModelOpen(false); }}>{m.name}</DropdownItem>)}
 	</Dropdown>;
-	const thinkingLabels = { off: "pgThinkOff", minimal: "pgThinkMinimal", low: "pgThinkLow", medium: "pgThinkMedium", high: "pgThinkHigh", xhigh: "pgThinkXhigh" } as const;
 	return <section className="pg-chat wiki-assistant">
 		<header className="wiki-assistant-header">
 			<img className="wiki-assistant-mark" src="/icon/1a-mark.svg" alt="" /><strong>{t("pgChatAsk")}</strong>
@@ -55,7 +53,7 @@ export function PlaygroundChat({ context, apply }: { context: PlaygroundChatCont
 			<label>{t("pgChatHistory")}<select autoFocus value={state?.id ?? ""} disabled={locked} onKeyDown={e => { if (e.key === "Escape") { setHistoryOpen(false); } }} onChange={e => { playgroundChatRequest("switch", { targetId: e.target.value }); setHistoryOpen(false); }}>{state?.history.map(h => <option key={h.id} value={h.id}>{h.title}</option>)}</select></label>
 		</div>}
 		<div ref={messages} onScroll={e => { const el = e.currentTarget; followOutput.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48; }} className={`messages pg-chat-messages ${empty ? "is-empty" : ""}`} aria-live="polite">
-			{empty && <div className="pg-chat-welcome"><div className="pg-chat-mode">{modelSelect}<span><FiCode aria-hidden="true" />{t("pgChatCodeMode")}</span></div><WelcomeMotto plain /></div>}
+			{empty && <div className="pg-chat-welcome"><WelcomeMotto plain /></div>}
 			{state?.interrupted && <p role="status">{t("pgChatInterrupted")}</p>}
 			{state?.messages.filter(m => m.role === "user" || m.role === "assistant").map((m, i) => <ChatMessage key={i} message={m} />)}
 			{state?.streaming && <ChatMessage message={state.streaming} streaming />}
@@ -84,11 +82,7 @@ export function PlaygroundChat({ context, apply }: { context: PlaygroundChatCont
 		<div className="inputbox-row"><textarea ref={input} rows={1} id="pg-chat-input" aria-label={t("pgChatAsk")} placeholder={t("pgChatComposerPlaceholder")} value={draft} onChange={e => editPlaygroundQuestion(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); sendPlaygroundQuestion(context); } }} /></div>
 		<div className="input-tools">
 			<div className="input-tools-left">
-			{!empty && modelSelect}
-			<Dropdown keyboardNavigation direction="up" align="left" trigger={<span title={t("pgChatThinking")}>{t(thinkingLabels[state?.thinking as keyof typeof thinkingLabels] ?? "pgThinkOff")}</span>} open={thinkingOpen} onOpenChange={open => { if (!locked) setThinkingOpen(open); }}>
-				<div className="dd-header">{t("pgChatThinking")}</div>
-				{Object.entries(thinkingLabels).map(([level, label]) => <DropdownItem disabled={locked} key={level} active={state?.thinking === level} onClick={() => { playgroundChatRequest("thinking", { thinking: level }); setThinkingOpen(false); }}>{t(label)}</DropdownItem>)}
-			</Dropdown>
+			{modelSelect}
 			</div><div className="input-tools-right"><div className="inputbox-actions">
 			{state?.running ? <button className="btn composer-action stop" title={t("playgroundStop")} aria-label={t("playgroundStop")} disabled={!connected} onClick={() => playgroundChatRequest("stop")}><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="3" /></svg></button> : <button className="btn composer-action send" title={t("pgChatSend")} aria-label={t("pgChatSend")} disabled={locked || !modelReady || !draft.trim()} onClick={() => sendPlaygroundQuestion(context)}><FiArrowUp strokeWidth={3} aria-hidden="true" /></button>}
 			</div></div>

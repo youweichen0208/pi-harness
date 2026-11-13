@@ -1,3 +1,6 @@
+import { useRef, useState } from "react";
+import { FiCheck, FiCode } from "react-icons/fi";
+import { Dropdown } from "./Dropdown";
 import { useT } from "../i18n";
 import type { PlaygroundCase, PlaygroundMethod, PlaygroundValue } from "../types";
 import { defaultParameterValue, isJsonType, validateCases } from "../../../server/playground-methods";
@@ -37,18 +40,28 @@ export function PlaygroundMethodCases({ methods, selected, cases, onSelect, onCh
 	onSelect: (id: string) => void; onChange: (cases: PlaygroundCase[]) => void;
 }) {
 	const t = useT();
+	const [menuOpen, setMenuOpen] = useState(false);
+	const picker = useRef<HTMLDivElement>(null);
 	const method = methods.find(m => m.id === selected);
 	const active = cases[0];
 	const error = active ? caseError(method, [active]) : "";
 	return <section className="method-tests lc-method-tests" aria-label={t("pgMethods")}>
-		<div className="method-toolbar"><label>{t("pgMethod")}<select value={selected} onChange={event => onSelect(event.target.value)}>
-			{!method && <option value={selected}>{selected || t("pgMethod")}</option>}
-			{methods.map(m => <option key={m.id} value={m.id}>{m.id}</option>)}
-		</select></label></div>
+		<div className="method-toolbar method-picker" ref={picker} onBlur={event => {
+			if (!event.currentTarget.contains(event.relatedTarget)) setMenuOpen(false);
+		}}>
+			<Dropdown open={menuOpen} onOpenChange={setMenuOpen} align="left" keyboardNavigation menuClassName="method-picker-menu" trigger={<><span className="method-picker-label">{t("pgMethod")}</span><FiCode aria-hidden="true" /><span className="method-picker-name" title={selected}>{selected || t("pgMethodChoose")}</span></>}>
+				{methods.map(m => <button type="button" className={`dd-item ${m.id === selected ? "active" : ""}`} key={m.id} aria-pressed={m.id === selected} onClick={() => {
+					onSelect(m.id);
+					setMenuOpen(false);
+					picker.current?.querySelector<HTMLButtonElement>(".chip")?.focus();
+				}}><FiCode aria-hidden="true" /><span>{m.id}</span>{m.id === selected && <FiCheck className="method-picker-check" aria-hidden="true" />}</button>)}
+				{!methods.length && <p className="method-picker-empty">{t("pgNoMethods")}</p>}
+			</Dropdown>
+		</div>
 		{!methods.length && !selected && <p className="playground-hint">{t("pgNoMethods")}</p>}
 		{selected && !method && <p className="playground-notice">{t("pgMissingMethod")}</p>}
 		{method?.unsupported && <p className="playground-notice">{methodErrorText(method.unsupported, t)}</p>}
-		{active && <div className="lc-case-panel"><p className="scratch-parameter-hint">{t("pgParameterHint")}</p><div className="method-parameters">
+		{active && <div className="lc-case-panel"><p className="scratch-parameter-hint">{t(active.args.length ? "pgParameterHint" : "pgNoParameters")}</p><div className="method-parameters">
 			{active.args.map((value, i) => <ValueInput key={i} type={method?.parameters[i]?.type ?? "JSON"} label={method?.parameters[i]?.name || `arg${i + 1}`} value={value} onChange={next => onChange([{ ...active, args: active.args.map((v, j) => j === i ? next : v) }, ...cases.slice(1)])} />)}
 		</div>{error && active.args.some(value => value.text.trim()) && <p className="method-validation" role="status">{methodErrorText(error, t)}</p>}</div>}
 	</section>;

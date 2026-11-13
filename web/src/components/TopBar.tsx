@@ -1,4 +1,3 @@
-import { toolTextIncidents } from "../tool-text";
 import { openSessionTree } from "../tree-events";
 import { createPortal } from "react-dom";
 import { useEffect, useState } from "react";
@@ -30,7 +29,6 @@ interface TopBarProps {
 	onOpenDatabase: () => void;
 	leftCollapsed?: boolean;
 	gitChangeCount: number;
-	onOpenTask: () => void;
 	chat: ChatState;
 	send: (msg: ClientMessage) => boolean;
 	/** Minimal terminal-tab bridge (same shape SCMPanel uses) — updates run there. */
@@ -70,7 +68,6 @@ export function TopBar({
 	onOpenDatabase,
 	leftCollapsed = false,
 	gitChangeCount,
-	onOpenTask,
 	chat,
 	send,
 	terminal,
@@ -95,11 +92,6 @@ export function TopBar({
 	}, [view, leftCollapsed]);
 	const projectName = chat.state?.cwd?.split(/[\\/]/).filter(Boolean).at(-1);
 	const notGitRepo = chat.gitBranch?.cwd === chat.state?.cwd && !!chat.gitBranch?.notRepo;
-	const incident = chat.state?.conversationId === chat.activeConversationId ? toolTextIncidents(chat.state.streamingMessage ? [...chat.state.messages, chat.state.streamingMessage] : chat.state.messages, chat.state.isStreaming).current : undefined;
-	const interrupted = incident?.state === "stopped";
-	const reminding = incident?.state === "reminding";
-	const task = chat.state?.conversationId === chat.activeConversationId ? chat.state?.taskProgress : null;
-	const hasCodemode = chat.state?.conversationId === chat.activeConversationId && chat.state?.codemode?.history.some(message => message.role === "assistant" && message.content.some(block => block.type === "toolCall" && block.name === "codemode"));
 	const LANGUAGES: { value: Locale; label: string }[] = [
 		{ value: "zh", label: t("langZh") },
 		{ value: "en", label: t("langEn") },
@@ -185,7 +177,7 @@ export function TopBar({
 			</div>
 
 			{view !== "nodes" && <button type="button" className="project-panel-toggle" title={t(leftCollapsed ? "expandProjects" : "collapseProjects")} aria-label={t(leftCollapsed ? "expandProjects" : "collapseProjects")} aria-expanded={!leftCollapsed} onClick={() => onOpenPanel("left")}><FiSidebar /></button>}
-			<div className="header-location"><button type="button" className="conversation-title-button" title={t("treeTitle")} aria-label={`${t("currentConversation")} · ${t("treeTitle")}`} onClick={() => openSessionTree()}><strong>{t("currentConversation")}</strong><FiChevronDown className="conversation-title-chevron" aria-hidden="true" /></button>{(interrupted || reminding || hasCodemode || !!task) && <button type="button" className={`header-task-progress${interrupted ? " interrupted" : reminding ? " reminding" : ""}`} title={t("taskProgress")} onClick={onOpenTask}>{interrupted ? t("toolRecoveryInterrupted") : reminding ? t("working") : t("taskProgress")}</button>}</div>
+			<div className="header-location"><button type="button" className="conversation-title-button" title={t("treeTitle")} aria-label={`${t("currentConversation")} · ${t("treeTitle")}`} onClick={() => openSessionTree()}><strong>{t("currentConversation")}</strong><FiChevronDown className="conversation-title-chevron" aria-hidden="true" /></button></div>
 			<div className="topbar-actions">
 				<div className="panel-tab-bar">
 				<div className="view-switch" role="tablist" aria-label={t("viewSwitch")}>

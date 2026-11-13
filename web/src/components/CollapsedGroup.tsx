@@ -9,7 +9,6 @@ import {
 	asThinking,
 	asToolCall,
 	roleLabel,
-	SystemEvent,
 } from "./Message";
 
 import { collapsedPreview, userPreviewParts } from "../collapsed-groups";
@@ -47,7 +46,7 @@ export const CollapsedGroup = memo(function CollapsedGroup({
 }: CollapsedGroupProps) {
 	const t = useT();
 	const head = messages[0];
-	if (head.role === "system") return <SystemEvent message={head} />;
+	if (head.role === "system") return null;
 
 	// Plain-text preview: the first text block of the run, first line, ~90 chars
 	// (no Markdown). Skill invocations collapse to a `skill:name · <args>` chip

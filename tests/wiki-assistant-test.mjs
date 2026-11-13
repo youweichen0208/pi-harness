@@ -33,6 +33,10 @@ try{
  await page.goto(url);await page.locator('.wiki-prose .fp-rich-document').waitFor();
  const api=(action,args={})=>page.evaluate(async({action,args})=>{const state=JSON.parse(sessionStorage.getItem('pi-wiki-view'));const response=await fetch('/api/wiki',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({clientId:new URL(location.href).searchParams.get('client'),cwd:state.cwd,conversationId:state.conversationId,action,...args})});return {status:response.status,body:await response.json()};},{action,args});
  await page.locator('.wiki-ask-toggle').click();await page.locator('.wiki-assistant.is-floating').waitFor();
+ assert.equal(await page.locator('.wiki-analysis-mode, .wiki-analysis-scope').count(),0);
+ await page.locator('.wiki-assistant .input-tools-left .chip-model').waitFor({state:'visible'});
+ await page.locator('.wiki-assistant .input-tools-left .dropdown > button').first().click();
+ await page.locator('.wiki-assistant .dd-menu-model').waitFor({state:'visible'});await page.locator('.wiki-assistant .input-tools-left .dropdown > button').first().click();
  const floating=page.locator('.wiki-assistant');const initialBox=await floating.boundingBox();
  await page.mouse.move(initialBox.x+80,initialBox.y+26);await page.mouse.down();await page.mouse.move(initialBox.x+20,initialBox.y+46,{steps:3});await page.mouse.up();
  let movedBox=await floating.boundingBox();assert(movedBox.x<initialBox.x);assert(movedBox.y>initialBox.y);
@@ -43,7 +47,13 @@ try{
  await page.getByRole('button',{name:'切换为浮动面板',exact:true}).click();assert.equal(await input.inputValue(),'Keep this draft');
 
  const original=(await api('chat-context')).body.sessionId;
- const choose=async()=>{await page.locator('.wiki-analysis-scope, .wiki-assistant-context').first().click();await page.locator('.wiki-project-list .wiki-sheet-row').filter({hasText:'knowledge'}).click();await page.locator('.wiki-assistant-sheet').waitFor({state:'detached'});};
+ const choose=async()=>{
+  if(!await page.locator('.wiki-assistant-context').count()) {
+   const draft=await input.inputValue();await input.fill('Summarize this document');await input.press('Enter');
+   await page.waitForFunction(()=>document.querySelector('.wiki-assistant .messages')?.textContent.includes('Local answer with evidence.'));
+   await input.fill(draft);
+  }
+  await page.locator('.wiki-assistant-context').click();await page.locator('.wiki-project-list .wiki-sheet-row').filter({hasText:'knowledge'}).click();await page.locator('.wiki-assistant-sheet').waitFor({state:'detached'});};
  await choose();await page.locator('.wiki-reference-chips').filter({hasText:'knowledge'}).waitFor();
  assert.equal((await api('chat-validate-project',{workspaceId:'research',path:cwd})).status,400);
  await page.screenshot({path:'/tmp/pi-wiki-document-analysis.png'});

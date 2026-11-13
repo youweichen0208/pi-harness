@@ -266,7 +266,7 @@ export const Message = memo(function Message({
 	if (message.role === "custom" && message.customType === "acp-delegate") return <DelegateNotification message={message} />;
 	if (message.origin === "auto-reminder") return <div className="tool-reminder-event" data-msg-id={message.id} title={message.content.map(b => b.type === "text" ? b.text : "").join("\n")}><span>↻ {t("toolReminderEvent")}{message.timestamp ? ` · ${formatTime(message.timestamp)}` : ""}</span></div>;
 	// SDK system messages are system-prompt snapshots: one quiet divider, not a chat row (3a).
-	if (message.role === "system") return <SystemEvent message={message} />;
+	if (message.role === "system") return null;
 	// Attached files are rendered as their own collapsible card, separate from
 	// the user message text.
 	const isFileAttachment =
@@ -724,14 +724,6 @@ export const Message = memo(function Message({
 		</div>
 	);
 });
-
-export function SystemEvent({ message }: { message: UiMessage }) {
-	const t = useChatT();
-	const text = message.content.map(b => asText(b)?.text ?? "").filter(Boolean).join("\n");
-	return <div className="system-event" data-msg-id={message.id} title={text || undefined}>
-		<span>{t("systemPromptLoaded")}{message.timestamp ? ` · ${formatTime(message.timestamp)}` : ""}</span>
-	</div>;
-}
 
 /** Reply prose, with grilling-style questions lifted into answerable cards (4a). */
 /**

@@ -14,13 +14,13 @@ import { DesktopWindowControls } from "./DesktopWindowControls";
 import { WikiResizeHandle } from "./WikiResizeHandle";
 
 type Geometry = { x: number; y: number; width: number; height: number };
-export function WikiWindowShell({ documentPath, loading = false, chatOpen, chatWidth, onChatOpen, onChatResize, onClose, chatHost, notices, children, cwd, conversationId, references = [], onReferences, onChatAction, empty, modelControls, currentIncluded = true, project, onProject }: {
+export function WikiWindowShell({ documentPath, loading = false, chatOpen, chatWidth, onChatOpen, onChatResize, onClose, chatHost, notices, children, cwd, conversationId, references = [], onReferences, onChatAction, empty, currentIncluded = true, project, onProject }: {
 	project?: WikiProjectReference | null; onProject?: (project: WikiProjectReference | null) => void;
 	documentPath: string; loading?: boolean; chatOpen: boolean; chatWidth: number;
 	onChatOpen: (open: boolean) => void; onChatResize: (width: number) => void; onClose: () => void;
 	chatHost: (node: HTMLDivElement | null) => void; notices?: ReactNode; children: ReactNode;
 	cwd?: string; conversationId?: string; references?: string[]; onReferences?: (paths: string[]) => Promise<void>;
-	onChatAction?: (action: string, id?: string) => void; currentIncluded?: boolean; empty?: boolean; modelControls?: ReactNode;
+	onChatAction?: (action: string, id?: string) => void; currentIncluded?: boolean; empty?: boolean;
 }) {
 	const t = useT();
 	const scope = useRef<HTMLDivElement>(null), body = useRef<HTMLDivElement>(null), panel = useRef<HTMLElement>(null);
@@ -99,7 +99,6 @@ export function WikiWindowShell({ documentPath, loading = false, chatOpen, chatW
 				</header>
 				{!empty && <button className="wiki-assistant-context" title={documentPath} onClick={() => setSheet("projects")}><FiBookOpen /><span>{documentName}{project ? ` + ${project.name}` : ""}</span><FiChevronDown /></button>}
 				{empty && <div className="wiki-assistant-welcome wiki-analysis-welcome">
-					<div className="wiki-analysis-mode"><div className="wiki-assistant-model">{modelControls}</div><button className="wiki-analysis-scope" onClick={() => setSheet("projects")}><FiBookOpen /><span>{t(project ? "wikiWithProject" : "wikiDocumentOnly")}</span><FiChevronDown /></button></div>
 					<WelcomeMotto plain />
 				</div>}
 

@@ -15,7 +15,7 @@ try {
 	const user = { id: 'u', role: 'user', content: [{ type: 'text', text: '实现并验证输入校验' }], timestamp: stamp };
 	const call = (id, text) => ({ id, role: 'assistant', model: 'test-model', timestamp: stamp + 1, content: [...(text ? [{ type: 'text', text }] : []), { type: 'toolCall', id, name: 'bash', argumentsText: JSON.stringify({ command: `echo ${id}` }) }] });
 	const result = (id, isError = false) => ({ id: `${id}-result`, role: 'toolResult', toolCallId: id, isError, durationMs: 100, timestamp: stamp + 2, content: [{ type: 'text', text: 'first\nsecond\n' }] });
-	const messages = [user, call('a', '实现模型层拦截。'), result('a'), call('b'), result('b'), call('c', '验证合法输入。'), result('c'), call('d', '清理旧测试。'), result('d', true), { id: 'final', role: 'assistant', model: 'test-model', timestamp: stamp + 3, content: [{ type: 'text', text: '旧测试仍需调整，失败信息已保留。' }] }];
+	const messages = [{ id: 'system', role: 'system', content: [{ type: 'text', text: 'Fixture system prompt' }], timestamp: stamp }, user, call('a', '实现模型层拦截。'), result('a'), call('b'), result('b'), call('c', '验证合法输入。'), result('c'), call('d', '清理旧测试。'), result('d', true), { id: 'final', role: 'assistant', model: 'test-model', timestamp: stamp + 3, content: [{ type: 'text', text: '旧测试仍需调整，失败信息已保留。' }] }];
 	let base, browserSocket;
 	await page.routeWebSocket(/\/ws(?:\?|$)/, route => {
 		browserSocket = route;
@@ -30,17 +30,17 @@ try {
 		});
 	});
 	await page.goto(`${fixture.base}/?token=${fixture.token}`);
-	await page.locator('.command-turn-summary').waitFor();
+	await page.locator('.process-group').first().waitFor();
 	await page.locator('.tree-hidden-summary').waitFor();
 	assert.equal(await page.locator('button.file-name[title=".flow-hidden"]').count(), 0);
 	await page.locator('.tree-hidden-summary').click();
 	await page.locator('button.file-name[title=".flow-hidden"]').waitFor();
 	assert.equal(await page.locator('.tree-hidden-summary').count(), 0);
-	assert.equal(await page.locator('.process-group').count(), 3, 'consecutive calls across messages share one phase');
-	assert.equal(await page.locator('.process-group-head[aria-expanded="true"]').count(), 1, 'unresolved failures remain expanded');
+	assert.equal(await page.locator('.process-group').count(), 2, 'successful calls keep their phases while failed bash attempts stay hidden');
+	assert.equal(await page.locator('.process-group-head[aria-expanded="true"]').count(), 0, 'settled phases do not add expanded group headers');
 	assert.match(await page.locator('.messages').textContent(), /实现模型层拦截/);
-	assert.match(await page.locator('.process-group-summary').first().textContent(), /2 commands|2 条命令/);
-	assert.equal(await page.locator('.process-group.ok .process-group-status svg').count(), 1);
+	assert.match(await page.locator('.process-group-summary-line').first().textContent(), /2 commands|2 条命令/);
+	assert.equal(await page.locator('.process-group.ok .process-group-status svg').count(), 0);
 	const single = page.locator('.process-group.single-command');
 	assert.equal(await single.count(), 1);
 	assert.match(await single.locator('.bash-inline-command').innerText(), /echo c/);
@@ -49,15 +49,14 @@ try {
 	await single.locator('.bash-numbered-output').waitFor();
 	await single.locator('.bash-row-head').press('Enter');
 	assert.equal(await single.locator('.bash-numbered-output').count(), 0);
-	assert.equal(await page.locator('.process-group.ok .process-group-status').first().getAttribute('aria-label'), 'all passed');
-	assert.match(await page.locator('.process-group.err').textContent(), /failed/);
-	const summary = await page.locator('.command-turn-summary').textContent();
-	assert.match(summary, /4 commands|4 条命令/); assert.match(summary, /1 次失败/); assert.match(summary, /输出 8 行/); assert.match(summary, /0.4s/);
-	assert(!summary.includes('全部通过'));
-	await page.locator('.process-group-head').first().click();
+	assert.equal(await page.locator('.process-group.err').count(), 0);
+	assert.equal(await page.locator('.bash-row.err').count(), 0);
+	assert.equal(await page.locator('.command-turn-summary').count(), 0);
+	assert.equal(await page.locator('.system-event').count(), 0);
+	await page.locator('.process-group-summary-line').first().click();
 	assert.equal(await page.locator('.process-group').first().locator('.bash-row').count(), 2);
 	assert.equal(await page.locator('.process-group').first().locator('.bash-inline-command:visible').count(), 2);
-	assert.equal(await page.locator('.process-group').first().locator('.bash-inline-command').first().evaluate(el => getComputedStyle(el).whiteSpace), 'nowrap');
+	assert.equal(await page.locator('.process-group').first().locator('.bash-inline-command').first().evaluate(el => getComputedStyle(el).whiteSpace), 'pre');
 	await page.locator('.process-group').first().locator('.bash-row-head').first().click();
 	await page.locator('.bash-numbered-output').first().waitFor();
 	await page.locator('.process-group-head').first().click();
@@ -76,7 +75,7 @@ try {
 	const running = page.locator('.single-command .bash-row.run');
 	await running.waitFor();
 	assert.equal(await running.evaluate(el => getComputedStyle(el).borderTopWidth), '0px');
-	assert.equal(await running.locator('.thinking-spinner').count(), 1);
+	assert.equal(await running.locator('.running-indicator').count(), 1);
 	await running.locator('.bash-row-head').click();
 	await running.locator('.bash-full-command').waitFor();
 	assert.match(await running.locator('.bash-full-command').innerText(), /echo running-command/);
@@ -85,9 +84,9 @@ try {
 	const original = call('original');
 	messages.splice(0, messages.length, user, original, result('original', true), retry, result('retry'));
 	browserSocket.send(JSON.stringify({type:'snapshot',state:{...base,piConfigured:true,isStreaming:false,messages,streamingMessage:null,taskProgress:null}}));
-	await page.locator('.process-group.ok .process-group-status[aria-label="all passed"]').waitFor();
+	await page.waitForFunction(() => document.querySelectorAll('.process-group').length === 1 && document.querySelector('.bash-inline-command')?.textContent.includes('echo original'));
 	assert.equal(await page.locator('.process-group.err').count(), 0);
-	assert(!await page.locator('.process-group-status').textContent().then(text => /failed|recovered/.test(text)));
+	assert.equal(await page.locator('.process-group-status').count(), 0);
 	assert.deepEqual(errors, []);
-	console.log('PASS merged phases, quiet success, preserved failures, measured turn summary, expansion, dark and mobile');
+	console.log('PASS merged phases, quiet success, hidden failed attempts, removed turn summary, expansion, dark and mobile');
 } finally { await browser?.close(); await fixture.stop(); }

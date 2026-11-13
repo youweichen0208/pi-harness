@@ -1,5 +1,9 @@
 # 发布流程
 
+## 1.30.0：Playground 编辑体验与界面排版
+
+新增代码缩略图、优化补全与函数选择菜单，精简 Playground／知识库助手模型入口、上下文用量浮层及聊天冗余状态，统一界面字号。SDK / pi-ai 1.5.2、协议 v56 不变；同提交 CI 与三平台桌面回归通过后公开 GitHub Release，不发布 npm。详见 `.github/release-notes/v1.30.0.md`。
+
 ## 1.29.2：运行状态与 Playground 精简
 
 压缩与子代理改用 Thinking 风格的无边框状态行和绿色呼吸灯，保留取消、错误与任务详情。Playground 顶栏只保留运行／停止，隐藏正常保存文字，助手页签更名为带对话图标的 AI助手。SDK / pi-ai 1.5.2、协议 v56 不变；同提交 CI 和三平台桌面回归通过后公开 GitHub Release，不发布 npm。

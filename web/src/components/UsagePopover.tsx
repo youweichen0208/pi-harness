@@ -37,23 +37,22 @@ export function UsagePopover({ stats, conversationId, send, onRefresh }: { stats
 	const money = (cost: number) => `$${cost.toFixed(4)}`;
 	if (!hasSummary && !warming) return null;
 	return <div className="usage-control" ref={root} onPointerEnter={() => setOpen(true)} onPointerLeave={() => { if (!pinned.current) setOpen(false); }}>
-		<button type="button" className={`usage-trigger${percent !== null && percent >= 80 ? " warn" : ""}`} title={`${t("usageContextTitle")} · ${t("usageCacheTitle")}`} aria-label={`${t("usageContextTitle")} ${percent ?? "—"}%`} aria-expanded={open} onPointerDown={() => { pinned.current = !pinned.current; setOpen(pinned.current); }} onClick={(event) => { if (event.detail === 0) { pinned.current = !pinned.current; setOpen(pinned.current); } }}>
-			{percent !== null && percent > 0 && <><span className="usage-context-label">{t("context")}</span><span className="usage-meter" aria-hidden="true"><i className={percent >= 80 ? "warn" : ""} style={{ width: `${shownPercent}%` }} /></span><span className="usage-percent">{percent}%</span></>}
-			{sessionRate !== null && sessionRate > 0 && <span className="usage-cache-short">{percent !== null && percent > 0 ? "· " : ""}{t("usageCacheShort")} <strong className={sessionRate < 50 ? "warn" : ""}>{sessionRate}%</strong></span>}
-			{!hasSummary && <span>{t("usageDetails")}</span>}
+		<button type="button" className={`usage-trigger${percent !== null && percent >= 80 ? " warn" : ""}`} aria-label={`${t("usageContextTitle")} ${percent ?? "—"}%`} aria-expanded={open} onFocus={() => setOpen(true)} onBlur={event => { if (!event.currentTarget.parentElement?.contains(event.relatedTarget)) { setOpen(false); pinned.current = false; } }} onPointerDown={() => { pinned.current = !pinned.current; setOpen(pinned.current); }} onClick={(event) => { if (event.detail === 0) { pinned.current = !pinned.current; setOpen(pinned.current); } }}>
+			<span className="usage-meter" aria-hidden="true"><i className={percent !== null && percent >= 80 ? "warn" : ""} style={{ width: `${shownPercent}%` }} /></span>
+			<span className="usage-percent">{percent === null ? "—" : `${percent}%`}</span>
 		</button>
 		{open && <div className="usage-popover" role="dialog" aria-label={t("usageContextTitle")}>
-			<div className="usage-head"><strong>{t("usageContextTitle")}</strong><span>{context?.tokens === null || context?.tokens === undefined ? "—" : formatTokens(context.tokens)} / {context?.contextWindow ? formatTokens(context.contextWindow) : "—"}</span></div>
-			<div className="usage-progress" role="img" aria-label={`${t("usageContextTitle")} ${percent ?? "—"}%`}><span className={percent !== null && percent >= 80 ? "warn" : ""} style={{ width: `${shownPercent}%` }} /></div>
+			<div className="usage-head usage-overview"><strong>{t("usageContextTitle")}</strong></div>
+			<div className="usage-capacity">{context?.tokens === null || context?.tokens === undefined ? "—" : formatTokens(context.tokens)} / {context?.contextWindow ? formatTokens(context.contextWindow) : "—"} <span>tokens</span></div>
 			<div className="usage-head usage-cache-section"><strong>{t("usageCacheTitle")}</strong><span className={sessionRate !== null && sessionRate < 50 ? "warn" : ""}>{sessionRate === null ? "—" : `${sessionRate}%`}</span></div>
 			<div className="usage-head usage-cache-section"><strong>{t("usageSessionCost")}</strong><span>{money(stats?.cost ?? 0)}</span></div>
 			{warming && <section className="usage-warming" aria-label={t("cacheWarmingGlobal")}>
 				<div className="usage-head"><strong>{t("cacheWarmingLabel")}</strong><span>{t(warming.state === "refreshing" ? "cacheWarmingRefreshing" : warming.state === "scheduled" ? "cacheWarmingScheduled" : "cacheWarmingInactive")}</span></div>
-				<div className="usage-head"><span>{t("cacheWarmingGlobal")}</span><span>{t(warming.mode === "off" ? "cacheWarmingOff" : warming.mode === "idle" ? "cacheWarmingIdle" : "cacheWarmingStreaming")}</span></div>
+				<div className="usage-head"><span>{t("usageWarmingMode")}</span><span>{t(warming.mode === "off" ? "cacheWarmingOff" : warming.mode === "idle" ? "cacheWarmingIdle" : "cacheWarmingStreaming")}</span></div>
 				{warming.nextWarmAt !== undefined && <div className="usage-head"><span>{t("cacheWarmingNext")}</span><time dateTime={new Date(warming.nextWarmAt).toISOString()}>{new Date(warming.nextWarmAt).toLocaleTimeString()}</time></div>}
-				{warming.reason && <p className="usage-warming-reason">{warming.reason}</p>}
+				{warming.reason && <p className="usage-warming-reason">{warming.reason === "waiting for first request" ? t("usageWaitingRequest") : warming.reason}</p>}
 				<div className="usage-head"><span>{t("cacheWarmingCost")}</span><span>{money(warming.cost)}</span></div>
-				<p className="usage-warming-reason">{t("cacheWarmingCostHint")}</p>
+				<p className="usage-warming-note">{t("usageCostNote")}</p>
 			</section>}
 		</div>}
 	</div>;

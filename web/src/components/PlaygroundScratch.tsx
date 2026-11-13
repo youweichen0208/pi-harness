@@ -2,7 +2,7 @@ import { CopyButton } from "./copy-button";
 import { PlaygroundChat } from "./PlaygroundChat";
 import { boundedPlaygroundOutput } from "../playground-chat-context";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FiPlay, FiSquare, FiCode, FiHash, FiAlignLeft, FiSliders, FiTerminal, FiMessageSquare } from "react-icons/fi";
+import { FiPlay, FiSquare, FiSliders, FiTerminal, FiMessageSquare } from "react-icons/fi";
 import { missingPythonEditorTools, pythonFormatErrorLine } from "../playground-format-error";
 import { useT } from "../i18n";
 import { withToken } from "../auth-token";
@@ -133,20 +133,22 @@ export function PlaygroundScratch() {
 
 	return <div className="scratch-page method-mode" data-save-state={saveState}>
 		<header className="scratch-head">
-			<h2>Playground <span className="scratch-language-badge">Python</span></h2>
+			<h2>playground for python</h2>
 
 			{saveState === "error" && <span className="scratch-save-status error" role="alert">{t("fileSaveFailed")}</span>}
-			{running ? <button type="button" className="btn" onClick={stop}><FiSquare aria-hidden="true" />{t("playgroundStop")}</button> : <>
 
-				<button type="button" className="btn primary" disabled={!!reason || !!(method && caseBatchError) || !doc?.content.trim()} title={reason || caseBatchError || "⌘/Ctrl+Enter"} onClick={() => void start()}><FiPlay aria-hidden="true" />{t("playgroundRun")}</button>
-			</>}
 		</header>
 		{(reason || (method && caseBatchError)) && <p className="scratch-run-hint" role="status">{reason || t("pgParametersRequired")}</p>}
 		{conflict && <div className="playground-notice" role="alert"><p>{t("pgScratchConflict")}</p><CopyButton text={JSON.stringify(doc, null, 2)} /><button className="btn" onClick={() => void reload()}>{t("pgScratchReload")}</button></div>}
 		{loadFailed && <p className="playground-notice" role="alert">{t("pgLoadFailed")}</p>}
 		<div className="scratch-workspace">
 			<section className="scratch-code-pane" aria-label={t("pgSource")}>
-				<div className="scratch-pane-head"><strong>{t("pgSource")}</strong><span className={`scratch-language-status ${language.state}`} title={language.reason} role="status">{t(language.state === "ready" ? "pgLanguageReady" : language.state === "error" ? "pgLanguageError" : "pgLanguageLoading")}</span><button type="button" className="btn" disabled={!doc} title={t("pgCommentHint")} onClick={() => editor.current?.toggleComment()} aria-label={t("pgComment")}><FiHash aria-hidden="true" /></button><button type="button" className="btn" disabled={!doc || formatting || !status?.python.available} title={t("pgAutoIndentHint")} aria-label={t("pgAutoIndent")} onClick={() => void formatCode(false, "indent")}><FiAlignLeft aria-hidden="true" /></button><button type="button" className="btn" disabled={!doc || formatting} title="Shift+Alt+F" onClick={() => void formatCode()} aria-label={t(formatting ? "pgFormatting" : "pgFormat")}><FiCode aria-hidden="true" /></button></div>
+				<div className="scratch-pane-head"><strong>{t("pgSource")}</strong><span className={`scratch-language-status ${language.state}`} title={language.reason} role="status">{t(language.state === "ready" ? "pgLanguageReady" : language.state === "error" ? "pgLanguageError" : "pgLanguageLoading")}</span>
+			{running ? <button type="button" className="btn scratch-run-button" aria-label={t("playgroundStop")} title={t("playgroundStop")} onClick={stop}><FiSquare aria-hidden="true" /></button> : <>
+
+				<button type="button" className="btn scratch-run-button is-run" aria-label={t("playgroundRun")} disabled={!!reason || !!(method && caseBatchError) || !doc?.content.trim()} title={reason || caseBatchError || `${t("playgroundRun")} (⌘/Ctrl+Enter)`} onClick={() => void start()}><FiPlay aria-hidden="true" /></button>
+			</>}
+				</div>
 				{((language.state === "error" && missingPythonEditorTools(language.reason ?? "")) || missingPythonEditorTools(formatError)) && <PlaygroundToolsInstall available={!!status?.python.available} />}
 				{formatError && <div className="playground-notice scratch-format-error" role="alert">
 					<p>{formatFailure?.operation === "indent" ? t("pgAutoIndentFailed") : formatErrorLine ? t("pgFormatSyntaxError").replace("{line}", formatErrorLine) : t("pgFormatFailed")}</p>
@@ -165,7 +167,7 @@ export function PlaygroundScratch() {
 					setResultTab(next); if (next === 2) setChatOpened(true); document.getElementById(["pg-cases-tab", "pg-result-tab", "pg-chat-tab"][next])?.focus();
 				}}>{[0, 1, 2].map(result => <button key={String(result)} id={["pg-cases-tab", "pg-result-tab", "pg-chat-tab"][result]} role="tab" aria-selected={resultTab === result} aria-controls="pg-test-panel" tabIndex={resultTab === result ? 0 : -1} onClick={() => { setResultTab(result); if (result === 2) setChatOpened(true); }}>{result === 2 ? <FiMessageSquare aria-hidden="true" /> : result === 1 ? <FiTerminal aria-hidden="true" /> : <FiSliders aria-hidden="true" />}{t(result === 2 ? "pgAssistantTab" : result === 1 ? "pgTestResult" : "pgTestCases")}</button>)}</div></div>
 				<div id="pg-test-panel" className={resultTab === 2 ? "is-chat" : undefined} role="tabpanel" aria-labelledby={["pg-cases-tab", "pg-result-tab", "pg-chat-tab"][resultTab]}>
-				<div hidden={resultTab !== 0}><PlaygroundMethodCases key={tests.selectedMethod} methods={discovered.methods} selected={tests.selectedMethod} cases={cases} onSelect={selectedMethod => updateTests({ selectedMethod })} onChange={next => updateTests({ casesByMethod: { ...tests.casesByMethod, [tests.selectedMethod]: next } })} /></div>
+				<div hidden={resultTab !== 0}><PlaygroundMethodCases methods={discovered.methods} selected={tests.selectedMethod} cases={cases} onSelect={selectedMethod => updateTests({ selectedMethod })} onChange={next => updateTests({ casesByMethod: { ...tests.casesByMethod, [tests.selectedMethod]: next } })} /></div>
 				{chatOpened && <div hidden={resultTab !== 2}><PlaygroundChat apply={(base, code) => editor.current?.applyProposal(base, code) ?? false} context={{ code: doc.content, parameters: JSON.stringify({ method: method?.id, parameters: cases[0]?.args }), output: output.text, partial: running, stale: !!lastRun && snapshot !== lastRun.snapshot, truncated: output.truncated || programRun.truncated || casesRun.truncated, runVersion: lastRun?.version }} /></div>}
 				<div className="scratch-run-region" hidden={resultTab !== 1}>
 					{lastRun ? <ScratchOutput executing={executing} program={programRun} cases={lastRun.ranCases ? casesRun : undefined} stale={snapshot !== lastRun.snapshot} /> : <p className="lc-result-empty">{t("pgRunToSeeResults")}</p>}
