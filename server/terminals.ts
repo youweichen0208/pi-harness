@@ -912,6 +912,26 @@ export class TerminalManager {
 		if (this.history.delete(id)) this.emitList();
 	}
 
+	/**
+	 * Rename a tab (live or exited). Terminal names are user-facing labels only:
+	 * the PTY, its cwd and any associated command are untouched. Control
+	 * characters are stripped and the name is capped so a pasted blob cannot
+	 * break the tab strip.
+	 */
+	rename(id: string, title: string): boolean {
+		const entry = this.find(id);
+		if (!entry) return false;
+		const next = title
+			// eslint-disable-next-line no-control-regex
+			.replace(/[\u0000-\u001f\u007f]/g, " ")
+			.trim()
+			.slice(0, 80);
+		if (!next || next === entry.title) return Boolean(next);
+		entry.title = next;
+		this.emitList();
+		return true;
+	}
+
 	/** Kill every terminal owned by this conversation. */
 	killAll(): void {
 		for (const entry of this.terms.values()) {

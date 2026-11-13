@@ -919,6 +919,9 @@ wss.on("connection", (ws) => {
 			case "terminal_kill":
 				cs.getTerminalManager(msg.conversationId)?.kill(msg.terminalId);
 				break;
+			case "terminal_rename":
+				cs.getTerminalManager(msg.conversationId)?.rename(msg.terminalId, msg.title);
+				break;
 			case "run_command":
 				cs.getTerminalManager(msg.conversationId)?.runCommand(
 					msg.terminalId,

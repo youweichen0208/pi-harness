@@ -495,6 +495,9 @@ export type ClientMessage =
 	| { type: "terminal_replay"; terminalId: string; conversationId?: string }
 	| { type: "terminal_resize"; terminalId: string; cols: number; rows: number; conversationId?: string }
 	| { type: "terminal_kill"; terminalId: string; conversationId?: string }
+	/** Rename a tab (live or exited). The server keeps the name and re-pushes
+	 *  terminal_list, so every attached client sees the same tab label. */
+	| { type: "terminal_rename"; terminalId: string; title: string; conversationId?: string }
 	// Runs a command in a new shell; if the terminal already exists it is
 	// RESTARTED in place (current process killed, fresh shell runs it again).
 	| {

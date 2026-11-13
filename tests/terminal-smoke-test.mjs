@@ -80,6 +80,7 @@ const exits = new Map(); // terminalId -> exitCode
 let commandsReply = null;
 let sessionsReply = null; // sessions list
 let snapshotReply = null;
+let terminalList = null; // latest terminal_list payload
 const notices = []; // notice texts from the server
 
 async function main() {
@@ -105,6 +106,7 @@ async function main() {
 			);
 		}
 		if (msg.type === "terminal_exit") exits.set(msg.terminalId, msg.exitCode);
+		if (msg.type === "terminal_list") terminalList = msg;
 		if (msg.type === "commands") commandsReply = msg;
 		if (msg.type === "sessions") sessionsReply = msg.sessions;
 		if (msg.type === "snapshot") snapshotReply = msg.state;
@@ -324,6 +326,32 @@ async function main() {
 	check(
 		"restarted shell accepts input",
 		(outputs.get(t2) ?? "").includes("WS_AFTER_RERUN"),
+	);
+
+	// -- rename: user-facing tab label only, never restarts the PTY ------------
+	send({ type: "terminal_rename", terminalId: t2, title: "  我的 终端  " });
+	check(
+		"terminal_rename updates the tab title (trimmed)",
+		await waitFor(() => terminalList?.terminals?.some((item) => item.id === t2 && item.title === "我的 终端")),
+	);
+	const beforeRename = outputs.get(t2) ?? "";
+	send({ type: "terminal_input", terminalId: t2, data: "echo WS_AFTER_RENAME\r" });
+	check(
+		"renamed tab keeps the same live PTY",
+		await waitFor(() => (outputs.get(t2) ?? "").includes("WS_AFTER_RENAME")) &&
+			(outputs.get(t2) ?? "").startsWith(beforeRename),
+	);
+	send({ type: "terminal_rename", terminalId: t2, title: "   " });
+	await sleep(400);
+	check(
+		"blank rename is ignored",
+		terminalList?.terminals?.some((item) => item.id === t2 && item.title === "我的 终端") ?? false,
+	);
+	send({ type: "terminal_rename", terminalId: "does-not-exist", title: "x" });
+	await sleep(300);
+	check(
+		"rename of an unknown terminal is a no-op",
+		!terminalList?.terminals?.some((item) => item.id === "does-not-exist"),
 	);
 
 	// -- kill / exit -----------------------------------------------------------

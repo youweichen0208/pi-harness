@@ -49,6 +49,54 @@ interface Draft {
 const EMPTY_DRAFT: Draft = { name: "", command: "", cwd: "${pwd}" };
 
 /**
+ * Inline rename field for a terminal tab (double-click or F2 on the tab).
+ * Mirrors the knowledge-base document rename row (`wiki-history-row form`):
+ * a bordered input followed by plain 保存 / 取消 buttons — not an icon-only
+ * control and not the browser's default focus ring. Owns its draft text so the
+ * parent only tracks WHICH tab is being renamed; Enter/保存 commits, Esc/取消
+ * cancels, an emptied field cancels instead of leaving a nameless tab.
+ */
+function TabRenameInput({ value, label, saveLabel, cancelLabel, onSubmit, onCancel }: { value: string; label: string; saveLabel: string; cancelLabel: string; onSubmit: (next: string) => void; onCancel: () => void }) {
+	const [text, setText] = useState(value);
+	const inputRef = useRef<HTMLInputElement>(null);
+	// Focus + select explicitly: the tab strip re-renders whenever terminal_list
+	// arrives, and autoFocus alone does not reliably keep the caret in the field.
+	useEffect(() => {
+		inputRef.current?.focus();
+		inputRef.current?.select();
+	}, []);
+	const finish = (commit: boolean) => {
+		const next = text.trim();
+		if (commit && next && next !== value) onSubmit(next);
+		else onCancel();
+	};
+	return (
+		<form className="term-tab-rename" onSubmit={(event) => { event.preventDefault(); finish(true); }}>
+			{/* biome-ignore lint/a11y/noAutofocus: opened by an explicit double-click / F2 */}
+			<input
+				ref={inputRef}
+				autoFocus
+				value={text}
+				maxLength={80}
+				aria-label={label}
+				placeholder={label}
+				onChange={(event) => setText(event.target.value)}
+				onFocus={(event) => event.currentTarget.select()}
+				onKeyDown={(event) => {
+					if (event.key === "Escape") {
+						event.preventDefault();
+						event.stopPropagation();
+						finish(false);
+					}
+				}}
+			/>
+			<button type="submit" className="term-tab-rename-save" title={saveLabel} disabled={!text.trim()}>{saveLabel}</button>
+			<button type="button" title={cancelLabel} onClick={() => finish(false)}>{cancelLabel}</button>
+		</form>
+	);
+}
+
+/**
  * Built-in terminal — two panes:
  *   left : active project directory + terminal tabs + user command list
  *          (on mobile this whole column slides in as a drawer)
@@ -113,6 +161,8 @@ export function TerminalPanel({ chat, send, terminal, active, focusRequest }: Te
 		} else setWorkspaceError(t("workspaceSaveFailed"));
 	};
 	const [activeId, setActiveId] = useState<string | null>(null);
+	/** Terminal tab currently in inline-rename mode. */
+	const [renamingId, setRenamingId] = useState<string | null>(null);
 	const focusedRequest = useRef<typeof focusRequest>();
 
 	// Mobile: the left column (commands + tabs) slides in as a drawer.
@@ -132,7 +182,8 @@ export function TerminalPanel({ chat, send, terminal, active, focusRequest }: Te
 		else if (!chat.terminals.some((t) => t.id === activeId)) {
 			setActiveId(chat.terminals[chat.terminals.length - 1].id);
 		}
-	}, [chat.terminals, activeId]);
+		if (renamingId && !chat.terminals.some((t) => t.id === renamingId)) setRenamingId(null);
+	}, [chat.terminals, activeId, renamingId]);
 
 	useEffect(() => {
 		if (!focusRequest || focusedRequest.current === focusRequest || !chat.terminals.some(item => item.id === focusRequest.id)) return;
@@ -200,13 +251,19 @@ export function TerminalPanel({ chat, send, terminal, active, focusRequest }: Te
 	};
 
 	const closeTab = (id: string) => {
-		const tab = chat.terminals.find((item) => item.id === id);
-		if (tab) send({ type: "terminal_kill", terminalId: id, conversationId: tab.conversationId });
+		const tab = chat.terminals.find((item) => item.id === id);		if (tab) send({ type: "terminal_kill", terminalId: id, conversationId: tab.conversationId });
 		terminal.close(id);
 		if (activeId === id) {
 			const rest = chat.terminals.filter((t) => t.id !== id);
 			setActiveId(rest.length > 0 ? rest[rest.length - 1].id : null);
 		}
+	};
+
+	const commitRename = (id: string, title: string) => {
+		const tab = chat.terminals.find((item) => item.id === id);
+		setRenamingId(null);
+		if (!tab || tab.title === title) return;
+		send({ type: "terminal_rename", terminalId: id, title, conversationId: tab.conversationId });
 	};
 
 	// -- command list editing --------------------------------------------------
@@ -262,11 +319,35 @@ export function TerminalPanel({ chat, send, terminal, active, focusRequest }: Te
 	const terminalList = <div className="term-tabs-block" role="group" aria-label={t("builtinTerminal")}>
 		<div className="panel-body">
 			{chat.terminals.map((tab) => (
-				<div key={tab.id} className={`term-tab ${tab.id === activeId ? "active" : ""}`}>
-					<button type="button" className="term-tab-main" aria-pressed={tab.id === activeId} title={`${tab.cwd}${tab.command ? `\n> ${tab.command.command}` : ""}`} onClick={() => { setActiveId(tab.id); setSideOpen(false); }}>
-						<span className={`term-tab-dot ${tab.running ? "run" : "exit"}`} />
-						<span className="term-tab-title">{tab.title}{!tab.running && <span className="term-tab-exit">{t("exited", { code: tab.exitCode === null ? "" : ` ${tab.exitCode}` })}</span>}</span>
-					</button>
+				<div key={tab.id} className={`term-tab ${tab.id === activeId ? "active" : ""} ${renamingId === tab.id ? "renaming" : ""}`}>
+					{renamingId === tab.id ? (
+						<>
+							{/* Keep the run/exit dot visible while renaming: it is the only
+							    status cue on the row (green = live PTY). */}
+							<span className={`term-tab-dot ${tab.running ? "run" : "exit"}`} title={tab.running ? undefined : t("exited", { code: tab.exitCode === null ? "" : ` ${tab.exitCode}` })} />
+							<TabRenameInput
+								value={tab.title}
+								label={t("terminalRename")}
+								saveLabel={t("save")}
+								cancelLabel={t("cancel")}
+								onSubmit={(next) => commitRename(tab.id, next)}
+								onCancel={() => setRenamingId(null)}
+							/>
+						</>
+					) : (
+						<button
+							type="button"
+							className="term-tab-main"
+							aria-pressed={tab.id === activeId}
+							title={`${tab.cwd}${tab.command ? `\n> ${tab.command.command}` : ""}\n${t("terminalRenameHint")}`}
+							onClick={() => { setActiveId(tab.id); setSideOpen(false); }}
+							onDoubleClick={(event) => { event.preventDefault(); setRenamingId(tab.id); }}
+							onKeyDown={(event) => { if (event.key === "F2") { event.preventDefault(); setRenamingId(tab.id); } }}
+						>
+							<span className={`term-tab-dot ${tab.running ? "run" : "exit"}`} />
+							<span className="term-tab-title">{tab.title}{!tab.running && <span className="term-tab-exit">{t("exited", { code: tab.exitCode === null ? "" : ` ${tab.exitCode}` })}</span>}</span>
+						</button>
+					)}
 					<button type="button" className="term-tab-close" title={t("closeTerminal")} aria-label={`${t("closeTerminal")} · ${tab.title}`} onClick={() => closeTab(tab.id)}><FiX /></button>
 				</div>
 			))}

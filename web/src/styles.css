@@ -2234,6 +2234,67 @@ body.panel-resizing {
 	font-size: 11px;
 }
 
+/* Inline tab rename (double-click / F2 on a terminal tab). Same shape as the
+   knowledge-base document rename row: bordered input + plain 保存 / 取消
+   buttons. The input suppresses the global `:focus-visible` outline, which
+   would otherwise draw a second blue ring on top of the accent border. */
+.term-tab-rename {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	align-items: center;
+	gap: 3px;
+}
+.term-tab-rename input {
+	flex: 1;
+	min-width: 0;
+	padding: 2px 6px;
+	border: 1px solid var(--accent);
+	border-radius: var(--r-sm);
+	background: var(--bg-elev);
+	color: var(--text);
+	font: inherit;
+	font-size: 12px;
+	line-height: 1.5;
+	outline: none;
+}
+.term-tab-rename button {
+	flex-shrink: 0;
+	padding: 2px 5px;
+	border: 1px solid var(--border-soft);
+	border-radius: var(--r-sm);
+	background: var(--bg-elev);
+	color: var(--text);
+	font: inherit;
+	font-size: 11px;
+	line-height: 1.5;
+	cursor: pointer;
+}
+.term-tab-rename .term-tab-rename-save {
+	border-color: var(--accent);
+	color: var(--accent);
+}
+.term-tab-rename button:disabled {
+	border-color: var(--border-soft);
+	color: var(--text-faint);
+	background: var(--bg-elev);
+	cursor: default;
+}
+/* While renaming, the row's own 取消 is the cancel action — the tab close button
+   would sit right next to it as a second, confusing dismiss control. */
+.term-tab.renaming .term-tab-close {
+	display: none;
+}
+/* The run/exit dot survives rename mode and must stay on the row's padding edge:
+   the normal tab renders it inside `.term-tab-main`, which adds no horizontal
+   padding in the terminal view, so any margin on the rename-mode dot would
+   visibly misalign it against the neighbouring tabs. */
+/* Must outrank `.design-workspace :is(button, input, …):focus-visible` (further
+   down the file), which would draw a second blue ring inside the accent border. */
+.design-workspace .term-tab.renaming .term-tab-rename input:is(:focus, :focus-visible) {
+	outline: none;
+}
+
 .term-tab-close {
 	display: inline-flex;
 	align-items: center;
