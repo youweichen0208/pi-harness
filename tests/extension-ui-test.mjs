@@ -169,14 +169,20 @@ try {
   assert(sent.some(m => m.type === "cancel_recovery" && m.operationId === "summary-retry" && m.conversationId === a));
   assert.equal(sent.filter(m => m.type === "retry_silent_prompt").length, beforeRetry);
   browserSocket.send(JSON.stringify({ type: "snapshot", state: { ...recoveryState, rev: recoveryState.rev + 1, recovery: { compaction: recoveryState.recovery.compaction } } }));
-  await page.getByText(/正在压缩.*上下文超限/).waitFor();
+  await page.locator(".compaction-status .running-indicator").waitFor();
+  await page.locator(".compaction-status").getByText("正在压缩", { exact: true }).waitFor();
+  assert.equal(await page.locator(".agent-silence").count(), 0);
+  await page.locator(".compaction-status button").click();
+  assert(sent.some(m => m.type === "cancel_recovery" && m.operationId === "long-compaction" && m.conversationId === a));
   browserSocket.send(JSON.stringify({ type: "snapshot", state: { ...snapshot, rev: recoveryState.rev + 2, recovery: {} } }));
   await page.getByText(/正在压缩/).waitFor({ state: "hidden" });
   browserSocket.send(JSON.stringify({ type: "snapshot", state: { ...snapshot, rev: recoveryState.rev + 3, recovery: { lastCompaction: { id: "completed", reason: "manual", status: "completed", tokensBefore: 8000, tokensAfter: 400 } } } }));
-  await page.getByText(/压缩完成.*手动压缩.*8,000.*≈400/).waitFor();
-  assert.equal(await page.locator('.agent-silence button', { hasText: "取消" }).count(), 0);
-  await page.locator('.agent-silence button', { hasText: "关闭" }).click();
   await page.getByText(/压缩完成/).waitFor({ state: "hidden" });
+  assert.equal(await page.locator(".compaction-status").count(), 0);
+  browserSocket.send(JSON.stringify({ type: "snapshot", state: { ...snapshot, rev: recoveryState.rev + 4, recovery: { lastCompaction: { id: "failed", reason: "manual", status: "error", error: "fixture compaction error" } } } }));
+  await page.getByText(/fixture compaction error/).waitFor();
+  await page.locator('.agent-silence button', { hasText: "关闭" }).click();
+  await page.getByText(/fixture compaction error/).waitFor({ state: "hidden" });
  }
  console.log("PASS native extension UI isolation, validation, reconnect, timeout, reload, override command and memory settings" + (browser ? ", browser multiline editor, background navigation and recovery phases" : ""));
 } catch (error) { console.error(error); process.exitCode = 1; }

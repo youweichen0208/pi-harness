@@ -37,7 +37,7 @@ try {
 	await page.waitForFunction(() => document.querySelector('.cm-content')?.innerText.includes('\n    b = 2'));
 	await page.getByRole('button', { name: '格式化', exact: true }).waitFor();
 	await error.waitFor({ state: 'detached' });
-	await page.waitForFunction(() => document.querySelector('.scratch-save-status')?.textContent.includes('已保存'));
+	await page.waitForFunction(() => document.querySelector('.scratch-page')?.dataset.saveState === 'saved');
 	assert.equal((await (await fixture.api('scratch')).json()).content.trimEnd(), invalid.replace('\nb = 2', '\n    b = 2'));
 	const valid = 'def add(a,b):\n    a=1\n    b=2\n    return a+b';
 	await editor.fill(valid);
@@ -65,13 +65,13 @@ try {
 	await editor.fill('def broken(:');
 	await editor.press('ControlOrMeta+s');
 	await page.getByText('无法确定正确的缩进，请检查代码块结构后重试。原代码已保留。', { exact: true }).waitFor();
-	await page.waitForFunction(() => document.querySelector('.scratch-save-status')?.textContent.includes('已保存'));
+	await page.waitForFunction(() => document.querySelector('.scratch-page')?.dataset.saveState === 'saved');
 	assert.equal((await (await fixture.api('scratch')).json()).content, 'def broken(:', 'save survives indentation failure');
 	await page.route('**/api/playground/format*', route => route.fulfill({ status: 422, contentType: 'application/json', body: JSON.stringify({ error: 'Install black in the selected Python environment.' }) }));
 	await editor.fill(invalid);
 	await editor.press('ControlOrMeta+s');
 	await page.locator('.playground-tools-install').waitFor();
-	await page.waitForFunction(() => document.querySelector('.scratch-save-status')?.textContent.includes('已保存'));
+	await page.waitForFunction(() => document.querySelector('.scratch-page')?.dataset.saveState === 'saved');
 	assert.equal((await (await fixture.api('scratch')).json()).content, invalid.replace('\nb = 2', '\n    b = 2'), 'save keeps indentation when Black is unavailable');
 	console.log('PASS format syntax error: source preserved, no reinstall prompt, concise line hint, collapsible details, edit clears error and valid format succeeds');
 } finally { await browser?.close(); await fixture.stop(); }

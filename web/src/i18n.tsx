@@ -27,6 +27,7 @@ const zh = {
 	playgroundRepair: "请 pi 修复",
 	playgroundRepairPrompt: "请分析下面 Python 代码及本次运行错误，解释原因，并给出包含必要导入、变量和示例数据、可独立运行的完整修正版。不要自动执行代码或修改文件；若缺少信息请明确指出。输出可能已截断。",
 
+	pgAssistantTab: "AI助手",
 	pgChatAsk: "问 pi",
 	pgChatUnconfirmed: "发送状态未确认。请核对对话后再发送，问题已保留。",
 	pgThinkOff: "关闭", pgThinkMinimal: "极简", pgThinkLow: "较低", pgThinkMedium: "标准", pgThinkHigh: "深度", pgThinkXhigh: "最高",
@@ -2590,6 +2591,7 @@ const en: Record<keyof typeof zh, string> = {
 	playgroundRepair: "Ask pi to fix",
 	playgroundRepairPrompt: "Analyze this Python code and its execution error, explain the cause, and provide a complete standalone correction with necessary imports, variables and sample data. Do not execute code or modify files automatically. Identify missing information. Output may be truncated.",
 
+	pgAssistantTab: "AI Assistant",
 	pgChatAsk: "Ask pi",
 	pgChatUnconfirmed: "Request not confirmed. Review the conversation before sending again; your question is preserved.",
 	pgThinkOff: "Off", pgThinkMinimal: "Minimal", pgThinkLow: "Low", pgThinkMedium: "Medium", pgThinkHigh: "High", pgThinkXhigh: "Extra high",

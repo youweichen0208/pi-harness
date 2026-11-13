@@ -75,7 +75,7 @@ try {
 		await page.getByRole('button', { name: '注释', exact: true }).click();
 		await page.locator('.scratch-head .primary').click();
 		await page.locator('.playground-stream pre').filter({ hasText: 'Python browser works' }).last().waitFor();
-		await page.waitForFunction(() => document.querySelector('.scratch-save-status')?.textContent?.includes('已保存'));
+		await page.waitForFunction(() => document.querySelector('.scratch-page')?.dataset.saveState === 'saved');
 		await page.reload();
 		await page.locator(".setup-modal .modal-close").click();
 		await page.getByRole("button", { name: "Playground", exact: true }).click();

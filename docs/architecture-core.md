@@ -211,7 +211,7 @@ Wiki 复用当前工作区，使用原生内存会话，离开后释放，不写
 
 ### 压缩结果展示
 
-压缩状态展示 manual/threshold/overflow 的本地化原因及可用的压缩前 token 数。compaction_end 保留 completed/aborted/error 结果供快照与重连恢复；成功时以前置 result.tokensBefore 和 SDK estimateTokens 对重建后上下文的估算展示变化，压缩后数值标记 ≈。取消或失败不展示虚假的压缩后数值。完成结果不是恢复中，不提供取消按钮，可在浏览器关闭提示。SDK agent_settled 仍是运行结束的唯一判据。
+普通聊天和 Wiki 的压缩进行态改为无边框紧凑行，共用 Thinking 的 RunningIndicator 绿色呼吸灯并保留取消入口；断线时不显示活动绿灯且禁用取消。成功或取消后状态行消失，不再显示独立结果卡；失败仍保留可关闭错误反馈。compaction_end 的 completed/aborted/error、原因和 token 数仍保留在快照供重连恢复，不修改原生压缩数据。lastCompaction 不阻止后续 Working 状态；SDK agent_settled 仍是运行结束的唯一判据。
 
 ## 未执行的工具调用
 

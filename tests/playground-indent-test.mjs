@@ -49,7 +49,7 @@ try {
 	assert.equal(await editorText(), broken, 'single undo restores exact source');
 	await button.click();
 	await page.waitForFunction(() => document.querySelector('.cm-content')?.innerText.includes('\n    b = 2'));
-	await page.waitForFunction(() => document.querySelector('.scratch-save-status')?.textContent.includes('已保存'));
+	await page.waitForFunction(() => document.querySelector('.scratch-page')?.dataset.saveState === 'saved');
 	assert.equal((await (await fixture.api('scratch')).json()).content, fixed);
 	await editor.fill(missingBody);
 	await button.click();

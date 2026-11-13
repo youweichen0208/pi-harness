@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { ClientMessage, UiState } from "../types";
 import { useT } from "../i18n";
+import { RunningIndicator } from "./RunningIndicator";
 export function RecoveryStatus({ state, send, connected }: { state: UiState | null; connected: boolean; send: (message: ClientMessage) => boolean }) {
 	const t = useT();
 	const [, tick] = useState(0);
@@ -18,7 +19,12 @@ export function RecoveryStatus({ state, send, connected }: { state: UiState | nu
 	const compact = recovery?.compaction ?? (!operation ? recovery?.lastCompaction : undefined);
 	if (!operation && !compact) return null;
 	const completed = !operation ? recovery?.lastCompaction : undefined;
-	if (completed && completed.id === dismissed) return null;
+	if (completed && (completed.id === dismissed || completed.status !== "error")) return null;
+	if (operation && operation === recovery?.compaction) return <div className="compaction-status" role="status">
+		{connected && <RunningIndicator />}
+		<span>{t(connected ? "recoveryCompacting" : "workDisconnected")}</span>
+		<button disabled={!connected} onClick={() => send({ type: "cancel_recovery", conversationId: state.conversationId, operationId: operation.id })}>{t("cancel")}</button>
+	</div>;
 	const deadline = recovery?.summary?.deadline ?? recovery?.retry?.deadline;
 	const attempt = recovery?.summary?.attempt ?? recovery?.retry?.attempt;
 	const maxAttempts = recovery?.summary?.maxAttempts ?? recovery?.retry?.maxAttempts;

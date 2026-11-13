@@ -47,7 +47,7 @@ export function ConversationWorkingStatus({ state, connected, silenceNotified, t
 	const completed = new Map([...toolStatuses].filter(([, s]) => !s.running && (!s.conversationId || s.conversationId === state.conversationId)));
 	const messages = state.streamingMessage ? [...state.messages.filter(m => m.id !== state.streamingMessage?.id), { ...state.streamingMessage, role: "assistant" }] : state.messages;
 	const stage = conversationWait(messages, completed, steeredUser);
-	if (!state.isStreaming || silenceNotified || state.recovery && Object.values(state.recovery).some(Boolean)) return null;
+	if (!state.isStreaming || silenceNotified || state.recovery && [state.recovery.compaction, state.recovery.retry, state.recovery.summary, state.recovery.branch].some(Boolean)) return null;
 	if (!connected) return <div className="agent-working disconnected" role="status">{t("workDisconnected")}</div>;
 	return stage && <WaitingIndicator key={`${state.conversationId}:${stage.key}:${stage.label}`} stage={stage} onStop={onStop} />;
 }

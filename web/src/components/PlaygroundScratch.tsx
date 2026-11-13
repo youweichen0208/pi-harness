@@ -2,7 +2,7 @@ import { CopyButton } from "./copy-button";
 import { PlaygroundChat } from "./PlaygroundChat";
 import { boundedPlaygroundOutput } from "../playground-chat-context";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FiPlay, FiSquare, FiCode, FiHash, FiChevronsRight, FiChevronsLeft, FiAlignLeft, FiSliders, FiTerminal } from "react-icons/fi";
+import { FiPlay, FiSquare, FiCode, FiHash, FiAlignLeft, FiSliders, FiTerminal, FiMessageSquare } from "react-icons/fi";
 import { missingPythonEditorTools, pythonFormatErrorLine } from "../playground-format-error";
 import { useT } from "../i18n";
 import { withToken } from "../auth-token";
@@ -29,12 +29,10 @@ export function PlaygroundScratch() {
 	const t = useT();
 	const editor = useRef<ScratchEditorHandle>(null);
 	const [cursor, setCursor] = useState({ line: 1, column: 1 });
-	const [resultsOpen, setResultsOpen] = useState(true);
 	const [resultTab, setResultTab] = useState<number>(0);
 	const [chatOpened, setChatOpened] = useState(false);
 	const [executing, setExecuting] = useState(false);
 	const cancelled = useRef(false);
-	const resultsToggle = useRef<HTMLButtonElement>(null);
 	const [language, setLanguage] = useState<{ state: "loading" | "ready" | "error"; reason?: string }>({ state: "loading" });
 	const languageStatus = useCallback((state: "loading" | "ready" | "error", reason?: string) => setLanguage({ state, reason }), []);
 	const [formatting, setFormatting] = useState(false);
@@ -42,10 +40,9 @@ export function PlaygroundScratch() {
 	const formatController = useRef<AbortController | null>(null);
 	useEffect(() => () => formatController.current?.abort(), []);
 	const { status } = usePlaygroundHost();
-	const { doc, edit: setDoc, save, reload, conflict, loadFailed, saveState, savedAt: savedTime } = usePlaygroundScratch();
+	const { doc, edit: setDoc, save, reload, conflict, loadFailed, saveState } = usePlaygroundScratch();
 	const formatError = formatFailure?.source === doc?.content ? formatFailure?.message ?? "" : "";
 	const formatErrorLine = pythonFormatErrorLine(formatError);
-	const savedAt = savedTime ? new Date(savedTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
 	const [lastRun, setLastRun] = useState(lastScratchRun);
 	const programRun = usePlaygroundRun(lastRun?.programKey ?? "");
 	const casesRun = usePlaygroundRun(lastRun?.casesKey ?? "");
@@ -86,7 +83,6 @@ export function PlaygroundScratch() {
 		const programKey = runKey(`scratch:program:${invocation}`, JSON.stringify({ code: doc.content }));
 		const casesKey = runKey(`scratch:cases:${invocation}`, JSON.stringify({ code: doc.content, methodId: method?.id, cases: requested ?? [] }));
 		lastScratchRun = { version: invocation, programKey, casesKey, snapshot: JSON.stringify(doc), methodId: method?.id, ranCases: !!requested };
-		setResultsOpen(true);
 		setResultTab(1);
 		setLastRun(lastScratchRun);
 		cancelled.current = false;
@@ -135,22 +131,20 @@ export function PlaygroundScratch() {
 	};
 	const updateTests = (patch: Partial<PlaygroundTestConfig>) => setDoc(current => current ? { ...current, tests: { ...current.tests, ...patch } } : current);
 
-	return <div className="scratch-page method-mode">
+	return <div className="scratch-page method-mode" data-save-state={saveState}>
 		<header className="scratch-head">
 			<h2>Playground <span className="scratch-language-badge">Python</span></h2>
 
-			<span className={`scratch-save-status${saveState === "error" ? " error" : ""}`} role={saveState === "error" ? "alert" : undefined}>{saveState === "error" ? t("fileSaveFailed") : saveState === "pending" || saveState === "saving" ? t("playgroundSaving") : savedAt ? `${t("playgroundSaved")} · ${savedAt}` : doc ? t("playgroundSaved") : ""}</span>
-			<button className="btn" onClick={() => { setChatOpened(true); setResultsOpen(true); setResultTab(2); requestAnimationFrame(() => document.getElementById("pg-chat-input")?.focus()); }}>{t("pgChatAsk")}</button>
-			<button ref={resultsToggle} type="button" className="btn scratch-results-toggle" aria-label={t(resultsOpen ? "pgResultHide" : "pgResultShow")} title={t(resultsOpen ? "pgResultHide" : "pgResultShow")} aria-expanded={resultsOpen} aria-controls="scratch-results" onClick={() => setResultsOpen(open => !open)}>{resultsOpen ? <FiChevronsRight /> : <FiChevronsLeft />}</button>
+			{saveState === "error" && <span className="scratch-save-status error" role="alert">{t("fileSaveFailed")}</span>}
 			{running ? <button type="button" className="btn" onClick={stop}><FiSquare aria-hidden="true" />{t("playgroundStop")}</button> : <>
 
-				<button type="button" className="btn primary" disabled={!!reason || !!(method && caseBatchError) || !doc?.content.trim()} title={reason || caseBatchError || "⌘/Ctrl+Enter"} onClick={() => void start()}><FiPlay aria-hidden="true" />{t("playgroundRun")}<kbd className="scratch-run-shortcut" aria-hidden="true">{navigator.platform.includes("Mac") ? "⌘" : "Ctrl"} ↵</kbd></button>
+				<button type="button" className="btn primary" disabled={!!reason || !!(method && caseBatchError) || !doc?.content.trim()} title={reason || caseBatchError || "⌘/Ctrl+Enter"} onClick={() => void start()}><FiPlay aria-hidden="true" />{t("playgroundRun")}</button>
 			</>}
 		</header>
 		{(reason || (method && caseBatchError)) && <p className="scratch-run-hint" role="status">{reason || t("pgParametersRequired")}</p>}
 		{conflict && <div className="playground-notice" role="alert"><p>{t("pgScratchConflict")}</p><CopyButton text={JSON.stringify(doc, null, 2)} /><button className="btn" onClick={() => void reload()}>{t("pgScratchReload")}</button></div>}
 		{loadFailed && <p className="playground-notice" role="alert">{t("pgLoadFailed")}</p>}
-		<div className={`scratch-workspace${resultsOpen ? "" : " results-collapsed"}`}>
+		<div className="scratch-workspace">
 			<section className="scratch-code-pane" aria-label={t("pgSource")}>
 				<div className="scratch-pane-head"><strong>{t("pgSource")}</strong><span className={`scratch-language-status ${language.state}`} title={language.reason} role="status">{t(language.state === "ready" ? "pgLanguageReady" : language.state === "error" ? "pgLanguageError" : "pgLanguageLoading")}</span><button type="button" className="btn" disabled={!doc} title={t("pgCommentHint")} onClick={() => editor.current?.toggleComment()} aria-label={t("pgComment")}><FiHash aria-hidden="true" /></button><button type="button" className="btn" disabled={!doc || formatting || !status?.python.available} title={t("pgAutoIndentHint")} aria-label={t("pgAutoIndent")} onClick={() => void formatCode(false, "indent")}><FiAlignLeft aria-hidden="true" /></button><button type="button" className="btn" disabled={!doc || formatting} title="Shift+Alt+F" onClick={() => void formatCode()} aria-label={t(formatting ? "pgFormatting" : "pgFormat")}><FiCode aria-hidden="true" /></button></div>
 				{((language.state === "error" && missingPythonEditorTools(language.reason ?? "")) || missingPythonEditorTools(formatError)) && <PlaygroundToolsInstall available={!!status?.python.available} />}
@@ -164,12 +158,12 @@ export function PlaygroundScratch() {
 				</Suspense>
 				<div className="scratch-code-foot"><span>Ln {cursor.line}, Col {cursor.column}</span><span>{status?.python.version ? `Python ${status.python.version}` : "Python"}</span><span>UTF-8</span><span>LF</span></div>
 			</section>
-			{doc && <aside id="scratch-results" hidden={!resultsOpen} className="scratch-test-pane" aria-label={t("pgResults")}>
+			{doc && <aside id="scratch-results" className="scratch-test-pane" aria-label={t("pgResults")}>
 				<div className="scratch-pane-head lc-panel-head"><div role="tablist" aria-label={t("pgResults")} onKeyDown={event => {
 					if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
 					event.preventDefault(); const next = event.key === "Home" ? 0 : event.key === "End" ? 2 : (resultTab + (event.key === "ArrowLeft" ? 2 : 1)) % 3;
 					setResultTab(next); if (next === 2) setChatOpened(true); document.getElementById(["pg-cases-tab", "pg-result-tab", "pg-chat-tab"][next])?.focus();
-				}}>{[0, 1, 2].map(result => <button key={String(result)} id={["pg-cases-tab", "pg-result-tab", "pg-chat-tab"][result]} role="tab" aria-selected={resultTab === result} aria-controls="pg-test-panel" tabIndex={resultTab === result ? 0 : -1} onClick={() => { setResultTab(result); if (result === 2) setChatOpened(true); }}>{result ? <FiTerminal aria-hidden="true" /> : <FiSliders aria-hidden="true" />}{t(result === 2 ? "pgChatAsk" : result === 1 ? "pgTestResult" : "pgTestCases")}</button>)}</div><button type="button" className="btn" aria-label={t("pgResultHide")} onClick={() => { setResultsOpen(false); resultsToggle.current?.focus(); }}><FiChevronsRight aria-hidden="true" /></button></div>
+				}}>{[0, 1, 2].map(result => <button key={String(result)} id={["pg-cases-tab", "pg-result-tab", "pg-chat-tab"][result]} role="tab" aria-selected={resultTab === result} aria-controls="pg-test-panel" tabIndex={resultTab === result ? 0 : -1} onClick={() => { setResultTab(result); if (result === 2) setChatOpened(true); }}>{result === 2 ? <FiMessageSquare aria-hidden="true" /> : result === 1 ? <FiTerminal aria-hidden="true" /> : <FiSliders aria-hidden="true" />}{t(result === 2 ? "pgAssistantTab" : result === 1 ? "pgTestResult" : "pgTestCases")}</button>)}</div></div>
 				<div id="pg-test-panel" className={resultTab === 2 ? "is-chat" : undefined} role="tabpanel" aria-labelledby={["pg-cases-tab", "pg-result-tab", "pg-chat-tab"][resultTab]}>
 				<div hidden={resultTab !== 0}><PlaygroundMethodCases key={tests.selectedMethod} methods={discovered.methods} selected={tests.selectedMethod} cases={cases} onSelect={selectedMethod => updateTests({ selectedMethod })} onChange={next => updateTests({ casesByMethod: { ...tests.casesByMethod, [tests.selectedMethod]: next } })} /></div>
 				{chatOpened && <div hidden={resultTab !== 2}><PlaygroundChat apply={(base, code) => editor.current?.applyProposal(base, code) ?? false} context={{ code: doc.content, parameters: JSON.stringify({ method: method?.id, parameters: cases[0]?.args }), output: output.text, partial: running, stale: !!lastRun && snapshot !== lastRun.snapshot, truncated: output.truncated || programRun.truncated || casesRun.truncated, runVersion: lastRun?.version }} /></div>}

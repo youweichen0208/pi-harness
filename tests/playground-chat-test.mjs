@@ -75,7 +75,7 @@ try {
 		await fetch(`http://127.0.0.1:${harness.port}/api/playground/scratch`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content: context.code, expectedVersion: 0 }) });
 		await page.goto(`http://127.0.0.1:${harness.port}`);
 		await page.getByRole("button", { name: "Playground", exact: true }).click();
-		await page.locator(".scratch-head").getByRole("button", { name: "问 pi", exact: true }).click();
+		await page.getByRole("tab", { name: "AI助手", exact: true }).click();
 		await page.locator(".pg-chat .input-tools .dropdown > button").first().click();
 		await page.locator(".pg-chat .dd-menu").waitFor();
 		await page.keyboard.press("Escape");
@@ -84,7 +84,7 @@ try {
 		assert.equal(await page.locator("#pg-chat-input").evaluate(el => getComputedStyle(el).outlineStyle), "none");
 		await page.locator("#pg-chat-input").fill("preserved draft");
 		await page.getByRole("tab", { name: "参数", exact: true }).click();
-		await page.getByRole("tab", { name: "问 pi", exact: true }).click();
+		await page.getByRole("tab", { name: "AI助手", exact: true }).click();
 		assert.equal(await page.locator("#pg-chat-input").inputValue(), "preserved draft");
 		const apply = page.getByRole("button", { name: "应用修改", exact: true });
 		const editor = page.locator(".scratch-editor-cm .cm-content");
@@ -98,7 +98,7 @@ try {
 		await page.setViewportSize({ width: 600, height: 900 });
 		assert(await editor.isVisible());
 		await page.evaluate(() => { document.documentElement.dataset.appearance = "dark"; window.dispatchEvent(new Event("pi:theme-change")); });
-		await page.waitForFunction(() => document.querySelector(".scratch-save-status")?.textContent.includes("已保存"));
+		await page.waitForFunction(() => document.querySelector('.scratch-page')?.dataset.saveState === 'saved');
 		const scratchUrl = `http://127.0.0.1:${harness.port}/api/playground/scratch`;
 		const stored = await (await fetch(scratchUrl)).json();
 		assert.equal((await fetch(scratchUrl, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content: "print('other tab')", expectedVersion: stored.updatedAt }) })).status, 200);

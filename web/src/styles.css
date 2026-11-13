@@ -14275,7 +14275,6 @@ html.pi-desktop .design-workspace .topbar { height: 48px; min-height: 48px; }
 /* Playground: independent code and result surfaces, with a focus layout. */
 .scratch-page.method-mode { background: var(--bg-elev2); gap: 16px; }
 .scratch-head { flex-wrap: wrap; }
-.scratch-head .scratch-results-toggle { background: var(--bg-elev); color: var(--text-muted); border-color: var(--border-soft); }
 .scratch-run-keys { padding: 5px 8px; border: 1px solid var(--border-soft); border-radius: var(--r-sm); background: var(--bg-elev); }
 .method-mode .scratch-workspace { gap: 16px; border: 0; border-radius: 0; grid-template-columns: minmax(0, 1fr) minmax(300px, 28%); }
 .method-mode .scratch-workspace.results-collapsed { grid-template-columns: minmax(0, 1fr); }
@@ -15784,9 +15783,7 @@ span.rich-math { display: inline-block; }
 .scratch-output .lc-result-value pre { margin: 0; padding: 12px; min-height: 44px; max-height: 320px; overflow: auto; background: transparent; color: var(--text); font: 13px/1.7 var(--pg-font); white-space: pre-wrap; overflow-wrap: anywhere; }
 .scratch-output .method-validation { padding: 12px; margin: 0; border: 1px solid var(--border-soft); border-radius: var(--r-md); background: var(--red-soft); color: var(--red); font: 12px/1.7 var(--pg-font); white-space: pre-wrap; overflow-wrap: anywhere; }
 .lc-result-empty { padding: 24px 8px; margin: 0; color: var(--text-dim); text-align: center; font: 13px/1.6 var(--sans); }
-.scratch-head .scratch-results-toggle { border-color: transparent; background: transparent; }
 .scratch-head .btn.primary { min-height: 34px; padding: 6px 12px; gap: 8px; font: 500 13px/1.5 var(--sans); border-radius: var(--r-md); }
-.scratch-head .scratch-run-shortcut { margin-left: 4px; padding: 1px 4px; border: 0; border-radius: var(--r-sm); background: color-mix(in srgb, var(--action-fg) 14%, transparent); font: 11px/1.5 var(--sans); opacity: .85; }
 @media (max-width: 600px) {
 	.lc-case-panel .method-value textarea { font-size: 16px; }
 	.lc-panel-head [role="tab"] { min-height: 36px; }
@@ -16106,3 +16103,30 @@ span.rich-math { display: inline-block; }
 .pg-chat .input-tools .dd-menu { max-width: min(320px, calc(100cqw - 32px)); min-width: min(220px, calc(100cqw - 32px)); max-height: min(300px, 45dvh); overflow-y: auto; }
 .pg-chat .pg-chat-messages > .msg { margin-inline: 0; }
 .pg-chat > :is([role="alert"], [role="status"]) { margin: 8px 16px; }
+
+/* Native compaction uses the same quiet breathing indicator as thinking. */
+.compaction-status { width: calc(100% - 2 * var(--composer-gutter, 28px)); max-width: var(--chat-max); margin: 0 auto 8px; display: flex; align-items: center; gap: 6px; min-height: 24px; color: var(--text-dim); font: 13px/18px var(--sans); }
+.compaction-status > span:not(.running-indicator) { flex: 1; }
+.compaction-status button { border: 0; border-radius: var(--r-sm); padding: 3px 7px; background: transparent; color: var(--text-dim); font: inherit; cursor: pointer; }
+.compaction-status button:hover:not(:disabled) { background: var(--bg-elev2); color: var(--text); }
+.compaction-status button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.compaction-status button:disabled { color: var(--text-faint); cursor: not-allowed; }
+
+.scratch-head h2 { margin-right: auto; }
+
+/* Subagent work follows Thinking: a quiet disclosure row, no outer card. */
+:root .design-workspace :is(.subagent-task-group, .toolcall-subagent-quiet) { border: 0; border-radius: 0; background: transparent; box-shadow: none; margin-block: 4px 10px; }
+:root .design-workspace .subagent-task-group-head { min-height: 24px; padding: 2px 0; gap: 6px; background: transparent; color: var(--text-dim); font: 13px/18px var(--sans); }
+.subagent-task-group-head > strong { font-weight: 500; }
+.subagent-task-group-head > .running-indicator { flex: none; margin: 0; }
+.subagent-task-group-head > svg { width: 14px; height: 14px; flex: none; }
+.subagent-task-group-head > .subagent-task-counts { margin-left: 6px; }
+:root .design-workspace .subagent-task-row { padding: 8px 0 8px 20px; border: 0; background: transparent; }
+:root .design-workspace .subagent-task-row:hover { background: var(--bg-elev2); }
+:root .design-workspace .subagent-task-failures { border: 0; }
+:root .design-workspace .subagent-task-failures > :is(button, p) { padding: 4px 0 4px 20px; margin: 0; }
+:root .design-workspace .toolcall-subagent-quiet > .toolcall-head { min-height: 24px; padding: 2px 0; gap: 6px; background: transparent; }
+@media (max-width: 600px) {
+	.subagent-task-group-head > .running-indicator { order: 0; flex-basis: auto; }
+	.subagent-task-group-head > .subagent-task-counts { flex-basis: auto; margin-left: 6px; }
+}

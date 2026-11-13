@@ -60,7 +60,8 @@ try {
 	});
 	await page.goto(`${fixture.base}/?token=${fixture.token}`);
 	await page.locator('.subagent-task-group-head').waitFor();
-	assert.equal(await page.locator('.subagent-task-group-head').getAttribute('aria-expanded'), 'true');
+	assert.equal(await page.locator('.subagent-task-group-head').getAttribute('aria-expanded'), 'false');
+	await page.locator('.subagent-task-group-head').click();
 	assert.match(await page.locator('.subagent-task-counts .unsuccessful').innerText(), /未成功 2/);
 	assert.match(await page.locator('.subagent-task-failures > button').innerText(), /任务已中止/);
 	assert.doesNotMatch(await page.locator('.subagent-task-failures > button').innerText(), /超时/);

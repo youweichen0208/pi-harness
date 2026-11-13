@@ -1,6 +1,6 @@
 import { RunningIndicator } from "./RunningIndicator";
 import { createContext, useEffect, useState } from "react";
-import { FiChevronRight, FiGitBranch, FiCheck, FiX, FiClock, FiAlertTriangle } from "react-icons/fi";
+import { FiChevronRight, FiCheck, FiX, FiClock, FiAlertTriangle } from "react-icons/fi";
 import { commandDuration } from "../bash-presentation";
 import { useChatT } from "../i18n";
 import { mergeSubagentDetail, subagentPresentation, type SubagentItemView } from "../subagent-presentation";
@@ -32,7 +32,7 @@ export function SubagentTurnPanel({ calls, fallback }: { calls: SubagentTurnCall
 	});
 	const rows = entries.flatMap(entry => entry.model?.items.map((item, index) => ({ item: mergeSubagentDetail(item, item.taskId ? details[item.taskId] : undefined, entry.model?.final), entry, key: item.taskId ?? `${entry.block.id}:${index}` })) ?? []);
 	const running = rows.some(row => !subagentTerminal(row.item));
-	const open = manualOpen ?? (running || rows.some(row => row.item.phase === "completed") || entries.some(entry => !entry.model));
+	const open = manualOpen ?? entries.some(entry => !entry.model && entry.view.result?.isError);
 	const failed = rows.filter(row => subagentFailed(row.item));
 	const errorGroups = subagentErrorGroups(failed.map(row => row.item));
 	const failureSummary = [...new Set(errorGroups.map(group => t(`subagentReason_${group.kind}`)))].join(t("todoChangeSeparator"));
@@ -63,7 +63,7 @@ export function SubagentTurnPanel({ calls, fallback }: { calls: SubagentTurnCall
 		</button>;
 	};
 	return <div className="toolcall subagent-task-group" data-tool-call-id={calls[0].block.id}>
-		<button type="button" className="subagent-task-group-head" aria-expanded={open} onClick={() => setOpen(!open)}><FiGitBranch /><strong>{t("subagentTasksTitle")}</strong><span className="subagent-task-counts"><span>{t("subagentTaskTotal", { n: rows.length })}</span>{running && <span className="running"> · {t("subagentRunningCount", { n: rows.filter(row => !subagentTerminal(row.item)).length })}</span>}{visible.some(row => row.item.phase === "completed") && <span className="completed"> · {t("subagentCompletedCount", { n: rows.filter(row => row.item.phase === "completed").length })}</span>}{failed.length > 0 && <strong className="unsuccessful"> · {t("subagentUnsuccessfulCount", { n: failed.length })}</strong>}</span><FiChevronRight className={open ? "open" : ""} /></button>
+		<button type="button" className="subagent-task-group-head" aria-expanded={open} onClick={() => setOpen(!open)}>{running ? <RunningIndicator /> : <FiChevronRight className={open ? "open" : ""} aria-hidden="true" />}<strong>{t("subagentTasksTitle")}</strong><span className="subagent-task-counts"><span>{t("subagentTaskTotal", { n: rows.length })}</span>{running && <span className="running"> · {t("subagentRunningCount", { n: rows.filter(row => !subagentTerminal(row.item)).length })}</span>}{visible.some(row => row.item.phase === "completed") && <span className="completed"> · {t("subagentCompletedCount", { n: rows.filter(row => row.item.phase === "completed").length })}</span>}{failed.length > 0 && <strong className="unsuccessful"> · {t("subagentUnsuccessfulCount", { n: failed.length })}</strong>}</span></button>
 		{!visible.length && failed.length > 0 && <div className="subagent-task-failures subagent-task-all-failed"><p><FiAlertTriangle aria-hidden="true" /> {t("subagentAllAttemptsFailed")} {failureSummary}{failureDuration && ` · ${failureDuration}`}</p></div>}
 		{open && <div className="subagent-task-list">
 			{visible.map(renderRow)}
