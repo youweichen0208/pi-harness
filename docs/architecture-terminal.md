@@ -17,6 +17,14 @@
 
 `encodeTerminalKey(key, modifiers)` 是纯函数（导出，字节级断言在 terminal-smoke-test.mjs）：命名键按名称路由，Ctrl/Alt 组合绝不回退成"Ctrl+首字母"——Ctrl+ArrowUp=`ESC[1;5A`（非 Ctrl+A）、Ctrl+Enter=`ESC[13;5u`（非 Ctrl+E）；方向键/F1–F4/Home/End 带修饰符时用 xterm 修饰序列 `ESC[1;<m>X`，其余命名键用 CSI-u `ESC[<code>;<m>u`，普通字符 Ctrl 映射 A–Z→0x01–0x1A、Shift 大写、Alt 前缀 ESC。
 
+## 粘贴与图片
+
+文本粘贴走 xterm 原生路径：`attachCustomKeyEventHandler` 对 `Ctrl/Cmd+V` 返回 `false`，按键交给浏览器，paste 事件落在 xterm 的 helper textarea，再按 bracketed paste 包装后经 `terminal_input` 进 PTY。`Ctrl+C` 有选区时同理走「先把选区塞进 textarea 再让浏览器复制」，不依赖 clipboard API（纯 http 也能用）。
+
+图片粘贴需要额外一条通路：xterm 的原生 paste 只搬纯文本，剪贴板里只有图片时它送出空串，表现为「按了没反应」；而 codex / Claude Code 这类 TUI 的贴图是「收到 `Ctrl+V` 按键后自己读系统剪贴板」，按键在浏览器侧已经被换成原生 paste，TUI 永远等不到。`TermXterm` 因此在 container 的捕获阶段监听 `paste`，用 `classifyTerminalPaste`（`web/src/terminal-paste.ts`，纯函数、有单测）分三类：**text** 交回 xterm 原生粘贴；**image**（存在 `image/*` 且没有 `text/plain`）`preventDefault` 后转发 `\x16` 给前台程序；**none** 忽略。文本优先，剪贴板里同时有文本和图片时按文本处理，避免破坏 `echo $PATH` 之类的普通粘贴。
+
+已知限制：`^V` 让 TUI 读的是**服务端机器**的剪贴板，因此只有浏览器与服务端同机（默认本地 / 桌面版）时才能真正贴到刚复制的那张图；远程访问时 TUI 会自己报 `Failed to paste image:`——可见但不可用，属于有意取舍。不要再用 `navigator.clipboard.read()` 兜底：需要用户手势与权限，http 下不可用，且与上面 `Ctrl+C` 的取舍冲突。zsh 里孤立的 `^V` 是 quoted-insert（等待下一个字符），所以只在图片型剪贴板时转发。回归：`tests/unit/terminal-paste.test.ts` 覆盖分类；`tests/terminal-paste-test.mjs` 用合成 paste 事件断言客户端发出的 `terminal_input` 与 PTY 实际收到的字节（`stty raw` + `od -tx1`），并确认文本粘贴行为不变。
+
 ## 输出合并
 
 输出经带 `conversationId` 的 `terminal_output` 推给浏览器；未挂载终端保留 200KB 输出窗口，切回对话时回放。socket 断开不杀 PTY；切换/重连保留状态，对话被释放或服务关闭时才杀掉全部 PTY。
