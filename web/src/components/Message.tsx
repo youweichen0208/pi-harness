@@ -16,6 +16,7 @@ import {
 	FiChevronUp,
 	FiEdit3,
 	FiImage,
+	FiAlertCircle,
 	FiX,
 } from "react-icons/fi";
 import type {
@@ -169,6 +170,8 @@ interface MessageProps {
 	toolsWrap?: boolean;
 	/** Identical consecutive user messages render once with a count (3a). */
 	repeatCount?: number;
+	/** Adjacent identical model errors appear once with this total count. */
+	errorRepeatCount?: number;
 	/** Newest settled reply: question cards are answerable from the composer. */
 	questionsActive?: boolean;
 	/** The agent kept going after this reply in the same turn. */
@@ -205,6 +208,7 @@ export const Message = memo(function Message({
 	thinkingWrap,
 	toolsWrap,
 	repeatCount = 1,
+	errorRepeatCount = 1,
 	questionsActive,
 	turnContinues,
 	settledTail,
@@ -670,7 +674,11 @@ export const Message = memo(function Message({
 				) : (
 					<>
 						{message.errorMessage && (
-							<div className="msg-error">{message.errorMessage}</div>
+							<div className="msg-error msg-provider-error">
+								<FiAlertCircle aria-hidden="true" />
+								<span className="msg-provider-error-text">{message.errorMessage}</span>
+								{errorRepeatCount > 1 && <span className="msg-error-count" aria-label={t("messageErrorRepeated", { n: errorRepeatCount })}>×{errorRepeatCount}</span>}
+							</div>
 						)}
 						{outputLimited && (
 							<div className="msg-error reply-output-limit" role="status">

@@ -30,6 +30,7 @@ import { Message, asText } from "./Message";
 
 import { collectQuestionAttachments } from "../question-attachments";
 import { repeatedUserMessages } from "../user-message-presentation";
+import { repeatedAssistantErrors } from "../assistant-error-presentation";
 import { retriedEditIds as findRetriedEditIds } from "../edit-write-presentation";
 
 import { parseSkillBlock } from "../skill-block";
@@ -213,7 +214,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 		return result;
 	}, [state.messages, state.streamingMessage, state.isStreaming, state.subagentTasks, toolResults, toolStatuses, liveOutputs]);
 	const subagentDonorMessages = new Set((state.streamingMessage ? [...state.messages, state.streamingMessage] : state.messages)
-		.filter(message => message.role === "assistant" && message.content.length > 0 && message.content.every(block => {
+		.filter(message => message.role === "assistant" && !message.errorMessage && message.content.length > 0 && message.content.every(block => {
 			if (block.type === "text") return typeof block.text === "string" && !block.text.trim();
 			if (block.type !== "toolCall" || typeof block.id !== "string") return false;
 			const group = subagentGroups.get(block.id);
@@ -235,6 +236,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 	const goalEvents = useMemo(() => groupGoalEvents(state.messages), [state.messages]);
 	const timeGaps = useMemo(() => messageTimeGaps(state.messages), [state.messages]);
 	const repeatedUsers = useMemo(() => repeatedUserMessages(state.messages), [state.messages]);
+	const repeatedErrors = useMemo(() => repeatedAssistantErrors(state.messages, new Set(timeGaps.keys())), [state.messages, timeGaps]);
 	/** Empty retries render nothing; repeated questions fold into the copy that is shown. */
 	const emptyReplies = useMemo(() => new Set(state.messages.filter(isEmptyReply).map(message => message.id)), [state.messages]);
 	const predecessors = assistantPredecessors(messages);
@@ -242,8 +244,10 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 	const streamingHasContent = state.streamingMessage?.content.some((block) => block.type === "text" ? (typeof block.text === "string" && !!block.text.trim()) || !!block.truncated : block.type === "thinking" ? typeof block.thinking === "string" && !!block.thinking.trim() : true) ?? false;
 	const changeSummaries = useMemo(() => turnChangeSummaries(state.messages, state.taskProgress, state.cwd, state.isStreaming), [state.messages, state.taskProgress, state.cwd, state.isStreaming]);
 	const lastUserIndex = state.messages.findLastIndex((message) => message.role === "user");
-	const lastAssistantId = state.messages.findLast((message) => message.role === "assistant")?.id;
-	const lastId = messages.length > 0 ? messages[messages.length - 1].id : null;
+	const rawLastAssistantId = state.messages.findLast((message) => message.role === "assistant")?.id;
+	const lastAssistantId = rawLastAssistantId ? repeatedErrors.hidden.get(rawLastAssistantId) ?? rawLastAssistantId : undefined;
+	const rawLastId = messages.length > 0 ? messages[messages.length - 1].id : null;
+	const lastId = rawLastId ? repeatedErrors.hidden.get(rawLastId) ?? rawLastId : null;
 	// History stays expanded: every persisted message is fully rendered. The lazy
 	// window below still decides what is mounted, so long chats stay responsive.
 	const answerRounds = useMemo(() => answerHistory(state.messages), [state.messages]);
@@ -258,12 +262,12 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 		for (let i = state.messages.length - 1; i >= 0; i--) {
 			const message = state.messages[i];
 			if (message.role === "user") { later = false; continue; }
-			if (message.role !== "assistant" || bashGroups.owners.has(message.id) || emptyReplies.has(message.id)) continue;
+			if (message.role !== "assistant" || bashGroups.owners.has(message.id) || emptyReplies.has(message.id) || repeatedErrors.hidden.has(message.id)) continue;
 			if (later) continues.add(message.id);
 			later = true;
 		}
 		return continues;
-	}, [state.messages, state.streamingMessage, bashGroups, emptyReplies]);
+	}, [state.messages, state.streamingMessage, bashGroups, emptyReplies, repeatedErrors]);
 	// 相邻的同角色折叠消息并成一条摘要，仅在折叠区生效；历史已恒为展开，所以
 	// 这里只需要一份空结果，保留调用点结构以兼容惰性窗口。
 	const collapsed = useMemo(() => ({ groupAt: new Map<number, UiMessage[]>(), absorbed: new Set<number>() }), []);
@@ -536,7 +540,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 	/** Scroll the conversation to a question; expand it first if it's collapsed. */
 	const jumpTo = useCallback(
 		(id: string) => {
-			id = bashGroups.owners.get(id) ?? id;
+			id = repeatedErrors.hidden.get(id) ?? bashGroups.owners.get(id) ?? id;
 			const idx = state.messages.findIndex((m) => m.id === id);
 			// 占位中的目标先同步恢复真实渲染（折叠行同步展开），再滚动定位——
 			// flushSync 保证本轮 commit 后 DOM 即为最终形态。
@@ -566,7 +570,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 				}
 			});
 		},
-		[state.messages, expanded, expand, bashGroups, subagentGroups],
+		[state.messages, expanded, expand, bashGroups, subagentGroups, repeatedErrors],
 	);
 	useEffect(() => {
 		const onTaskJump = (event: Event) => {
@@ -751,7 +755,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 					</div>);
 
 					// Repeats keep an anchor so search and question jumps still land on the shown copy.
-					if (repeatedUsers.hidden.has(m.id) || emptyReplies.has(m.id) && m.id !== state.streamingMessage?.id) return <span key={m.id} data-msg-id={m.id} hidden />;
+					if (repeatedUsers.hidden.has(m.id) || repeatedErrors.hidden.has(m.id) || emptyReplies.has(m.id) && m.id !== state.streamingMessage?.id) return <span key={m.id} data-msg-id={m.id} hidden />;
 					if (bashGroups.owners.has(m.id)) return changeSummaries.has(m.id) ? <ChangeSummaryCard key={m.id} files={changeSummaries.get(m.id)!} /> : null;
 					const qIdx = m.role === "user" ? qnIndex.get(m.id) : undefined;
 					const show =
@@ -801,6 +805,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 							conversationId={state.conversationId}
 							questionAttachments={questionAttachments.get(m.id)}
 							repeatCount={repeatedUsers.counts.get(m.id)}
+							errorRepeatCount={repeatedErrors.counts.get(m.id)}
 							questionsActive={!state.isStreaming && m.id === lastAssistantId}
 							turnContinues={turnContinues.has(m.id)}
 							// The edit cards hold their diff open only at the live edge of the
@@ -808,7 +813,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 							settledTail={m.id === lastAssistantId && !streamingHasContent && !state.streamingMessage?.content.some((block) => block.type === "toolCall")}
 						/>
 						{changeSummaries.has(m.id) && <ChangeSummaryCard files={changeSummaries.get(m.id)!} />}
-						{m.role === "assistant" && <ReplyActions message={m} last={m.id === state.messages.findLast(message => message.role === "assistant")?.id} regenerate={!state.isStreaming && connected && !state.tree?.verifying && onEdit ? () => {
+						{m.role === "assistant" && <ReplyActions message={m} last={m.id === lastAssistantId} regenerate={!state.isStreaming && connected && !state.tree?.verifying && onEdit ? () => {
 							const user = state.messages.slice(0, i).findLast(message => message.role === "user" && message.origin !== "auto-reminder");
 							if (!user) return;
 							const text = user.questionText ?? user.content.map(block => block.type === "text" ? block.text : "").join("\n");
