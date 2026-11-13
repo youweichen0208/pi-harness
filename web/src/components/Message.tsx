@@ -873,13 +873,14 @@ function stripFileWrapper(text: string): string {
 /**
  * Compact collapsible card for a skill invocation (the SDK's /skill:name
  * expansion) — the web counterpart of the CLI's SkillInvocationMessageComponent.
- * Open by default so the invoked instructions are visible without a click;
- * collapsed shows a book icon + skill name + file path, expanded shows the
- * full SKILL.md content. The user's own question (args) renders separately.
+ * Collapsed by default so long SKILL.md content does not push the user's own
+ * question out of view; collapsed shows a book icon + skill name + file path,
+ * expanded shows the full SKILL.md content. The user's own question (args)
+ * renders separately.
  */
 function SkillCard({ block }: { block: SkillBlock }) {
 	const t = useChatT();
-	const [expanded, setExpanded] = useState(true);
+	const [expanded, setExpanded] = useState(false);
 	const content = splitFrontmatter(block.content);
 	return (
 		<div className={`skillcard${expanded ? " expanded" : ""}`}>

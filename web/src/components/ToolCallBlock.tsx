@@ -132,6 +132,10 @@ const TOOL_ICONS: Record<string, UiIconName> = {
 	ls: "folder",
 };
 
+/** `read` rows never dump the whole file: the collapsed row is one line and
+ *  the body previews this many lines before the `展开全部 · N 行` control. */
+const READ_PREVIEW_LINES = 10;
+
 function toolIcon(name: string) {
 	return <UiIcon name={TOOL_ICONS[name] ?? "tool"} />;
 }
@@ -417,8 +421,8 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true, rawSubagen
 	const command = block.name === "bash" ? bashCommand(block.argumentsText) : null;
 	const compactBash = !!command;
 	const commandDisplay = command ? commandPresentation(command, cwd) : null;
-	const limitedOutput = block.name !== "bash" && outputLines.length > 10 && !expanded && !zoomed;
-	const visibleOutput = limitedOutput ? outputLines.slice(0, 10).join("\n") : output;
+	const limitedOutput = block.name !== "bash" && outputLines.length > READ_PREVIEW_LINES && !expanded && !zoomed;
+	const visibleOutput = limitedOutput ? outputLines.slice(0, READ_PREVIEW_LINES).join("\n") : output;
 	const markdownRead = isMarkdown && markdownPreview && !isError ? splitFrontmatter(visibleOutput) : null;
 	const targetPath = block.name === "read" ? readPath(block.argumentsText) : null;
 	const subagent = block.name === "subagent" && !rawSubagent ? subagentPresentation(block.argumentsText ?? "", output, view.subagents, view.result?.subagents) : undefined;
@@ -442,6 +446,14 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true, rawSubagen
 	const recorded = toolDuration(view);
 	const duration = recorded !== undefined ? formatDuration(recorded) : "";
 	if (duration) statusLabel = `${statusLabel} · ${duration}`;
+	// `read` rows mirror the compact bash rows in the process list: state glyph +
+	// path + size + timing, with the file body only after clicking the row.
+	const readNotExecuted = abandoned && !done && !waitingModel;
+	const readStats = imageReadNotice
+		? duration
+		: readNotExecuted
+			? t("toolNotExecuted")
+			: [outputLines.length > 0 ? t("toolLineCount", { n: outputLines.length }) : "", duration].filter(Boolean).join(" · ");
 	if (bashRun) statusLabel = bashRun.status === "partial" ? t("bashPartial", { ok: bashRun.completed, total: bashRun.steps.length }) : bashRun.status === "failed" ? t("bashFailed") : bashRun.status === "no-match" ? t("bashNoMatch") : bashRun.status === "running" ? `${t("bashRunning")}${elapsed ? ` · ${elapsed}s` : ""}` : `${t("done")}${duration ? ` · ${duration}` : ""}`;
 	else if (block.name === "bash" && isError) statusLabel = `${t("bashFailed")}${Number.isFinite(bashExit) ? ` · exit ${bashExit}` : ""}${bashDiagnostics.length ? ` · ${t("bashErrorCount", { n: bashDiagnostics.length })}` : ""}`;
 	if (subagent) {
@@ -474,6 +486,12 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true, rawSubagen
 	// the two views can never drift apart.
 	const bodyContent = (
 		<>
+			{targetPath && !zoomed && (
+				<div className="toolcall-read-actions">
+					<button type="button" className="toolcall-expand" title={t("zoomCode")} onClick={() => setZoomed(true)}>{t("zoomCode")}</button>
+					<button type="button" className="toolcall-copy" title={t(copyError ? "copyFailed" : copied ? "copied" : "copyArgs")} onClick={copyArgs}>{t(copyError ? "copyFailed" : copied ? "copied" : "copy")}</button>
+				</div>
+			)}
 
 			{block.argumentsText && (!targetPath || zoomed) && !subagent && (!compactBash || fullCommand || zoomed) && (
 				<div className="toolcall-args">
@@ -546,7 +564,7 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true, rawSubagen
 					) : (
 						<pre>{visibleOutput}</pre>
 					)}
-					{block.name !== "bash" && outputLines.length > 10 && <button type="button" className="toolcall-output-more" onClick={() => setExpanded((value) => !value)}>{expanded || zoomed ? t("collapseCode") : t("expandAllLines", { n: outputLines.length })}</button>}
+					{block.name !== "bash" && outputLines.length > READ_PREVIEW_LINES && <button type="button" className="toolcall-output-more" onClick={() => setExpanded((value) => !value)}>{expanded || zoomed ? t("collapseCode") : t("expandAllLines", { n: outputLines.length })}</button>}
 				</div>
 			))}
 			{generic && !output && view.result?.toolOutputUrl && <div className="toolcall-result-actions">{!output && <span>{t("toolOutputFileOnly")}</span>}<ToolOutputDownload url={view.result.toolOutputUrl} compact /></div>}
@@ -562,10 +580,20 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true, rawSubagen
 				<button type="button" className="toolcall-expand" onClick={() => setZoomed(true)}>{t("zoomCode")}</button>
 				<button type="button" className="toolcall-copy" onClick={copyArgs}>{t(copyError ? "copyFailed" : copied ? "copied" : "copy")}</button>
 				<button type="button" className="toolcall-toggle" onClick={() => setOpen((value) => !value)}>{t(open ? "collapseCode" : "expandCode")}</button>
-			</BashCommandHeader> : (
+			</BashCommandHeader> : targetPath ? (
+			<button type="button" className="toolcall-head toolcall-read-head" aria-expanded={open} aria-label={`${t("readVerb")} ${displayReadPath(targetPath)}"`} onClick={() => setOpen((v) => !v)}>
+				<span className={`toolcall-read-state ${statusClass}`} aria-hidden="true">
+					{statusClass === "run" ? <RunningIndicator /> : statusClass === "err" ? "✗" : readNotExecuted ? "−" : "✓"}
+				</span>
+				<span className="toolcall-read-title"><span>{t("readVerb")}</span><code title={targetPath}>{displayReadPath(targetPath)}</code></span>
+				{readStats && <span className="toolcall-read-stats">{readStats}</span>}
+				<span className="toolcall-spacer" />
+				{open ? <FiChevronDown aria-hidden="true" /> : <FiChevronRight aria-hidden="true" />}
+			</button>
+			) : (
 			<div className="toolcall-head">
 				<span className="toolcall-icon">{block.name === "subagent" ? <FiGitBranch aria-hidden="true" /> : generic ? <FiTool aria-hidden="true" /> : toolIcon(block.name)}</span>
-				{compactBash ? <code className="bash-head-command" title={command ?? ""}>$ {displayBashCommand(command!, cwd)}</code> : generic ? <button type="button" className="toolcall-name toolcall-name-toggle" title={block.name} aria-expanded={open} onClick={() => setOpen(v => !v)}><span>{block.name}</span>{action && <small className="toolcall-action" title={action}>action: {action}</small>}</button> : targetPath ? <span className="toolcall-read-title"><span>{t("readVerb")}</span><code title={targetPath}>{displayReadPath(targetPath)}</code></span> : <span className="toolcall-name">{block.name}</span>}
+				{compactBash ? <code className="bash-head-command" title={command ?? ""}>$ {displayBashCommand(command!, cwd)}</code> : generic ? <button type="button" className="toolcall-name toolcall-name-toggle" title={block.name} aria-expanded={open} onClick={() => setOpen(v => !v)}><span>{block.name}</span>{action && <small className="toolcall-action" title={action}>action: {action}</small>}</button> : <span className="toolcall-name">{block.name}</span>}
 				{compactBash && output && <span className="bash-head-count">{t("toolLineCount", { n: outputLines.length })}</span>}
 				<span className="toolcall-status">
 					{running && !quietSubagent && <RunningIndicator />}

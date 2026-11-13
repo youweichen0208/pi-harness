@@ -73,14 +73,41 @@ try {
 		assert(await card.evaluate(el => el.scrollWidth <= el.clientWidth + 1), 'read card fits its available width');
 		await card.screenshot({path:`/tmp/pi-read-card-${theme}-${width}.png`});
 	}
-	await page.locator('.toolcall-read .toolcall-toggle').click();
+	await page.locator('.toolcall-read .toolcall-read-head').click();
 	assert.equal(await page.locator('.toolcall-read .toolcall-body').count(), 0);
-	await page.locator('.toolcall-read .toolcall-toggle').click();
+	// 折叠态必须是一条 34px 的扁平行（和 bash/grep 行同款），不是卡片。
+	const collapsed = await page.locator('.toolcall-read').evaluate(el => {
+		const style = getComputedStyle(el);
+		return { border: style.borderTopWidth, radius: style.borderRadius, height: el.getBoundingClientRect().height };
+	});
+	assert.equal(collapsed.border, '0px', 'collapsed read is a flat row, not a card');
+	assert.equal(collapsed.radius, '0px', 'collapsed read has no card radius');
+	assert(collapsed.height <= 40, `collapsed read row stays one line (got ${collapsed.height}px)`);
+	await page.locator('.toolcall-read .toolcall-read-head').click();
 	await page.locator('.toolcall-read .tool-result-image').waitFor();
 	await page.locator('.toolcall-read .toolcall-expand').click();
 	await page.locator('.toolcall-zoom').waitFor();
+
+	// --- 文本读取：行数 + 最大展示行数 -------------------------------------
+	const longText = Array.from({ length: 180 }, (_, index) => `const line${index + 1} = ${index + 1};`).join('\n');
+	phaseMessages = [
+		{ id: 'user', role: 'user', content: [{ type: 'text', text: 'Read app.ts' }] },
+		{ id: 'read', role: 'assistant', content: [{ type: 'toolCall', id: 'read1', name: 'read', argumentsText: JSON.stringify({ path: 'app.ts' }) }] },
+		{ id: 'result', role: 'toolResult', toolCallId: 'read1', content: [{ type: 'text', text: longText }], durationMs: 120 },
+	];
+	await page.reload();
+	await page.locator('.process-group-summary-line').click();
+	await page.locator('.toolcall-read').waitFor();
+	const stats = await page.locator('.toolcall-read-stats').textContent();
+	assert.match(stats ?? '', /180/, `read row shows the line count (got ${stats})`);
+	assert.match(stats ?? '', /0\.1s/, 'read row shows the recorded duration');
+	const previewLines = async () => ((await page.locator('.toolcall-read .toolcall-code code').first().textContent()) ?? '').replace(/\n$/, '').split('\n').length;
+	assert.equal(await previewLines(), 10, 'expanded read previews at most READ_PREVIEW_LINES lines');
+	await page.locator('.toolcall-read .toolcall-output-more').click();
+	assert.equal(await previewLines(), 180, 'the expand control reveals the whole file');
+
 	assert.deepEqual(errors, []);
-	console.log('PASS read card hierarchy, image preview, collapse, zoom, themes and narrow width');
+	console.log('PASS read rows mirror bash rows, line-count cap, image preview, collapse, zoom, themes and narrow width');
 } finally {
 	await browser?.close().catch(() => {});
 	server?.kill('SIGTERM');

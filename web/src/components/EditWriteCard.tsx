@@ -4,7 +4,7 @@ import type { UiToolCallBlock } from "../types";
 import { useChatT } from "../i18n";
 import { WorkspacePathContext } from "../workspace-context";
 import { outputPath } from "../task-outputs";
-import { editWriteChange, type ChangeLine, type EditWriteChange } from "../edit-write-presentation";
+import { editWriteChange, clampDiffPreview, EDIT_WRITE_PREVIEW_LINES, type ChangeLine, type EditWriteChange } from "../edit-write-presentation";
 import { highlightLine, langFromPath } from "../hljs-lite";
 import { ChangeSummaryCard } from "./ChangeSummaryCard";
 import type { ToolView } from "./ToolCallBlock";
@@ -30,13 +30,17 @@ function Lines({ lines, path }: { lines: ChangeLine[]; path: string }) {
 function ChangeBody({ change, state, path, toolId }: { change: EditWriteChange; state: string; path: string; toolId: string }) {
 	const t = useChatT();
 	const [expanded, setExpanded] = useState(false);
+	// 一次编辑/写入可能几百行：内联卡片默认只给前 EDIT_WRITE_PREVIEW_LINES 行，
+	// 其余折叠成「展开其余 N 行」；完整的 diff 仍在改动面板与文件预览里。
+	const diffLines = change.hunks.flatMap(hunk => hunk.lines);
+	const previewLines = expanded ? diffLines : clampDiffPreview(diffLines);
 	if (!change.error && !change.empty && state === "done") return <div className="change-card-body"><ChangeSummaryCard inlineDiff files={[{
 		path, added: change.added, removed: change.removed, counted: true,
-		lines: change.hunks.flatMap(hunk => hunk.lines), unlocated: change.fromArguments,
+		lines: previewLines, unlocated: change.fromArguments,
 		truncated: change.diffTruncated, toolIds: [toolId],
-	}]} /></div>;
-	const allLines = change.hunks.reduce((sum, hunk) => sum + hunk.lines.length, 0);
-	let remaining = expanded ? Infinity : 12;
+	}]} footer={diffLines.length > EDIT_WRITE_PREVIEW_LINES ? <button type="button" className="change-more" onClick={() => setExpanded(value => !value)}>{expanded ? t("collapseCode") : t("expandRemainingLines", { n: diffLines.length - EDIT_WRITE_PREVIEW_LINES })}</button> : undefined} /></div>;
+	const allLines = diffLines.length;
+	let remaining = expanded ? Infinity : EDIT_WRITE_PREVIEW_LINES;
 	// 头部已经显示 `+N −M`，hunk 头已经显示行号／函数名，diff 行本身也带红绿和
 	// `+`/`−` 标记。再单独列一行「删除 N · 新增 N」是把同一件事说三遍，正文从这里开始。
 	const failure = change.errorText.split("\n").find((line) => line.trim()) || t("changeFailed");
@@ -49,7 +53,7 @@ function ChangeBody({ change, state, path, toolId }: { change: EditWriteChange; 
 			return <div className="change-hunk" key={index}><div className="change-hunk-head">{change.error ? change.kind === "write" ? t("changeAttemptedWrite") : t("changeOriginal") : change.kind === "write" ? t("changeWrittenLines", { n: change.added }) : change.fromArguments ? t("changeReplacement") : t("changeAtLine", { n: hunk.line })}{hunk.functionName && <span> · {hunk.functionName}</span>}</div><Lines lines={visible} path={change.path} /></div>;
 		})}
 		{change.diffTruncated && <div className="change-empty">{t("truncated")}</div>}
-		{allLines > 12 && <button type="button" className="change-more" onClick={() => setExpanded((value) => !value)}>{expanded ? t("collapseCode") : t("expandRemainingLines", { n: allLines - 12 })}</button>}
+		{allLines > EDIT_WRITE_PREVIEW_LINES && <button type="button" className="change-more" onClick={() => setExpanded((value) => !value)}>{expanded ? t("collapseCode") : t("expandRemainingLines", { n: allLines - EDIT_WRITE_PREVIEW_LINES })}</button>}
 	</div>;
 }
 

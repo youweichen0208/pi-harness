@@ -1,4 +1,4 @@
-import { Fragment, useState } from "react";
+import { Fragment, useState, type ReactNode } from "react";
 import { FiFile, FiChevronDown, FiChevronRight } from "react-icons/fi";
 import { ChangeDiff } from "./ChangeDiff";
 import type { ChangedFile } from "../changes";
@@ -10,7 +10,7 @@ export function ChangeCounts({ files }: { files: Pick<ChangedFile, "added" | "re
 	const added = files.reduce((n, file) => n + file.added, 0), removed = files.reduce((n, file) => n + file.removed, 0);
 	return <span className="change-counts"><span className="add">+{added}</span><span className="del">−{removed}</span></span>;
 }
-export function ChangeSummaryCard({ files, inlineDiff = false }: { files: ChangedFile[]; inlineDiff?: boolean }) {
+export function ChangeSummaryCard({ files, inlineDiff = false, footer }: { files: ChangedFile[]; inlineDiff?: boolean; footer?: ReactNode }) {
 	const t = useT(), changes = useChanges();
 	const [all, setAll] = useState(false);
 	const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -27,5 +27,6 @@ export function ChangeSummaryCard({ files, inlineDiff = false }: { files: Change
 			{file.counted ? <ChangeCounts files={[file]} /> : <span className="change-summary-unavailable" title={t("changesUnavailable")}>—</span>}{inlineDiff && !collapsed.has(file.path) ? <FiChevronDown /> : <FiChevronRight />}
 		</button>{inlineDiff && !collapsed.has(file.path) && <ChangeDiff file={file} gaps={gaps} expandGap={id => setGaps(previous => new Set([...previous, id]))} />}</Fragment>)}
 		{!all && files.length > 6 && <button className="changes-more" onClick={() => setAll(true)}>{t("changesMore", { n: files.length - 6 })}</button>}
+		{footer}
 	</section>;
 }

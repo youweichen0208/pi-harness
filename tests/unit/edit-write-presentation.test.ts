@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import type { UiMessage, UiToolCallBlock } from "../../server/protocol.js";
-import { editWriteChange, parseEditDiff, retriedEditIds } from "../../web/src/edit-write-presentation.js";
+import { clampDiffPreview, EDIT_WRITE_PREVIEW_LINES, editWriteChange, parseEditDiff, retriedEditIds, type ChangeLine } from "../../web/src/edit-write-presentation.js";
 
 const call = (id: string, name: string, args: object): UiToolCallBlock => ({ type: "toolCall", id, name, argumentsText: JSON.stringify(args) });
 const result = (id: string, details?: object, isError = false): UiMessage => ({ id: `r-${id}`, role: "toolResult", toolCallId: id, isError, content: [{ type: "text", text: isError ? "Could not find exact text in file" : "Successfully replaced text" }], details });
@@ -64,4 +64,23 @@ test("a later successful edit of the same path marks only the earlier failure as
 	const messages: UiMessage[] = [{ id: "a", role: "assistant", content: [failedCall] }, result("e1", undefined, true), { id: "b", role: "assistant", content: [otherCall, successCall] }, result("e3", undefined, true), result("e2", { diff: "-1 old\n+1 new" })];
 	const results = new Map(messages.filter((message) => message.toolCallId).map((message) => [message.toolCallId!, message]));
 	expect([...retriedEditIds(messages, results)]).toEqual(["e1"]);
+});
+
+test("inline diff preview stops at the line cap instead of dumping the file", () => {
+	const lines: ChangeLine[] = Array.from({ length: 213 }, (_, index) => ({ marker: "+", newLine: index + 1, text: `line ${index + 1}` }));
+	const preview = clampDiffPreview(lines);
+	expect(preview).toHaveLength(EDIT_WRITE_PREVIEW_LINES);
+	expect(preview.at(-1)?.text).toBe(`line ${EDIT_WRITE_PREVIEW_LINES}`);
+	// 少于上限时原样返回，调用方据此决定是否显示「展开其余 N 行」。
+	expect(clampDiffPreview(lines.slice(0, 3))).toHaveLength(3);
+});
+
+test("preview drops trailing context so it does not fake a fold at the cut", () => {
+	const add = (n: number): ChangeLine => ({ marker: "+", newLine: n, text: `add ${n}` });
+	const context = (n: number): ChangeLine => ({ marker: " ", newLine: n, text: `context ${n}` });
+	// 上限落在上下文行中间：末尾未改动行不能留，否则会渲染成「后面 N 行」折叠行。
+	const mixed = [...Array.from({ length: 10 }, (_, index) => add(index + 1)), context(11), context(12), context(13), add(14), add(15)];
+	expect(clampDiffPreview(mixed).map((line) => line.text)).toEqual(Array.from({ length: 10 }, (_, index) => `add ${index + 1}`));
+	// 全是上下文（无标记的纯文本 diff）时仍按行数截断，不能切出空预览。
+	expect(clampDiffPreview(Array.from({ length: 20 }, (_, index) => context(index + 1)))).toHaveLength(EDIT_WRITE_PREVIEW_LINES);
 });

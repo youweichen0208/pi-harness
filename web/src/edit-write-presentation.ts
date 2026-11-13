@@ -33,6 +33,19 @@ export interface EditWriteChange {
 
 const functionLine = /^\s*(?:(?:async\s+)?def\s+\w+|(?:export\s+)?(?:async\s+)?function\s+\w+|(?:public|private|protected)\s+\w+\s*\(|(?:async\s+)?\w+\s*\([^)]*\)\s*[:{])/;
 
+/** 内联编辑卡片的 diff 预览上限：一次写入／重写可能几百行，默认只铺这些行，
+ *  其余由「展开其余 N 行」补齐；完整 diff 仍在改动面板与文件预览里。 */
+export const EDIT_WRITE_PREVIEW_LINES = 12;
+
+/** 按行数截断 diff 预览。末尾的未改动上下文行一并截掉，否则 `foldDiff` 会把
+ *  它渲染成一个能点的「后面 N 行」折叠行，看起来像文件到这里就结束了。 */
+export function clampDiffPreview(lines: ChangeLine[], max = EDIT_WRITE_PREVIEW_LINES): ChangeLine[] {
+	if (lines.length <= max) return lines;
+	let end = max;
+	while (end > 0 && lines[end - 1].marker === " ") end--;
+	return lines.slice(0, end > 0 ? end : max);
+}
+
 /** SDK edit details contain one line number per row and ` ...` gaps. */
 export function parseEditDiff(diff: string, context = 2): ChangeHunk[] {
 	const segments: ChangeLine[][] = [[]];

@@ -127,6 +127,39 @@ try {
 	await summary.locator('header button').click();
 	await page.locator('.changes-panel .changes-line.add').waitFor();
 	assert.match(await page.locator('.changes-panel .changes-line.add').innerText(), /new/, 'view all opens the same historical edit');
+	// 6) 几百行的写入不再整段铺开：默认 12 行 + 「展开其余 N 行」。
+	const bigDiff = Array.from({ length: 40 }, (_, index) => `+${index + 1} const value${index + 1} = ${index + 1};`).join('\n');
+	await show([
+		userMsg,
+		{ id: 'write', role: 'assistant', content: [{ type: 'toolCall', id: 'edit1', name: 'edit', argumentsText: JSON.stringify({ path: 'app.ts', oldText: 'old', newText: 'new' }) }] },
+		{ id: 'edit-result', role: 'toolResult', toolCallId: 'edit1', details: { diff: bigDiff, firstChangedLine: 1 }, content: [] },
+	]);
+	const preview = body().locator('.change-summary-inline .changes-line');
+	await preview.first().waitFor();
+	assert.equal(await preview.count(), 12, 'inline diff previews at most EDIT_WRITE_PREVIEW_LINES lines');
+	const more = body().locator('.change-more');
+	await more.waitFor();
+	assert.match((await more.textContent()) ?? '', /展开其余 28 行/);
+	await page.evaluate(() => document.documentElement.dataset.appearance = 'light');
+	await page.locator('.change-card').first().screenshot({ path: '/tmp/pi-edit-capped.png' });
+	await more.click();
+	assert.equal(await preview.count(), 40, 'the expand control reveals the whole diff');
+	await more.click();
+	assert.equal(await preview.count(), 12, 'collapsing returns to the capped preview');
+
+	// 7) Write 新文件同样按行数折叠（截图里的 213 行全铺开就是这么来的）。
+	const writeContent = Array.from({ length: 40 }, (_, index) => `const written${index + 1} = ${index + 1};`).join('\n');
+	await show([
+		userMsg,
+		{ id: 'write', role: 'assistant', content: [{ type: 'toolCall', id: 'edit1', name: 'write', argumentsText: JSON.stringify({ path: 'app.ts', content: writeContent }) }] },
+		{ id: 'edit-result', role: 'toolResult', toolCallId: 'edit1', content: [{ type: 'text', text: 'Wrote 40 lines' }] },
+	]);
+	await body().locator('.changes-line').first().waitFor();
+	assert.equal(await body().locator('.changes-line').count(), 12, 'a new-file write previews at most 12 lines');
+	assert.match((await body().locator('.change-more').textContent()) ?? '', /展开其余 28 行/);
+	await body().locator('.change-more').click();
+	assert.equal(await body().locator('.changes-line').count(), 40, 'the write card can reveal the whole file');
+
 	assert.deepEqual(errors, [], 'no browser errors');
 	console.log('PASS edits show changes directly and support collapse, expand and historical review');
 } finally {
