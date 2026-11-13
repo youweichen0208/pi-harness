@@ -91,13 +91,22 @@ try {
 				await page.keyboard.press('Escape');
 			}
 			await page.getByRole('tab', { name: '对话', exact: true }).click();
-			const rightPanel = await page.locator('.panel-drawer.drawer-right').boundingBox();
-			if (!(await page.locator('.right-panel-tabs').isVisible()) || !rightPanel || rightPanel.x < 0 || rightPanel.x + rightPanel.width > width + 1) {
+			await page.locator('.view-switch button.active').waitFor();
+			// The right drawer slides in and out. Measuring while it animates reports the
+			// panel as closed and the toggle below would then shut it again, leaving the
+			// task tab hidden; settle first and check where the tab actually sits.
+			const taskTab = page.locator('.right-panel-tabs [role="tab"]').filter({ hasText: '任务' });
+			const taskTabOnScreen = async () => {
+				const box = await taskTab.boundingBox().catch(() => null);
+				return !!box && box.x >= 0 && box.x + box.width <= width + 1;
+			};
+			await page.waitForTimeout(400);
+			for (let attempt = 0; attempt < 3 && !(await taskTabOnScreen()); attempt++) {
 				await page.locator('.topbar-more .chip').click();
 				await page.locator('.workspace-settings-menu .dd-item').filter({ hasText: '文件列表' }).click();
+				await page.waitForTimeout(400);
 			}
-			await page.locator('.right-panel-tabs:visible').waitFor();
-			await page.locator('.right-panel-tabs [role="tab"]').filter({ hasText: '任务' }).click();
+			await taskTab.click();
 			await page.locator('.task-progress:visible').waitFor();
 			assert.equal(await page.locator('.right-panel-tabs [aria-selected="true"]').textContent(), '任务');
 			assert.equal(await page.locator('.tree-filter, .tree-modified-count').count(), 0);
