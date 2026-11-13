@@ -4,6 +4,10 @@ import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 import type { ClientMessage, CommandDef } from "../types";
 import { buildTermTheme, THEME_CHANGE_EVENT } from "../theme";
+import { classifyTerminalPaste } from "../terminal-paste";
+
+/** Ctrl+V (0x16)：TUI 的「从系统剪贴板贴图」按键，见下面的 paste 处理。 */
+const CTRL_V = "\x16";
 
 interface TermXtermProps {
 	conversationId: string;
@@ -100,6 +104,24 @@ export function TermXterm({
 			return true;
 		});
 
+		// 图片粘贴：xterm 的原生 paste 只搬纯文本（剪贴板里只有图片时它送出
+		// 空串，什么都不会发生），而 codex / Claude Code 这类 TUI 的贴图是
+		// 「收到 Ctrl+V 按键后自己读系统剪贴板」。所以剪贴板里只有图片时在
+		// 捕获阶段拦下 paste，把 ^V 转发给前台程序（本地部署时两端同一台
+		// 机器，TUI 读到的就是用户刚复制的图）。有文本时照旧交给 xterm。
+		const onPaste = (event: ClipboardEvent) => {
+			const data = event.clipboardData;
+			if (!data) return;
+			const types: (string | null)[] = [];
+			for (const item of Array.from(data.items ?? [])) types.push(item.type);
+			for (const file of Array.from(data.files ?? [])) types.push(file.type);
+			if (classifyTerminalPaste(data.getData("text/plain"), types) !== "image") return;
+			event.preventDefault();
+			event.stopPropagation();
+			send({ type: "terminal_input", terminalId, conversationId, data: CTRL_V });
+		};
+		container.addEventListener("paste", onPaste, true);
+
 		const unregister = register(conversationId, terminalId, {
 			write: (data) => term.write(data),
 			replace: (data) => { term.reset(); term.write(data); },
@@ -170,6 +192,7 @@ export function TermXterm({
 		return () => {
 			cancelAnimationFrame(raf);
 			onData.dispose();
+			container.removeEventListener("paste", onPaste, true);
 			window.removeEventListener(THEME_CHANGE_EVENT, onThemeChange);
 			ro?.disconnect();
 			unregister();
