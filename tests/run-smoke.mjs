@@ -82,6 +82,7 @@ const ALL = [
 	"wiki-assistant-test",
 	"wiki-thinking-level-test",
 	"wiki-bootstrap-model-test",
+	"stale-model-selection-test",
 	"wiki-modal-browser-test",
 	"wiki-format-editor-test",
 	"wiki-math-browser-test",

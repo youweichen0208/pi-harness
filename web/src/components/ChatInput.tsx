@@ -13,12 +13,12 @@ import type { CurrentFileContext, ReadCurrentFile, SaveCurrentFile } from "../cu
 import { mergeCurrentFile } from "../current-file";
 import { randomUuid } from "../uuid";
 import { memo, useCallback, useLayoutEffect, useEffect, useRef, useState } from "react";
-import { FiInfo, FiCornerUpLeft, FiPlus, FiPaperclip, FiArrowUp } from "react-icons/fi";
+import { FiAlertCircle, FiInfo, FiCornerUpLeft, FiPlus, FiPaperclip, FiArrowUp } from "react-icons/fi";
 import type { ClientMessage, WikiProjectReference, PromptAttachment, ServerMessage, ModelInfo, SlashCommandInfo, UiMessage, UiState } from "../types";
 import { useT, useI18n } from "../i18n";
 import { isRasterImage } from "../image-paste";
 
-import { ModelPicker } from "./ModelPicker";
+import { isCurrentModelUnavailable, ModelPicker } from "./ModelPicker";
 import { UsagePopover } from "./UsagePopover";
 import { acceptRecommended, useQuestionAnswers } from "../question-answers";
 import { composeAnswers, isAnswered } from "../question-cards";
@@ -451,6 +451,7 @@ export const ChatInput = memo(function ChatInput({
 	const choices = answering?.questions ?? [];
 	const answeredCount = choices.filter(question => isAnswered(question, questionState.answers, questionState.custom)).length;
 	const unanswered = choices.filter(question => !isAnswered(question, questionState.answers, questionState.custom)).map(question => question.id);
+	const modelUnavailable = isCurrentModelUnavailable(modelState?.model ?? null, models, modelsLoading);
 	const submit = (queue = false, override?: string) => {
 		if (verifying) { onNotice("info", t("treeVerifying")); return; }
 		const trimmed = (override ?? text).trim();
@@ -472,6 +473,10 @@ export const ChatInput = memo(function ChatInput({
 			setText("");
 			taRef.current?.focus();
 			void copyLastAssistant();
+			return;
+		}
+		if (modelUnavailable) {
+			onNotice("error", t("modelUnavailableSelectAnother"));
 			return;
 		}
 		// While the agent is streaming, the server queues this prompt as a
@@ -506,7 +511,6 @@ export const ChatInput = memo(function ChatInput({
 			let promptText = trimmed;
 			if (!/^[\/!]/.test(trimmed)) {
 				if (selectedProject) promptText += "\n\n" + t("wikiProjectPrompt", { workspace: selectedProject.workspaceName, path: JSON.stringify(selectedProject.path) });
-				if (wikiReferences !== undefined || (autoFile && /\.(md|markdown)$/i.test(autoFile.path))) promptText += "\n\n" + t("playgroundExamplePrompt");
 			}
 			if (send({ type: "prompt", target: sessionId ? { cwd, conversationId: activeConversationId, sessionId, workspaceId: analysisWorkspaceId } : undefined, text: promptText, queue, requestId, attachments: outgoing })) {
 				pendingSubmit.current = { id: requestId, sessionId, conversation: activeConversationId, text, queued: streaming, newSessionCommand: /^\/new(?:\s|$)/.test(trimmed), attachments };
@@ -596,7 +600,7 @@ export const ChatInput = memo(function ChatInput({
 		<div className="inputbox-actions">
 			{streaming && <button type="button" className="btn composer-action stop" title={`${t("stopTask")} · Esc`} aria-label={t("stopTask")} onClick={stop}><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="3" /></svg></button>}
 			<button type="button" className="btn composer-action send" title={t("sendTip")} aria-label={t("sendTip")}
-				disabled={!connected || verifying || (!text.trim() && !attachments.some(a => a.imageData || a.fileData))}
+				disabled={!connected || verifying || (modelUnavailable && text.trim() !== "/help" && text.trim() !== "/copy") || (!text.trim() && !attachments.some(a => a.imageData || a.fileData))}
 				onClick={() => submit()}><FiArrowUp strokeWidth={3} aria-hidden="true" /></button>
 		</div>
 	);
@@ -823,6 +827,7 @@ export const ChatInput = memo(function ChatInput({
 				{/* Mobile second line: model/thinking left, file/send right — the top
 				    bar folds those away on phones (styles.css ≤768px). */}
 
+				{modelUnavailable && <p className="composer-model-warning" role="status"><FiAlertCircle aria-hidden="true" />{t("modelUnavailableSelectAnother")}</p>}
 				<div className="input-tools">
 					<div className="input-tools-left">
 						<button type="button" className="btn composer-attach" title={t("uploadFile")} disabled={!connected} onClick={() => fileInputRef.current?.click()}><FiPlus /></button>

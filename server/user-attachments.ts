@@ -2,6 +2,20 @@ import type { AgentSession } from "@earendil-works/pi-coding-agent";
 import type { PromptAttachment } from "./protocol.js";
 
 type Parsed = { path: string; mode: "inline" | "lines" | "reference"; raw: string; preview: string };
+// Older Wiki prompts appended this unrelated guidance as user text. Keep the
+// transcript intact for the model, but project only what the user typed.
+const LEGACY_WIKI_PYTHON_PROMPTS = [
+	"Python 示例默认应是可独立运行的完整代码块，补齐导入、变量和示例数据，不依赖其他代码块的状态。仅展示 API 用法的片段须明确标注“示意片段，不能直接运行”，并说明缺少的前置条件；未经实际执行，不声称已验证。",
+	"Python examples should default to complete, independently runnable code blocks with imports, variables and sample data, without relying on other blocks. Clearly label API-only fragments as illustrative and not directly runnable, stating prerequisites. Do not claim execution or verification without evidence.",
+];
+export function visibleUserPrompt(text: string): string {
+	const value = text.trimEnd();
+	for (const guidance of LEGACY_WIKI_PYTHON_PROMPTS) {
+		const suffix = `\n\n${guidance}`;
+		if (value.endsWith(suffix)) return value.slice(0, -suffix.length);
+	}
+	return text;
+}
 /** Only complete, standalone host blocks at the end of a message are attachments.
  * Ambiguous fences/markers stay visible as ordinary prose. */
 export function parseUserAttachments(text: string): { text: string; attachments: Parsed[] } {

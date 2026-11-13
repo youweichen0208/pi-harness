@@ -15,6 +15,8 @@ import { randomUuid } from "./uuid.js";
 
 /** 浏览器端 window.open 的命名目标：重复进入复用同一窗口（导航到新文档）。 */
 const WIKI_WINDOW_NAME = "pi-wiki";
+/** Last valid model chosen in the normal chat, used only to recover an invalid Wiki model. */
+export const PREFERRED_CHAT_MODEL_KEY = "pi-preferred-chat-model";
 
 /** 解析 URL 查询串中的 wiki 窗口参数（纯函数，供启动判断与单测）。 */
 export function parseWikiWindowParams(search: string): { wikiWindow: boolean; cwd: string | null; doc: string | null; client: string | null; model: string | null; thinking: string | null } {

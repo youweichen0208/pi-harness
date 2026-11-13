@@ -1,6 +1,7 @@
 import { subagentResultDetails } from "./subagent-presentation.js";
 import { codemodeDetails } from "./codemode-presentation.js";
 import { parseDelegateNotification } from "./delegate-notification.js";
+import { visibleUserPrompt } from "./user-attachments.js";
 import { createHash } from "node:crypto";
 /**
  * Serializes pi SDK AgentMessage[] into the browser-friendly UiMessage[] shape
@@ -144,6 +145,8 @@ export function serializeMessage(
 	switch (m.role) {
 		case "user": {
 			const content = serializeUserContent(m.content);
+			const rawText = content.map(block => block.type === "text" ? block.text : "").filter(Boolean).join("\n");
+			const questionText = visibleUserPrompt(rawText);
 			const notification = content.every(block => block.type === "text")
 				? parseDelegateNotification(content.map(block => block.type === "text" ? block.text : "").join("\n")) : undefined;
 			return {
@@ -151,6 +154,7 @@ export function serializeMessage(
 				role: notification ? "custom" : "user",
 				...(notification ? { customType: "acp-delegate", details: notification } : {}),
 				content,
+				...(questionText !== rawText ? { questionText } : {}),
 				timestamp: m.timestamp,
 			};
 		}

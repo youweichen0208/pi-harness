@@ -22,6 +22,8 @@ interface DropdownProps {
 	/** Extra class(es) for the .dd-menu panel itself (e.g. "dd-menu-model"
 	 * makes only the inner scroll band scroll, keeping header/footer fixed). */
 	menuClassName?: string;
+	triggerClassName?: string;
+	triggerTitle?: string;
 }
 
 /** Click-outside-aware dropdown menu. */
@@ -34,6 +36,8 @@ export function Dropdown({
 	fit = false,
 	direction = "down",
 	menuClassName,
+	triggerClassName,
+	triggerTitle,
 	keyboardNavigation = false,
 }: DropdownProps) {
 	const ref = useRef<HTMLDivElement>(null);
@@ -77,7 +81,8 @@ export function Dropdown({
 		>
 			<button
 				type="button"
-				className="chip"
+				className={`chip${triggerClassName ? ` ${triggerClassName}` : ""}`}
+				title={triggerTitle}
 				onClick={() => onOpenChange(!open)}
 				aria-expanded={open}
 			>

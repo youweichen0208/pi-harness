@@ -306,16 +306,49 @@ export class WikiService {
 		try { this.record(cwd, before, await this.snapshot(cwd), "pi", title, attribution); } finally { this.active.delete(this.key(cwd)); }
 	}
 	cancel(cwd: string) { this.active.delete(this.key(cwd)); }
+	private newPath(cwd: string, path: string) {
+		path = path.replaceAll("\\", "/");
+		if (!path || path.split("/").some(part => !part || part === "." || part === ".." || /[<>:"|?*\x00-\x1f]/.test(part) || /[. ]$/.test(part) || /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(part))) throw new Error("Invalid file name");
+		return { path, absolute: wikiPath(cwd, path) };
+	}
 	createFile(cwd: string, path: string) {
 		if (this.busy(cwd)) throw new Error("Wait for the current Wiki request to finish");
 		// Accept portable relative paths; parent directories must already exist.
-		path = path.replaceAll("\\", "/");
-		if (!path || path.split("/").some(part => !part || part === "." || part === ".." || /[<>:"|?*\x00-\x1f]/.test(part) || /[. ]$/.test(part) || /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(part))) throw new Error("Invalid file name");
-		const absolute = wikiPath(cwd, path);
+		const target = this.newPath(cwd, path);
 		// Exclusive creation also rejects existing files and symlinks without truncating them.
-		writeFileSync(absolute, "", { flag: "wx" });
+		writeFileSync(target.absolute, "", { flag: "wx" });
+		path = target.path;
 		this.record(cwd, { files: new Map(), skipped: [] }, { files: new Map([[path, Buffer.alloc(0)]]), skipped: [] }, "user", path);
 		return { path };
+	}
+	createDirectory(cwd: string, path: string) {
+		if (this.busy(cwd)) throw new Error("Wait for the current Wiki request to finish");
+		const target = this.newPath(cwd, path);
+		mkdirSync(target.absolute);
+		this.invalidate(cwd);
+		return { path: target.path };
+	}
+	deleteEntry(cwd: string, path: string, kind: "file" | "directory") {
+		if (this.busy(cwd)) throw new Error("Wait for the current Wiki request to finish");
+		const target = this.newPath(cwd, path);
+		if (target.path.split("/").some(part => IGNORED.has(part))) throw new Error("This folder cannot be deleted from Wiki");
+		if (isKnowledgeEvidence(cwd, target.path)) throw new Error("Knowledge evidence snapshots are read-only");
+		const info = lstatSync(target.absolute);
+		if (info.isSymbolicLink() || (kind === "directory" ? !info.isDirectory() : !info.isFile())) throw new Error("File type changed; refresh before deleting");
+		if (info.isFile() && basename(target.absolute) === "manifest.json" && isKnowledgeManifest(readFileSync(target.absolute))) throw new Error("Knowledge ingestion manifests are read-only");
+		if (kind === "directory") {
+			const inspect = (folder: string) => {
+				for (const child of readdirSync(folder, { withFileTypes: true })) {
+					if (IGNORED.has(child.name)) throw new Error("This folder contains files Wiki cannot delete");
+					if (child.isDirectory() && skipTraversalDirectory(folder, child.name) && child.name === "evidence") throw new Error("Knowledge evidence snapshots are read-only");
+					if (child.isDirectory() && !child.isSymbolicLink()) inspect(join(folder, child.name));
+				}
+			};
+			inspect(target.absolute);
+		}
+		rmSync(target.absolute, { recursive: kind === "directory" });
+		this.invalidate(cwd);
+		return { path: target.path };
 	}
 	write(cwd: string, path: string, text: string, version: string) {
 		if (isKnowledgeEvidence(cwd, path)) throw new Error("Knowledge evidence snapshots are read-only; edit the source and ingest a new version");

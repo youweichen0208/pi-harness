@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { WikiWindowSession, type WikiWindowMemory } from "./wiki-window-session";
 import { knowledgeLibrary } from "./knowledge-library";
-import { isKnowledgeLibraryWindow, isWikiWindow, wikiWindowCarry, wikiWindowClient, wikiWindowParams } from "./wiki-window";
+import { isKnowledgeLibraryWindow, isWikiWindow, PREFERRED_CHAT_MODEL_KEY, wikiWindowCarry, wikiWindowClient, wikiWindowParams } from "./wiki-window";
 import type { ChatState } from "./use-chat";
 import type { ClientMessage } from "./types";
 
@@ -17,6 +17,7 @@ export function useWikiWindowSession(options: {
 	const live = useRef(options); live.current = options;
 	const [session] = useState(() => new WikiWindowSession(isKnowledgeLibraryWindow, isWikiWindow, {
 		params: () => ({ ...wikiWindowParams(), ...wikiWindowCarry(), client: wikiWindowClient() }),
+		preferredModel: () => { try { return localStorage.getItem(PREFERRED_CHAT_MODEL_KEY); } catch { return null; } },
 		target(cwd, path) {
 			const url = new URL(location.href); url.searchParams.set("cwd", cwd);
 			if (path) url.searchParams.set("doc", path); else url.searchParams.delete("doc");
@@ -40,8 +41,9 @@ export function useWikiWindowSession(options: {
 			cwd: chat.state?.cwd, conversationId: chat.state?.conversationId ?? chat.activeConversationId,
 			sessionId: chat.state?.sessionId, wiki: chat.state?.wiki === true,
 			model: chat.state?.model ? chat.state.model.provider + "/" + chat.state.model.id : null,
-			models: chat.models, thinking: chat.state?.thinkingLevel, availableThinking: chat.state?.availableThinkingLevels,
+			models: chat.models, modelsLoading: chat.modelsLoading, streaming: chat.state?.isStreaming,
+			thinking: chat.state?.thinkingLevel, availableThinking: chat.state?.availableThinkingLevels,
 		});
-	}, [session, chat.ready, chat.state, chat.activeConversationId, chat.models, switching, switchError, opened]);
+	}, [session, chat.ready, chat.state, chat.activeConversationId, chat.models, chat.modelsLoading, switching, switchError, opened]);
 	return { session, ...state };
 }

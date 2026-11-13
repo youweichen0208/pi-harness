@@ -18,7 +18,7 @@ interface TermXtermProps {
 	register: (
 		conversationId: string,
 		id: string,
-		writer: { write(data: string): void; dispose(): void },
+		writer: { write(data: string): void; replace?(data: string): void; dispose(): void },
 	) => () => void;
 }
 
@@ -102,8 +102,12 @@ export function TermXterm({
 
 		const unregister = register(conversationId, terminalId, {
 			write: (data) => term.write(data),
+			replace: (data) => { term.reset(); term.write(data); },
 			dispose: () => term.dispose(),
 		});
+		// A hot reload can remount xterm while its PTY keeps running. Restore the
+		// retained prompt/output before the idempotent terminal_create below.
+		if (!command) send({ type: "terminal_replay", terminalId, conversationId });
 
 		const sendDims = () => {
 			if (!activeRef.current || !container.clientWidth || !container.clientHeight) return;

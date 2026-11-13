@@ -1,5 +1,5 @@
 import { codemodeHistoryContent } from "./codemode-history.js";
-import { parseUserAttachments } from "./user-attachments.js";
+import { parseUserAttachments, visibleUserPrompt } from "./user-attachments.js";
 import { recallPending } from "./prompt-delivery.js";
 import { SessionTailValidator } from "./session-file-read.js";
 import { randomUUID } from "node:crypto";
@@ -101,9 +101,10 @@ export class SessionTreeController {
 		if (entry?.type === "message" && (entry.message.role === "user" || (entry.message.role === "custom" && entry.message.customType === "file"))) {
 			const content = entry.message.content;
 			const parsed = parseUserAttachments(typeof content === "string" ? content : content.filter(b => b.type === "text").map(b => b.text).join("\n"));
-			if (parsed.attachments.length) {
-				value.questionText = parsed.text;
-				value.userAttachments = parsed.attachments.map((a, index) => ({ path: a.path, mode: a.mode, preview: a.preview.slice(0, 12000), nativeRef: { entryId, index } }));
+			const questionText = visibleUserPrompt(parsed.text);
+			if (parsed.attachments.length || questionText !== parsed.text) {
+				value.questionText = questionText;
+				if (parsed.attachments.length) value.userAttachments = parsed.attachments.map((a, index) => ({ path: a.path, mode: a.mode, preview: a.preview.slice(0, 12000), nativeRef: { entryId, index } }));
 			}
 		}
 		this.decorated.set(message, { key, value });

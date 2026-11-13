@@ -68,7 +68,7 @@ try{
  assert.equal(await page.locator('.wiki-reference-chips').count(),0,'returning does not restore project');
  await choose();await input.fill('Analyze the project with this document');assert.equal(await input.inputValue(),'Analyze the project with this document');await input.press('Enter');
  await page.waitForFunction(()=>document.querySelector('.wiki-assistant .messages')?.textContent.includes('Local answer with evidence.'));
- assert(JSON.stringify(requests.at(-1)).includes('Python 示例默认应是可独立运行的完整代码块'));
+ assert(!JSON.stringify(requests.at(-1)).includes('Python 示例默认应是可独立运行的完整代码块'));
  assert(JSON.stringify(requests.at(-1)).includes('knowledge'));assert(JSON.stringify(requests.at(-1)).includes('note.md'));
  await input.fill('Saved draft');
  await page.locator('.wiki-tree-row[title="other.md"]').click();

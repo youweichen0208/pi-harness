@@ -5,7 +5,7 @@ import { createServer } from "node:http";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chromium } from "playwright-core";
@@ -161,6 +161,16 @@ try {
 	// The background reply completes in the main window's conversation.
 	releaseReply();
 	await page.locator(".messages", {hasText: "Reply paragraph 49"}).waitFor();
+	const menuModels = async target => {
+		const trigger = target.locator(".input-tools .dropdown").filter({has: target.locator(".chip-model")}).getByRole("button").first();
+		await trigger.click();
+		const menu = target.locator(".dd-menu-model");
+		await menu.locator(".dd-item").first().waitFor();
+		const items = await menu.locator(".dd-item").allTextContents();
+		await trigger.click();
+		return items.map(item => item.trim());
+	};
+	assert.deepEqual(await menuModels(wiki.page), await menuModels(page), "Wiki and normal chat use the same model catalog");
 	// Wiki chat carries the open document as its automatic current-file chip.
 	assert.equal(await wiki.page.locator(".wiki-agent-chat .attach-chip.current-file").count(), 1, "Wiki chat must attach the open document");
 	assert((await wiki.page.locator(".attach-chip.current-file").innerText()).includes("@README.md"));
@@ -217,7 +227,15 @@ try {
 	assert(readFileSync(join(cwd, "README.md"), "utf8").includes("Saved on close."));
 
 	// Failed saves keep the window open and offer explicit choices.
-	await open(); failWrites = true; await append(" Unsaved text.");
+	await open();
+	await wiki.page.getByRole("button", {name: "最近改动", exact: true}).click();
+	await wiki.page.locator(".wiki-revision-card").first().waitFor();
+	assert.equal(await wiki.page.locator(".wiki-revision-card").first().locator(".wiki-revision-actions").count(), 0, "a single-file revision has one restore control");
+	await wiki.page.locator(".wiki-revision-card").first().locator("summary").first().click();
+	assert.equal(await wiki.page.locator(".wiki-revision-card").first().locator(".wiki-diff-label").allInnerTexts().then(labels => labels.join("/")), "修改前/修改后");
+	await wiki.page.screenshot({path: "tests/scratch/wiki-window-changes-expanded.png"});
+	await wiki.page.locator(".wiki-changes > header > button").click();
+	failWrites = true; await append(" Unsaved text.");
 	await select(); await wiki.page.locator(".wiki-ask-selection").click();
 	await wiki.page.locator(".wiki-save-status.failed").waitFor();
 	assert(await wiki.view.isVisible());
@@ -296,14 +314,11 @@ try {
 	assert((await wiki.page.locator(".attach-chip.current-file").innerText()).includes("@other.md"));
 	assert.equal(await wiki.page.locator(".attach-chip.current-file .attach-remove").count(), 0, "the bound document cannot be dismissed");
 
-	// The file explorer references paths without navigating.
+	// The file tree keeps creation and deletion actions without a reference shortcut.
 	await wiki.page.locator(".wiki-sidebar .file-search-trigger").first().waitFor();
 	const folder = wiki.page.locator('.wiki-tree-row[title="knowledge"]');
 	await folder.waitFor();
-	await folder.locator(".file-reference-action").focus();
-	await folder.locator(".file-reference-action").click();
-	assert((await wiki.page.locator(".attach-chip.reference").innerText()).includes("knowledge"));
-	await wiki.page.locator(".attach-chip.reference .attach-remove").click();
+	assert.equal(await wiki.page.locator(".file-reference-action").count(), 0);
 
 	// A page refresh re-enters Wiki mode and reattaches the SAME ephemeral
 	// conversation (Q15); the chat transcript survives the reload.
@@ -311,6 +326,8 @@ try {
 	responseGate = new Promise(resolve => { releaseReply = resolve; });
 	await wiki.input.fill("Wiki only question"); await wiki.input.press("Enter");
 	await wiki.page.waitForFunction(() => document.querySelector(".wiki-prose [contenteditable=false]"));
+	const inactiveTreeActions = await wiki.page.locator(".wiki-tree-row :is(.wiki-create-in-folder, .wiki-delete-entry):disabled").evaluateAll(buttons => buttons.filter(button => !button.closest(".wiki-tree-row")?.matches(":hover, :focus-within")).map(button => getComputedStyle(button).opacity));
+	assert(inactiveTreeActions.length > 0 && inactiveTreeActions.every(opacity => opacity === "0"), "sending must not reveal disabled actions in every Wiki folder row");
 	releaseReply();
 	await wiki.page.locator(".messages", {hasText: "Wiki only question"}).waitFor();
 	const beforeReload = wiki.state.conversation;
@@ -355,6 +372,36 @@ try {
 	await open();
 	await showChat();
 	await wiki.page.locator(".attach-chip.current-file", {hasText: "@README.md"}).waitFor();
+	const knowledgeRow = wiki.page.locator('.wiki-tree-main[title="knowledge"]').locator('..');
+	await knowledgeRow.hover();
+	await knowledgeRow.getByRole("button", {name: "新建文件夹 · knowledge"}).click();
+	const folderDraft = wiki.page.locator(".wiki-tree-create-row");
+	await folderDraft.waitFor();
+	assert.equal(await folderDraft.locator(".tree-icon-folder").count(), 1, "new folder is named in its tree row");
+	await folderDraft.locator("input").fill("inline-created");
+	await folderDraft.locator("input").press("Enter");
+	const newFolderRow = wiki.page.locator('.wiki-tree-main[title="knowledge/inline-created"]').locator('..');
+	await newFolderRow.waitFor();
+	assert.equal(realpathSync(join(cwd, "knowledge/inline-created")), join(cwd, "knowledge/inline-created"));
+	await newFolderRow.hover();
+	await newFolderRow.getByRole("button", {name: "新建文件 · inline-created"}).click();
+	const fileDraft = wiki.page.locator(".wiki-tree-create-row");
+	await fileDraft.waitFor();
+	assert.equal(await fileDraft.locator(".tree-icon-document").count(), 1, "new file is named in its tree row");
+	await fileDraft.locator("input").fill("inline-note.md");
+	await wiki.page.screenshot({path: "tests/scratch/wiki-inline-create.png"});
+	await fileDraft.locator("input").press("Enter");
+	await wiki.page.locator('.wiki-tree-main[title="knowledge/inline-created/inline-note.md"]').waitFor();
+	assert.equal(readFileSync(join(cwd, "knowledge/inline-created/inline-note.md"), "utf8"), "");
+	await newFolderRow.hover();
+	await newFolderRow.getByRole("button", { name: "删除文件夹 · inline-created" }).click();
+	await wiki.page.getByRole("dialog", { name: "删除文件夹" }).getByRole("button", { name: "取消" }).click();
+	assert(existsSync(join(cwd, "knowledge/inline-created/inline-note.md")), "cancel keeps the folder contents");
+	await newFolderRow.hover();
+	await newFolderRow.getByRole("button", { name: "删除文件夹 · inline-created" }).click();
+	await wiki.page.getByRole("dialog", { name: "删除文件夹" }).getByRole("button", { name: "删除", exact: true }).click();
+	await newFolderRow.waitFor({ state: "detached" });
+	assert.equal(existsSync(join(cwd, "knowledge/inline-created")), false);
 	await close();
 	await page.locator(".attach-chip.current-file", {hasText: "@background.txt"}).waitFor();
 

@@ -311,7 +311,10 @@ describe("runtime synchronization", () => {
 	});
 
 	it("keeps Anthropic bearer tokens in header-owned auth without an API key", async () => {
-		const f = fixture(); f.put(".claude/settings.json", { model: "claude-example", env: { ANTHROPIC_AUTH_TOKEN: "api-bearer-secret" } });
+		const f = fixture(); f.put(".claude/settings.json", { model: "claude-example", env: { ANTHROPIC_BASE_URL: "https://gateway.example/apps/anthropic", ANTHROPIC_AUTH_TOKEN: "api-bearer-secret" } });
+		Object.assign(f.options.env, { ANTHROPIC_API_KEY: "unrelated-process-key" });
+		const discovered = discoverModels(f.options).connections[0];
+		expect(discovered).toMatchObject({ key: "api-bearer-secret", authentication: "bearer", headers: { Authorization: "Bearer api-bearer-secret" } });
 		const runtime = await ModelRuntime.create({ modelsPath: null, authPath: join(f.home, "pi/auth.json") });
 		const sync = new ModelSourceSync(join(f.home, "data"), join(f.home, "pi"), f.options);
 		const unbind = await sync.bind(runtime, () => false, () => {});

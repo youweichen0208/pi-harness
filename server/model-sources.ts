@@ -108,16 +108,21 @@ export function discoverModels(options: DiscoveryOptions = {}): { connections: C
 		const config = read(join(path(env.CLAUDE_CONFIG_DIR || join(home, ".claude")), "settings.json"));
 		if (!config) return false;
 		if (config.modelOverrides) throw new SourceError("unsupported");
-		const vars = { ...env, ...object(config.env) };
+		const configuredEnv = object(config.env);
+		const vars = { ...env, ...configuredEnv };
 		if (vars.CLAUDE_CODE_USE_BEDROCK || vars.CLAUDE_CODE_USE_VERTEX || vars.CLAUDE_CODE_USE_FOUNDRY) throw new SourceError("unsupported");
 		const headers: ObjectValue = {};
 		for (const line of string(vars.ANTHROPIC_CUSTOM_HEADERS).split("\n").filter(Boolean)) {
 			const colon = line.indexOf(":"); if (colon < 1) throw new SourceError("invalid");
 			headers[line.slice(0, colon)] = line.slice(colon + 1).trim();
 		}
-		const key = vars.ANTHROPIC_API_KEY || vars.ANTHROPIC_AUTH_TOKEN;
+		// A source-local bearer token belongs to its configured endpoint. Do not
+		// replace it with an unrelated process-wide Anthropic API key.
+		const configuredApiKey = string(configuredEnv.ANTHROPIC_API_KEY);
+		const configuredToken = string(configuredEnv.ANTHROPIC_AUTH_TOKEN);
+		const key = configuredApiKey || configuredToken || string(env.ANTHROPIC_API_KEY) || string(env.ANTHROPIC_AUTH_TOKEN);
 		if (!key && config.apiKeyHelper) throw new SourceError("unsupported");
-		if (vars.ANTHROPIC_AUTH_TOKEN && !vars.ANTHROPIC_API_KEY) headers.Authorization = `Bearer ${required(key)}`;
+		if ((configuredToken && !configuredApiKey) || (!configuredApiKey && !configuredToken && env.ANTHROPIC_AUTH_TOKEN && !env.ANTHROPIC_API_KEY)) headers.Authorization = `Bearer ${required(key)}`;
 		const selected = vars.ANTHROPIC_MODEL || config.model;
 		const aliases: ObjectValue = { opus: vars.ANTHROPIC_DEFAULT_OPUS_MODEL, sonnet: vars.ANTHROPIC_DEFAULT_SONNET_MODEL, haiku: vars.ANTHROPIC_DEFAULT_HAIKU_MODEL };
 		const models = [...new Set([selected, vars.ANTHROPIC_DEFAULT_OPUS_MODEL, vars.ANTHROPIC_DEFAULT_SONNET_MODEL, vars.ANTHROPIC_DEFAULT_HAIKU_MODEL].filter(Boolean))];

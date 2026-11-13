@@ -2,6 +2,7 @@ import type { ClientMessage, ProjectSummary, ProjectWorkspaceCatalog } from "../
 
 // Keep this window's selection separate from another tab's localStorage writes.
 let selectedWorkspace: string | undefined;
+export const PROJECT_WORKSPACE_SELECTION_EVENT = "pi-harness:project-workspace-selection";
 export function selectedProjectWorkspace(): string {
 	if (selectedWorkspace === undefined) {
 		try { selectedWorkspace = localStorage.getItem("pi-harness:project-workspace") ?? ""; } catch { selectedWorkspace = ""; }
@@ -11,6 +12,7 @@ export function selectedProjectWorkspace(): string {
 export function selectProjectWorkspace(id: string): void {
 	selectedWorkspace = id;
 	try { localStorage.setItem("pi-harness:project-workspace", id); } catch { /* optional preference */ }
+	if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(PROJECT_WORKSPACE_SELECTION_EVENT, { detail: id }));
 }
 
 type PromptTarget = NonNullable<Extract<ClientMessage, { type: "prompt" }>["target"]>;

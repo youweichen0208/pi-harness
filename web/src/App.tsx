@@ -27,7 +27,7 @@ import { WikiDocumentModal } from "./components/WikiDocumentModal";
 import { useWikiPanelWidth } from "./components/WikiResizeHandle";
 import { wikiRequest } from "./wiki-api";
 import { isWikiDocumentPath } from "./wiki-document";
-import { isKnowledgeLibraryWindow, openKnowledgeLibrary, isWikiWindow, wikiWindowClient, wikiWindowParams } from "./wiki-window";
+import { isKnowledgeLibraryWindow, openKnowledgeLibrary, isWikiWindow, PREFERRED_CHAT_MODEL_KEY, wikiWindowClient, wikiWindowParams } from "./wiki-window";
 import type { ChatReferenceRequest } from "./chat-reference";
 
 import { ProviderAuthModal } from "./components/ProviderAuthModal";
@@ -555,12 +555,12 @@ export function App() {
 			wikiPersist({ client: wikiWindowClient(), cwd: current.cwd, conversationId: result.conversationId, sessionId: result.sessionId, path: current.path, anchor: wikiNormalAnchor.current });
 		}, true);
 	};
-	const openWikiDocument = async (path: string) => {
+	const openWikiDocument = async (path: string | null) => {
 		if (switching) return;
 		const source = wikiCurrent.current;
 		runWikiOperation(async operation => {
 			if (await guardWiki() && operation.accepts(wikiCurrent.current, source)) await enterWiki(path, false, operation);
-		}, isWikiDocumentPath(path));
+		}, path === null || isWikiDocumentPath(path));
 	};
 	const pickWikiFolder = (path: string) => {
 		if (!chat.ready || switching || wikiFolderPending) return;
@@ -750,6 +750,19 @@ export function App() {
 	}, [enabledPlugins, chat.pluginsEpoch]);
 	// 左右面板可拖拽宽度（桌面端）：localStorage 持久化，双击手柄复位。
 	const [leftCollapsed, setLeftCollapsed] = useState(() => localStorage.getItem("pi-left-collapsed") === "true");
+	const terminalLeftRestore = useRef<boolean | null>(null);
+	const previousViewForLeft = useRef<ViewName>(view);
+	useLayoutEffect(() => {
+		const wasTerminal = previousViewForLeft.current === "terminal";
+		if (view === "terminal" && !wasTerminal) {
+			terminalLeftRestore.current = leftCollapsed;
+			setLeftCollapsed(true);
+		} else if (view !== "terminal" && wasTerminal && terminalLeftRestore.current !== null) {
+			setLeftCollapsed(terminalLeftRestore.current);
+			terminalLeftRestore.current = null;
+		}
+		previousViewForLeft.current = view;
+	}, [view]);
 	const [changesOpen, setChangesOpen] = useState(false);
 	const changesLeftRestore = useRef<boolean | null>(null);
 	const onChangesOpen = useCallback((open: boolean) => {
@@ -1238,6 +1251,10 @@ export function App() {
 		// so the object identity survives token deltas and ChatInput's memo holds.
 		[model, conversationState?.routedModel, conversationState?.conversationId, conversationState?.runSettings?.autoCompaction, conversationState?.runSettings?.autoRetry],
 	);
+	useEffect(() => {
+		if (isWikiWindow || !model || chat.modelsLoading || !chat.models.some(item => item.id === `${model.provider}/${model.id}`)) return;
+		try { localStorage.setItem(PREFERRED_CHAT_MODEL_KEY, `${model.provider}/${model.id}`); } catch { /* Model choice remains in the session. */ }
+	}, [model, chat.models, chat.modelsLoading]);
 
 	// A same-project history switch changes the owner without changing cwd.
 	// Wait for its matching snapshot before creating a default terminal.
@@ -1419,7 +1436,7 @@ export function App() {
 						if (side === "left" && !isNarrow) {
 							setDrawer(null);
 							changesLeftRestore.current = null;
-							setLeftCollapsed((value) => { localStorage.setItem("pi-left-collapsed", String(!value)); return !value; });
+							setLeftCollapsed((value) => { if (view !== "terminal") localStorage.setItem("pi-left-collapsed", String(!value)); return !value; });
 						} else if (side === "right" && !filesOverlay && !inlinePreview) setFilesCollapsed((value) => !value);
 						else {
 							if (side === "right") setFilesCollapsed(false);
@@ -1596,7 +1613,7 @@ export function App() {
 							onClose={exitWiki}
 							chatHost={setWikiChatHost}
 						>
-							{wikiFileRequest.cwd === chat.state?.cwd && wikiFileRequest.conversationId === chat.activeConversationId ? <WikiWorkbench coordinator={wikiCoordinator} key={wikiFileRequest.cwd} cwd={wikiFileRequest.cwd} conversationId={wikiFileRequest.conversationId} fileRequest={wikiFileRequest} streaming={!!conversationState?.isStreaming} active={view === "wiki"} ready={chat.ready && !switching} writingBlocked={!!switching || !!conversationState?.isStreaming} openDocument={openWikiDocument} onOpenFolder={() => { setWikiFolderError(undefined); setWikiFolderPicker(true); }} folderBusy={!chat.ready || !!switching || !!wikiFolderPending || wikiBusy} connected={chat.ready} guard={wikiGuard} saveBeforePrompt={wikiSave} contextReader={wikiContextReader} contextSaver={wikiContextSaver} onContextChange={setWikiCurrentFile} onAttach={(path, name, isDir) => { attach(path, name, "reference", isDir); setWikiChatOpen(true); }} onReference={receiveWikiReference} /> : <div className="boot-wait">{chat.ready ? t("loadingSession") : t("connectingServer")}</div>}
+							{wikiFileRequest.cwd === chat.state?.cwd && wikiFileRequest.conversationId === chat.activeConversationId ? <WikiWorkbench coordinator={wikiCoordinator} key={wikiFileRequest.cwd} cwd={wikiFileRequest.cwd} conversationId={wikiFileRequest.conversationId} fileRequest={wikiFileRequest} streaming={!!conversationState?.isStreaming} active={view === "wiki"} ready={chat.ready && !switching} writingBlocked={!!switching || !!conversationState?.isStreaming} openDocument={openWikiDocument} onOpenFolder={() => { setWikiFolderError(undefined); setWikiFolderPicker(true); }} folderBusy={!chat.ready || !!switching || !!wikiFolderPending || wikiBusy} connected={chat.ready} guard={wikiGuard} saveBeforePrompt={wikiSave} contextReader={wikiContextReader} contextSaver={wikiContextSaver} onContextChange={setWikiCurrentFile} onReference={receiveWikiReference} /> : <div className="boot-wait">{chat.ready ? t("loadingSession") : t("connectingServer")}</div>}
 						</WikiWindowShell> : <WikiWindowShell notices={chat.notices.length > 0 && <div className="notices wiki-status-notices">{chat.notices.map(n => <NoticeToast key={n.id} notice={n} onDismiss={dismissNotice} onOpenExtensions={openExtensionSettings} onSelectDirectory={() => setCwdNoticePicker(n.id)} />)}</div>} documentPath={wikiWindowParams().doc ?? ""} loading chatOpen={false} chatWidth={wikiChatWidth} onChatOpen={setWikiChatOpen} onChatResize={resizeWikiChat} onClose={exitWiki} chatHost={setWikiChatHost}><div className="boot-wait" role="status">{chat.ready ? t("loadingSession") : t("connectingServer")}</div></WikiWindowShell>)}
 					</div>
 					<div className={`view-pane ${view === "terminal" ? "" : "hidden"}`}>

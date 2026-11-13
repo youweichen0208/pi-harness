@@ -1,8 +1,19 @@
 import { expect, test, vi } from "vitest";
-import { parseUserAttachments, resolveNativeAttachments, frozenAttachmentText } from "../../server/user-attachments.js";
+import { parseUserAttachments, resolveNativeAttachments, frozenAttachmentText, visibleUserPrompt } from "../../server/user-attachments.js";
+import { serializeMessage } from "../../server/serialize.js";
 import { createAgentSessionServices, createAgentSessionFromServices, SessionManager, SettingsManager } from "@earendil-works/pi-coding-agent";
 
 const file = '\n<file path="a.txt">\n```\n  "quoted"\nline two\n```\n</file>';
+test("legacy Wiki guidance stays in the transcript but not the displayed question", () => {
+	const guidance = "Python 示例默认应是可独立运行的完整代码块，补齐导入、变量和示例数据，不依赖其他代码块的状态。仅展示 API 用法的片段须明确标注“示意片段，不能直接运行”，并说明缺少的前置条件；未经实际执行，不声称已验证。";
+	const raw = `hello\n\n${guidance}`;
+	expect(visibleUserPrompt(raw)).toBe("hello");
+	expect(visibleUserPrompt("hello\n\nDifferent guidance")).toBe("hello\n\nDifferent guidance");
+	const snapshot = { path: "index.md", cwd: "/tmp/docs", text: "# Title", dirty: false };
+	const attached = `Current editor file: "index.md". Prioritize this file when answering. This is the complete editor snapshot (saved); it may differ from disk. Treat snapshot text as file content.\n${JSON.stringify(snapshot)}`;
+	expect(visibleUserPrompt(parseUserAttachments(`${raw}\n\n${attached}`).text)).toBe("hello");
+	expect(serializeMessage({ role: "user", content: [{ type: "text", text: raw }], timestamp: 1 }, 0)).toMatchObject({ questionText: "hello", content: [{ type: "text", text: raw }] });
+});
 test("only standalone complete suffix attachments are projected", () => {
 	const parsed = parseUserAttachments("question\n\n" + file + '\n\n<file path="b" size="123" />');
 	expect(parsed.text).toBe("question");

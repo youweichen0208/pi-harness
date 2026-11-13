@@ -8,14 +8,16 @@ function fixture(library = true, initial = "") {
 	const target = { cwd: initial || null, doc: null as string | null, client: "window", model: null as string | null, thinking: null as string | null };
 	const current: WikiWindowObservation = { ready: true, switching: false, switchError: false, cwd: "/main", conversationId: "conv", sessionId: "session", wiki: true, opened: false, model: "p/model", models: [], thinking: "off", availableThinking: ["off", "high"] };
 	let memory: WikiWindowMemory | null = null;
+	let preferredModel: string | null = null;
 	const send = vi.fn<(message: ClientMessage) => boolean>(() => true);
 	const configure = vi.fn<(action: "read" | "configure" | "remember", cwd?: string, path?: string | null) => Promise<LibraryConfig>>(async (_action, cwd) => ({ cwd: cwd ?? "/library", path: null, available: true }));
 	const enter = vi.fn(async () => true), restore = vi.fn(), changeFolder = vi.fn(), warn = vi.fn();
 	const session = new WikiWindowSession(library, true, {
 		params: () => target, target: (cwd, path) => { target.cwd = cwd; target.doc = path; },
+		preferredModel: () => preferredModel,
 		readMemory: () => memory, writeMemory: value => { memory = value; }, configure, send, enter, restore, changeFolder, warn,
 	});
-	return { session, current, target, configure, send, enter, restore, changeFolder, setMemory: (value: WikiWindowMemory) => { memory = value; } };
+	return { session, current, target, configure, send, enter, restore, changeFolder, setMemory: (value: WikiWindowMemory) => { memory = value; }, setPreferredModel: (value: string | null) => { preferredModel = value; } };
 }
 it("loads configured target before switching, then opens only after authoritative cwd confirmation", async () => {
 	const f = fixture(); f.session.connect(); f.session.observe(f.current);
@@ -88,4 +90,32 @@ it("applies carried settings after the target workspace resets its session defau
 	expect(f.enter).not.toHaveBeenCalled();
 	f.session.observe({ ...f.current, cwd: "/library", thinking: "high" });
 	expect(f.enter).toHaveBeenCalledOnce();
+});
+
+it("recovers a restored Wiki session from an unavailable model using the normal chat's available model", () => {
+	const f = fixture(false, "/main");
+	const models = [{ id: "p/valid", provider: "p" }, { id: "other/fallback", provider: "other" }];
+	f.session.connect();
+	f.session.observe({ ...f.current, model: "p/valid", models });
+	expect(f.enter).toHaveBeenCalledOnce();
+	f.target.model = "other/fallback";
+	f.setPreferredModel("p/valid");
+	const restored = { ...f.current, model: "anthropic/claude-opus-5-5", models, opened: true };
+	f.session.observe({ ...restored, streaming: true });
+	expect(f.send).not.toHaveBeenCalled();
+	f.session.observe(restored);
+	expect(f.send).toHaveBeenCalledExactlyOnceWith({ type: "set_model", modelId: "p/valid" });
+	f.session.observe(restored);
+	expect(f.send).toHaveBeenCalledTimes(1);
+});
+
+it("uses the first available model when the carried model is also unavailable", () => {
+	const f = fixture(false, "/main");
+	f.session.connect();
+	f.session.observe({ ...f.current, model: "p/valid", models: [{ id: "p/valid", provider: "p" }] });
+	f.target.model = "anthropic/claude-opus-5-5";
+	f.session.observe({ ...f.current, model: "anthropic/claude-opus-5-5", models: [], opened: true });
+	expect(f.send).not.toHaveBeenCalled();
+	f.session.observe({ ...f.current, model: "anthropic/claude-opus-5-5", models: [{ id: "p/valid", provider: "p" }], opened: true });
+	expect(f.send).toHaveBeenCalledExactlyOnceWith({ type: "set_model", modelId: "p/valid" });
 });

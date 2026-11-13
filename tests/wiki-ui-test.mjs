@@ -125,11 +125,11 @@ try {
 	assert.equal(await page.locator('.wiki-limit').count(), 0);
 	assert.equal(await page.locator('.wiki-tags, .wiki-all-tags').count(), 0);
 	assert.equal(await page.locator('.wiki-document-meta button', { hasText: '#' }).count(), 0);
-	assert.equal(await page.getByRole('treeitem', { name: '.obsidian', exact: true }).count(), 0);
-	await page.getByRole('treeitem', { name: '隐藏文件夹 · 1', exact: true }).click();
-	await page.getByRole('treeitem', { name: '.obsidian', exact: true }).waitFor();
-	assert.equal(await page.evaluate(cwd => localStorage.getItem(`pi-wiki-hidden:${cwd}`), cwd), 'true');
-	await page.getByRole('treeitem', { name: '隐藏文件夹 · 1', exact: true }).click();
+	await page.locator('.wiki-tree-row[title=".obsidian"]').waitFor();
+	assert.equal(await page.locator('.wiki-hidden-folders').count(), 0, 'dot folders appear directly in the file tree');
+	await page.locator('.wiki-tree-row[title=".obsidian"] .wiki-tree-main').click();
+	await page.locator('.wiki-tree-row[title=".obsidian/hidden.md"]').waitFor();
+	await page.locator('.wiki-tree-row[title=".obsidian"] .wiki-tree-main').click();
 	const mixedIndex = async route => {
 		const response = await route.fetch();
 		if (!['state', 'refresh'].includes(route.request().postDataJSON()?.action) || !response.ok()) return route.fulfill({ response });

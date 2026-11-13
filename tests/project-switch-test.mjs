@@ -84,8 +84,7 @@ try {
 	// Dismiss first-run model setup without configuring or invoking a model.
 	await page.waitForSelector("textarea");
 	await page.keyboard.press("Escape");
-	await page.locator(".setup-modal .modal-close").waitFor();
-	await page.locator(".setup-modal .modal-close").click();
+	if (await page.locator(".setup-modal .modal-close").isVisible()) await page.locator(".setup-modal .modal-close").click();
 	await page.waitForSelector(`.project-item[title="${projects[1]}"]`);
 	const select = async (i) => {
 		const elapsed = await page.evaluate(async ({ project, marker }) => {

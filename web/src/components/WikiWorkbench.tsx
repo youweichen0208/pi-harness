@@ -6,7 +6,7 @@ import { wikiProperties } from "../wiki-properties";
 import ReactMarkdown from "react-markdown";
 import { useContext, useCallback, useEffect, useMemo, useLayoutEffect, useRef, useState, type CSSProperties, type MutableRefObject } from "react";
 import { createPortal } from "react-dom";
-import { FiPlus, FiCalendar, FiBookOpen, FiChevronDown, FiChevronRight, FiFile, FiFolder, FiRefreshCw, FiSearch, FiX, FiClock, FiCornerUpLeft, FiCornerUpRight, FiLink } from "react-icons/fi";
+import { FiPlus, FiCalendar, FiBookOpen, FiChevronDown, FiChevronRight, FiFile, FiFolder, FiFolderPlus, FiRefreshCw, FiSearch, FiX, FiClock, FiCornerUpLeft, FiCornerUpRight, FiTrash2 } from "react-icons/fi";
 import { useI18n, useT } from "../i18n";
 import type { WikiState, WikiDirectory, WikiDocument, WikiDocumentContent, WikiDocumentReferences, WikiRevision, WikiChange, WikiSearchResult } from "../types";
 import { wikiRequest, wikiMedia } from "../wiki-api";
@@ -30,14 +30,13 @@ type Guard = (next: () => void, cancel?: () => void) => void;
 const EMPTY: WikiState = { entries: [], tags: [], revisions: [], running: false, limited: false };
 const NO_ADDED_LINES = new Set<string>();
 const readingPositions = new Map<string, number>();
-export function WikiWorkbench({ coordinator, cwd, conversationId, streaming, active, ready, guard, fileRequest, openDocument, onOpenFolder, folderBusy, connected, writingBlocked, onReference, saveBeforePrompt, onAttach, contextReader, contextSaver, onContextChange }: {
+export function WikiWorkbench({ coordinator, cwd, conversationId, streaming, active, ready, guard, fileRequest, openDocument, onOpenFolder, folderBusy, connected, writingBlocked, onReference, saveBeforePrompt, contextReader, contextSaver, onContextChange }: {
 	coordinator?: WikiCoordinator;
 	cwd: string; conversationId: string; streaming: boolean; active: boolean; ready: boolean;
 	fileRequest: {path:string;token:string}; writingBlocked: boolean; connected: boolean;
-	openDocument: (path: string) => Promise<void>;
+	openDocument: (path: string | null) => Promise<void>;
 	onOpenFolder: () => void;
 	folderBusy: boolean;
-	onAttach: (path: string, name: string, isDir: boolean) => void;
 	onReference: (request: ChatReferenceRequest) => void;
 	guard: MutableRefObject<Guard | null>;
 	saveBeforePrompt: MutableRefObject<(() => Promise<boolean>) | null>;
@@ -56,14 +55,34 @@ export function WikiWorkbench({ coordinator, cwd, conversationId, streaming, act
 	const [loading, setLoading] = useState(false), [restoring, setRestoring] = useState(false);
 	const [error, setError] = useState(""), [nav, setNav] = useState<(() => void) | null>(null);
 	const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
-	const [showHidden, setShowHidden] = useState(() => localStorage.getItem(`pi-wiki-hidden:${cwd}`) === "true");
 	const [sidebarWidth, resizeSidebar] = useWikiPanelWidth("sidebar");
 	const [focused, setFocused] = useState(false);
 	const [editorToolbarHost, setEditorToolbarHost] = useState<HTMLDivElement | null>(null);
 	const readingOutline = useContext(WikiReadingOutline);
 	const scrollRef = useRef<HTMLDivElement>(null);
-	const [creating, setCreating] = useState(false);
-	useEffect(() => setCreating(false), [active, conversationId]);
+	const treeRef = useRef<HTMLDivElement>(null);
+	const [creating, setCreating] = useState<{ kind: "file" | "directory"; parent: string } | null>(null);
+	const [deleteTarget, setDeleteTarget] = useState<{ path: string; name: string; kind: "file" | "directory" } | null>(null);
+	const [deleting, setDeleting] = useState(false), [deleteError, setDeleteError] = useState("");
+	const deleteDialogRef = useDialogFocus<HTMLElement>(active && !!deleteTarget);
+	const createRowRef = useRef<HTMLDivElement>(null);
+	useEffect(() => setCreating(null), [active, conversationId]);
+	useEffect(() => {
+		if (!creating) return;
+		const closeOutside = (event: PointerEvent) => { if (!createRowRef.current?.contains(event.target as Node)) setCreating(null); };
+		document.addEventListener("pointerdown", closeOutside);
+		return () => document.removeEventListener("pointerdown", closeOutside);
+	}, [creating]);
+	const beginCreate = (kind: "file" | "directory", parent: string) => {
+		if (parent) {
+			setExpanded(prev => new Set(prev).add(parent));
+			void loadDirectory(parent);
+		} else {
+			treeRef.current?.scrollTo({ top: 0 });
+			setTreeScroll(0);
+		}
+		setCreating({ kind, parent });
+	};
 	const initialDocumentRequest = useRef<string | null>(null);
 	const [drawer, setDrawer] = useState<"recent" | string | null>(null);
 	const [search, setSearch] = useState(false), [query, setQuery] = useState(""), [results, setResults] = useState<WikiSearchResult[]>([]);
@@ -102,8 +121,12 @@ export function WikiWorkbench({ coordinator, cwd, conversationId, streaming, act
 		});
 	}, [state.entries, state.limited, directories]);
 	const paths = useMemo(() => entries.filter(e => e.kind !== "directory").map(e => e.path), [entries]);
-	const hiddenRoots = useMemo(() => new Set(entries.filter(e => e.kind === "directory" && !e.path.includes("/") && e.name.startsWith(".")).map(e => e.path)), [entries]);
-	const visibleEntries = useMemo(() => entries.filter(e => (showHidden || !hiddenRoots.has(e.path.split("/")[0])) && e.path.split("/").slice(0, -1).every((_, i, parts) => expanded.has(parts.slice(0, i + 1).join("/")))), [entries, expanded, showHidden, hiddenRoots]);
+	const visibleEntries = useMemo(() => entries.filter(e => e.path.split("/").slice(0, -1).every((_, i, parts) => expanded.has(parts.slice(0, i + 1).join("/")))), [entries, expanded]);
+	const treeRows: Array<(typeof visibleEntries)[number] | null> = [...visibleEntries];
+	if (creating) {
+		const index = creating.parent ? treeRows.findIndex(entry => entry?.path === creating.parent) : -1;
+		if (index >= 0 || !creating.parent) treeRows.splice(index + 1, 0, null);
+	}
 	const [treeScroll, setTreeScroll] = useState(0);
 	const rowStart = Math.max(0, Math.floor(treeScroll / 32) - 10), rowEnd = rowStart + 70;
 
@@ -287,6 +310,27 @@ export function WikiWorkbench({ coordinator, cwd, conversationId, streaming, act
 		catch (e) { if (alive.current) setError((e as Error).message); }
 		finally { if (alive.current) setRestoring(false); }
 	};
+	const deleteEntry = async () => {
+		if (!deleteTarget || deleting || busy) return;
+		const target = deleteTarget;
+		const affectsCurrent = path === target.path || (target.kind === "directory" && path.startsWith(`${target.path}/`));
+		setDeleting(true); setDeleteError("");
+		try {
+			if (affectsCurrent && (dirty || saving) && !await save()) { setDeleteError(t("wikiDeleteSaveFailed")); return; }
+			await wikiRequest(cwd, "delete-entry", { path: target.path, kind: target.kind, conversationId });
+			if (!alive.current) return;
+			setDirectories({});
+			setExpanded(previous => new Set([...previous].filter(item => item !== target.path && !item.startsWith(`${target.path}/`))));
+			setDeleteTarget(null);
+			await refresh(true);
+			void loadDirectory("");
+			if (affectsCurrent) {
+				const fallback = entries.find(entry => entry.kind === "document" && entry.path !== target.path && !entry.path.startsWith(`${target.path}/`));
+				await openDocument(fallback?.path ?? null);
+			}
+		} catch (error) { if (alive.current) setDeleteError((error as Error).message); }
+		finally { if (alive.current) setDeleting(false); }
+	};
 	const ask = async (text: string, target = path) => {
 		if (sending || !text.trim()) return;
 		const sequence = docSequence.current;
@@ -323,6 +367,7 @@ export function WikiWorkbench({ coordinator, cwd, conversationId, streaming, act
 	const backlinkCount = new Set(doc?.backlinks.map(link => link.path)).size;
 
 	const errorBanner = error && <div className="wiki-error" role="alert"><span>{error}</span><button onClick={() => setError("")} aria-label={t("close")}><FiX /></button>{doc && <button onClick={() => navigate(() => void load(path))}>{t("wikiReload")}</button>}</div>;
+	const visibleRevisions = state.revisions.filter(revision => drawer === "recent" || revision.id === drawer);
 	useLayoutEffect(() => {
 		const key = `${cwd}:${path}`, element = scrollRef.current;
 		if (!element || loading || doc?.entry.path !== path) return;
@@ -349,25 +394,30 @@ export function WikiWorkbench({ coordinator, cwd, conversationId, streaming, act
 			<WikiResizeHandle side="sidebar" width={sidebarWidth} onResize={resizeSidebar} />
 			<button className="file-search-trigger" aria-label={t(isKnowledgeLibraryWindow ? "knowledgeChangeFolder" : "wikiOpenFolder")} title={`${t(isKnowledgeLibraryWindow ? "knowledgeChangeFolder" : "wikiOpenFolder")} · ${cwd}`} disabled={folderBusy} onClick={onOpenFolder}><FiFolder /><span>{t(isKnowledgeLibraryWindow ? "knowledgeChangeFolder" : "wikiOpenFolder")}</span></button>
 			<button className="wiki-search-trigger file-search-trigger" onClick={() => setSearch(true)}><FiSearch /><span>{t("fileTreeSearch")}</span><kbd>{navigator.platform.includes("Mac") ? "⌘ P" : "Ctrl P"}</kbd></button>
-			<div className="wiki-tree-label"><span>{t("wikiFiles")}</span><button aria-label={t("newWorkspaceFile")} title={t("newWorkspaceFile")} disabled={writingBlocked || !connected || state.running} onClick={() => setCreating(value => !value)}><FiPlus /><span>{t("newWorkspaceFile")}</span></button><button aria-label={t("wikiRefresh")} onClick={() => void refresh(true)}><FiRefreshCw /></button></div>
-			{creating && <CreateFileForm key={`${cwd}:${conversationId}`} cwd={cwd} conversationId={conversationId} initialPath={path.includes("/") ? path.slice(0, path.lastIndexOf("/") + 1) : ""} disabled={writingBlocked || !connected || state.running} onCancel={() => setCreating(false)} onCreated={target => { setCreating(false); void refresh(true); open(target); }} />}
-			<div className="wiki-tree" role="tree" aria-label={t("wikiFiles")} onScroll={e => setTreeScroll(e.currentTarget.scrollTop)}>
-				{hiddenRoots.size > 0 && <button className="wiki-tree-row wiki-hidden-folders" role="treeitem" aria-expanded={showHidden} onClick={() => { const value = !showHidden; setShowHidden(value); localStorage.setItem(`pi-wiki-hidden:${cwd}`, String(value)); setTreeScroll(0); }}>
-					{showHidden ? <FiChevronDown /> : <FiChevronRight />}<span>{t("wikiHiddenFolders", { count: hiddenRoots.size })}</span>
-				</button>}
+			<div className="wiki-tree-label"><span>{t("wikiFiles")}</span><div className="wiki-tree-actions"><button aria-label={t("newWorkspaceFolder")} title={t("newWorkspaceFolder")} disabled={writingBlocked || !connected || state.running} onClick={() => beginCreate("directory", "")}><FiFolderPlus /></button><button aria-label={t("newWorkspaceFile")} title={t("newWorkspaceFile")} disabled={writingBlocked || !connected || state.running} onClick={() => beginCreate("file", "")}><FiPlus /><span>{t("newWorkspaceFile")}</span></button><button aria-label={t("wikiRefresh")} title={t("wikiRefresh")} onClick={() => void refresh(true)}><FiRefreshCw /></button></div></div>
+			<div ref={treeRef} className="wiki-tree" role="tree" aria-label={t("wikiFiles")} onScroll={e => setTreeScroll(e.currentTarget.scrollTop)}>
 				<div style={{ height: rowStart * 32 }} />
-				{visibleEntries.slice(rowStart, rowEnd).map(entry => <div key={entry.path} role="treeitem" aria-selected={entry.path === path} aria-expanded={entry.kind === "directory" ? expanded.has(entry.path) : undefined} className={`wiki-tree-row ${entry.path === path ? "selected" : ""}`} style={{ paddingLeft: 6 + (entry.path.split("/").length - 1) * 18 }} title={entry.path}>
+				{treeRows.slice(rowStart, rowEnd).map(entry => entry ? <div key={entry.path} role="treeitem" aria-selected={entry.path === path} aria-expanded={entry.kind === "directory" ? expanded.has(entry.path) : undefined} className={`wiki-tree-row ${entry.path === path ? "selected" : ""}`} style={{ paddingLeft: 6 + (entry.path.split("/").length - 1) * 18 }} title={entry.path}>
 					<button className="wiki-tree-main" title={entry.path} onClick={() => entry.kind === "directory" ? setExpanded(prev => { const next = new Set(prev); if (next.has(entry.path)) next.delete(entry.path); else { next.add(entry.path); void loadDirectory(entry.path); } return next; }) : open(entry.path)}>
 						<span className="tree-caret">{entry.kind === "directory" && (expanded.has(entry.path) ? <FiChevronDown /> : <FiChevronRight />)}</span>
-						<span className="file-tree-icon" aria-hidden="true">{entry.kind === "directory" ? <FiFolder /> : <FiFile />}</span><span className="file-name-text">{entry.name}</span>
+						{entry.kind === "directory" ? <FiFolder className="tree-entry-icon tree-icon-folder" aria-hidden="true" /> : <FiFile className={`tree-entry-icon tree-icon-${entry.kind === "document" || entry.kind === "pdf" ? "document" : entry.kind === "code" ? "code" : entry.kind === "image" ? "media" : "default"}`} aria-hidden="true" />}<span className="file-name-text">{entry.name}</span>
 					</button>
 					{changedPaths.has(entry.path) && <i className="wiki-unread" aria-label={t("wikiUnread")} />}
-					<button className="file-reference-action" title={t(entry.kind === "directory" ? "linkFolderTip" : "referenceTip")} aria-label={`${t(entry.kind === "directory" ? "linkFolderTip" : "referenceTip")} · ${entry.name}`} onClick={() => onAttach(entry.path, entry.name, entry.kind === "directory")}><FiLink /></button>
-				</div>)}<div style={{ height: Math.max(0, visibleEntries.length - rowEnd) * 32 }} />
+					{entry.kind === "directory" && <button className="wiki-create-in-folder" title={t("newWorkspaceFile")} aria-label={`${t("newWorkspaceFile")} · ${entry.name}`} disabled={writingBlocked || !connected || state.running} onClick={() => beginCreate("file", entry.path)}><FiPlus /></button>}
+					{entry.kind === "directory" && <button className="wiki-create-in-folder" title={t("newWorkspaceFolder")} aria-label={`${t("newWorkspaceFolder")} · ${entry.name}`} disabled={writingBlocked || !connected || state.running} onClick={() => beginCreate("directory", entry.path)}><FiFolderPlus /></button>}
+					<button className="wiki-delete-entry" title={t(entry.kind === "directory" ? "wikiDeleteFolder" : "wikiDeleteFile")} aria-label={`${t(entry.kind === "directory" ? "wikiDeleteFolder" : "wikiDeleteFile")} · ${entry.name}`} disabled={busy || deleting} onClick={() => { setDeleteError(""); setDeleteTarget({ path: entry.path, name: entry.name, kind: entry.kind === "directory" ? "directory" : "file" }); }}><FiTrash2 /></button>
+				</div> : creating ? <div key={`create:${creating.parent}:${creating.kind}`} ref={createRowRef} role="treeitem" className="wiki-tree-row wiki-tree-create-row" style={{ paddingLeft: 6 + (creating.parent ? creating.parent.split("/").length : 0) * 18 }}><CreateFileForm inline cwd={cwd} conversationId={conversationId} kind={creating.kind} parentPath={creating.parent} disabled={writingBlocked || !connected || state.running} onCancel={() => setCreating(null)} onCreated={target => { const { kind, parent } = creating; setCreating(null); void refresh(true); if (kind === "directory") setExpanded(prev => new Set([...prev, parent, target].filter(Boolean))); else open(target); }} /></div> : null)}<div style={{ height: Math.max(0, treeRows.length - rowEnd) * 32 }} />
 				{Object.values(directories).filter(d => d.nextOffset !== undefined && (state.limited || entries.some(e => e.symlink && d.path.startsWith(e.path))) && (!d.path || expanded.has(d.path))).map(d => <button className="wiki-load-more" key={d.path} onClick={() => void loadDirectory(d.path, d.nextOffset)}>{t("wikiLoadMore")} · {d.path || "/"}</button>)}
-				{!visibleEntries.length && <p className="wiki-muted">{t("wikiNoFiles")}</p>}
+				{!treeRows.length && <p className="wiki-muted">{t("wikiNoFiles")}</p>}
 			</div>
 		</aside>
+		{deleteTarget && <div className="wiki-modal-backdrop"><section ref={deleteDialogRef} className="wiki-confirm wiki-entry-delete-dialog" role="dialog" aria-modal="true" aria-label={t(deleteTarget.kind === "directory" ? "wikiDeleteFolder" : "wikiDeleteFile")} onKeyDown={event => { if (event.key === "Escape" && !deleting) { event.stopPropagation(); setDeleteTarget(null); } }}>
+			<h2>{t(deleteTarget.kind === "directory" ? "wikiDeleteFolder" : "wikiDeleteFile")}</h2>
+			<p>{t(deleteTarget.kind === "directory" ? "wikiDeleteFolderHint" : "wikiDeleteFileHint", { name: deleteTarget.name })}</p>
+			<code className="wiki-delete-path">{deleteTarget.path}</code>
+			{deleteError && <p className="wiki-delete-error" role="alert">{deleteError}</p>}
+			<div><button type="button" disabled={deleting} onClick={() => setDeleteTarget(null)}>{t("cancel")}</button><button type="button" disabled={deleting} onClick={() => void deleteEntry()}>{deleting ? t("wikiDeleting") : t("delete")}</button></div>
+		</section></div>}
 		<div className="wiki-main">
 			<div className="wiki-document-toolbar">
 				<div className="wiki-editor-toolbar-slot" ref={setEditorToolbarHost} />
@@ -405,7 +455,16 @@ export function WikiWorkbench({ coordinator, cwd, conversationId, streaming, act
 			</div>
 			{active && state.index && (statusHost ? createPortal(<WikiIndexIndicator status={state.index} />, statusHost) : <footer className="wiki-statusbar"><WikiIndexIndicator status={state.index} /></footer>)}
 		</div>
-		{drawer && <aside className="wiki-changes"><header><div><h2>{t(drawer === "recent" ? "wikiRecent" : "wikiRelatedChanges")}</h2><span>{cwd.split(/[\\/]/).at(-1)}</span></div><button aria-label={t("close")} onClick={() => setDrawer(null)}><FiX /></button></header><div className="wiki-changes-scroll">{state.revisions.filter(r => drawer === "recent" || r.id === drawer).map((revision, index, list) => <div key={revision.id} className="wiki-revision">{(index === 0 || new Date(list[index - 1].at).toDateString() !== new Date(revision.at).toDateString()) && <time>{new Date(revision.at).toLocaleDateString(locale === "zh" ? "zh-CN" : "en-US")}</time>}<div className="wiki-revision-title"><span className={`wiki-avatar ${revision.author}`}>{revision.author === "pi" ? <img src="/icon/1a-mark.svg" alt="pi" /> : t("wikiMe")}</span><div><strong>{revision.title.split("\n")[0]}</strong><small>{new Date(revision.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · {t("wikiFileCount", { count: revision.changes.length })}</small></div></div><div className="wiki-revision-actions"><button disabled={busy || revision.changes.every(c => c.undone)} onClick={() => void restore(revision, true)}><FiCornerUpLeft />{t("wikiUndoAll")}</button><button disabled={busy || revision.changes.every(c => !c.undone)} onClick={() => void restore(revision, false)}><FiCornerUpRight />{t("wikiRedoAll")}</button></div>{revision.changes.map(summary => { const change = { ...summary, ...(fullChanges[`${revision.id}:${summary.path}`] ?? {}), undone: summary.undone }; return <div className={`wiki-file-change ${change.undone ? "undone" : ""}`} key={change.path}><div><button title={change.path} onClick={() => open(change.path)}>{change.path}</button><button disabled={busy} onClick={() => void restore(revision, !change.undone, change.path)}>{t(change.undone ? "wikiRedo" : "wikiUndo")}</button></div><small><em>+{change.additions}</em> <b>−{change.deletions}</b></small><details onToggle={e => { if (e.currentTarget.open && change.truncated) void wikiRequest<WikiChange>(cwd, "change", { id: revision.id, path: change.path }).then(result => { if (alive.current) setFullChanges(previous => ({ ...previous, [`${revision.id}:${change.path}`]: result })); }).catch(e => setError(e.message)); }}><summary>{t("wikiViewDiff")}</summary>{change.binary ? <p>{t("wikiBinaryChange")}</p> : <><pre className="wiki-diff-before">{change.before ?? t("wikiNewFile")}</pre><pre className="wiki-diff-after">{change.after ?? t("wikiDeletedFile")}</pre></>}</details></div>; })}{revision.skipped.length > 0 && <p className="wiki-skipped">{t("wikiUntracked")}: {revision.skipped.join(", ")}</p>}</div>)}{!state.revisions.length && <p className="wiki-muted">{t("wikiNoChanges")}</p>}</div></aside>}
+		{drawer && <aside className="wiki-changes" aria-label={t(drawer === "recent" ? "wikiRecent" : "wikiRelatedChanges")}>
+			<header><div><h2>{t(drawer === "recent" ? "wikiRecent" : "wikiRelatedChanges")}</h2><span>{cwd.split(/[\\/]/).at(-1)} · {t("wikiChangeCount", { count: visibleRevisions.length })}</span></div><button aria-label={t("close")} onClick={() => setDrawer(null)}><FiX /></button></header>
+			<div className="wiki-changes-scroll">{visibleRevisions.map((revision, index, list) => <section key={revision.id} className="wiki-revision">
+				{(index === 0 || new Date(list[index - 1].at).toDateString() !== new Date(revision.at).toDateString()) && <time>{new Date(revision.at).toLocaleDateString(locale === "zh" ? "zh-CN" : "en-US", { year: "numeric", month: "long", day: "numeric" })}</time>}
+				<div className="wiki-revision-card"><div className="wiki-revision-title"><span className={`wiki-avatar ${revision.author}`}>{revision.author === "pi" ? <img src="/icon/1a-mark.svg" alt="pi" /> : t("wikiMe")}</span><div><strong>{revision.changes.length === 1 && revision.title.split("\n")[0] === revision.changes[0].path ? t("wikiSavedChange") : revision.title.split("\n")[0]}</strong><small>{new Date(revision.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · {t("wikiFileCount", { count: revision.changes.length })}</small></div></div>
+					{revision.changes.length > 1 && <div className="wiki-revision-actions"><button disabled={busy || revision.changes.every(c => c.undone)} onClick={() => void restore(revision, true)}><FiCornerUpLeft />{t("wikiUndoAll")}</button><button disabled={busy || revision.changes.every(c => !c.undone)} onClick={() => void restore(revision, false)}><FiCornerUpRight />{t("wikiRedoAll")}</button></div>}
+					{revision.changes.map(summary => { const change = { ...summary, ...(fullChanges[`${revision.id}:${summary.path}`] ?? {}), undone: summary.undone }; return <div className={`wiki-file-change ${change.undone ? "undone" : ""}`} key={change.path}><div className="wiki-file-change-head"><button className="wiki-change-file" title={change.path} onClick={() => open(change.path)}><FiFile /><span>{change.path}</span></button><button className="wiki-change-restore" disabled={busy} onClick={() => void restore(revision, !change.undone, change.path)}>{change.undone ? <FiCornerUpRight /> : <FiCornerUpLeft />}{t(change.undone ? "wikiRedo" : "wikiUndo")}</button></div><div className="wiki-file-change-meta"><span><em>+{change.additions}</em><b>−{change.deletions}</b></span>{change.undone && <span className="wiki-change-undone">{t("wikiUndone")}</span>}</div><details onToggle={e => { if (e.currentTarget.open && change.truncated) void wikiRequest<WikiChange>(cwd, "change", { id: revision.id, path: change.path }).then(result => { if (alive.current) setFullChanges(previous => ({ ...previous, [`${revision.id}:${change.path}`]: result })); }).catch(e => setError(e.message)); }}><summary>{t("wikiViewDiff")}</summary>{change.binary ? <p>{t("wikiBinaryChange")}</p> : <div className="wiki-diff-versions"><div><span className="wiki-diff-label before">{t("wikiBefore")}</span><pre className="wiki-diff-before">{change.before ?? t("wikiNewFile")}</pre></div><div><span className="wiki-diff-label after">{t("wikiAfter")}</span><pre className="wiki-diff-after">{change.after ?? t("wikiDeletedFile")}</pre></div></div>}</details></div>; })}
+					{revision.skipped.length > 0 && <p className="wiki-skipped">{t("wikiUntracked")}: {revision.skipped.join(", ")}</p>}
+				</div></section>)}{!visibleRevisions.length && <p className="wiki-muted">{t("wikiNoChanges")}</p>}</div>
+		</aside>}
 		{selectionMenu && createPortal(<div className="wiki-selection-menu" style={{ left: selectionMenu.x, top: selectionMenu.y }} onMouseDown={e => e.preventDefault()}><button onClick={() => { void ask(selectionMenu.text); setSelectionMenu(null); }}>{t("wikiAskPi")}</button></div>, document.querySelector(".wiki-document-dialog") ?? document.body)}
 		{search && <div className="wiki-modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) setSearch(false); }}><section ref={searchDialogRef} className="wiki-search-modal" role="dialog" aria-modal="true" aria-label={t("wikiSearchAll")}><div><FiSearch /><input autoFocus aria-label={t("wikiSearchAll")} placeholder={t("wikiSearchHint")} value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => { if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); setCursor(i => Math.max(0, Math.min(results.length - 1, i + (e.key === "ArrowDown" ? 1 : -1)))); } if (e.key === "Enter" && results[cursor]) { e.preventDefault(); if (e.metaKey || e.ctrlKey) attachResult(results[cursor]); else open(results[cursor].path); } }} /><button aria-label={t("close")} onClick={() => setSearch(false)}><FiX /></button></div><div className="wiki-search-results">{searching && <p role="status">{t("loading")}</p>}{results.map((result, i) => <div key={`${result.path}:${result.line}:${i}`}>{(i === 0 || results[i - 1].kind !== result.kind) && <h3>{t(result.kind === "document" ? "wikiDocuments" : result.kind === "pdf" ? "wikiPdf" : result.kind === "code" ? "wikiCode" : "wikiFiles")}</h3>}<button className={cursor === i ? "selected" : ""} onMouseEnter={() => setCursor(i)} onClick={e => e.metaKey || e.ctrlKey ? attachResult(result) : open(result.path)}><strong>{result.path}{result.page ? ` · ${t("wikiPage", { page: result.page })}` : ""}</strong><span>{result.snippet}</span></button></div>)}{query && !searching && !results.length && <p>{t("wikiNoResults")}</p>}{searchLimited && <p>{t("wikiSearchLimited")}</p>}</div><footer>{t("wikiSearchKeys")}</footer></section></div>}
 		{nav && <UnsavedChangesDialog dialogRef={navigationDialogRef} saving={saving} busy={busy} onCancel={() => { cancelNavigation.current?.(); setNav(null); }} onDiscard={() => { const next = nav; setDraft(doc?.text ?? ""); setNav(null); next(); }} onSave={() => void (async () => { if (await save()) { const next = nav; setNav(null); next(); } })()} />}

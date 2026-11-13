@@ -8,11 +8,12 @@ export interface LibraryConfig { cwd: string | null; path: string | null; availa
 export interface WikiWindowObservation {
 	ready: boolean; switching: boolean; switchError: boolean; cwd?: string;
 	conversationId: string; sessionId?: string; wiki: boolean; opened: boolean;
-	model: string | null; models: { id: string; provider: string }[];
+	model: string | null; models: { id: string; provider: string }[]; modelsLoading?: boolean; streaming?: boolean;
 	thinking?: string; availableThinking?: string[];
 }
 interface WindowAdapter {
 	params(): { cwd: string | null; doc: string | null; client: string | null; model: string | null; thinking: string | null };
+	preferredModel?(): string | null;
 	target(cwd: string, path: string | null): void;
 	readMemory(): WikiWindowMemory | null;
 	writeMemory(memory: WikiWindowMemory | null): void;
@@ -61,6 +62,24 @@ export class WikiWindowSession {
 	observe(observation: WikiWindowObservation) {
 		this.current = observation;
 		this.advance();
+		this.recoverUnavailableModel();
+	}
+	private recoverUnavailableModel() {
+		const current = this.current;
+		if (!this.active || this.boot || !current?.ready || current.switching || current.streaming || current.modelsLoading || !current.wiki || !current.model || !current.models.length) return;
+		if (current.models.some(model => model.id === current.model)) {
+			for (const key of this.sent) if (key.startsWith("recover-model:")) this.sent.delete(key);
+			return;
+		}
+		const carried = this.adapter.params().model;
+		const preferredId = this.adapter.preferredModel?.();
+		const preferred = current.models.find(model => model.id === preferredId)
+			?? current.models.find(model => model.id === carried || model.id.slice(model.provider.length + 1) === carried);
+		const sameProvider = current.models.find(model => model.provider === current.model?.split("/", 1)[0]);
+		const fallback = preferred ?? sameProvider ?? current.models[0];
+		const key = `recover-model:${current.cwd}:${current.sessionId}:${current.model}:${fallback.id}`;
+		if (this.sent.has(key)) return;
+		if (this.adapter.send({ type: "set_model", modelId: fallback.id })) this.sent.add(key);
 	}
 	private advance() {
 		const current = this.current;

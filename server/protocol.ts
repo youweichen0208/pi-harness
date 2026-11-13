@@ -492,6 +492,7 @@ export type ClientMessage =
 			conversationId?: string;
 	  }
 	| { type: "terminal_input"; terminalId: string; data: string; conversationId?: string }
+	| { type: "terminal_replay"; terminalId: string; conversationId?: string }
 	| { type: "terminal_resize"; terminalId: string; cols: number; rows: number; conversationId?: string }
 	| { type: "terminal_kill"; terminalId: string; conversationId?: string }
 	// Runs a command in a new shell; if the terminal already exists it is
@@ -1157,7 +1158,7 @@ export type ServerMessage =
 			durationMs?: number;
 	  }
 	// -- terminal ------------------------------------------------------------
-	| { type: "terminal_output"; conversationId?: string; terminalId: string; data: string }
+	| { type: "terminal_output"; conversationId?: string; terminalId: string; data: string; reset?: boolean }
 	| { type: "terminal_exit"; conversationId?: string; terminalId: string; exitCode: number | null }
 	| { type: "terminal_list"; conversationId?: string; terminals: TerminalInfo[] }
 	// -- command list (.pi/commands.json) ------------------------------------

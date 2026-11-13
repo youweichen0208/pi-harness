@@ -24,7 +24,7 @@ import type {
 	ClientMessage,
 	SessionSummary,
 } from "../types";
-import { workspaceProjects, selectedProjectWorkspace, selectProjectWorkspace } from "../project-workspaces";
+import { workspaceProjects, selectedProjectWorkspace, selectProjectWorkspace, PROJECT_WORKSPACE_SELECTION_EVENT } from "../project-workspaces";
 import { useDialogFocus } from "../use-dialog-focus";
 import { randomUuid } from "../uuid";
 import { FolderPickerModal } from "./FolderPickerModal";
@@ -32,6 +32,7 @@ import type { ConnStatus } from "../use-chat";
 import { skillAwarePreview } from "../skill-block";
 import { conversationDisplayTitle } from "../conversation-display-title";
 import { useI18n } from "../i18n";
+import { WorkspaceBook } from "./WorkspaceBook";
 
 /** Props are deliberately NARROW (no whole-ChatState object): every field is
  *  stable while tokens stream in, so the shallow-compared memo() below skips
@@ -91,14 +92,15 @@ function formatModified(ts: number, yesterday: string): string {
 	return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
-function WorkspaceBook() {
-	return <svg className="workspace-book" viewBox="0 0 20 24" aria-hidden="true"><rect x="2" y="1.5" width="16" height="21" rx="1.5" /><path d="M6 2v20M11 6h4" /></svg>;
-}
-
 export const LeftPanel = memo(function LeftPanel({
 	directoryCollapsed, onToggleDirectory, notesOpen, scratchOpen, onNavigate, notesList, onOpenSettings, onNewChat, ready, status, cwd, sessionFile, conversations, sessions, projects, projectWorkspaces, projectWorkspaceResult, dirBrowse, activeConversationId, send, active }: LeftPanelProps) {
 	const { t, locale } = useI18n();
 	const [selectedWorkspace, setSelectedWorkspace] = useState(selectedProjectWorkspace);
+	useEffect(() => {
+		const sync = (event: Event) => setSelectedWorkspace((event as CustomEvent<string>).detail);
+		window.addEventListener(PROJECT_WORKSPACE_SELECTION_EVENT, sync);
+		return () => window.removeEventListener(PROJECT_WORKSPACE_SELECTION_EVENT, sync);
+	}, []);
 	const [workspaceForm, setWorkspaceForm] = useState<"create" | string | null>(null);
 	const [workspaceOpen, setWorkspaceOpen] = useState(false);
 	const [groupQuery, setGroupQuery] = useState("");

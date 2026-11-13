@@ -316,6 +316,7 @@ const MAX_TERM_BUFFER = 200_000;
  */
 interface TerminalWriter {
 	write: (data: string) => void;
+	replace?: (data: string) => void;
 	dispose: () => void;
 }
 
@@ -328,13 +329,14 @@ function makeTerminalBridge() {
 	const buffers = new Map<string, string>();
 	const key = (conversationId: string, terminalId: string) => `${conversationId}:${terminalId}`;
 	return {
-		write(conversationId: string, terminalId: string, data: string): void {
+		write(conversationId: string, terminalId: string, data: string, reset = false): void {
 			const writerKey = key(conversationId, terminalId);
 			const set = writers.get(writerKey);
 			if (set && set.size > 0) {
 				for (const w of set) {
 					try {
-						w.write(data);
+						if (reset && w.replace) w.replace(data);
+						else w.write(data);
 					} catch {
 						// best effort
 					}
@@ -342,7 +344,7 @@ function makeTerminalBridge() {
 				return;
 			}
 			const prev = buffers.get(writerKey) ?? "";
-			const next =
+			const next = reset ? data :
 				prev.length + data.length > MAX_TERM_BUFFER ? data : prev + data;
 			buffers.set(writerKey, next);
 		},
@@ -470,6 +472,9 @@ function reducer(state: ChatState, action: Action): ChatState {
 				...state,
 				ready: true,
 				state: action.state,
+				// Terminal lists are conversation-owned. Clear the old view before
+				// the new conversation's terminal_list arrives after this snapshot.
+				...(state.state?.conversationId !== action.state.conversationId ? { terminals: [] } : {}),
 				...(state.state?.cwd !== action.state.cwd ? { sessions: [], files: null, conversationFilesChecked: null, fileContent: null, scmData: null, scmPanelResults: {}, scmDiffData: null } : {}),
 				activeConversationId: action.state.conversationId,
 				agentSilence: action.state.isStreaming ? state.agentSilenceByConversation[action.state.conversationId] ?? null : null,
@@ -1273,6 +1278,7 @@ export function useChat() {
 						msg.conversationId ?? authoritative.current.activeConversationId,
 						msg.terminalId,
 						msg.data,
+						msg.reset,
 					);
 					break;
 				case "terminal_exit":

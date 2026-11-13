@@ -908,6 +908,11 @@ wss.on("connection", (ws) => {
 			case "terminal_input":
 				cs.getTerminalManager(msg.conversationId)?.input(msg.terminalId, msg.data);
 				break;
+			case "terminal_replay": {
+				const output = cs.getTerminalManager(msg.conversationId)?.replay().find(item => item.terminalId === msg.terminalId);
+				if (output) send({ type: "terminal_output", conversationId: msg.conversationId, terminalId: msg.terminalId, data: output.data, reset: true });
+				break;
+			}
 			case "terminal_resize":
 				cs.getTerminalManager(msg.conversationId)?.resize(msg.terminalId, msg.cols, msg.rows);
 				break;

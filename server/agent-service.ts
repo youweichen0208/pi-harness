@@ -11,6 +11,7 @@ import type { PromptResult } from "./protocol.js";
 import { withSessionErrors } from "./session-errors.js";
 import { WikiChatStore } from "./wiki-chat-store.js";
 import { isSelectableProvider } from "./provider-catalog.js";
+import { modelMatchesEndpoint } from "./model-endpoint-availability.js";
 import { databaseScope } from "./database/service.js";
 import { getSubagentWorkspace } from "./subagents/scope.js";
 import { reloadSession } from "./session-reload.js";
@@ -2236,7 +2237,6 @@ export class ClientSession {
 			if (prevModel) this.session.setThinkingLevel(prevThinking);
 			this.emitConversations();
 
-			this.pushTerminals();
 			// The new runtime re-discovered skills/templates — refresh the catalog
 			// so the picker stops showing the previous runtime's list.
 			void this.pushSlashCommands();
@@ -2248,6 +2248,7 @@ export class ClientSession {
 			});
 		}
 		this.flushSnapshot();
+		this.pushTerminals();
 	}
 
 	/**
@@ -2347,10 +2348,10 @@ export class ClientSession {
 		this.webUi.refresh();
 		this.emitConversations();
 
-		this.pushTerminals();
 		// The switched-to conversation has its own runtime (own resource cache).
 		void this.pushSlashCommands();
 		this.flushSnapshot();
+		this.pushTerminals();
 	}
 
 	/** Push the current project's running-conversation list to the client. */
@@ -2982,7 +2983,6 @@ export class ClientSession {
 				}
 			}
 
-			this.pushTerminals();
 			this.conv.promptedSinceActive = false;
 			this.conv.lastActiveAt = Date.now();
 			this.cwd = abs;
@@ -2994,6 +2994,7 @@ export class ClientSession {
 			}
 			const preparedAt = Date.now();
 			this.flushSnapshot(true);
+			this.pushTerminals();
 			if (requestId) this.emit({ type: "cwd_result", requestId, cwd: abs, ok: true,
 				timing: { startedAt, preparedAt, snapshotAt: Date.now() },
 			});
@@ -3037,7 +3038,7 @@ export class ClientSession {
 			const mr = this.runtime.services.modelRuntime;
 			await this.sources?.ready(mr);
 			const available = await mr.getAvailable();
-			const models = available.filter(m => this.sources?.visible(m.provider) ?? isSelectableProvider(m.provider)).map((m) => ({
+			const models = available.filter(m => (this.sources?.visible(m.provider) ?? isSelectableProvider(m.provider)) && modelMatchesEndpoint(m, process.env.ANTHROPIC_BASE_URL ?? m.baseUrl)).map((m) => ({
 				id: `${m.provider}/${m.id}`,
 				origin: this.sources?.origin(m.provider),
 				name: m.name,
@@ -3086,6 +3087,7 @@ export class ClientSession {
 			if (this.sources && !this.sources.selectable(provider)) throw new Error("模型来源不可用，请选择其他模型");
 			const model = mr.getModel(provider, id);
 			if (!model) throw new Error(`模型不存在：${modelId}`);
+			if (!modelMatchesEndpoint(model, process.env.ANTHROPIC_BASE_URL ?? model.baseUrl)) throw new Error("当前接口不支持该模型，请选择其他模型");
 			await this.session.setModel(model);
 		} catch (err) {
 			this.emit({

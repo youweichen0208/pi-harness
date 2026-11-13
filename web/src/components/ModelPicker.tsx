@@ -1,7 +1,7 @@
 import { MODEL_SOURCE_NAMES } from "./ModelSources";
 import { UiIcon } from "./UiIcon";
 import { memo, useEffect, useId, useMemo, useState } from "react";
-import { FiCpu, FiSearch } from "react-icons/fi";
+import { FiAlertCircle, FiCpu, FiSearch } from "react-icons/fi";
 import type { ClientMessage, ModelInfo, UiState } from "../types";
 import { Dropdown, DropdownItem } from "./Dropdown";
 import { useT } from "../i18n";
@@ -29,6 +29,10 @@ interface Props {
 	compact?: boolean;
 }
 
+export function isCurrentModelUnavailable(model: UiState["model"] | undefined, models: ModelInfo[], loading: boolean): boolean {
+	return !!model && !loading && models.length > 0 && !models.some(item => item.id === `${model.provider}/${model.id}`);
+}
+
 /** Shared model picker and native run settings. */
 export const ModelPicker = memo(function ModelPicker({ state, models, accounts, modelsLoading, send, onManageModels, compact = false }: Props) {
 	const t = useT();
@@ -36,6 +40,7 @@ export const ModelPicker = memo(function ModelPicker({ state, models, accounts, 
 	const model = state?.model;
 	// snapshot model.id is the bare id; list ids are "provider/id".
 	const currentModelId = model ? `${model.provider}/${model.id}` : null;
+	const modelUnavailable = isCurrentModelUnavailable(model, models, modelsLoading);
 	const [modelOpen, setModelOpen] = useState(false);
 	// Model dropdown filter — the list can be long (all providers × models),
 	// so a type-to-filter box sits above it. Reset when the dropdown closes.
@@ -88,6 +93,7 @@ export const ModelPicker = memo(function ModelPicker({ state, models, accounts, 
 				trigger={
 					<>
 						<FiCpu />
+						{modelUnavailable && <FiAlertCircle className="chip-model-alert" aria-hidden="true" />}
 						<span className="chip-model">
 							{model ? model.name : t("selectModel")}
 							{state?.routedModel && <span className="chip-routed-model" title={`${state.routedModel.provider}/${state.routedModel.id}`}> → {state.routedModel.name}</span>}
@@ -103,10 +109,13 @@ export const ModelPicker = memo(function ModelPicker({ state, models, accounts, 
 					</>
 				}
 				open={modelOpen}
+				triggerClassName={modelUnavailable ? "chip-model-unavailable" : undefined}
+				triggerTitle={modelUnavailable ? t("modelUnavailableSelectAnother") : undefined}
 				onOpenChange={open => { setModelOpen(open); if (open) send({ type: "list_models" }); }}
 				menuClassName="dd-menu-model"
 			>
 				<div className="dd-header">{t("availableModels")} <span className="model-count">{filteredModels.length}{modelFilter ? " / " + models.length : ""}</span></div>
+				{modelUnavailable && <p className="dd-model-unavailable" role="status">{t("modelUnavailableSelectAnother")}</p>}
 				<div className="dd-search-row">
 					<FiSearch aria-hidden="true" />
 					<input
