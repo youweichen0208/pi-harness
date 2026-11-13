@@ -3706,6 +3706,12 @@ body.panel-resizing {
 	overflow-anchor: none;
 }
 
+/* 贴底跟随的探测哨兵：1px 不可见元素，被滚出视口即「内容变高了」。 */
+.messages-end {
+	height: 1px;
+	flex-shrink: 0;
+}
+
 /* 惰性窗口化的等高占位（视口外的重型消息收起后的替身） */
 .msg-lazy-ph {
 	max-width: 860px;

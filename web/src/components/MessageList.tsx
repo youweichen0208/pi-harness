@@ -16,7 +16,7 @@ import { goalEventText, goalCompletedText, groupGoalEvents } from "../goal-event
 import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
 
-import type { ReactNode, WheelEvent as ReactWheelEvent } from "react";
+import type { ReactNode, TouchEvent as ReactTouchEvent, WheelEvent as ReactWheelEvent } from "react";
 import { FiArrowDown } from "react-icons/fi";
 import type {
 	PromptAttachment,
@@ -66,6 +66,8 @@ const LAZY_MARGIN = 1200;
 /** 底部常驻区高度预算（px）：贴底滚动 / 流式输出区域零占位延迟，
  *  但按累计高度截断——单条巨型消息不允许把常驻区撑成半个文档。 */
 const ALWAYS_BUDGET = 1600;
+/** 距离底部多少 px 以内算「就在底部」：往下滚进这个区间就重新贴底跟随。 */
+const FOLLOW_SLOP = 24;
 
 function hasToolCall(m: UiMessage): boolean {
 	return m.content.some((b) => b.type === "toolCall");
@@ -148,6 +150,8 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 		return items;
 	}, [state.messages, state.conversationId, state.cwd, state.cwdEvents, reloadEvents]);
 	const scrollRef = useRef<HTMLDivElement>(null);
+	/** 底部 1px 哨兵：内容高度变化的唯一探测点（见下方 IntersectionObserver）。 */
+	const endRef = useRef<HTMLDivElement>(null);
 	const [stickBottom, setStickBottom] = useState(true);
 	const [farFromBottom, setFarFromBottom] = useState(false);
 	/** 4a: back-to-bottom appears only while the reader is moving up. */
@@ -157,6 +161,18 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 	const prevStRef = useRef(0);
 	/** 用户已主动离开底部：流式结束 / finalize 塌缩时不再自动吸回。 */
 	const escapedRef = useRef(false);
+	/** 用户手势判定：指针按住（拖滚动条 / 拖选文本自动滚屏）与触摸下拖。
+	 *  只有这些手势与滚轮才算「主动离开底部」——布局变化（惰性窗口化、
+	 *  折叠换高、finalize 塌缩）也会让 scrollTop 回退，但那是被动的。 */
+	const pointerHoldRef = useRef(false);
+	const touchYRef = useRef<number | null>(null);
+	/** 停止跟随最新内容（滚轮向上、拖滚动条、跳转、搜索）。 */
+	const escapeBottom = useCallback(() => {
+		escapedRef.current = true;
+		stickRef.current = false;
+		setStickBottom(false);
+		setScrollingUp(true);
+	}, []);
 	useLayoutEffect(() => {
 		const el = scrollRef.current;
 		const saved = scrollPositions.get(state.conversationId);
@@ -165,6 +181,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 			escapedRef.current = !saved.bottom;
 			setStickBottom(saved.bottom);
 			el.scrollTop = saved.bottom ? el.scrollHeight : saved.top;
+			prevStRef.current = el.scrollTop;
 		}
 		return () => {
 			if (el) {
@@ -180,6 +197,16 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 	expandedRef.current = expanded;
 	/** 会话内搜索栏（Ctrl+F / Cmd+F）。 */
 	const [searchOpen, setSearchOpen] = useState(false);
+	useEffect(() => {
+		if (searchOpen) { escapeBottom(); return; }
+		// 关搜索时如果视口就在底部，重新开启贴底跟随。
+		const el = scrollRef.current;
+		if (el && el.scrollHeight - el.scrollTop - el.clientHeight <= FOLLOW_SLOP) {
+			escapedRef.current = false;
+			stickRef.current = true;
+			setStickBottom(true);
+		}
+	}, [searchOpen, escapeBottom]);
 	/** Persisted messages + the live in-progress assistant message (if any). */
 	const messages = useMemo(() => (state.streamingMessage
 		? [...state.messages, state.streamingMessage]
@@ -565,12 +592,12 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 					el.classList.remove("msg-flash");
 					void el.offsetWidth; // restart the highlight animation
 					el.classList.add("msg-flash");
-					// 问题跳转 = 主动离开底部；流结束时不要被吸回去
-					if (el !== scrollRef.current?.lastElementChild) escapedRef.current = true;
+					// 跳转 = 主动离开底部：流式探测与结尾兜底都不再把视口拉回最新内容。
+					escapeBottom();
 				}
 			});
 		},
-		[state.messages, expanded, expand, bashGroups, subagentGroups, repeatedErrors],
+		[state.messages, expanded, expand, bashGroups, subagentGroups, repeatedErrors, escapeBottom],
 	);
 	useEffect(() => {
 		const onTaskJump = (event: Event) => {
@@ -609,31 +636,53 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 		if (dSt < 0) setScrollingUp(true); else if (dSt > 0) setScrollingUp(false);
 		const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
 		setFarFromBottom(distance > el.clientHeight);
-		const nearBottom = distance < 80;
-		if (dSt < -4 && dSt > -500) {
-			// 明确的向上滚动意图：立即松开贴底——即使仍在 80px 阈值内。
-			// 流式期间每个 delta 都会把视口钉回底部，若只看距离阈值，
-			// 用户永远逃不出去（表现为「自己滚动一直弹回来」）。
-			// 大幅负跳变（<-500）不算：那是布局塌缩（finalize 一帧收起巨消息）
-			// 引发的原生 clamp，不是用户手势。
-			escapedRef.current = true;
-		} else if (distance <= 2 && dSt > 0) {
-			escapedRef.current = false; // 滚回了底部
+		if (pointerHoldRef.current && dSt < -4 && distance > FOLLOW_SLOP) {
+			// 拖滚动条 / 拖选文本向上：松开贴底（滚轮由 onWheelCapture 覆盖）。
+			// distance <= FOLLOW_SLOP 不算：那是内容变矮时浏览器把视口 clamp 回底部。
+			escapeBottom();
+		} else if (distance <= FOLLOW_SLOP && dSt > 0 && !stickRef.current) {
+			// 滚回了底部：重新贴底跟随（不等哨兵，手感更直接）。
+			escapedRef.current = false;
+			stickRef.current = true;
+			setStickBottom(true);
 		}
-		stickRef.current = nearBottom && !escapedRef.current;
-		setStickBottom(stickRef.current);
 		updateActiveFromScroll();
 		updateMarkerPositions();
 		scheduleSweep();
-	}, [updateActiveFromScroll, updateMarkerPositions, scheduleSweep]);
+	}, [updateActiveFromScroll, updateMarkerPositions, scheduleSweep, escapeBottom]);
 	const onWheelCapture = useCallback((event: ReactWheelEvent<HTMLDivElement>) => {
 		const el = scrollRef.current;
-		if (!el || event.deltaY >= 0 || el.scrollTop <= 0) return;
+		if (!el) return;
+		if (event.deltaY > 0) {
+			// 已经在底部还继续往下滚 = 重新贴底（此时不会产生 scroll 事件）。
+			if (!stickRef.current && el.scrollHeight - el.scrollTop - el.clientHeight <= FOLLOW_SLOP) {
+				escapedRef.current = false;
+				stickRef.current = true;
+				setStickBottom(true);
+			}
+			return;
+		}
+		if (event.deltaY >= 0 || el.scrollTop <= 0) return;
 		// 滚轮意图先于 scroll 事件到达；流式更新可能在两者之间重绘。
-		escapedRef.current = true;
-		stickRef.current = false;
-		setStickBottom(false);
-		setScrollingUp(true);
+		escapeBottom();
+	}, [escapeBottom]);
+	/** 滚动条拖动、拖选文本自动滚屏与触摸拖动：这几种手势不产生 wheel 事件。 */
+	const onPointerDown = useCallback(() => { pointerHoldRef.current = true; }, []);
+	const onTouchStart = useCallback((event: ReactTouchEvent<HTMLDivElement>) => {
+		touchYRef.current = event.touches[0]?.clientY ?? null;
+	}, []);
+	const onTouchMove = useCallback((event: ReactTouchEvent<HTMLDivElement>) => {
+		const y = event.touches[0]?.clientY;
+		if (y === undefined) return;
+		// 手指向下拖 = 内容向上翻 = 离开底部。
+		if (touchYRef.current !== null && y - touchYRef.current > 4) escapeBottom();
+		touchYRef.current = y;
+	}, [escapeBottom]);
+	useEffect(() => {
+		const release = () => { pointerHoldRef.current = false; };
+		window.addEventListener("pointerup", release);
+		window.addEventListener("pointercancel", release);
+		return () => { window.removeEventListener("pointerup", release); window.removeEventListener("pointercancel", release); };
 	}, []);
 
 	// 流结束兜底：finalize 瞬间 streaming→persisted 切换可能让内容高度塌缩一帧，
@@ -665,6 +714,47 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 		if (el) setFarFromBottom(el.scrollHeight - el.scrollTop - el.clientHeight > el.clientHeight);
 	}, [messages, state.isStreaming, liveOutputs]);
 
+	/**
+	 * 高度探测器（非流式时的主要触发源）。内容变高不一定发生在 React 提交的
+	 * 同一帧（流式文本的 markdown/高亮、图片解码、工具卡片异步展开、字体切换），
+	 * 只在 messages 变化时滚一次会永远差那段高度。这里用一个 1px 的底部哨兵
+	 * 观察视口：哨兵被挤出视口 ⇒ 内容刚变高，贴底模式下补一次滚动；
+	 * 哨兵重新可见 ⇒ 视口就在底部（用户滚回来时重新开启跟随）。
+	 */
+	useEffect(() => {
+		const root = scrollRef.current;
+		const end = endRef.current;
+		if (!root || !end || typeof IntersectionObserver === "undefined") return;
+		const io = new IntersectionObserver(([entry]) => {
+			if (!entry) return;
+			if (entry.isIntersecting) {
+				escapedRef.current = false;
+				if (!stickRef.current) { stickRef.current = true; setStickBottom(true); }
+				return;
+			}
+			if (stickRef.current) root.scrollTop = root.scrollHeight;
+		}, { root });
+		io.observe(end);
+		return () => io.disconnect();
+	}, [state.conversationId]);
+
+	/**
+	 * 流式期间逐帧贴底：异步渲染（markdown、高亮、图片解码、工具栏）可能在 React
+	 * 提交之后才把内容撑高，只靠 IntersectionObserver 会慢一两帧（看得见的位移）。
+	 * 贴底模式下每帧最多补一次，不需要时不写（避免无谓的 scroll 事件）。
+	 */
+	useEffect(() => {
+		if (!state.isStreaming || searchOpen) return;
+		let frame = requestAnimationFrame(function tick() {
+			const el = scrollRef.current;
+			if (el && stickRef.current) {
+				const max = el.scrollHeight - el.clientHeight;
+				if (max - el.scrollTop > 0.5) el.scrollTop = max;
+			}
+			frame = requestAnimationFrame(tick);
+		});
+		return () => cancelAnimationFrame(frame);
+	}, [state.isStreaming, searchOpen]);
 
 	const scrollToBottom = useCallback(() => {
 		const el = scrollRef.current;
@@ -725,7 +815,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 
 	return (
 		<SubagentTurnContext.Provider key={`${state.conversationId}:${state.sessionId}`} value={subagentGroups}><div className="messages-wrap">
-			<div className="messages" ref={scrollRef} onScroll={onScroll} onWheelCapture={onWheelCapture}>
+			<div className="messages" ref={scrollRef} onScroll={onScroll} onWheelCapture={onWheelCapture} onPointerDown={onPointerDown} onTouchStart={onTouchStart} onTouchMove={onTouchMove}>
 				{timeline.length === 0 && !state.streamingMessage && (
 					<div className="empty-state">
 						<div className="empty-logo-wrap"><img className="empty-logo" src="/icon/1a-mark.svg" alt="pi-harness" /></div>
@@ -863,6 +953,8 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 						</div>
 					</div>
 				)}
+				{/* 贴底跟随的探测哨兵：被挤出视口即内容变高（见 IntersectionObserver）。 */}
+				<div className="messages-end" ref={endRef} aria-hidden="true" />
 
 			</div>
 			{!stickBottom && farFromBottom && scrollingUp && (() => {
