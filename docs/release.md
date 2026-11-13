@@ -1,5 +1,9 @@
 # 发布流程
 
+## 1.30.1：桌面发布回归修复
+
+继承 1.30.0 的 Playground 编辑体验与界面排版更新。1.30.0 因旧桌面工具栏测试仍定位已移除的任务进度按钮而保持草稿；本版将测试改为右栏任务页签，并修复 Windows Pi CLI 浏览器测试的增量快照夹具。SDK / pi-ai 1.5.2、协议 v56 不变；同提交 CI 与三平台打包回归通过后公开 GitHub Release，不发布 npm。详见 `.github/release-notes/v1.30.1.md`。
+
 ## 1.30.0：Playground 编辑体验与界面排版
 
 新增代码缩略图、优化补全与函数选择菜单，精简 Playground／知识库助手模型入口、上下文用量浮层及聊天冗余状态，统一界面字号。SDK / pi-ai 1.5.2、协议 v56 不变；同提交 CI 与三平台桌面回归通过后公开 GitHub Release，不发布 npm。详见 `.github/release-notes/v1.30.0.md`。
