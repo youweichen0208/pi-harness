@@ -2479,16 +2479,34 @@ export class ClientSession {
 			const owners = [...this.convs.values()].filter((conv) =>
 				conv.session.sessionFile && resolve(conv.session.sessionFile) === abs);
 			for (const conv of owners) {
-				if (conv.id === this.activeId || conv.session.isStreaming ||
-
-					conv.queueSteering.length > 0 || conv.queueFollowUp.length > 0 ||
-					conv.terminals.list().length > 0) {
+				if (conv.id === this.activeId) {
 					this.emit({
 						type: "notice",
 						level: "warning",
-						text: conv.id === this.activeId
-							? "该对话正在使用中，请先切换到其他对话再删除"
-							: "该对话仍有后台任务或终端，请先停止任务并关闭终端再删除",
+						text: "该对话正在使用中，请先切换到其他对话再删除",
+					});
+					return;
+				}
+				if (
+					conv.session.isStreaming ||
+					conv.queueSteering.length > 0 || conv.queueFollowUp.length > 0
+				) {
+					this.emit({
+						type: "notice",
+						level: "warning",
+						text: "该对话仍有后台任务，请先停止任务再删除",
+					});
+					return;
+				}
+				// Only LIVE PTYs block deletion: an exited terminal keeps its scrollback
+				// in the manager's history but nothing is running, and the tab can never
+				// be closed from another conversation — it must not lock the session.
+				const live = conv.terminals.list().filter((term) => term.running);
+				if (live.length > 0) {
+					this.emit({
+						type: "notice",
+						level: "warning",
+						text: `该对话仍有运行中的终端（${live.map((term) => term.title).join("、")}），请先关闭终端再删除`,
 					});
 					return;
 				}

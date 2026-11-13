@@ -126,6 +126,7 @@ const ALL = [
 	"snapshot-delta-test",
 	"ssh-plugin-test",
 	"steer-queue-smoke",
+	"delete-session-terminal-test",
 	"switch-session-background-test",
 	"terminal-smoke-test",
 	"version-handshake-test",
