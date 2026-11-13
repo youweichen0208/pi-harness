@@ -91,10 +91,12 @@ try {
 				await page.keyboard.press('Escape');
 			}
 			await page.getByRole('tab', { name: '对话', exact: true }).click();
-			if (!(await page.locator('.right-panel-tabs').isVisible())) {
+			const rightPanel = await page.locator('.panel-drawer.drawer-right').boundingBox();
+			if (!(await page.locator('.right-panel-tabs').isVisible()) || !rightPanel || rightPanel.x < 0 || rightPanel.x + rightPanel.width > width + 1) {
 				await page.locator('.topbar-more .chip').click();
 				await page.locator('.workspace-settings-menu .dd-item').filter({ hasText: '文件列表' }).click();
 			}
+			await page.locator('.right-panel-tabs:visible').waitFor();
 			await page.locator('.right-panel-tabs [role="tab"]').filter({ hasText: '任务' }).click();
 			await page.locator('.task-progress:visible').waitFor();
 			assert.equal(await page.locator('.right-panel-tabs [aria-selected="true"]').textContent(), '任务');
@@ -148,6 +150,8 @@ try {
 	console.log('PASS Windows/macOS toolbar bounds and settings at 800/900/1000/1193/1500px');
 } finally {
 	await browser?.close();
-	const stopped = new Promise(resolve => server.once('exit', resolve)); server.kill(); await stopped;
+	if (server.exitCode === null && server.signalCode === null) {
+		const stopped = new Promise(resolve => server.once('exit', resolve)); server.kill(); await stopped;
+	}
 	rmSync(data, { recursive: true, force: true });
 }
