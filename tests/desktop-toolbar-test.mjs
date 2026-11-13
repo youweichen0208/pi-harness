@@ -60,7 +60,7 @@ try {
 			assert.equal(await page.locator('.inputbox').evaluate(el => getComputedStyle(el).boxShadow), 'none');
 			await input.fill('');
 			await page.keyboard.press('Escape');
-			assert.equal(await page.locator('.header-task-progress').textContent(), '任务进度');
+			assert.equal(await page.locator('.header-task-progress').count(), 0, 'task access lives in the right panel');
 			assert.equal(await page.locator('.view-switch').evaluate(el => getComputedStyle(el).borderTopWidth), '1px');
 			assert.equal(await page.locator('.project-panel-toggle').evaluate(el => getComputedStyle(el).borderTopWidth), '0px');
 			assert.equal(await page.locator('.topbar-actions > .panel-toggle').count(), 0);
@@ -76,8 +76,8 @@ try {
 				const controls = await page.locator('.desktop-window-controls').count() ? await page.locator('.desktop-window-controls').boundingBox() : null;
 				await page.locator('.topbar').screenshot({ path: `tests/scratch/toolbar-${platform}-${width}-${view}.png` });
 				assert(actions.x + actions.width <= (controls?.x ?? width) + 1, `${platform}/${width}/${view}: toolbar overlaps window controls`);
-				const taskButton = await page.locator('.header-task-progress').boundingBox();
-				assert(taskButton.x + taskButton.width <= actions.x + 1, `${platform}/${width}/${view}: task overlaps tabs`);
+				const titleButton = await page.locator('.conversation-title-button').boundingBox();
+				assert(titleButton.x + titleButton.width <= actions.x + 1, `${platform}/${width}/${view}: conversation title overlaps tabs`);
 				const menu = page.locator('.topbar-actions .topbar-more .chip');
 				if (view === 'nodes') {
 					assert(await page.getByRole('tab', { name: '节点', exact: true }).isVisible(), 'secondary navigation stays available in nodes');
@@ -90,9 +90,13 @@ try {
 				await page.locator('.topbar-actions .dd-menu').waitFor();
 				await page.keyboard.press('Escape');
 			}
-			await page.locator('.header-task-progress').click();
+			await page.getByRole('tab', { name: '对话', exact: true }).click();
+			if (!(await page.locator('.right-panel-tabs').isVisible())) {
+				await page.locator('.topbar-more .chip').click();
+				await page.locator('.workspace-settings-menu .dd-item').filter({ hasText: '文件列表' }).click();
+			}
+			await page.locator('.right-panel-tabs [role="tab"]').filter({ hasText: '任务' }).click();
 			await page.locator('.task-progress:visible').waitFor();
-			await page.waitForFunction(() => document.activeElement === document.querySelector('.task-progress')).catch(async error => { console.error(platform, width, await page.evaluate(() => ({ active: document.activeElement?.outerHTML, panel: document.querySelector('.task-progress')?.getBoundingClientRect().toJSON() }))); throw error; });
 			assert.equal(await page.locator('.right-panel-tabs [aria-selected="true"]').textContent(), '任务');
 			assert.equal(await page.locator('.tree-filter, .tree-modified-count').count(), 0);
 			if (width === 1500) {
@@ -123,7 +127,7 @@ try {
 		assert.equal(await page.locator('.conversation-title-button').innerText(), '当前会话');
 		assert.equal(await page.locator('.header-location > span, .header-location-separator').count(), 0);
 		await page.locator('.topbar').screenshot({ path: `tests/scratch/toolbar-${platform}-crowded.png` });
-		assert(await page.locator('.header-task-progress').isVisible(), 'task progress remains accessible');
+		assert(await page.locator('.right-panel-tabs [role="tab"]').filter({ hasText: '任务' }).isVisible(), 'task progress remains accessible');
 		await page.locator('.topbar-more .chip').click();
 		await page.locator('.workspace-settings-menu').screenshot({ path: `tests/scratch/settings-menu-${platform}.png` });
 		await page.locator('.sound-menu-summary').click();
