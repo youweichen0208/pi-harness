@@ -76,6 +76,12 @@ try {
 		await page.goto(`http://127.0.0.1:${harness.port}`);
 		await page.getByRole("button", { name: "Playground", exact: true }).click();
 		await page.locator(".scratch-head").getByRole("button", { name: "问 pi", exact: true }).click();
+		await page.locator(".pg-chat .input-tools .dropdown > button").first().click();
+		await page.locator(".pg-chat .dd-menu").waitFor();
+		await page.keyboard.press("Escape");
+		assert.equal(await page.locator(".pg-chat .dd-menu").count(), 0);
+		await page.locator("#pg-chat-input").focus();
+		assert.equal(await page.locator("#pg-chat-input").evaluate(el => getComputedStyle(el).outlineStyle), "none");
 		await page.locator("#pg-chat-input").fill("preserved draft");
 		await page.getByRole("tab", { name: "参数", exact: true }).click();
 		await page.getByRole("tab", { name: "问 pi", exact: true }).click();

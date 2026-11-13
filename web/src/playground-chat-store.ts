@@ -23,7 +23,8 @@ export function playgroundChatConnection(connected: boolean) {
 }
 export function playgroundChatEvent(event: PlaygroundChatEvent) {
 	if (event.type === "playground_chat_state") {
-		publish({ state: event.state });
+		const changed = view.state?.id !== event.state.id || view.state?.model?.provider !== event.state.model?.provider || view.state?.model?.id !== event.state.model?.id;
+		publish({ state: event.state, ...(changed ? { error: undefined } : {}) });
 		if (event.state.error && lastSent?.conversationId === event.state.id && restoredFailure !== lastSent.id) {
 			restoredFailure = lastSent.id;
 			if (!view.draft) editPlaygroundQuestion(lastSent.text);
@@ -43,7 +44,7 @@ export function playgroundChatEvent(event: PlaygroundChatEvent) {
 export function openPlaygroundChat(model?: PlaygroundChatRequest["model"], thinking?: string) { opened = true; playgroundChatRequest("open", { model, thinking }); if (pending) playgroundChatRequest("receipt", { requestId: pending.id }); }
 export function editPlaygroundQuestion(draft: string) { sessionStorage.setItem(KEY, draft); publish({ draft }); }
 export function sendPlaygroundQuestion(context: PlaygroundChatRequest["context"]) {
-	if (!view.connected || view.pending || !view.state || view.state.running || !view.draft.trim()) return;
+	if (!view.connected || view.pending || !view.state || view.state.running || !view.state.model || !view.state.models.some(m => m.provider === view.state!.model!.provider && m.id === view.state!.model!.id) || !view.draft.trim()) return;
 	pending = { id: randomUuid(), text: view.draft, created: Date.now() };
 	sessionStorage.setItem(KEY + "-pending", JSON.stringify(pending));
 	lastSent = { text: view.draft, conversationId: view.state.id, id: pending.id };
