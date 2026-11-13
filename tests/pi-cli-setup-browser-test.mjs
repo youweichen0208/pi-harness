@@ -52,7 +52,7 @@ try {
 			});
 			upstream.onMessage(raw => {
 				const message = JSON.parse(String(raw));
-				if (message.type === 'snapshot') message.state.piConfigured = true;
+				if (message.type === 'snapshot' || message.type === 'snapshot_delta') message.state.piConfigured = true;
 				if (message.type !== 'terminal_list') route.send(JSON.stringify(message));
 			});
 		});
