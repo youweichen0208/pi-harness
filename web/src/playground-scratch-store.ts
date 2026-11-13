@@ -16,6 +16,7 @@ export interface ScratchTransport {
 export interface ScratchState {
 	doc: ScratchDraft | null;
 	loadFailed: boolean;
+	conflict?: boolean;
 	saveState: "pending" | "saving" | "saved" | "error";
 	savedAt: number | null;
 }
@@ -75,7 +76,7 @@ export class PlaygroundScratchStore {
 				content: stored.updatedAt === 0 && !stored.content ? SCRATCH_EXAMPLE : stored.content,
 				tests: { ...(stored.tests ?? EMPTY_SCRATCH_TESTS), mode: stored.tests?.mode ?? "program" },
 			};
-			this.publish({ doc, loadFailed: false, savedAt: null, saveState: "saved" });
+			this.publish({ doc, loadFailed: false, conflict: false, savedAt: null, saveState: "saved" });
 			this.schedule();
 		} catch {
 			if (generation === this.generation && this.state.doc === before) this.publish({ loadFailed: true });
@@ -90,6 +91,7 @@ export class PlaygroundScratchStore {
 	};
 	private schedule(): void {
 		this.clearTimer();
+		if (this.state.conflict) { this.publish({ saveState: "error" }); return; }
 		const serialized = JSON.stringify(this.state.doc);
 		if (this.pending && serialized === this.queued) {
 			this.publish({ saveState: "saving" });
@@ -101,9 +103,20 @@ export class PlaygroundScratchStore {
 		}
 	}
 
+	/** Explicit discard only; wait for writes before resetting the local document. */
+	reload = async (): Promise<void> => {
+		this.clearTimer();
+		await this.queue;
+		this.persisted = null;
+		this.queued = null;
+		this.publish({ doc: null, conflict: false, loadFailed: false });
+		await this.load(++this.generation);
+	};
+
 	/** Resolves false on failure, retaining the latest editable draft for retry. */
 	flush = (): Promise<boolean> => {
 		this.clearTimer();
+		if (this.state.conflict) return Promise.resolve(false);
 		if (!this.state.doc) return Promise.resolve(true);
 		const serialized = JSON.stringify(this.state.doc);
 		if (this.pending && serialized === this.queued) return this.queue;
@@ -116,10 +129,11 @@ export class PlaygroundScratchStore {
 		this.queue = this.queue.then(async () => {
 			let ok = false;
 			try {
+				if (this.state.conflict) throw new Error("409");
 				await this.transport.write(draft);
 				this.persisted = serialized;
 				ok = true;
-			} catch { /* A failed write must not poison subsequent writes. */ }
+			} catch (error) { if (error instanceof Error && error.message === "409") this.publish({ conflict: true, saveState: "error" }); }
 			--this.pending;
 			if (!this.pending) {
 				this.queued = null;

@@ -9,6 +9,8 @@ import type { PlaygroundStatus } from "./types";
  */
 export interface PlaygroundHost {
 	status: PlaygroundStatus | null;
+	model?: { provider: string; id: string };
+	thinking?: string;
 	/** Keys a Run's state, which outlives the component that started it. */
 	conversationId: string;
 	/** Insert a Run's output into the composer without sending it. */

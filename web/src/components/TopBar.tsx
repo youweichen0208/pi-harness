@@ -210,7 +210,7 @@ export function TopBar({
 					<ModelPicker
 						state={chat.state ? { conversationId: chat.state.conversationId, runSettings: chat.state.runSettings, model: chat.state.model, routedModel: chat.state.routedModel } : null}
 						models={chat.models}
-						modelsLoading={chat.modelsLoading}
+						accounts={chat.accounts} modelsLoading={chat.modelsLoading}
 						send={send}
 						onManageModels={onManageModels}
 					/>

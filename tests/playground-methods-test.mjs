@@ -13,8 +13,8 @@ try {
 	await api("config", { enabled: true });
 	const code = "def add(a: int, b: int) -> int:\n    return a + b\n";
 	const tests = { mode: "methods", selectedMethod: "add(a,b)", casesByMethod: { "add(a,b)": [testCase("a", [1, 2], 3)] } };
-	await api("scratch", { content: code, tests }, "PUT");
-	await api("scratch", { content: code }, "PUT");
+	await api("scratch", { expectedVersion: (await (await api("scratch")).json()).updatedAt, content: code, tests }, "PUT");
+	await api("scratch", { expectedVersion: (await (await api("scratch")).json()).updatedAt, content: code }, "PUT");
 	assert.deepEqual((await (await api("scratch")).json()).tests, tests);
 	assert.equal((await api("run", { code, tests: { methodId: "missing()", cases: [testCase("a", [])] } })).status, 400);
 	assert.equal((await api("run", { code, tests: { methodId: tests.selectedMethod, cases: [testCase("a", ["bad", 2])] } })).status, 400);

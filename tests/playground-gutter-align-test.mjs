@@ -14,7 +14,7 @@ const failed = [];
 let browser;
 try {
 	await fixture.api("config", { enabled: true });
-	await fixture.api("scratch", { content: source, tests: { mode: "program", selectedMethod: "", casesByMethod: {} } }, "PUT");
+	await fixture.api("scratch", { expectedVersion: (await (await fixture.api("scratch")).json()).updatedAt, content: source, tests: { mode: "program", selectedMethod: "", casesByMethod: {} } }, "PUT");
 	browser = await chromium.launch({ executablePath: CHROME_PATH || undefined });
 	const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
 	const errors = [];

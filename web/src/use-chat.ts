@@ -1,3 +1,4 @@
+import { playgroundChatEvent, playgroundChatConnection } from "./playground-chat-store";
 import { useT } from "./i18n";
 import { promptWorkspaceTarget, selectedProjectWorkspace } from "./project-workspaces";
 import { localRecoveryClock } from "./recovery-clock";
@@ -111,7 +112,7 @@ export interface ChatState {
 	/** Last dir-changed push from the server fs.watch (path = listed directory). */
 	fileChanged: { path: string } | null;
 	/** Models with valid auth, for the model dropdown. */
-	models: ModelInfo[];
+	accounts?: import("./types").ModelAccount[]; models: ModelInfo[];
 	/** True while a model list request is in flight. */
 	modelsLoading: boolean;
 	/** Custom providers from agentDir/models.json (model config panel). */
@@ -254,7 +255,7 @@ type Action =
 	| { type: "file_content"; content: FileContent }
 	| { type: "prompt_result"; result: Extract<ServerMessage, { type: "prompt_result" }> }
 	| { type: "file_result"; result: Extract<ServerMessage, { type: "file_result" }> }
-	| { type: "models"; models: ModelInfo[]; loading: boolean }
+	| { type: "models"; accounts?: import("./types").ModelAccount[]; models: ModelInfo[]; loading: boolean }
 	| { type: "models_config"; providers: UiProviderConfig[]; sources?: ModelSourceStatus[] }
 	| { type: "providers_status"; providers: ProviderStatus[] }
 	| { type: "fetch_models_result"; result: { reqId: number; ok: boolean; models?: UiModelConfigEntry[]; error?: string } }
@@ -594,7 +595,7 @@ function reducer(state: ChatState, action: Action): ChatState {
 		case "file_content":
 			return { ...state, fileContent: action.content };
 		case "models":
-			return { ...state, models: action.models, modelsLoading: action.loading };
+			return { ...state, accounts: action.accounts, models: action.models, modelsLoading: action.loading };
 		case "models_config":
 			return { ...state, modelsConfig: action.providers, modelSources: action.sources ?? [] };
 		case "provider_auth":
@@ -940,6 +941,15 @@ export function useChat() {
 		return () => window.removeEventListener("pi:subagent-request", request);
 	}, [send]);
 
+	useEffect(() => {
+		const request = (event: Event) => {
+			const detail = (event as CustomEvent<Extract<ClientMessage, { type: "playground_chat" }>>).detail;
+			if (!send(detail)) playgroundChatConnection(false);
+		};
+		window.addEventListener("pi:playground-request", request);
+		return () => window.removeEventListener("pi:playground-request", request);
+	}, [send]);
+
 	/** Stable across renders — the reconnect loop lives entirely inside this closure. */
 	const connect = useCallback(() => {
 		if (!aliveRef.current) return;
@@ -971,6 +981,8 @@ export function useChat() {
 				return;
 			}
 			switch (msg.type) {
+				case "playground_chat_state": case "playground_chat_result": case "playground_chat_error":
+					playgroundChatEvent(msg); break;
 				case "subagent_response":
 					window.dispatchEvent(new CustomEvent("pi:subagent-response", { detail: msg }));
 					break;
@@ -978,6 +990,7 @@ export function useChat() {
 					window.dispatchEvent(new CustomEvent("pi-node-event", { detail: msg }));
 					break;
 				case "ready":
+					playgroundChatConnection(true);
 					dispatch({
 						type: "ready",
 						serverVersion: msg.serverVersion,
@@ -1140,7 +1153,7 @@ export function useChat() {
 					dispatch({ type: "file_content", content: msg });
 					break;
 				case "models":
-					dispatch({ type: "models", models: msg.models, loading: false });
+					dispatch({ type: "models", models: msg.models, accounts: msg.accounts, loading: false });
 					break;
 				case "models_config":
 					dispatch({ type: "models_config", providers: msg.providers, sources: msg.sources });
@@ -1149,6 +1162,7 @@ export function useChat() {
 					window.dispatchEvent(new CustomEvent("pi-native-mcp-event", { detail: msg }));
 					break;
 				case "provider_auth":
+					if (msg.state.phase === "success") { const channel = new BroadcastChannel("pi-account-updates"); channel.postMessage("changed"); channel.close(); }
 					dispatch({ type: "provider_auth", state: msg.state });
 					break;
 				case "providers_status":
@@ -1303,6 +1317,7 @@ export function useChat() {
 		};
 
 		ws.onclose = () => {
+			playgroundChatConnection(false);
 			if (wsRef.current === ws) wsRef.current = null;
 			// Terminals died with the server-side PTYs — drop writers/buffers.
 			bridgeRef.current.clear();

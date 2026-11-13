@@ -114,6 +114,7 @@ function toggleEditorComment(view: EditorView): boolean {
 
 export interface ScratchEditorHandle {
 	toggleComment(): void;
+	applyProposal(base: string, code: string): boolean;
 	indentRange(): { fromLine: number; toLine: number };
 	applyIndent(source: string, result: string): void;
 }
@@ -131,6 +132,12 @@ export const ScratchEditor = forwardRef<ScratchEditorHandle, {
 }>(function ScratchEditor({ value, onChange, onRun, onFormat, onSave, onLanguageStatus, onCursorChange, placeholder }, ref) {
 	const editor = useRef<EditorView | null>(null);
 	useImperativeHandle(ref, () => ({
+		applyProposal(base, code) {
+			const view = editor.current;
+			if (!view || view.state.doc.toString() !== base) return false;
+			view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: code }, annotations: isolateHistory.of("full"), userEvent: "input" });
+			return true;
+		},
 		toggleComment() { if (editor.current) { toggleEditorComment(editor.current); editor.current.focus(); } },
 		indentRange() {
 			const state = editor.current?.state;

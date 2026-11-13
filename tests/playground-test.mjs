@@ -16,7 +16,7 @@ try {
 	assert.equal((await api("run", { code: "" })).status, 400);
 	assert.equal((await api("run", { code: "x".repeat(262145) })).status, 400);
 	assert.deepEqual(await (await api("scratch")).json(), { content: "", updatedAt: 0 });
-	await api("scratch", { content: "print(1)" }, "PUT");
+	await api("scratch", { content: "print(1)", expectedVersion: 0 }, "PUT");
 	assert.equal(JSON.parse(readFileSync(join(fixture.dataDir, "playground-scratch.json"))).content, "public class Legacy {}");
 	if (!status.python.available) {
 		assert.equal((await api("run", { code: "print(1)" })).status, 503);
@@ -45,7 +45,11 @@ try {
 		assert.throws(() => process.kill(pythonPid, 0), /ESRCH/, "cancel kills the actual Python process");
 	}
 	await api("config", { enabled: false }); assert.equal((await api("run", { code: "print(1)" })).status, 403);
-	assert.equal((await api("scratch", { content: "print(2)" }, "PUT")).status, 200);
+	const version = (await (await api("scratch")).json()).updatedAt;
+	assert.equal((await api("scratch", { content: "print(2)", expectedVersion: version }, "PUT")).status, 200);
+	assert.equal((await api("scratch", { content: "stale", expectedVersion: version }, "PUT")).status, 409);
+	assert.equal((await api("scratch", { content: "unversioned" }, "PUT")).status, 409);
+	assert.equal((await (await api("scratch")).json()).content, "print(2)");
 	console.log("PASS Python runtime: UTF-8 streams, stdin EOF, syntax/runtime/import failures, timeout, output budget, cancellation, concurrency, auth, config and preserved Java draft");
 } finally { await fixture.stop(); }
 const locked = await playgroundFixture({ PI_WEB_PLAYGROUND: "off" });

@@ -144,3 +144,8 @@ App 按 chat.plugins 动态 import 各插件的 client bundle（`/* @vite-ignore
 MCP OAuth 的 `oauth.clientRegistration` 接受 `auto`、`dcr`、`cimd`，通过原生验证和现有 JSON 编辑器保存；缺省由 SDK 使用 auto，宿主不将默认值写回用户配置。
 
 Codemode 压缩回归：`tests/unit/codemode-history.test.ts` 使用真实 SDK 验证 split-turn／整轮压缩、分支及请求边界、缓存和只读读取；`tests/codemode-history-browser-test.mjs` 使用真实持久会话与生产快照／树接口验证刷新、分支隔离及历史卡片，无模型调用。
+
+
+### ChatGPT / Kimi 账号模型入口
+
+共用模型菜单在滚动区顶部显示 ChatGPT（openai）与 Kimi Code（kimi-coding）。账号状态来自原生 SDK 认证类型与不含敏感信息的凭据元数据，API Key 不标为账号登录。登录成功不切换模型、不发送聊天请求；目录不代表逐项验证订阅权限。已保存原生密钥时先确认替换，服务端再次检查；来源停用时提供管理入口。协议 v56 的 models 携带 accounts 状态摘要，login_provider 支持 confirmReplaceKey。

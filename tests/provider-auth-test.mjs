@@ -1,6 +1,6 @@
 /** Official ModelRuntime login, fake OAuth provider, isolated credentials. */
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
@@ -50,5 +50,23 @@ try {
 	assert.equal(wire.at(-1).state.phase, 'cancelled'); assert.equal(changed, 1);
 	service.respond(response.requestId, response.prompt.id, 'stale-code');
 	assert.equal(wire.at(-1).state.phase, 'cancelled');
+	await service.logout('desktop-auth-fixture');
+	writeFileSync(join(directory, 'auth.json'), JSON.stringify({ 'desktop-auth-fixture': { type: 'api_key', key: 'SAVED_KEY' } }));
+	const before = wire.length;
+	await service.login('desktop-auth-fixture');
+	assert.equal(wire.at(-1).state.phase, 'error');
+	assert(!wire.slice(before).some(m => m.state?.prompt));
+	assert.equal(JSON.parse(readFileSync(join(directory, 'auth.json')))['desktop-auth-fixture'].key, 'SAVED_KEY');
+	await service.login('desktop-auth-fixture', true);
+	assert.equal(wire.at(-1).state.phase, 'cancelled');
+	assert.equal(JSON.parse(readFileSync(join(directory, 'auth.json')))['desktop-auth-fixture'].key, 'SAVED_KEY');
+	scenario = 'success';
+	await service.login('desktop-auth-fixture', true);
+	assert.equal(wire.at(-1).state.phase, 'success');
+	assert(!JSON.stringify(wire).includes('SAVED_KEY'));
+	const restored = await ModelRuntime.create({ authPath: join(directory, 'auth.json'), modelsPath: join(directory, 'models.json') });
+	assert((await restored.listCredentials()).some(c => c.providerId === 'desktop-auth-fixture' && c.type === 'oauth'));
+	await service.logout('desktop-auth-fixture');
+	assert(!(await runtime.listCredentials()).some(c => c.providerId === 'desktop-auth-fixture'));
 	console.log('PASS provider OAuth callbacks, stable device ID, credential isolation, cancellation and stale responses');
 } finally { rmSync(directory, { recursive: true, force: true }); }

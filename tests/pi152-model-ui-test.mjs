@@ -40,6 +40,7 @@ try {
 		await page.evaluate(theme => document.documentElement.dataset.appearance = theme, theme);
 		await page.setViewportSize({ width: 375, height: 900 });
 		await page.locator('.input-tools-left .dropdown > button.chip:visible').first().click();
+		await page.locator('.model-run-settings > summary').click();
 		await page.locator('.model-cache-warming select').waitFor();
 		assert.equal(await page.locator('.model-cache-warming select').inputValue(), 'off');
 		const menuStyle = await page.locator('.dd-menu-model').evaluate(el => ({ opacity: getComputedStyle(el).opacity, color: getComputedStyle(el).color }));

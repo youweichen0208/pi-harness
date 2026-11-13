@@ -8,7 +8,7 @@ const fixture = await playgroundFixture();
 let browser;
 try {
 	await fixture.api("config", { enabled: true });
-	await fixture.api("scratch", { content: 'print(1 / 0)', tests: { mode: "program", selectedMethod: "", casesByMethod: {} } }, "PUT");
+	await fixture.api("scratch", { expectedVersion: (await (await fixture.api("scratch")).json()).updatedAt, content: 'print(1 / 0)', tests: { mode: "program", selectedMethod: "", casesByMethod: {} } }, "PUT");
 	browser = await chromium.launch({ executablePath: CHROME_PATH || undefined });
 	const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
 	const errors = [];

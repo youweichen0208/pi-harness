@@ -69,6 +69,7 @@ interface ChatInputProps {
 		routedModel?: UiState["routedModel"];
 	} | null;
 	models: ModelInfo[];
+	accounts?: import("../types").ModelAccount[];
 	modelsLoading: boolean;
 	send: (msg: ClientMessage) => boolean;
 	/** Active conversation id — tags the optimistic echo so it only renders
@@ -118,6 +119,7 @@ export const ChatInput = memo(function ChatInput({
 	slashCommands,
 	modelState,
 	models,
+	accounts,
 	modelsLoading,
 	send,
 	activeConversationId,
@@ -501,9 +503,12 @@ export const ChatInput = memo(function ChatInput({
 				outgoing = mergeCurrentFile(outgoing, snapshot);
 			}
 			const requestId = randomUuid();
-			if (send({ type: "prompt", target: sessionId ? { cwd, conversationId: activeConversationId, sessionId, workspaceId: analysisWorkspaceId } : undefined, text: selectedProject && !trimmed.startsWith("/") ? `${trimmed}
-
-${t("wikiProjectPrompt", { workspace: selectedProject.workspaceName, path: JSON.stringify(selectedProject.path) })}` : trimmed, queue, requestId, attachments: outgoing })) {
+			let promptText = trimmed;
+			if (!/^[\/!]/.test(trimmed)) {
+				if (selectedProject) promptText += "\n\n" + t("wikiProjectPrompt", { workspace: selectedProject.workspaceName, path: JSON.stringify(selectedProject.path) });
+				if (wikiReferences !== undefined || (autoFile && /\.(md|markdown)$/i.test(autoFile.path))) promptText += "\n\n" + t("playgroundExamplePrompt");
+			}
+			if (send({ type: "prompt", target: sessionId ? { cwd, conversationId: activeConversationId, sessionId, workspaceId: analysisWorkspaceId } : undefined, text: promptText, queue, requestId, attachments: outgoing })) {
 				pendingSubmit.current = { id: requestId, sessionId, conversation: activeConversationId, text, queued: streaming, newSessionCommand: /^\/new(?:\s|$)/.test(trimmed), attachments };
 				try { sessionStorage.setItem(pendingKey, JSON.stringify({ id: requestId, sessionId, conversation: activeConversationId, text, queued: streaming })); } catch { /* Live connection still tracks the receipt. */ }
 				setSubmissionEpoch(value => value + 1);
@@ -824,7 +829,7 @@ ${t("wikiProjectPrompt", { workspace: selectedProject.workspaceName, path: JSON.
 						<ModelPicker
 							state={modelState}
 							models={models}
-							modelsLoading={modelsLoading}
+							accounts={accounts} modelsLoading={modelsLoading}
 							send={send}
 							onManageModels={onManageModels}
 							compact

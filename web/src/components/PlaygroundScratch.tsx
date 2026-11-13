@@ -1,3 +1,6 @@
+import { CopyButton } from "./copy-button";
+import { PlaygroundChat } from "./PlaygroundChat";
+import { boundedPlaygroundOutput } from "../playground-chat-context";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FiPlay, FiSquare, FiCode, FiHash, FiChevronsRight, FiChevronsLeft, FiAlignLeft, FiSliders, FiTerminal } from "react-icons/fi";
 import { missingPythonEditorTools, pythonFormatErrorLine } from "../playground-format-error";
@@ -20,14 +23,15 @@ import type { ScratchEditorHandle } from "./scratch-editor";
 const ScratchEditor = lazy(() => import("./scratch-editor").then(m => ({ default: m.ScratchEditor })));
 
 /** Script and current parameters run sequentially against separate store keys. */
-let lastScratchRun: { programKey: string; casesKey: string; snapshot: string; methodId?: string; ranCases: boolean } | null = null;
+let lastScratchRun: { version: string; programKey: string; casesKey: string; snapshot: string; methodId?: string; ranCases: boolean } | null = null;
 
 export function PlaygroundScratch() {
 	const t = useT();
 	const editor = useRef<ScratchEditorHandle>(null);
 	const [cursor, setCursor] = useState({ line: 1, column: 1 });
 	const [resultsOpen, setResultsOpen] = useState(true);
-	const [resultTab, setResultTab] = useState(false);
+	const [resultTab, setResultTab] = useState<number>(0);
+	const [chatOpened, setChatOpened] = useState(false);
 	const [executing, setExecuting] = useState(false);
 	const cancelled = useRef(false);
 	const resultsToggle = useRef<HTMLButtonElement>(null);
@@ -38,7 +42,7 @@ export function PlaygroundScratch() {
 	const formatController = useRef<AbortController | null>(null);
 	useEffect(() => () => formatController.current?.abort(), []);
 	const { status } = usePlaygroundHost();
-	const { doc, edit: setDoc, save, loadFailed, saveState, savedAt: savedTime } = usePlaygroundScratch();
+	const { doc, edit: setDoc, save, reload, conflict, loadFailed, saveState, savedAt: savedTime } = usePlaygroundScratch();
 	const formatError = formatFailure?.source === doc?.content ? formatFailure?.message ?? "" : "";
 	const formatErrorLine = pythonFormatErrorLine(formatError);
 	const savedAt = savedTime ? new Date(savedTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
@@ -46,6 +50,7 @@ export function PlaygroundScratch() {
 	const programRun = usePlaygroundRun(lastRun?.programKey ?? "");
 	const casesRun = usePlaygroundRun(lastRun?.casesKey ?? "");
 	const running = executing || programRun.phase === "running" || casesRun.phase === "running";
+	const output = boundedPlaygroundOutput(lastRun ? JSON.stringify({ program: programRun, cases: lastRun.ranCases ? casesRun : undefined }) : "");
 	const snapshot = doc ? JSON.stringify(doc) : "";
 	const tests = doc?.tests ?? EMPTY_TESTS;
 	const discovered = useMemo(() => discoverPythonMethods(doc?.content ?? ""), [doc?.content]);
@@ -80,9 +85,9 @@ export function PlaygroundScratch() {
 		const invocation = randomUuid();
 		const programKey = runKey(`scratch:program:${invocation}`, JSON.stringify({ code: doc.content }));
 		const casesKey = runKey(`scratch:cases:${invocation}`, JSON.stringify({ code: doc.content, methodId: method?.id, cases: requested ?? [] }));
-		lastScratchRun = { programKey, casesKey, snapshot: JSON.stringify(doc), methodId: method?.id, ranCases: !!requested };
+		lastScratchRun = { version: invocation, programKey, casesKey, snapshot: JSON.stringify(doc), methodId: method?.id, ranCases: !!requested };
 		setResultsOpen(true);
-		setResultTab(true);
+		setResultTab(1);
 		setLastRun(lastScratchRun);
 		cancelled.current = false;
 		setExecuting(true);
@@ -135,6 +140,7 @@ export function PlaygroundScratch() {
 			<h2>Playground <span className="scratch-language-badge">Python</span></h2>
 
 			<span className={`scratch-save-status${saveState === "error" ? " error" : ""}`} role={saveState === "error" ? "alert" : undefined}>{saveState === "error" ? t("fileSaveFailed") : saveState === "pending" || saveState === "saving" ? t("playgroundSaving") : savedAt ? `${t("playgroundSaved")} · ${savedAt}` : doc ? t("playgroundSaved") : ""}</span>
+			<button className="btn" onClick={() => { setChatOpened(true); setResultsOpen(true); setResultTab(2); requestAnimationFrame(() => document.getElementById("pg-chat-input")?.focus()); }}>{t("pgChatAsk")}</button>
 			<button ref={resultsToggle} type="button" className="btn scratch-results-toggle" aria-label={t(resultsOpen ? "pgResultHide" : "pgResultShow")} title={t(resultsOpen ? "pgResultHide" : "pgResultShow")} aria-expanded={resultsOpen} aria-controls="scratch-results" onClick={() => setResultsOpen(open => !open)}>{resultsOpen ? <FiChevronsRight /> : <FiChevronsLeft />}</button>
 			{running ? <button type="button" className="btn" onClick={stop}><FiSquare aria-hidden="true" />{t("playgroundStop")}</button> : <>
 
@@ -142,6 +148,7 @@ export function PlaygroundScratch() {
 			</>}
 		</header>
 		{(reason || (method && caseBatchError)) && <p className="scratch-run-hint" role="status">{reason || t("pgParametersRequired")}</p>}
+		{conflict && <div className="playground-notice" role="alert"><p>{t("pgScratchConflict")}</p><CopyButton text={JSON.stringify(doc, null, 2)} /><button className="btn" onClick={() => void reload()}>{t("pgScratchReload")}</button></div>}
 		{loadFailed && <p className="playground-notice" role="alert">{t("pgLoadFailed")}</p>}
 		<div className={`scratch-workspace${resultsOpen ? "" : " results-collapsed"}`}>
 			<section className="scratch-code-pane" aria-label={t("pgSource")}>
@@ -160,12 +167,13 @@ export function PlaygroundScratch() {
 			{doc && <aside id="scratch-results" hidden={!resultsOpen} className="scratch-test-pane" aria-label={t("pgResults")}>
 				<div className="scratch-pane-head lc-panel-head"><div role="tablist" aria-label={t("pgResults")} onKeyDown={event => {
 					if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
-					event.preventDefault(); const next = event.key === "Home" ? false : event.key === "End" ? true : !resultTab;
-					setResultTab(next); document.getElementById(next ? "pg-result-tab" : "pg-cases-tab")?.focus();
-				}}>{[false, true].map(result => <button key={String(result)} id={result ? "pg-result-tab" : "pg-cases-tab"} role="tab" aria-selected={resultTab === result} aria-controls="pg-test-panel" tabIndex={resultTab === result ? 0 : -1} onClick={() => setResultTab(result)}>{result ? <FiTerminal aria-hidden="true" /> : <FiSliders aria-hidden="true" />}{t(result ? "pgTestResult" : "pgTestCases")}</button>)}</div><button type="button" className="btn" aria-label={t("pgResultHide")} onClick={() => { setResultsOpen(false); resultsToggle.current?.focus(); }}><FiChevronsRight aria-hidden="true" /></button></div>
-				<div id="pg-test-panel" role="tabpanel" aria-labelledby={resultTab ? "pg-result-tab" : "pg-cases-tab"}>
-				<div hidden={resultTab}><PlaygroundMethodCases key={tests.selectedMethod} methods={discovered.methods} selected={tests.selectedMethod} cases={cases} onSelect={selectedMethod => updateTests({ selectedMethod })} onChange={next => updateTests({ casesByMethod: { ...tests.casesByMethod, [tests.selectedMethod]: next } })} /></div>
-				<div className="scratch-run-region" hidden={!resultTab}>
+					event.preventDefault(); const next = event.key === "Home" ? 0 : event.key === "End" ? 2 : (resultTab + (event.key === "ArrowLeft" ? 2 : 1)) % 3;
+					setResultTab(next); if (next === 2) setChatOpened(true); document.getElementById(["pg-cases-tab", "pg-result-tab", "pg-chat-tab"][next])?.focus();
+				}}>{[0, 1, 2].map(result => <button key={String(result)} id={["pg-cases-tab", "pg-result-tab", "pg-chat-tab"][result]} role="tab" aria-selected={resultTab === result} aria-controls="pg-test-panel" tabIndex={resultTab === result ? 0 : -1} onClick={() => { setResultTab(result); if (result === 2) setChatOpened(true); }}>{result ? <FiTerminal aria-hidden="true" /> : <FiSliders aria-hidden="true" />}{t(result === 2 ? "pgChatAsk" : result === 1 ? "pgTestResult" : "pgTestCases")}</button>)}</div><button type="button" className="btn" aria-label={t("pgResultHide")} onClick={() => { setResultsOpen(false); resultsToggle.current?.focus(); }}><FiChevronsRight aria-hidden="true" /></button></div>
+				<div id="pg-test-panel" role="tabpanel" aria-labelledby={["pg-cases-tab", "pg-result-tab", "pg-chat-tab"][resultTab]}>
+				<div hidden={resultTab !== 0}><PlaygroundMethodCases key={tests.selectedMethod} methods={discovered.methods} selected={tests.selectedMethod} cases={cases} onSelect={selectedMethod => updateTests({ selectedMethod })} onChange={next => updateTests({ casesByMethod: { ...tests.casesByMethod, [tests.selectedMethod]: next } })} /></div>
+				{chatOpened && <div hidden={resultTab !== 2}><PlaygroundChat apply={(base, code) => editor.current?.applyProposal(base, code) ?? false} context={{ code: doc.content, parameters: JSON.stringify({ method: method?.id, parameters: cases[0]?.args }), output: output.text, partial: running, stale: !!lastRun && snapshot !== lastRun.snapshot, truncated: output.truncated || programRun.truncated || casesRun.truncated, runVersion: lastRun?.version }} /></div>}
+				<div className="scratch-run-region" hidden={resultTab !== 1}>
 					{lastRun ? <ScratchOutput executing={executing} program={programRun} cases={lastRun.ranCases ? casesRun : undefined} stale={snapshot !== lastRun.snapshot} /> : <p className="lc-result-empty">{t("pgRunToSeeResults")}</p>}
 				</div>
 				</div>

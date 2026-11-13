@@ -23,7 +23,7 @@ export class ProviderAuthService {
 		catch (error) { this.emit({ type: "notice", level: "error", text: error instanceof Error ? error.message : "Sign-out failed" }); }
 	}
 	private publish(state: ProviderAuthState): void { this.state = state; this.emit({ type: "provider_auth", state }); }
-	async login(provider: string): Promise<void> {
+	async login(provider: string, confirmReplaceKey = false): Promise<void> {
 		this.cancel();
 		const requestId = randomUUID(), controller = new AbortController();
 		this.controller = controller;
@@ -58,6 +58,7 @@ export class ProviderAuthService {
 			}),
 		};
 		try {
+			if (!confirmReplaceKey && (await this.runtime().listCredentials()).some(c => c.providerId === provider && c.type === "api_key")) throw new Error("授权成功将替换该提供商已保存的密钥，请确认后重试");
 			if (!this.runtime().getProvider(provider)?.auth.oauth) throw new Error("Provider does not support OAuth login");
 			await this.runtime().login(provider, "oauth", interaction, { getDeviceId: this.getDeviceId });
 			await this.changed();

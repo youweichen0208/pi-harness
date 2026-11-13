@@ -59,6 +59,7 @@ import { isValidClientId } from "./client-id.js";
 import { securityHeaders } from "./security-headers.js";
 import { needsTokenCookie, tokenCookie, tokenMatches } from "./token-auth.js";
 import { installNotesRoutes } from "./notes.js";
+import { PlaygroundChat } from "./playground-chat.js";
 import { installPlaygroundRoutes } from "./playground.js";
 import { createOriginPolicy } from "./origin-policy.js";
 import { PluginManager, resolvePluginClientFile } from "./plugins.js";
@@ -170,6 +171,7 @@ installNoteAssets(app, join(DATA_DIR, "notes", "assets"), originAllowed);
 installLinkPreview(app, originAllowed);
 installNotesRoutes(app, join(DATA_DIR, "notes"), originAllowed);
 // Before the compression middleware below: gzip would buffer the event stream.
+const playgroundChat = new PlaygroundChat(DATA_DIR);
 const stopPlayground = installPlaygroundRoutes(app, { dataDir: DATA_DIR, allowed: originAllowed });
 installCodemodeImageRoutes(app, () => service, originAllowed);
 installOpenAIProxyRoutes(app, openAIProxy, originAllowed);
@@ -583,6 +585,7 @@ wss.on("connection", (ws) => {
 	service.noteSocketOpen();
 	let clientId: string | null = null;
 	let closed = false;
+	let unsubscribePlayground: (() => void) | undefined;
 	/** 最近一份全量 snapshot 的估算字节数（UTF-16 ×2），供背压相对阈值用（issue #11）。 */
 	let lastSnapshotBytes = 0;
 	/** Commands received while the session is still being created — replayed after attach. */
@@ -662,7 +665,7 @@ wss.on("connection", (ws) => {
 			pending.push(msg);
 			return;
 		}
-		if (cs.switchingWorkspace && msg.type !== "prompt" && msg.type !== "query_prompt_receipt" && msg.type !== "set_cwd" && msg.type !== "get_state" && msg.type !== "node_request" && msg.type !== "list_project_workspaces" && msg.type !== "project_workspace_action") {
+		if (cs.switchingWorkspace && msg.type !== "prompt" && msg.type !== "query_prompt_receipt" && msg.type !== "set_cwd" && msg.type !== "get_state" && msg.type !== "node_request" && msg.type !== "playground_chat" && msg.type !== "list_project_workspaces" && msg.type !== "project_workspace_action") {
 			if (msg.type === "read_file" || msg.type === "write_file") send({
 				type: "file_result", operation: msg.type === "read_file" ? "read" : "write",
 				requestId: msg.requestId, cwd: msg.cwd ?? cs.cwd, path: msg.path,
@@ -671,6 +674,11 @@ wss.on("connection", (ws) => {
 			return;
 		}
 		switch (msg.type) {
+			case "playground_chat":
+				if (service.quiesceInfo().quiesced && !["open", "receipt", "stop"].includes(msg.action)) { send({ type: "playground_chat_error", requestId: msg.requestId, error: "Service paused" }); break; }
+				unsubscribePlayground ??= playgroundChat.subscribe(send);
+				void playgroundChat.handle(clientId, msg, send);
+				break;
 			case "node_request":
 				if (service.quiesceInfo().quiesced && ["connect", "trust", "credential_test", "xshell_unlock", "agent_start", "agent_prompt", "agent_new", "agent_model"].includes(msg.action)) {
 					send({ type: "node_event", event: "failure", requestId: msg.requestId, nodeId: msg.nodeId, conversationId: msg.conversationId, data: { action: msg.action, message: "服务暂停接收新操作。" } });
@@ -848,7 +856,7 @@ wss.on("connection", (ws) => {
 				void cs.nativeMcpRequest(msg);
 				break;
 			case "login_provider":
-				void cs.providerAuth.login(msg.provider);
+				void cs.providerAuth.login(msg.provider, msg.confirmReplaceKey);
 				break;
 			case "cancel_provider_login":
 				cs.providerAuth.cancel(msg.requestId);
@@ -1035,6 +1043,7 @@ wss.on("connection", (ws) => {
 	});
 
 	ws.on("close", () => {
+		unsubscribePlayground?.();
 		service.noteSocketClose();
 		closed = true;
 		pending = [];
@@ -1100,6 +1109,7 @@ async function shutdown(): Promise<void> {
 	console.log("\nshutting down…");
 	clearInterval(heartbeatTimer);
 	stopControl();
+	await playgroundChat.close();
 	await stopPlayground();
 	await nodeWorkbench.dispose();
 	pluginMgr.dispose();

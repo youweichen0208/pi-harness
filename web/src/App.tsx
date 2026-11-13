@@ -396,7 +396,7 @@ export function App() {
 	// refreshed on focus/online/reconnect rather than derived from local state.
 	const playground = usePlayground(chat.status === "open");
 	const sendToPi = useCallback((text: string) => appendComposerText(chat.activeConversationId, text), [chat.activeConversationId]);
-	const playgroundHost = useMemo(() => ({ status: playground.status, conversationId: chat.activeConversationId, sendToPi }), [playground.status, chat.activeConversationId, sendToPi]);
+	const playgroundHost = useMemo(() => ({ status: playground.status, model: conversationState?.model ?? undefined, thinking: conversationState?.thinkingLevel, conversationId: chat.activeConversationId, sendToPi }), [playground.status, conversationState?.model, conversationState?.thinkingLevel, chat.activeConversationId, sendToPi]);
 	const [view, setView] = useState<ViewName>(isWikiWindow ? "wiki" : "chat");
 	const [wikiFileRequest, setWikiFileRequest] = useState<{cwd:string;conversationId:string;path:string;token:string} | null>(null);
 	// 媒体/代码预览（issue #119）：无文本上下文、不产生当前文件 chip，但不禁用聊天输入。
@@ -1527,7 +1527,7 @@ export function App() {
 								slashCommands={chat.slashCommands}
 								modelState={modelState}
 								models={chat.models}
-								modelsLoading={chat.modelsLoading}
+								accounts={chat.accounts} modelsLoading={chat.modelsLoading}
 								activeConversationId={chat.activeConversationId}
 								setPendingEcho={setPendingEcho}
 								attachments={attachments}
@@ -1590,7 +1590,7 @@ export function App() {
 							onReferences={updateWikiReferences}
 							onChatAction={wikiChatAction}
 							empty={!conversationState?.messages.some(message => message.role === "user") && !conversationState?.isStreaming}
-							modelControls={<ModelPicker state={modelState} models={chat.models} modelsLoading={chat.modelsLoading} send={send} onManageModels={openManageModels} />}
+							modelControls={<ModelPicker state={modelState} models={chat.models} accounts={chat.accounts} modelsLoading={chat.modelsLoading} send={send} onManageModels={openManageModels} />}
 							notices={chat.notices.length > 0 && <div className="notices wiki-status-notices">{chat.notices.map(n => <NoticeToast key={n.id} notice={n} onDismiss={dismissNotice} onOpenExtensions={openExtensionSettings} onSelectDirectory={() => setCwdNoticePicker(n.id)} />)}</div>}
 							chatOpen={wikiChatOpen}
 							chatWidth={wikiChatWidth}

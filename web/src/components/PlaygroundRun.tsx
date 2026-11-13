@@ -1,3 +1,4 @@
+import { boundedPlaygroundOutput } from "../playground-chat-context";
 import { RunningIndicator } from "./RunningIndicator";
 import { useState, type ReactNode } from "react";
 import { FiPlay, FiSquare } from "react-icons/fi";
@@ -17,7 +18,7 @@ import { CopyButton } from "./copy-button";
  * component is re-mounted when its message moves from the in-flight slot into
  * the settled list, and a Run must survive that.
  */
-export function PlaygroundResult({ runKey: key, onSendToPi, stale = false, showCases = true, variant, pythonVersion }: { variant?: "scratch"; pythonVersion?: string; runKey: string; onSendToPi?: (text: string) => void; stale?: boolean; showCases?: boolean }) {
+export function PlaygroundResult({ runKey: key, onSendToPi, stale = false, showCases = true, variant, pythonVersion, sourceCode }: { sourceCode?: string; variant?: "scratch"; pythonVersion?: string; runKey: string; onSendToPi?: (text: string) => void; stale?: boolean; showCases?: boolean }) {
 	const t = useT();
 	const [expanded, setExpanded] = useState(true);
 	const run = usePlaygroundRun(key);
@@ -52,9 +53,13 @@ export function PlaygroundResult({ runKey: key, onSendToPi, stale = false, showC
 			{(run.stdout || (variant === "scratch" && !running)) && <section className="playground-stream"><h4>{t("playgroundStdout")}</h4><pre className={run.stdout ? undefined : "empty-output"}>{run.stdout || t("pgNoOutput")}</pre></section>}
 			{variant !== "scratch" && run.stderr && <section className="playground-stream stderr"><h4>{t("playgroundStderr")}</h4><pre>{run.stderr}</pre></section>}
 			{variant === "scratch" && <dl className="scratch-run-details">{pythonVersion && <><dt>{t("pgInterpreter")}</dt><dd>Python {pythonVersion}</dd></>}<dt>{t("pgEntry")}</dt><dd>scratch.py</dd></dl>}
-			{!running && !run.error && (
+			{!running && (!run.error || (onSendToPi && sourceCode !== undefined)) && (
 				<div className="playground-result-foot">
 					<CopyButton text={output} label />
+					{onSendToPi && failed && !run.stopped && sourceCode !== undefined && <button type="button" className="playground-action" onClick={() => {
+						const summary = boundedPlaygroundOutput(JSON.stringify({ stdout: run.stdout, stderr: run.stderr, error: run.error, cases: run.cases }));
+						onSendToPi(t("playgroundRepairPrompt") + "\n\n" + JSON.stringify({ code: sourceCode, exitCode: run.exitCode, timedOut: run.timedOut, truncated: run.truncated || summary.truncated, output: summary.text }, null, 2));
+					}}>{t("playgroundRepair")}</button>}
 					{onSendToPi && <button type="button" className="playground-action" onClick={() => onSendToPi(fence(output))}>{t("playgroundSendToPi")}</button>}
 				</div>
 			)}
@@ -100,17 +105,18 @@ export function PlaygroundRun({ code, pre }: { code: string; pre?: ReactNode }) 
 					type="button"
 					className="playground-action"
 					disabled={!!reason}
-					title={reason || t(started ? "playgroundRerun" : "playgroundRun")}
-					aria-label={reason || t(started ? "playgroundRerun" : "playgroundRun")}
+					title={reason || t("playgroundBlockHint")}
+					aria-label={reason || t(started ? "playgroundRerun" : "playgroundRunBlock")}
 					onClick={() => void startRun(key, code)}
 				>
-					<FiPlay aria-hidden="true" /><span>{t(started ? "playgroundRerun" : "playgroundRun")}</span>
+					<FiPlay aria-hidden="true" /><span>{t(started ? "playgroundRerun" : "playgroundRunBlock")}</span>
 				</button>
 			)}
 			<CopyButton text={code} label />
 		</div>
+		<details className="playground-hint"><summary>{t("playgroundBlockScope")}</summary><p>{t("playgroundBlockHint")}</p></details>
 		{pre}
-		{started && <PlaygroundResult runKey={key} onSendToPi={sendToPi} />}
+		{started && <PlaygroundResult runKey={key} sourceCode={code} onSendToPi={sendToPi} />}
 	</>;
 }
 

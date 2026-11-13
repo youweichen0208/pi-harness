@@ -455,6 +455,7 @@ export interface NativeMcpConfigState { path: string; paths?: { global: string; 
 export type PromptResult = { type: "prompt_result"; requestId: string; ok: boolean; conversationId?: string; sessionId?: string; commandExecuted?: boolean; attachmentsConsumed?: boolean; receipt?: "processing" | "accepted" | "rejected" | "unknown" | "missing" | "expired" | "conflict" };
 
 export type ClientMessage =
+	| PlaygroundChatRequest
 	| SubagentRequest
 	| { type: "recall_queue"; conversationId: string; requestId: string }
 	| { type: "queue_recall_ack"; conversationId: string; requestId: string }
@@ -586,7 +587,7 @@ export type ClientMessage =
 	| { type: "install_pi_agent" }
 	/** Persist an api-key credential for a provider (auth.json) and apply it now. */
 	| { type: "logout_provider"; provider: string }
-	| { type: "login_provider"; provider: string }
+	| { type: "login_provider"; provider: string; confirmReplaceKey?: boolean }
 	| { type: "cancel_provider_login"; requestId: string }
 	| { type: "provider_auth_response"; requestId: string; promptId: string; value: string }
 	| { type: "set_provider_api_key"; provider: string; apiKey: string }
@@ -1062,6 +1063,7 @@ export interface UiSettingsState {
 	extensions: UiExtensionInfo[];
 }
 export type ServerMessage =
+	| PlaygroundChatEvent
 	| SubagentResponse
 	| { type: "queue_recalled"; conversationId: string; requestId: string; text: string; images: { data: string; mimeType: string }[] }
 	| TreeResponse
@@ -1234,7 +1236,7 @@ export type ServerMessage =
 			/** Total file size in bytes. */
 			size: number;
 	  }
-	| { type: "models"; models: ModelInfo[] }
+	| { type: "models"; models: ModelInfo[]; accounts?: ModelAccount[] }
 	| { type: "models_config"; providers: UiProviderConfig[]; sources?: ModelSourceStatus[] }
 	| { type: "provider_auth"; state: ProviderAuthState }
 	| { type: "providers_status"; providers: ProviderStatus[] }
@@ -1663,4 +1665,52 @@ export interface PythonLanguageResult {
 	items?: { label: string; detail?: string; info?: string; kind?: number; edit: PythonTextEdit; additionalEdits: PythonTextEdit[] }[];
 	diagnostics?: { from: number; to: number; severity: "error" | "warning" | "info"; message: string }[];
 	signatures?: string[];
+}
+
+/** Dedicated, installation-wide Playground assistant. No project capabilities. */
+export interface PlaygroundChatContext {
+	code: string;
+	parameters: string;
+	output: string;
+	runVersion?: string;
+	partial: boolean;
+	stale: boolean;
+	truncated: boolean;
+}
+export interface PlaygroundChatRequest {
+	type: "playground_chat";
+	action: "open" | "send" | "stop" | "new" | "switch" | "model" | "thinking" | "receipt";
+	requestId: string;
+	conversationId?: string;
+	targetId?: string;
+	text?: string;
+	context?: PlaygroundChatContext;
+	model?: { provider: string; id: string };
+	thinking?: string;
+}
+export interface PlaygroundChatState {
+	id: string;
+	running: boolean;
+	messages: UiMessage[];
+	streaming?: UiMessage;
+	model?: { provider: string; id: string; name: string };
+	models: { provider: string; id: string; name: string }[];
+	thinking: string;
+	history: { id: string; title: string }[];
+	proposals: { id: string; conversationId: string; base: string; version: string; code: string; explanation: string }[];
+	error?: string;
+	interrupted?: boolean;
+}
+export type PlaygroundChatEvent =
+	| { type: "playground_chat_state"; state: PlaygroundChatState }
+	| { type: "playground_chat_result"; result: PromptResult }
+	| { type: "playground_chat_error"; requestId: string; error: string };
+
+export interface ModelAccount {
+	provider: string;
+	name: string;
+	loggedIn: boolean;
+	enabled: boolean;
+	replaceKey: boolean;
+	error?: string;
 }

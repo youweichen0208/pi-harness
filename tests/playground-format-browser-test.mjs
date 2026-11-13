@@ -10,7 +10,7 @@ if (process.env.PI_TEST_PYTHON_TOOLS) symlinkSync(process.env.PI_TEST_PYTHON_TOO
 let browser;
 try {
 	const invalid = 'def add(a: int, b: int) -> int:\n    a = 1\nb = 2\n    return a + b';
-	await fixture.api("scratch", { content: invalid, tests: { mode: "program", selectedMethod: "", casesByMethod: {} } }, "PUT");
+	await fixture.api("scratch", { expectedVersion: (await (await fixture.api("scratch")).json()).updatedAt, content: invalid, tests: { mode: "program", selectedMethod: "", casesByMethod: {} } }, "PUT");
 	browser = await chromium.launch({ executablePath: CHROME_PATH || undefined });
 	const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
 	await page.goto(`${fixture.base}/?token=${fixture.token}`);

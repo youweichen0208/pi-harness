@@ -9,7 +9,7 @@ const fixture = await playgroundFixture({ PI_WEB_PYTHON: process.env.PI_WEB_PYTH
 if (process.env.PI_TEST_PYTHON_TOOLS) symlinkSync(process.env.PI_TEST_PYTHON_TOOLS, join(fixture.dataDir, "python-tools"), "dir");
 let browser;
 try {
-	await fixture.api("scratch", { content: 'a = "1"\na', tests: { mode: "program", selectedMethod: "", casesByMethod: {} } }, "PUT");
+	await fixture.api("scratch", { expectedVersion: (await (await fixture.api("scratch")).json()).updatedAt, content: 'a = "1"\na', tests: { mode: "program", selectedMethod: "", casesByMethod: {} } }, "PUT");
 	browser = await chromium.launch({ executablePath: CHROME_PATH || undefined });
 	const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
 	await page.goto(`${fixture.base}/?token=${fixture.token}`);

@@ -8,6 +8,7 @@ import { useT } from "../i18n";
 
 /** Messages this component sends (a subset shared by TopBar and ChatInput). */
 export type ModelPickerMsg =
+	| Extract<ClientMessage, { type: "login_provider" }>
 	| { type: "list_models" }
 	| { type: "set_model"; modelId: string }
 	| Extract<ClientMessage, { type: "set_cache_warming" }>
@@ -18,6 +19,7 @@ export type ModelPickerMsg =
  *  both toolbars idle during streaming. */
 interface Props {
 	state: Pick<UiState, "model" | "routedModel" | "conversationId" | "runSettings"> | null;
+	accounts?: import("../types").ModelAccount[];
 	models: ModelInfo[];
 	modelsLoading: boolean;
 	send: (msg: ModelPickerMsg) => boolean;
@@ -28,7 +30,7 @@ interface Props {
 }
 
 /** Shared model picker and native run settings. */
-export const ModelPicker = memo(function ModelPicker({ state, models, modelsLoading, send, onManageModels, compact = false }: Props) {
+export const ModelPicker = memo(function ModelPicker({ state, models, accounts, modelsLoading, send, onManageModels, compact = false }: Props) {
 	const t = useT();
 	const warmingHint = useId();
 	const model = state?.model;
@@ -46,15 +48,15 @@ export const ModelPicker = memo(function ModelPicker({ state, models, modelsLoad
 		if (!q) return models;
 		return models.filter(
 			(m) =>
+				accounts?.some(a => a.loggedIn && a.provider === m.provider && a.name.toLowerCase().includes(q)) ||
 				m.name.toLowerCase().includes(q) ||
 				m.provider.toLowerCase().includes(q) ||
 				m.id.toLowerCase().includes(q),
 		);
-	}, [models, modelFilter]);
-	// Local loading flag for the model dropdown (list arrives via props.models).
-	const [reqLoading, setReqLoading] = useState(false);
+	}, [models, modelFilter, accounts]);
 
-	const runSettings = state?.runSettings && <div className="model-run-settings">
+
+	const runSettings = state?.runSettings && <details className="model-run-settings"><summary>{t("modelMenuSettings")}</summary><div className="model-run-settings-body">
 		{(["autoCompaction", "autoRetry"] as const).map(key => <label key={key}>
 			<input type="checkbox" checked={state.runSettings![key]} onChange={event => send({ type: "set_run_settings", conversationId: state.conversationId, [key]: event.target.checked })} />
 			{t(key === "autoCompaction" ? "conversationAutoCompaction" : "conversationAutoRetry")}
@@ -68,18 +70,17 @@ export const ModelPicker = memo(function ModelPicker({ state, models, modelsLoad
 			</select>
 		</label>
 		<p id={warmingHint} className="model-cache-hint">{t("cacheWarmingHint")}</p>
-	</div>;
+	</div></details>;
 
-	// Lazily fetch the model list when the dropdown opens for the first time.
 	useEffect(() => {
-		if (modelOpen && models.length === 0 && !reqLoading && !modelsLoading) {
-			setReqLoading(true);
-			send({ type: "list_models" });
-		}
-	}, [modelOpen, models.length, reqLoading, modelsLoading, send]);
-	useEffect(() => {
-		if (models.length > 0) setReqLoading(false);
-	}, [models.length]);
+		if (!modelOpen) return;
+		const channel = new BroadcastChannel("pi-account-updates");
+		channel.onmessage = () => send({ type: "list_models" });
+		const refresh = () => send({ type: "list_models" });
+		window.addEventListener("focus", refresh);
+		const timer = window.setInterval(refresh, 5000);
+		return () => { window.clearInterval(timer); channel.close(); window.removeEventListener("focus", refresh); };
+	}, [modelOpen, send]);
 
 	return (
 		<>
@@ -102,16 +103,17 @@ export const ModelPicker = memo(function ModelPicker({ state, models, modelsLoad
 					</>
 				}
 				open={modelOpen}
-				onOpenChange={setModelOpen}
+				onOpenChange={open => { setModelOpen(open); if (open) send({ type: "list_models" }); }}
 				menuClassName="dd-menu-model"
 			>
-				<div className="dd-header">{t("availableModels")}</div>
+				<div className="dd-header">{t("availableModels")} <span className="model-count">{filteredModels.length}{modelFilter ? " / " + models.length : ""}</span></div>
 				<div className="dd-search-row">
-					<FiSearch />
+					<FiSearch aria-hidden="true" />
 					<input
 						className="dd-search"
 						type="text"
 						placeholder={t("searchModels")}
+						aria-label={t("searchModels")}
 						value={modelFilter}
 						onChange={(e) => setModelFilter(e.target.value)}
 					/>
@@ -119,20 +121,32 @@ export const ModelPicker = memo(function ModelPicker({ state, models, modelsLoad
 				{/* Scrollable model list (middle band) — the header/search above
 				    and the footer below stay fixed while this scrolls. */}
 				<div className="dd-model-scroll">
-					{(reqLoading || modelsLoading) && (
+					{accounts?.filter(a => !modelFilter.trim() || a.name.toLowerCase().includes(modelFilter.trim().toLowerCase()) || filteredModels.some(m => m.provider === a.provider)).map(a => <button
+						key={a.provider}
+						type="button"
+						className="model-account-entry"
+						aria-label={`${a.name} · ${t(a.error ? "accountRetry" : !a.enabled || a.loggedIn ? "modelMenuManage" : "providerLogin")}`}
+						onClick={() => {
+							if (a.error) { send({ type: "list_models" }); return; }
+							if (!a.enabled || a.loggedIn) { setModelOpen(false); onManageModels(); return; }
+							if (a.replaceKey && !window.confirm(t("accountReplaceKey"))) return;
+							send({ type: "login_provider", provider: a.provider, confirmReplaceKey: a.replaceKey });
+						}}
+					><span>{a.name}</span><span aria-hidden="true">{a.error ? "↻" : a.loggedIn ? "✓" : "›"}</span></button>)}
+					{modelsLoading && (
 						<div className="dd-loading">{t("loading")}</div>
 					)}
 					{models.length === 0 &&
-						!reqLoading &&
 						!modelsLoading && (
 							<div className="dd-loading">{t("noModels")}</div>
 						)}
-					{filteredModels.length === 0 && models.length > 0 && (
+					{filteredModels.length === 0 && models.length > 0 && !accounts?.some(a => a.name.toLowerCase().includes(modelFilter.trim().toLowerCase())) && (
 						<div className="dd-loading">{t("noModelMatches")}</div>
 					)}
 					{filteredModels.map((m) => (
 						<DropdownItem
 							key={m.id}
+							title={`${m.name} · ${m.provider}`}
 							active={currentModelId === m.id}
 							onClick={() => {
 								if (currentModelId !== m.id) {
@@ -166,9 +180,10 @@ export const ModelPicker = memo(function ModelPicker({ state, models, modelsLoad
 						<button
 							type="button"
 							className="dd-refresh"
+							title={t("refreshModels")}
 							onClick={() => send({ type: "list_models" })}
 						>
-							{t("refreshModels")}
+							{t("modelMenuRefresh")}
 						</button>
 						<button
 							type="button"
@@ -178,7 +193,7 @@ export const ModelPicker = memo(function ModelPicker({ state, models, modelsLoad
 								onManageModels();
 							}}
 						>
-							<UiIcon name="settings" /> {t("manageModels")}
+							<UiIcon name="settings" /> {t("modelMenuManage")}
 						</button>
 					</div>
 				</Dropdown>

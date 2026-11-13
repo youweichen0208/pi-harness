@@ -1,8 +1,26 @@
 # Playground（Python 代码运行）
 
-Playground 使用宿主 Python 3.9+ 运行聊天、小记中的 `python` / `py` / `python3` 代码块、右栏 `.py` 文件缓冲区以及左栏草稿。首次检测到可用解释器默认开启，保留已保存开关；`PI_WEB_PLAYGROUND=off` 硬关闭且锁定设置。运行结果不进入模型上下文、不持久化；显式「把结果发给 pi」仅追加到输入框。
+## Playground「问 pi」（协议 v55）
+
+右栏提供参数、输出、问 pi 三个页签；顶部问 pi 仅展开、切换并聚焦，不发送。编辑器持续显示，窄屏上下排列。独立输入不接主聊天附件、项目或终端；普通代码块仅复制。关闭运行或没有 Python 仍可问答。
+
+`server/playground-chat.ts` 管理安装级共享助手，历史、当前对话、模型及建议位于 `<dataDir>/playground-chat/`，原生 transcript 按独立对话目录保存。首次继承打开方模型与思考设置，之后独立保存。`playground_chat` 请求覆盖 open/send/stop/new/switch/model/thinking/receipt；独立 state/result/error 消息不修改主聊天快照。多标签页共享当前对话；运行期间禁止切换、新建或改模型。离开不停止任务，重启保留中断标记，不续跑。
+
+原生资源加载关闭上下文文件、技能、扩展与模板，内存设置关闭预热；工具白名单仅 `propose_playground_code`，排除 MCP，创建后核验 active tools。认证和模型声明沿用原生文件。首段流式消息包含角色，以 `agent_settled` 判定完成。使用独立目录下的 `PromptReceipts`，发送前持久化占位；重连查询，不自动重发。已接收后的模型错误不把回执改为拒绝。
+
+发送冻结未保存代码（≤256 KiB）、当前函数/参数和最近结果。输出按 UTF-8 截到 64 KiB，附部分、过期、截断标记与独立运行 ID，引用可展开。服务端用源码 SHA-256 绑定建议基准，保守检查上下文容量；拒绝时保留问题，不静默删除源码。结果仅显式发送时进入助手。
+
+建议包含说明、完整代码和本轮基准，以差异卡片展示。应用同时检查 React 草稿和 CodeMirror 实际文档；基准不符仅允许复制或重新提问。应用使用隔离历史的单次事务，可一次撤销，沿用自动保存及签名参数迁移，不执行代码。草稿冲突后停止自动重试，保留本地编辑，提供复制和显式重新加载。
+
+验证：`node tests/playground-chat-test.mjs --browser` 使用本地模拟模型检查隔离、冻结、建议、去重、历史/重启、停止及浏览器应用/撤销；相关单测覆盖 UTF-8 输出边界及保存冲突。
+
+Playground 使用宿主 Python 3.9+ 运行聊天、小记中的 `python` / `py` / `python3` 代码块、右栏 `.py` 文件缓冲区以及左栏草稿。首次检测到可用解释器默认开启，保留已保存开关；`PI_WEB_PLAYGROUND=off` 硬关闭且锁定设置。运行结果默认不进入模型上下文、不持久化；Playground 问 pi 仅在显式发送时冻结结果到专属对话；显式「把结果发给 pi」仅追加到输入框。
 
 ## 运行环境
+
+代码块入口标注「运行此代码块」，可展开说明独立进程不继承其他代码块变量、生成代码未经预验证。文档问 pi 的普通请求追加完整 Python 示例要求（含导入、变量与示例数据；示意片段需标注），不覆盖原生系统提示词；斜杠及 shell 命令不追加。Playground 隔离助手也遵循此要求。
+
+代码块运行失败后「请 pi 修复」将原始源码、退出码、超时/截断标记与最多 64 KiB 的输出摘要追加到当前输入草稿。保留原草稿，不自动发送、不再次执行、不自动改文件。回归：`node tests/playground-repair-test.mjs` 使用真实 Python NameError 和本地模拟模型验证回填及调用次数。
 
 - 不捆绑解释器。`PI_WEB_PYTHON` 指定解释器可执行文件路径（不是 shell 命令）；未指定时按 `VIRTUAL_ENV`、PATH 的 `python3` / `python`、Windows `py -3` 顺序探测。显式路径失败不偷偷回退。探测验证版本与实际 `sys.executable`，缓存 60 秒，支持重新检测。
 - 执行与语言辅助共用选中的解释器。推荐虚拟环境；第三方库在该环境中安装，Playground 不隐式安装依赖；用户可通过按钮安装可选编辑工具。运行使用 `-I -X utf8 -u`，忽略 `PYTHONPATH` 和用户 site-packages，虚拟环境自身的包仍可用。规则依据 [Python 命令行文档](https://docs.python.org/3/using/cmdline.html)。
@@ -21,7 +39,7 @@ Playground 使用宿主 Python 3.9+ 运行聊天、小记中的 `python` / `py` 
 
 ## 草稿与函数测试
 
-新草稿保存到 `<dataDir>/playground-python-scratch.json`；旧 Java 的 `playground-scratch.json` 原样保留作备份，不自动翻译或覆盖。GET/PUT scratch 保持原接口，执行关闭时仍可编辑保存。600ms 去抖、串行保存、失败内存保留与卸载 flush 由 `playground-scratch-store.ts` 统一管理。
+新草稿保存到 `<dataDir>/playground-python-scratch.json`；旧 Java 的 `playground-scratch.json` 原样保留作备份，不自动翻译或覆盖。GET scratch 返回的 updatedAt 同时作为保存版本；PUT 必须携带 expectedVersion，版本不匹配（含未提供）返回 409，不写入磁盘。成功保存返回严格递增的 updatedAt，客户端串行队列使用最新确认版本。冲突保留本地草稿。执行关闭时仍可编辑保存。600ms 去抖、串行保存、失败内存保留与卸载 flush 由 `playground-scratch-store.ts` 统一管理。
 
 草稿不再有「运行脚本」与「函数测试」两种模式，运行也不是二选一。一次运行同时跑脚本和使用例：服务端 `/api/playground/run` 传 `tests` 时只跑用例、不传时只跑脚本，所以合并运行是客户端串行的两次请求，各自一个 run key。脚本先跑，输出先出现，用例批次随后。服务端对每个客户端只放行一个 Run（`gate.acquire(clientId, maxConcurrent, 1)`），两个请求不能并行，否则第二个会被拒为「已有运行在进行」。草稿仍保存 `tests.mode` 字段以兼容旧草稿，但界面不再读取它。
 

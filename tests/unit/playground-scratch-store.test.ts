@@ -124,3 +124,16 @@ it("retries the same failed payload explicitly without an endless background ret
 	expect(await store.flush()).toBe(true);
 	expect(store.getSnapshot().saveState).toBe("saved");
 });
+
+it("retains conflicting edits without retry loops, then explicitly reloads the server copy", async () => {
+	const { store, transport } = fixture(); store.connect(); await settle();
+	vi.mocked(transport.write).mockRejectedValue(new Error("409"));
+	store.edit(draft("local")); expect(await store.flush()).toBe(false);
+	expect(store.getSnapshot().conflict).toBe(true);
+	store.edit(draft("newer local")); await vi.advanceTimersByTimeAsync(2000);
+	expect(transport.write).toHaveBeenCalledTimes(1);
+	expect(store.getSnapshot().doc?.content).toBe("newer local");
+	await store.reload();
+	expect(store.getSnapshot().doc?.content).toBe("original");
+	expect(store.getSnapshot().conflict).toBe(false);
+});

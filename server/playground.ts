@@ -45,7 +45,7 @@ class PlaygroundScratchStore {
 		}
 	}
 	write(content: string, tests?: PlaygroundTestConfig): PlaygroundScratch {
-		const doc = { content, tests: tests ?? this.read().tests, updatedAt: Date.now() };
+		const doc = { content, tests: tests ?? this.read().tests, updatedAt: Math.max(Date.now(), this.read().updatedAt + 1) };
 		writeFileAtomic(this.file, JSON.stringify(doc));
 		return doc;
 	}
@@ -207,11 +207,15 @@ export function installPlaygroundRoutes(app: Express, options: PlaygroundRouteOp
 		// Content is required; tests are an optional bounded configuration.
 		// Legacy content-only writes preserve tests. Empty content is a valid clear.
 		const body = req.body as Record<string, unknown> | undefined;
-		if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).some(key => key !== "content" && key !== "tests") || (body.tests !== undefined && !isTestConfig(body.tests)) || typeof body.content !== "string" || Buffer.byteLength(body.content, "utf8") > MAX_SOURCE_BYTES) {
+		if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).some(key => key !== "content" && key !== "tests" && key !== "expectedVersion") || (body.tests !== undefined && !isTestConfig(body.tests)) || typeof body.content !== "string" || Buffer.byteLength(body.content, "utf8") > MAX_SOURCE_BYTES) {
 			res.status(400).json({ error: "Invalid scratch" });
 			return;
 		}
 		try {
+			if (body.expectedVersion !== scratchStore.read().updatedAt) {
+				res.status(409).json({ error: "Scratch changed; reload before saving" });
+				return;
+			}
 			res.json(scratchStore.write(body.content, body.tests as PlaygroundTestConfig | undefined));
 		} catch {
 			res.status(500).json({ error: "Playground scratch failed" });

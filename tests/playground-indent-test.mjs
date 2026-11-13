@@ -32,7 +32,7 @@ try {
 	assert.equal((await fixture.api('indent', { code: broken, fromLine: 4 })).status, 422, 'do not repair a line outside selection');
 	assert.equal((await fixture.api('indent', { code: fixed, toLine: 0 })).status, 400);
 	assert.equal((await fixture.api('indent', { code: fixed, extra: true })).status, 400);
-	await fixture.api('scratch', { content: broken, tests: { mode: 'program', selectedMethod: '', casesByMethod: {} } }, 'PUT');
+	await fixture.api('scratch', { expectedVersion: (await (await fixture.api('scratch')).json()).updatedAt, content: broken, tests: { mode: 'program', selectedMethod: '', casesByMethod: {} } }, 'PUT');
 	browser = await chromium.launch({ executablePath: CHROME_PATH || undefined });
 	const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
 	await page.goto(`${fixture.base}/?token=${fixture.token}`);

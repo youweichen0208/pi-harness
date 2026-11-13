@@ -3045,13 +3045,22 @@ export class ClientSession {
 				reasoning: m.reasoning,
 				vision: m.input?.includes("image") ?? false,
 			}));
-			this.emit({ type: "models", models });
+			const accounts = await Promise.all([ ["openai", "ChatGPT"], ["kimi-coding", "Kimi"] ].map(async ([provider, name]) => {
+				const enabled = this.sources?.selectable(provider) ?? true;
+				try {
+					const credentials = await mr.listCredentials();
+					const auth = await mr.checkAuth(provider);
+					return { provider, name, enabled, loggedIn: auth?.type === "oauth", replaceKey: credentials.some(c => c.providerId === provider && c.type === "api_key") };
+				} catch { return { provider, name, enabled, loggedIn: false, replaceKey: false, error: "Account status unavailable" }; }
+			}));
+			this.emit({ type: "models", models, accounts });
 		} catch (err) {
 			this.emit({
 				type: "notice",
 				level: "error",
 				text: `获取模型列表失败：${(err as Error).message}`,
 			});
+			this.emit({ type: "models", models: [], accounts: [ ["openai", "ChatGPT"], ["kimi-coding", "Kimi"] ].map(([provider, name]) => ({ provider, name, enabled: false, loggedIn: false, replaceKey: false, error: "Model catalog unavailable" })) });
 		}
 	}
 
