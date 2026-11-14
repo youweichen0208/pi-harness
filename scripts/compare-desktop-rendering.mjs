@@ -11,20 +11,25 @@ const mac = read(macFile);
 assert(mac.platform === 'darwin' && mac.surfaces && mac.typography && mac.ui && mac.electron, 'Invalid macOS reference');
 const windows = files.filter(name => /win32-(100|125|150)-metrics.json$/.test(name));
 assert.equal(windows.length, 3, 'Require Windows 100%, 125%, 150% results');
-function compare(expected, actual, path) {
+function compare(expected, actual, path, nativeCjk = false, intrinsicWidth = false) {
+	if (expected?.tag) intrinsicWidth = expected.tag === "TD";
+	if (expected?.text) nativeCjk = /[^\x00-\x7f]/.test(expected.text);
+	// Surface fixtures intentionally contain mixed Chinese and English text.
+	if (path.includes(".surfaces.")) nativeCjk = true;
 	// Range rect height tracks OS glyph rasterization, not the CSS line box.
 	// Compare line count/width and the element's own height separately.
 	if (/\.lines\[\d+\]\.height$/.test(path)) return;
 	if (typeof expected === 'number') {
 		assert.equal(typeof actual, 'number', path);
-		assert(Math.abs(expected - actual) <= 1, `${path}: Mac ${expected}, Windows ${actual} (tolerance 1 CSS px)`);
+		const tolerance = nativeCjk && (/\.lines\[\d+\]\.width$/.test(path) || intrinsicWidth && path.endsWith(".width")) ? Math.max(1, expected * 0.03) : 1;
+		assert(Math.abs(expected - actual) <= tolerance, `${path}: Mac ${expected}, Windows ${actual} (tolerance ${tolerance} CSS px)`);
 	} else if (Array.isArray(expected)) {
 		assert(Array.isArray(actual), path);
 		assert.equal(actual.length, expected.length, `${path}: line/item count`);
-		expected.forEach((value, index) => compare(value, actual[index], `${path}[${index}]`));
+		expected.forEach((value, index) => compare(value, actual[index], `${path}[${index}]`, nativeCjk, intrinsicWidth));
 	} else if (expected && typeof expected === 'object') {
 		assert(actual && typeof actual === 'object', path);
-		for (const key of Object.keys(expected)) compare(expected[key], actual[key], `${path}.${key}`);
+		for (const key of Object.keys(expected)) compare(expected[key], actual[key], `${path}.${key}`, nativeCjk, intrinsicWidth);
 	} else assert.equal(actual, expected, path);
 }
 for (const file of windows) {

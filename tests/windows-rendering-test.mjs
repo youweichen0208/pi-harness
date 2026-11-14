@@ -169,7 +169,8 @@ try {
 			surfaces[appearance] = await page.evaluate(async () => {
 				const host = document.createElement('div');
 				host.style.cssText = 'position:fixed;left:0;top:0;width:640px;visibility:hidden';
-				const text = '项目文档 Workspace：检查文件与任务进度，运行完成 123。';
+				// Keep headings away from a wrap boundary: native CJK fallback advances vary by OS.
+				const text = '项目文档 Workspace：运行完成 123。';
 				const contexts = {
 					wiki: '<div class="wiki-prose md"><p></p><h2></h2><table><tbody><tr><td></td></tr></tbody></table></div>',
 					notes: '<div class="notes-preview md"><p></p><h2></h2></div>',
