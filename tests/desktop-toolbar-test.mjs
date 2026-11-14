@@ -92,20 +92,25 @@ try {
 			}
 			await page.getByRole('tab', { name: '对话', exact: true }).click();
 			await page.locator('.view-switch button.active').waitFor();
-			// The right drawer slides in and out. Measuring while it animates reports the
-			// panel as closed and the toggle below would then shut it again, leaving the
-			// task tab hidden; settle first and check where the tab actually sits.
+			// A slow animation frame can leave an already-open drawer offscreen after
+			// 400ms. Open it once, then await its actual bounds instead of toggling again
+			// through the backdrop (which correctly blocks clicks outside the drawer).
 			const taskTab = page.locator('.right-panel-tabs [role="tab"]').filter({ hasText: '任务' });
 			const taskTabOnScreen = async () => {
 				const box = await taskTab.boundingBox().catch(() => null);
 				return !!box && box.x >= 0 && box.x + box.width <= width + 1;
 			};
 			await page.waitForTimeout(400);
-			for (let attempt = 0; attempt < 3 && !(await taskTabOnScreen()); attempt++) {
+			if (!(await taskTabOnScreen())) {
 				await page.locator('.topbar-more .chip').click();
 				await page.locator('.workspace-settings-menu .dd-item').filter({ hasText: '文件列表' }).click();
-				await page.waitForTimeout(400);
 			}
+			await page.waitForFunction(() => {
+				const tab = [...document.querySelectorAll('.right-panel-tabs [role="tab"]')].find(el => el.textContent.includes('任务'));
+				if (!tab) return false;
+				const box = tab.getBoundingClientRect();
+				return box.width > 0 && box.x >= 0 && box.right <= innerWidth + 1;
+			});
 			await taskTab.click();
 			await page.locator('.task-progress:visible').waitFor();
 			assert.equal(await page.locator('.right-panel-tabs [aria-selected="true"]').textContent(), '任务');
