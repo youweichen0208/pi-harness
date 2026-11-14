@@ -84,8 +84,8 @@ try {
 			assert.fail(`No stable rendered node for ${selector}`);
 		};
 		const rendered = await platformFonts('.msg-text h2');
-		assert(rendered.fonts.some(font => (process.platform === 'darwin' ? font.postScriptName.startsWith('PingFangSC-') : font.familyName === 'UI SC' && font.isCustomFont) && font.glyphCount > 0), JSON.stringify(rendered));
-		assert(await page.locator('.msg-text h2').evaluate(el => getComputedStyle(el).fontFamily.startsWith('"JetBrains Mono"')), 'prose prioritizes the shared terminal-style font');
+		assert(rendered.fonts.some(font => font.familyName === 'UI SC' && font.isCustomFont && font.glyphCount > 0), JSON.stringify(rendered));
+		assert(await page.locator('.msg-text h2').evaluate(el => getComputedStyle(el).fontFamily.startsWith('"UI SC"')), 'prose prioritizes the bundled cross-platform UI font');
 		await page.locator('.tree-hidden-summary').click();
 		await page.locator('[data-tree-node=".ruff_cache"] .file-name').waitFor();
 		const monoFonts = await platformFonts('.msg-text pre code');
@@ -169,8 +169,7 @@ try {
 			surfaces[appearance] = await page.evaluate(async () => {
 				const host = document.createElement('div');
 				host.style.cssText = 'position:fixed;left:0;top:0;width:640px;visibility:hidden';
-				// Keep headings away from a wrap boundary: native CJK fallback advances vary by OS.
-				const text = '项目文档 Workspace：运行完成 123。';
+				const text = '项目文档 Workspace：检查文件与任务进度，运行完成 123。';
 				const contexts = {
 					wiki: '<div class="wiki-prose md"><p></p><h2></h2><table><tbody><tr><td></td></tr></tbody></table></div>',
 					notes: '<div class="notes-preview md"><p></p><h2></h2></div>',

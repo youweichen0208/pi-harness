@@ -8,8 +8,9 @@ const tool = name => home ? join(home, "bin", name + (windows ? ".exe" : "")) : 
 const temp = mkdtempSync(join(tmpdir(), "pi-jdbc-build-"));
 try {
 	mkdirSync("dist/server/database/jdbc", { recursive: true });
+	// Java 8 is the supported runtime baseline; silence only obsolete option warnings.
 	for (const [name, args] of [
-		["javac", ["--release", "8", "-encoding", "UTF-8", "-d", temp, "server/database/jdbc/PiJdbc.java"]],
+		["javac", ["--release", "8", "-Xlint:-options", "-encoding", "UTF-8", "-d", temp, "server/database/jdbc/PiJdbc.java"]],
 		["jar", ["cfe", resolve("dist/server/database/jdbc/pi-jdbc.jar"), "PiJdbc", "-C", temp, "."]],
 	]) {
 		const result = spawnSync(tool(name), args, { stdio: "inherit", windowsHide: true });

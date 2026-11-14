@@ -2,8 +2,13 @@ import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import type { AnyModel } from "@earendil-works/pi-ai";
 
 export function outputTokenLimit(maxTokens: number, contextWindow: number, env: NodeJS.ProcessEnv = process.env): number {
-	const floor = Number(env.PI_MAX_TOKENS_FLOOR ?? 65536);
-	return Number.isSafeInteger(floor) && floor > 0 ? Math.max(maxTokens, Math.min(floor, contextWindow)) : maxTokens;
+	// Preserve explicitly configured legacy floors; the new override takes precedence.
+	if (env.PI_MAX_TOKENS === undefined && env.PI_MAX_TOKENS_FLOOR !== undefined) {
+		const floor = Number(env.PI_MAX_TOKENS_FLOOR);
+		return Number.isSafeInteger(floor) && floor > 0 ? Math.max(maxTokens, Math.min(floor, contextWindow)) : maxTokens;
+	}
+	const limit = Number(env.PI_MAX_TOKENS ?? 128000);
+	return Number.isSafeInteger(limit) && limit > 0 ? Math.min(limit, contextWindow) : maxTokens;
 }
 
 const wrapped = new WeakSet<ModelRuntime>();

@@ -174,7 +174,7 @@ export class ModelSourceSync {
 		for (const entry of entries) {
 			const c = entry.connection;
 			const maxTokens = outputTokenLimit(c.maxTokens, c.contextWindow, this.options.env ?? process.env);
-			if (maxTokens > c.maxTokens) entry.connection = { ...c, maxTokens, unknownCapabilities: c.unknownCapabilities?.filter(field => field !== "maxTokens") };
+			if (maxTokens !== c.maxTokens) entry.connection = { ...c, maxTokens, unknownCapabilities: c.unknownCapabilities?.filter(field => field !== "maxTokens") };
 		}
 		const next = JSON.stringify([entries, this.statuses.map(s => s.status)]);
 		if (next !== this.previous || piFiles !== this.piFiles) { this.revision++; this.previous = next; this.piFiles = piFiles; this.entries = entries; }

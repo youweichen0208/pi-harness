@@ -345,8 +345,9 @@ function BashCommandHeader({ command, original, directory, running, elapsed, sta
 function RegularToolCallBlock({ block, view, onKillBash, wrap = true, rawSubagent = false }: ToolCallBlockProps) {
 	const nestedCalls = view.result?.nestedCalls ?? view.nestedCalls;
 	const t = useChatT();
-	const quietSubagent = block.name === "subagent";
-	const [open, setOpen] = useState(quietSubagent && !rawSubagent && !view.result?.isError ? false : wrap);
+	const acpDelegate = block.name === "acp_delegate";
+	const quietSubagent = block.name === "subagent" || acpDelegate;
+	const [open, setOpen] = useState(acpDelegate || (quietSubagent && !rawSubagent && !view.result?.isError) ? false : wrap);
 	const [copyError, setCopyError] = useState(false);
 	const [copied, setCopied] = useState(false);
 	const [lineWrap, setLineWrap] = useState(false);
@@ -593,7 +594,7 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true, rawSubagen
 			) : (
 			<div className="toolcall-head">
 				<span className="toolcall-icon">{block.name === "subagent" ? <FiGitBranch aria-hidden="true" /> : generic ? <FiTool aria-hidden="true" /> : toolIcon(block.name)}</span>
-				{compactBash ? <code className="bash-head-command" title={command ?? ""}>$ {displayBashCommand(command!, cwd)}</code> : generic ? <button type="button" className="toolcall-name toolcall-name-toggle" title={block.name} aria-expanded={open} onClick={() => setOpen(v => !v)}><span>{block.name}</span>{action && <small className="toolcall-action" title={action}>action: {action}</small>}</button> : <span className="toolcall-name">{block.name}</span>}
+				{compactBash ? <code className="bash-head-command" title={command ?? ""}>$ {displayBashCommand(command!, cwd)}</code> : generic ? <button type="button" className="toolcall-name toolcall-name-toggle" title={block.name} aria-expanded={open} onClick={() => setOpen(v => !v)}>{acpDelegate && (open ? <FiChevronDown aria-hidden="true" /> : <FiChevronRight aria-hidden="true" />)}<span>{block.name}</span>{action && <small className="toolcall-action" title={action}>action: {action}</small>}</button> : <span className="toolcall-name">{block.name}</span>}
 				{compactBash && output && <span className="bash-head-count">{t("toolLineCount", { n: outputLines.length })}</span>}
 				<span className="toolcall-status">
 					{running && !quietSubagent && <RunningIndicator />}

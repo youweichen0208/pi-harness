@@ -66,7 +66,8 @@ export function TermXterm({
 			cols,
 			rows,
 			theme: buildTermTheme(container),
-			fontFamily: getComputedStyle(container).getPropertyValue("--app-font").trim(),
+			fontFamily:
+				'"SF Mono", "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace',
 			fontSize: 14,
 			lineHeight: 1.2,
 			// xterm halves this target for ANSI dim text: 9 preserves a 4.5

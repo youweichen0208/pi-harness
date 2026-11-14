@@ -12,7 +12,8 @@
 | `PI_WEB_UPLOAD_RETENTION_DAYS` | `14` | 上传文件保留天数（`<dataDir>/uploads/`，启动时扫一次 + 每 6 小时一次）；0 = 关闭清理 |
 | `PI_WEB_SHELL` | 自动探测 | Windows 终端面板（node-pty）的 shell：默认优先 Git Bash（与 SDK bash 工具一致），可用此变量显式指定（如 `powershell.exe` / `cmd.exe`） |
 | `PATH`（macOS 自动补全） | 追加 `/opt/homebrew/bin`、`/opt/homebrew/sbin`、`/usr/local/bin`、`/usr/local/sbin` | 桌面版从 Dock / Spotlight / launchd 启动时不经过登录 shell，`~/.zprofile` 的 `brew shellenv` 不执行，PATH 只剩 `/usr/bin:/bin:/usr/sbin:/sbin`，终端里 `npm`/`node`/`git` 全是 command not found。服务启动时**追加**（不前置、不重复、不存在的目录跳过）这几个系统标准目录；用户自己配的目录始终优先。nvm / volta / asdf / fnm 等版本管理器**不猜**，仍需用户在 `~/.zshenv` 里导出。见 `server/shell-path.ts` |
-| `PI_MAX_TOKENS_FLOOR` | `65536`（默认开启） | 所有聊天模型（内置、Pi 原生配置、独立配置、外部同步）的输出额度下限；设为 `0` 关闭，仅接受正安全整数，不超过已知上下文窗口。不覆盖调用方显式额度。修改部署环境后重启服务；详见 `architecture-model-sources.md` |
+| `PI_MAX_TOKENS` | `128000` | pi-harness 统一模型输出额度，覆盖本地 Pi／独立／同步模型声明，受已知上下文窗口限制；不覆盖压缩等内部请求的显式额度。设为 `0` 关闭覆盖。 |
+| `PI_MAX_TOKENS_FLOOR` | 不再默认启用 | 兼容旧部署的输出下限；仅在显式设置且未设置 `PI_MAX_TOKENS` 时生效。 |
 | `PI_CODING_AGENT_DIR` | `~/.pi/agent` | pi 配置目录（auth.json / models.json / skills） |
 | `PI_WEB_HOST` | `127.0.0.1` | 监听地址。**默认只绑 loopback**（本地个人工具，不暴露到网络）；局域网/容器访问需显式 `0.0.0.0`（docker-compose 已内置，并同时设置 `PI_WEB_ALLOW_HOSTS`） |
 | `PI_WEB_ALLOW_ORIGINS` | 空 | 逗号分隔的额外 Origin 白名单（如 `http://localhost:5173` dev 代理、反代场景），用于绕过 WS 的 Origin/Host 同权威校验 |

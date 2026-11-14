@@ -177,7 +177,7 @@ describe("runtime synchronization", () => {
 		try {
 			const merged = sync.configs().find(c => c.models[0].id === "claude-example-1")!;
 			expect(merged.origin?.sources).toEqual(["claude", "opencode"]);
-			expect(runtime.getModel(merged.providerId, "claude-example-1")).toMatchObject({ contextWindow: 200000, maxTokens: 65536, reasoning: true, input: ["text", "image"] });
+			expect(runtime.getModel(merged.providerId, "claude-example-1")).toMatchObject({ contextWindow: 200000, maxTokens: 128000, reasoning: true, input: ["text", "image"] });
 			rmSync(join(f.home, ".claude/settings.json"));
 			open(false, "https://new.example/v1"); await sync.sync();
 			expect(runtime.getModel(merged.providerId, "claude-example-1")?.baseUrl).toBe("https://new.example/v1");
@@ -282,7 +282,7 @@ describe("runtime synchronization", () => {
 
 	it("keeps the existing Pi identity for an exact native duplicate", async () => {
 		const f = fixture(); f.claude("shared");
-		f.put("pi/models.json", { providers: { native: { api: "anthropic-messages", baseUrl: "https://api.anthropic.com", apiKey: "shared", models: [{ id: "claude-example-1", contextWindow: 200000, maxTokens: 65536, reasoning: false, input: ["text", "image"] }] } } });
+		f.put("pi/models.json", { providers: { native: { api: "anthropic-messages", baseUrl: "https://api.anthropic.com", apiKey: "shared", models: [{ id: "claude-example-1", contextWindow: 200000, maxTokens: 128000, reasoning: false, input: ["text", "image"] }] } } });
 		const runtime = await ModelRuntime.create({ modelsPath: join(f.home, "pi/models.json"), authPath: join(f.home, "pi/auth.json") });
 		const sync = new ModelSourceSync(join(f.home, "data"), join(f.home, "pi"), f.options);
 		const unbind = await sync.bind(runtime, () => false, () => {});

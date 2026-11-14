@@ -5,11 +5,14 @@ import { join } from "node:path";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { outputTokenLimit, withOutputTokenFloor } from "../../server/model-output-floor.js";
 
-it("preserves higher limits, respects context size and allows disabling the floor", () => {
-	expect(outputTokenLimit(131072, 200000, {})).toBe(131072);
-	expect(outputTokenLimit(4096, 200000, {})).toBe(65536);
+it("overrides higher and lower local limits, respects context size and supports legacy floors", () => {
+	expect(outputTokenLimit(131072, 200000, {})).toBe(128000);
+	expect(outputTokenLimit(4096, 200000, {})).toBe(128000);
 	expect(outputTokenLimit(4096, 200000, { PI_MAX_TOKENS_FLOOR: "16384" })).toBe(16384);
 	expect(outputTokenLimit(4096, 8192, {})).toBe(8192);
+	expect(outputTokenLimit(4096, 200000, { PI_MAX_TOKENS: "128000", PI_MAX_TOKENS_FLOOR: "1" })).toBe(128000);
+	expect(outputTokenLimit(200000, 300000, { PI_MAX_TOKENS: "128000" })).toBe(128000);
+	expect(outputTokenLimit(4096, 200000, { PI_MAX_TOKENS: "0" })).toBe(4096);
 	for (const value of ["0", "", "NaN", "-1", "1.5"]) expect(outputTokenLimit(4096, 32768, { PI_MAX_TOKENS_FLOOR: value })).toBe(4096);
 });
 
@@ -26,15 +29,15 @@ it("projects native and built-in catalogs without changing SDK registration, aut
 		expect(runtime.getRegisteredProviderIds()).toEqual(original.getRegisteredProviderIds());
 		expect(await runtime.getAuth("fixture")).toEqual(await original.getAuth("fixture"));
 		for (const list of [runtime.getModels(), runtime.getAllModels(), runtime.getAvailableSnapshot(), await runtime.getAvailable()]) {
-			expect(list.find(m => m.provider === "fixture" && m.id === "small")).toMatchObject({ maxTokens: 65536 });
+			expect(list.find(m => m.provider === "fixture" && m.id === "small")).toMatchObject({ maxTokens: 128000 });
 		}
-		const builtin = original.getModels().find(m => m.provider !== "fixture" && m.maxTokens < 65536 && m.contextWindow >= 65536);
+		const builtin = original.getModels().find(m => m.provider !== "fixture" && m.maxTokens < 128000 && m.contextWindow >= 128000);
 		expect(builtin).toBeDefined();
-		expect(runtime.getModel(builtin!.provider, builtin!.id)?.maxTokens).toBe(65536);
+		expect(runtime.getModel(builtin!.provider, builtin!.id)?.maxTokens).toBe(128000);
 		expect(original.getModel("fixture", "small")?.maxTokens).toBe(4096);
 		await runtime.refresh({ allowNetwork: false });
-		expect(runtime.getPhysicalModel("fixture", "small")?.maxTokens).toBe(65536);
-		expect(runtime.getModelOfType("chat", "fixture", "small")?.maxTokens).toBe(65536);
+		expect(runtime.getPhysicalModel("fixture", "small")?.maxTokens).toBe(128000);
+		expect(runtime.getModelOfType("chat", "fixture", "small")?.maxTokens).toBe(128000);
 		env.PI_MAX_TOKENS_FLOOR = "0";
 		expect(runtime.getModel("fixture", "small")?.maxTokens).toBe(4096);
 	} finally { rmSync(dir, { recursive: true, force: true }); }

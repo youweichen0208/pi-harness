@@ -17,17 +17,19 @@ Claude Code 来源的 `settings.env` 凭据优先于服务进程同类全局变�
 
 协议限定 Anthropic Messages、OpenAI Responses 和 OpenAI-compatible Chat Completions。Claude 的模型 ID 或显式别名映射支持末尾 `[1m]`：导入时去掉该后缀，并明确声明 1,000,000 token 上下文；请求使用去掉后缀的模型 ID。sonnet/opus 等未解析别名、云平台认证、modelOverrides、Codex 命令认证/gateway OAuth/query_params、OpenCode 未知 SDK 或无法转换的 options/variants 均报告不支持。不执行 apiKeyHelper、hooks、插件或远程配置；不读取项目配置、系统钥匙串和第三方订阅 token。不发现远程模型、不发起测试推理。
 
-能力声明按字段区分“未声明”和明确值。接口、模型与认证一致的重复来源中，一个来源未声明而另一个明确声明时，采用明确值；多个明确声明存在冲突时保留独立入口，不取最大值，也不通过缺失值把冲突项合并。Claude Code 来源默认声明 `input: ["text", "image"]`，匹配该客户端的图片输入行为（#165）；此默认值不推广到所有 Anthropic Messages 来源。若自定义网关实际仅支持文本，可编辑为本地独立配置并关闭图片能力，后续同步保留该选择。与 Pi/OpenCode 明确声明的文本模型保持独立，不合并能力冲突。其他来源没有可采用的声明时使用保守文本模型配置（32768 上下文、4096 原始输出、不声明推理/图片；同步时默认应用下述 65536 输出下限）。可编辑为本地独立配置补充能力。费用字段不来自远程价格目录。
+能力声明按字段区分“未声明”和明确值。接口、模型与认证一致的重复来源中，一个来源未声明而另一个明确声明时，采用明确值；多个明确声明存在冲突时保留独立入口，不取最大值，也不通过缺失值把冲突项合并。Claude Code 来源默认声明 `input: ["text", "image"]`，匹配该客户端的图片输入行为（#165）；此默认值不推广到所有 Anthropic Messages 来源。若自定义网关实际仅支持文本，可编辑为本地独立配置并关闭图片能力，后续同步保留该选择。与 Pi/OpenCode 明确声明的文本模型保持独立，不合并能力冲突。其他来源没有可采用的声明时使用保守文本模型配置（32768 上下文、4096 原始输出、不声明推理/图片；同步时默认应用下述 128000 输出额度覆盖）。可编辑为本地独立配置补充能力。费用字段不来自远程价格目录。
 
 来源格式依据 [Codex 配置参考](https://learn.chatgpt.com/docs/config-file/config-reference)、[Claude Code 设置](https://code.claude.com/docs/en/settings)、[OpenCode 配置](https://opencode.ai/docs/config/) 与 [OpenCode 凭据](https://opencode.ai/docs/providers/)。新格式必须增加夹具后适配，不能猜测协议或执行认证助手。
 
-## 统一模型输出额度下限（#144）
+## 统一模型输出额度
 
-`PI_MAX_TOKENS_FLOOR` 默认 `65536`，未设置时直接开启。设为 `0` 可关闭，也可设置其他正安全整数；服务部署环境修改后重启生效。对所有聊天模型统一应用，包括 SDK 内置、Pi 原生配置、本地独立模型和外部同步模型；不覆盖调用方显式的 `maxTokens`；低于原额度不降级，提升后的额度不超过已知 contextWindow。空值、负数、小数及非有限值按关闭处理。
+`PI_MAX_TOKENS` 默认 `128000`，对 SDK 内置、Pi 原生配置、本地独立和外部同步聊天模型统一覆盖 maxTokens，较大或较小的来源声明均不优先于 pi-harness。额度不超过已知 contextWindow；压缩等调用方显式请求额度继续保留。设为 `0`、空值或非法值时关闭覆盖。修改部署环境后重启生效。
 
-下限在来源去重与稳定身份分配之后应用，运行时注册和模型管理读取同一份有效额度，不改写来源文件、不合并原本冲突的能力声明。原生 Pi 入口仅与有效能力仍相同的外部入口合并。编辑同步条目生成本地独立配置后，同样应用下限。原生运行时通过 `model-output-floor.ts` 的公开 API facade 在模型读取、路由和请求边界投影有效额度；SDK 实例、认证、提供商注册和源文件保持原样，reload 后继续生效。该值不是网关能力探测：服务端若拒绝提高后的额度，应降低下限或设为 0；不自动重复请求试探上限。
+兼容显式设置的旧 `PI_MAX_TOKENS_FLOOR`：仅当未设置 `PI_MAX_TOKENS` 且旧变量存在时保留旧下限行为；新变量优先。默认无环境变量时使用 128000 覆盖策略。
 
-回归：`tests/unit/model-sources.test.ts`；`tests/output-limit-context-test.mjs` 验证同模型 Anthropic 请求的上下文及 4096 → 65536 实际额度变化，显式 `maxTokens: 1` 不受影响。
+覆盖在来源去重与稳定身份分配之后应用，运行时注册和模型管理读取同一份有效额度，不改写本地 Pi／来源文件，不合并原本冲突的能力声明。运行时通过 `model-output-floor.ts` 的公开 API facade 在模型读取、路由和请求边界投影有效额度，reload 后继续生效。该值不会提升远端服务能力；服务端若拒绝，应设置较小的 `PI_MAX_TOKENS`，不自动重复请求试探上限。
+
+回归：`tests/unit/model-output-floor.test.ts`、`tests/unit/model-sources.test.ts` 与 `tests/output-limit-context-test.mjs` 检查上下文限制、来源配置隔离、重载和实际 Anthropic 请求的 128000 额度，以及内部显式小额度保留。
 
 ## 模块与存储
 

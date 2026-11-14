@@ -82,6 +82,25 @@ try {
 	await page.evaluate(() => document.documentElement.dataset.appearance = 'light');
 	await card.screenshot({ path: 'tests/scratch/tool-card-mobile.png' });
 	assert(await card.evaluate(el => el.scrollWidth <= el.clientWidth + 1), 'mobile card does not overflow');
+	// ACP delegates are quiet disclosure rows, including failed and running calls.
+	for (const state of ["completed", "failed", "running"]) {
+		const callId = `acp-${state}`;
+		const messages = [{ id: callId, role: "assistant", timestamp: 3, content: [{ type: "toolCall", id: callId, name: "acp_delegate", argumentsText: '{"task":"Inspect the project"}' }] }];
+		if (state !== "running") messages.push({ id: `${callId}-result`, role: "toolResult", toolCallId: callId, toolName: "acp_delegate", content: [{ type: "text", text: state === "failed" ? "Delegate failed" : "Delegate completed" }], isError: state === "failed", timestamp: 4 });
+		socket.send(JSON.stringify({ type: "snapshot", state: { ...baseState, messages, isStreaming: state === "running" } }));
+		const delegate = page.locator(`.toolcall-subagent-quiet.${state === 'failed' ? 'err' : state === 'running' ? 'run' : 'ok'}`);
+		await delegate.waitFor();
+		assert.equal(await delegate.locator('.toolcall-body').count(), 0, `${state} defaults to collapsed`);
+		assert.equal(await delegate.evaluate(el => getComputedStyle(el).borderTopWidth), '0px');
+		assert.equal(await delegate.locator('.toolcall-head > .toolcall-copy').count(), 0, 'actions stay inside details');
+		if (state === 'failed') assert(await delegate.evaluate(el => el.classList.contains('err')));
+		if (state === 'running') await delegate.locator('.running-indicator').waitFor();
+		await delegate.locator('.toolcall-name-toggle').press('Enter');
+		await delegate.locator('.toolcall-body').waitFor();
+		await delegate.getByRole('button', { name: '复制参数', exact: true }).waitFor();
+		await delegate.locator('.toolcall-name-toggle').click();
+		assert.equal(await delegate.locator('.toolcall-body').count(), 0);
+	}
 	assert.deepEqual(errors, []);
 	console.log('PASS generic tool parameters, accessible controls, download, collapse, zoom, dark and mobile layouts');
 } finally {

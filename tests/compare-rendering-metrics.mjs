@@ -21,11 +21,9 @@ for (const scale of [100, 125, 150]) {
 			for (const key of ['text', 'weight', 'family', 'size', 'color']) assert.equal(sample[key], expected[key], `${context}: ${key}`);
 			assert.equal(sample.lines.length, expected.lines.length, `${context}: line wrapping`);
 			for (let line = 0; line < expected.lines.length; line++) {
-				// Native PingFang glyph advances differ slightly from bundled UI SC.
-				const tolerance = /[^\x00-\x7f]/.test(expected.text) ? Math.max(1, expected.lines[line].width * 0.03) : 1;
-				assert(Math.abs(sample.lines[line].width - expected.lines[line].width) <= tolerance, `${context}: line ${line} width exceeds ${tolerance} CSS px tolerance`);
+				assert(Math.abs(sample.lines[line].width - expected.lines[line].width) <= 1, `${context}: line ${line} width differs by more than 1 CSS px`);
 			}
 		}
 	}
-	console.log(`PASS Windows ${scale}% matches Mac typography: bundled files, colors, sizes, weights, wrapping and line widths (English 1 CSS px, native CJK 3%)`);
+	console.log(`PASS Windows ${scale}% matches Mac typography: bundled files, colors, sizes, weights, wrapping and line widths (within 1 CSS px)`);
 }

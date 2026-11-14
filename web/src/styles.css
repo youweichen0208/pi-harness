@@ -300,12 +300,10 @@
 	--term-bright-magenta: #c084fc;
 	--term-bright-cyan: #22d3ee;
 	--term-bright-white: #ffffff;
-	--mono: var(--app-font);
-	--app-font: "JetBrains Mono", "PingFang SC", "UI SC", monospace;
-	--chat-font: var(--app-font);
-	--sans: var(--chat-font);
-	--document-font: var(--chat-font);
-	--document-title-font: var(--chat-font);
+	--mono: "JetBrains Mono", "Cascadia Mono", "SF Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+	--sans: "UI SC", "Chinese Quote", -apple-system, system-ui, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
+	--document-font: "UI SC", "Chinese Quote", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
+	--document-title-font: "UI SC", "Chinese Quote", "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif, "Apple Color Emoji";
 	--accent-fg: #fff;
 	--yellow: #f2bc4e;
 	--yellow-fg: #8a5a00;
@@ -7969,7 +7967,7 @@ span.msg-editor-hint svg {
 	margin: 0;
 	padding: 12px 14px;
 	background: color-mix(in srgb, var(--shadow-color) 22%, transparent);
-	font-family: var(--mono);
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 	font-size: calc(12px * var(--fp-zoom, 1));
 	line-height: 1.55;
 	color: var(--text-dim);
@@ -10620,7 +10618,7 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { height: 44px;
 .extensions-panel .ext-primary { background: var(--ext-accent); color: var(--accent-fg); border-color: var(--ext-accent); }
 .extensions-panel .ext-primary:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 85%, var(--shadow-color)); color: var(--accent-fg); }
 .extensions-panel p { margin: 6px 0; line-height: 1.6; font-size: 12px; }
-.extensions-panel code, .extensions-panel pre, .ext-name strong, .ext-version, .ext-card-heading strong { font-family: var(--mono); }
+.extensions-panel code, .extensions-panel pre, .ext-name strong, .ext-version, .ext-card-heading strong { font-family: "JetBrains Mono", monospace; }
 .ext-header { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 4px 0 20px; }
 .ext-header h2 { font-size: 21px; font-weight: 600; letter-spacing: -.5px; margin: 0; }
 .ext-header p, .ext-muted, .ext-meta, .ext-check, .ext-auto { color: var(--ext-muted); }
@@ -13573,7 +13571,7 @@ html.pi-desktop .wiki-window-header .desktop-window-controls { -webkit-app-regio
 	background-position: center; container-type: inline-size;
 }
 .welcome-paper .welcome-motto {
-	margin: 0; font-family: var(--sans);
+	margin: 0; font-family: "Times New Roman", "Source Serif 4", Georgia, serif;
 	font-size: clamp(28px, 6.4cqw, 76px); font-weight: 400; font-style: italic;
 	line-height: 1.08; letter-spacing: -0.045em; text-align: center; color: var(--welcome-ink);
 }
@@ -15934,7 +15932,7 @@ span.rich-math { display: inline-block; }
    低对比缩进导轨，语法色拉开色相（紫关键字／海军蓝字符串／绿数字／蓝函数名）。
 --------------------------------------------------------------------------- */
 .scratch-page {
-	--pg-font: var(--app-font);
+	--pg-font: "JetBrains Mono", "Sarasa Mono SC", Menlo, monospace;
 	--pg-tab-size: 4;
 	--pg-code-bg: #ffffff;
 	--pg-code-gutter: #ffffff;
@@ -16560,9 +16558,9 @@ span.rich-math { display: inline-block; }
 .design-workspace .panel-right .file-item > .file-name,
 .design-workspace .panel-right .file-dir-main { font-size: 14px; }
 .design-workspace .msg-assistant .msg-text:not(.process-narration) .md,
-.design-workspace .msg-user .msg-text .md { font-family: var(--chat-font); font-size: 16px; line-height: 1.7; }
+.design-workspace .msg-user .msg-text .md { font-size: 16px; line-height: 1.7; }
 .design-workspace .msg-assistant .msg-text:not(.process-narration) .md > :is(p, ul, ol, blockquote) { max-width: 88ch; }
-.design-workspace .inputbox textarea { font-family: var(--chat-font); font-size: 16px; line-height: 1.6; }
+.design-workspace .inputbox textarea { font-size: 16px; line-height: 1.6; }
 .design-workspace .input-tools .chip { font-size: 13px; }
 .design-workspace .reply-actions { font-size: 13px; }
 
