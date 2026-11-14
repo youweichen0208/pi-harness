@@ -4,8 +4,8 @@ export const THEME_CHANGE_EVENT = "pi-harness:theme-change";
 /** CSS variable → xterm theme. Reads the --term-* palette from the current
  * stylesheet, so the terminal canvas always matches the app's palette.
  * The stylesheet is the single source of palette values. */
-export function buildTermTheme(): Record<string, string> {
-	const cs = getComputedStyle(document.documentElement);
+export function buildTermTheme(element: Element = document.documentElement): Record<string, string> {
+	const cs = getComputedStyle(element);
 	const v = (name: string) => cs.getPropertyValue(name).trim();
 	return {
 		background: v("--term-bg"),

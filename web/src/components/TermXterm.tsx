@@ -10,6 +10,8 @@ import { classifyTerminalPaste } from "../terminal-paste";
 const CTRL_V = "\x16";
 
 interface TermXtermProps {
+	cols: number;
+	rows: number;
 	conversationId: string;
 	terminalId: string;
 	/** When set, the server runs this command in a new shell instead of a bare shell. */
@@ -33,6 +35,8 @@ interface TermXtermProps {
  * scrollback survives tab switches.
  */
 export function TermXterm({
+	cols,
+	rows,
 	conversationId,
 	terminalId,
 	command,
@@ -57,10 +61,17 @@ export function TermXterm({
 		if (!container) return;
 
 		const term = new Terminal({
-			theme: buildTermTheme(),
-			fontFamily:
-				'"SF Mono", "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace',
-			fontSize: 13,
+			// Replay contains cursor-addressed output. Hidden terminals cannot fit
+			// to the DOM, so start at the PTY size before registering the writer.
+			cols,
+			rows,
+			theme: buildTermTheme(container),
+			fontFamily: getComputedStyle(container).getPropertyValue("--app-font").trim(),
+			fontSize: 14,
+			lineHeight: 1.2,
+			// xterm halves this target for ANSI dim text: 9 preserves a 4.5
+			// minimum for muted CLI descriptions on both light and dark surfaces.
+			minimumContrastRatio: 9,
 			cursorBlink: true,
 			scrollback: 8000,
 		});
@@ -73,7 +84,7 @@ export function TermXterm({
 		// Re-theme the canvas when the active theme changes (the injected <link>
 		// fires THEME_CHANGE_EVENT after its stylesheet has applied).
 		const onThemeChange = () => {
-			term.options.theme = buildTermTheme();
+			term.options.theme = buildTermTheme(container);
 		};
 		window.addEventListener(THEME_CHANGE_EVENT, onThemeChange);
 

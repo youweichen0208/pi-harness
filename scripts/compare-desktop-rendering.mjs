@@ -32,7 +32,9 @@ for (const file of windows) {
 	assert.equal(win.platform, 'win32');
 	assert.equal(win.electron, mac.electron, 'Compare the same Electron version');
 	for (const key of ['width', 'height', 'bodySize', 'typography', 'surfaces', 'ui']) compare(mac[key], win[key], `${file}.${key}`);
-	for (const key of ['renderedFonts', 'monoFonts']) {
+	// CJK uses native PingFang on macOS and bundled UI SC on Windows.
+	// The per-platform rendering test verifies each fallback; code uses the same bundled font.
+	for (const key of ['monoFonts']) {
 		const custom = fonts => [...new Set(fonts.filter(font => font.isCustomFont).map(font => font.familyName))].sort();
 		assert.deepEqual(custom(win[key]), custom(mac[key]), `${file}.${key}: actual bundled fonts`);
 	}

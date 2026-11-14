@@ -39,6 +39,13 @@ try {
 		const upstream = route.connectToServer();
 		route.onMessage(wire => {
 			const message = JSON.parse(wire.toString());
+			if (message.terminalId === "wide-replay-fixture") {
+				if (message.type === "terminal_replay") route.send(JSON.stringify({
+					type: "terminal_output", conversationId: activeConversationId, terminalId: message.terminalId,
+					reset: true, data: "\x1b[2J\x1b[1;100HREPLAY_POSITION",
+				}));
+				return;
+			}
 			if (message.type.startsWith('terminal_')) events.push(`${message.type}:${message.conversationId}`);
 			if (message.type === 'terminal_create') creates.push(message);
 			upstream.send(wire);
@@ -96,6 +103,20 @@ try {
 	await page.keyboard.press('Enter');
 	await page.waitForFunction(() => document.querySelector('.term-xterm:not(.hidden)')?.textContent.includes('RESTORED_TERMINAL'), undefined, { timeout: 5000 });
 	console.log('PASS terminal receives output after reconnect');
+	const current = creates.at(-1);
+	socket.send(JSON.stringify({ type: "terminal_list", conversationId: activeConversationId, terminals: [
+		{ id: current.terminalId, title: "Current", cwd: root, cols: current.cols, rows: current.rows, running: true, exitCode: null },
+		{ id: "wide-replay-fixture", title: "Wide replay", cwd: root, cols: 120, rows: 40, running: true, exitCode: null },
+	] }));
+	await page.waitForFunction(() => [...document.querySelectorAll(".term-xterm.hidden .xterm-rows > div")].some(row => row.textContent.includes("REPLAY_POSITION")));
+	const replay = await page.locator(".term-xterm.hidden .xterm-rows").evaluate(element => ({
+		rows: element.children.length,
+		firstRow: element.children[0].textContent,
+	}));
+	assert.equal(replay.rows, 40, "hidden terminal restores the recorded PTY height");
+	assert(replay.firstRow.includes("REPLAY_POSITION"), "column 100 must remain on the first row instead of wrapping at column 80");
+	console.log("PASS hidden terminal replays cursor-addressed output at the PTY dimensions");
+
 } finally {
 	await browser?.close();
 	if (server?.exitCode === null) { const stopped = new Promise(resolve => server.once('exit', resolve)); server.kill('SIGTERM'); await stopped; }

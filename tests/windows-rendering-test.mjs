@@ -84,8 +84,8 @@ try {
 			assert.fail(`No stable rendered node for ${selector}`);
 		};
 		const rendered = await platformFonts('.msg-text h2');
-		assert(rendered.fonts.some(font => font.familyName === 'UI SC' && font.isCustomFont && font.glyphCount > 0), JSON.stringify(rendered));
-		assert(await page.locator('.msg-text h2').evaluate(el => getComputedStyle(el).fontFamily.startsWith('"UI SC"')), 'prose prioritizes the bundled cross-platform UI font');
+		assert(rendered.fonts.some(font => font.familyName === (process.platform === 'darwin' ? 'PingFang SC' : 'UI SC') && font.glyphCount > 0), JSON.stringify(rendered));
+		assert(await page.locator('.msg-text h2').evaluate(el => getComputedStyle(el).fontFamily.startsWith('"JetBrains Mono"')), 'prose prioritizes the shared terminal-style font');
 		await page.locator('.tree-hidden-summary').click();
 		await page.locator('[data-tree-node=".ruff_cache"] .file-name').waitFor();
 		const monoFonts = await platformFonts('.msg-text pre code');

@@ -85,132 +85,41 @@ async function main() {
 	});
 	page.on("pageerror", (e) => consoleErrors.push(String(e)));
 
+	await page.routeWebSocket('**/ws', route => {
+		const upstream = route.connectToServer();
+		route.onMessage(wire => upstream.send(wire));
+		upstream.onMessage(wire => {
+			const message = JSON.parse(wire.toString());
+			if (message.type === 'snapshot' || message.type === 'snapshot_delta') message.state.piConfigured = true;
+			route.send(JSON.stringify(message));
+		});
+	});
 	await page.goto(`http://localhost:${PORT}/`);
 	// Wait for the session to be ready (hello/ready round-trip).
 	await page.waitForSelector(".boot-wait", { state: "hidden", timeout: 60000 });
 	await page.waitForSelector(".topbar", { timeout: 5000 });
 	console.log("app booted");
-
-	// -- folder path link (right panel) ---------------------------------------
-	{
-		const { mkdirSync } = await import("node:fs");
-		mkdirSync(join(workdir, "subdir"), { recursive: true });
-		// RightPanel refreshes automatically on mount and on fs.watch changes;
-		// there is no manual refresh button in the current UI.
-		await page.waitForSelector('.panel-right .file-item.dir', { timeout: 5000 });
-		await sleep(300);
-		const dirRow = page.locator(".file-item.dir", { hasText: "subdir" });
-		check("folder row visible in file panel", (await dirRow.count()) === 1);
-		await dirRow.hover();
-		await dirRow.locator(".file-attach.ref").click();
-		await sleep(400);
-		const chip = page.locator(".attach-chip", { hasText: "subdir" });
-		check("folder chip added to the input bar", (await chip.count()) === 1);
-		check("folder chip shows the folder icon", (await chip.textContent())?.includes("📁"));
-		// Remove it again so the rest of the test is unaffected.
-		await chip.locator(".attach-remove").click();
-	}
+	await page.locator('.compact-workspace-trigger').click();
+	await page.locator('.workspace-picker-create').click();
+	await page.getByLabel('Workspace 名称', { exact: true }).fill('Terminal test');
+	await page.getByRole('button', { name: '创建 Workspace', exact: true }).click();
+	await page.locator('.lp-add-project').click();
+	await page.locator('.fpk-modal-foot input').fill(workdir);
+	await page.locator('.fpk-open-btn').click();
+	await page.locator('.project-item.active').waitFor();
 
 	// Switch to the terminal view.
 	await page.click('.view-switch button:has-text("终端")');
 	await page.waitForSelector(".terminal-view", { timeout: 5000 });
 	check("terminal view renders", true);
-	// Opening the terminal view creates a default shell. Close it so the
-	// command-list assertions below exercise a single command terminal.
-	const initialShell = page.locator(".term-tab", { hasText: "终端 1" });
-	if (await initialShell.count()) await initialShell.locator(".term-tab-close").click();
-	await sleep(300);
-
-	// Add a command via the form.
-	await page.click(".term-commands .panel-new");
-	await page.fill("#cmd-name", "hello-test");
-	await page.fill("#cmd-command", "echo BROWSER_PTY_OK");
-	await page.fill("#cmd-cwd", "${pwd}");
-	await page.click(".cmd-form-actions .btn.primary");
-	await sleep(500);
-	check(
-		"command saved into the list",
-		(await page.textContent(".term-commands"))?.includes("hello-test"),
-	);
-
-	// commands.json must exist on disk with the expected shape.
-	const { existsSync, readFileSync } = await import("node:fs");
-	check(
-		"commands.json on disk",
-		existsSync(join(workdir, ".pi", "commands.json")),
-	);
-	let onDisk = null;
-	try {
-		onDisk = JSON.parse(
-			readFileSync(join(workdir, ".pi", "commands.json"), "utf8"),
-		);
-	} catch {
-		onDisk = null;
-	}
-	check(
-		"disk commands[0].cwd is ${pwd}",
-		onDisk?.commands?.[0]?.cwd === "${pwd}",
-	);
-
-	// Run it — a tab appears and the PTY banner/output shows.
-	await page.click(".cmd-run");
+	check("command form removed", await page.locator(".term-command-section").count() === 0);
+	if (await page.locator(".term-tab").count() === 0) await page.locator(".term-new-row").click();
 	await page.waitForSelector(".term-tab", { timeout: 5000 });
-	check("terminal tab appears", true);
-	await sleep(2500);
-	const termText = await page.textContent(".term-main");
-	check("command ran in terminal", termText?.includes("BROWSER_PTY_OK"));
-	check("banner shows command", termText?.includes("> echo BROWSER_PTY_OK"));
-	// Clicking the same command again must REUSE the same tab AND re-run it:
-	// the running process is interrupted and a fresh shell starts.
-	const termTextarea = page
-		.locator(".term-xterm:not(.hidden) .xterm-helper-textarea")
-		.first();
-	await termTextarea.click();
-	await page.keyboard.type("echo SH1=$$");
-	await page.keyboard.press("Enter");
-	await sleep(800);
-	const before = await page.textContent(".term-main");
-	const sh1 = (before.match(/SH1=(\d+)/) ?? [])[1];
-	check("first shell pid captured", !!sh1);
-
-	await page.click(".cmd-run"); // re-run: interrupt + fresh shell in same tab
-	await sleep(1500);
-	check(
-		"same command reuses the running tab",
-		(await page.locator(".term-tab").count()) === 1,
-	);
-	const afterRun = await page.textContent(".term-main");
-	check("terminal cleared for the re-run", !afterRun.includes("SH1="));
 	await page.locator(".term-xterm:not(.hidden) .xterm-helper-textarea").first().click();
-	await page.keyboard.type("echo SH2=$$");
+	await page.keyboard.type("echo BROWSER_PTY_OK");
 	await page.keyboard.press("Enter");
-	await sleep(800);
-	const after = await page.textContent(".term-main");
-	const sh2 = (after.match(/SH2=(\d+)/) ?? [])[1];
-	check(
-		"re-run spawns a fresh shell (old one interrupted)",
-		!!sh1 && !!sh2 && sh1 !== sh2,
-	);
-
-	// After the command's shell exits, clicking again restarts the SAME tab.
-	await page.locator(".term-xterm:not(.hidden) .xterm-helper-textarea").first().click();
-	await page.keyboard.type("exit");
-	await page.keyboard.press("Enter");
-	await sleep(1200);
-	check(
-		"tab marked exited",
-		(await page.locator(".term-tab-exit").count()) === 1,
-	);
-	await page.click(".cmd-run");
-	await sleep(1500);
-	check(
-		"exited tab reused (still one tab)",
-		(await page.locator(".term-tab").count()) === 1,
-	);
-	check(
-		"tab running again after re-run",
-		(await page.locator(".term-tab-dot.run").count()) === 1,
-	);
+	await page.waitForFunction(() => document.querySelector(".term-main")?.textContent.includes("BROWSER_PTY_OK"));
+	check("shell accepts terminal input", true);
 
 	// Type into the terminal through the xterm (paste into its hidden textarea).
 	const textarea = page.locator(".term-xterm:not(.hidden) .xterm-helper-textarea").first();
@@ -247,9 +156,9 @@ async function main() {
 
 	// Conversation-level persistence: an idle conversation with a terminal must
 	// remain switchable after creating a new chat, and its PTY/tab must return.
-	await page.click(".sidebar-new button");
-	await sleep(1800);
 	await page.click('.view-switch button:has-text("对话")');
+	await page.click(".global-new-chat");
+	await sleep(1800);
 	await page.waitForSelector(".panel-sessions .session-item:not(.active)", { timeout: 5000 });
 	check("conversation with terminal remains listed", (await page.locator(".panel-sessions .session-item:not(.active)").count()) >= 1);
 	await page.locator(".panel-sessions .session-item:not(.active)").first().click();

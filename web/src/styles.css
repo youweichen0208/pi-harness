@@ -258,6 +258,27 @@
 	/* Tooltips and terminals keep independent dark backgrounds. */
 	--tooltip-bg: #232733;
 	--tooltip-fg: #e6e8ef;
+	--console-light-bg: #ffffff;
+	--console-light-fg: #292929;
+	--console-light-cursor: #777777;
+	--console-light-cursor-accent: #ffffff;
+	--console-light-selection: #dce5ef;
+	--console-light-black: #292929;
+	--console-light-red: #c72d49;
+	--console-light-green: #387c32;
+	--console-light-yellow: #946017;
+	--console-light-blue: #286b9f;
+	--console-light-magenta: #995080;
+	--console-light-cyan: #287681;
+	--console-light-white: #ededed;
+	--console-light-bright-black: #737373;
+	--console-light-bright-red: #c43723;
+	--console-light-bright-green: #397e35;
+	--console-light-bright-yellow: #a05a19;
+	--console-light-bright-blue: #326fa5;
+	--console-light-bright-magenta: #a04478;
+	--console-light-bright-cyan: #327782;
+	--console-light-bright-white: #f4f4f4;
 	--term-bg: #1f1d1a;
 	--term-fg: #e6e8ef;
 	--term-cursor: var(--accent);
@@ -279,10 +300,12 @@
 	--term-bright-magenta: #c084fc;
 	--term-bright-cyan: #22d3ee;
 	--term-bright-white: #ffffff;
-	--mono: "JetBrains Mono", "Cascadia Mono", "SF Mono", "SFMono-Regular", Menlo, Consolas, monospace;
-	--sans: "UI SC", "Chinese Quote", -apple-system, system-ui, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
-	--document-font: "UI SC", "Chinese Quote", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
-	--document-title-font: "UI SC", "Chinese Quote", "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif, "Apple Color Emoji";
+	--mono: var(--app-font);
+	--app-font: "JetBrains Mono", "PingFang SC", "UI SC", monospace;
+	--chat-font: var(--app-font);
+	--sans: var(--chat-font);
+	--document-font: var(--chat-font);
+	--document-title-font: var(--chat-font);
 	--accent-fg: #fff;
 	--yellow: #f2bc4e;
 	--yellow-fg: #8a5a00;
@@ -1815,6 +1838,31 @@ body.panel-resizing {
 }
 
 /* -------------------------------------------------------------- terminal */
+
+/* cmux-inspired light palette, scoped to the interactive terminal. */
+:root:not([data-appearance="dark"]) .terminal-view {
+	--term-bg: var(--console-light-bg);
+	--term-fg: var(--console-light-fg);
+	--term-cursor: var(--console-light-cursor);
+	--term-cursor-accent: var(--console-light-cursor-accent);
+	--term-selection: var(--console-light-selection);
+	--term-black: var(--console-light-black);
+	--term-red: var(--console-light-red);
+	--term-green: var(--console-light-green);
+	--term-yellow: var(--console-light-yellow);
+	--term-blue: var(--console-light-blue);
+	--term-magenta: var(--console-light-magenta);
+	--term-cyan: var(--console-light-cyan);
+	--term-white: var(--console-light-white);
+	--term-bright-black: var(--console-light-bright-black);
+	--term-bright-red: var(--console-light-bright-red);
+	--term-bright-green: var(--console-light-bright-green);
+	--term-bright-yellow: var(--console-light-bright-yellow);
+	--term-bright-blue: var(--console-light-bright-blue);
+	--term-bright-magenta: var(--console-light-bright-magenta);
+	--term-bright-cyan: var(--console-light-bright-cyan);
+	--term-bright-white: var(--console-light-bright-white);
+}
 
 .terminal-view {
 	flex: 1;
@@ -7921,7 +7969,7 @@ span.msg-editor-hint svg {
 	margin: 0;
 	padding: 12px 14px;
 	background: color-mix(in srgb, var(--shadow-color) 22%, transparent);
-	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-family: var(--mono);
 	font-size: calc(12px * var(--fp-zoom, 1));
 	line-height: 1.55;
 	color: var(--text-dim);
@@ -10572,7 +10620,7 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { height: 44px;
 .extensions-panel .ext-primary { background: var(--ext-accent); color: var(--accent-fg); border-color: var(--ext-accent); }
 .extensions-panel .ext-primary:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 85%, var(--shadow-color)); color: var(--accent-fg); }
 .extensions-panel p { margin: 6px 0; line-height: 1.6; font-size: 12px; }
-.extensions-panel code, .extensions-panel pre, .ext-name strong, .ext-version, .ext-card-heading strong { font-family: "JetBrains Mono", monospace; }
+.extensions-panel code, .extensions-panel pre, .ext-name strong, .ext-version, .ext-card-heading strong { font-family: var(--mono); }
 .ext-header { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 4px 0 20px; }
 .ext-header h2 { font-size: 21px; font-weight: 600; letter-spacing: -.5px; margin: 0; }
 .ext-header p, .ext-muted, .ext-meta, .ext-check, .ext-auto { color: var(--ext-muted); }
@@ -13525,7 +13573,7 @@ html.pi-desktop .wiki-window-header .desktop-window-controls { -webkit-app-regio
 	background-position: center; container-type: inline-size;
 }
 .welcome-paper .welcome-motto {
-	margin: 0; font-family: "Times New Roman", "Source Serif 4", Georgia, serif;
+	margin: 0; font-family: var(--sans);
 	font-size: clamp(28px, 6.4cqw, 76px); font-weight: 400; font-style: italic;
 	line-height: 1.08; letter-spacing: -0.045em; text-align: center; color: var(--welcome-ink);
 }
@@ -15886,7 +15934,7 @@ span.rich-math { display: inline-block; }
    低对比缩进导轨，语法色拉开色相（紫关键字／海军蓝字符串／绿数字／蓝函数名）。
 --------------------------------------------------------------------------- */
 .scratch-page {
-	--pg-font: "JetBrains Mono", "Sarasa Mono SC", Menlo, monospace;
+	--pg-font: var(--app-font);
 	--pg-tab-size: 4;
 	--pg-code-bg: #ffffff;
 	--pg-code-gutter: #ffffff;
@@ -16512,8 +16560,62 @@ span.rich-math { display: inline-block; }
 .design-workspace .panel-right .file-item > .file-name,
 .design-workspace .panel-right .file-dir-main { font-size: 14px; }
 .design-workspace .msg-assistant .msg-text:not(.process-narration) .md,
-.design-workspace .msg-user .msg-text .md { font-size: 16px; line-height: 1.7; }
+.design-workspace .msg-user .msg-text .md { font-family: var(--chat-font); font-size: 16px; line-height: 1.7; }
 .design-workspace .msg-assistant .msg-text:not(.process-narration) .md > :is(p, ul, ol, blockquote) { max-width: 88ch; }
-.design-workspace .inputbox textarea { font-size: 16px; line-height: 1.6; }
+.design-workspace .inputbox textarea { font-family: var(--chat-font); font-size: 16px; line-height: 1.6; }
 .design-workspace .input-tools .chip { font-size: 13px; }
 .design-workspace .reply-actions { font-size: 13px; }
+
+/* Terminal navigation: compact workspace header and project/session tree. */
+.terminal-view .term-navigation { background: var(--sidebar-bg); }
+.term-navigation .term-workspace-section { flex: 1; max-height: none; padding: 12px; }
+.term-navigation .term-workspace-trigger { height: 58px; gap: 10px; padding: 8px 10px; background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--r-md); }
+.term-navigation .term-workspace-trigger:hover { border-color: var(--input-border); }
+.term-navigation .term-workspace-trigger > svg:first-child { width: 22px; height: 22px; }
+.term-navigation .term-workspace-label { display: flex; flex-direction: column; gap: 3px; }
+.term-navigation .term-workspace-label small { color: var(--text-dim); font-size: 10px; line-height: 14px; letter-spacing: .6px; }
+.term-navigation .term-workspace-label strong { overflow: hidden; text-overflow: ellipsis; font-size: 14px; line-height: 20px; font-weight: 600; }
+.term-navigation .term-project-section { margin-top: 16px; padding-top: 10px; border-top: 1px solid var(--border); flex: 1; }
+.term-navigation .term-section-heading { min-height: 32px; padding: 0 6px; font-size: 11px; letter-spacing: .5px; }
+.term-navigation .term-section-heading button { width: 28px; height: 28px; }
+.term-navigation .term-project-list { padding-top: 6px; scrollbar-gutter: stable; }
+.term-navigation .term-project-group { margin-bottom: 14px; }
+.term-navigation .term-project-row { min-height: 48px; gap: 9px; padding: 6px; color: var(--text); }
+.term-navigation .term-project-row.active { background: transparent; }
+.term-navigation .term-project-row:hover { background: var(--bg-elev2); }
+.term-navigation .term-project-row strong { font-size: 13px; line-height: 18px; }
+.term-navigation .term-project-row small { color: var(--text-dim); font: 11px/16px var(--mono); }
+.term-navigation .term-project-row > .term-project-total { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 22px; padding: 0 5px; background: var(--bg-elev2); border-radius: var(--r-sm); color: var(--text-dim); font-size: 11px; font-variant-numeric: tabular-nums; }
+.terminal-view .term-navigation .term-tabs-block .panel-body { margin: 5px 0 0 14px; padding: 0 0 0 10px; border-left: 1px solid var(--border); }
+.terminal-view .term-navigation .term-tab { position: relative; min-height: 36px; margin: 2px 0; padding: 2px 6px 2px 9px; background: transparent; }
+.terminal-view .term-navigation .term-tab:hover { background: var(--bg-elev2); }
+.terminal-view .term-navigation .term-tab.active { background: var(--row-active); }
+.terminal-view .term-navigation .term-tab-main { gap: 8px; min-height: 30px; font-size: 13px; }
+.term-navigation .term-session-icon { flex-shrink: 0; width: 14px; height: 14px; color: var(--text-dim); }
+.term-navigation .term-tab.active .term-tab-title { font-weight: 600; }
+.term-navigation .term-tab-dot { width: 6px; height: 6px; }
+.terminal-view .term-navigation .term-tab-close { width: 26px; height: 26px; flex: 0 0 26px; }
+.term-navigation .term-tab:focus-within .term-tab-close { opacity: 1; }
+.terminal-view .term-navigation .term-new-row.panel-new { width: 100%; height: 34px; margin-top: 10px; padding: 0 9px; gap: 8px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--bg-elev); color: var(--text); font-size: 12px; }
+.terminal-view .term-navigation .term-new-row.panel-new:hover:not(:disabled) { border: 1px solid var(--input-border); background: var(--bg-elev2); }
+.term-navigation button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (pointer: coarse) {
+	.term-navigation .term-workspace-trigger, .term-navigation .term-project-row, .terminal-view .term-navigation .term-tab, .terminal-view .term-navigation .term-new-row.panel-new { min-height: 44px; }
+	.terminal-view .term-navigation .term-tab-close, .term-navigation .term-section-heading button { width: 44px; height: 44px; flex-basis: 44px; opacity: 1; }
+}
+
+/* Reduced terminal navigation: three visible sessions, full list on demand. */
+.terminal-view .term-navigation .term-tabs-block .panel-body { margin-left: 0; padding-left: 8px; border-left: none; }
+.terminal-view .term-navigation .term-tab { min-height: 32px; margin: 1px 0; padding: 1px 6px 1px 12px; }
+.terminal-view .term-navigation .term-tab-main { min-height: 28px; }
+.terminal-view .term-navigation .term-tab.renaming > .term-tab-dot,
+.terminal-view .term-navigation .term-tab.renaming > .term-tab-close { display: none; }
+.term-navigation .term-tab-rename input { width: 100%; height: 28px; font-size: 13px; }
+.term-navigation .term-list-toggle { display: flex; align-items: center; gap: 6px; min-height: 30px; padding: 4px 12px; border: 0; background: transparent; color: var(--text-dim); font: 12px var(--sans); cursor: pointer; }
+.term-navigation .term-list-toggle:hover { color: var(--text); }
+.term-navigation .term-list-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
+.terminal-view .term-navigation .term-new-row.panel-new { height: 32px; margin-top: 6px; padding-left: 12px; border: none; background: transparent; color: var(--text-dim); }
+.terminal-view .term-navigation .term-new-row.panel-new:hover:not(:disabled) { border: none; background: var(--bg-elev2); color: var(--text); }
+@media (pointer: coarse) {
+	.terminal-view .term-navigation .term-tab, .term-navigation .term-list-toggle, .terminal-view .term-navigation .term-new-row.panel-new { min-height: 44px; }
+}
