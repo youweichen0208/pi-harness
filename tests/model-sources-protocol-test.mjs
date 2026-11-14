@@ -53,8 +53,8 @@ try {
 	send({ type: "prompt", text: "Reply fixture" });
 	await wait(() => pending, "mock model request");
 	assert.equal(requests[0].key, "Bearer FIRST_SECRET");
-	assert.equal(providers[0].models[0].maxTokens, 65536);
-	assert.equal(requests[0].body.max_tokens ?? requests[0].body.max_completion_tokens, 65536);
+	assert.equal(providers[0].models[0].maxTokens, 128000);
+	assert.equal(requests[0].body.max_tokens ?? requests[0].body.max_completion_tokens, 128000);
 	writeFileSync(source, JSON.stringify(config("SECOND_SECRET")));
 	send({ type: "sync_model_sources" }); await delay(300);
 	pending();
@@ -70,7 +70,7 @@ try {
 	await delay(300); send({ type: "sync_model_sources" });
 	await wait(() => messages.findLast(m => m.type === "models")?.models.some(m => m.id === "native/example" && m.origin.sources.includes("opencode")), "native merged identity");
 	send({ type: "list_models_config" });
-	await wait(() => messages.findLast(m => m.type === "models_config")?.providers.find(p => p.providerId === "native")?.models[0].maxTokens === 65536, "native effective config floor");
+	await wait(() => messages.findLast(m => m.type === "models_config")?.providers.find(p => p.providerId === "native")?.models[0].maxTokens === 128000, "native effective config limit");
 	send({ type: "set_model", modelId: "native/example" });
 	await delay(300);
 	rmSync(nativeConfig); send({ type: "sync_model_sources" });
