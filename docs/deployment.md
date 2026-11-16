@@ -248,6 +248,8 @@ OMP 请求诊断的 `omp/request-diagnostics-extension.js` 随服务编译打包
 
 Task 压缩夹具要求显式选择被测应用的 Bun 和 SDK，并在打开历史前核对真实路径归属；OAuth 重连门禁同样支持传入包内 executable/appRoot。MCP 桌面用例的未保存离开确认经过真实 `will-prevent-unload` 路径，测试仅替代原生对话框的用户按钮响应，验证取消后保留草稿；浏览器模式仍检查浏览器自己的 beforeunload。二者不能同时通过 CDP 处理同一次桌面确认。
 
-### 独立 Windows OMP 测试包
+### 独立 OMP 桌面测试包
 
-`Verify Windows desktop build` 的空 `release_tag` 路径在 Windows runner 构建当前检出，执行与正式发布相同的 OMP 源码、包内和桌面门禁，并保留三轮终端、便携版重启、中文／空格路径 ZIP 与 NSIS 旧版隔离数据升级检查。只有全部成功才上传 Actions 安装包产物；截图即使失败也上传。该流程使用只读仓库权限，不创建 Release。真实 DeepSeek 原任务与网关对照仍需在故障环境单独完成。
+`Verify desktop migration`（工作流文件 `verify-windows-desktop.yml`）在空 `release_tag`、`platform=windows` 时，在 Windows runner 构建当前检出，执行与正式发布相同的 OMP 源码、包内和桌面门禁，并保留三轮终端、便携版重启、中文／空格路径 ZIP 与 NSIS 旧版隔离数据升级检查。只有全部成功才上传 Actions 安装包产物；截图即使失败也上传。该流程使用只读仓库权限，不创建 Release。真实 DeepSeek 原任务与网关对照仍需在故障环境单独完成。
+
+`platform=linux` 在 Ubuntu 24.04 x64 构建 AppImage/deb，复用发布流程的源码、包内与 deb 旧版数据验证，另以 Xvfb 执行六项真实 Electron 界面检查，并验证中文／空格路径中解出的 AppImage 内容。全部门禁通过后才上传安装包及 SHA256SUMS，截图失败时也保留。AppImage 解包运行不代表 FUSE 挂载方式已验证；该流程不创建或更新 Release。

@@ -1,10 +1,15 @@
-# 独立 Windows 测试包：真实平台构建和 OMP 门禁，产物保存在 Actions。
+# 独立 Windows/Linux 测试包：真实平台构建和 OMP 门禁，产物保存在 Actions。
 # 不经 Release 工作流；所有包内检查通过后才上传安装包。
-name: Verify Windows desktop build
+name: Verify desktop migration
 
 on:
   workflow_dispatch:
     inputs:
+      platform:
+        description: "Platform for a checkout test package"
+        type: choice
+        options: [windows, linux]
+        default: windows
       release_tag:
         description: "Existing release to diagnose (blank builds the checkout)"
         type: string
@@ -15,7 +20,7 @@ permissions:
 
 jobs:
   verify:
-    if: ${{ inputs.release_tag == '' }}
+    if: ${{ inputs.release_tag == '' && inputs.platform != 'linux' }}
     runs-on: windows-2022
     timeout-minutes: 60
     steps:
@@ -377,3 +382,195 @@ jobs:
         run: |
           $exe = Get-ChildItem "$env:RUNNER_TEMP/portable-package/*win-x64.exe" | Select-Object -First 1
           ./tests/portable-relaunch-test.ps1 -PortableExe $exe.FullName
+
+  verify-linux:
+    if: ${{ inputs.release_tag == '' && inputs.platform == 'linux' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install system deps (node-gyp)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y python3-setuptools xvfb libgtk-3-0 libnss3 libgbm1 libasound2t64 libfuse2t64
+
+      - name: Check lockfile registry
+        run: npm run check:lockfile
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck and protocol boundary
+        run: |
+          node tests/check-engine-boundary-test.mjs
+          npm run typecheck
+          npm run check:protocol
+
+      - name: Build web + server
+        run: npm run build
+
+      - name: Verify OMP runtime, configuration and entry (plain Node)
+        run: |
+          node tests/terminal-smoke-test.mjs
+          node tests/omp-runtime-test.mjs
+          node tests/omp-openai-proxy-test.mjs
+          node tests/omp-proxy-transports-test.mjs
+          node tests/omp-model-config-test.mjs
+          node tests/omp-model-catalog-test.mjs
+          node tests/omp-skill-settings-test.mjs
+          node tests/omp-extension-settings-test.mjs
+          node tests/omp-packages-test.mjs
+          node tests/omp-marketplace-test.mjs
+          node tests/omp-package-features-test.mjs
+          node tests/omp-package-settings-test.mjs
+          node tests/omp-mcp-test.mjs
+          node tests/omp-mcp-auth-test.mjs
+          node tests/omp-mcp-auth-reconnect-test.mjs
+          node tests/omp-stop-metadata-test.mjs
+          node tests/omp-prompt-test.mjs
+          node tests/omp-tasks-test.mjs
+          node tests/omp-request-diagnostics-test.mjs
+          node tests/omp-task-output-test.mjs
+          node tests/omp-task-compaction-test.mjs
+          node tests/omp-mcp-diagnostics-test.mjs
+          node tests/reasoning-repetition-test.mjs
+          node tests/omp-recovery-test.mjs
+          node tests/omp-restricted-recovery-test.mjs
+          node tests/playground-drain-test.mjs
+          node tests/omp-persistence-test.mjs
+          node tests/omp-persistence-restart-test.mjs
+          node tests/omp-external-history-test.mjs
+          node tests/omp-session-storage-test.mjs
+          node tests/omp-tree-test.mjs
+          node tests/omp-skill-history-test.mjs
+          node tests/omp-template-attachments-test.mjs
+          node tests/omp-entry-test.mjs
+
+      - name: Build Electron (Linux)
+        run: npx electron-builder build --linux --x64 --publish never
+
+      - name: Verify packaged server and OMP integration
+        run: |
+          root="$PWD/release/linux-unpacked/resources/app"
+          executable="$PWD/release/linux-unpacked/pi-harness"
+          node tests/packaged-server-start-test.mjs "$executable" "$root"
+          node tests/packaged-jdbc-test.mjs "$executable" "$root"
+          node tests/omp-runtime-test.mjs "$executable" "$root"
+          node tests/omp-model-config-test.mjs "$executable" "$root"
+          node tests/omp-model-catalog-test.mjs "$executable" "$root"
+          node tests/omp-skill-settings-test.mjs "$executable" "$root"
+          node tests/omp-extension-settings-test.mjs "$executable" "$root"
+          node tests/omp-packages-test.mjs "$executable" "$root"
+          node tests/omp-marketplace-test.mjs "$executable" "$root"
+          node tests/omp-package-features-test.mjs "$executable" "$root"
+          node tests/omp-package-settings-test.mjs "$executable" "$root"
+          node tests/omp-mcp-test.mjs "$executable" "$root"
+          node tests/omp-mcp-auth-test.mjs "$executable" "$root"
+          node tests/omp-mcp-auth-reconnect-test.mjs "$executable" "$root"
+          node tests/omp-stop-metadata-test.mjs "$executable" "$root"
+          node tests/omp-prompt-test.mjs "$executable" "$root"
+          node tests/omp-tasks-test.mjs "$executable" "$root"
+          node tests/omp-request-diagnostics-test.mjs "$executable" "$root"
+          node tests/omp-task-output-test.mjs "$executable" "$root"
+          node tests/omp-task-compaction-test.mjs "$executable" "$root"
+          node tests/omp-mcp-diagnostics-test.mjs "$executable" "$root"
+          node tests/reasoning-repetition-test.mjs "$executable" "$root"
+          node tests/omp-recovery-test.mjs "$executable" "$root"
+          node tests/omp-restricted-recovery-test.mjs "$executable" "$root"
+          node tests/playground-drain-test.mjs "$executable" "$root"
+          node tests/omp-persistence-test.mjs "$executable" "$root"
+          node tests/omp-persistence-restart-test.mjs "$executable" "$root"
+          node tests/omp-external-history-test.mjs "$executable" "$root"
+          node tests/omp-session-storage-test.mjs "$executable" "$root"
+          node tests/omp-skill-history-test.mjs "$executable" "$root"
+          node tests/omp-template-attachments-test.mjs "$executable" "$root"
+          node tests/omp-entry-test.mjs "$executable" "$root"
+
+      - name: Verify packaged desktop UI
+        run: |
+          executable="$PWD/release/linux-unpacked/pi-harness"
+          root="$PWD/release/linux-unpacked/resources/app"
+          sudo chown root:root release/linux-unpacked/chrome-sandbox
+          sudo chmod 4755 release/linux-unpacked/chrome-sandbox
+          xvfb-run -a -s '-screen 0 1920x1080x24' node tests/windows-rendering-test.mjs "$executable"
+          xvfb-run -a -s '-screen 0 1920x1080x24' node tests/omp-resources-desktop-test.mjs "$executable"
+          xvfb-run -a -s '-screen 0 1920x1080x24' node tests/omp-packages-browser-test.mjs "$executable" "$root"
+          xvfb-run -a -s '-screen 0 1920x1080x24' node tests/omp-mcp-browser-test.mjs "$executable"
+          xvfb-run -a -s '-screen 0 1920x1080x24' node tests/omp-prompt-browser-test.mjs "$executable"
+          xvfb-run -a -s '-screen 0 1920x1080x24' node tests/omp-tasks-browser-test.mjs "$executable"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: omp-validation-rendering-linux
+          path: |
+            tests/scratch/rendering
+            tests/scratch/omp-*.png
+          if-no-files-found: warn
+
+      - name: Verify extracted AppImage in a path with spaces and Chinese characters
+        run: |
+          artifact=("$PWD"/release/*.AppImage)
+          test "${#artifact[@]}" -eq 1
+          mkdir -p "$RUNNER_TEMP/OMP 测试/AppImage"
+          cd "$RUNNER_TEMP/OMP 测试/AppImage"
+          "${artifact[0]}" --appimage-extract > "$RUNNER_TEMP/omp-appimage-extraction.log"
+          root="$PWD/squashfs-root/resources/app"
+          executable="$PWD/squashfs-root/pi-harness"
+          cd "$GITHUB_WORKSPACE"
+          node tests/packaged-server-start-test.mjs "$executable" "$root"
+          node tests/omp-task-compaction-test.mjs "$executable" "$root"
+
+      - name: Verify deb installation and previous-version data
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          previous="$RUNNER_TEMP/pi-previous"
+          mkdir -p "$previous"
+          # Previous version = latest published release; the first release has none and skips the upgrade-data check.
+          prev=$(gh release list --exclude-drafts --limit 1 --json tagName --jq '.[0].tagName // empty')
+          if [ -n "$prev" ]; then
+            gh release download "$prev" --pattern '*.deb' --dir "$previous"
+            dpkg-deb -x "$previous/"*.deb "$previous/app"
+            oldroot=$(dirname "$(find "$previous/app" -path '*/resources/app/package.json' -print -quit)")
+            # Linux builds name the executable pi-harness (3c7ddcc); older packages may still ship pi.
+            oldexe="$oldroot/../../pi-harness"; [ -x "$oldexe" ] || oldexe="$oldroot/../../pi"
+            node tests/packaged-upgrade-test.mjs seed "$oldexe" "$oldroot" "$RUNNER_TEMP/pi-upgrade-state"
+          fi
+          sudo apt-get update
+          sudo apt-get install -y ./release/*.deb
+          package=$(dpkg-deb -f release/*.deb Package)
+          test "$package" = pi-harness
+          test "$(dpkg-query -W -f='${Version}' "$package")" = "$(node -p "require('./package.json').version")"
+          root=$(dirname "$(dpkg -L "$package" | sed -n '\|/resources/app/package.json$|p')")
+          node tests/packaged-server-start-test.mjs "$root/../../pi-harness" "$root"
+          if [ -n "$prev" ]; then node tests/packaged-upgrade-test.mjs verify "$root/../../pi-harness" "$root" "$RUNNER_TEMP/pi-upgrade-state"; fi
+
+      - name: Checksum verified test packages
+        run: |
+          cd release
+          sha256sum *.AppImage *.deb > SHA256SUMS
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: omp-validation-linux-x64
+          path: |
+            release/*.AppImage
+            release/*.deb
+            release/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 7
