@@ -42,6 +42,8 @@ jobs:
 
       - name: Typecheck and protocol boundary
         run: |
+          node tests/check-engine-boundary-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "Production boundary regression failed" }
           npm run typecheck
           if ($LASTEXITCODE -ne 0) { throw "Typecheck failed" }
           npm run check:protocol

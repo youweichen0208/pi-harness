@@ -27,7 +27,9 @@ try {
 	write('tsconfig.production.json', JSON.stringify({ compilerOptions: { noLib: true, types: [], module: 'NodeNext', moduleResolution: 'NodeNext' }, files: ['server/index.ts'] }));
 	write('extensions/webui.ts', 'export {};');
 	write('server/index.ts', 'export {};');
-	assert.equal(run().status, 0);
+	const initial = run();
+	assert.equal(initial.status, 0, initial.output);
+	assert.match(initial.output, /2 source files checked/);
 	for (const source of [
 		'import { SessionManager } from "@earendil-works/pi-coding-agent";',
 		'import type { AgentSession } from "@earendil-works/pi-coding-agent";',
@@ -74,5 +76,15 @@ try {
 	rejected(/missing production output: worker\.js/, '--built');
 	write('dist/server/worker.js', 'export {};');
 	assert.equal(run('--built').status, 0);
+	// Nested transitive outputs use native separators even when TypeScript uses '/'.
+	mkdirSync(join(root, 'server/nested'));
+	mkdirSync(join(root, 'dist/server/nested'));
+	write('server/index.ts', 'export { value } from "./nested/child.js";');
+	write('server/nested/child.ts', 'export const value = 1;');
+	rejected(/missing production output: nested[/\\]child\.js/, '--built');
+	write('dist/server/nested/child.js', 'export const value = 1;');
+	const nested = run('--built');
+	assert.equal(nested.status, 0, nested.output);
+	assert.match(nested.output, /4 source files checked/);
 	console.log('PASS production boundary: runtime/type imports, transitive types, production dependencies, stale outputs and independent workers');
 } finally { rmSync(root, { recursive: true, force: true }); }

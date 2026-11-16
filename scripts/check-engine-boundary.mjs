@@ -13,8 +13,12 @@ if (parsed.errors.length) throw Error(parsed.errors.map(error => ts.flattenDiagn
 // Type imports count too: otherwise a transport interface can drag the entire
 // old agent into tsc's emitted output even when runtime imports are clean.
 const program = ts.createProgram({ rootNames: [...parsed.fileNames, path.join(root, 'extensions/webui.ts')], options: parsed.options });
-const sources = program.getSourceFiles().filter(file => file.fileName.startsWith(root + path.sep) && !file.fileName.includes(path.sep + 'node_modules' + path.sep));
-const checked = new Map(sources.map(source => [source.fileName, source]));
+// TypeScript uses forward slashes on Windows; compare native absolute paths.
+const sources = program.getSourceFiles().filter(file => path.resolve(file.fileName).startsWith(root + path.sep) && !path.resolve(file.fileName).includes(path.sep + 'node_modules' + path.sep));
+if (!sources.some(source => path.resolve(source.fileName) === path.join(root, 'server/index.ts'))) {
+	throw Error('Production source graph does not include server/index.ts');
+}
+const checked = new Map(sources.map(source => [path.resolve(source.fileName), source]));
 // Retired imports must not survive in tests, development-only modules or scripts.
 function collect(directory) {
 	if (!fs.existsSync(directory)) return;
@@ -39,7 +43,7 @@ for (const source of checked.values()) {
 }
 if (process.argv.includes('--built')) {
 	const directory = path.join(root, 'dist/server');
-	const expected = new Set(sources.filter(source => !source.isDeclarationFile && source.fileName.startsWith(path.join(root, 'server') + path.sep)).map(source => path.relative(path.join(root, 'server'), source.fileName).replace(/\.ts$/, '.js')));
+	const expected = new Set(sources.filter(source => !source.isDeclarationFile && path.resolve(source.fileName).startsWith(path.join(root, 'server') + path.sep)).map(source => path.relative(path.join(root, 'server'), source.fileName).replace(/\.ts$/, '.js')));
 	for (const file of expected) if (!fs.existsSync(path.join(directory, file))) violations.push(`missing production output: ${file}`);
 	function inspect(dir) {
 		for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
