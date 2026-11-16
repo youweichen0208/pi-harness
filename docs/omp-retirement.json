@@ -744,15 +744,15 @@
     "tests/extensions-directory-desktop-test.mjs",
     "tests/quiesce-test.mjs"
   ],
-  "remainingSmoke": "Latest complete v78 baseline remains the earlier 120/120 (omp-smoke-task-output.json). Subsequent child-compaction and deployment changes have separate verified regressions (omp-task-compaction.json, omp-container.json). Current default list 122; no full run of the final changed version. Container integration is a separate Docker CI job. Native OAuth write-back/tool-level authorization, Task storage, native CLI JSON/print exit and Windows/real-gateway/package acceptance remain.",
+  "remainingSmoke": "Complete local v78 122/122, no skips, exit 0 (omp-smoke-current.json), including task compaction and deployment. Windows path-check normalization followed this snapshot and passed a separate local regression; Windows CI acceptance remains pending. Docker and macOS package results are independent evidence. Native OAuth write-back/tool-level authorization, Task storage and original Windows real-gateway acceptance remain.",
   "validation": {
     "nativeSmoke": "21/21 passed after SDK removal; after workspace changes, 6/6 related native/entry tests plus 2/2 public Workspace protocol tests and persistence browser passed",
     "unit": "174 files, 1079 passed, 1 skipped; omp-task-compaction.json",
     "projectSwitch": "Passed protocol and browser: latest selection, native restoration, drafts, scroll, retained terminal and reconnect",
-    "fullSmoke": "Latest complete v78 baseline remains the earlier 120/120 (omp-smoke-task-output.json). Subsequent child-compaction and deployment changes have separate verified regressions (omp-task-compaction.json, omp-container.json). Current default list 122; no full run of the final changed version. Container integration is a separate Docker CI job. Native OAuth write-back/tool-level authorization, Task storage, native CLI JSON/print exit and Windows/real-gateway/package acceptance remain.",
+    "fullSmoke": "Complete local v78 122/122, no skips, exit 0 (omp-smoke-current.json), including task compaction and deployment. Windows path-check normalization followed this snapshot and passed a separate local regression; Windows CI acceptance remains pending. Docker and macOS package results are independent evidence.",
     "platforms": "macOS arm64 current DMG/desktop verified with fixture accounts; Linux arm64 container separately verified. Windows/Linux desktop and original Windows task remain.",
     "container": "Linux arm64: production image and native package/history persistence verified, including old non-empty volume; omp-container.json. Not Linux desktop or x64 acceptance.",
-    "desktop": "omp-desktop-current.json: original 31-entry package batch passed plus separate OAuth reconnect entry; first DMG/UI batch 9/10, MCP fixture correction then passed on Desktop and Web. No new full 122-entry smoke claim."
+    "desktop": "omp-desktop-current.json: original 31-entry package batch passed plus separate OAuth reconnect entry; first DMG/UI batch 9/10, MCP fixture correction then passed on Desktop and Web. Separate source baseline 122/122 is recorded in omp-smoke-current.json; package gates remain distinct."
   },
   "addedRegression": [
     "tests/omp-workspaces-test.mjs",

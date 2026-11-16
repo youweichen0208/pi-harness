@@ -8,11 +8,11 @@
 
 当前新增子任务完整输出下载：保留调用归属、从 OMP 共享输出目录取原始字节，覆盖嵌套任务、兄弟同名调用、停止后下载和历史恢复；下载入口放在长预览前。最终构建、类型检查、1079 项单测（1 跳过）、6/6 关联检查与真实窄屏浏览器通过，见 [子任务输出记录](review-data/omp-task-output.json)。该输出下载记录早于本轮压缩目录修复；原生 Task 内部写入保护仍未完成。
 
-最新完整执行的 v78 基线为 **120/120、无跳过、退出码 0**，见 [全量记录](review-data/omp-smoke-task-output.json)。包含子任务输出下载及扩展／编辑插件夹具修正；这份独立候选早于本轮压缩目录修复。
+最新完整执行的 v78 基线为 **122/122、无跳过、退出码 0**，耗时 1728 秒，见 [全量记录](review-data/omp-smoke-current.json)。包含子任务压缩目录、输出下载及部署入口变更；运行结束时 1499 个候选源文件与原始快照一致。Windows 路径检查修复随后单独验证，不回填为这轮全量测试内容。较早 120/120 记录保留在 [历史基线](review-data/omp-smoke-task-output.json)。
 
 上一轮 v78 基线为 **117/119、无跳过、退出码 1**，包含请求诊断和 `/new` 修复，见 [全量记录](review-data/omp-smoke-request-diagnostics.json)。失败项为扩展用例把设置消息当作重载完成，以及编辑插件测试未准备依赖、退出清理与后台安装相遇。两项已修正测试并通过专项验证：[重载等待](review-data/omp-extension-reload-readiness.json)、[离线插件夹具](review-data/omp-editor-fixtures.json)。不把专项通过回填全量；生产插件安装器的退出取消未修复。
 
-当前冒烟清单 **122 项，最终版本未整套重跑**；压缩目录和 CLI 服务生成有单独回归，Docker 与 macOS 安装包为独立验证，不能与较早的 120/120 合并称作当前全量通过。Windows 原故障／真实网关、原生 OAuth 写回与工具级授权、Task 存储保护、旧历史清理和 Windows/Linux 当前安装包验收仍未完成。以下段落保留早期实施记录，不代表当前完整验收结论。
+当前冒烟清单 **122 项，已在 macOS 隔离候选完整通过**。Docker 与 macOS 安装包为独立验证；Windows 构建检查曾因 TypeScript 路径分隔符差异失败，修正后 Windows 路径回归、类型检查及构建已通过，终端门禁随后因预置历史未出现在列表而失败，路径夹具正在核对，尚未进入安装包门禁，见 [Windows 验证记录](review-data/omp-windows-validation.json)。Windows 原故障／真实网关、原生 OAuth 写回与工具级授权、Task 存储保护、旧历史清理和 Windows/Linux 当前安装包验收仍未完成。以下段落保留早期实施记录，不代表当前完整验收结论。
 
 较早 v78 全量基线执行 **117/118 通过、退出码 1**，见 [全量记录](review-data/omp-smoke-v78.json)。失败的无模型 `/new` 已通过原生配置锁固定时序复现并修复：会话切换与后台元数据同步串行，等待中的 Stop 仍撤销切换；专项与浏览器证据见 [竞态记录](review-data/omp-new-session-race.json)。这不是重新跑出的全量全绿。
 

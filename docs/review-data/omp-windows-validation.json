@@ -1,0 +1,119 @@
+{
+  "status": "Windows build fixed; terminal history fixture candidate locally verified; third Windows run in progress",
+  "branch": "feat/omp-validation-20261116",
+  "attempts": [
+    {
+      "commit": "52db0bee65f7b5f88eb1ad4f3bd8c4e34a1459ef",
+      "runId": 43816043104,
+      "jobId": 133128214904,
+      "url": "https://github.com/youweichen0208/pi-harness/actions/runs/43816043104",
+      "conclusion": "failure",
+      "failedStep": "Build web + server",
+      "cause": "TypeScript returned forward-slash Windows filenames; native separator prefix matching yielded zero source files and rejected all output.",
+      "log": {
+        "path": "/tmp/omp-windows-first-job.log",
+        "sha256": "2ea39ad0b290a6dbb25ce0aaa40c374df03258d95e7827cee54a718aecf94289"
+      }
+    },
+    {
+      "commit": "fd2940f",
+      "runId": 43817099297,
+      "jobId": 133131533016,
+      "url": "https://github.com/youweichen0208/pi-harness/actions/runs/43817099297",
+      "status": "completed",
+      "conclusion": "failure",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1
+        },
+        {
+          "name": "Run actions/checkout@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2
+        },
+        {
+          "name": "Run actions/setup-java@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3
+        },
+        {
+          "name": "Run actions/setup-node@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4
+        },
+        {
+          "name": "Setup Python (setuptools for node-gyp)",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5
+        },
+        {
+          "name": "Check lockfile registry",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 6
+        },
+        {
+          "name": "Install dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 7
+        },
+        {
+          "name": "Typecheck and protocol boundary",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8
+        },
+        {
+          "name": "Build web + server",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9
+        }
+      ],
+      "failedStep": "Terminal smoke test (plain Node)",
+      "failure": "42 checks passed; persisted OMP session absent from conversation list. PTY input/restart/rename/limits/cleanup passed; later package gates skipped.",
+      "log": {
+        "path": "/tmp/omp-windows-second-job.log",
+        "sha256": "b2072cb0bffc556cadab5de3953ecfe53ec02907097b822dc4dfda3d504851bd"
+      }
+    },
+    {
+      "commit": "f87247158ade0e9eff35d7762e77a17a871e354b",
+      "runId": 43818744814,
+      "url": "https://github.com/youweichen0208/pi-harness/actions/runs/43818744814",
+      "status": "in_progress",
+      "conclusion": null,
+      "jobId": 133136677289,
+      "lastObservedStep": "Install dependencies"
+    }
+  ],
+  "fix": "Normalize TypeScript filenames through native path.resolve before containment checks; require server/index.ts in the source graph. Regression checks source counts and nested transitive output, and runs before typecheck in independent Windows CI.",
+  "localRegression": "Boundary regression passed in validation worktree and root; modified checker accepted 134 source files and matching prebuilt output from isolated candidate. Local 122-entry baseline preceded this script-only change.",
+  "scope": "Actions test installers only after every gate passes; no Release, merge, tag, installed app replacement or SDK modification. Source, packaged, UI, portable, ZIP and NSIS gates are independent of original DeepSeek task acceptance.",
+  "terminalFixtureCandidate": {
+    "commit": "f872471",
+    "change": "Seed using the same async realpath as prepareLaunch; retain original list assertion and add bounded synthetic-path diagnostics.",
+    "hypothesis": "Windows JS realpathSync may retain an 8.3 alias while native async realpath expands it, producing different workspace hashes. Not yet confirmed by the third Windows run.",
+    "localChecks": [
+      {
+        "path": "/tmp/omp-windows-fixture-local-build.log",
+        "exitCode": 0,
+        "sha256": "5c4d42d5f2c209871cc7c8ad5c390b6ff51f03e3adfbca1615d2ece0fc0f8e05"
+      },
+      {
+        "path": "/tmp/omp-windows-fixture-local-terminal.log",
+        "exitCode": 0,
+        "sha256": "53e8ff0f909c7d463644c3267c7a69d5db57421155605c8de1ecd710692215b2"
+      }
+    ],
+    "terminalChecksPassed": 43
+  }
+}
