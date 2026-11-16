@@ -11,9 +11,9 @@ import { desktopAPI } from "./desktop";
 
 document.documentElement.dataset.platform = desktopAPI?.platform ?? (/Windows/i.test(navigator.userAgent) ? "win32" : /Mac/i.test(navigator.userAgent) ? "darwin" : "linux");
 
-if (desktopAPI) {
-	document.documentElement.classList.add("pi-desktop", `pi-desktop-${desktopAPI.platform}`);
-}
+// One shell class for every platform: the Windows/Linux chrome is styled exactly
+// like macOS, so no rule is allowed to branch on the desktop OS again.
+if (desktopAPI) document.documentElement.classList.add("pi-desktop");
 
 // 吸收地址栏 ?token=（PI_WEB_TOKEN 鉴权入口）并持久化，须在首次请求前执行
 initAuthToken();

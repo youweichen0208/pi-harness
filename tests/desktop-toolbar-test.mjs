@@ -75,7 +75,8 @@ try {
 				const actions = await page.locator('.topbar-actions').boundingBox();
 				const controls = await page.locator('.desktop-window-controls').count() ? await page.locator('.desktop-window-controls').boundingBox() : null;
 				await page.locator('.topbar').screenshot({ path: `tests/scratch/toolbar-${platform}-${width}-${view}.png` });
-				assert(actions.x + actions.width <= (controls?.x ?? width) + 1, `${platform}/${width}/${view}: toolbar overlaps window controls`);
+				assert(actions.x + actions.width <= width + 1, `${platform}/${width}/${view}: toolbar overflows the window`);
+				if (controls) assert(Math.round(controls.x) === 18, `${platform}/${width}/${view}: traffic lights stay in the left gutter`);
 				const titleButton = await page.locator('.conversation-title-button').boundingBox();
 				assert(titleButton.x + titleButton.width <= actions.x + 1, `${platform}/${width}/${view}: conversation title overlaps tabs`);
 				const menu = page.locator('.topbar-actions .topbar-more .chip');

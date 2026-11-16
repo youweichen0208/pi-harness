@@ -48,7 +48,8 @@ try {
 	const health = await (await fetch(`http://127.0.0.1:${port}/api/health`)).json();
 	assert.equal(health.pid, server.pid);
 	browser = await chromium.launch({ executablePath: CHROME_PATH || chromium.executablePath() });
-	// #113: native controls must occupy space beside, not over, Wiki tools.
+	// #113: the Wiki shell shares the macOS header geometry — traffic lights in the
+	// left gutter, nothing reserved at the right edge.
 	for (const platform of ["win32", "linux"]) {
 		const page = await browser.newPage({ viewport: { width: 1100, height: 800 } });
 		await page.addInitScript(platform => { window.windowActions = []; window.electronAPI = { platform, windowAction(action) { window.windowActions.push(action); }, onWindowState() { return () => {}; } }; }, platform);
@@ -57,9 +58,10 @@ try {
 		for (const width of [1100, 900, 720]) {
 			await page.setViewportSize({ width, height: 800 });
 			const controls = await page.locator(".wiki-window-header .desktop-window-controls").boundingBox();
-			const ask = await page.locator(".wiki-ask-toggle").boundingBox();
-			assert(controls.x + controls.width <= width, "window controls stay inside the viewport");
-			assert(controls.x >= ask.x + ask.width, `${platform}/${width}: native controls overlap Wiki tools`);
+			const header = await page.locator(".wiki-window-header").evaluate(el => parseFloat(getComputedStyle(el).paddingLeft));
+			assert.equal(Math.round(controls.x), 18, `${platform}/${width}: traffic lights sit at the macOS position`);
+			assert.equal(Math.round(controls.y), 17);
+			assert(header >= 92, `${platform}/${width}: header reserves the traffic-light gutter`);
 			for (const button of await page.locator(".wiki-window-header .desktop-window-controls button").all()) {
 				assert(await button.evaluate(el => { const r = el.getBoundingClientRect(); return el.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)); }), "window control is reachable");
 				await button.click();
@@ -67,7 +69,7 @@ try {
 			mkdirSync("tests/scratch", { recursive: true });
 			await page.locator(".wiki-window-header").screenshot({ path: `tests/scratch/wiki-controls-${platform}-${width}.png` });
 		}
-		assert.deepEqual(await page.evaluate(() => window.windowActions), Array(3).fill(["minimize", "toggle-maximize", "close"]).flat());
+		assert.deepEqual(await page.evaluate(() => window.windowActions), Array(3).fill(["close", "minimize", "toggle-maximize"]).flat());
 		await page.close();
 	}
 	// #114: while the SDK is starting, never render ordinary chat.

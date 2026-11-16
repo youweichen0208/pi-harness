@@ -74,9 +74,14 @@ try {
 			assert(geometry.scroll <= width, JSON.stringify(geometry));
 			assert(geometry.buttons.every(rect => rect.x >= 0 && rect.right <= width + 1), JSON.stringify(geometry));
 			if (platform === 'win32') {
+				// Same shell as macOS: three dots at the native traffic-light position and no
+				// right-edge reservation, so the header may use its full width.
 				const controls = await page.locator('.desktop-window-controls').boundingBox();
 				const actions = await page.locator('.topbar-actions').boundingBox();
-				assert(actions.x + actions.width <= controls.x + 1, 'toolbar must leave window controls clear');
+				assert.equal(Math.round(controls.x), 18, 'traffic lights sit at the macOS position');
+				assert.equal(Math.round(controls.y), 17);
+				assert.equal(Math.round(controls.width), 12 * 3 + 8 * 2);
+				assert(actions.x + actions.width <= width + 1, 'toolbar may use the right edge');
 			}
 			for (const button of await page.locator('.topbar-actions > .panel-toggle').all()) assert(await button.evaluate(el => { const b = el.getBoundingClientRect(); return el.contains(document.elementFromPoint(b.x + b.width / 2, b.y + b.height / 2)); }), 'navigation must be clickable');
 			for (const appearance of ['light', 'dark']) {

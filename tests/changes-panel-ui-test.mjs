@@ -149,12 +149,15 @@ try {
 	await page.locator('.changes-panel').waitFor({state:'detached'});
 	upstreamSocket.send(JSON.stringify({type:'switch_conversation',id:original}));
 	await page.locator('.changes-panel').waitFor();
-	// Desktop window controls must not overlap the changes close button.
+	// Window controls live in the left gutter, so the changes toolbar keeps the right edge.
 	await page.addInitScript(() => { window.electronAPI = { platform:'win32', windowAction(){}, onWindowState(){return ()=>{};} }; });
 	await page.reload(); await page.locator('.changes-panel').waitFor();
 	const controls = await page.locator('.desktop-window-controls').boundingBox();
+	assert.equal(Math.round(controls.x), 18, 'traffic lights sit at the macOS position');
 	const close = await page.locator('.changes-toolbar > button').last().boundingBox();
-	assert(close.x + close.width <= controls.x, 'changes toolbar overlaps window controls');
+	const viewport = page.viewportSize();
+	assert(close.x + close.width <= viewport.width + 1, 'changes close button stays inside the window');
+	assert(close.x >= controls.x + controls.width, 'changes close button clears the traffic lights');
 	await page.screenshot({path:'/tmp/pi-changes-35a-windows.png'});
 	// Non-Git workspaces retain tool changes and hide Git scope controls.
 	forceNotRepo = true; await page.reload(); await page.locator('.changes-panel').waitFor();

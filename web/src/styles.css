@@ -3,6 +3,16 @@
 @font-face { font-family: "UI SC"; font-style: normal; font-weight: 500; font-display: swap; src: url("./assets/fonts/ui-sc-500.woff2") format("woff2"); }
 @font-face { font-family: "UI SC"; font-style: normal; font-weight: 600; font-display: swap; src: url("./assets/fonts/ui-sc-600.woff2") format("woff2"); }
 
+/* Monochrome marks UI SC has no glyphs for (arrows, technical signs, geometric
+   shapes, ticks). Bundled so macOS and Windows draw the same outlines instead of
+   falling back to SF Symbols / Segoe UI Symbol. Merged from the Noto project;
+   see fonts/symbols.json. */
+@font-face { font-family: "UI Symbols"; font-style: normal; font-weight: 400; font-display: swap; src: url("./assets/fonts/ui-symbols-400.woff2") format("woff2"); unicode-range: U+0100-017F, U+0330-033F, U+0370-052F, U+2070-209F, U+2190-21FF, U+2300-23FF, U+2460-24FF, U+25A0-25FF, U+2600-27BF; }
+
+/* Colour emoji, bundled so both platforms use one emoji design and one set of
+   sequences instead of Apple Color Emoji vs Segoe UI Emoji. */
+@font-face { font-family: "PI Emoji"; font-style: normal; font-weight: 400; font-display: swap; src: url("/fonts/noto-color-emoji/noto-color-emoji-400.woff2") format("woff2"); }
+
 /* Local, Unicode-subset Wiki heading faces; OFL licenses in public/fonts. */
 @font-face { font-family: "Source Serif 4"; font-style: normal; font-weight: 500; font-display: swap; src: url("/fonts/source-serif-4/source-serif-4-500-0.woff2") format("woff2"); unicode-range: U+20,U+41,U+42,U+A0; }
 @font-face { font-family: "Source Serif 4"; font-style: normal; font-weight: 500; font-display: swap; src: url("/fonts/source-serif-4/source-serif-4-500-1.woff2") format("woff2"); unicode-range: U+20,U+41,U+42,U+A0; }
@@ -206,6 +216,10 @@
 	--waiting-blue: #3e8fc0;
 	--shadow-color: #000;
 	--shadow-soft: #0000000a;
+	--tl-close: #ff5f57;
+	--tl-minimize: #febc2e;
+	--tl-maximize: #28c840;
+	--tl-glyph: #0000008c;
 	--r-switch: 999px;
 	--r-waiting: 1.5px;
 	--r-sm: 6px;
@@ -300,10 +314,13 @@
 	--term-bright-magenta: #c084fc;
 	--term-bright-cyan: #22d3ee;
 	--term-bright-white: #ffffff;
-	--mono: "JetBrains Mono", "Cascadia Mono", "SF Mono", "SFMono-Regular", Menlo, Consolas, monospace;
-	--sans: "UI SC", "Chinese Quote", -apple-system, system-ui, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
-	--document-font: "UI SC", "Chinese Quote", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
-	--document-title-font: "UI SC", "Chinese Quote", "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif, "Apple Color Emoji";
+	/* One stack on every platform: bundled faces first, so text, CJK, symbols and
+	   emoji no longer depend on which OS is rendering. The system names behind
+	   them only catch scripts outside the bundled subsets. */
+	--mono: "JetBrains Mono", "UI SC", "UI Symbols", "PI Emoji", "Cascadia Mono", "SF Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+	--sans: "UI SC", "UI Symbols", "PI Emoji", -apple-system, system-ui, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
+	--document-font: "UI SC", "UI Symbols", "PI Emoji", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
+	--document-title-font: "UI SC", "UI Symbols", "PI Emoji", "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
 	--accent-fg: #fff;
 	--yellow: #f2bc4e;
 	--yellow-fg: #8a5a00;
@@ -7967,7 +7984,7 @@ span.msg-editor-hint svg {
 	margin: 0;
 	padding: 12px 14px;
 	background: color-mix(in srgb, var(--shadow-color) 22%, transparent);
-	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-family: var(--mono);
 	font-size: calc(12px * var(--fp-zoom, 1));
 	line-height: 1.55;
 	color: var(--text-dim);
@@ -8659,7 +8676,7 @@ html.pi-desktop .topbar {
 	gap: 10px;
 	flex-wrap: nowrap;
 }
-html.pi-desktop-darwin .topbar { padding-left: 92px; }
+html.pi-desktop .topbar { padding-left: 92px; }
 html.pi-desktop .brand {
 	flex: 1 1 130px;
 	align-self: stretch;
@@ -8696,24 +8713,41 @@ html.pi-desktop .view-switch button { flex-shrink: 0; }
 html.pi-desktop .topbar-desktop { flex-shrink: 0; }
 html.pi-desktop .chip-model { max-width: 112px; overflow: hidden; text-overflow: ellipsis; }
 .desktop-window-controls { display: none; }
+/* macOS-style dots at the native traffic-light position (18,17: 12px circles with
+   an 8px gap) so the frameless Windows/Linux shell shares the macOS header
+   layout instead of reserving the right edge for its own buttons. */
 html.pi-desktop .desktop-window-controls {
 	display: flex;
-	align-self: stretch;
-	flex: none;
+	position: fixed;
+	left: 18px;
+	top: 17px;
+	z-index: 70;
+	gap: 8px;
 	-webkit-app-region: no-drag;
 	app-region: no-drag;
 }
 .desktop-window-controls button {
-	width: 44px;
+	position: relative;
+	width: 12px;
+	height: 12px;
+	padding: 0;
 	border: 0;
-	background: transparent;
-	color: var(--text-dim);
+	border-radius: 50%;
 	display: grid;
 	place-items: center;
 	cursor: pointer;
+	color: transparent;
 }
-.desktop-window-controls button:hover { background: var(--bg-elev2); color: var(--text); }
-.desktop-window-controls .desktop-window-close:hover { background: #dc3545; color: var(--accent-fg); }
+/* Each target is 20px, the widest that keeps neighbours abutting without
+   overlapping (the dots are 20px apart). The painted circle stays 12px. */
+.desktop-window-controls button::before { content: ""; position: absolute; inset: -4px; border-radius: 50%; }
+.desktop-window-controls button > svg { width: 7px; height: 7px; stroke-width: 3.4; }
+.desktop-window-controls .desktop-window-close { background: var(--tl-close); }
+.desktop-window-controls .desktop-window-minimize { background: var(--tl-minimize); }
+.desktop-window-controls .desktop-window-maximize { background: var(--tl-maximize); }
+.desktop-window-controls button:hover,
+.desktop-window-controls button:focus-visible { color: var(--tl-glyph); }
+.desktop-window-controls button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 @media (max-width: 900px) {
 	html.pi-desktop .topbar { padding-right: 0; }
@@ -9230,11 +9264,11 @@ img.brand-logo, img.empty-logo { background: transparent; object-fit: contain; }
 	.design-workspace .thinking-segments { max-width: 130px; }
 }
 html.pi-desktop .design-workspace .sidebar-brand { -webkit-app-region: drag; app-region: drag; }
-html.pi-desktop-darwin .design-workspace .sidebar-brand { padding-top: 42px; }
+html.pi-desktop .design-workspace .sidebar-brand { padding-top: 42px; }
 html.pi-desktop .design-workspace .header-location { -webkit-app-region: drag; app-region: drag; }
 html.pi-desktop .design-workspace .topbar { height: 52px; padding-left: 20px; }
 @media (max-width: 1200px) {
-	html.pi-desktop-darwin .design-workspace.document-open .topbar { padding-left: 92px; }
+	html.pi-desktop .design-workspace.document-open .topbar { padding-left: 92px; }
 }
 .design-workspace .panel-projects { max-height: none; border-bottom: 0; padding: 0; }
 .design-workspace .inputbox textarea { width: 100%; }
@@ -9271,12 +9305,6 @@ html.pi-desktop .design-workspace .topbar { height: 52px; padding-left: 20px; }
 @media (min-width: 1201px) {
 	.design-workspace .workspace-column:has(.view-pane:not(.hidden):not(.preview-open) .drawer-right:not(.files-collapsed)) > .statusbar .status-cwd,
 	.design-workspace .workspace-column:has(.view-pane:not(.hidden):not(.preview-open) .drawer-right:not(.files-collapsed)) > .statusbar .status-cwd-wrap { flex: 0 0 100%; max-width: 100%; margin-left: 0; }
-}
-html.pi-desktop-win32 .design-workspace .desktop-window-controls,
-html.pi-desktop-linux .design-workspace .desktop-window-controls { position: fixed; top: 0; right: 0; z-index: 70; height: 52px; }
-@media (min-width: 1201px) {
-	html.pi-desktop-win32 .design-workspace .panel-right .right-files-pane > .panel-title,
-	html.pi-desktop-linux .design-workspace .panel-right .right-files-pane > .panel-title { padding-right: 140px; }
 }
 /* Standalone reference: navigation, tree, structured tool output. */
 .design-workspace .view-switch button > svg { display: none; }
@@ -10113,27 +10141,19 @@ body { -webkit-font-smoothing: antialiased; }
 .task-artifact-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: baseline; column-gap: 8px; row-gap: 4px; padding: 9px 12px; border-bottom: 1px solid var(--border-soft); font: 12px/1.6 var(--sans); }
 .task-artifact-row > span { grid-row: 1; grid-column: 1; color: var(--text-dim); }
 .task-artifact-row > button:not(.task-artifact-change) { grid-row: 2; grid-column: 1 / -1; white-space: normal; overflow: visible; }
-.task-artifact-row code { white-space: pre-wrap; overflow: visible; overflow-wrap: anywhere; font: 12.5px/1.65 "JetBrains Mono", "SFMono-Regular", Consolas, "Microsoft YaHei UI", "Microsoft YaHei", monospace; }
+.task-artifact-row code { white-space: pre-wrap; overflow: visible; overflow-wrap: anywhere; font: 12.5px/1.65 var(--mono); }
 .task-artifact-row > .task-artifact-change { grid-row: 1; grid-column: 2; font-size: 12px; color: var(--green); }
 .task-artifact-row > small { grid-row: 1; grid-column: 3; font-size: 11.5px; color: var(--text-dim); }
 .task-progress-meta { font-size: 12px; line-height: 1.6; }
 .task-step-detail .task-artifact-row { padding-inline: 0; }
 
 /* Reserve the fixed Windows/Linux caption controls in the toolbar layout. */
-html.pi-desktop-win32 .design-workspace .topbar,
-html.pi-desktop-linux .design-workspace .topbar { padding-right: 144px; }
 .design-workspace .topbar-actions { min-width: 0; flex-shrink: 1; }
 html.pi-desktop .design-workspace .topbar-actions > .topbar-more { flex: none; }
 html.pi-desktop .design-workspace .topbar-actions > .topbar-more .chip { white-space: nowrap; flex: none; }
 html.pi-desktop .design-workspace .topbar-actions > .topbar-more .chip > svg { flex: none; }
 .design-workspace .view-switch { min-width: 0; overflow-x: auto; flex-shrink: 1; }
 .design-workspace .topbar-actions > .changes-toggle { flex-shrink: 0; }
-/* A visible file column already reserves the entire right edge of the window. */
-@media (min-width: 1201px) {
-	html.pi-desktop-win32 .design-workspace .workspace-column:has(.view-pane:not(.hidden) .drawer-right:not(.files-collapsed)):not(:has(.preview-open:not(.hidden))) > .topbar,
-	html.pi-desktop-linux .design-workspace .workspace-column:has(.view-pane:not(.hidden) .drawer-right:not(.files-collapsed)):not(:has(.preview-open:not(.hidden))) > .topbar { padding-right: 144px; }
-}
-
 /* Running command reference: one command, one clock, a separate task stop. */
 .design-workspace .toolcall-bash.run { border-color: color-mix(in srgb, var(--progress-text) 40%, var(--border)); }
 .design-workspace .toolcall-bash > .bash-command-head { flex-wrap: nowrap; gap: 8px; padding: 7px 12px; }
@@ -10215,19 +10235,17 @@ html.pi-desktop .design-workspace .topbar-actions > .panel-toggle { position: re
 .design-workspace .qn-rail { right: 8px; width: 16px; opacity: 0; }
 .design-workspace .qn-rail:hover,
 .design-workspace .qn-rail:focus-within { opacity: 1; }
-html.pi-desktop-win32 .design-workspace .desktop-window-controls,
-html.pi-desktop-linux .design-workspace .desktop-window-controls { height: 44px; }
 @media (min-width: 1201px) {
 	.design-workspace .view-pane:not(.preview-open) > .drawer-right { margin-top: -44px; }
 }
 @media (min-width: 769px) {
-	html.pi-desktop-darwin .design-workspace .project-panel-toggle { position: fixed; left: 92px; top: 8px; z-index: 75; }
-	html.pi-desktop-darwin .design-workspace.left-collapsed .topbar { padding-left: 132px; }
-	html.pi-desktop-darwin .design-workspace:not(.left-collapsed) .topbar { padding-left: 20px; }
-	html.pi-desktop-darwin .design-workspace .topbar:not(:has(.project-panel-toggle)) { padding-left: 92px; }
+	html.pi-desktop .design-workspace .project-panel-toggle { position: fixed; left: 92px; top: 8px; z-index: 75; }
+	html.pi-desktop .design-workspace.left-collapsed .topbar { padding-left: 132px; }
+	html.pi-desktop .design-workspace:not(.left-collapsed) .topbar { padding-left: 20px; }
+	html.pi-desktop .design-workspace .topbar:not(:has(.project-panel-toggle)) { padding-left: 92px; }
 }
 @media (max-width: 768px) {
-	html.pi-desktop-darwin .design-workspace .topbar { padding-left: 92px; }
+	html.pi-desktop .design-workspace .topbar { padding-left: 92px; }
 	.design-workspace .view-switch button { padding-inline: 7px; }
 }
 @media (min-width: 769px) and (max-width: 900px) {
@@ -11202,7 +11220,7 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { height: 44px;
 .settings-modal .settings-list-row, .settings-modal .ext-row-main { min-height: 48px; }
 
 /* Wiki document canvas: serif headings, quiet metadata and contextual editing. */
-.wiki-workbench { --wiki-accent: var(--accent); --wiki-heading-font: "Iowan Old Style", "Palatino Linotype", "Songti SC", "Noto Serif CJK SC", "SimSun", serif; --wiki-line: var(--border-soft); }
+.wiki-workbench { --wiki-accent: var(--accent); --wiki-heading-font: var(--document-font); --wiki-line: var(--border-soft); }
 .wiki-workbench .wiki-sidebar { width: 250px; flex-basis: 250px; }
 .wiki-workbench .wiki-chat-panel { width: 400px; flex-basis: 400px; }
 
@@ -11736,9 +11754,6 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { height: 44px;
 .task-interrupted-hint strong { color: var(--red); }
 .task-interrupted-hint p { margin: 6px 0 0; color: var(--text); }
 
-@media (max-width: 768px) {
-}
-
 /* 34a — Wiki document v2. Toolbar editing shares the native autosave path. */
 :root { --r-wiki-grid: 3px; --r-wiki-code: 4px; --wiki-tree-selected: var(--row-active); }
 :root[data-appearance="dark"] { --wiki-tree-selected: var(--bg-elev2); }
@@ -12023,10 +12038,6 @@ pre.wiki-mermaid-source-hidden > .fp-mermaid-preview { padding-bottom: 0; }
 .design-workspace .msg-assistant .msg-text:not(.process-narration) .md { font-size: 15px; line-height: 1.75; }
 .changes-current-branch { display: inline-flex; align-items: center; gap: 5px; max-width: 130px; padding: 3px 6px; border-radius: var(--r-sm); background: var(--bg-elev2); font: 12px var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .branch-change-count { flex: none; display: inline-grid; place-items: center; min-width: 15px; height: 15px; padding: 0 4px; border-radius: 50%; background: var(--yellow-bg); color: var(--yellow-fg); font: 600 10px var(--mono); font-variant-numeric: tabular-nums; }
-@media (min-width: 1200px) {
-	html.pi-desktop-win32 .changes-toolbar, html.pi-desktop-linux .changes-toolbar { padding-right: 140px; }
-	html.pi-desktop-win32 .design-workspace.changes-open .topbar, html.pi-desktop-linux .design-workspace.changes-open .topbar { padding-right: 16px; }
-}
 .conversation-title-button { display: flex; align-items: center; gap: 5px; min-width: 0; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
 .conversation-title-button strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .changes-toggle > svg { width: 13px; height: 13px; }
@@ -12165,15 +12176,6 @@ pre.wiki-mermaid-source-hidden > .fp-mermaid-preview { padding-bottom: 0; }
 .panel-right .right-files-pane > .panel-title > span:first-child { flex: none; white-space: nowrap; }
 .ext-row-main > button { flex: none; white-space: nowrap; }
 .ext-row-main { column-gap: 12px; }
-@media (min-width: 1101px) {
-	html.pi-desktop-win32 .design-workspace .panel-right .right-files-pane > .panel-title,
-	html.pi-desktop-linux .design-workspace .panel-right .right-files-pane > .panel-title { padding-left: 8px; padding-right: 140px; gap: 3px; }
-	html.pi-desktop-win32 .panel-right .right-files-pane > .panel-title .tree-menu-trigger,
-	html.pi-desktop-linux .panel-right .right-files-pane > .panel-title .tree-menu-trigger { width: 22px; min-width: 22px; padding: 2px; }
-	html.pi-desktop-win32 .panel-right .right-files-pane > .panel-title .tree-filter,
-	html.pi-desktop-linux .panel-right .right-files-pane > .panel-title .tree-filter { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-}
-
 /* Wiki shares the native model controls with the chat composer. */
 .wiki-model-controls { display: flex; align-items: center; gap: 8px; min-width: 0; margin: 8px 0 0; padding: 0; border: 0; }
 .wiki-model-controls:disabled { opacity: .5; }
@@ -13146,8 +13148,7 @@ pre.wiki-mermaid-source-hidden > .fp-mermaid-preview { padding-bottom: 0; }
 .wiki-window-header > .wiki-agent-toggle[aria-expanded="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
 .wiki-window-header > .wiki-window-close { width: 32px; padding: 0; border-color: transparent; background: transparent; }
 .wiki-window-header button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-html.pi-desktop .design-workspace .wiki-window-header .desktop-window-controls { position: static; align-self: stretch; height: auto; min-width: 132px; }
-html.pi-desktop-darwin .wiki-window-header { padding-left: 92px; }
+html.pi-desktop .wiki-window-header { padding-left: 92px; }
 html.pi-desktop .wiki-window-header,
 html.pi-desktop .wiki-window-mark,
 html.pi-desktop .wiki-window-header #wiki-modal-toolbar,
@@ -13246,7 +13247,6 @@ html.pi-desktop .wiki-window-header .desktop-window-controls { -webkit-app-regio
 @media (min-width: 1201px) {
 	.design-workspace:not(.changes-open) .workspace-column > .topbar { margin-right: 0; }
 	.design-workspace:not(.changes-open) .view-pane:not(.preview-open) > .drawer-right { margin-top: 0; border-left: 1px solid var(--border-soft); }
-	html:is(.pi-desktop-win32, .pi-desktop-linux) .design-workspace:not(.changes-open) .workspace-column > .topbar { padding-right: 144px; }
 }
 @media (max-width: 1100px) {
 	.design-workspace .usage-meter { width: 36px; }
@@ -13571,7 +13571,7 @@ html.pi-desktop .wiki-window-header .desktop-window-controls { -webkit-app-regio
 	background-position: center; container-type: inline-size;
 }
 .welcome-paper .welcome-motto {
-	margin: 0; font-family: "Times New Roman", "Source Serif 4", Georgia, serif;
+	margin: 0; font-family: "Source Serif 4", "Noto Serif SC", serif;
 	font-size: clamp(28px, 6.4cqw, 76px); font-weight: 400; font-style: italic;
 	line-height: 1.08; letter-spacing: -0.045em; text-align: center; color: var(--welcome-ink);
 }
@@ -13684,15 +13684,10 @@ html.pi-desktop .wiki-window-header .desktop-window-controls { -webkit-app-regio
 }
 /* In overlay navigation, reserve the fixed macOS window and project controls. */
 @media (min-width: 769px) and (max-width: 900px) {
-	html.pi-desktop-darwin .design-workspace.dual-navigation .topbar { padding-left: 132px; }
+	html.pi-desktop .design-workspace.dual-navigation .topbar { padding-left: 132px; }
 }
 
 /* ---- Yuque typography: measured from /yuque/ng1qth/about, 2026-10-20 ---- */
-@font-face {
-	font-family: "Chinese Quote";
-	src: local("PingFang SC"), local("SimSun");
-	unicode-range: U+2018, U+2019, U+201C, U+201D;
-}
 .wiki-workbench { --wiki-title: 36px; --wiki-h2: 24px; --wiki-h3: 20px; --wiki-body: 15px; --wiki-heading-font: var(--document-font); }
 .wiki-document-heading h1, .notes-editor .note-title {
 	font-family: var(--document-title-font);
@@ -13861,7 +13856,7 @@ html.pi-desktop .wiki-window-header .desktop-window-controls { -webkit-app-regio
 	.drawer-left.open .compact-navigation.directory-collapsed .sidebar-footer span span { display: inline; }
 	.drawer-left.open .compact-navigation.directory-collapsed .navigation-search { display: flex; }
 }
-html.pi-desktop-darwin .compact-navigation .global-navigation { padding-top: 36px; }
+html.pi-desktop .compact-navigation .global-navigation { padding-top: 36px; }
 /* Include the navigation's top/side padding without moving the brand or entries. */
 html.pi-desktop .compact-navigation .compact-brand {
 	--desktop-brand-inset: 12px;
@@ -13873,7 +13868,7 @@ html.pi-desktop .compact-navigation .compact-brand {
 	app-region: drag;
 	user-select: none;
 }
-html.pi-desktop-darwin .compact-navigation .compact-brand { --desktop-brand-inset: 36px; }
+html.pi-desktop .compact-navigation .compact-brand { --desktop-brand-inset: 36px; }
 .compact-project-shortcut { display: none; border: 0; background: transparent; color: var(--text); height: 30px; margin-top: 12px; }
 .compact-project-shortcut svg { width: 14px; height: 14px; }
 .compact-navigation.directory-collapsed:not(:hover):not(:focus-within) .compact-project-shortcut { display: block; }
@@ -15932,7 +15927,7 @@ span.rich-math { display: inline-block; }
    低对比缩进导轨，语法色拉开色相（紫关键字／海军蓝字符串／绿数字／蓝函数名）。
 --------------------------------------------------------------------------- */
 .scratch-page {
-	--pg-font: "JetBrains Mono", "Sarasa Mono SC", Menlo, monospace;
+	--pg-font: "JetBrains Mono", "UI SC", "UI Symbols", "PI Emoji", monospace;
 	--pg-tab-size: 4;
 	--pg-code-bg: #ffffff;
 	--pg-code-gutter: #ffffff;

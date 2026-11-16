@@ -133,12 +133,12 @@ npm run publish:electron       # 同 build，但 --publish always——本地跑
 - 关闭窗口 → 最小化到托盘（不退出）；托盘菜单可重新打开 / 退出。macOS 全屏关闭时，保存守卫通过后先退出原生全屏，等待 `leave-full-screen` 再隐藏，避免留下黑色全屏空间；连续关闭合并处理。回归：`tests/desktop-fullscreen-close-test.mjs`。
 - 桌面主窗口与 Wiki 窗口都使用无边框外壳：macOS 隐藏系统标题栏、保留左侧原生红黄绿按钮；
   Windows/Linux 使用 `DesktopWindowControls` 自绘最小化、最大化、关闭按钮。主窗口拖动区
-  覆盖整条顶栏背景（含窄窗口）及左侧 pi-harness 品牌区的上方／两侧留白，右侧操作区的控件间空白也可拖动；按钮、输入框、链接、会话选择器、可滚动页签组和弹出菜单为 `no-drag`；Wiki 的 Windows/Linux 窗口按钮在标题栏中占用独立 132px 空间，不继承主窗口的固定定位，避免覆盖搜索、历史与「问 pi」（#113）；整条文档标题栏与面包屑都可拖动，按钮、保存状态和菜单均为
+  覆盖整条顶栏背景（含窄窗口）及左侧 pi-harness 品牌区的上方／两侧留白，右侧操作区的控件间空白也可拖动；按钮、输入框、链接、会话选择器、可滚动页签组和弹出菜单为 `no-drag`；Wiki 窗口与主窗口共用同一组左侧红绿灯圆点（`left: 18px; top: 17px`，标题栏左侧避让 92px），不再单独在标题栏右侧占用 132px（#113 的右侧独立占位已由统一外壳取代）；整条文档标题栏与面包屑都可拖动，按钮、保存状态和菜单均为
   `no-drag`。双击标题区、系统缩放和全屏仍由 Electron 处理。沙箱兼容的 `preload.cjs`
   仅暴露固定窗口操作和窗口状态通知，主窗口关闭按钮继续隐藏到托盘，Wiki 窗口真正关闭。
 - Electron 渲染页加 `pi-desktop` 类，次要操作位于设置菜单；窗口宽度
   ≤900px 时右侧文件树变为抽屉。Web 和桌面共用工作区布局，模型设置位于输入框底部；
-  顶栏高 44px，项目栏全高显示；macOS 品牌区为原生窗口按钮留空，项目栏开关固定在红绿灯右侧，收起项目栏时标题仍避让这些控件。Windows/Linux 顶栏为右上角 132px 窗口按钮预留空间；顶栏横跨对话与文件栏，窗口按钮避让始终由顶栏承担。设置和文件按钮不压缩，视图入口在空间不足时依次将 Git、终端移入更多菜单。`tests/desktop-toolbar-test.mjs` 在 Chromium 中模拟两平台外壳，验证顶栏边界、状态数字与任务定位（不替代真机窗口验证）。详见 [界面布局](ui-design.md)。
+  顶栏高 44px，项目栏全高显示；macOS 品牌区为原生窗口按钮留空，项目栏开关固定在红绿灯右侧，收起项目栏时标题仍避让这些控件。Windows/Linux 与 macOS 使用同一套窗口按钮：三枚红绿灯圆点固定在 `left: 18px; top: 17px`，顶栏只保留左侧 92px 避让，右侧不再预留按钮空间；顶栏横跨对话与文件栏。设置和文件按钮不压缩，视图入口在空间不足时依次将 Git、终端移入更多菜单。`tests/desktop-toolbar-test.mjs` 在 Chromium 中模拟两平台外壳，验证顶栏边界、状态数字与任务定位（不替代真机窗口验证）。详见 [界面布局](ui-design.md)。
 - 初始窗口背景匹配默认简白主题；界面优先使用随 web/dist 本地打包的 UI SC 与 JetBrains Mono，以 Mac Desktop 为视觉基准；字体子集外字符回退到系统字体。视觉以 `ui-design.md` 的语雀桌面参考为准。顶栏直接提供对话、终端、Git、数据库、节点与插件，窄屏横向滚动；Wiki 从左栏知识库进入；连接与路径位于底部状态栏。
 - 流畅界面与 Web 共用：窄窗口抽屉使用可中断弹簧与独立拖动区；系统减少动态效果/透明度与提高对比度设置有对应降级。窗口控件、拖动区域与 IPC 不变。
 - SDK 原生提示词引用的 README、docs 与 examples 通过 extraResources 原样保留，防止 electron-builder 的生产依赖剪枝删除扩展示例。afterPack 检查文档和示例入口；native-tools-desktop-test 使用包内 SDK 的真实路径读取资源，缺失时阻断打包回归。
@@ -146,7 +146,7 @@ npm run publish:electron       # 同 build，但 --publish always——本地跑
   rebuild 成 Electron 的 Node ABI，不需要手动 `electron-rebuild`；本机需要装好
   Xcode Command Line Tools（mac）/ Visual Studio Build Tools（win）。
 - 聊天任务清单与 Web 共用 `TodoChecklist`：连续更新合并、后续变化行及历史任务定位一起随 `web/dist` 构建进入桌面包。`tests/todo-chat-browser-test.mjs` 覆盖 Web 和 macOS/Windows 桌面外壳的 900px 布局、键盘跳转、历史折叠与清空后编号复用；它不替代原生安装包验证。
-- 35a 改动面板打开时对话顶栏为 48px、对话列 600px；Windows/Linux 面板工具栏为右侧窗口控制区预留 132px，macOS 沿用原生红绿灯避让。小于 1200px 使用抽屉。
+- 35a 改动面板打开时对话顶栏为 48px、对话列 600px；改动工具栏不再为右侧窗口按钮预留空间；两平台都由左上角红绿灯的 92px 避让承担。小于 1200px 使用抽屉。
 - 图标：来自用户提供的 `icon-1a/1a-flat` 素材。`web/public/favicon.svg` 用于网页与侧栏，PNG 用于 favicon、触屏快捷方式及 Electron 窗口/托盘；`build/icon.png`（1024×1024）、`build/icon.ico`、`build/icon.icns` 用于桌面安装包。平台格式从同一 PNG 生成。
 - 自动更新：`electron-updater` 使用 GitHub Releases feed；安装版启动时检查版本，
   在「设置 → 组件更新」点击「自动更新」下载，显示进度后点击「重启并安装」。

@@ -38,7 +38,7 @@ function allowedPalette(decl) {
 	if (contentPalette.test(decl.prop) && rule.selectors.every(selector => /(?:^|\s)\.(?:fp-embedded|wiki-prose)(?:\[data-code-theme="(?:dark|system)"\])?$/.test(selector))) return true;
 	if (decl.prop === "--highlight-color" && /^\.fp-highlight-(?:yellow|green|blue|pink|purple)$/.test(rule.selector)) return true;
 	if (/^--pg-code-/.test(decl.prop) && rule.selectors.every(selector => /^(?::root\[data-appearance="dark"\] )?\.scratch-page$/.test(selector))) return true;	if (decl.prop === "color" && rule.selectors.every(selector => /^\.fp-markdown \.hljs-[\w-]+$/.test(selector) || /^\.fp-rich-document pre > code::highlight\(rich-code-[\w-]+\)$/.test(selector))) return true;
-	return decl.prop === "background" && rule.selector === ".desktop-window-controls .desktop-window-close:hover";
+	return false;
 }
 
 function validRadius(value) {

@@ -27,8 +27,9 @@ test("keeps palette exceptions narrow and ignores selector IDs and quoted commen
 .fp-highlight-purple { --highlight-color: #e5d5ff; }
 .fp-embedded[data-code-theme="dark"] { --file-code-keyword: #8ab9dd; }
 .fp-markdown .hljs-keyword { color: #2f6f9e; }
-.desktop-window-controls .desktop-window-close:hover { background: #dc3545; }
 `)), []);
+	// Window controls read their colours from tokens like every other surface.
+	assert.equal(errors(checkCss('.desktop-window-controls .desktop-window-close:hover { background: #dc3545; }')).length, 1);
 	assert.equal(errors(checkCss('.fp-highlight-purple { color: #123; }')).length, 1);
 	assert.equal(errors(checkCss('.card { --file-code-bg: #123; }')).length, 1);
 });

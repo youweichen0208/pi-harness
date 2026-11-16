@@ -678,6 +678,15 @@ function setupAutoUpdater() {
 
 // ── 应用生命周期 ──
 
+// 字体栅格化对齐：macOS(Core Text) 用灰度抗锯齿且不做 hinting；Windows 的
+// DirectWrite 默认走 ClearType 次像素抗锯齿 + hinting，同一份 woff2 在两侧的
+// 笔画粗细和字宽会有肉眼可见差异。这两条开关让 Skia 在 Windows/Linux 上按与
+// macOS 相同的灰度、无 hinting 方式渲染，必须早于 app ready 设置。
+if (process.platform !== "darwin") {
+	app.commandLine.appendSwitch("disable-lcd-text");
+	app.commandLine.appendSwitch("font-render-hinting", "none");
+}
+
 app.setAppUserModelId("com.youweichen.pi-harness");
 
 // 确保只有一个实例

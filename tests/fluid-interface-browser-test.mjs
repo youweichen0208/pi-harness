@@ -123,7 +123,8 @@ try {
 		const controls=desktop.locator('.desktop-window-controls');
 		if(platform==='win32') {
 			const c=await controls.boundingBox(), a=await desktop.locator('.topbar-actions').boundingBox();
-			assert(a.x+a.width<=c.x+1);
+			assert(Math.round(c.x)===18&&Math.round(c.y)===17,'traffic lights sit at the macOS position');
+			assert(a.x+a.width<=1100+1,'header uses the full width');
 		}
 		await desktop.screenshot({path:`tests/scratch/fluid-desktop-${platform}.png`});
 		await desktop.close();

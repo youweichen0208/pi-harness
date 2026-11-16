@@ -82,7 +82,7 @@ Workspace 新建／重命名使用 400px 弹窗，带名称标签与全宽 38px 
 
 本节替代下文旧的暖灰、MiSans 和浮起导航样式。Web 与 Electron 共用：默认纯白正文、浅灰侧栏、中性灰选中行、细分隔线。浅色令牌为正文 #FFFFFF、侧栏 #FAFAFA、选中行 #EFEFEF、边框 #ECECEC、正文文字 #333333、标题 #262626。主操作使用独立 action 绿色 #00875A，链接与计数保留蓝色。默认主题显示名改为「简白」，存储键仍为 warm；其他色调与深色选择保留。
 
-- 字体采用 2026-10-20 实测语雀页面 https://www.yuque.com/yuque/ng1qth/about 的回退顺序。界面依次使用 Chinese Quote、-apple-system、system-ui、Segoe UI、Roboto、PingFang SC、Hiragino Sans GB、Microsoft YaHei、Helvetica Neue、Helvetica、Arial、sans-serif；文档正文不插入 -apple-system、system-ui 或 Roboto，文档标题在 Segoe UI 后保留 Roboto。Chinese Quote 仅覆盖四个中文弯引号，使用本地 PingFang SC／SimSun。当前界面及文档字体均在此回退顺序之前优先使用内置 UI SC，统一 Windows／macOS 常用中英文字形。代码字体独立。
+- 字体沿用 2026-10-20 实测语雀页面的回退顺序，但内置字体已排到系统字体之前：`--sans`／`--document-font`／`--document-title-font` 依次是内置 UI SC、内置 UI Symbols、内置 PI Emoji（Noto Color Emoji），其后才是 -apple-system、system-ui、Segoe UI、Roboto、PingFang SC、Hiragino Sans GB、Microsoft YaHei、Helvetica Neue、Helvetica、Arial、sans-serif；文档正文不插入 -apple-system、system-ui 或 Roboto，文档标题在 Segoe UI 后保留 Roboto。原「Chinese Quote」@font-face（`local()` 取 PingFang SC／SimSun，仅覆盖四个中文弯引号）已移除：它按平台取不同字形，而 UI SC 现在自带这四个引号。代码字体独立，`--mono` 同样是内置 JetBrains Mono → UI SC → UI Symbols → PI Emoji 优先。
 - 主界面保留贴边三栏、窗口按钮避让、拖动区及功能入口；导航改为小圆角平面按钮，文件、项目、会话选中项使用灰底，不使用浮起阴影。
 - Wiki、小记和聊天 Markdown 正文采用 15px / 26.1px、0.12px 字间距、400 字重，强调文字 700。文档标题 36px / 50.004px、700；正文 H1 28px / 36px、H2 24px / 32px、H3 20px / 28px，均为 700。标题不使用负字间距；窄屏保持同一文字尺度，通过换行适配。Markdown 段落间距 12px，不移植语雀页面的目录预留空间。小记源码输入采用正文比例字体，代码块保持等宽。
 - Wiki 正文和右侧大纲为白色，文件栏为浅灰色。大纲单行省略并保留完整标题提示；目录与问 pi 页签、键盘切换和草稿继续保留。
@@ -176,14 +176,14 @@ Workspace 新建／重命名使用 400px 弹窗，带名称标签与全宽 38px 
 - 终端 ANSI 调色板（`--term-*`，光标使用 `--accent`）。
 - Mermaid 等第三方渲染器配置读取 CSS 变量。独立代码配色（`--file-code-*`、`--wiki-code-*`、`.hljs-*`）可以定义内容色板，关键字使用蓝色系。
 - 文字高亮色板（`remark-text-highlight` / `.fp-highlight-*`）。这是用户可选的内容颜色，不属于界面颜色。
-- 系统关闭按钮悬停红色（`.desktop-window-close:hover`）。深色浮层及阴影统一读取根变量。
+- 窗口红绿灯使用 `--tl-close`／`--tl-minimize`／`--tl-maximize`／`--tl-glyph` 令牌（悬停与键盘焦点不再改变底色）。深色浮层及阴影统一读取根变量。
 - 深色命令输出中的 Git 状态使用 `--out-green`、`--out-yellow`、`--out-red`，与界面状态色分开。
 
 `npm run check:design` 扫描 `web/src` 下全部 `.css`、`.ts`、`.tsx`，禁止色板及上述例外之外的十六进制颜色、RGB/HSL、颜色名和紫色 OKLCH；非令牌圆角报错并给出行号。颜色名只检查样式值，避免误报文案、路径和标识符。透明色与 `currentColor` 可用。图片转码的白底和文档高亮序列化色板属于内容处理，检查只豁免对应文件中的指定声明。`npm test` 先运行此检查。根色板只允许根选择器中的变量声明，不能通过带 `data-appearance` 的组件规则绕过检查。
 
 ---
 
-Windows 与 macOS 统一优先使用内置 UI SC（Noto Sans SC 子集）及 400／500／600 实际字重，正文基准均为 14px，文字颜色共用主题令牌；移除 Windows 额外 0.5px 字号及次要文字颜色覆盖。不在子集中的字符继续回退到系统字体。浅色非终端滚动区默认隐藏滑块，悬停显示 8px 轨道中的 4px 滑块；拖动颜色加深。xterm 与深色模式沿用原样式。Electron 启动背景与暖白窗口一致。
+Windows 与 macOS 统一优先使用内置 UI SC（Noto Sans SC 子集）及 400／500／600 实际字重，正文基准均为 14px，文字颜色共用主题令牌；移除 Windows 额外 0.5px 字号及次要文字颜色覆盖。界面实际渲染的字符（GB2312 一二级汉字、拉丁、假名、全角形式、箭头、数学运算符、制表符、几何图形、装饰符号）全部内置在 UI SC；UI SC 没有的单色符号、带重音的拉丁字母、希腊与西里尔字母由内置 UI Symbols 提供，彩色 emoji 由内置 PI Emoji 提供。只有内置子集之外的文种（例如阿拉伯文、泰文、韩文音节）才回退到系统字体——界面与模型输出中的常见字符不再回退。浅色非终端滚动区默认隐藏滑块，悬停显示 8px 轨道中的 4px 滑块；拖动颜色加深。xterm 与深色模式沿用原样式。Electron 启动背景与暖白窗口一致。
 
 ### 1.5 主界面外壳
 
@@ -408,7 +408,7 @@ Windows 与 macOS 统一优先使用内置 UI SC（Noto Sans SC 子集）及 400
 - 普通文件预览的 Markdown 表格外框随实际列宽收缩；Wiki 正文表格默认铺满可用宽度。超宽表格限制在正文宽度内并横向滚动。编辑器里无任何单元格内容的空模板表格（如 /table 尺寸格新插入）例外：占满正文宽度、列均分且不受单元格最小宽限制，填入内容后按所在视图的宽度规则展示。文档表格规则优先于祖先 `.msg-text` 的聊天表格样式；通过 `/table` 尺寸格新插入及保存重开后均遵循同一布局。回归：`tests/markdown-table-layout-test.mjs`、`tests/wiki-table-insert-test.mjs`。
 - 表格尺寸格和行内代码分别使用 `--r-wiki-grid`（3px）、`--r-wiki-code`（4px），为文档内容专用令牌。
 - 文档正文最宽 760px（宽版 1000px），两侧各 64px 留白；左栏 250px，对话面板 400px。
-- Markdown 统一打开独立可编辑文档窗口（ADR-0003），不再渲染主应用的顶栏、视图切换与底部 Git 状态。专用标题栏依次提供文档图标、路径／文件名／保存状态、目录、搜索、最近改动、「问 pi」和关闭／系统窗口控制；桌面端标题栏与面包屑形成连续拖动区，所有交互控件为 `no-drag`，macOS 左侧避让红绿灯。
+- Markdown 统一打开独立可编辑文档窗口（ADR-0003），不再渲染主应用的顶栏、视图切换与底部 Git 状态。专用标题栏依次提供文档图标、路径／文件名／保存状态、目录、搜索、最近改动、「问 pi」和关闭／系统窗口控制；桌面端标题栏与面包屑形成连续拖动区，所有交互控件为 `no-drag`，左侧避让红绿灯（macOS 原生，Windows/Linux 同一位置的自绘圆点）。
 - 右栏默认显示当前文档目录；展开「问 pi」时在同一栏替换目录，收起聊天后恢复目录，宽度保持不变。右栏可拖动调宽，刷新保留窗口级聊天／目录选择。小屏默认收起目录，手动打开后以覆盖式面板展示。复用原聊天的消息和输入框实例，保留草稿、附件和进行中的回复；发送前保存文档，保存失败保留输入。选区「问 pi」先保存，再把路径与点击时选中文字追加到右栏输入并聚焦，不自动发送；文件引用同样自动展开。左侧文件栏默认常驻，切换文档保持展开，移除标题栏目录开关；最近改动使用右侧覆盖抽屉，不压缩正文。
 - 最近改动抽屉按日期分组，每次改动收在浅边框记录卡内：标题、作者与时间在卡头，文件名、增删行数、单文件撤销在文件行；仅多文件改动显示整次撤销／重做。展开前后版本后用中性代码面板和明确的「修改前／修改后」标签展示原文，避免整段红绿底色影响阅读；窄窗口继续覆盖正文而不挤压布局。
 - 关闭与 Escape 共用保存保护；失败后可继续编辑或明确放弃。Escape 先处理内部菜单和弹窗，重开同文档恢复滚动位置。
@@ -553,7 +553,7 @@ CodeMirror 使用 Python 高亮与 Jedi 补全、签名和诊断；补全列表�
 
 ### 代码面视觉基准（Light 2026）
 
-源码编辑区使用自己的浅色基准 Light 2026，不跟随应用外观切换：白纸底（`--pg-code-bg`）、灰阶行号列、低对比缩进导轨。字体固定为 `"JetBrains Mono", "Sarasa Mono SC", Menlo, monospace`（`--pg-font`），Tab 宽度 4（`--pg-tab-size`）；JetBrains Mono 为内置字体，Sarasa Mono SC 覆盖中文注释，Menlo 兜底。语法色按色相分工：关键字紫、字符串海军蓝、数字与内建绿、函数名蓝、注释灰斜体。
+源码编辑区使用自己的浅色基准 Light 2026，不跟随应用外观切换：白纸底（`--pg-code-bg`）、灰阶行号列、低对比缩进导轨。字体固定为 `"JetBrains Mono", "UI SC", "UI Symbols", "PI Emoji", monospace`（`--pg-font`，与 `scratch-editor.tsx` 的 `PLAYGROUND_FONT` 一致），Tab 宽度 4（`--pg-tab-size`）；JetBrains Mono 与 UI SC 均为内置字体，UI SC 覆盖中文注释，因此两侧字形一致。语法色按色相分工：关键字紫、字符串海军蓝、数字与内建绿、函数名蓝、注释灰斜体。
 
 缩进导轨由 `scratch-editor.tsx` 的视图插件按行给出 `--rail-depth`（一级 = 4 空格）并用 `::before` 画 1px 竖线；空行借用下一条语句的层级，块内空行不断线。行号列无折叠箭头（基础主题对 `.cm-gutter` 用 `display:flex !important`，需 `!important` 覆盖），选中行为透明底，只用页边与导轨表示当前行。字体与 Tab 宽度同时写进 CodeMirror 主题，避免排版测量与样式不一致造成光标偏移。`--pg-code-*` 是内容色板，`scripts/check-design-tokens.mjs` 只允许在 `.scratch-page` 令牌块中直接写字面色值。
 
@@ -697,7 +697,7 @@ Subagent 第 6 版（2026-11-02）：详情按任务→结论→发现→执行�
 
 原生计划卡默认折叠为真实分段进度与「已完成 N/M」，展开后保留步骤、完成标准和变化记录；更新变化默认折叠，查看／任务跳转自动展开对应卡片。命令卡和计划卡统一表面色、细边框与 --r-lg 圆角，窄屏不溢出；运行旋转兼容减少动态效果。
 
-macOS 窄窗口（769–900px）为固定窗口控件与项目栏开关预留 132px，避免开关覆盖任务进度入口。
+桌面窄窗口（769–900px）为固定窗口控件与项目栏开关预留 132px，避免开关覆盖任务进度入口；两平台规则相同。
 
 回归入口：`tests/chat-optimization-browser-test.mjs` 覆盖中英文、浅深色、390px 窄屏、命令全文、运行蓝点和圆环。使用隔离目录与模拟消息，不调用模型；外壳模拟不替代原生安装包验证。
 
@@ -721,9 +721,9 @@ Workspace 切换器与品牌图标分行：品牌图标与 pi-harness 名称占�
 
 顶栏项目／对话区域使用紧凑层级：项目名为 12px 次级文字，浅色线性右箭头分隔，当前对话为较深半粗文字与统一线性下箭头；标题按钮有悬停底色和键盘焦点环。长项目名先收缩，对话标题保留更多空间，点击仍打开会话树查看完整名称；沿用窄屏隐藏项目上下文和桌面拖动区规则。
 
-跨平台字体以本次统一规则为准，替代旧的系统字体／MiSans 优先说明：界面、聊天正文与文档预览使用 `--sans` 的内置 UI SC 优先顺序。代码沿用内置 JetBrains Mono，首页衬线标语保持原样。字体来自包内，不请求外部字体服务；系统栅格化与屏幕缩放仍可能带来细微差异。
+跨平台字体以本次统一规则为准，替代旧的系统字体／MiSans 优先说明：界面、聊天正文与文档预览使用 `--sans` 的内置 UI SC → UI Symbols → PI Emoji 顺序，代码使用内置 JetBrains Mono（其后同样接 UI SC／UI Symbols，中文注释不再落到系统 CJK 字体），终端与 Playground 编辑器沿用同一顺序，首页衬线标语使用内置 Source Serif 4／Noto Serif SC。字体全部来自包内，不请求外部字体服务。字形栅格化由 Electron 侧对齐：Windows／Linux 启动时设置 `disable-lcd-text` 与 `font-render-hinting=none`，与 macOS 的无 hinting 灰度抗锯齿一致，因此同一段文字在两侧的笔画粗细与字宽一致；屏幕缩放仍可能带来亚像素差异。
 
-顶栏按自身可用宽度响应（包含侧栏与 Windows 窗口控件占用）：内容区不超过 900px 时隐藏次级项目名、分隔箭头和任务分段条，保留可点击的任务步骤文字，将释放的宽度留给会话标题；视图导航与窗口控件保持原有入口。宽顶栏仍显示完整项目上下文与进度条（#142）。
+顶栏按自身可用宽度响应（侧栏与左侧红绿灯占用固定 92px 起排）：内容区不超过 900px 时隐藏次级项目名、分隔箭头和任务分段条，保留可点击的任务步骤文字，将释放的宽度留给会话标题；视图导航与窗口控件保持原有入口。宽顶栏仍显示完整项目上下文与进度条（#142）。
 
 主窗口顶栏会话入口固定显示「当前会话」（英文 Current conversation）和下拉箭头，替代项目名／动态会话标题组合；点击仍打开会话树，右侧任务步骤入口保留。此规则替代前述动态面包屑与长标题布局。
 
@@ -731,7 +731,7 @@ Workspace 切换器与品牌图标分行：品牌图标与 pi-harness 名称占�
 
 模型管理正文顶部和首次引导共用配置来源列表：Pi、Claude Code、Codex、OpenCode，默认开启，只读用户级 API 配置。每行包含复选开关、状态、模型数、检查时间和恢复同步；列表提供立即同步。同步模型编辑后成为本地独立配置，删除需主动恢复来源。首次引导直接提供手动配置及原生登录，不要求安装 Pi CLI。沿用现有 provider-row、btn 与主题令牌。
 
-桌面主窗口顶行：左侧 pi-harness 品牌及其周围留白、会话标题区和右侧操作区空白均可拖动窗口；品牌区保持原有位置并避让 macOS 红绿灯。实际按钮、输入、可滚动页签组和弹出菜单保留点击／滚动操作，不作为拖动区。浏览器布局不变。
+桌面主窗口顶行：左侧 pi-harness 品牌及其周围留白、会话标题区和右侧操作区空白均可拖动窗口；品牌区保持原有位置并避让红绿灯（两平台同一位置）。实际按钮、输入、可滚动页签组和弹出菜单保留点击／滚动操作，不作为拖动区。浏览器布局不变。
 
 聊天回复的执行状态固定使用英文（如 Thinking、Running、Done、Completed、Queued、Cancelled），包括思考块、工具卡、过程组和流式等待提示；状态中的时长使用英文单位。消息正文、操作按钮及其他界面继续跟随所选语言。
 
@@ -832,9 +832,9 @@ SCM 更改列表（2026-11-12）：界面不再展示工作树清单；仓库工
 
 ## Desktop 跨平台视觉基准（2026-11-12）
 
-以 Mac Desktop 的主界面字体与风格为基准，Windows 共用 UI SC、JetBrains Mono 和主题令牌。插入菜单、Wiki 搜索／格式控件及设置面板统一走 `--sans`，不独立指定系统字体。保留现有 400／500／600 字体文件与 700 字重映射，不为 Windows 单独加粗或放大文字。窗口按钮、快捷键和标题栏避让保留平台习惯。
+以 Mac Desktop 为主界面字体与风格基准，Windows 与 macOS 完全共用一套字体、令牌和窗口外壳：同一份内置 UI SC／UI Symbols／PI Emoji／JetBrains Mono，同一套 400／500／600 字重与 700 映射，不为 Windows 单独加粗或放大文字；插入菜单、Wiki 搜索／格式控件及设置面板统一走 `--sans`，不独立指定系统字体。窗口按钮也对齐 macOS：Windows／Linux 的无边框窗口在主窗口、Wiki 窗口和改动面板里都绘制同一组红绿灯圆点（12px 圆点、8px 间距、`left: 18px; top: 17px`、红 `--tl-close`／黄 `--tl-minimize`／绿 `--tl-maximize`，悬停显示 ×／−／＋），顶栏、Wiki 标题栏和改动工具栏因此只保留左侧 92px 避让，删除了旧的右侧 132／144px 预留与 Windows 自绘的右上角按钮。键盘快捷键文字仍按平台显示（`⌘ P` vs `Ctrl P`）：那是真实按键说明，写错会误导操作。
 
-`tests/windows-rendering-test.mjs` 在真实 Electron 中输出字体、聊天与文件栏样式、文档／小记／设置的 CSS 场景测量和明暗截图。`verify-rendering.yml` 汇总同版本 Mac 与 Windows 100%／125%／150% 产物，由 `scripts/compare-desktop-rendering.mjs` 检查字体、换行数、文字宽度、颜色与控件盒尺寸；数值尺寸容差为 1 CSS px。`Range.getClientRects()` 的字形像素高度受系统字体栅格化影响，不作为 CSS 盒尺寸比较。系统抗锯齿、Emoji、字体子集外字符和原生窗口控制不做逐像素比较。CSS 场景测量不替代各页面已有的交互回归。
+`tests/windows-rendering-test.mjs` 在真实 Electron 中输出字体、聊天与文件栏样式、文档／小记／设置的 CSS 场景测量和明暗截图。`verify-rendering.yml` 汇总同版本 Mac 与 Windows 100%／125%／150% 产物，由 `scripts/compare-desktop-rendering.mjs` 检查字体、换行数、文字宽度、颜色与控件盒尺寸；数值尺寸容差为 1 CSS px。`Range.getClientRects()` 的字形像素高度受系统字体栅格化影响，不作为 CSS 盒尺寸比较。内置字体覆盖范围内已无系统回退，因此 Emoji 与符号字形也应一致；仍不做逐像素比较的是屏幕缩放的亚像素差异与内置子集之外的文种。CSS 场景测量不替代各页面已有的交互回归。
 ### ChatGPT / Kimi 账号模型入口
 
 共用模型菜单保留 ChatGPT 与 Kimi 紧凑单行入口，不显示额外的「登录账号」文字；未登录时点击名称授权，已登录时点击名称管理账号。所有可用模型统一呈现；来源采用系统字体，底部使用简短的刷新与管理入口。账号状态来自原生 SDK 认证类型与不含敏感信息的凭据元数据，API Key 不标为账号登录。登录成功不切换模型、不发送聊天请求；目录不代表逐项验证订阅权限。已保存原生密钥时先确认替换，服务端再次检查；来源停用时提供管理入口。协议 v56 的 models 携带 accounts 状态摘要，login_provider 支持 confirmReplaceKey。

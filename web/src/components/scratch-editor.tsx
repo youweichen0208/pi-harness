@@ -12,9 +12,10 @@ import { Decoration, EditorView, ViewPlugin, keymap, placeholder as cmPlaceholde
 import { basicSetup } from "codemirror";
 import { THEME_CHANGE_EVENT } from "../theme";
 
-/** The code surface's own font stack (Light 2026); Sarasa Mono SC covers CJK
- * code comments, Menlo is the last resort when neither webfont loads. */
-export const PLAYGROUND_FONT = '"JetBrains Mono", "Sarasa Mono SC", Menlo, monospace';
+/** The code surface's own font stack (Light 2026). JetBrains Mono is bundled and
+ * UI SC covers CJK code comments, so both platforms shape identical text; the
+ * generic monospace remains the last resort. */
+export const PLAYGROUND_FONT = '"JetBrains Mono", "UI SC", "UI Symbols", "PI Emoji", monospace';
 export const PLAYGROUND_TAB_SIZE = 4;
 
 /**
