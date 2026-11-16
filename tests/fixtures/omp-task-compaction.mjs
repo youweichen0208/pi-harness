@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { realpathSync, readFileSync } from 'node:fs';
 import { join, relative, isAbsolute, sep } from 'node:path';
-import { pathToFileURL, fileURLToPath } from 'node:url';
+import { pathToFileURL } from 'node:url';
 const [file, mode = 'compact', leaf, applicationRoot] = process.argv.slice(2);
 assert(applicationRoot, 'Select the application whose native history is under test');
 const root = realpathSync(applicationRoot);
@@ -11,11 +11,15 @@ const assertInside = file => {
 	assert(!isAbsolute(inside) && inside !== '..' && !inside.startsWith('..' + sep), `Native compaction must use the selected application runtime: ${JSON.stringify({ root, requested: file, actual, relative: inside })}`);
 };
 assertInside(process.execPath);
-assert.equal(Bun.version, JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).dependencies.bun);
+const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
+assert.equal(Bun.version, manifest.dependencies.bun);
+assert.equal(JSON.parse(readFileSync(join(root, 'node_modules/@oh-my-pi/pi-coding-agent/package.json'), 'utf8')).version, manifest.dependencies['@oh-my-pi/pi-coding-agent']);
 const loadNative = async name => {
-	const url = import.meta.resolve(name, pathToFileURL(join(root, 'package.json')).href);
-	assertInside(fileURLToPath(url));
-	return import(url);
+	// A file-URL parent can fall back to Bun's global install cache on Windows.
+	// Use the explicit filesystem directory and keep the resolved-path guard.
+	const file = Bun.resolveSync(name, root);
+	assertInside(file);
+	return import(pathToFileURL(file).href);
 };
 const { SessionManager } = await loadNative('@oh-my-pi/pi-coding-agent');
 const { loadSessionMessagesReadOnly } = await loadNative('@oh-my-pi/pi-coding-agent/session/session-loader');

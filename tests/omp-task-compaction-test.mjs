@@ -75,8 +75,8 @@ try {
 	const requestCount = requests.length;
 	const bun = join(ompTestRoot, 'node_modules/bun/bin/bun.exe');
 	const mutate = async (file, mode = 'compact', leaf = '') => {
-		const result = await promisify(execFile)(bun, [fileURLToPath(new URL('./fixtures/omp-task-compaction.mjs', import.meta.url)), file, mode, leaf, ompTestRoot], {
-			cwd: root, env: { ...process.env, NODE_OPTIONS: '', NODE_PATH: '', ELECTRON_RUN_AS_NODE: undefined, PI_CODING_AGENT_DIR: agent, PI_CONFIG_DIR: relative(homedir(), join(root, 'native-config')) }, timeout: 30000,
+		const result = await promisify(execFile)(bun, ['--no-install', fileURLToPath(new URL('./fixtures/omp-task-compaction.mjs', import.meta.url)), file, mode, leaf, ompTestRoot], {
+			cwd: root, env: { ...process.env, BUN_OPTIONS: '', NODE_OPTIONS: '', NODE_PATH: '', ELECTRON_RUN_AS_NODE: undefined, PI_CODING_AGENT_DIR: agent, PI_CONFIG_DIR: relative(homedir(), join(root, 'native-config')) }, timeout: 30000,
 		});
 		return JSON.parse(result.stdout);
 	};
