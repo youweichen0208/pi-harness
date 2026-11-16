@@ -1,5 +1,5 @@
 {
-  "status": "Deterministic aborted-upload reproduction failed before the fixture fix and full local tree regression passed afterward; Linux revalidation pending",
+  "status": "Historical aborted-upload fixture fix: deterministic reproduction and local regression recorded; Linux run 43821610138 later failed at an unrelated packaged compaction fixture. Current platform status is recorded in omp-linux-validation.json.",
   "linuxFailure": {
     "runId": 43819621811,
     "jobId": 133139455260,
@@ -27,5 +27,6 @@
     }
   ],
   "productionChanged": false,
-  "limits": "Local Node 26 reproduction and regression do not replace Linux Node 22 or Windows execution; native tree cancellation, branch/history and no-replay assertions are retained."
+  "limits": "Local Node 26 reproduction and regression do not replace Linux Node 22 or Windows execution; native tree cancellation, branch/history and no-replay assertions are retained.",
+  "linuxRunId": 43821610138
 }
