@@ -3,6 +3,7 @@
  * Run:  npm run build:server && node terminal-smoke-test.mjs */
 import { spawn, spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, realpathSync, mkdirSync, writeFileSync } from "node:fs";
+import { realpath } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import { dirname } from "node:path";
@@ -218,7 +219,11 @@ async function main() {
 
 	// -- persisted OMP history: seed through the shipped native SDK ------------
 	{
-		const sessionDir = join(dataDir, "omp", "sessions", "chat", createHash("sha256").update(realpathSync(workdir)).digest("hex").slice(0, 24));
+		// Match prepareLaunch's native async realpath: on Windows the JS sync
+		// resolver may retain an 8.3 alias that hashes to a different directory.
+		const canonicalCwd = await realpath(workdir);
+		const sessionDir = join(await realpath(dataDir), "omp", "sessions", "chat", createHash("sha256").update(canonicalCwd).digest("hex").slice(0, 24));
+		if (process.platform === "win32") console.log("History fixture paths:", JSON.stringify({ requested: workdir, sync: realpathSync(workdir), native: canonicalCwd, sessionDir, activeSessionFile: snapshotReply?.sessionFile }));
 		const require = createRequire(import.meta.url);
 		const bun = join(dirname(require.resolve("bun/package.json")), "bin", "bun.exe");
 		const seeded = spawnSync(bun, ["--eval", `
@@ -228,11 +233,13 @@ async function main() {
 			session.appendMessage({role:'assistant',content:[{type:'text',text:'Persisted fixture'}],api:'anthropic-messages',provider:'fixture',model:'fixture',stopReason:'stop',timestamp:Date.now(),usage:{input:0,output:0,cacheRead:0,cacheWrite:0,totalTokens:0,cost:{input:0,output:0,cacheRead:0,cacheWrite:0,total:0}}});
 			await session.flush();
 			console.log(session.getSessionFile());
-		`], { cwd: REPO, encoding: "utf8", timeout: 30000, env: testEnv({ ELECTRON_RUN_AS_NODE: undefined, TEST_OMP_CWD: realpathSync(workdir), TEST_OMP_SESSIONS: sessionDir }) });
+		`], { cwd: REPO, encoding: "utf8", timeout: 30000, env: testEnv({ ELECTRON_RUN_AS_NODE: undefined, TEST_OMP_CWD: canonicalCwd, TEST_OMP_SESSIONS: sessionDir }) });
 		if (seeded.status !== 0) throw Error(`Cannot seed OMP history: ${seeded.stderr}`);
 		const sessionFile = realpathSync(seeded.stdout.trim());
 		send({ type: "list_sessions" });
-		check("persisted OMP session appears in the conversation list", await waitFor(() => sessionsReply?.some(s => realpathSync(s.path) === sessionFile && s.firstMessage === "OMP terminal history")));
+		const listed = await waitFor(() => sessionsReply?.some(s => realpathSync(s.path) === sessionFile && s.firstMessage === "OMP terminal history"));
+		if (!listed) console.error("OMP fixture listing mismatch:", JSON.stringify({ sessionFile, sessions: sessionsReply?.map(s => ({ path: s.path, firstMessage: s.firstMessage })) }));
+		check("persisted OMP session appears in the conversation list", listed);
 	}
 
 	// -- plain terminal --------------------------------------------------------
