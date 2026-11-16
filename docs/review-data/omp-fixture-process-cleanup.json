@@ -1,0 +1,57 @@
+{
+  "status": "Owned-process cleanup corrected in test helper; local process and two-protocol source/package regressions passed; Windows verification pending",
+  "observedFailure": {
+    "runId": 43824244004,
+    "jobId": 133154171579,
+    "test": "reasoning-repetition-test",
+    "log": {
+      "path": "/tmp/omp-windows-sixth-job.log",
+      "exitCode": 1,
+      "sha256": "51de4b92e4a032b30bf5b952d52814765a348d6ff61dced301638b071ef18bb2"
+    },
+    "symptom": "Anthropic assertions passed; temporary agent.db removal failed EBUSY after parent-only stop."
+  },
+  "reproduction": {
+    "test": "tests/isolated-server-test.mjs",
+    "red": {
+      "path": "/tmp/omp-isolated-tree-red.log",
+      "exitCode": 1,
+      "sha256": "666dd9c2c6144df1f4b0eb59247676d8824177be618fb534705f81240ae0be03"
+    },
+    "finding": "stop resolved with synthetic child/grandchild still alive; unrelated sibling server remained outside its ownership."
+  },
+  "changes": [
+    "Windows stop awaits taskkill /PID <owned parent> /T /F instead of terminating the parent before its child tree.",
+    "POSIX fixture server owns a separate process group; graceful parent exit is followed by bounded group cleanup. Detached SDK groups still rely on the native parent shutdown.",
+    "Concurrent and repeated stop calls share the same completion. Cleanup failures remain fatal.",
+    "Existing isolated-server regression now checks parent/child/grandchild exit and a surviving unrelated sibling; included before native desktop gates."
+  ],
+  "verification": {
+    "processTree": {
+      "path": "/tmp/omp-isolated-tree-green.log",
+      "exitCode": 0,
+      "sha256": "7a9f8d5e5820e77b3494a35a9726e1e800c86fb6c53cd179d8e329af5a86b071"
+    },
+    "sourceAnthropicAndOpenAI": {
+      "path": "/tmp/omp-repetition-tree-source.log",
+      "exitCode": 0,
+      "sha256": "c898ad4a2f63e63ef9b9acc6e588f5aeb90398a289cfe7655eba1a6f0a135add"
+    },
+    "packagedAnthropicAndOpenAI": {
+      "path": "/tmp/omp-repetition-tree-packaged.log",
+      "exitCode": 0,
+      "sha256": "c898ad4a2f63e63ef9b9acc6e588f5aeb90398a289cfe7655eba1a6f0a135add"
+    },
+    "typecheck": {
+      "path": "/tmp/omp-fixture-cleanup-typecheck.log",
+      "exitCode": 0,
+      "sha256": "20eba569f73b594b29f88375d81dbe413bbe134c5008159c58f8cd696a6e4b77"
+    },
+    "static": [
+      "320 script environment checks passed",
+      "both modified workflow YAML files parsed",
+      "git diff --check passed"
+    ]
+  },
+  "scope": "Tests and CI only. No SDK/runtime source edits, retry suppression or skipped assertions. Actual Windows taskkill behavior remains subject to next runner execution."
+}

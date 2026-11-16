@@ -96,6 +96,7 @@ jobs:
 
       - name: Verify OMP runtime, configuration and entry (plain Node)
         run: |
+          node tests/isolated-server-test.mjs
           node tests/terminal-smoke-test.mjs
           node tests/omp-runtime-test.mjs
           node tests/omp-openai-proxy-test.mjs
@@ -269,6 +270,8 @@ jobs:
 
       - name: Verify OMP runtime, configuration and entry (plain Node)
         run: |
+          node tests/isolated-server-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "Isolated process cleanup regression failed" }
           node tests/omp-runtime-test.mjs
           if ($LASTEXITCODE -ne 0) { throw "omp-runtime-test.mjs failed" }
           node tests/omp-openai-proxy-test.mjs
@@ -524,6 +527,7 @@ jobs:
 
       - name: Verify OMP runtime, configuration and entry (plain Node)
         run: |
+          node tests/isolated-server-test.mjs
           node tests/terminal-smoke-test.mjs
           node tests/omp-runtime-test.mjs
           node tests/omp-openai-proxy-test.mjs

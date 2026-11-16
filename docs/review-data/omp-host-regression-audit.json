@@ -92,7 +92,7 @@
       "Real gateway/model request comparison and raw-wire evidence",
       "Windows original task and packaged acceptance"
     ],
-    "fullSmoke": "Included in complete v78 120/120 baseline; subsequent child-compaction and deployment changes have separate checks, not a full 122-entry run."
+    "fullSmoke": "Included in complete local v78 122/122 baseline, no skips, exit 0; see omp-smoke-current.json. Later Windows fixture corrections have separate regressions."
   },
   "requestDiagnostics": {
     "evidence": "omp-request-diagnostics.json",
@@ -102,7 +102,7 @@
       "Native CLI JSON/print early event-loop exit with and without observer",
       "Raw transport correlation and real-account acceptance"
     ],
-    "fullSmoke": "Included in complete v78 120/120 baseline; current child-compaction follow-up has separate checks, not a full 122-entry run."
+    "fullSmoke": "Included in complete local v78 122/122 baseline, no skips, exit 0; see omp-smoke-current.json. Later Windows fixture corrections have separate regressions."
   },
   "newSessionRace": {
     "evidence": "omp-new-session-race.json",
@@ -119,7 +119,8 @@
   "hostFixtureCorrections": {
     "evidence": [
       "omp-extension-reload-readiness.json",
-      "omp-editor-fixtures.json"
+      "omp-editor-fixtures.json",
+      "omp-fixture-process-cleanup.json"
     ],
     "verified": "Reload idle-admission boundary, offline locked SSH dependencies, current browser entry and owned cleanup.",
     "remaining": "No claim to fix the development plugin auto-installer lifecycle."
@@ -149,8 +150,22 @@
       "Native Task internal writer guard",
       "Native MCP OAuth write-back CAS and tool-level challenge handling",
       "Native CLI JSON/print exit",
-      "Current full 122-entry smoke and active legacy Desktop history cleanup"
+      "Active legacy Desktop history cleanup"
     ],
-    "release": "Local test artifacts only; no installed app replacement or publishing"
+    "release": "Local test artifacts only; no installed app replacement or publishing",
+    "platformValidation": {
+      "windows": {
+        "evidence": "omp-windows-validation.json",
+        "status": "Sixth run: corrected Task compaction and later source gates passed; reasoning fixture cleanup failed. Process-tree cleanup locally reproduced and corrected; Windows revalidation pending."
+      },
+      "linux": {
+        "evidence": "omp-linux-validation.json",
+        "status": "Second run: source/build/package integration and six desktop UI entries passed; AppImage Unicode-path server start passed, then old compaction fixture binding failed. Corrected fixture revalidation pending."
+      }
+    }
+  },
+  "upstream18203": {
+    "evidence": "omp-upstream-18.20.3.json",
+    "status": "Verified official tarball and compared source only; no upgrade or runtime validation. Inspected native Task paths still omit parent storage; three critical MCP files byte-identical to 18.20.0."
   }
 }

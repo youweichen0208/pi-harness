@@ -1,0 +1,59 @@
+{
+  "status": "Corrected fixture passed native Windows compaction and local Unicode-path packaged comparison; full platform package gates remain incomplete",
+  "observedFailure": {
+    "runId": 43822972218,
+    "jobId": 133150081996,
+    "expectedSDK": "18.20.0",
+    "resolvedSDK": "18.20.3",
+    "resolvedLocation": "Outside selected application, under the runner Bun install cache",
+    "log": "/tmp/omp-windows-fifth-job.log",
+    "sha256": "72d7676758e508cea026ba229cca57f49c132a8b7e1ad50a276fc379220c368c"
+  },
+  "change": "Use Bun.resolveSync with the selected filesystem root, pass --no-install, clear BUN_OPTIONS, retain realpath containment and check both Bun and SDK versions.",
+  "checks": [
+    {
+      "name": "native compaction",
+      "log": "/tmp/omp-compaction-explicit-root-local.log",
+      "exitCode": 0,
+      "sha256": "fdd8c76b1c01ae1169b471c92856d795ccb2d90f2b6b4598352494760b84d238"
+    },
+    {
+      "name": "external SDK rejected before history access; no auto-install cache; Unicode/space root",
+      "log": "/tmp/omp-compaction-explicit-root-guard.log",
+      "fixtureExitCode": 1,
+      "expectedExitCode": 1,
+      "passed": true,
+      "sha256": "e35ba4d466434a5788f602e12e5efb0f3fa1c21a10cecb0b7ff22578fe2fa4a2"
+    },
+    {
+      "name": "old fixture in Unicode/space macOS extracted ZIP, with --no-install",
+      "log": {
+        "path": "/tmp/omp-compaction-unicode-red.log",
+        "sha256": "7008bb20ea280b14f46082e12285466edbfa0b8ac3d36e65b9600fa84b882113"
+      },
+      "exitCode": 1,
+      "failure": "File-URL base failed to locate selected SDK."
+    },
+    {
+      "name": "corrected fixture in the same extracted ZIP and Unicode/space root",
+      "log": {
+        "path": "/tmp/omp-compaction-unicode-green.log",
+        "sha256": "fdd8c76b1c01ae1169b471c92856d795ccb2d90f2b6b4598352494760b84d238"
+      },
+      "exitCode": 0,
+      "passed": true
+    }
+  ],
+  "productionChanges": false,
+  "limits": "Runtime binding is verified by actual Windows source compaction and local extracted ZIP positive/negative tests. Linux AppImage revalidation and complete Windows package acceptance remain pending.",
+  "windowsValidation": {
+    "runId": 43824244004,
+    "jobId": 133154171579,
+    "status": "compaction passed; later unrelated cleanup gate failed",
+    "observedAt": "2026-11-16T07:48:27.954033+00:00",
+    "log": {
+      "path": "/tmp/omp-windows-sixth-job.log",
+      "sha256": "51de4b92e4a032b30bf5b952d52814765a348d6ff61dced301638b071ef18bb2"
+    }
+  }
+}

@@ -1,6 +1,8 @@
 /** Bind test listeners directly; never release a probe and assume the port stays free. */
 import { randomInt } from "node:crypto";
-import { spawn } from "node:child_process";
+import { spawn, execFile } from "node:child_process";
+import { win32 } from "node:path";
+import { promisify } from "node:util";
 import { setTimeout as sleep } from "node:timers/promises";
 import { testEnv } from "./test-env.mjs";
 
@@ -37,18 +39,40 @@ export async function listenIsolated(server, { nextPort = nextTestPort, attempts
 export async function startIsolatedHarness({ env = {}, executable = process.execPath, nextPort = nextTestPort, attempts = 8, timeoutMs = 20000, onOutput = () => {}, args = ["dist/server/index.js"] } = {}) {
 	for (let attempt = 0; attempt < attempts; attempt++) {
 		const port = checkedPort(nextPort());
-		const child = spawn(executable, args, { env: testEnv({ ...env, PORT: String(port), PI_WEB_HOST: "127.0.0.1" }), stdio: ["ignore", "pipe", "pipe"] });
+		const child = spawn(executable, args, { env: testEnv({ ...env, PORT: String(port), PI_WEB_HOST: "127.0.0.1" }), stdio: ["ignore", "pipe", "pipe"], detached: process.platform !== "win32" });
 		let logs = "", closed = false, spawnError;
 		const output = chunk => { logs = (logs + chunk).slice(-16000); onOutput(String(chunk)); };
 		child.stdout.on("data", output); child.stderr.on("data", output);
 		child.once("error", error => { spawnError = error; });
 		const completion = new Promise(resolve => child.once("close", () => { closed = true; resolve(); }));
-		const stop = async () => {
-			if (closed) return;
-			if (child.pid && child.exitCode === null && child.signalCode === null) child.kill();
-			const force = setTimeout(() => { if (!closed && child.pid) child.kill("SIGKILL"); }, 2000);
+		let stopping;
+		const stop = () => stopping ??= (async () => {
+			if (!child.pid) { await completion; return; }
+			if (process.platform === "win32") {
+				if (closed) return;
+				// child.kill() forcibly terminates only the Node parent on Windows.
+				// Keep it alive until taskkill has captured and closed its Bun tree.
+				const taskkill = win32.join(process.env.SystemRoot ?? process.env.WINDIR ?? "C:\\Windows", "System32", "taskkill.exe");
+				await promisify(execFile)(taskkill, ["/PID", String(child.pid), "/T", "/F"], { windowsHide: true, timeout: 10000 });
+				await completion;
+				return;
+			}
+			const killGroup = () => {
+				try { process.kill(-child.pid, "SIGKILL"); } catch (error) { if (error.code !== "ESRCH") throw error; }
+			};
+			if (!closed && child.exitCode === null && child.signalCode === null) child.kill();
+			const force = setTimeout(killGroup, 2000);
 			try { await completion; } finally { clearTimeout(force); }
-		};
+			// Graceful parent shutdown may still leave a native worker behind.
+			// The detached group belongs only to this fixture, never a sibling.
+			killGroup();
+			const deadline = Date.now() + 2000;
+			while (true) {
+				try { process.kill(-child.pid, 0); } catch (error) { if (error.code === "ESRCH") return; throw error; }
+				if (Date.now() >= deadline) throw Error(`Test process group ${child.pid} did not exit`);
+				await sleep(20);
+			}
+		})();
 		try {
 			const deadline = Date.now() + timeoutMs;
 			while (Date.now() < deadline) {

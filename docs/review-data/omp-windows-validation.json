@@ -1,5 +1,5 @@
 {
-  "status": "Windows source suite stopped at prompt fixture path lookup; native canonicalization regression in progress",
+  "status": "Sixth Windows validation: compaction and later source gates passed; reasoning fixture cleanup failed",
   "branch": "feat/omp-validation-20261116",
   "attempts": [
     {
@@ -106,8 +106,47 @@
       "commit": "b89e1d0dd2039ef7eee6a08c4232ce04bb9c0359",
       "runId": 43820728630,
       "url": "https://github.com/youweichen0208/pi-harness/actions/runs/43820728630",
-      "status": "in_progress",
-      "conclusion": null
+      "status": "completed",
+      "conclusion": "failure",
+      "jobId": 133142952027,
+      "failedTest": "tests/fixtures/omp-task-compaction.mjs:11",
+      "failure": "Resolved native SDK module failed the selected-application containment assertion; exact resolved path not included in original error.",
+      "log": {
+        "path": "/tmp/omp-windows-fourth-job.log",
+        "sha256": "af5ff9d69dd95bd59d1b7ea4bfd53dadfac623ce0759bdb860c1b6c0b814a01e"
+      },
+      "verified": "Prompt file test now passed; native tasks, request diagnostics and task output passed before compaction."
+    },
+    {
+      "commit": "9e11b59966bc06f88a3ec7be95558dcace575e8d",
+      "runId": 43822972218,
+      "url": "https://github.com/youweichen0208/pi-harness/actions/runs/43822972218",
+      "status": "completed",
+      "conclusion": "failure",
+      "purpose": "Diagnose native compaction SDK containment with actual/canonical/relative paths; keep assertion and unchanged platform test command sets.",
+      "jobId": 133150081996,
+      "failure": "Compaction fixture resolved OMP 18.20.3 from the runner global Bun cache instead of selected app 18.20.0; containment guard rejected it.",
+      "log": {
+        "path": "/tmp/omp-windows-fifth-job.log",
+        "sha256": "72d7676758e508cea026ba229cca57f49c132a8b7e1ad50a276fc379220c368c"
+      }
+    },
+    {
+      "commit": "6552abb5e0283a67cc071e7dcd84374c208c8bab",
+      "runId": 43824244004,
+      "jobId": 133154171579,
+      "url": "https://github.com/youweichen0208/pi-harness/actions/runs/43824244004",
+      "purpose": "Resolve compaction fixture SDK from the selected filesystem root; prohibit auto-install and verify Bun/SDK versions.",
+      "status": "completed",
+      "conclusion": "failure",
+      "lastObservedStep": "Verify OMP runtime, configuration and entry (plain Node)",
+      "verified": "Typecheck/build/three terminal rounds, corrected native Task compaction, configuration/MCP/prompt/tasks/request diagnostics/output gates passed.",
+      "failedTest": "tests/reasoning-repetition-test.mjs cleanup",
+      "failure": "Anthropic assertions passed, then rmSync encountered EBUSY on agent.db; isolated harness stop killed only the parent on Windows.",
+      "log": {
+        "path": "/tmp/omp-windows-sixth-job.log",
+        "sha256": "51de4b92e4a032b30bf5b952d52814765a348d6ff61dced301638b071ef18bb2"
+      }
     }
   ],
   "fix": "Normalize TypeScript filenames through native path.resolve before containment checks; require server/index.ts in the source graph. Regression checks source counts and nested transitive output, and runs before typecheck in independent Windows CI.",
@@ -132,9 +171,9 @@
     "terminalChecksPassed": 43,
     "windowsVerification": "The original history-list assertion passes in all three terminal rounds. Exact path diagnostics pending completed logs."
   },
-  "lastObservedAt": "2026-11-16T06:54:47.740152+00:00",
-  "lastObservedStatus": "in_progress",
-  "runId": 43820728630,
-  "runUrl": "https://github.com/youweichen0208/pi-harness/actions/runs/43820728630",
-  "commit": "b89e1d0dd2039ef7eee6a08c4232ce04bb9c0359"
+  "lastObservedAt": "2026-11-16T07:48:27.954033+00:00",
+  "lastObservedStatus": "completed/failure: reasoning fixture database locked during cleanup",
+  "runId": 43824244004,
+  "runUrl": "https://github.com/youweichen0208/pi-harness/actions/runs/43824244004",
+  "commit": "6552abb5e0283a67cc071e7dcd84374c208c8bab"
 }

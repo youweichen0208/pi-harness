@@ -1,8 +1,8 @@
 {
   "branch": "feat/omp-validation-20261116",
-  "commit": "3a262ebb0c6c155184725b96227149328e657f73",
-  "runId": 43819621811,
-  "runUrl": "https://github.com/youweichen0208/pi-harness/actions/runs/43819621811",
+  "commit": "f21e1f7c583c6d8593d03da5050179f9f6b9dee3",
+  "runId": 43821610138,
+  "runUrl": "https://github.com/youweichen0208/pi-harness/actions/runs/43821610138",
   "status": "completed/failure",
   "worktree": "/Users/youweichen/projects/pi-harness/.claude/worktrees/feat-omp-validation-20261116",
   "workflow": ".github/workflows/verify-windows-desktop.yml",
@@ -17,22 +17,70 @@
     "Verify deb installation and previous-version data"
   ],
   "push": "Git HTTPS failed once with low-speed timeout; GitHub API uploaded exact local blobs/tree/commit; branch updated non-force after checking parent SHA.",
-  "jobId": 133139455260,
-  "lastObservedAt": "2026-11-16T06:54:47.740152+00:00",
-  "lastObservedStep": "Verify OMP runtime, configuration and entry (plain Node)",
-  "verifiedStages": [
-    "system dependencies",
-    "official registry lockfile",
-    "npm ci",
-    "boundary regression",
-    "typecheck",
-    "protocol",
-    "web and server build"
+  "lastObservedAt": "2026-11-16T07:48:27.954033+00:00",
+  "lastObservedStep": "Verify extracted AppImage in a path with spaces and Chinese characters",
+  "attempts": [
+    {
+      "commit": "3a262ebb0c6c155184725b96227149328e657f73",
+      "runId": 43819621811,
+      "runUrl": "https://github.com/youweichen0208/pi-harness/actions/runs/43819621811",
+      "jobId": 133139455260,
+      "status": "completed/failure",
+      "failedTest": "tests/omp-tree-test.mjs",
+      "failure": "Unhandled ECONNRESET while reading a cancelled incomplete request body in the HTTP provider fixture.",
+      "log": {
+        "path": "/tmp/omp-linux-first-job.log",
+        "sha256": "b5546521e6e468177cc9d8adc75ac2e00841770c8049764b0d3c3be5afe77ee5"
+      },
+      "verifiedStages": [
+        "system dependencies",
+        "official registry lockfile",
+        "npm ci",
+        "boundary regression",
+        "typecheck",
+        "protocol",
+        "web and server build"
+      ]
+    },
+    {
+      "commit": "f21e1f7c583c6d8593d03da5050179f9f6b9dee3",
+      "runId": 43821610138,
+      "runUrl": "https://github.com/youweichen0208/pi-harness/actions/runs/43821610138",
+      "status": "completed",
+      "conclusion": "failure",
+      "jobId": 133145728301,
+      "lastObservedStep": "Verify packaged desktop UI",
+      "failedTest": "tests/fixtures/omp-task-compaction.mjs",
+      "failure": "Old fixture SDK-containment guard failed after AppImage extraction into Unicode/space path. This run predates explicit filesystem-root resolution.",
+      "log": {
+        "path": "/tmp/omp-linux-second-job.log",
+        "sha256": "632751a884725914812bb4a8b1a1a889b27589be0c363fd02936f792f58e642d"
+      },
+      "verifiedStages": [
+        "typecheck and protocol",
+        "web/server build",
+        "all source OMP integration gates",
+        "Linux desktop package build",
+        "all packaged server and OMP integration gates",
+        "six packaged Electron UI entries",
+        "extracted AppImage server start in Unicode/space path"
+      ]
+    }
   ],
-  "failedTest": "tests/omp-tree-test.mjs",
-  "failure": "Unhandled ECONNRESET while reading a cancelled incomplete request body in the HTTP provider fixture.",
-  "log": {
-    "path": "/tmp/omp-linux-first-job.log",
-    "sha256": "b5546521e6e468177cc9d8adc75ac2e00841770c8049764b0d3c3be5afe77ee5"
+  "jobId": 133145728301,
+  "verifiedStages": [
+    "typecheck and protocol",
+    "web/server build",
+    "all source OMP integration gates",
+    "Linux desktop package build",
+    "all packaged server and OMP integration gates",
+    "six packaged Electron UI entries",
+    "extracted AppImage server start in Unicode/space path"
+  ],
+  "renderingArtifact": {
+    "id": 14206271846,
+    "url": "https://github.com/youweichen0208/pi-harness/actions/runs/43821610138/artifacts/14206271846",
+    "sha256": "7b7a6abbbe616f160b96a87d2a13b7d0f9fda8496fc1586c209e5cdedb116aa3",
+    "files": 45
   }
 }
