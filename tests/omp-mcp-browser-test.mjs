@@ -258,7 +258,7 @@ try {
 	await diagnostics.locator('summary').click(); await page.setViewportSize({ width: 1440, height: 1000 });
 	await page.waitForFunction(() => ![...document.querySelectorAll('.omp-mcp-actions button')].find(button => button.textContent === '重载当前会话 MCP')?.disabled);
 	const withOAuth = JSON.parse(await editor.inputValue());
-	withOAuth.mcpServers.oauth = { type: 'http', url: `${oauthBase}/protected`, oauth: { clientId: 'ui-client', callbackPort: 0 } };
+	withOAuth.mcpServers.oauth = { type: 'http', url: `${oauthBase}/protected`, headers: { Authorization: 'Bearer UI_STALE_FIXTURE' }, oauth: { clientId: 'ui-client', callbackPort: 0 } };
 	await editor.fill(JSON.stringify(withOAuth)); await panel.getByRole('button', { name: '保存 MCP 配置' }).click();
 	await page.waitForFunction(() => document.querySelector('.omp-mcp-panel')?.dataset.dirty === 'false');
 	await panel.getByRole('button', { name: '重载当前会话 MCP' }).click();
@@ -286,7 +286,7 @@ try {
 	await page.setViewportSize({ width: 1440, height: 1000 });
 	await panel.getByRole('button', { name: '重新读取配置', exact: true }).click();
 	await page.waitForFunction(() => { const input = document.querySelector('.omp-mcp-editor textarea'); return input && !input.disabled && JSON.parse(input.value).mcpServers.oauth.enabled === false; });
-	const resumeConfig = JSON.parse(await editor.inputValue()); delete resumeConfig.mcpServers.oauth.enabled;
+	const resumeConfig = JSON.parse(await editor.inputValue()); delete resumeConfig.mcpServers.oauth.enabled; delete resumeConfig.mcpServers.oauth.headers;
 	await editor.fill(JSON.stringify(resumeConfig)); await panel.getByRole('button', { name: '保存 MCP 配置' }).click();
 	await page.waitForFunction(() => document.querySelector('.omp-mcp-panel')?.dataset.dirty === 'false');
 	await panel.getByRole('button', { name: '重载当前会话 MCP' }).click();

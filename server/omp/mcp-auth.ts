@@ -9,6 +9,10 @@ import { findMcpServerForAuth, matchingManagerServerConfig, reauthorizeMcpServer
 import { lookupMcpOAuthCredential, mcpOAuthCredentialIdsForServerUrl, removeManagedMcpOAuthCredentials } from "@oh-my-pi/pi-coding-agent/mcp/oauth-credentials";
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
+import { mkdtemp, rm, mkdir } from "node:fs/promises";
+import { join, dirname } from "node:path";
+import { withFileLock } from "@oh-my-pi/pi-utils/file-lock";
+import { readMCPConfigFile, writeMCPConfigFile } from "@oh-my-pi/pi-coding-agent/mcp/config-writer";
 import type { UiOmpMcpAuth } from "../protocol.js";
 
 type Job = { view: UiOmpMcpAuth; abort: AbortController; done?: Promise<void>; input?: (value: string) => void };
@@ -49,7 +53,8 @@ export class OmpMcpAuth {
 		const { name, found } = selected;
 		try {
 			// Read native discovery again, including deny/allow lists, scope shadowing
-			// and extension sources. This is a reconnect guard, not persistence CAS.
+			// and extension sources. The caller separately compares the file entry
+			// under its native lock when committing a persisted result.
 			clearCache();
 			if (selected.projectPolicy !== await this.projectPolicyOnDisk()) throw new DefinitionChanged();
 			const options = { enableProjectConfig: cfgMcpEnableProjectConfig.get(this.session.settings) };
@@ -71,8 +76,15 @@ export class OmpMcpAuth {
 	}
 	private async run(job: Job, selected: Awaited<ReturnType<OmpMcpAuth["find"]>>) {
 		const { name, found } = selected;
+		let stagedDirectory: string | undefined;
+		let status: UiOmpMcpAuth["status"] = "cancelled";
 		try {
-			const outcome = await reauthorizeMcpServer(name, found, {
+			const expectedDocument = await readMCPConfigFile(found.filePath);
+			stagedDirectory = await mkdtemp(join(this.session.settings.getAgentDir(), ".harness-mcp-oauth-"));
+			const stagedPath = join(stagedDirectory, "mcp.json");
+			// The native helper computes and validates its own result. Nothing is
+			// copied to staging while the user is interacting with the browser.
+			const outcome = await reauthorizeMcpServer(name, { ...found, filePath: stagedPath }, {
 				authStorage: this.storage, mcpManager: this.manager, cwd: this.session.settings.getCwd(), signal: job.abort.signal, flowOwner: this,
 				onAuth: info => {
 					if (job.abort.signal.aborted) throw Error("Cancelled");
@@ -86,15 +98,29 @@ export class OmpMcpAuth {
 			// Credentials may have been saved before cancellation. Never claim they
 			// were rolled back, and never reconnect a stopped conversation.
 			if (job.abort.signal.aborted || this.stopping() || this.session.isDisposed) return;
+			if (outcome.persisted) {
+				// Do not hold the real config lock across browser interaction. Commit
+				// only the native result, merging unrelated changes under that lock.
+				await mkdir(dirname(found.filePath), { recursive: true, mode: 0o700 });
+				await withFileLock(found.filePath, async () => {
+					await this.checkSelection(selected, { ...outcome, persisted: false, config: found.config });
+					const current = await readMCPConfigFile(found.filePath);
+					if (!isDeepStrictEqual(current.mcpServers?.[name], expectedDocument.mcpServers?.[name])) throw new DefinitionChanged();
+					if (job.abort.signal.aborted || this.stopping() || this.session.isDisposed) throw Error("Cancelled");
+					await writeMCPConfigFile(found.filePath, { ...current, mcpServers: { ...current.mcpServers, [name]: outcome.config } });
+				}, { signal: job.abort.signal });
+			}
 			await this.checkSelection(selected, outcome);
 			if (job.abort.signal.aborted || this.stopping() || this.session.isDisposed) return;
 			await reconnectMcpManagerServer(this.manager, name, found.config);
 			if (job.abort.signal.aborted || this.stopping() || this.session.isDisposed) return;
 			await this.session.refreshMCPTools(this.manager!.getTools());
-			job.view.status = "complete";
-		} catch (error) { job.view.status = job.abort.signal.aborted ? "cancelled" : error instanceof DefinitionChanged ? "configuration_changed" : "failed"; }
+			status = "complete";
+		} catch (error) { status = job.abort.signal.aborted ? "cancelled" : error instanceof DefinitionChanged ? "configuration_changed" : "failed"; }
 		finally {
-			if (job.view.status === "pending") job.view.status = "cancelled";
+			try { if (stagedDirectory) await rm(stagedDirectory, { recursive: true, force: true }); }
+			catch { status = "failed"; }
+			job.view.status = status;
 			delete job.view.url; delete job.view.inputRequired; job.input?.(""); job.input = undefined;
 		}
 	}
@@ -108,6 +134,7 @@ export class OmpMcpAuth {
 		this.stop(); await this.job.done;
 	}
 	stop() { if (this.active) this.job!.abort.abort(); }
+	async close() { this.stop(); await this.job?.done; }
 	async logout(name: unknown) {
 		this.assertIdle();
 		const selected = await this.find(name); this.assertIdle();

@@ -144,5 +144,26 @@
     "Ubuntu 24.04 x64; AppImage extraction/start verified, not FUSE mounting.",
     "This snapshot predates the isolated OAuth staging experiment, which is not in production.",
     "Windows and original DeepSeek real-gateway acceptance remain separate."
-  ]
+  ],
+  "localArtifact": {
+    "directory": "/Users/youweichen/projects/pi-harness/release/omp-migration-linux-x64-9d0a7df",
+    "runId": 43826724731,
+    "artifactId": 14207777868,
+    "phase": "verified",
+    "commit": "9d0a7df08c55531d9e4cbedd848a0f8a9ed2d195",
+    "files": [
+      {
+        "file": "pi-1.34.2-linux-x86_64.AppImage",
+        "bytes": 365722310,
+        "sha256": "d16225bbcd265a9629cfd7e8b259b557ff917164fd96bc62f123b980ac5775b4"
+      },
+      {
+        "file": "pi-1.34.2-linux-amd64.deb",
+        "bytes": 283229136,
+        "sha256": "06b0dfd348e66fbf3cee535bad6cc9980b299412a7136ee71645f4226715ffe5"
+      }
+    ],
+    "verifiedAt": "2026-11-16T08:44:23.408575+00:00",
+    "verification": "SHA256SUMS matched extracted installers; download completed. Initial verifier used unavailable hashlib.file_digest on Python 3.9; rerun streamed SHA256 verification without another download."
+  }
 }

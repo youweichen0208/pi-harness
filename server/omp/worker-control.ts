@@ -113,7 +113,7 @@ export async function hostControlInput(input: ReadableStream<Uint8Array>, sessio
 					continue;
 				}
 				if (isRecord(frame) && frame.type === "harness_prepare_stop") {
-					stopping = true; mcp.dispose();
+					stopping = true; void mcp.dispose();
 					session.clearQueue({ forInterrupt: true });
 					session.abortCompaction(); session.abortRetry(); session.abortBranchSummary();
 					process.stdout.write(encoder.encode({ type: "response", id: frame.id, command: frame.type, success: true }));
@@ -357,6 +357,6 @@ export async function hostControlInput(input: ReadableStream<Uint8Array>, sessio
 				});
 			}
 		},
-		flush(controller) { clearInterval(monitor); mcp.dispose(); unsubscribeRecovery(); if (buffer.trim()) controller.enqueue(bytes.encode(buffer + "\n")); },
+		async flush(controller) { stopping = true; clearInterval(monitor); unsubscribeRecovery(); await mcp.dispose(); if (buffer.trim()) controller.enqueue(bytes.encode(buffer + "\n")); },
 	}));
 }

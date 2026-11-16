@@ -76,7 +76,7 @@ export class OmpMcpControl {
 		this.auth = new OmpMcpAuth(session, manager, cancelled);
 		this.diagnostics = new OmpMcpDiagnostics(manager);
 	}
-	dispose() { this.auth.stop(); this.diagnostics.dispose(); }
+	dispose() { this.diagnostics.dispose(); return this.auth.close(); }
 	private path(scope: unknown) {
 		if (scope !== "global" && scope !== "project") return fail("Invalid MCP configuration scope");
 		return getMCPConfigPath(scope === "global" ? "user" : "project", this.session.settings.getCwd());

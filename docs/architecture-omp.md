@@ -1,5 +1,7 @@
 # OMP 迁移：接入契约与实施状态
 
+当前源码已修复 MCP 登录期间覆盖外部配置的问题：原生 OAuth helper 先输出到私有临时路径，宿主在原生文件锁内核对所选定义后再合并写回，保持 OMP 的认证与持久化策略。26 个本地 OAuth 场景、取消／停止／锁超时、关联协议及浏览器验证通过，完整构建、类型检查和单测通过，见 [写回修复](review-data/omp-oauth-config-commit.json)。已有 macOS/Linux 测试包与 122/122 全量基线早于此生产改动，不能回填为新修复的验收结果。Windows 第八轮针对前一个版本，已通过修正后的持久化测试，随后跨进程恢复测试在清理目录时发生 EBUSY；记录见 [Windows 验证](review-data/omp-windows-validation.json)。工具级 OAuth、Task 内部历史保护和原 DeepSeek 任务验收仍未完成。
+
 当前 macOS arm64 测试包已重新构建，DMG 复制安装、签名、旧版隔离夹具升级通过；31 项包内集成及新增的 OAuth 重连门禁通过，六项桌面用例均有通过结果。MCP 用例首次失败来自 Electron 原生离开确认与测试 CDP 处理冲突，修正夹具后桌面／浏览器复验通过，应用确认行为未改。Task 压缩夹具也已限定使用目标包内 Bun／SDK，避免借用仓库依赖。完整证据和本地测试包校验值见 [当前 macOS 包验收](review-data/omp-desktop-current.json)。原生 OAuth 写回冲突在该包内仍然失败；Windows/Linux 桌面及原 DeepSeek 任务、Task 内部写入保护等缺口不因此关闭。未替换已安装应用或发布。
 
 本轮补齐部署入口：Docker 将原生 `~/.omp` 个人包目录纳入持久卷，并在普通用户启动时为非空旧卷补建目标目录，修复删除并重建容器后扩展丢失；真实 Linux arm64 镜像通过 HTTP/WebSocket、OMP 文件工具、PTY、配置／包／历史恢复和零重发检查。CLI 帮助、服务生成及 systemd 示例改为应用 data-dir；三平台生成分支通过只打印测试，未实际安装系统服务。构建及类型检查通过，见 [部署验证](review-data/omp-container.json)。容器 CI 已加入，远端 job 未执行。
@@ -166,7 +168,7 @@ OAuth 桥单测覆盖授权链接过滤、过期输入拒绝、取消及晚到�
 以下按已批准的迁移范围核对当前状态；后面的按日期记录保留当时结果，不作为当前待办。这里的局部通过不能代替平台或真实网关验收。
 
 1. **主入口与代理功能：已接入，内部存储保护未完成。** 主聊天、Wiki、SSH 与 Playground 均使用 OMP；原生任务派发、嵌套停止、历史恢复、工具卡、队列和扩展交互已有本地回归。Task 压缩后目录和输出下载见 [压缩记录](review-data/omp-task-compaction.json)、[输出记录](review-data/omp-task-output.json)。原生 Task 内部 writer 不继承父会话存储保护，仍有[失败诊断](omp-task-storage-gap.md)。
-2. **配置、模型与认证：主要管理功能已接入，认证验收仍有缺口。** models.yml、配置／来源发现、技能、扩展、包、MCP 与提示词使用 OMP 公共接口。输出额度使用原生默认值，显式覆盖可保留，应用不再强制 128000。真实供应商账号尚未验收；MCP 工具级授权与原生 OAuth 配置写回冲突未解决，见 [工具授权](review-data/omp-mcp-tool-auth-probe.json)、[写回冲突](review-data/omp-mcp-auth-conflict.json)。不自动导入旧凭据或旧历史。
+2. **配置、模型与认证：主要管理功能已接入，认证验收仍有缺口。** models.yml、配置／来源发现、技能、扩展、包、MCP 与提示词使用 OMP 公共接口。输出额度使用原生默认值，显式覆盖可保留，应用不再强制 128000。真实供应商账号尚未验收；MCP 工具级授权仍有缺口；配置写回冲突已在宿主修复并通过本地验证，新安装包验收待执行，见 [工具授权](review-data/omp-mcp-tool-auth-probe.json)、[写回修复](review-data/omp-oauth-config-commit.json)。不自动导入旧凭据或旧历史。
 3. **Wiki、会话树与压缩：本地回归通过，平台验收分开记录。** 当前协议为 v78，协议单源与敏感字段投影检查保留；分支、摘要取消、编辑重问、停止后恢复、压缩目录和 Wiki 独立窗口已有验证，见 [宿主回归清单](review-data/omp-host-regression-audit.json)。原生 RPC 不支持的历史 ask 结果重答不能宣称与 TUI 等价。
 4. **保留的业务功能与界面：本地迁移回归通过。** Workspace、文档、附件、文件、终端、Git、数据库、SSH 和 Playground 保留；数据库与远端工具沿用会话授权和受限工具边界。真实本地 PostgreSQL/MySQL、SSH 与浏览器检查见 [数据库记录](review-data/omp-database-live.json) 和宿主回归清单。其他真实供应商／远端数据库环境的通过情况不能由这些夹具推断。
 5. **旧历史：部分已清理。** 本机 Web 目录已删除 22 个旧 Pi 历史文件；旧桌面应用仍运行，桌面及共享 Pi 历史待其退出后删除。继续保留 OMP 对话、配置、凭据与项目；不恢复已取消的旧历史导入方案。

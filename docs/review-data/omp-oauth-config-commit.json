@@ -1,0 +1,147 @@
+{
+  "status": "Adopted into source after isolated native OAuth and browser regressions; platform package verification pending",
+  "date": "2026-11-16T08:44:57.272874+00:00",
+  "baselineCommit": "8ae3662a40d86bc46c8abebb005dd2f86faf8ffe",
+  "candidate": "/private/var/folders/41/07yyp3_12jddkkthmflqkbgw0000gn/T/omp-oauth-staged-write-pl620eob",
+  "scope": "Public native OAuth helper writes its computed result to a private staged path. Host compares the selected file entry and effective configuration under the public native lock, then merges the native result with current unrelated entries using the public atomic writer. SDK files unchanged.",
+  "sourceFiles": [
+    {
+      "path": "server/omp/mcp-auth.ts",
+      "sha256": "7a46c842a8b0a2e831c9454ce57e35b2ced2f9f44047c13770ebd723fac0361f"
+    },
+    {
+      "path": "server/omp/mcp-control.ts",
+      "sha256": "4f19809a6cf0eebae1726136564f6c919ae371f208aa43a7a33bbe2aecfc8e84"
+    },
+    {
+      "path": "server/omp/worker-control.ts",
+      "sha256": "4446ed2a88328ec6233c30120e8aace302270d4ac9c9870cccd4bb607eed9b01"
+    },
+    {
+      "path": "tests/omp-mcp-auth-test.mjs",
+      "sha256": "fcad7321096b857b2291c99dae3389e5c91af4e26dd70a26038ebff5e3b1f08b"
+    },
+    {
+      "path": "tests/omp-mcp-auth-reconnect-test.mjs",
+      "sha256": "c31f64a646258028f247b8d3f5a393f07f826e2a3f0731370af5071ce27117b8"
+    },
+    {
+      "path": "tests/diagnostics/omp-mcp-auth-conflict-probe.mjs",
+      "sha256": "3bd7e56a857aba58746931ae442088d7d92cba381d8c6f6408bcc7334247215a"
+    },
+    {
+      "path": "tests/omp-mcp-browser-test.mjs",
+      "sha256": "81e8eb1bd12132762d59e8727fe1a8d2d9b504bea40b19d9d60d1a586190c6fb"
+    },
+    {
+      "path": "tests/lib/native-file-lock.mjs",
+      "sha256": "893ba0ca363c99331f74d591e756ace62c2a07e9681bf2ff058f1ee1541b9f53"
+    }
+  ],
+  "red": {
+    "log": "/tmp/omp-oauth-staged-red.log",
+    "exitCode": 1,
+    "sha256": "6602dc0f75cdf4cbb419de318702431a538aedcaa175541377249c071b1c0190",
+    "symptom": "Selected server timeout/unknown field overwritten after real local PKCE grant; obsolete reconnect occurred."
+  },
+  "verification": [
+    {
+      "test": "omp-mcp-auth-reconnect-test",
+      "exitCode": 0,
+      "seconds": 33.56,
+      "log": "/tmp/omp-oauth-final-omp-mcp-auth-reconnect-test.log",
+      "sha256": "e225ece9e2cdbedf17a42758cf2969363b15ae62a81fbedff25d2c850802ed4f"
+    },
+    {
+      "test": "omp-mcp-auth-test",
+      "exitCode": 0,
+      "seconds": 13.47,
+      "log": "/tmp/omp-oauth-final-omp-mcp-auth-test.log",
+      "sha256": "020800299adb0469555f614badcdd725f18cbf736de55f515f190f2f77245eaf"
+    },
+    {
+      "test": "omp-stop-metadata-test",
+      "exitCode": 0,
+      "seconds": 34.54,
+      "log": "/tmp/omp-oauth-final-omp-stop-metadata-test.log",
+      "sha256": "eed5b511b09bc7121a3d17a4bbd03bfdbe8a18d9899e35b66d85788eba122e56"
+    },
+    {
+      "test": "omp-mcp-browser-test",
+      "exitCode": 0,
+      "seconds": 73.07,
+      "log": "/tmp/omp-oauth-final-omp-mcp-browser-test.log",
+      "sha256": "6c1351de7de29c4fe51ea009fce695bf9de8580f524699ca2a0746028f7369be"
+    },
+    {
+      "test": "canonical-path reconnect (26 cases)",
+      "exitCode": 0,
+      "log": "/tmp/omp-oauth-final-canonical-reconnect.log",
+      "sha256": "e225ece9e2cdbedf17a42758cf2969363b15ae62a81fbedff25d2c850802ed4f"
+    },
+    {
+      "test": "omp-mcp-test",
+      "exitCode": 0,
+      "seconds": 13.09,
+      "log": "/tmp/omp-oauth-staged-omp-mcp-test.log",
+      "sha256": "daaf5fe4b3b274704752ccfdcaa2b6b95f2dfcbe9a78fa799e454a4e08eeb105"
+    },
+    {
+      "test": "omp-mcp-diagnostics-test",
+      "exitCode": 0,
+      "seconds": 12.98,
+      "log": "/tmp/omp-oauth-staged-omp-mcp-diagnostics-test.log",
+      "sha256": "004d6aa1b0df69fe8922546886403634ffe67a98c65c8201efaeb4a7755370e9"
+    },
+    {
+      "test": "omp-recovery-test",
+      "exitCode": 0,
+      "seconds": 13.13,
+      "log": "/tmp/omp-oauth-staged-omp-recovery-test.log",
+      "sha256": "3b6bb77b6326dcf2453e0443d66d394003184219021a51f149eb9e6dfb29db0c"
+    },
+    {
+      "test": "omp-restricted-recovery-test",
+      "exitCode": 0,
+      "seconds": 9.34,
+      "log": "/tmp/omp-oauth-staged-omp-restricted-recovery-test.log",
+      "sha256": "d7c3f5fab9ab2684ce5029d502dd9edcedc15f867a16e50e36d023b9dedbd61d"
+    },
+    {
+      "test": "build",
+      "exitCode": 0,
+      "log": "/tmp/omp-oauth-staged-final-build.log",
+      "sha256": "96a6e12f55861b64f480d05b5400e3062b2ffb369e3a74d1f56438acf148aabd"
+    },
+    {
+      "test": "typecheck",
+      "exitCode": 0,
+      "log": "/tmp/omp-oauth-staged-final-typecheck.log",
+      "sha256": "20eba569f73b594b29f88375d81dbe413bbe134c5008159c58f8cd696a6e4b77"
+    },
+    {
+      "test": "unit (1079 passed, 1 skipped)",
+      "exitCode": 0,
+      "log": "/tmp/omp-oauth-final-unit.log",
+      "sha256": "46ee51e01c39a2aad716c63e1b5735bb7a202c1eb6e978659b20cafcf97d8e60"
+    }
+  ],
+  "cases": 26,
+  "initialBrowserFailure": {
+    "exitCode": 1,
+    "log": "/tmp/omp-oauth-staged-omp-mcp-browser-test.log",
+    "cause": "Private candidate lacked web/dist. Failed at initial page connection before OAuth. Full build and browser rerun passed."
+  },
+  "limits": [
+    "Local loopback issuer and macOS source verification only; no real account or Windows package claim.",
+    "Credentials may already be saved before conflict/cancellation; no rollback or shared credential deletion.",
+    "Native advisory lock serializes cooperating writers. An editor ignoring that lock or edits to other policy files can still race after checks; not a transaction across all configuration and network operations.",
+    "Normal completion/cancel/Stop/EOF cleans private staging. Hard process termination can leave a private staged directory; no global cleanup sweep.",
+    "Current macOS/Linux installers predate this fix. Full 122-entry baseline predates these production changes.",
+    "Tool-level MCP OAuth challenge forwarding, native Task history protection and original Windows DeepSeek acceptance remain open."
+  ],
+  "installedApplicationChanged": false,
+  "published": false,
+  "candidateBaselineCommit": "9d0a7df08c55531d9e4cbedd848a0f8a9ed2d195",
+  "relatedRegressionNote": "Four MCP/recovery related checks used the same OAuth implementation before adding the EOF stopping guard. Final-build OAuth, Stop, browser, unit, build and typecheck checks are separately recorded."
+}

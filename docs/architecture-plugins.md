@@ -176,7 +176,13 @@ Codemode 压缩回归：`tests/unit/codemode-history.test.ts` 使用真实 SDK �
 
 格式依据：[VS Code 配置参考](https://code.visualstudio.com/docs/agents/reference/mcp-configuration)、[OpenCode MCP 配置](https://opencode.ai/docs/mcp-servers)，以及锁定的 OMP 18.20.0 `discovery/builtin.ts`、`discovery/helpers.ts`、`mcp/config.ts`。回归与限制见 [导入记录](review-data/omp-mcp-import.json)。
 
-## OMP OAuth 外部配置并发缺口
+## OMP OAuth 外部配置并发保护
+
+当前宿主已通过公开 `FoundMcpServer.filePath` 将原生 helper 的配置写回定向到应用 agent 目录中的私有临时目录。OMP 继续负责客户端选择、PKCE、凭据存储、是否持久化及最终配置内容；宿主不改 SDK，也不伪造 ACP 所有权。授权交互期间不持有真实配置锁，临时目录为空。需要写回时，取得原生 `withFileLock`，重新核对生效定义、来源及规则，并比较文件中所选服务的原始条目；仅匹配时用公开 `writeMCPConfigFile` 合并原生结果，保留其他服务及根字段。
+
+冲突保持 `configuration_changed`，不覆盖新定义或自动重连。正常完成、取消、Stop 和输入流关闭均等待临时目录清理；锁等待支持取消。强杀进程可能留下权限受限的临时目录，不扫描删除其他流程的目录。凭据可能早已保存，不能声称回滚。锁只约束使用同一原生锁的写入者；不遵守锁的编辑器、其他策略文件及后续网络操作不属于同一事务。
+
+26 个真实本地 OAuth 场景、持锁取消／Stop／超时、扩展来源、停止恢复及浏览器回归已通过，见 [配置写回验证](review-data/omp-oauth-config-commit.json)。当前 macOS/Linux 安装包早于此修复，Windows 和新包验收待执行。下方为问题发现及早期重连保护记录。
 
 授权流程打开后，外部编辑器或另一会话仍可更改配置。原生 helper 在需要持久化 auth 时，把流程开始时的定义交给原生 writer；writer 虽锁住读改写，却未比较所选服务的旧版本，因此同一服务的新字段会丢失。其他服务和文件根字段保留。修正前，定义本身不需写回时，文件编辑被保留，但宿主仍用旧选择重连并显示 complete，包括服务已停用或换地址。两条问题均以真实本地 PKCE、明确的授权中编辑时点重复复现，见 [诊断记录](review-data/omp-mcp-auth-conflict.json)。
 

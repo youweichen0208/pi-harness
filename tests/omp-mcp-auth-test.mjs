@@ -2,15 +2,16 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, readdirSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadOmpTestModule } from './lib/omp-runtime-location.mjs';
 import { listenIsolated } from './lib/isolated-server.mjs';
 import { testEnv } from './lib/test-env.mjs';
 const { OmpSession } = await loadOmpTestModule('session.js');
-const root = mkdtempSync(join(tmpdir(), 'omp-mcp-auth-')), cwd = join(root, 'workspace'), agent = join(root, 'omp/agent');
+const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'omp-mcp-auth-'))), cwd = join(root, 'workspace'), agent = join(root, 'omp/agent');
 mkdirSync(agent, { recursive: true }); mkdirSync(cwd);
+const assertCleanStaging = () => assert.deepEqual(readdirSync(agent).filter(name => name.startsWith('.harness-mcp-oauth-')), [], 'completed/cancelled/stopped/failed flow cleans staging');
 const sessions = [], requests = [], challenges = new Map();
 let base, tokenCount = 0, invalidAuthorization = false;
 const fixture = createServer(async (req, res) => {
@@ -57,14 +58,14 @@ try {
 	await assert.rejects(command(a, 'reload'));
 	await assert.rejects(a.prompt('must not invoke model during OAuth'));
 	await command(a, 'auth_cancel', { authId: auth.id });
-	assert.equal((await status(a)).auth.status, 'cancelled'); assert.equal(tokenCount, 0);
+	assert.equal((await status(a)).auth.status, 'cancelled'); assertCleanStaging(); assert.equal(tokenCount, 0);
 	assert.equal(readFileSync(configPath, 'utf8'), original);
 	await command(a, 'login', { name: 'protected' }); auth = await pending(a);
 	const redirect = callback(auth);
 	const wrong = new URL(redirect); wrong.searchParams.set('state', 'wrong'); await fetch(wrong);
 	assert.equal(tokenCount, 0, 'wrong state never reaches token exchange');
 	await fetch(redirect);
-	let view = await complete(a);
+	let view = await complete(a); assertCleanStaging();
 	assert.equal(view.servers[0].authenticated, true); assert(view.servers[0].tools.includes('authenticated_tool'));
 	assert(requests.includes('tools/list')); assert.equal(tokenCount, 1);
 	for (const secret of ['ACCESS_SECRET', 'REFRESH_SECRET', 'MODEL_SECRET', 'SECRET_CODE']) assert(!JSON.stringify(view).includes(secret));
@@ -79,12 +80,12 @@ try {
 	await command(a, 'reload'); view = await status(a);
 	assert.equal(view.servers[0].authenticated, false); assert.equal(view.servers[0].status, 'disconnected');
 	await command(a, 'login', { name: 'protected' }); auth = await pending(a); const stoppedCallback = callback(auth);
-	await a.stop(); assert.equal(await a.requestIfOpen('harness_mcp', { action: 'status' }), undefined);
+	await a.stop(); assertCleanStaging(); assert.equal(await a.requestIfOpen('harness_mcp', { action: 'status' }), undefined);
 	await assert.rejects(fetch(stoppedCallback)); assert.equal(tokenCount, 2);
 	await a.open(); assert.equal((await status(a)).auth, undefined); assert.equal((await status(a)).servers[0].authenticated, false);
 	invalidAuthorization = true;
 	await command(a, 'login', { name: 'protected' });
 	const failed = await wait(async () => { const view = await status(a); return view.auth?.status === 'failed' && view; }, 'invalid authorization URL rejected');
-	assert.equal(failed.auth.url, undefined); assert.equal(tokenCount, 2);
+	assertCleanStaging(); assert.equal(failed.auth.url, undefined); assert.equal(tokenCount, 2);
 	console.log('PASS OMP MCP OAuth: native discovery/PKCE/state, browser and manual callbacks, persistence, masked projection, stale IDs, cancellation, independent sessions, logout and Stop/reopen');
 } finally { await Promise.allSettled(sessions.map(session => session.close())); fixture.closeAllConnections(); await new Promise(resolve => fixture.close(resolve)); rmSync(root, { recursive: true, force: true }); }

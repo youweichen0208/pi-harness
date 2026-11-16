@@ -1,24 +1,29 @@
-/** Diagnostic outside passing smoke: OAuth must preserve edits made while the browser is open.
+/** Native OAuth must preserve edits made while the browser is open or commit is waiting.
  * Modes: control/peer are controls; same-server and definition-only assert conflict safety.
  * Uses fake credentials and loopback services only. Failures remain failures.
  */
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, realpathSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, realpathSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { listenIsolated } from '../lib/isolated-server.mjs';
 import { testEnv } from '../lib/test-env.mjs';
+import { holdNativeFileLock } from '../lib/native-file-lock.mjs';
 assert(process.argv.length <= 4, 'Expected mode and optional application root');
-const applicationRoot = realpathSync(process.argv[3] ? resolve(process.argv[3]) : fileURLToPath(new URL('../../', import.meta.url)));
+const applicationRoot = realpathSync.native(process.argv[3] ? resolve(process.argv[3]) : fileURLToPath(new URL('../../', import.meta.url)));
 const { OmpSession } = await import(pathToFileURL(join(applicationRoot, 'dist/server/omp/session.js')).href);
-const root = mkdtempSync(join(tmpdir(), 'omp-mcp-auth-conflict-')), cwd = join(root, 'workspace'), agent = join(root, 'omp/agent');
+const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'omp-mcp-auth-conflict-'))), cwd = join(root, 'workspace'), agent = join(root, 'omp/agent');
 mkdirSync(agent, { recursive: true }); mkdirSync(cwd);
 const sessions = [], requests = [], challenges = new Map();
 let base, tokenCount = 0, invalidAuthorization = false;
-const mode = process.argv[2] ?? 'same-server';
+const scenario = process.argv[2] ?? 'same-server';
+const locked = scenario.startsWith('lock-');
+const mode = locked ? ({ 'lock-selected': 'same-server', 'lock-peer': 'peer', 'lock-cancel': 'control', 'lock-stop': 'control', 'lock-timeout': 'control' })[scenario] : scenario.replace(/^bearer-/, '');
+let releaseLock;
+const staging = () => readdirSync(agent).filter(name => name.startsWith('.harness-mcp-oauth-')).map(name => join(agent, name));
 assert(['control', 'peer', 'same-server', 'definition-only', 'url-change', 'disable', 'delete', 'shadow', 'global-deny', 'project-policy', 'definition-edit', 'discovered', 'discovered-edit'].includes(mode));
 let editing = false, authenticatedAfterEdit = 0;
 const fixture = createServer(async (req, res) => {
@@ -63,7 +68,7 @@ try {
 	const projectDir = join(cwd, '.omp'); mkdirSync(projectDir);
 	const configPath = join(mode.startsWith('discovered') ? discoveredDir : mode === 'project-policy' ? projectDir : agent, 'mcp.json');
 	const original = { future: { retained: true }, mcpServers: {
-		protected: { type: 'http', url: `${base}/mcp`, timeout: 1000, ...(['control', 'peer', 'same-server'].includes(mode) ? { headers: { Authorization: 'Bearer STALE_FIXTURE' } } : {}), oauth: { clientId: 'fixture-client', callbackPort: 0 } },
+		protected: { type: 'http', url: `${base}/mcp`, timeout: 1000, ...(['control', 'peer', 'same-server'].includes(mode) || scenario.startsWith('bearer-') ? { headers: { Authorization: 'Bearer STALE_FIXTURE' } } : {}), oauth: { clientId: 'fixture-client', callbackPort: 0 } },
 		peer: { type: 'stdio', command: 'MUST_NOT_RUN_DISABLED_PEER', enabled: false }
 	} };
 	writeFileSync(configPath, JSON.stringify(original));
@@ -71,6 +76,27 @@ try {
 	assert((await status(session)).servers.some(server => server.name === 'protected'), 'fixture service must be discovered before testing OAuth');
 	await command(session, 'login', { name: 'protected' });
 	const auth = await pending(session);
+	const stages = staging(); assert.equal(stages.length, 1, 'one private staging directory per flow');
+	assert.deepEqual(readdirSync(stages[0]), [], 'no config/credentials copied while browser interaction is pending');
+	if (process.platform !== 'win32') assert.equal(statSync(stages[0]).mode & 0o777, 0o700);
+	if (locked) {
+		releaseLock = await holdNativeFileLock(applicationRoot, configPath);
+		await fetch(callback(auth));
+		await wait(() => tokenCount === 1 && existsSync(join(stages[0], 'mcp.json')), 'native grant persisted to staging');
+		assert.equal(readFileSync(configPath, 'utf8'), JSON.stringify(original), 'real config unchanged while another writer holds the lock');
+	}
+	if (scenario === 'lock-cancel' || scenario === 'lock-stop' || scenario === 'lock-timeout') {
+		if (scenario === 'lock-cancel') {
+			await command(session, 'auth_cancel', { authId: auth.id });
+			assert.equal((await status(session)).auth.status, 'cancelled');
+		} else if (scenario === 'lock-stop') await session.stop();
+		else await wait(async () => (await status(session)).auth?.status === 'failed', 'contended commit times out');
+		assert.deepEqual(staging(), [], 'cancellation/Stop/timeout cleans staging without waiting for config lock release');
+		assert.equal(readFileSync(configPath, 'utf8'), JSON.stringify(original));
+		assert.equal(requests.length, 0, 'no reconnect after cancellation');
+		await releaseLock(); releaseLock = undefined;
+		console.log(JSON.stringify({ mode: scenario, tokenCount, finishedWhileLocked: true, stageCleaned: true }));
+	} else {
 	const external = structuredClone(original);
 	if (mode === 'peer') external.mcpServers.peer.timeout = 42;
 	if (mode === 'same-server') { external.mcpServers.protected.timeout = 9876; external.mcpServers.protected.future = { edited: true }; }
@@ -83,13 +109,14 @@ try {
 	if (mode === 'shadow') writeFileSync(join(projectDir, 'mcp.json'), JSON.stringify({ mcpServers: { protected: { ...original.mcpServers.protected, timeout: 4321 } } }));
 	if (mode === 'project-policy') writeFileSync(join(agent, 'config.yml'), JSON.stringify({ skills: { enabled: false }, mcp: { enableProjectConfig: false } }));
 	if (mode !== 'control') { editing = true; writeFileSync(configPath, JSON.stringify(external)); }
-	await fetch(callback(auth));
+	if (locked) { await releaseLock(); releaseLock = undefined; } else await fetch(callback(auth));
 	const final = await wait(async () => { const view = await status(session); return view.auth && view.auth.status !== 'pending' && view; }, 'terminal OAuth state');
+	assert.deepEqual(staging(), [], 'terminal auth status follows staging cleanup');
 	const persisted = JSON.parse(readFileSync(configPath, 'utf8'));
 	const sameEditPreserved = persisted.mcpServers.protected?.timeout === 9876 && persisted.mcpServers.protected?.future?.edited === true;
 	const peerEditPreserved = persisted.mcpServers.peer.timeout === 42;
 	const definitionPreserved = persisted.mcpServers.protected?.url === `${base}/new-resource` && persisted.mcpServers.protected?.enabled === false;
-	console.log(JSON.stringify({ mode, tokenCount, authStatus: final.auth.status, sameEditPreserved, peerEditPreserved, definitionPreserved, authenticatedAfterEdit, connectionStatus: final.servers.find(server => server.name === 'protected')?.status, configAuthWritten: !!persisted.mcpServers.protected?.auth, unrelatedRootPreserved: persisted.future?.retained === true }));
+	console.log(JSON.stringify({ mode: scenario, tokenCount, authStatus: final.auth.status, sameEditPreserved, peerEditPreserved, definitionPreserved, authenticatedAfterEdit, connectionStatus: final.servers.find(server => server.name === 'protected')?.status, configAuthWritten: !!persisted.mcpServers.protected?.auth, unrelatedRootPreserved: persisted.future?.retained === true }));
 	assert.equal(tokenCount, 1, 'real native OAuth grant completed once');
 	assert.equal(persisted.future.retained, true);
 	if (mode === 'control' || mode === 'peer' || mode === 'discovered') {
@@ -97,9 +124,12 @@ try {
 		if (mode === 'peer') assert(peerEditPreserved, 'editing another service must survive native OAuth persistence');
 	} else if (mode === 'same-server') {
 		assert(sameEditPreserved, 'OAuth completion must not overwrite external edits to the selected definition');
+		assert.equal(authenticatedAfterEdit, 0);
+		assert.equal(final.auth.status, 'configuration_changed');
 	} else {
 		assert.deepEqual(persisted, external, 'definition-only grant must preserve the edited file');
 		assert.equal(authenticatedAfterEdit, 0, 'do not reconnect the obsolete server after its definition changed during login');
 		assert.equal(final.auth.status, 'configuration_changed', 'changed or disabled definition requires explicit reload, credentials may already exist');
 	}
-} finally { await Promise.allSettled(sessions.map(session => session.close())); fixture.closeAllConnections(); await new Promise(resolve => fixture.close(resolve)); rmSync(root, { recursive: true, force: true }); }
+	}
+} finally { await releaseLock?.(); await Promise.allSettled(sessions.map(session => session.close())); fixture.closeAllConnections(); await new Promise(resolve => fixture.close(resolve)); rmSync(root, { recursive: true, force: true }); }

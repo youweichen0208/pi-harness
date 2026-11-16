@@ -30,7 +30,7 @@ npm run test:freeze  # 冻结/重连回归测试（Playwright，需要本机 chr
 
 `node tests/codemode-mcp-test.mjs --browser` 验证 OMP 默认 MCP 虚拟路径调用、实际模型工具结果及图片保存／附加，并覆盖同目录跨对话拒绝与停止后的图片保存。该模式加入 Mac/Windows CI；未运行对应平台前不宣称跨平台验收通过。
 
-`node tests/omp-mcp-auth-reconnect-test.mjs` 已纳入 smoke：12 个真实原生 OAuth 场景覆盖修改、删除、停用、范围覆盖、项目开关、全局规则和扩展来源，未修改／仅修改其他服务时仍正常登录。`node tests/diagnostics/omp-mcp-auth-conflict-probe.mjs same-server` 仍按期望行为断言失败，记录原生 OAuth 写回覆盖问题，不能纳入通过率分母后把失败忽略。
+`node tests/omp-mcp-auth-reconnect-test.mjs` 已纳入 smoke：26 个真实原生 OAuth 场景覆盖配置写回冲突、原生锁竞争、取消／Stop／锁超时、修改／删除／停用、范围覆盖、项目开关、全局规则和扩展来源；正常登录及其他服务编辑仍保留。`same-server` 原失败诊断现已纳入通过门禁。私有临时配置在正常结束后清理，浏览器等待时不复制凭据或持有实际配置锁；详见 [写回验证](review-data/omp-oauth-config-commit.json)。Windows／新安装包仍须单独验证。
 
 `node tests/omp-mcp-browser-test.mjs` 验证配置导入（原子冲突、变量转换、项目范围、实际原生环境展开、不自动连接）、逐服务 stdio/HTTP/SSE 配置、凭据掩码与未知字段、全局启停／项目覆盖、实际重载、版本冲突、草稿／焦点保护、中英文窄屏及原生 OAuth。与 `omp-mcp-test`、`omp-mcp-auth-test` 配套运行；服务名称含 env/secret 时只能公开已知非敏感元数据，未知枚举及连接／凭据继续隐藏。源码浏览器入口加入 Mac/Windows CI，桌面发布沿用打包执行入口；门禁定义不等于平台已经通过。
 
