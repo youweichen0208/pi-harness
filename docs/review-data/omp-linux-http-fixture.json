@@ -1,0 +1,31 @@
+{
+  "status": "Deterministic aborted-upload reproduction failed before the fixture fix and full local tree regression passed afterward; Linux revalidation pending",
+  "linuxFailure": {
+    "runId": 43819621811,
+    "jobId": 133139455260,
+    "failedTest": "omp-tree-test.mjs",
+    "log": "/tmp/omp-linux-first-job.log"
+  },
+  "reproduction": "POST a partial JSON body with Content-Length 100, then close the client after the server receives it. This runs through the actual tree test provider callback before starting OMP.",
+  "fix": "Only ignore ECONNRESET when IncomingMessage.aborted is true. Incomplete bodies never enter the parsed model-request list. JSON decoding and unrelated errors remain outside the cancellation branch.",
+  "file": "tests/omp-tree-test.mjs",
+  "fileSha256": "b6e8ba52abd9ada499d84a7f2beff24426917e2141a190efbad6dc9b2deaa4db",
+  "checks": [
+    {
+      "phase": "red",
+      "command": "node tests/omp-tree-test.mjs",
+      "exitCode": 1,
+      "log": "/tmp/omp-tree-aborted-body-red.log",
+      "sha256": "3142b6a7396692a476a0c4d4e50a6e6916d30cb1ace645e352c115690172f93e"
+    },
+    {
+      "phase": "green",
+      "command": "node tests/omp-tree-test.mjs",
+      "exitCode": 0,
+      "log": "/tmp/omp-tree-aborted-body-green.log",
+      "sha256": "4e2592a6690c54396ec46d088a28c0ce0bce532fb32851c514fec5014b59050a"
+    }
+  ],
+  "productionChanged": false,
+  "limits": "Local Node 26 reproduction and regression do not replace Linux Node 22 or Windows execution; native tree cancellation, branch/history and no-replay assertions are retained."
+}

@@ -1,0 +1,112 @@
+{
+  "status": "Five local source and five local browser entries passed; fourth Windows run in progress",
+  "commit": "b89e1d0dd2039ef7eee6a08c4232ce04bb9c0359",
+  "redEvidence": {
+    "runId": 43818744814,
+    "test": "omp-prompt-test.mjs:59",
+    "symptom": "Native context text was loaded, but exact AGENTS.md file lookup used a short alias.",
+    "pathComparison": "Windows Node realpathSync retained C:\\Users\\RUNNER~1; async native realpath expanded C:\\Users\\runneradmin. Terminal seeding after native canonicalization passed all 43 checks three times.",
+    "logSha256": "a66a65aae7d3b179927258bb8fa4506f6749443ffa6dd926c7e1aab645e6e939"
+  },
+  "fix": "Use realpathSync.native for canonical fixture roots and expected copied paths, matching runtime async realpath. Keep all exact identity, history, context and clipboard assertions.",
+  "files": [
+    "tests/omp-prompt-test.mjs",
+    "tests/omp-task-compaction-test.mjs",
+    "tests/omp-persistence-test.mjs",
+    "tests/omp-skill-history-test.mjs",
+    "tests/omp-template-attachments-test.mjs",
+    "tests/omp-tasks-browser-test.mjs",
+    "tests/omp-mcp-browser-test.mjs",
+    "tests/omp-resources-desktop-test.mjs",
+    "tests/omp-prompt-browser-test.mjs",
+    "tests/omp-packages-browser-test.mjs"
+  ],
+  "sourceChecks": [
+    {
+      "name": "omp-prompt",
+      "exitCode": 0,
+      "seconds": 19.04,
+      "log": "/tmp/omp-native-path-omp-prompt.log",
+      "sha256": "2b230d6c2bda05b2d7ed5b0bb0e9217a36f6d455645fca17ec4d41c0f6eb415a"
+    },
+    {
+      "name": "omp-task-compaction",
+      "exitCode": 0,
+      "seconds": 21.3,
+      "log": "/tmp/omp-native-path-omp-task-compaction.log",
+      "sha256": "fdd8c76b1c01ae1169b471c92856d795ccb2d90f2b6b4598352494760b84d238"
+    },
+    {
+      "name": "omp-persistence",
+      "exitCode": 0,
+      "seconds": 15.44,
+      "log": "/tmp/omp-native-path-omp-persistence.log",
+      "sha256": "03fab6b9624d71f02ec54fbe76503d58d2bdee511baa8c04ceb44c9379852ca2"
+    },
+    {
+      "name": "omp-skill-history",
+      "exitCode": 0,
+      "seconds": 13.02,
+      "log": "/tmp/omp-native-path-omp-skill-history.log",
+      "sha256": "4e5e0d27d619f9545f333970c32c557aa811d82377eb058cbaf60beb3f8bcc99"
+    },
+    {
+      "name": "omp-template-attachments",
+      "exitCode": 0,
+      "seconds": 17.72,
+      "log": "/tmp/omp-native-path-omp-template-attachments.log",
+      "sha256": "95288eee15b3eb044c7ab99f5d2a542217a4fac11ea9809d3316c41a98b5c8c5"
+    }
+  ],
+  "browserChecks": [
+    {
+      "name": "omp-resources-desktop",
+      "args": [
+        "--browser"
+      ],
+      "exitCode": 0,
+      "seconds": 22.76,
+      "log": "/tmp/omp-native-path-omp-resources-desktop.log",
+      "sha256": "be5fea3af24bbf3e6be8d3f9bebb6e3f3185c381ddd604bd2fb36586ce2d2489"
+    },
+    {
+      "name": "omp-packages-browser",
+      "args": [],
+      "exitCode": 0,
+      "seconds": 70.32,
+      "log": "/tmp/omp-native-path-omp-packages-browser.log",
+      "sha256": "03bb43fd7920d7525ec071725cb4e208966b8909a89da2d23452e4309127e517"
+    },
+    {
+      "name": "omp-prompt-browser",
+      "args": [],
+      "exitCode": 0,
+      "seconds": 14.28,
+      "log": "/tmp/omp-native-path-omp-prompt-browser.log",
+      "sha256": "ce74eda1ed2599eca980e99cb9046d610f84f97678dddae0785ab2c9220d14af"
+    },
+    {
+      "name": "omp-mcp-browser",
+      "args": [],
+      "exitCode": 0,
+      "seconds": 72.74,
+      "log": "/tmp/omp-native-path-omp-mcp-browser.log",
+      "sha256": "6c1351de7de29c4fe51ea009fce695bf9de8580f524699ca2a0746028f7369be"
+    },
+    {
+      "name": "omp-tasks-browser",
+      "args": [],
+      "exitCode": 0,
+      "seconds": 20.14,
+      "log": "/tmp/omp-native-path-omp-tasks-browser.log",
+      "sha256": "fe15bd79e4b9dbd0e216ae07cb9ed3c3bb9196659de5764a8390f1df583632b2"
+    }
+  ],
+  "runtimeComparison": {
+    "baseline": "omp-smoke-current.json",
+    "filesCompared": 452,
+    "differences": []
+  },
+  "limits": "This changes test fixtures only and does not establish original DeepSeek task stability, native SDK gaps or packaged Windows acceptance.",
+  "windowsRunId": 43820728630
+}

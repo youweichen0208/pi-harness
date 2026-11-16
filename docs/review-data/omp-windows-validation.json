@@ -1,5 +1,5 @@
 {
-  "status": "Windows build fixed; terminal history fixture candidate locally verified; third Windows run in progress",
+  "status": "Windows source suite stopped at prompt fixture path lookup; native canonicalization regression in progress",
   "branch": "feat/omp-validation-20261116",
   "attempts": [
     {
@@ -89,10 +89,25 @@
       "commit": "f87247158ade0e9eff35d7762e77a17a871e354b",
       "runId": 43818744814,
       "url": "https://github.com/youweichen0208/pi-harness/actions/runs/43818744814",
-      "status": "in_progress",
-      "conclusion": null,
+      "status": "completed",
+      "conclusion": "failure",
       "jobId": 133136677289,
-      "lastObservedStep": "Install dependencies"
+      "lastObservedStep": "Verify OMP runtime, configuration and entry (plain Node)",
+      "terminalGate": "All 43 assertions passed in each of three Windows rounds.",
+      "failedStep": "Verify OMP runtime, configuration and entry (plain Node)",
+      "failedTest": "tests/omp-prompt-test.mjs:59",
+      "failure": "Context marker was loaded; exact path lookup failed because the Node fixture retained an 8.3 temporary-directory alias.",
+      "log": {
+        "path": "/tmp/omp-windows-third-job.log",
+        "sha256": "a66a65aae7d3b179927258bb8fa4506f6749443ffa6dd926c7e1aab645e6e939"
+      }
+    },
+    {
+      "commit": "b89e1d0dd2039ef7eee6a08c4232ce04bb9c0359",
+      "runId": 43820728630,
+      "url": "https://github.com/youweichen0208/pi-harness/actions/runs/43820728630",
+      "status": "in_progress",
+      "conclusion": null
     }
   ],
   "fix": "Normalize TypeScript filenames through native path.resolve before containment checks; require server/index.ts in the source graph. Regression checks source counts and nested transitive output, and runs before typecheck in independent Windows CI.",
@@ -101,7 +116,7 @@
   "terminalFixtureCandidate": {
     "commit": "f872471",
     "change": "Seed using the same async realpath as prepareLaunch; retain original list assertion and add bounded synthetic-path diagnostics.",
-    "hypothesis": "Windows JS realpathSync may retain an 8.3 alias while native async realpath expands it, producing different workspace hashes. Not yet confirmed by the third Windows run.",
+    "hypothesis": "Confirmed in Windows logs: sync path retains RUNNER~1, native path expands runneradmin. The seeded directory matches the active session directory after correction.",
     "localChecks": [
       {
         "path": "/tmp/omp-windows-fixture-local-build.log",
@@ -114,6 +129,12 @@
         "sha256": "53e8ff0f909c7d463644c3267c7a69d5db57421155605c8de1ecd710692215b2"
       }
     ],
-    "terminalChecksPassed": 43
-  }
+    "terminalChecksPassed": 43,
+    "windowsVerification": "The original history-list assertion passes in all three terminal rounds. Exact path diagnostics pending completed logs."
+  },
+  "lastObservedAt": "2026-11-16T06:54:47.740152+00:00",
+  "lastObservedStatus": "in_progress",
+  "runId": 43820728630,
+  "runUrl": "https://github.com/youweichen0208/pi-harness/actions/runs/43820728630",
+  "commit": "b89e1d0dd2039ef7eee6a08c4232ce04bb9c0359"
 }

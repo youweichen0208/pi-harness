@@ -1,7 +1,7 @@
 import { snapshotStates } from "./lib/snapshots.mjs";
 /** Native tree writes stay bound to the conversation that admitted them. */
 import assert from 'node:assert/strict';
-import { createServer } from 'node:http';
+import { createServer, request } from 'node:http';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -19,9 +19,14 @@ const summaryPreparation = join(root, 'summary-preparation.json');
 mkdirSync(join(agent, 'extensions'));
 writeFileSync(join(agent, 'extensions/summary-probe.js'), `import { writeFileSync } from 'node:fs'; export default api => api.on('session_before_tree', event => { const p = event.preparation; writeFileSync(${JSON.stringify(summaryPreparation)}, JSON.stringify({ targetId: p.targetId, entryCount: p.entriesToSummarize.length, commonAncestorId: p.commonAncestorId })); });`);
 const requests = [], events = [];
-let hang = false, fail = false, client;
+let hang = false, fail = false, client, abortedBodies = 0;
 const provider = createServer(async (req, res) => {
-	let raw = ''; for await (const part of req) raw += part;
+	let raw = '';
+	try { for await (const part of req) raw += part; }
+	catch (error) {
+		if (req.aborted && error.code === 'ECONNRESET') { abortedBodies++; return; }
+		throw error;
+	}
 	requests.push(JSON.parse(raw));
 	if (fail) { res.writeHead(400, { 'content-type': 'application/json' }); res.end(JSON.stringify({ error: { type: 'invalid_request_error', message: 'SUMMARY_FIXTURE_DENIED' } })); return; }
 	res.writeHead(200, { 'content-type': 'text/event-stream' });
@@ -37,6 +42,19 @@ const provider = createServer(async (req, res) => {
 const wait = async (test, label) => { for (let i = 0; i < 1000; i++) { if (test()) return; await new Promise(r => setTimeout(r, 20)); } throw Error(`Timed out ${label}`); };
 try {
 	const port = await listenIsolated(provider);
+	// Cancellation can close an upload before the fixture has its whole JSON body.
+	// Exercise that exact HTTP path before the native tree cancellation scenarios.
+	const incoming = new Promise(resolve => provider.once('request', resolve));
+	const unfinished = request({ hostname: '127.0.0.1', port, method: 'POST', headers: { 'content-length': '100' } });
+	unfinished.on('error', () => {});
+	unfinished.write('{');
+	const partial = await incoming;
+	const dropped = new Promise(resolve => partial.once('aborted', resolve));
+	unfinished.destroy();
+	await dropped;
+	await new Promise(resolve => setImmediate(resolve));
+	assert.equal(abortedBodies, 1, 'fixture observes incomplete cancelled uploads');
+	assert.equal(requests.length, 0, 'incomplete JSON is not a model request');
 	writeFileSync(join(agent, 'models.yml'), JSON.stringify({ providers: { fixture: { api: 'anthropic-messages', baseUrl: `http://127.0.0.1:${port}`, apiKey: 'fixture', models: [{ id: 'fixture', input: ['text'], contextWindow: 200000 }] } } }));
 	writeFileSync(join(agent, 'config.yml'), JSON.stringify({ treeFilterMode: "user-only", skills: { enabled: false }, retry: { enabled: false }, compaction: { enabled: false }, cacheWarming: { enabled: false } }));
 	client = new OmpClientSession('tree', root, new ClientStateStore(join(root, 'client-state.json')));

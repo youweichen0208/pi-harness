@@ -1,0 +1,38 @@
+{
+  "branch": "feat/omp-validation-20261116",
+  "commit": "3a262ebb0c6c155184725b96227149328e657f73",
+  "runId": 43819621811,
+  "runUrl": "https://github.com/youweichen0208/pi-harness/actions/runs/43819621811",
+  "status": "completed/failure",
+  "worktree": "/Users/youweichen/projects/pi-harness/.claude/worktrees/feat-omp-validation-20261116",
+  "workflow": ".github/workflows/verify-windows-desktop.yml",
+  "inputs": {
+    "platform": "linux",
+    "release_tag": ""
+  },
+  "scope": "Ubuntu 24.04 x64 native source and package gates, six Electron UI entries under Xvfb, extracted AppImage Unicode path, actual deb installation and old release isolated-data upgrade. No Release publishing.",
+  "releaseGatesVerifiedIdentical": [
+    "Verify OMP runtime, configuration and entry (plain Node)",
+    "Verify packaged server and OMP integration",
+    "Verify deb installation and previous-version data"
+  ],
+  "push": "Git HTTPS failed once with low-speed timeout; GitHub API uploaded exact local blobs/tree/commit; branch updated non-force after checking parent SHA.",
+  "jobId": 133139455260,
+  "lastObservedAt": "2026-11-16T06:54:47.740152+00:00",
+  "lastObservedStep": "Verify OMP runtime, configuration and entry (plain Node)",
+  "verifiedStages": [
+    "system dependencies",
+    "official registry lockfile",
+    "npm ci",
+    "boundary regression",
+    "typecheck",
+    "protocol",
+    "web and server build"
+  ],
+  "failedTest": "tests/omp-tree-test.mjs",
+  "failure": "Unhandled ECONNRESET while reading a cancelled incomplete request body in the HTTP provider fixture.",
+  "log": {
+    "path": "/tmp/omp-linux-first-job.log",
+    "sha256": "b5546521e6e468177cc9d8adc75ac2e00841770c8049764b0d3c3be5afe77ee5"
+  }
+}
