@@ -123,7 +123,7 @@ export function foldDiff(lines: ChangeLine[]): VisibleDiff[] {
  * original turn. Current task uses the server's artifact boundary verbatim. */
 export function turnChangeSummaries(messages: UiMessage[], current: TaskProgress | null | undefined, cwd: string, streaming: boolean): Map<string, ChangedFile[]> {
 	const summaries = new Map<string, ChangedFile[]>();
-	const starts = messages.flatMap((message, index) => message.role === "user" && message.origin !== "auto-reminder" ? [index] : []);
+	const starts = messages.flatMap((message, index) => message.role === "user" && message.origin !== "auto-reminder" && message.origin !== "auto-recovery" ? [index] : []);
 	for (let n = 0; n < starts.length; n++) {
 		if (streaming && n === starts.length - 1) continue;
 		const turn = messages.slice(starts[n], starts[n + 1] ?? messages.length);

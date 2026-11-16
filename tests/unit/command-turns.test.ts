@@ -21,8 +21,8 @@ test("a successful retry does not erase failed attempts; missing results never p
 	const summary = commandTurnSummaries([user("u"), call("a"), result("a", true), call("b"), result("b"), call("c")], false).get("c");
 	expect(summary).toEqual({ commands: 3, failed: 1, skipped: 1 });
 });
-test("truncated output and missing duration omit estimates; auto-reminders do not split a turn", () => {
+test.each(["auto-reminder", "auto-recovery"] as const)("truncated output and missing duration omit estimates; %s does not split a turn", origin => {
 	const incomplete = result("a"); incomplete.durationMs = undefined; incomplete.content = [{ type: "text", text: "partial", truncated: true }];
-	const reminder = { ...user("reminder"), origin: "auto-reminder" as const };
+	const reminder = { ...user("reminder"), origin };
 	expect(commandTurnSummaries([user("u"), call("a"), incomplete, reminder, call("b"), result("b")], false).get("b")).toEqual({ commands: 2, failed: 0, skipped: 0 });
 });

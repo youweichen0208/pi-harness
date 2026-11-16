@@ -30,7 +30,7 @@ export function currentCodemodeGroups(messages: readonly UiMessage[], live: UiMe
 		const index = transcript.findIndex(message => message.id === live.id);
 		if (index >= 0) transcript[index] = live; else transcript.push(live);
 	}
-	const start = transcript.findLastIndex((message, index) => message.role === "user" && message.origin !== "auto-reminder" && !isToolTextContinuation(transcript, index) && message.content.some(part => part.type === "text"));
+	const start = transcript.findLastIndex((message, index) => message.role === "user" && message.origin !== "auto-reminder" && message.origin !== "auto-recovery" && !isToolTextContinuation(transcript, index) && message.content.some(part => part.type === "text"));
 	if (start < 0) return [];
 	const tail = transcript.slice(start + 1);
 	const results = new Map(tail.filter(message => message.role === "toolResult" && message.toolCallId).map(message => [message.toolCallId!, message]));

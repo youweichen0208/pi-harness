@@ -5,7 +5,7 @@ export function messageTimeGaps(messages: readonly UiMessage[]): Map<number, str
 	const gaps = new Map<number, string>();
 	for (let index = 0; index < messages.length; index++) {
 		const message = messages[index];
-		if (message.role !== "user" || message.origin === "auto-reminder" || !message.timestamp) continue;
+		if (message.role !== "user" || (message.origin === "auto-reminder" || message.origin === "auto-recovery") || !message.timestamp) continue;
 		const date = new Date(message.timestamp);
 		gaps.set(index, `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`);
 	}

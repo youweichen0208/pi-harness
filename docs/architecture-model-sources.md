@@ -31,6 +31,8 @@ Claude Code 来源的 `settings.env` 凭据优先于服务进程同类全局变�
 
 回归：`tests/unit/model-output-floor.test.ts`、`tests/unit/model-sources.test.ts` 与 `tests/output-limit-context-test.mjs` 检查上下文限制、来源配置隔离、重载和实际 Anthropic 请求的 128000 额度，以及内部显式小额度保留。
 
+#173/#174 的重复输出保护不降低此额度，也不修改 reasoning 能力。正常正文截断和退化重复分别由有界续接协调器处理，见 `architecture-core.md`「重复输出保护与有界续接」。配置来源和 API 协议不等于模型能力：Claude Code 来源不会一律开启推理，自定义网关仍需明确能力声明。
+
 ## 模块与存储
 
 - `model-sources.ts`：只读适配器，接收可注入 home/env，输出服务端连接信息、安全状态和监听文件；JSONC 使用 jsonc-parser，TOML 使用 smol-toml。

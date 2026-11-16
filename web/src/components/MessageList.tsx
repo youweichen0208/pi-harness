@@ -228,7 +228,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 		const all = state.streamingMessage ? [...state.messages, state.streamingMessage] : state.messages;
 		const groups = subagentTurns(all);
 		const result = new Map<string, SubagentTurnCall[]>();
-		const currentTurn = all.findLastIndex(message => message.role === "user" && message.origin !== "auto-reminder");
+		const currentTurn = all.findLastIndex(message => message.role === "user" && message.origin !== "auto-reminder" && message.origin !== "auto-recovery");
 		const currentIds = new Set(all.slice(currentTurn + 1).flatMap(message => message.content.flatMap(block => block.type === "toolCall" ? [block.id] : [])));
 		for (const blocks of new Set(groups.values())) {
 			const calls = blocks.map(block => ({ block, view: {
@@ -270,7 +270,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 	const messageIndex = useMemo(() => new Map(state.messages.map((message, index) => [message.id, index])), [state.messages]);
 	const streamingHasContent = state.streamingMessage?.content.some((block) => block.type === "text" ? (typeof block.text === "string" && !!block.text.trim()) || !!block.truncated : block.type === "thinking" ? typeof block.thinking === "string" && !!block.thinking.trim() : true) ?? false;
 	const changeSummaries = useMemo(() => turnChangeSummaries(state.messages, state.taskProgress, state.cwd, state.isStreaming), [state.messages, state.taskProgress, state.cwd, state.isStreaming]);
-	const lastUserIndex = state.messages.findLastIndex((message) => message.role === "user");
+	const lastUserIndex = state.messages.findLastIndex((message) => message.role === "user" && message.origin !== "auto-reminder" && message.origin !== "auto-recovery");
 	const rawLastAssistantId = state.messages.findLast((message) => message.role === "assistant")?.id;
 	const lastAssistantId = rawLastAssistantId ? repeatedErrors.hidden.get(rawLastAssistantId) ?? rawLastAssistantId : undefined;
 	const rawLastId = messages.length > 0 ? messages[messages.length - 1].id : null;
@@ -288,7 +288,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 		let later = !!state.streamingMessage;
 		for (let i = state.messages.length - 1; i >= 0; i--) {
 			const message = state.messages[i];
-			if (message.role === "user") { later = false; continue; }
+			if (message.role === "user" && message.origin !== "auto-reminder" && message.origin !== "auto-recovery") { later = false; continue; }
 			if (message.role !== "assistant" || bashGroups.owners.has(message.id) || emptyReplies.has(message.id) || repeatedErrors.hidden.has(message.id)) continue;
 			if (later) continues.add(message.id);
 			later = true;
@@ -420,7 +420,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 	const questions = useMemo(() => {
 		const qs: { id: string; text: string }[] = [];
 		for (const m of state.messages) {
-			if (m.role !== "user" || m.origin === "auto-reminder" || repeatedUsers.hidden.has(m.id) || goalEventText(m) || goalCompletedText(m)) continue;
+			if (m.role !== "user" || (m.origin === "auto-reminder" || m.origin === "auto-recovery") || repeatedUsers.hidden.has(m.id) || goalEventText(m) || goalCompletedText(m)) continue;
 			const joined = m.content
 				.map((b) => asText(b)?.text ?? "")
 				.filter(Boolean)
@@ -831,7 +831,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 					const answerGroup = foldedAnswers.heads.get(m.id);
 					if (answerGroup) return <button type="button" className="answer-history-expand" key={m.id} data-msg-id={m.id} aria-expanded={false} onClick={() => expandGroup(answerGroup.ids)}>{t("answerHistoryExpand", { n: answerGroup.count })}</button>;
 					if (goalEvents.absorbed.has(m.id)) return null;
-					if (m.origin === "auto-reminder") return <Message key={m.id} message={m} toolResults={toolResults} liveOutputs={EMPTY_LIVE} toolStatuses={toolStatuses} streaming={false} isLast={false} />;
+					if (m.origin === "auto-reminder" || m.origin === "auto-recovery") return <Message key={m.id} message={m} toolResults={toolResults} liveOutputs={EMPTY_LIVE} toolStatuses={toolStatuses} streaming={false} isLast={false} />;
 					const withGap = (content: ReactNode) => {
 						const label = timeGaps.get(i);
 						return label ? <Fragment key={m.id}><div className="time-gap" aria-label={t("timeGapAt", { time: label })} title={m.timestamp ? new Date(m.timestamp).toLocaleString() : undefined}><span>{label}</span></div>{content}</Fragment> : content;
@@ -904,7 +904,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 						/>
 						{changeSummaries.has(m.id) && <ChangeSummaryCard files={changeSummaries.get(m.id)!} />}
 						{m.role === "assistant" && <ReplyActions message={m} last={m.id === lastAssistantId} regenerate={!state.isStreaming && connected && !state.tree?.verifying && onEdit ? () => {
-							const user = state.messages.slice(0, i).findLast(message => message.role === "user" && message.origin !== "auto-reminder");
+							const user = state.messages.slice(0, i).findLast(message => message.role === "user" && message.origin !== "auto-reminder" && message.origin !== "auto-recovery");
 							if (!user) return;
 							const text = user.questionText ?? user.content.map(block => block.type === "text" ? block.text : "").join("\n");
 							const skill = parseSkillBlock(text);

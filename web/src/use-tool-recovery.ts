@@ -11,7 +11,7 @@ export function useToolRecovery(chat: ChatState, send: (message: ClientMessage) 
 	const failure = state && latestToolTextFailure(state.messages, state.isStreaming);
 	const pending = useRef<{ conversation: string; session?: string; source: string; modelId?: string; text: string; attachments: PromptAttachment[]; requestId: string; sent: boolean } | null>(null);
 	const [busy, setBusy] = useState(false);
-	const writable = !!state && chat.ready && !state.isStreaming && !state.tree?.busy && !state.tree?.verifying && !state.tree?.externallyModified && !Object.values(state.recovery ?? {}).some(Boolean);
+	const writable = !!state && chat.ready && !state.isStreaming && (!state.runRecovery || state.runRecovery.phase === "stopped") && !state.tree?.busy && !state.tree?.verifying && !state.tree?.externallyModified && !Object.values(state.recovery ?? {}).some(Boolean);
 	const current = useRef({ state, failure, writable, send, onError });
 	current.current = { state, failure, writable, send, onError };
 	const clear = () => { pending.current = null; setBusy(false); };

@@ -15,7 +15,7 @@ export function AgentSilenceStatus({ chat, send }: { chat: ChatState; send: (mes
 		const timer = window.setInterval(() => setNow(Date.now()), 1000);
 		return () => window.clearInterval(timer);
 	}, [silence]);
-	if (chat.state?.recovery && Object.values(chat.state.recovery).some(Boolean)) return null;
+	if (chat.state?.runRecovery && chat.state.runRecovery.phase !== "stopped" || chat.state?.recovery && Object.values(chat.state.recovery).some(Boolean)) return null;
 	if (!chat.ready || !silence || silence.conversationId !== chat.activeConversationId || !chat.state?.isStreaming) return null;
 	// 工具静默不显示状态行：长命令属于正常执行，停止/重试按钮只会误导；
 	// 进度由命令行的实时计时与最新输出呈现（#106），底栏也不占用。
@@ -23,7 +23,7 @@ export function AgentSilenceStatus({ chat, send }: { chat: ChatState; send: (mes
 	const seconds = Math.max(0, Math.floor((now - silence.since) / 1000));
 	const duration = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 	const messages = chat.state.messages;
-	const lastUserIndex = messages.findLastIndex((message) => message.role === "user");
+	const lastUserIndex = messages.findLastIndex((message) => message.role === "user" && message.origin !== "auto-reminder" && message.origin !== "auto-recovery");
 	const lastUser = messages[lastUserIndex] as UiMessage | undefined;
 	const prompt = lastUser?.content.map((part) => part.type === "text" && typeof (part as { text?: unknown }).text === "string" ? (part as { text: string }).text : "").filter(Boolean).join("\n").trim() ?? "";
 	const toolsSincePrompt = messages.slice(lastUserIndex + 1).some((message) => message.content.some((part) => part.type === "toolCall"));

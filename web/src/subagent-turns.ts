@@ -6,7 +6,7 @@ export function subagentTurns(messages: readonly UiMessage[]): Map<string, UiToo
 	let calls: UiToolCallBlock[] = [];
 	const seen = new Set<string>();
 	for (const message of messages) {
-		if (message.role === "user" && message.origin !== "auto-reminder") calls = [];
+		if (message.role === "user" && message.origin !== "auto-reminder" && message.origin !== "auto-recovery") calls = [];
 		if (message.role !== "assistant") continue;
 		for (const block of message.content) {
 			if (block.type !== "toolCall" || block.name !== "subagent" || typeof block.id !== "string" || seen.has(block.id)) continue;

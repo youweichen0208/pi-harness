@@ -64,20 +64,25 @@ try {
 		for (const scenario of ["thinking", "empty", "partial"]) {
 			mode = scenario; toolReturned = false;
 			const before = requests;
+			const expectedRequests = before + (scenario === "partial" ? 4 : 2);
 			await input.fill(`Write ${scenario} report ${locale}`);
 			await input.press("Enter");
 			const action = page.getByRole("button", { name: locale === "zh" ? "调整输出额度" : "Adjust output limit", exact: true });
 			const continueAction = page.getByRole("button", { name: locale === "zh" ? "准备继续" : "Prepare to continue", exact: true });
+			for (let attempt = 0; attempt < 200 && !(requests === expectedRequests && !state?.isStreaming && state?.runRecovery?.phase === "stopped"); attempt++) await page.waitForTimeout(50);
+			assert.equal(state?.runRecovery?.phase, "stopped", "bounded automatic recovery has settled");
+			assert.equal(state.runRecovery.detail, scenario === "partial" ? "exhausted" : "thinking-only");
 			await action.waitFor();
 			await page.waitForTimeout(200);
-			assert.equal(requests, before + 2, "only explicit request and native tool-result round; no auto continuation");
+			assert.equal(requests, expectedRequests, "partial answers get at most two continuations; thinking-only and empty answers do not continue");
 			assert.equal(state.isStreaming, false);
 			assert.equal(state.taskProgress.status, "failed");
 			const last = state.messages.findLast(message => message.role === "assistant");
 			assert.equal(last.stopReason, "length");
 			if (scenario !== "empty") assert(last.content.some(block => block.type === "thinking"));
 			await page.getByRole("tab", { name: locale === "zh" ? "任务" : "Tasks", exact: true }).click();
-			await page.getByText(locale === "zh" ? "输出达到上限 · 回答未完成" : "Output limit reached · Answer incomplete", { exact: true }).waitFor();
+			await page.locator(".task-step.done").first().waitFor();
+			assert.match(await page.locator(".reply-output-limit").last().innerText(), locale === "zh" ? /输出.*(?:额度|上限)/ : /output limit/i);
 			if (scenario === "partial") await page.getByText("Partial report preserved.", { exact: true }).last().waitFor();
 			assert.equal(state.taskProgress.steps[0].status, "done", "completed read remains successful");
 			await input.fill("Keep my draft");
@@ -92,11 +97,12 @@ try {
 				assert.equal(await continueAction.count(), 0, "no blind continue when no answer was generated");
 				assert.match(await page.locator(".reply-output-limit").last().innerText(), locale === "zh" ? /仅发送「继续」可能再次截断/ : /may hit the same limit again/);
 			}
-			assert.equal(requests, before + 2, "preparing continuation only edits the draft");
+			assert.equal(requests, expectedRequests, "preparing continuation only edits the draft");
 			await input.fill("");
 			await page.reload();
 			await action.waitFor();
 			assert.equal(state.taskProgress.status, "failed", "reload preserves truncation outcome");
+			assert.equal(requests, expectedRequests, "reloading an exhausted turn must not restart recovery");
 			if (scenario === "partial") {
 				mkdirSync("tests/scratch", { recursive: true });
 				await page.screenshot({ path: `tests/scratch/output-limit-${locale}.png` });
@@ -109,7 +115,7 @@ try {
 		await page.waitForTimeout(200);
 		assert.equal(await page.getByRole("button", { name: locale === "zh" ? "准备继续" : "Prepare to continue", exact: true }).count(), 0, "old messages cannot continue the wrong turn");
 		assert.deepEqual(errors, []);
-		console.log(`PASS ${locale}: thinking-only and partial limits, failed task, preserved tools, draft, reload, manual continuation`);
+		console.log(`PASS ${locale}: bounded partial continuation, thinking-only limits, failed task, preserved tools, draft, reload, manual continuation`);
 		await context.close();
 	}
 } finally {

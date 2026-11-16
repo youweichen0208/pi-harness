@@ -2,7 +2,11 @@ import { useEffect, useState } from "react";
 import type { ClientMessage, UiState } from "../types";
 import { useT } from "../i18n";
 import { RunningIndicator } from "./RunningIndicator";
+import { RunRecoveryStatus } from "./RunRecoveryStatus";
 export function RecoveryStatus({ state, send, connected }: { state: UiState | null; connected: boolean; send: (message: ClientMessage) => boolean }) {
+	return <><RunRecoveryStatus state={state} send={send} connected={connected} /><NativeRecoveryStatus state={state} send={send} connected={connected} /></>;
+}
+function NativeRecoveryStatus({ state, send, connected }: { state: UiState | null; connected: boolean; send: (message: ClientMessage) => boolean }) {
 	const t = useT();
 	const [, tick] = useState(0);
 	const [dismissed, dismiss] = useState<string>();

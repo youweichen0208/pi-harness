@@ -6,7 +6,7 @@ export function repeatedAssistantErrors(messages: readonly UiMessage[], gapIndic
 	const hidden = new Map<string, string>();
 	let head: UiMessage | undefined;
 	for (const [index, message] of messages.entries()) {
-		const errorOnly = message.role === "assistant" && message.origin !== "auto-reminder" &&
+		const errorOnly = message.role === "assistant" && message.origin !== "auto-reminder" && message.origin !== "auto-recovery" &&
 			!!message.errorMessage?.trim() &&
 			message.content.every(block => block.type === "text" && typeof block.text === "string" && !block.text.trim());
 		if (errorOnly && head && !gapIndices.has(index) && message.errorMessage === head.errorMessage) {

@@ -63,10 +63,10 @@ export class SessionTreeController {
 		if (!this.session.isIdle) void this.session.abort().catch(() => {});
 		this.host.changed();
 	}
-	async waitForVerification(): Promise<void> {
+	async waitForVerification(requireActive = true): Promise<void> {
 		const validator = this.validator, session = this.session;
 		await validator?.verify(session.sessionManager);
-		if (this.disposed || !this.host.active() || this.validator !== validator || this.session !== session) throw new Error("对话已切换，请重新操作。");
+		if (this.disposed || (requireActive && !this.host.active()) || this.validator !== validator || this.session !== session) throw new Error("对话已切换，请重新操作。");
 		this.assertWritable();
 	}
 	assertWritable(): void {

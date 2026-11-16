@@ -175,7 +175,8 @@ export type TreeResponse =
 export interface UiMessage {
 	/** Bounded persisted subagent execution metadata, independent of report text truncation. */
 	subagents?: UiSubagentProgress[];
-	origin?: "auto-reminder";
+	origin?: "auto-reminder" | "auto-recovery";
+	autoRecovery?: { reason: "repetition" | "length"; attempt: number; limit: number };
 	toolText?: { incidentId: string; attempt: number };
 	questionText?: string;
 	userAttachments?: { path: string; mode: "inline" | "lines" | "reference"; preview: string; nativeRef: { entryId: string; index: number } }[];
@@ -279,11 +280,21 @@ export interface UiCacheWarming {
 	cost: number;
 }
 
+export interface UiRunRecovery {
+	reason: "repetition" | "length" | "tool-text";
+	phase: "stopping" | "recovering" | "stopped";
+	attempt: number;
+	limit: number;
+	messageId?: string;
+	detail?: "exhausted" | "unsafe" | "thinking-only" | "cancelled" | "failed";
+}
+
 export interface UiState {
 	subagentTasks?: { toolCallId: string; tasks: UiSubagentProgress[] }[];
 	tree?: UiTreeState;
 	recovery?: UiRecovery;
-	runSettings?: { autoCompaction: boolean; autoRetry: boolean; cacheWarming?: CacheWarmingMode };
+	runRecovery?: UiRunRecovery | null;
+	runSettings?: { autoCompaction: boolean; autoRetry: boolean; repetitionProtection: boolean; cacheWarming?: CacheWarmingMode };
 	clientId: string;
 	cwd: string;
 	sessionId: string;
@@ -577,7 +588,7 @@ export type ClientMessage =
 	| { type: "set_cwd"; path: string; requestId?: string; source?: "ui" }
 	| { type: "complete_path"; path: string }
 	| { type: "cancel_recovery"; conversationId: string; operationId: string }
-	| { type: "set_run_settings"; conversationId: string; autoCompaction?: boolean; autoRetry?: boolean }
+	| { type: "set_run_settings"; conversationId: string; autoCompaction?: boolean; autoRetry?: boolean; repetitionProtection?: boolean }
 	| { type: "set_cache_warming"; mode: CacheWarmingMode }
 	| { type: "get_cache_warming"; conversationId: string }
 	| { type: "dialog_response"; conversationId: string; id: string; value: string | boolean | null }

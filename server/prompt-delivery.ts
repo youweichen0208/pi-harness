@@ -52,7 +52,13 @@ export async function deliverPrompt(session: AgentSession, text: string, asides:
 					}).reverse();
 				}
 			}
-			if (event.type === "agent_settled") { records.scope.clearPending(); pendingPromptsBySession.delete(session); unsubscribe(); }
+			if (event.type === "agent_settled") {
+				records.scope.clearPending(); pendingPromptsBySession.delete(session);
+				// SDK 1.5.2 iterates its live listener array. Splicing this listener
+				// synchronously skips the following listener (including Stop's
+				// settled acknowledgement), falsely triggering a forced reset.
+				queueMicrotask(unsubscribe);
+			}
 		});
 	}
 	await session.prompt(input.text, {

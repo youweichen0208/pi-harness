@@ -55,6 +55,7 @@ const ALL = [
 	"long-history-browser-test",
 	"changes-panel-ui-test",
 	"tool-text-continue-test",
+	"run-recovery-test",
 	"clear-provider-key-test",
 	"provider-catalog-test",
 	"component-updates-test",

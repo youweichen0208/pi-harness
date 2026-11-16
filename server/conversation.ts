@@ -6,6 +6,7 @@ import type { SessionTreeController } from "./session-tree-controller.js";
 import type { TerminalManager } from "./terminals.js";
 import type { ThinkingTimings } from "./thinking-timing.js";
 import type { WebUIContext } from "./webui-context.js";
+import type { RunRecoveryCoordinator } from "./run-recovery.js";
 
 /** Thrown when the service is quiesced (draining) and the request is NEW work
  *  the admission controller refuses: a brand-new client attach, a prompt,
@@ -26,6 +27,7 @@ export class QuiesceRejectedError extends Error {
  * never interrupts another conversation's in-flight run.
  */
 export interface Conversation {
+	runRecovery?: RunRecoveryCoordinator;
 	codemodeHistory?: CodemodeHistory;
 	tree?: SessionTreeController;
 	treeProjectionRevision?: string;

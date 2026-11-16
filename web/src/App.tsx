@@ -1249,7 +1249,7 @@ export function App() {
 				: null,
 		// Deps are the STABLE inner refs (server reuses them across snapshots),
 		// so the object identity survives token deltas and ChatInput's memo holds.
-		[model, conversationState?.routedModel, conversationState?.conversationId, conversationState?.runSettings?.autoCompaction, conversationState?.runSettings?.autoRetry],
+		[model, conversationState?.routedModel, conversationState?.conversationId, conversationState?.runSettings?.autoCompaction, conversationState?.runSettings?.autoRetry, conversationState?.runSettings?.repetitionProtection, conversationState?.runSettings?.cacheWarming],
 	);
 	useEffect(() => {
 		if (isWikiWindow || !model || chat.modelsLoading || !chat.models.some(item => item.id === `${model.provider}/${model.id}`)) return;
@@ -1536,7 +1536,7 @@ export function App() {
 								pendingCount={(conversationState?.queue.steering.length ?? 0) + (conversationState?.queue.followUp.length ?? 0)}
 								send={send}
 								ready={chat.ready && !!conversationState && (!wikiFileRequest?.path || wikiMediaPreview || (wikiCurrentFile?.id === wikiFileRequest.token && wikiContextSession === chat.state?.sessionId))}
-								streaming={conversationState?.isStreaming ?? false}
+								streaming={!!conversationState && (conversationState.isStreaming || !!conversationState.runRecovery && conversationState.runRecovery.phase !== "stopped")}
 								silentActivity={chat.agentSilence?.conversationId === chat.activeConversationId && chat.agentSilence.activity === "model" ? chat.agentSilence.activity : null}
 										messages={conversationState?.messages ?? EMPTY_MESSAGES}
 								slashCommands={chat.slashCommands}

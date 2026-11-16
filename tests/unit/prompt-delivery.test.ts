@@ -2,7 +2,7 @@ import { expect, test, vi } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createAgentSessionServices, createAgentSessionFromServices, SessionManager, SettingsManager } from "@earendil-works/pi-coding-agent";
+import { createAgentSessionServices, createAgentSessionFromServices, SessionManager, SettingsManager, type AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 import { deliverPrompt, recallPending } from "../../server/prompt-delivery.js";
 
 test.each(["one-at-a-time", "all"] as const)("attachments stay inside their native queue item and mode %s is untouched", async mode => {
@@ -91,5 +91,28 @@ test("extension failure is acknowledged without consuming attachments or calling
 			expect(recallPending(session).steering).toEqual(["must not run\n\nfrozen"]);
 		}
 		expect(calls).toBe(1); expect(input).toHaveBeenCalledTimes(3);
+	} finally { session.dispose(); vi.restoreAllMocks(); rmSync(root, { recursive: true, force: true }); }
+});
+
+test("prompt cleanup does not skip later native settled listeners such as the stop acknowledgement", async () => {
+	const root = mkdtempSync(join(tmpdir(), "pi-prompt-settled-unit-"));
+	const services = await createAgentSessionServices({ cwd: root, agentDir: root, settingsManager: SettingsManager.inMemory() });
+	const { session } = await createAgentSessionFromServices({ services, sessionManager: SessionManager.inMemory(root) });
+	try {
+		// Install the actual deliverPrompt cleanup listener without starting a
+		// model request, then subscribe the Stop listener that follows it.
+		vi.spyOn(session, "prompt").mockResolvedValue(undefined);
+		await deliverPrompt(session, "Investigate the fixture", [], false, () => {});
+		const stopAcknowledged = vi.fn();
+		const off = session.subscribe(event => { if (event.type === "agent_settled") stopAcknowledged(); });
+		// Invoke the real SDK emitter: a copied fake listener array would hide
+		// the live-array splice bug this regression is intended to catch.
+		const emitter = session as unknown as { _emit(event: AgentSessionEvent): void };
+		emitter._emit({ type: "agent_settled", aborted: true });
+		expect(stopAcknowledged).toHaveBeenCalledTimes(1);
+		await Promise.resolve();
+		emitter._emit({ type: "agent_settled", aborted: false });
+		expect(stopAcknowledged).toHaveBeenCalledTimes(2);
+		off();
 	} finally { session.dispose(); vi.restoreAllMocks(); rmSync(root, { recursive: true, force: true }); }
 });

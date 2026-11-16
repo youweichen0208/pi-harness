@@ -37,6 +37,7 @@ export function isCurrentModelUnavailable(model: UiState["model"] | undefined, m
 export const ModelPicker = memo(function ModelPicker({ state, models, accounts, modelsLoading, send, onManageModels, compact = false }: Props) {
 	const t = useT();
 	const warmingHint = useId();
+	const repetitionHint = useId();
 	const model = state?.model;
 	// snapshot model.id is the bare id; list ids are "provider/id".
 	const currentModelId = model ? `${model.provider}/${model.id}` : null;
@@ -66,6 +67,11 @@ export const ModelPicker = memo(function ModelPicker({ state, models, accounts, 
 			<input type="checkbox" checked={state.runSettings![key]} onChange={event => send({ type: "set_run_settings", conversationId: state.conversationId, [key]: event.target.checked })} />
 			{t(key === "autoCompaction" ? "conversationAutoCompaction" : "conversationAutoRetry")}
 		</label>)}
+		<label>
+			<input type="checkbox" checked={state.runSettings.repetitionProtection ?? true} aria-describedby={repetitionHint} onChange={event => send({ type: "set_run_settings", conversationId: state.conversationId, repetitionProtection: event.target.checked })} />
+			{t("conversationRepetitionProtection")}
+		</label>
+		<p id={repetitionHint} className="model-cache-hint">{t("conversationRepetitionProtectionHint")}</p>
 		<label className="model-cache-warming">
 			<span>{t("cacheWarmingGlobal")}</span>
 			<select value={state.runSettings.cacheWarming ?? "streaming"} aria-label={t("cacheWarmingGlobal")} aria-describedby={warmingHint} onChange={event => send({ type: "set_cache_warming", mode: event.target.value as "off" | "streaming" | "idle" })}>

@@ -2,6 +2,12 @@ import type { AgentSession } from "@earendil-works/pi-coding-agent";
 
 const pending = new WeakMap<AgentSession, Promise<void>>();
 
+/** Join all reloads queued before admitting a new automatic run. */
+export async function waitForSessionReload(session: AgentSession): Promise<void> {
+	let operation: Promise<void> | undefined;
+	while ((operation = pending.get(session))) await operation;
+}
+
 /** Host reload entry points share one queue per native session. A failed
  * reload is reported to its caller without poisoning later retries. */
 export function reloadSession(session: AgentSession): Promise<void> {

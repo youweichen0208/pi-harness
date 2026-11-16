@@ -27,11 +27,11 @@ function WaitingIndicator({ stage, onStop }: { stage: WaitStage; onStop?: () => 
 
 /** Shared presentation; native retry, compaction and silence notices take precedence. */
 export function ConversationWorkingStatus({ state, connected, silenceNotified, toolStatuses, onStop }: {
-	state: Pick<UiState, "messages" | "streamingMessage" | "isStreaming" | "conversationId" | "model" | "recovery"> & Partial<Pick<UiState, "queue">>;
+	state: Pick<UiState, "messages" | "streamingMessage" | "isStreaming" | "conversationId" | "model" | "recovery" | "runRecovery"> & Partial<Pick<UiState, "queue">>;
 	connected: boolean; silenceNotified: boolean; toolStatuses: ReadonlyMap<string, ToolStatus>; onStop?: () => void;
 }) {
 	const t = useChatT();
-	const lastUser = state.messages.findLast(m => m.role === "user");
+	const lastUser = state.messages.findLast(m => m.role === "user" && m.origin !== "auto-reminder" && m.origin !== "auto-recovery");
 	const previous = useRef({ conversation: state.conversationId, user: lastUser?.id, steering: [] as string[] });
 	const [steeredUser, setSteeredUser] = useState<string>();
 	useEffect(() => {
@@ -47,7 +47,7 @@ export function ConversationWorkingStatus({ state, connected, silenceNotified, t
 	const completed = new Map([...toolStatuses].filter(([, s]) => !s.running && (!s.conversationId || s.conversationId === state.conversationId)));
 	const messages = state.streamingMessage ? [...state.messages.filter(m => m.id !== state.streamingMessage?.id), { ...state.streamingMessage, role: "assistant" }] : state.messages;
 	const stage = conversationWait(messages, completed, steeredUser);
-	if (!state.isStreaming || silenceNotified || state.recovery && [state.recovery.compaction, state.recovery.retry, state.recovery.summary, state.recovery.branch].some(Boolean)) return null;
+	if (!state.isStreaming || silenceNotified || state.runRecovery && state.runRecovery.phase !== "stopped" || state.recovery && [state.recovery.compaction, state.recovery.retry, state.recovery.summary, state.recovery.branch].some(Boolean)) return null;
 	if (!connected) return <div className="agent-working disconnected" role="status">{t("workDisconnected")}</div>;
 	return stage && <WaitingIndicator key={`${state.conversationId}:${stage.key}:${stage.label}`} stage={stage} onStop={onStop} />;
 }

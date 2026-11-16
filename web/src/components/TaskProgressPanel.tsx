@@ -28,7 +28,7 @@ type TaskProgressPanelProps = CodemodeActivity & { send?: (message: ClientMessag
 
 export function TaskProgressPanel(props: TaskProgressPanelProps) {
 	const history = props.codemode?.history ?? props.messages;
-	const request = history.findLast((message, index) => message.role === "user" && message.origin !== "auto-reminder" && !isToolTextContinuation(history, index));
+	const request = history.findLast((message, index) => message.role === "user" && message.origin !== "auto-reminder" && message.origin !== "auto-recovery" && !isToolTextContinuation(history, index));
 	return <TaskProgressContent key={`${props.conversationId ?? ""}:${props.task?.sourceMessageId ?? request?.id ?? "empty"}`} {...props} />;
 }
 

@@ -24,6 +24,8 @@ import { isSessionDirectory } from "./session-directory.js";
 import type { TreeRequest } from "./protocol.js";
 import { createHash, randomUUID } from "node:crypto";
 import { recoveryEvent, isRecovering, recoverySnapshot } from "./recovery-state.js";
+import { RunRecoveryCoordinator } from "./run-recovery.js";
+import { waitForSessionReload } from "./session-reload.js";
 import { Readable } from "node:stream";
 import { openToolOutput, toolOutputManifest, toolOutputId } from "./tool-output.js";
 import { nativeToolDetails, toolExitCode } from "./serialize.js";
@@ -239,7 +241,7 @@ export class ClientSession {
 	wikiDocumentSession(path: string): SessionManager | undefined {
 		return [...this.convs.values()].reverse().find(conv => conv.wiki && conv.cwd === this.cwd && this.wikiChats.settings(this.cwd, conv.session.sessionManager.getSessionId()).documentPath === path)?.session.sessionManager ?? this.wikiBlankDocuments.get(`${this.cwd}\0${path}`);
 	}
-	wikiSessionBusy(id: string): boolean { return [...this.convs.values()].some(conv => conv.wiki && conv.session.sessionManager.getSessionId() === id && (conv.session.isStreaming || conv.terminals.list().length > 0)); }
+	wikiSessionBusy(id: string): boolean { return [...this.convs.values()].some(conv => conv.wiki && conv.session.sessionManager.getSessionId() === id && (conv.session.isStreaming || conv.runRecovery?.pending || conv.terminals.list().length > 0)); }
 	ownsWikiSession(id: string): boolean { return [...this.convs.values()].some(conv => conv.wiki && conv.session.sessionManager.getSessionId() === id); }
 	private readonly thinkingDurationStore: ThinkingDurationStore;
 	/** Open conversations — each owns its OWN runtime, so starting a new chat
@@ -803,6 +805,7 @@ export class ClientSession {
 	private boundUiSessions = new WeakSet<AgentSession>();
 	private async bindSession(conv = this.conv): Promise<void> {
 		if (this.disposed || this.convs.get(conv.id) !== conv) return;
+		conv.runRecovery?.dispose();
 		conv.unsubscribe?.();
 		if (conv.session !== conv.runtime.session) {
 			conv.webUi.dispose();
@@ -854,9 +857,27 @@ export class ClientSession {
 			return;
 		}
 
-		const unsubscribe = conv.session.subscribe((event) =>
-			this.onEvent(conv, event),
-		);
+		conv.runRecovery = new RunRecoveryCoordinator(session, {
+			current: () => !this.disposed && this.convs.get(conv.id) === conv && conv.runtime === runtime && conv.session === session,
+			admitted: () => !this.quiesceBlocked() && !conv.rebuilding && !isRecovering(conv.recovery) && !conv.tree?.busy && !conv.tree?.externallyModified && !conv.runningToolNames.size,
+			changed: () => { conv.uiMessageCache.clear(); conv.tree?.refresh(); this.scheduleSnapshot(); this.scheduleSessionsRefresh(); },
+			interrupt: () => this.interruptRun(conv, "检测到重复输出，已中止"),
+			verifyEdit: async () => { await conv.tree?.waitForVerification(false); },
+			writable: () => { try { conv.tree?.assertWritable(); return true; } catch { return false; } },
+			prepare: async () => {
+				await waitForSessionReload(session);
+				await conv.tree?.waitForVerification(false);
+				await flushPromptReload(session);
+				if (promptReloadStatus(session).reloadError) throw new Error("Native prompt reload failed");
+				const release = await this.sources?.acquire(session.modelRuntime);
+				if (session.model && this.sources && !this.sources.accepts(session.modelRuntime, session.model.provider, session.model.id)) { release?.(); throw new Error("当前模型来源不可用"); }
+				return release ?? (() => {});
+			},
+			toolText: () => this.continueAfterToolText(conv),
+		});
+		const unsubscribe = conv.session.subscribe((event) => {
+			if (conv.session === session && conv.runtime === runtime) this.onEvent(conv, event);
+		});
 		conv.unsubscribe = unsubscribe;
 		this.scheduleSnapshot();
 		conv.webUi.refresh();
@@ -901,6 +922,7 @@ export class ClientSession {
 	private onEvent(conv: Conversation, event: AgentSessionEvent): void {
 		const contextTokens = event.type === "compaction_start" ? conv.session.getContextUsage()?.tokens ?? undefined : event.type === "compaction_end" && event.result ? conv.session.messages.reduce((total, message) => total + estimateTokens(message), 0) : undefined;
 		conv.recovery = recoveryEvent(conv.recovery, event, Date.now(), contextTokens);
+		conv.runRecovery?.observe(event);
 		if (event.type === "agent_settled" || event.type === "message_end") conv.tree?.refresh();
 
 		// Background cache usage updates accounting without implying progress on a user task.
@@ -1006,7 +1028,7 @@ export class ClientSession {
 				conv.lastTaskEndedAt = Date.now();
 				this.scheduleSessionsRefresh();
 				// SDK 1.1+: a user stop between model calls leaves stopReason "stop"; never remind after it.
-				if (!event.aborted) void this.continueAfterToolText(conv);
+				// Host continuations are serialized outside this callback by runRecovery.
 
 				// Deferred settings reload: settings (system prompt / skills /
 				// extensions) changed while the run was streaming — applying now
@@ -1085,7 +1107,7 @@ export class ClientSession {
 			this.sessionsTimer = null;
 			if (this.disposed) return;
 			for (const conv of [...this.convs.values()]) {
-				if (conv.wiki && conv.id !== this.activeId && !conv.session.isStreaming && conv.terminals.list().length === 0) this.removeConversation(conv.id);
+				if (conv.wiki && conv.id !== this.activeId && !conv.session.isStreaming && !conv.runRecovery?.pending && conv.terminals.list().length === 0) this.removeConversation(conv.id);
 			}
 			this.invalidateLists();
 			this.emitConversations();
@@ -1260,11 +1282,12 @@ export class ClientSession {
 			streamingMessage,
 			subagentTasks: taskSummaries(conv.session.sessionManager.getSessionId(), new Set(messages.flatMap(message => message.content.flatMap(block => block.type === "toolCall" && block.name === "subagent" ? [block.id as string] : []))), new Set(messages.flatMap(message => message.role === "toolResult" && message.toolCallId ? [message.toolCallId] : []))),
 			codemode: (conv.codemodeHistory ??= new CodemodeHistory()).snapshot(conv.session.sessionManager, (message, entryId) => this.serializeCached(message, entryId)),
-			taskProgress: deriveTaskProgress(conv.id, messages, streamingMessage, conv.session.isStreaming, conv.lastTaskEndedAt),
+			taskProgress: deriveTaskProgress(conv.id, messages, streamingMessage, conv.session.isStreaming || !!conv.runRecovery?.pending, conv.lastTaskEndedAt),
 			isStreaming: this.session.isStreaming,
 			wiki: !!conv.wiki,
 			recovery: recoverySnapshot(conv.recovery),
-			runSettings: { autoCompaction: conv.session.autoCompactionEnabled, autoRetry: conv.session.autoRetryEnabled, cacheWarming: conv.session.settingsManager.getCacheWarmingMode() },
+			runSettings: { autoCompaction: conv.session.autoCompactionEnabled, autoRetry: conv.session.autoRetryEnabled, cacheWarming: conv.session.settingsManager.getCacheWarmingMode(), repetitionProtection: conv.runRecovery?.protection ?? true },
+			runRecovery: conv.runRecovery?.status ?? null,
 			model: model
 				? {
 						id: model.id,
@@ -1384,6 +1407,7 @@ export class ClientSession {
 		if (!conv?.tree || conv.id !== this.activeId) {
 			this.emit({ type: "tree_navigate_result", conversationId: message.conversationId, reqId: message.reqId, status: "error", error: "只能操作当前活动对话。" }); return;
 		}
+		if (["tree_navigate", "session_fork", "session_reopen"].includes(message.type)) conv.runRecovery?.cancel();
 		await conv.tree.request(message);
 		this.flushSnapshot(true);
 	}
@@ -1391,6 +1415,7 @@ export class ClientSession {
 		const conv = this.convs.get(message.conversationId);
 		if (!conv || conv.id !== this.activeId) return;
 		setConversationRunSettings(conv.session.settingsManager, message);
+		if (typeof message.repetitionProtection === "boolean") conv.runRecovery?.setProtection(message.repetitionProtection);
 		this.flushSnapshot();
 	}
 	async setCacheWarming(mode: Extract<ClientMessage, { type: "set_cache_warming" }>["mode"]): Promise<void> {
@@ -1731,6 +1756,9 @@ export class ClientSession {
 	): Promise<void> {
 		const conv = this.conv;
 		const receiptSessionId = conv.session.sessionId;
+		// Plain queued/steering prompts cancel automatic continuation while
+		// allowing the interrupted reply to be isolated. Commands may navigate.
+		conv.runRecovery?.cancel(false, !parseSlash(text));
 		let releaseModels: (() => void) | undefined;
 		let sideEffectsStarted = false;
 		let acknowledged = false;
@@ -1856,7 +1884,9 @@ export class ClientSession {
 	async abort(): Promise<void> {
 		// 只停止当前智能体运行。
 		const conv = this.conv;
-		await this.interruptRun(conv, "已停止");
+		const pendingRecovery = conv.runRecovery?.pending;
+		conv.runRecovery?.cancel(true);
+		if (!pendingRecovery || !conv.session.isIdle) await this.interruptRun(conv, "已停止");
 		conv.runningToolNames.clear();
 		if (conv.stallNoticed) this.emit({ type: "agent_silence", conversationId: conv.id, phase: "active", since: Date.now(), activity: "model" });
 		conv.stallNoticed = false;
@@ -1901,6 +1931,7 @@ export class ClientSession {
 		if (last.content.some(block => block.type === "toolCall")) return;
 		const text = last.content.map(block => block.type === "text" ? block.text : "").join("\n");
 		if (!unexecutedToolText(text)) return;
+		if (conv.runRecovery && !conv.runRecovery.reserveToolText()) return;
 		conv.toolTextContinues += 1;
 		conv.toolRanSinceContinue = false;
 		try {
@@ -2279,7 +2310,7 @@ export class ClientSession {
 		// retain that conversation so its review is not disposed when the user
 		// switches away without sending another prompt.
 
-		if (conv.session.isStreaming) {
+		if (conv.session.isStreaming || conv.runRecovery?.pending) {
 			conv.listed = true;
 			return null;
 		}
@@ -2320,6 +2351,7 @@ export class ClientSession {
 	private removeConversation(id: string): Promise<void> {
 		const conv = this.convs.get(id);
 		if (!conv || id === this.activeId) return Promise.resolve();
+		conv.runRecovery?.dispose();
 
 		conv.tree?.dispose();
 		conv.webUi.dispose();
@@ -2360,7 +2392,7 @@ export class ClientSession {
 		for (const conv of this.convs.values()) {
 			// Wiki history stays out of the project list. Keep only running Wiki
 			// tasks reachable so users can stop a background run.
-			if (conv.wiki && !conv.session.isStreaming) continue;
+			if (conv.wiki && !conv.session.isStreaming && !conv.runRecovery?.pending) continue;
 			// Always include the active conversation. A fresh session has no
 			// transcript yet, so history cannot provide its sidebar row.
 			if (conv.cwd !== this.cwd || (!conv.listed && conv.id !== this.activeId)) continue;
@@ -2368,7 +2400,7 @@ export class ClientSession {
 			let isStreaming = false;
 			try {
 				messageCount = conv.session.getSessionStats().totalMessages;
-				isStreaming = conv.session.isStreaming;
+				isStreaming = conv.session.isStreaming || !!conv.runRecovery?.pending;
 			} catch {
 				// session being replaced — report defaults
 			}
@@ -3199,7 +3231,7 @@ export class ClientSession {
 		this.files.unwatchDir();
 		this.files.unwatchGit();
 		this.providerAuth.cancel();
-		for (const conv of this.convs.values()) { conv.tree?.dispose(); conv.webUi.dispose(); }
+		for (const conv of this.convs.values()) { conv.runRecovery?.dispose(); conv.tree?.dispose(); conv.webUi.dispose(); }
 		for (const conv of this.convs.values()) {
 
 			conv.unsubscribe?.();

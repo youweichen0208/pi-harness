@@ -214,7 +214,7 @@ export const Message = memo(function Message({
 	settledTail,
 }: MessageProps) {
 	const t = useChatT();
-	const outputLimited = message.role === "assistant" && message.stopReason === "length";
+	const outputLimited = message.role === "assistant" && message.stopReason === "length" && !turnContinues && !streaming;
 	const hasPartialReply = message.content.some(block => block.type === "text" && typeof block.text === "string" && !!block.text.trim());
 	const cwd = useContext(WorkspacePathContext);
 	const replyQuestions = useMemo(() => message.role === "assistant" ? message.content.flatMap(block => block.type === "text" && typeof block.text === "string" ? parseReplySegments(block.text).flatMap(segment => segment.kind === "questions" ? segment.questions : []) : []) : [], [message.content, message.role]);
@@ -268,6 +268,7 @@ export const Message = memo(function Message({
 	// (otherwise the same output shows twice: formatted card + plain text).
 	if (message.role === "toolResult") return null;
 	if (message.role === "custom" && message.customType === "acp-delegate") return <DelegateNotification message={message} />;
+	if (message.origin === "auto-recovery") return <div className="tool-reminder-event" data-msg-id={message.id} title={message.content.map(b => b.type === "text" ? b.text : "").join("\n")}><span>↻ {t(message.autoRecovery?.reason === "length" ? "runRecoveryLengthEvent" : "runRecoveryRepetitionEvent")}{message.autoRecovery && ` · ${message.autoRecovery.attempt}/${message.autoRecovery.limit}`}{message.timestamp ? ` · ${formatTime(message.timestamp)}` : ""}</span></div>;
 	if (message.origin === "auto-reminder") return <div className="tool-reminder-event" data-msg-id={message.id} title={message.content.map(b => b.type === "text" ? b.text : "").join("\n")}><span>↻ {t("toolReminderEvent")}{message.timestamp ? ` · ${formatTime(message.timestamp)}` : ""}</span></div>;
 	// SDK system messages are system-prompt snapshots: one quiet divider, not a chat row (3a).
 	if (message.role === "system") return null;

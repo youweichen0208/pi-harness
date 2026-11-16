@@ -7,7 +7,7 @@ export interface WaitStage { key: string; label: WaitLabel; delay: number }
 
 /** Presentation only: text does not settle a run; the caller gates this on native lifecycle. */
 export function conversationWait(messages: readonly UiMessage[], completed: ReadonlyMap<string, unknown>, steeredUserId?: string): WaitStage | null {
-	const userIndex = messages.findLastIndex(m => m.role === "user");
+	const userIndex = messages.findLastIndex(m => m.role === "user" && m.origin !== "auto-reminder" && m.origin !== "auto-recovery");
 	const turn = messages.slice(userIndex + 1);
 	const running = activeTool(messages, completed);
 	if (running) {

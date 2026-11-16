@@ -49,7 +49,7 @@ export function commandTurnSummaries(messages: readonly UiMessage[], running: bo
 		});
 	};
 	for (const message of messages) {
-		if (message.role === "user" && message.origin !== "auto-reminder") { finish(); ids = []; tail = undefined; }
+		if (message.role === "user" && message.origin !== "auto-reminder" && message.origin !== "auto-recovery") { finish(); ids = []; tail = undefined; }
 		if (message.role !== "assistant") continue;
 		if (message.content.length || message.errorMessage) tail = message.id;
 		for (const block of message.content) if (block.type === "toolCall" && block.name === "bash" && typeof block.id === "string" && !ids.includes(block.id)) ids.push(block.id);

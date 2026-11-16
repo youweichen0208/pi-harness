@@ -91,7 +91,7 @@ export function buildCollapsedGroups(
 	const end = Math.min(recentStart, messages.length);
 	for (let i = 0; i < end; i++) {
 		const m = messages[i];
-		if (m.role === "toolResult" || m.origin === "auto-reminder" || hiddenMessages.has(m.id)) {
+		if (m.role === "toolResult" || (m.origin === "auto-reminder" || m.origin === "auto-recovery") || hiddenMessages.has(m.id)) {
 			absorbed.add(i);
 			continue;
 		}

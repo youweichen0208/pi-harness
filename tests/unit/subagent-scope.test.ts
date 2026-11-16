@@ -111,6 +111,8 @@ test("started preflight binds and clears scope without changing prompt text or i
 	expect(listeners.size).toBe(1);
 	emit({ type: "agent_settled", aborted: false });
 	expect(session.isStreaming).toBe(false);
+	// Native listeners are removed after dispatch so Stop observers are not skipped.
+	await Promise.resolve();
 	expect(listeners.size).toBe(0);
 	await session.reload();
 	await deliverPrompt(session, "after reload", [], false, () => {}, "new");
@@ -118,6 +120,7 @@ test("started preflight binds and clears scope without changing prompt text or i
 	expect(listeners.size).toBe(1);
 	expect(getSubagentWorkspace(session.sessionManager)).toBe("new");
 	emit({ type: "agent_settled", aborted: true });
+	await Promise.resolve();
 	expect(listeners.size).toBe(0);
 });
 

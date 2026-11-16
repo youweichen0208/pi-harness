@@ -227,11 +227,15 @@ export function serializeMessage(
 				return null;
 			}
 			const content = serializeUserContent(m.content);
+			const recovery = m.customType === "pi-harness:run-continuation" ? m.details as { reason?: unknown; attempt?: unknown; limit?: unknown } | undefined : undefined;
+			const autoRecovery: UiMessage["autoRecovery"] = recovery && (recovery.reason === "length" || recovery.reason === "repetition") && typeof recovery.attempt === "number" && typeof recovery.limit === "number"
+				? { reason: recovery.reason, attempt: recovery.attempt, limit: recovery.limit } : undefined;
 			return {
 				id: `c-${m.timestamp}-${seq}`,
 				role: "custom",
 				content,
 				customType: m.customType,
+				...(autoRecovery ? { origin: "auto-recovery" as const, autoRecovery } : {}),
 				details: (m as { details?: unknown }).details,
 				timestamp: m.timestamp,
 			};

@@ -17,7 +17,7 @@ export function answerHistory(messages: readonly UiMessage[]) {
 	const rounds: UiMessage[][] = [];
 	let current: UiMessage[] | undefined;
 	for (const message of messages) {
-		if (message.role === "user" && message.origin !== "auto-reminder") {
+		if (message.role === "user" && message.origin !== "auto-reminder" && message.origin !== "auto-recovery") {
 			const text = message.questionText ?? message.content.map(block => block.type === "text" ? block.text : "").join("\n");
 			current = parseAnswerSummary(text) ? [] : undefined;
 			if (current) rounds.push(current);
