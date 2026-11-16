@@ -1,0 +1,54 @@
+{
+  "status": "Local I/O-fault and original directory-obstruction modes pass; Windows rerun pending",
+  "runId": 43831802804,
+  "jobId": 133178658840,
+  "failure": "Windows EBUSY at root cleanup masked the original restart fixture error. No PASS line for restart test. Prior persistence test passed.",
+  "analysis": [
+    "Directory obstruction recorded before rename succeeded; cleanup failure could skip session.close().",
+    "Parent observed child exit before stdio close; final root cleanup could race child resources.",
+    "Original Windows cause remains unknown because cleanup masked it."
+  ],
+  "change": [
+    "Canonical native fixture paths on Windows.",
+    "Use the shared scoped I/O-fault preload for Windows storage failure; assert real native write fault and unchanged rejected label.",
+    "Retain physical directory obstruction on POSIX and explicitly force I/O mode for local verification.",
+    "Record obstruction only after successful rename; always close session even when obstruction cleanup fails.",
+    "Await child close rather than exit; log original error before cleanup."
+  ],
+  "tests": [
+    {
+      "mode": "io",
+      "exitCode": 0,
+      "seconds": 17.83,
+      "log": "/tmp/omp-restart-io-local.log",
+      "sha256": "dc967e0971c33fc2a48cf544e3e0c236b03080b55e7cdbb4ae5ea452cc33edca"
+    },
+    {
+      "mode": "directory",
+      "exitCode": 0,
+      "seconds": 18.5,
+      "log": "/tmp/omp-restart-directory-local.log",
+      "sha256": "dc967e0971c33fc2a48cf544e3e0c236b03080b55e7cdbb4ae5ea452cc33edca"
+    }
+  ],
+  "runtimeUnderTest": "Immutable pre-OAuth validation-worktree dist, same runtime as Windows eighth run; final full run will use rebuilt OAuth commit.",
+  "sourceSha256": "5e41f6a0c773306021baa6537d09e2fe1b77874ecbf0fb683d5cdb76c1ff7f61",
+  "limits": [
+    "Does not establish Windows success until rerun.",
+    "Does not alter production storage or SDK files."
+  ],
+  "validationBuild": [
+    {
+      "command": "npm run build",
+      "exitCode": 0,
+      "log": "/tmp/omp-oauth-validation-build.log",
+      "sha256": "5e517b060bdcea69305a2ac1cc79211e51caf4dae08ecbe4ff944e156baa51ac"
+    },
+    {
+      "command": "npm run typecheck",
+      "exitCode": 0,
+      "log": "/tmp/omp-oauth-validation-typecheck.log",
+      "sha256": "20eba569f73b594b29f88375d81dbe413bbe134c5008159c58f8cd696a6e4b77"
+    }
+  ]
+}

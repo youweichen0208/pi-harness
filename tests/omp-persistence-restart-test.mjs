@@ -1,6 +1,6 @@
 /** Durability failures must survive a fresh host process. No model requests. */
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, renameSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, renameSync, rmSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -36,13 +36,16 @@ if (inherited) {
 		await healthy.reopen(); assert.equal(healthy.state.persistence.failed, false);
 	} finally { await healthy.close(); }
 } else {
-	const root = mkdtempSync(join(tmpdir(), 'omp-restart-')), agent = join(root, 'omp/agent');
+	const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'omp-restart-'))), agent = join(root, 'omp/agent');
 	mkdirSync(agent, { recursive: true });
+	const injectIo = process.platform === 'win32' || process.env.HARNESS_TEST_PERSISTENCE_FAULT === 'io';
+	const faultMarker = join(root, 'history-io-fault.json');
+	const env = testEnv(injectIo ? { FIXTURE_HISTORY_IO_FAULT: faultMarker, BUN_OPTIONS: `--preload=${fileURLToPath(new URL('./fixtures/history-io-fault.mjs', import.meta.url))}` } : {});
 	writeFileSync(join(agent, 'config.yml'), JSON.stringify({ skills: { enabled: false }, retry: { enabled: false } }));
 	writeFileSync(join(agent, 'models.yml'), JSON.stringify({ providers: { fixture: { api: 'anthropic-messages', baseUrl: 'http://127.0.0.1:1', apiKey: 'fixture', models: [{ id: 'fixture', contextWindow: 200000 }] } } }));
 	try {
 		for (const externallyModified of [true, false]) {
-			const session = new OmpSession({ conversationId: 'first-host', dataDir: root, cwd: root, env: testEnv(), restricted: { systemPrompt: 'No model calls.', toolNames: [] }, onChange() {} });
+			const session = new OmpSession({ conversationId: 'first-host', dataDir: root, cwd: root, env, restricted: { systemPrompt: 'No model calls.', toolNames: [] }, onChange() {} });
 			let obstruction;
 			try {
 				await session.open(); await session.command('set_model', { provider: 'fixture', modelId: 'fixture' });
@@ -50,18 +53,39 @@ if (inherited) {
 				await session.command('set_label', { entryId, label: 'NATIVE_ORIGINAL' }); await session.refresh();
 				const file = session.state.sessionFile, original = readFileSync(file, 'utf8');
 				if (externallyModified) writeFileSync(file, original.replace('NATIVE_ORIGINAL', 'EXTERN_CHANGED!'));
-				else { obstruction = dirname(file); renameSync(obstruction, obstruction + '.saved'); writeFileSync(obstruction, 'storage unavailable'); }
+				else if (injectIo) {
+					writeFileSync(faultMarker, JSON.stringify({ file }));
+					// Native label persistence may reject its RPC or report the write
+					// failure asynchronously; both must stop this exact worker.
+					await Promise.allSettled([session.command('set_label', { entryId, label: 'MUST_NOT_PERSIST' })]);
+				} else {
+					const directory = dirname(file);
+					renameSync(directory, directory + '.saved'); obstruction = directory;
+					writeFileSync(obstruction, 'storage unavailable');
+				}
 				await wait(() => session.state.persistence?.failed && !session.generation, 'external failure');
+				if (!externallyModified && injectIo) {
+					const observed = JSON.parse(readFileSync(faultMarker + '.observed', 'utf8'));
+					assert.equal(observed.code, 'EIO'); assert.equal(observed.writeObserved, true);
+					assert.equal(observed.file, file, 'native I/O fault belongs only to selected history');
+					assert(!readFileSync(file, 'utf8').includes('MUST_NOT_PERSIST'));
+					rmSync(faultMarker);
+				}
 				await session.close();
 				if (obstruction) { rmSync(obstruction); renameSync(obstruction + '.saved', obstruction); obstruction = undefined; }
 				const child = spawn(ompTestExecutable, [fileURLToPath(import.meta.url), ...process.argv.slice(2)], { env: { ...testEnv(), ...(ompTestPackaged ? { ELECTRON_RUN_AS_NODE: '1' } : {}), OMP_RESTART_FIXTURE: JSON.stringify({ root, file, entryId, externallyModified }) }, stdio: ['ignore', 'pipe', 'pipe'] });
 				let output = ''; child.stdout.on('data', data => output += data); child.stderr.on('data', data => output += data);
 				const timeout = setTimeout(() => child.kill(), 30000);
-				try { const code = await new Promise((resolve, reject) => { child.once('error', reject); child.once('exit', resolve); }); assert.equal(code, 0, output); }
+				try { const code = await new Promise((resolve, reject) => { child.once('error', reject); child.once('close', resolve); }); assert.equal(code, 0, output); }
 				finally { clearTimeout(timeout); }
+			} catch (error) {
+				// Preserve the real assertion/setup error even if cleanup also fails.
+				console.error('Restart fixture failure before cleanup:', error); throw error;
 			} finally {
-				if (obstruction) { rmSync(obstruction); renameSync(obstruction + '.saved', obstruction); }
-				await session.close();
+				try {
+					rmSync(faultMarker, { force: true });
+					if (obstruction) { rmSync(obstruction, { force: true }); renameSync(obstruction + '.saved', obstruction); }
+				} finally { await session.close(); }
 			}
 		}
 		console.log('PASS native OMP external/storage failures survive fresh hosts, worker bootstrap rejects bypass, explicit recovery clears restrictions');
