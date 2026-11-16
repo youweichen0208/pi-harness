@@ -8,7 +8,7 @@ import { chromium, _electron as electron } from 'playwright-core';
 import { CHROME_PATH } from './lib/chrome.mjs';
 import { startIsolatedHarness } from './lib/isolated-server.mjs';
 import { testEnv } from './lib/test-env.mjs';
-const root = realpathSync(mkdtempSync(join(tmpdir(), 'omp-prompt-ui-'))), cwd = join(root, 'workspace'), data = join(root, 'data'), agent = join(data, 'omp/agent');
+const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'omp-prompt-ui-'))), cwd = join(root, 'workspace'), data = join(root, 'data'), agent = join(data, 'omp/agent');
 mkdirSync(cwd); mkdirSync(agent, { recursive: true }); mkdirSync('tests/scratch', { recursive: true });
 writeFileSync(join(cwd, 'AGENTS.md'), 'UI_CONTEXT_MARKER');
 writeFileSync(join(agent, 'SYSTEM.md'), 'UI_GLOBAL_MARKER');

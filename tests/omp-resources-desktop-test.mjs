@@ -49,11 +49,11 @@ try {
 	await page.getByText('所有设置', { exact: true }).click();
 	await page.getByRole('button', { name: 'Extensions', exact: true }).click();
 	await page.locator('.settings-skill-row', { hasText: 'desktop-fixture' }).waitFor();
-	assert.equal(await page.locator('footer.settings-paths code').innerText(), realpathSync(agent));
+	assert.equal(await page.locator('footer.settings-paths code').innerText(), realpathSync.native(agent));
 	if (process.argv[2] === '--browser') {
 		await page.getByRole('button', { name: '复制个人扩展目录', exact: true }).click();
 		await page.waitForFunction(() => window.copiedOmpPaths.length === 1);
-		assert.deepEqual(await page.evaluate(() => window.copiedOmpPaths), [realpathSync(join(agent, 'extensions'))]);
+		assert.deepEqual(await page.evaluate(() => window.copiedOmpPaths), [realpathSync.native(join(agent, 'extensions'))]);
 	}
 
 	await page.setViewportSize({ width: 390, height: 844 });

@@ -13,8 +13,8 @@ import { testEnv } from './lib/test-env.mjs';
 import { loadOmpTestModule, ompTestPackaged, ompTestExecutable } from './lib/omp-runtime-location.mjs';
 const { OmpPackages, createOmpPackageRunner } = await loadOmpTestModule('packages.js');
 const { installOmpRoutes } = await loadOmpTestModule('routes.js');
-const root = realpathSync(mkdtempSync(join(tmpdir(), 'omp-packages-ui-'))), dataDir = join(root, 'data'), agent = join(dataDir, 'omp/agent');
-const configRoot = realpathSync(mkdtempSync(join(homedir(), '.omp-harness-market-ui-'))), source = join(root, 'local-package'), name = 'omp-ui-native-package';
+const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'omp-packages-ui-'))), dataDir = join(root, 'data'), agent = join(dataDir, 'omp/agent');
+const configRoot = realpathSync.native(mkdtempSync(join(homedir(), '.omp-harness-market-ui-'))), source = join(root, 'local-package'), name = 'omp-ui-native-package';
 for (const path of [agent, source, configRoot]) mkdirSync(path, { recursive: true });
 const manifest = { name, version: '1.0.0', omp: { extensions: ['./entry.js'], features: { recommended: { default: true, description: 'Default feature' }, optional: { default: false, description: 'Optional feature' } }, settings: { token: { type: 'string', secret: true, default: 'DEFAULT_SECRET' }, count: { type: 'number', min: 0, max: 8, default: 2 }, enabled: { type: 'boolean', default: true } } } };
 writeFileSync(join(source, 'package.json'), JSON.stringify(manifest));
@@ -78,7 +78,7 @@ try {
 	if (!ompTestPackaged) {
 		await row.getByRole('button', { name: '复制路径', exact: true }).click();
 		await page.waitForFunction(() => window.copiedOmpPaths.length === 1);
-		assert.deepEqual(await page.evaluate(() => window.copiedOmpPaths), [realpathSync(source)]);
+		assert.deepEqual(await page.evaluate(() => window.copiedOmpPaths), [realpathSync.native(source)]);
 	}
 	const features = row.locator('.omp-package-features');
 	await features.locator('summary').click();
@@ -212,7 +212,7 @@ try {
 		const lookup = async target => fetch(`http://127.0.0.1:${apiPort}/api/omp-paths`, { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: origin }, body: JSON.stringify({ ...owner, target }) });
 		const target = { kind: 'plugin', id: plugin.id, scope: plugin.scope, path: plugin.paths[0] };
 		const response = await lookup(target); assert.equal(response.status, 200);
-		assert.equal((await response.json()).absolute, realpathSync(plugin.paths[0]));
+		assert.equal((await response.json()).absolute, realpathSync.native(plugin.paths[0]));
 		assert.equal((await lookup({ ...target, path: root })).status, 400);
 		assert.equal((await lookup({ ...target, scope: 'invalid' })).status, 400);
 	}
@@ -220,7 +220,7 @@ try {
 		const beforeCopy = await page.evaluate(() => window.copiedOmpPaths.length);
 		await projectRow.getByRole('button', { name: '复制路径', exact: true }).first().click();
 		await page.waitForFunction(count => window.copiedOmpPaths.length === count + 1, beforeCopy);
-		assert.equal(await page.evaluate(() => window.copiedOmpPaths.at(-1)), realpathSync(installedPlugins.find(plugin => plugin.scope === 'project').paths[0]));
+		assert.equal(await page.evaluate(() => window.copiedOmpPaths.at(-1)), realpathSync.native(installedPlugins.find(plugin => plugin.scope === 'project').paths[0]));
 	}
 	const projectFeatures = projectRow.locator('.omp-package-features');
 	await projectFeatures.locator('summary').click();

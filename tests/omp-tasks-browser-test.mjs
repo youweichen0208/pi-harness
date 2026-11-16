@@ -7,7 +7,7 @@ import { chromium, _electron as electron } from 'playwright-core';
 import { CHROME_PATH } from './lib/chrome.mjs';
 import { startIsolatedHarness } from './lib/isolated-server.mjs';
 import { testEnv } from './lib/test-env.mjs';
-const base = realpathSync(mkdtempSync(join(tmpdir(), 'omp-task-ui-'))), root = join(base, 'workspace'), data = join(base, 'data'), agent = join(data, 'omp/agent');
+const base = realpathSync.native(mkdtempSync(join(tmpdir(), 'omp-task-ui-'))), root = join(base, 'workspace'), data = join(base, 'data'), agent = join(data, 'omp/agent');
 mkdirSync(root);
 mkdirSync(agent, { recursive: true });
 writeFileSync(join(root, 'note.md'), '# Task fixture\n\nWiki content.\n');

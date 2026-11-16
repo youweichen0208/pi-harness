@@ -9,7 +9,7 @@ import { chromium, _electron as electron } from 'playwright-core';
 import { CHROME_PATH } from './lib/chrome.mjs';
 import { listenIsolated, startIsolatedHarness } from './lib/isolated-server.mjs';
 import { testEnv } from './lib/test-env.mjs';
-const root = realpathSync(mkdtempSync(join(tmpdir(), 'omp-mcp-ui-'))), cwd = join(root, 'workspace'), data = join(root, 'data'), agent = join(data, 'omp/agent');
+const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'omp-mcp-ui-'))), cwd = join(root, 'workspace'), data = join(root, 'data'), agent = join(data, 'omp/agent');
 mkdirSync(cwd); mkdirSync(agent, { recursive: true });
 writeFileSync(join(agent, 'models.yml'), JSON.stringify({ providers: { fixture: { api: 'anthropic-messages', apiKey: 'FIXTURE_MODEL_KEY', baseUrl: 'http://127.0.0.1:1', models: [{ id: 'fixture' }] } } }));
 writeFileSync(join(agent, 'config.yml'), JSON.stringify({ skills: { enabled: false } }));

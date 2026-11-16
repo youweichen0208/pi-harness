@@ -12,7 +12,7 @@ scrubHostEnv();
 for (const key of Object.keys(process.env)) if (/API_KEY|TOKEN|SECRET|PASSWORD|^ANTHROPIC_|^OPENAI_/.test(key)) delete process.env[key];
 const { OmpClientSession } = await loadOmpTestModule('chat-service.js');
 const { ClientStateStore } = await import(pathToFileURL(join(ompTestRoot, 'dist/server/client-state.js')).href);
-const root = realpathSync(mkdtempSync(join(tmpdir(), 'omp-skill-history-'))), agent = join(root, 'omp/agent');
+const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'omp-skill-history-'))), agent = join(root, 'omp/agent');
 const skillDir = join(agent, 'skills', 'fixture');
 mkdirSync(skillDir, { recursive: true });
 const skillBody = 'NATIVE_SKILL_BODY\n'.repeat(200);

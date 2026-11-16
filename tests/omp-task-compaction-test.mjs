@@ -17,7 +17,7 @@ const { OmpClientSession } = await loadOmpTestModule('chat-service.js');
 const { OmpSession } = await loadOmpTestModule('session.js');
 const { readOmpToolOutput } = await loadOmpTestModule('runtime.js');
 const { ClientStateStore } = await import(pathToFileURL(join(ompTestRoot, 'dist/server/client-state.js')).href);
-const root = realpathSync(mkdtempSync(join(tmpdir(), 'omp-task-compaction-'))), agent = join(root, 'omp/agent');
+const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'omp-task-compaction-'))), agent = join(root, 'omp/agent');
 mkdirSync(agent, { recursive: true }); writeFileSync(join(root, 'task-evidence.txt'), 'NATIVE_CHILD_READ_EVIDENCE');
 const requests = [], readers = []; let client;
 const provider = createServer(async (req, res) => {

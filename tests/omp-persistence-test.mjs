@@ -13,7 +13,7 @@ for (const key of Object.keys(process.env)) if (/API_KEY|TOKEN|SECRET|PASSWORD|^
 const { OmpClientSession } = await loadOmpTestModule('chat-service.js');
 const { OmpSession } = await loadOmpTestModule('session.js');
 const { ClientStateStore } = await import(pathToFileURL(join(ompTestRoot, 'dist/server/client-state.js')).href);
-const root = realpathSync(mkdtempSync(join(tmpdir(), 'omp-persistence-'))), agent = join(root, 'omp/agent');
+const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'omp-persistence-'))), agent = join(root, 'omp/agent');
 const workA = join(root, 'a'), workB = join(root, 'b');
 for (const path of [agent, workA, workB]) mkdirSync(path, { recursive: true });
 const requests = [], events = [], holds = new Map();

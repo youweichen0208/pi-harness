@@ -8,7 +8,8 @@ import { loadOmpTestModule } from './lib/omp-runtime-location.mjs';
 import { testEnv } from './lib/test-env.mjs';
 import { listenIsolated } from './lib/isolated-server.mjs';
 const { OmpSession } = await loadOmpTestModule('session.js');
-const root = realpathSync(mkdtempSync(join(tmpdir(), 'omp-prompt-'))), agent = join(root, 'omp/agent'), cwd = join(root, 'workspace');
+// Native canonicalization matches Node async realpath, including Windows 8.3 aliases.
+const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'omp-prompt-'))), agent = join(root, 'omp/agent'), cwd = join(root, 'workspace');
 mkdirSync(agent, { recursive: true }); mkdirSync(cwd);
 writeFileSync(join(cwd, 'AGENTS.md'), 'CONTEXT_INITIAL_MARKER');
 let requests = 0;
