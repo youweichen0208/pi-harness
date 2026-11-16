@@ -22,7 +22,7 @@
     "Host automatic replay of textual tool descriptions is intentionally absent under the OMP boundary.",
     "Old forced 128000 output limits and automatic cross-client Pi model alias binding do not apply to OMP defaults."
   ],
-  "testDisposition": "Complete local v78 122/122, no skips, exit 0 (omp-smoke-current.json), including task compaction and deployment. Windows path-check normalization followed this snapshot and passed a separate local regression; Windows CI acceptance remains pending. Docker and macOS package results are independent evidence.",
+  "testDisposition": "Complete local v78 122/122 after process-tree fixture cleanup, no skips, exit 0; see omp-smoke-current.json. Later Windows I/O fault fixture verified separately. Linux x64 desktop gates completed at 9d0a7df.",
   "platform": "darwin-arm64; Windows original-task acceptance remains outstanding",
   "fullSmokeBaseline": "omp-smoke-current.json: v78 122/122, exit 0, no skips; Windows build script changes verified separately afterward.",
   "retiredExtensionRequests": "Old Pi actions now return 410 without executing an OMP command; a native startup counter reproduced and verifies the stopped-worker revival fix.",
@@ -146,7 +146,7 @@
     "evidence": "omp-desktop-current.json",
     "verified": "Fresh macOS arm64 DMG/ZIP; 31 packaged integration entries plus the 12-scenario reconnect entry; DMG copy/start/upgrade/signature and six desktop entries have passing results. MCP native-dialog fixture failed first and passed after correction; Web branch also passed. Native compaction fixture now enforces target Bun/SDK ownership.",
     "remaining": [
-      "Windows/Linux desktop packages and original Windows DeepSeek/gateway task",
+      "Windows desktop packages and original Windows DeepSeek/gateway task",
       "Native Task internal writer guard",
       "Native MCP OAuth write-back CAS and tool-level challenge handling",
       "Native CLI JSON/print exit",
@@ -156,11 +156,11 @@
     "platformValidation": {
       "windows": {
         "evidence": "omp-windows-validation.json",
-        "status": "Sixth run: corrected Task compaction and later source gates passed; reasoning fixture cleanup failed. Process-tree cleanup locally reproduced and corrected; Windows revalidation pending."
+        "status": "Seventh run passed process cleanup and both repetition protocols, then failed persistence fault setup/cleanup. Corrected I/O fixture passed locally, pending Windows."
       },
       "linux": {
         "evidence": "omp-linux-validation.json",
-        "status": "Second run: source/build/package integration and six desktop UI entries passed; AppImage Unicode-path server start passed, then old compaction fixture binding failed. Corrected fixture revalidation pending."
+        "status": "Third run completed: source/package/UI/Unicode extracted AppImage/deb/previous-data gates passed; test packages uploaded."
       }
     }
   },

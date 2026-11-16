@@ -1,5 +1,5 @@
 {
-  "status": "Sixth Windows validation: compaction and later source gates passed; reasoning fixture cleanup failed",
+  "status": "completed/failure",
   "branch": "feat/omp-validation-20261116",
   "attempts": [
     {
@@ -147,6 +147,23 @@
         "path": "/tmp/omp-windows-sixth-job.log",
         "sha256": "51de4b92e4a032b30bf5b952d52814765a348d6ff61dced301638b071ef18bb2"
       }
+    },
+    {
+      "commit": "9d0a7df08c55531d9e4cbedd848a0f8a9ed2d195",
+      "runId": 43826720006,
+      "jobId": 133162197673,
+      "runUrl": "https://github.com/youweichen0208/pi-harness/actions/runs/43826720006",
+      "status": "completed",
+      "conclusion": "failure",
+      "lastObservedStep": "Typecheck and protocol boundary",
+      "purpose": "Verify selected-root SDK binding and awaited owned fixture process-tree cleanup; retain all source/package/UI/install gates.",
+      "failedTest": "tests/omp-persistence-test.mjs:100",
+      "failure": "Cleanup unconditionally treated blockedDirectory as a replacement file; EISDIR masked the earlier directory-block setup error.",
+      "log": {
+        "path": "/tmp/omp-windows-seventh-job.log",
+        "sha256": "0a6adaeac4f8fc491f2ee4e156972f0d3f2a5151e4e1fb6625ded43550de512f"
+      },
+      "verified": "Owned process-tree regression and both Anthropic/OpenAI repetition tests passed on Windows; native retry/recovery and Playground drain also passed."
     }
   ],
   "fix": "Normalize TypeScript filenames through native path.resolve before containment checks; require server/index.ts in the source graph. Regression checks source counts and nested transitive output, and runs before typecheck in independent Windows CI.",
@@ -171,9 +188,11 @@
     "terminalChecksPassed": 43,
     "windowsVerification": "The original history-list assertion passes in all three terminal rounds. Exact path diagnostics pending completed logs."
   },
-  "lastObservedAt": "2026-11-16T07:48:27.954033+00:00",
-  "lastObservedStatus": "completed/failure: reasoning fixture database locked during cleanup",
-  "runId": 43824244004,
-  "runUrl": "https://github.com/youweichen0208/pi-harness/actions/runs/43824244004",
-  "commit": "6552abb5e0283a67cc071e7dcd84374c208c8bab"
+  "lastObservedAt": "2026-11-16T08:15:07.979052+00:00",
+  "lastObservedStatus": "completed/failure: persistence fixture cleanup masked earlier fault injection",
+  "runId": 43826720006,
+  "runUrl": "https://github.com/youweichen0208/pi-harness/actions/runs/43826720006",
+  "commit": "9d0a7df08c55531d9e4cbedd848a0f8a9ed2d195",
+  "jobId": 133162197673,
+  "lastObservedStep": "Verify OMP runtime, configuration and entry (plain Node)"
 }

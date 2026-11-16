@@ -8,11 +8,11 @@
 
 当前新增子任务完整输出下载：保留调用归属、从 OMP 共享输出目录取原始字节，覆盖嵌套任务、兄弟同名调用、停止后下载和历史恢复；下载入口放在长预览前。最终构建、类型检查、1079 项单测（1 跳过）、6/6 关联检查与真实窄屏浏览器通过，见 [子任务输出记录](review-data/omp-task-output.json)。该输出下载记录早于本轮压缩目录修复；原生 Task 内部写入保护仍未完成。
 
-最新完整执行的 v78 基线为 **122/122、无跳过、退出码 0**，耗时 1728 秒，见 [全量记录](review-data/omp-smoke-current.json)。包含子任务压缩目录、输出下载及部署入口变更；运行结束时 1499 个候选源文件与原始快照一致。Windows 路径检查修复随后单独验证，不回填为这轮全量测试内容。较早 120/120 记录保留在 [历史基线](review-data/omp-smoke-task-output.json)。
+最新完整执行的 v78 基线为 **122/122、无跳过、退出码 0**，耗时 1706 秒，见 [全量记录](review-data/omp-smoke-current.json)。包含指定应用根目录的 SDK 解析与共享测试进程树清理；1352 个受检输入在运行结束时未变。随后新增的 Windows 持久化 I/O 故障夹具有独立的本地验证，不回填全量；较早的 1728 秒基线保留在 [上一轮记录](review-data/omp-smoke-pre-fixture-cleanup.json)。
 
 上一轮 v78 基线为 **117/119、无跳过、退出码 1**，包含请求诊断和 `/new` 修复，见 [全量记录](review-data/omp-smoke-request-diagnostics.json)。失败项为扩展用例把设置消息当作重载完成，以及编辑插件测试未准备依赖、退出清理与后台安装相遇。两项已修正测试并通过专项验证：[重载等待](review-data/omp-extension-reload-readiness.json)、[离线插件夹具](review-data/omp-editor-fixtures.json)。不把专项通过回填全量；生产插件安装器的退出取消未修复。
 
-当前冒烟清单 **122 项，已在 macOS 隔离候选完整通过**。Docker 与 macOS 安装包为独立验证。Windows 路径兼容修正后，类型检查、构建、三轮终端及提示词检查已有通过结果，见 [路径记录](review-data/omp-windows-native-paths.json)。第六轮已通过修正后的原生 Task 压缩测试，随后复读测试在删除临时数据库时失败；已复现测试停止函数仅退出父进程而留下子进程，并修正进程树清理，本地进程隔离及源码／包内两种协议复验通过，Windows 复验待执行，见 [清理记录](review-data/omp-fixture-process-cleanup.json)。Linux 第二轮源码、桌面构建、包内集成和六项桌面界面通过；AppImage 中文路径启动通过，随后旧压缩夹具的 SDK 归属断言失败，将使用已修正的解析方式复验，见 [绑定记录](review-data/omp-compaction-runtime-binding.json)。完整运行记录见 [Windows](review-data/omp-windows-validation.json) 和 [Linux](review-data/omp-linux-validation.json)。Windows 原故障／真实网关、原生 OAuth 写回与工具级授权、Task 存储保护、旧历史清理和 Windows/Linux 当前安装包验收仍未完成。以下段落保留早期实施记录，不代表当前完整验收结论。
+当前冒烟清单 **122 项，已在 macOS 隔离候选完整通过**。Windows 第七轮已通过进程清理、两种协议复读、恢复和排空检查，随后持久化夹具清理失败掩盖了故障设置错误；现保留 POSIX 目录故障，并为 Windows 增加实际命中原生 writer 的 I/O 故障注入，本地两种路径均通过，真机复验待执行，见 [持久化夹具记录](review-data/omp-persistence-windows-fixture.json)。Linux 第三轮全部门禁通过，包括包内集成、六项桌面界面、中文路径 AppImage 解压启动／压缩、deb 安装和旧版隔离数据升级，测试包已上传，见 [Linux 记录](review-data/omp-linux-validation.json)。AppImage 解压验证不代表 FUSE 挂载验收。完整 Windows 记录见 [对应清单](review-data/omp-windows-validation.json)。Windows 原故障／真实网关、原生 OAuth 写回与工具级授权、Task 存储保护、旧历史清理和 Windows 安装包验收仍未完成。以下段落保留早期实施记录，不代表当前完整验收结论。
 
 较早 v78 全量基线执行 **117/118 通过、退出码 1**，见 [全量记录](review-data/omp-smoke-v78.json)。失败的无模型 `/new` 已通过原生配置锁固定时序复现并修复：会话切换与后台元数据同步串行，等待中的 Stop 仍撤销切换；专项与浏览器证据见 [竞态记录](review-data/omp-new-session-race.json)。这不是重新跑出的全量全绿。
 
@@ -161,15 +161,18 @@ OAuth 桥单测覆盖授权链接过滤、过期输入拒绝、取消及晚到�
 
 单测覆盖协议重组、异常退出、超时不重放、关闭、工具取消、越会话/过期事件和异常脱敏。该集成测试已加入零 token 冒烟清单；macOS arm64 目录包已通过本机验证，Windows/Linux 尚未验证。
 
-## 后续实施清单
+## 迁移验收清单（2026-11-16）
 
-1. 主聊天入口及原生嵌套 task 独立停止已接入；继续补齐任务历史恢复、Wiki/工具卡入口、会话树、队列及扩展 UI 的剩余集成。
-2. 实现 OMP 配置/认证管理进程，保留来源发现，输出额度遵循 OMP 模型默认值与显式覆盖，凭据仅在服务端。默认目录迁移须预览和显式导入。
-3. 完善 Wiki、会话树和压缩接入；当前采用 v59 wire shape，新增消息时修改 `protocol.ts` 并升级版本；不能把原生含 headers 的模型对象直接下发浏览器。
-4. 重做代理任务/工具/设置 UI，验证数据库与 SSH AI 工具并完成 Playground 剩余回归；删除旧子代理和 Pi 内置扩展路径。
-5. 按用户最新要求清除旧历史；旧桌面版退出后按明确的 Pi 历史目录执行，保留 OMP 对话、配置、凭据或项目。
-6. Pi SDK 已移出生产依赖，暂留 devDependencies 供尚未退休的测试；继续删除旧代码与替换失效测试。`check:engine` 守护生产入口和 OMP worker 不再导入 Pi。
-7. 完成三平台 Bun/原生库打包和离线启动、退出/后台任务清理、现有保留功能回归；完整试用版验收通过后再进入正式发布。
+以下按已批准的迁移范围核对当前状态；后面的按日期记录保留当时结果，不作为当前待办。这里的局部通过不能代替平台或真实网关验收。
+
+1. **主入口与代理功能：已接入，内部存储保护未完成。** 主聊天、Wiki、SSH 与 Playground 均使用 OMP；原生任务派发、嵌套停止、历史恢复、工具卡、队列和扩展交互已有本地回归。Task 压缩后目录和输出下载见 [压缩记录](review-data/omp-task-compaction.json)、[输出记录](review-data/omp-task-output.json)。原生 Task 内部 writer 不继承父会话存储保护，仍有[失败诊断](omp-task-storage-gap.md)。
+2. **配置、模型与认证：主要管理功能已接入，认证验收仍有缺口。** models.yml、配置／来源发现、技能、扩展、包、MCP 与提示词使用 OMP 公共接口。输出额度使用原生默认值，显式覆盖可保留，应用不再强制 128000。真实供应商账号尚未验收；MCP 工具级授权与原生 OAuth 配置写回冲突未解决，见 [工具授权](review-data/omp-mcp-tool-auth-probe.json)、[写回冲突](review-data/omp-mcp-auth-conflict.json)。不自动导入旧凭据或旧历史。
+3. **Wiki、会话树与压缩：本地回归通过，平台验收分开记录。** 当前协议为 v78，协议单源与敏感字段投影检查保留；分支、摘要取消、编辑重问、停止后恢复、压缩目录和 Wiki 独立窗口已有验证，见 [宿主回归清单](review-data/omp-host-regression-audit.json)。原生 RPC 不支持的历史 ask 结果重答不能宣称与 TUI 等价。
+4. **保留的业务功能与界面：本地迁移回归通过。** Workspace、文档、附件、文件、终端、Git、数据库、SSH 和 Playground 保留；数据库与远端工具沿用会话授权和受限工具边界。真实本地 PostgreSQL/MySQL、SSH 与浏览器检查见 [数据库记录](review-data/omp-database-live.json) 和宿主回归清单。其他真实供应商／远端数据库环境的通过情况不能由这些夹具推断。
+5. **旧历史：部分已清理。** 本机 Web 目录已删除 22 个旧 Pi 历史文件；旧桌面应用仍运行，桌面及共享 Pi 历史待其退出后删除。继续保留 OMP 对话、配置、凭据与项目；不恢复已取消的旧历史导入方案。
+6. **Pi 代码与依赖退休：已实施并有边界回归。** Pi SDK 已从生产和开发依赖移除；旧代理实现与专属测试按 [退休清单](omp-retirement.json) 删除或替换。`check:engine` 检查生产导入、传递类型、依赖和构建产物；不是仅凭入口改名判断迁移成功。
+7. **构建、回归与交付：尚未完成三平台验收。** macOS arm64 测试包、Linux arm64 容器、Linux x64 桌面全部门禁及本地新一轮 122/122 全量回归已有通过证据。Windows 第七轮在后续持久化夹具失败，修正后的真机验收待完成；见 [Windows](review-data/omp-windows-validation.json)、[Linux](review-data/omp-linux-validation.json)、[macOS](review-data/omp-desktop-current.json) 和 [全量基线](review-data/omp-smoke-current.json)。三平台 Bun／原生库、离线启动、退出及后台任务清理、中文路径、安装／旧版数据验收均须按实际产物确认。先交付验收后的测试包，再进入正式发布；尚未替换已安装应用或正式发布。
+8. **最初 Windows DeepSeek 问题：真实任务验收缺失。** 还需要原故障提示词、项目版本／初始文件、Windows 网关与模型 ID，以及主／子任务设置。按原计划对故障任务、多轮工具调用、长历史继续分别重复三次，记录完成、首次工具时间、耗时及 token；现有模拟协议、诊断和保护检查不能替代此项。仅 watchdog 中止、截断或隐藏 thinking 不计作修复成功。
 
 旧历史清理使用 `node scripts/clear-pi-history.mjs --agent-dir <旧Pi目录> --data-dir <Web数据目录> --data-dir <Desktop数据目录>` 预览；追加 `--apply` 执行。工具只接受显式目录，不在升级时自动运行。它核对原生 JSONL 会话头、拒绝符号链接，并在删除前检查全部文件指纹；只删除对话及相关元数据，保留 Wiki 文档修订、项目、上传、配置及防重复发送的共享回执。执行前须正常关闭使用这些目录的 Pi 客户端；macOS/Linux 会拒绝仍可连接的服务控制 socket。`tests/clear-pi-history-test.mjs` 覆盖实际删除与保留边界。
 

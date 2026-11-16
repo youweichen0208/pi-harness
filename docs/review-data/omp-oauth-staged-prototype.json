@@ -1,0 +1,77 @@
+{
+  "status": "Isolated public-API staging prototype passed seven native OAuth scenarios; not adopted into production",
+  "candidate": "/private/var/folders/41/07yyp3_12jddkkthmflqkbgw0000gn/T/omp-oauth-staged-write-pl620eob",
+  "baselineCommit": "9d0a7df08c55531d9e4cbedd848a0f8a9ed2d195",
+  "publicSeam": "FoundMcpServer.filePath redirects native config write to staging; native PKCE, client selection, credentials and persistence policy stay in reauthorizeMcpServer. Host commit compares the definition under native withFileLock and uses writeMCPConfigFile.",
+  "red": {
+    "log": "/tmp/omp-oauth-staged-red.log",
+    "exitCode": 1,
+    "sha256": "6602dc0f75cdf4cbb419de318702431a538aedcaa175541377249c071b1c0190"
+  },
+  "results": [
+    {
+      "mode": "same-server",
+      "exitCode": 0,
+      "log": "/tmp/omp-oauth-staged-same-server.log",
+      "sha256": "26cdcb96182b8fe63be25007aa41f3eea7219bf95e66fdff6c220127b7484f41"
+    },
+    {
+      "mode": "control",
+      "exitCode": 0,
+      "log": "/tmp/omp-oauth-staged-control.log",
+      "sha256": "5d2157279643a3aa40c9cb5bee5c2b90f00f5b7469d0915b1edccab087b9eef4"
+    },
+    {
+      "mode": "peer",
+      "exitCode": 0,
+      "log": "/tmp/omp-oauth-staged-peer.log",
+      "sha256": "84d7b075d4bacf938e6ca984dfea87c3356182c4f098d8daa42e4dd45e5f3df2"
+    },
+    {
+      "mode": "definition-only",
+      "exitCode": 0,
+      "log": "/tmp/omp-oauth-staged-definition-only.log",
+      "sha256": "c6ad1db777dd9f54e50220c7ef86e743a0b01744714caa01f2a00585528d94cd"
+    },
+    {
+      "mode": "shadow",
+      "exitCode": 0,
+      "log": "/tmp/omp-oauth-staged-shadow.log",
+      "sha256": "2f936e04c6d0156d47293962776dca4ec9d0ebe90bb2207208562280434d40c4"
+    },
+    {
+      "mode": "global-deny",
+      "exitCode": 0,
+      "log": "/tmp/omp-oauth-staged-global-deny.log",
+      "sha256": "1a04d438f2e2250be422d818457b419b420fb09dd6c8dd1799badc268aa976aa"
+    },
+    {
+      "mode": "discovered",
+      "exitCode": 0,
+      "log": "/tmp/omp-oauth-staged-discovered.log",
+      "sha256": "7f9d51b4dacad2c20281db3b3c135725e72be21477e68b9aa63687abddc4db9e"
+    }
+  ],
+  "verifiedCompiledModule": {
+    "path": "/private/var/folders/41/07yyp3_12jddkkthmflqkbgw0000gn/T/omp-oauth-staged-write-pl620eob/dist/server/omp/mcp-auth.js",
+    "sha256": "b3a159dd0557bb9e5d38a55410a253ce4c4a68f46e84a255eabe7f7f07b531f7"
+  },
+  "outcome": "Same-server edit preserved; configuration_changed, zero obsolete reconnects, no auth binding written into edited definition. Control and peer cases still complete.",
+  "unbuiltFollowups": [
+    "staging directory under agentDir for per-fixture cleanup assertions",
+    "no initial credential/config copy into staging",
+    "publish terminal auth status after staged file cleanup"
+  ],
+  "remaining": [
+    "cancellation and staging cleanup",
+    "lock-contended selected-definition and peer edits",
+    "bearer-policy changes",
+    "review and production adoption"
+  ],
+  "limits": [
+    "Local loopback issuer only; no real accounts or Windows coverage.",
+    "Native credentials may be saved before conflict; no rollback or credential deletion claimed.",
+    "No SDK/node_modules edits; production and current platform candidates unchanged.",
+    "Cancellation, lock contention, lifecycle and broader regression required before adoption."
+  ]
+}

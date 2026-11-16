@@ -1,48 +1,31 @@
 {
-  "status": "Complete local 122-entry baseline passed; Windows path-check fix verified separately afterward",
+  "status": "Complete local 122-entry baseline passed after shared fixture process cleanup; later persistence I/O fixture has separate checks",
   "platform": "darwin-arm64",
   "protocol": 78,
   "omp": "18.20.0",
   "bun": "1.4.4",
   "source": {
-    "candidate": "/private/var/folders/41/07yyp3_12jddkkthmflqkbgw0000gn/T/omp-full-122-2w4y5zvy",
-    "filesCompared": 1499,
-    "fingerprintSha256": "e722703eae542c4d8cbea875b0d58773c5b4a3fd682ac153a557e0002746e426",
-    "fingerprintMethod": "sha256 of ordered path, NUL, binary sha256(file) tuples",
-    "differencesAfterRun": {
-      "root": [],
-      "candidate": []
-    }
+    "candidate": "/Users/youweichen/projects/pi-harness/.claude/worktrees/feat-omp-validation-20261116",
+    "commit": "9d0a7df08c55531d9e4cbedd848a0f8a9ed2d195",
+    "filesCompared": 1352,
+    "fingerprintSha256": "0b4020d7a95e0dc792b2ba443b3a03b2748790f61ac78c260612d48acc03a612",
+    "fingerprintMethod": "sha256 of git ls-files order: path, NUL, binary sha256(file); docs and AGENTS.md excluded",
+    "differencesAfterRun": []
   },
   "command": "npm run test:smoke",
   "verification": [
     {
-      "name": "lockfile",
-      "exitCode": 0,
-      "seconds": 0.21,
-      "path": "/tmp/omp-full-122-lockfile.log",
-      "sha256": "57464156463011ca899a96fd77ed3d7d8b7548d5fe47bf86ce1e46fac89b5bd9"
-    },
-    {
       "name": "typecheck",
+      "path": "/tmp/omp-fixture-cleanup-typecheck.log",
       "exitCode": 0,
-      "seconds": 12.4,
-      "path": "/tmp/omp-full-122-typecheck.log",
       "sha256": "20eba569f73b594b29f88375d81dbe413bbe134c5008159c58f8cd696a6e4b77"
     },
     {
-      "name": "build",
-      "exitCode": 0,
-      "seconds": 12.02,
-      "path": "/tmp/omp-full-122-build.log",
-      "sha256": "b99b74e35db9f225d7e3d6d76f27ead42a7e765903b208930ec3cc597facfe27"
-    },
-    {
       "name": "smoke",
+      "path": "/tmp/omp-fixture-cleanup-full-smoke.log",
       "exitCode": 0,
-      "seconds": 1728.36,
-      "path": "/tmp/omp-full-122-smoke.log",
-      "sha256": "c7df4e81848e6117f6877336c43d263e487d023d4c60cfba91109688f547b3bf"
+      "sha256": "d869535f8346a14e745e546226f558e6b9570818a14f446440151fb40ed67759",
+      "seconds": 1706.426049
     }
   ],
   "counts": {
@@ -176,18 +159,18 @@
     "vscode-editor-plugin-test"
   ],
   "failed": [],
-  "scope": "Includes task-compaction catalogue, CLI deployment and corrected packaged test fixtures. Windows build guard normalization and independent validation workflow were edited only in another worktree during this run; their targeted regression is separate. No real gateway or provider account was used.",
+  "scope": "Includes explicit-root native SDK fixture resolution and shared test process-tree cleanup. No production runtime source changed since the prior complete build baseline; uses isolated worktree build. New Windows I/O fault fixture was developed in the root checkout while this immutable run completed and is not included. No real provider account or gateway requests.",
   "remaining": [
     "Windows source and packaged acceptance",
     "Original Windows DeepSeek task and repeated representative tasks",
     "Native Task internal writer protection",
     "Native MCP OAuth write-back CAS and tool-level challenges",
-    "Active legacy desktop history cleanup",
-    "Linux desktop package acceptance"
+    "Active legacy desktop history cleanup"
   ],
   "protectedPids": [
     23786,
     62015
   ],
-  "cleanup": "All four stages ended with exit 0; no candidate processes remained; only the owned temporary candidate was deleted. Protected Node service and installed desktop remained running."
+  "cleanup": "Runner finished exit 0; worktree retained for Windows/Linux validation. Root dist and installed application were not replaced.",
+  "previousBaseline": "omp-smoke-pre-fixture-cleanup.json"
 }

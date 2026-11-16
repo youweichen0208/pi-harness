@@ -1,5 +1,5 @@
 {
-  "status": "Owned-process cleanup corrected in test helper; local process and two-protocol source/package regressions passed; Windows verification pending",
+  "status": "Owned-process cleanup passed on real Windows; local source/package and process regressions passed; full migration remains incomplete",
   "observedFailure": {
     "runId": 43824244004,
     "jobId": 133154171579,
@@ -51,7 +51,16 @@
       "320 script environment checks passed",
       "both modified workflow YAML files parsed",
       "git diff --check passed"
-    ]
+    ],
+    "windows": {
+      "runId": 43826720006,
+      "jobId": 133162197673,
+      "processRegression": "5/5 passed",
+      "reasoningRegression": "Both Anthropic and OpenAI passed",
+      "laterFailure": "Unrelated persistence fixture directory cleanup",
+      "log": "/tmp/omp-windows-seventh-job.log",
+      "sha256": "0a6adaeac4f8fc491f2ee4e156972f0d3f2a5151e4e1fb6625ded43550de512f"
+    }
   },
   "scope": "Tests and CI only. No SDK/runtime source edits, retry suppression or skipped assertions. Actual Windows taskkill behavior remains subject to next runner execution."
 }

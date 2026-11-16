@@ -1,0 +1,51 @@
+{
+  "status": "Windows persistence fixture corrected; local directory and injected-I/O paths passed; Windows revalidation pending",
+  "observedFailure": {
+    "runId": 43826720006,
+    "jobId": 133162197673,
+    "log": {
+      "path": "/tmp/omp-windows-seventh-job.log",
+      "exitCode": 1,
+      "sha256": "0a6adaeac4f8fc491f2ee4e156972f0d3f2a5151e4e1fb6625ded43550de512f"
+    },
+    "symptom": "Unconditional restoration treated an unmodified directory as the injected replacement file and threw EISDIR, masking the original fault-setup error. Original underlying error was not preserved."
+  },
+  "changes": [
+    "Track the blocked directory only after its rename succeeds, so cleanup cannot remove the original directory as a file.",
+    "Windows uses a test-only Bun preload to inject EIO into the selected transcript native fs.writeSync call; active writer must actually encounter that fault.",
+    "After the first write fault, subsequent reads including Bun.file fail until the marker is explicitly removed. This preserves refusal to reopen while storage remains unavailable.",
+    "Keep the original directory obstruction path on POSIX, and permit an explicit local I/O mode for regression.",
+    "Retain competing writer relocation, scoped failure, unaffected foreground, cleared queue, no replay, explicit repair, and missing/empty-history assertions."
+  ],
+  "verification": {
+    "directoryFault": {
+      "path": "/tmp/omp-persistence-directory-local.log",
+      "exitCode": 0,
+      "sha256": "03fab6b9624d71f02ec54fbe76503d58d2bdee511baa8c04ceb44c9379852ca2"
+    },
+    "injectedIo": {
+      "path": "/tmp/omp-persistence-io-complete-local.log",
+      "exitCode": 0,
+      "sha256": "03fab6b9624d71f02ec54fbe76503d58d2bdee511baa8c04ceb44c9379852ca2"
+    }
+  },
+  "intermediateFailures": [
+    {
+      "log": {
+        "path": "/tmp/omp-persistence-io-local.log",
+        "exitCode": 1,
+        "sha256": "9468b6460abce2f3b0266e021bc968f52d7c617f5b05ca33ced702ca0286faec"
+      },
+      "finding": "Patching default fs exports did not affect Bun namespace imports; the writer fault did not occur. Replaced with the public bun:test module mocking seam."
+    },
+    {
+      "log": {
+        "path": "/tmp/omp-persistence-io-module-local.log",
+        "exitCode": 1,
+        "sha256": "3df28f30dccb6c609ca4fb792c5e3b76d610cdc61ae0ed807c3f572ea03be164"
+      },
+      "finding": "Native writer fault occurred but restore still succeeded through Bun.file. Added the explicit read-fault path after the observed write failure; retained the original reopen assertion."
+    }
+  ],
+  "scope": "Test-only simulated I/O failure; no production or SDK changes, no claim to reproduce the Windows physical rename failure or original DeepSeek task."
+}

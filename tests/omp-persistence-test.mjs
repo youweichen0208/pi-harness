@@ -4,7 +4,7 @@ import { createServer } from 'node:http';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, renameSync, rmSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { pathToFileURL, fileURLToPath } from 'node:url';
 import { loadOmpTestModule, ompTestRoot } from './lib/omp-runtime-location.mjs';
 import { listenIsolated } from './lib/isolated-server.mjs';
 import { scrubHostEnv } from './lib/test-env.mjs';
@@ -14,6 +14,14 @@ const { OmpClientSession } = await loadOmpTestModule('chat-service.js');
 const { OmpSession } = await loadOmpTestModule('session.js');
 const { ClientStateStore } = await import(pathToFileURL(join(ompTestRoot, 'dist/server/client-state.js')).href);
 const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'omp-persistence-'))), agent = join(root, 'omp/agent');
+// Do not depend on renaming an open native transcript's directory on Windows.
+// Exercise the same failed-persistence contract through an explicit I/O fault.
+const injectIo = process.platform === 'win32' || process.env.HARNESS_TEST_PERSISTENCE_FAULT === 'io';
+const faultMarker = join(root, 'history-io-fault.json');
+if (injectIo) {
+	process.env.FIXTURE_HISTORY_IO_FAULT = faultMarker;
+	process.env.BUN_OPTIONS = `--preload=${fileURLToPath(new URL('./fixtures/history-io-fault.mjs', import.meta.url))}`;
+}
 const workA = join(root, 'a'), workB = join(root, 'b');
 for (const path of [agent, workA, workB]) mkdirSync(path, { recursive: true });
 const requests = [], events = [], holds = new Map();
@@ -67,10 +75,20 @@ try {
 	await client.prompt('MUST_NOT_AUTOREPLAY', undefined, 'followUp');
 	await client.switchConversation(bId); await client.prompt('HOLD_B'); await wait(() => holds.has('HOLD_B'), 'B streaming');
 	const beforeFailure = requests.length;
-	blockedDirectory = dirname(a.state.sessionFile);
-	renameSync(blockedDirectory, blockedDirectory + '.saved'); writeFileSync(blockedDirectory, 'TEST_BLOCKED_STORAGE_SECRET');
+	if (injectIo) {
+		writeFileSync(faultMarker + '.tmp', JSON.stringify({ file: a.state.sessionFile })); renameSync(faultMarker + '.tmp', faultMarker);
+	} else {
+		const directory = dirname(a.state.sessionFile);
+		renameSync(directory, directory + '.saved'); blockedDirectory = directory;
+		writeFileSync(directory, 'TEST_BLOCKED_STORAGE_SECRET');
+	}
 	holds.get('HOLD_A')();
 	await wait(() => a.state.persistence?.failed && !a.state.running && !a.generation, 'durability failure stops its worker');
+	if (injectIo) {
+		const observed = JSON.parse(readFileSync(faultMarker + '.observed', 'utf8'));
+		assert.equal(observed.code, 'EIO'); assert.equal(observed.writeObserved, true, 'native writer must actually encounter the injected fault');
+		assert.equal(observed.file, a.state.sessionFile, 'only the selected history writer may fail');
+	}
 	assert.equal(client.conversationId, bId); assert.equal(b.state.running, true, 'background failure does not stop the foreground');
 	assert.equal(requests.length, beforeFailure, 'failed history does not drain the queued follow-up');
 	assert.deepEqual(a.state.queue, { steering: [], followUp: [] });
@@ -84,7 +102,8 @@ try {
 	await client.handle({ type: 'session_reopen', conversationId: aId, reqId: 'still-broken' });
 	assert(events.some(event => event.type === 'tree_navigate_result' && event.reqId === 'still-broken' && event.status === 'error'));
 	assert.equal(a.state.persistence.failed, true);
-	rmSync(blockedDirectory); renameSync(blockedDirectory + '.saved', blockedDirectory); blockedDirectory = undefined;
+	if (injectIo) rmSync(faultMarker);
+	else { rmSync(blockedDirectory); renameSync(blockedDirectory + '.saved', blockedDirectory); blockedDirectory = undefined; }
 	await client.handle({ type: 'session_reopen', conversationId: aId, reqId: 'repaired' });
 	assert(events.some(event => event.type === 'tree_navigate_result' && event.reqId === 'repaired' && event.status === 'ok'));
 	assert.equal(a.state.persistence.failed, false); assert.equal(requests.length, beforeFailure, 'reopen never repeats a request');
@@ -97,6 +116,7 @@ try {
 	writeFileSync(saved, bytes); await a.reopen();
 	console.log('PASS native OMP persistence: concurrent writer relocated without altering owner history, failure stops only its owner, no queued replay or implicit reopen, explicit recovery and missing/empty history refused');
 } finally {
+	rmSync(faultMarker, { force: true });
 	if (blockedDirectory) { rmSync(blockedDirectory, { force: true }); renameSync(blockedDirectory + '.saved', blockedDirectory); }
 	await contender?.close(); await client?.dispose(); provider.closeAllConnections(); await new Promise(resolve => provider.close(resolve)); rmSync(root, { recursive: true, force: true });
 }
