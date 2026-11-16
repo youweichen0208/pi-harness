@@ -77,6 +77,8 @@ jobs:
         run: |
           node tests/omp-runtime-test.mjs
           if ($LASTEXITCODE -ne 0) { throw "omp-runtime-test.mjs failed" }
+          node tests/omp-task-compaction-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-task-compaction-test.mjs failed" }
           node tests/omp-openai-proxy-test.mjs
           if ($LASTEXITCODE -ne 0) { throw "omp-openai-proxy-test.mjs failed" }
           node tests/omp-proxy-transports-test.mjs
@@ -113,8 +115,6 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "omp-request-diagnostics-test.mjs failed" }
           node tests/omp-task-output-test.mjs
           if ($LASTEXITCODE -ne 0) { throw "omp-task-output-test.mjs failed" }
-          node tests/omp-task-compaction-test.mjs
-          if ($LASTEXITCODE -ne 0) { throw "omp-task-compaction-test.mjs failed" }
           node tests/omp-mcp-diagnostics-test.mjs
           if ($LASTEXITCODE -ne 0) { throw "omp-mcp-diagnostics-test.mjs failed" }
           node tests/reasoning-repetition-test.mjs
@@ -427,6 +427,7 @@ jobs:
         run: |
           node tests/terminal-smoke-test.mjs
           node tests/omp-runtime-test.mjs
+          node tests/omp-task-compaction-test.mjs
           node tests/omp-openai-proxy-test.mjs
           node tests/omp-proxy-transports-test.mjs
           node tests/omp-model-config-test.mjs
@@ -445,7 +446,6 @@ jobs:
           node tests/omp-tasks-test.mjs
           node tests/omp-request-diagnostics-test.mjs
           node tests/omp-task-output-test.mjs
-          node tests/omp-task-compaction-test.mjs
           node tests/omp-mcp-diagnostics-test.mjs
           node tests/reasoning-repetition-test.mjs
           node tests/omp-recovery-test.mjs

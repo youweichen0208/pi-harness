@@ -7,8 +7,8 @@ const [file, mode = 'compact', leaf, applicationRoot] = process.argv.slice(2);
 assert(applicationRoot, 'Select the application whose native history is under test');
 const root = realpathSync(applicationRoot);
 const assertInside = file => {
-	const inside = relative(root, realpathSync(file));
-	assert(!isAbsolute(inside) && inside !== '..' && !inside.startsWith('..' + sep), 'Native compaction must use the selected application runtime');
+	const actual = realpathSync(file), inside = relative(root, actual);
+	assert(!isAbsolute(inside) && inside !== '..' && !inside.startsWith('..' + sep), `Native compaction must use the selected application runtime: ${JSON.stringify({ root, requested: file, actual, relative: inside })}`);
 };
 assertInside(process.execPath);
 assert.equal(Bun.version, JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).dependencies.bun);
