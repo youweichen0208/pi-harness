@@ -1,0 +1,284 @@
+{
+  "candidate": "/private/var/folders/41/07yyp3_12jddkkthmflqkbgw0000gn/T/omp-oauth-staged-write-pl620eob",
+  "phase": "failed",
+  "buildLog": "/tmp/omp-oauth-mac-local-runtime-build.log",
+  "buildSession": 93868,
+  "sourceCommit": "1c5845bdf1e7bcb12cbc3d54f5bccbd1cc4e8821",
+  "validationCommit": "ea4ca55db289b0b242782ac432575e619f2975ae",
+  "note": "Private candidate has identical production OAuth source; later commit changes restart fixture only. No installed app replacement or publication.",
+  "initialBuild": "Explicitly stopped the owned builder while it waited on a GitHub connection before creating appOutDir; reuse verified installed Electron 41.10.7 dist for the retry.",
+  "initialBuildLog": "/tmp/omp-oauth-mac-build.log",
+  "installRoot": "/private/var/folders/41/07yyp3_12jddkkthmflqkbgw0000gn/T/omp-oauth-mac-install-kd3sqevx",
+  "app": "/private/var/folders/41/07yyp3_12jddkkthmflqkbgw0000gn/T/omp-oauth-mac-install-kd3sqevx/installed \u4e2d\u6587/pi.app",
+  "results": [
+    {
+      "test": "mount",
+      "exitCode": 0,
+      "seconds": 2.612,
+      "log": "/tmp/omp-oauth-mac-mount.log",
+      "sha256": "2e28682701193903bb5faba97cdbaf1b27d1351f96b291e60a48f3563eefdbdc"
+    },
+    {
+      "test": "copy-install",
+      "exitCode": 0,
+      "seconds": 7.736,
+      "log": "/tmp/omp-oauth-mac-copy-install.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "test": "detach",
+      "exitCode": 0,
+      "seconds": 0.104,
+      "log": "/tmp/omp-oauth-mac-detach.log",
+      "sha256": "7a042615bf3722a3771413c5ae0834a1153311a88abad4deef4d8ad80a5c7273"
+    },
+    {
+      "test": "signature",
+      "exitCode": 0,
+      "seconds": 2.451,
+      "log": "/tmp/omp-oauth-mac-signature.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "test": "upgrade",
+      "exitCode": 0,
+      "seconds": 15.57,
+      "log": "/tmp/omp-oauth-mac-upgrade.log",
+      "sha256": "49cd643be0677f18d0f9766c5b4ea164883d0f9f903b7024ddc419de074567b7"
+    },
+    {
+      "test": "packaged-server-start-test",
+      "exitCode": 0,
+      "seconds": 12.432,
+      "log": "/tmp/omp-oauth-mac-packaged-server-start-test.log",
+      "sha256": "7be44953ad9b1f0958446e06f68e5f2149d769b58d22f5d4b3a89e17b2f4381f"
+    },
+    {
+      "test": "packaged-jdbc-test",
+      "exitCode": 0,
+      "seconds": 0.984,
+      "log": "/tmp/omp-oauth-mac-packaged-jdbc-test.log",
+      "sha256": "e757efd679b2e4ae368e066a03747b2727cdd05d184bff87916bdbfe54809ef3"
+    },
+    {
+      "test": "omp-runtime-test",
+      "exitCode": 0,
+      "seconds": 18.75,
+      "log": "/tmp/omp-oauth-mac-omp-runtime-test.log",
+      "sha256": "31f9f139f2ef6a0aa48480a7ed932239e1a7d3348d422801d7216541ae2a5888"
+    },
+    {
+      "test": "omp-model-config-test",
+      "exitCode": 0,
+      "seconds": 12.607,
+      "log": "/tmp/omp-oauth-mac-omp-model-config-test.log",
+      "sha256": "94a65bec8ef88f0de505e60bf72fe1a4a4d38a4a812a7f74967d7b97169241c8"
+    },
+    {
+      "test": "omp-model-catalog-test",
+      "exitCode": 0,
+      "seconds": 12.443,
+      "log": "/tmp/omp-oauth-mac-omp-model-catalog-test.log",
+      "sha256": "9d8035b0724ec753b1678f438abc4565fb1c51b483851d4d78768b0c7b23cfa7"
+    },
+    {
+      "test": "omp-skill-settings-test",
+      "exitCode": 0,
+      "seconds": 15.009,
+      "log": "/tmp/omp-oauth-mac-omp-skill-settings-test.log",
+      "sha256": "6e0074f8f63402e1257bc7afe3e224ab3352df6e66870c1a5d2b84f86b752b91"
+    },
+    {
+      "test": "omp-extension-settings-test",
+      "exitCode": 0,
+      "seconds": 14.076,
+      "log": "/tmp/omp-oauth-mac-omp-extension-settings-test.log",
+      "sha256": "ca821f5d65710f101335918d57147027b49f60c41593f6b90fc33d1f7e5d65ed"
+    },
+    {
+      "test": "omp-packages-test",
+      "exitCode": 0,
+      "seconds": 9.171,
+      "log": "/tmp/omp-oauth-mac-omp-packages-test.log",
+      "sha256": "4295b7def103a683f1f61254b2d5cb4c0c8ada5c41a3885ffaa2d41b9d8a3075"
+    },
+    {
+      "test": "omp-marketplace-test",
+      "exitCode": 0,
+      "seconds": 15.726,
+      "log": "/tmp/omp-oauth-mac-omp-marketplace-test.log",
+      "sha256": "5010ed0a37f8eb0df4823613e33b8f9c69bae7506e129a1d09c2d455de0bf2ca"
+    },
+    {
+      "test": "omp-package-features-test",
+      "exitCode": 0,
+      "seconds": 13.857,
+      "log": "/tmp/omp-oauth-mac-omp-package-features-test.log",
+      "sha256": "6859d126317e8b9744828eb78ae830040037655903b510afc519d864bff0a9e7"
+    },
+    {
+      "test": "omp-package-settings-test",
+      "exitCode": 0,
+      "seconds": 10.279,
+      "log": "/tmp/omp-oauth-mac-omp-package-settings-test.log",
+      "sha256": "18ef915c2169fc58b3ae84a86c9cf65075ed4680234b583327c8ee3769d1c490"
+    },
+    {
+      "test": "omp-mcp-test",
+      "exitCode": 0,
+      "seconds": 13.534,
+      "log": "/tmp/omp-oauth-mac-omp-mcp-test.log",
+      "sha256": "daaf5fe4b3b274704752ccfdcaa2b6b95f2dfcbe9a78fa799e454a4e08eeb105"
+    },
+    {
+      "test": "omp-mcp-auth-test",
+      "exitCode": 0,
+      "seconds": 13.556,
+      "log": "/tmp/omp-oauth-mac-omp-mcp-auth-test.log",
+      "sha256": "020800299adb0469555f614badcdd725f18cbf736de55f515f190f2f77245eaf"
+    },
+    {
+      "test": "omp-mcp-auth-reconnect-test",
+      "exitCode": 0,
+      "seconds": 33.066,
+      "log": "/tmp/omp-oauth-mac-omp-mcp-auth-reconnect-test.log",
+      "sha256": "e225ece9e2cdbedf17a42758cf2969363b15ae62a81fbedff25d2c850802ed4f"
+    },
+    {
+      "test": "omp-stop-metadata-test",
+      "exitCode": 0,
+      "seconds": 35.027,
+      "log": "/tmp/omp-oauth-mac-omp-stop-metadata-test.log",
+      "sha256": "eed5b511b09bc7121a3d17a4bbd03bfdbe8a18d9899e35b66d85788eba122e56"
+    },
+    {
+      "test": "omp-prompt-test",
+      "exitCode": 0,
+      "seconds": 14.062,
+      "log": "/tmp/omp-oauth-mac-omp-prompt-test.log",
+      "sha256": "2b230d6c2bda05b2d7ed5b0bb0e9217a36f6d455645fca17ec4d41c0f6eb415a"
+    },
+    {
+      "test": "omp-tasks-test",
+      "exitCode": 0,
+      "seconds": 16.189,
+      "log": "/tmp/omp-oauth-mac-omp-tasks-test.log",
+      "sha256": "ba9c000be40c7bbe03bce50dcd72aa762f9a2a981da32d91052df3a35ff67d1c"
+    },
+    {
+      "test": "omp-request-diagnostics-test",
+      "exitCode": 0,
+      "seconds": 16.689,
+      "log": "/tmp/omp-oauth-mac-omp-request-diagnostics-test.log",
+      "sha256": "0616c4144696582cb91467155706be9ee1805d1b3e6d13787f7a8594350a1e2e"
+    },
+    {
+      "test": "omp-task-output-test",
+      "exitCode": 0,
+      "seconds": 26.18,
+      "log": "/tmp/omp-oauth-mac-omp-task-output-test.log",
+      "sha256": "5929f20a58eb58fb435b06c97e8024430748ab038c213282751f8f683bcff509"
+    },
+    {
+      "test": "omp-task-compaction-test",
+      "exitCode": 0,
+      "seconds": 21.935,
+      "log": "/tmp/omp-oauth-mac-omp-task-compaction-test.log",
+      "sha256": "fdd8c76b1c01ae1169b471c92856d795ccb2d90f2b6b4598352494760b84d238"
+    },
+    {
+      "test": "omp-mcp-diagnostics-test",
+      "exitCode": 0,
+      "seconds": 13.238,
+      "log": "/tmp/omp-oauth-mac-omp-mcp-diagnostics-test.log",
+      "sha256": "004d6aa1b0df69fe8922546886403634ffe67a98c65c8201efaeb4a7755370e9"
+    },
+    {
+      "test": "reasoning-repetition-test",
+      "exitCode": 0,
+      "seconds": 36.243,
+      "log": "/tmp/omp-oauth-mac-reasoning-repetition-test.log",
+      "sha256": "c898ad4a2f63e63ef9b9acc6e588f5aeb90398a289cfe7655eba1a6f0a135add"
+    },
+    {
+      "test": "omp-recovery-test",
+      "exitCode": 0,
+      "seconds": 13.2,
+      "log": "/tmp/omp-oauth-mac-omp-recovery-test.log",
+      "sha256": "3b6bb77b6326dcf2453e0443d66d394003184219021a51f149eb9e6dfb29db0c"
+    },
+    {
+      "test": "omp-restricted-recovery-test",
+      "exitCode": 0,
+      "seconds": 8.652,
+      "log": "/tmp/omp-oauth-mac-omp-restricted-recovery-test.log",
+      "sha256": "d7c3f5fab9ab2684ce5029d502dd9edcedc15f867a16e50e36d023b9dedbd61d"
+    },
+    {
+      "test": "playground-drain-test",
+      "exitCode": 0,
+      "seconds": 5.865,
+      "log": "/tmp/omp-oauth-mac-playground-drain-test.log",
+      "sha256": "888766e189cdb36e6f75d7979fc200fe5882eb68ed0c0f3c69c5f3084d1a0309"
+    },
+    {
+      "test": "omp-persistence-test",
+      "exitCode": 0,
+      "seconds": 16.038,
+      "log": "/tmp/omp-oauth-mac-omp-persistence-test.log",
+      "sha256": "03fab6b9624d71f02ec54fbe76503d58d2bdee511baa8c04ceb44c9379852ca2"
+    },
+    {
+      "test": "omp-persistence-restart-test",
+      "exitCode": 0,
+      "seconds": 19.055,
+      "log": "/tmp/omp-oauth-mac-omp-persistence-restart-test.log",
+      "sha256": "dc967e0971c33fc2a48cf544e3e0c236b03080b55e7cdbb4ae5ea452cc33edca"
+    },
+    {
+      "test": "omp-external-history-test",
+      "exitCode": 0,
+      "seconds": 20.492,
+      "log": "/tmp/omp-oauth-mac-omp-external-history-test.log",
+      "sha256": "0f8e6f9b503b448dfba6f08d483b3918ffc22eae594ff43b4543c3027787ce34"
+    },
+    {
+      "test": "omp-session-storage-test",
+      "exitCode": 1,
+      "seconds": 70.728,
+      "log": "/tmp/omp-oauth-mac-omp-session-storage-test.log",
+      "sha256": "a37e3060fab71a63ae826b4d9e2cdd26ba3e967b8394aeb7baefb3ea0e96153d"
+    }
+  ],
+  "mounted": false,
+  "artifacts": [
+    {
+      "path": "/private/var/folders/41/07yyp3_12jddkkthmflqkbgw0000gn/T/omp-oauth-staged-write-pl620eob/release/pi-1.34.2-mac-arm64.dmg",
+      "bytes": 280991161,
+      "sha256": "d1bd066392e539f15fa4db202058e8dfabc9994e7b05d257cc2ab0cec6037244"
+    },
+    {
+      "path": "/private/var/folders/41/07yyp3_12jddkkthmflqkbgw0000gn/T/omp-oauth-staged-write-pl620eob/release/pi-1.34.2-mac-arm64.zip",
+      "bytes": 291831335,
+      "sha256": "b8fa4c2c80135017b68eda68685b5b0aa0bb054a0f25e3027775b94fe285450e"
+    }
+  ],
+  "currentCheck": "omp-session-storage-test",
+  "error": "omp-session-storage-test failed: /tmp/omp-oauth-mac-omp-session-storage-test.log",
+  "retainedArtifacts": [
+    {
+      "path": "/Users/youweichen/projects/pi-harness/release/omp-stage-closeout-ea4ca55/pi-1.34.2-omp-stage-mac-arm64.dmg",
+      "bytes": 280991161,
+      "sha256": "d1bd066392e539f15fa4db202058e8dfabc9994e7b05d257cc2ab0cec6037244",
+      "verifiedForRelease": false
+    },
+    {
+      "path": "/Users/youweichen/projects/pi-harness/release/omp-stage-closeout-ea4ca55/pi-1.34.2-omp-stage-mac-arm64.zip",
+      "bytes": 291831335,
+      "sha256": "b8fa4c2c80135017b68eda68685b5b0aa0bb054a0f25e3027775b94fe285450e",
+      "verifiedForRelease": false
+    }
+  ],
+  "closeout": "User requested current-stage delivery and pause. Actual packaged storage-test failure retained; remaining package/UI gates not run.",
+  "temporaryCopiesRemoved": true
+}

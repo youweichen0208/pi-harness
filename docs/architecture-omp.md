@@ -1,5 +1,7 @@
 # OMP 迁移：接入契约与实施状态
 
+**阶段收尾：2026-11-16，按用户要求暂停后续迁移。** 已完成改动保留在 `feat/omp-validation-20261116`，源码提交至 `ea4ca55`。当前阶段记录见 [收尾清单](review-data/omp-stage-closeout.json)，测试包与日志保留在 `release/omp-stage-closeout-ea4ca55/`。本地新一轮全量回归由用户要求取消，Windows/Linux CI 已取消；新 macOS 包的存储测试辅助程序错误解析到全局 Bun 缓存，留下失败记录，其余包内／界面门禁未完成。早前 122/122 基线和 Linux 通过包继续保留，但不代表新改动已全面验收。Task 子历史保护、工具级 MCP 授权、剩余旧历史清理和原 Windows DeepSeek 任务验收列为后续待办。本阶段交付不标记全面迁移完成，未替换已安装应用或正式发布。
+
 当前源码已修复 MCP 登录期间覆盖外部配置的问题：原生 OAuth helper 先输出到私有临时路径，宿主在原生文件锁内核对所选定义后再合并写回，保持 OMP 的认证与持久化策略。26 个本地 OAuth 场景、取消／停止／锁超时、关联协议及浏览器验证通过，完整构建、类型检查和单测通过，见 [写回修复](review-data/omp-oauth-config-commit.json)。已有 macOS/Linux 测试包与 122/122 全量基线早于此生产改动，不能回填为新修复的验收结果。Windows 第八轮针对前一个版本，已通过修正后的持久化测试，随后跨进程恢复测试在清理目录时发生 EBUSY；记录见 [Windows 验证](review-data/omp-windows-validation.json)。工具级 OAuth、Task 内部历史保护和原 DeepSeek 任务验收仍未完成。
 
 当前 macOS arm64 测试包已重新构建，DMG 复制安装、签名、旧版隔离夹具升级通过；31 项包内集成及新增的 OAuth 重连门禁通过，六项桌面用例均有通过结果。MCP 用例首次失败来自 Electron 原生离开确认与测试 CDP 处理冲突，修正夹具后桌面／浏览器复验通过，应用确认行为未改。Task 压缩夹具也已限定使用目标包内 Bun／SDK，避免借用仓库依赖。完整证据和本地测试包校验值见 [当前 macOS 包验收](review-data/omp-desktop-current.json)。原生 OAuth 写回冲突在该包内仍然失败；Windows/Linux 桌面及原 DeepSeek 任务、Task 内部写入保护等缺口不因此关闭。未替换已安装应用或发布。

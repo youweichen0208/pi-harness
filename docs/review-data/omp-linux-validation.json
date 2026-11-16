@@ -1,9 +1,9 @@
 {
   "branch": "feat/omp-validation-20261116",
-  "commit": "9d0a7df08c55531d9e4cbedd848a0f8a9ed2d195",
-  "runId": 43826724731,
-  "runUrl": "https://github.com/youweichen0208/pi-harness/actions/runs/43826724731",
-  "status": "completed/success",
+  "commit": "ea4ca55db289b0b242782ac432575e619f2975ae",
+  "runId": 43834781671,
+  "runUrl": "https://github.com/youweichen0208/pi-harness/actions/runs/43834781671",
+  "status": "completed/cancelled_by_user",
   "worktree": "/Users/youweichen/projects/pi-harness/.claude/worktrees/feat-omp-validation-20261116",
   "workflow": ".github/workflows/verify-windows-desktop.yml",
   "inputs": {
@@ -17,8 +17,8 @@
     "Verify deb installation and previous-version data"
   ],
   "push": "Git HTTPS failed once with low-speed timeout; GitHub API uploaded exact local blobs/tree/commit; branch updated non-force after checking parent SHA.",
-  "lastObservedAt": "2026-11-16T08:26:39.317602+00:00",
-  "lastObservedStep": "All Linux gates completed",
+  "lastObservedAt": "2026-11-16T08:53:38.300024+00:00",
+  "lastObservedStep": "Install system deps (node-gyp)",
   "attempts": [
     {
       "commit": "3a262ebb0c6c155184725b96227149328e657f73",
@@ -92,16 +92,20 @@
         "exitCode": 0,
         "sha256": "1eb8f117e9c03b3c3abea355464c4be5f81425b3f33ed3d3c04da7db620e3260"
       }
+    },
+    {
+      "commit": "ea4ca55db289b0b242782ac432575e619f2975ae",
+      "runId": 43834781671,
+      "jobId": 133188604373,
+      "runUrl": "https://github.com/youweichen0208/pi-harness/actions/runs/43834781671",
+      "status": "completed",
+      "purpose": "Verify OAuth staged configuration commit and expanded 26-case regression plus portable restart storage fixture; full source/package/UI/install gates.",
+      "conclusion": "cancelled",
+      "reason": "User requested current-stage closeout and pause"
     }
   ],
-  "jobId": 133162211583,
-  "renderingArtifact": {
-    "id": 14206271846,
-    "url": "https://github.com/youweichen0208/pi-harness/actions/runs/43821610138/artifacts/14206271846",
-    "sha256": "7b7a6abbbe616f160b96a87d2a13b7d0f9fda8496fc1586c209e5cdedb116aa3",
-    "files": 45
-  },
-  "lastObservedStatus": "completed/success",
+  "jobId": 133188604373,
+  "lastObservedStatus": "in_progress",
   "previousRunVerifiedStages": [
     "typecheck and protocol",
     "web/server build",
@@ -110,35 +114,6 @@
     "all packaged server and OMP integration gates",
     "six packaged Electron UI entries",
     "extracted AppImage server start in Unicode/space path"
-  ],
-  "verifiedStages": [
-    "typecheck and protocol",
-    "web/server build",
-    "all source OMP integration gates",
-    "Linux desktop package build",
-    "all packaged server and OMP integration gates",
-    "six packaged Electron UI entries",
-    "extracted AppImage server and Task compaction in Unicode/space path",
-    "actual deb installation and package/version check",
-    "previous release isolated-data seed and upgrade verification",
-    "checksums and Actions test-package upload"
-  ],
-  "artifacts": [
-    {
-      "id": 14207777868,
-      "name": "omp-validation-linux-x64",
-      "bytes": 647864978,
-      "expiresAt": "2026-11-23T08:17:12Z",
-      "url": "https://github.com/youweichen0208/pi-harness/actions/runs/43826724731/artifacts/14207777868",
-      "sha256": "4488015785ee15f5ac395883b529f15389face40311ddc90f404fcdcee81e883"
-    },
-    {
-      "id": 14207753653,
-      "name": "omp-validation-rendering-linux",
-      "bytes": 2903435,
-      "url": "https://github.com/youweichen0208/pi-harness/actions/runs/43826724731/artifacts/14207753653",
-      "sha256": "2abf51eecbcfc5af2d56dfd444f1c41da5c93d4a34104d316e6a25d83bd5e4f9"
-    }
   ],
   "limits": [
     "Ubuntu 24.04 x64; AppImage extraction/start verified, not FUSE mounting.",
@@ -165,5 +140,55 @@
     ],
     "verifiedAt": "2026-11-16T08:44:23.408575+00:00",
     "verification": "SHA256SUMS matched extracted installers; download completed. Initial verifier used unavailable hashlib.file_digest on Python 3.9; rerun streamed SHA256 verification without another download."
-  }
+  },
+  "latestRun": {
+    "commit": "ea4ca55db289b0b242782ac432575e619f2975ae",
+    "runId": 43834781671,
+    "jobId": 133188604373,
+    "runUrl": "https://github.com/youweichen0208/pi-harness/actions/runs/43834781671",
+    "status": "completed",
+    "purpose": "Verify OAuth staged configuration commit and expanded 26-case regression plus portable restart storage fixture; full source/package/UI/install gates.",
+    "conclusion": "cancelled",
+    "reason": "User requested current-stage closeout and pause"
+  },
+  "previousSuccessfulRun": {
+    "runId": 43826724731,
+    "commit": "9d0a7df08c55531d9e4cbedd848a0f8a9ed2d195",
+    "verifiedStages": [
+      "typecheck and protocol",
+      "web/server build",
+      "all source OMP integration gates",
+      "Linux desktop package build",
+      "all packaged server and OMP integration gates",
+      "six packaged Electron UI entries",
+      "extracted AppImage server and Task compaction in Unicode/space path",
+      "actual deb installation and package/version check",
+      "previous release isolated-data seed and upgrade verification",
+      "checksums and Actions test-package upload"
+    ],
+    "artifacts": [
+      {
+        "id": 14207777868,
+        "name": "omp-validation-linux-x64",
+        "bytes": 647864978,
+        "expiresAt": "2026-11-23T08:17:12Z",
+        "url": "https://github.com/youweichen0208/pi-harness/actions/runs/43826724731/artifacts/14207777868",
+        "sha256": "4488015785ee15f5ac395883b529f15389face40311ddc90f404fcdcee81e883"
+      },
+      {
+        "id": 14207753653,
+        "name": "omp-validation-rendering-linux",
+        "bytes": 2903435,
+        "url": "https://github.com/youweichen0208/pi-harness/actions/runs/43826724731/artifacts/14207753653",
+        "sha256": "2abf51eecbcfc5af2d56dfd444f1c41da5c93d4a34104d316e6a25d83bd5e4f9"
+      }
+    ],
+    "renderingArtifact": {
+      "id": 14206271846,
+      "url": "https://github.com/youweichen0208/pi-harness/actions/runs/43821610138/artifacts/14206271846",
+      "sha256": "7b7a6abbbe616f160b96a87d2a13b7d0f9fda8496fc1586c209e5cdedb116aa3",
+      "files": 45
+    }
+  },
+  "purpose": "Verify OAuth staged configuration commit and expanded 26-case regression plus portable restart storage fixture; full source/package/UI/install gates."
 }

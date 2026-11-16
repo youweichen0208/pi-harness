@@ -1,0 +1,78 @@
+{
+  "status": "Current stage delivered; full migration paused at user request, not complete",
+  "checkedAt": "2026-11-16T09:08:33.781228+00:00",
+  "sourceCommit": "ea4ca55db289b0b242782ac432575e619f2975ae",
+  "branch": "feat/omp-validation-20261116",
+  "completed": [
+    "OMP-only production entries for chat, Wiki, SSH and Playground; original SDK packages removed from production/development dependencies.",
+    "Native output defaults, explicit optional overrides; no forced 128000 budget.",
+    "OAuth config conflict fix via public native helper/staging/lock/atomic writer; 26 local cases and browser regression pass.",
+    "Final build/typecheck and 1079 unit tests pass, 1 skipped.",
+    "Portable Windows persistence and restart fault fixtures locally verified.",
+    "Current macOS DMG build, isolated Unicode/space install, signature, old-runtime fixture upgrade and earlier recorded packaged checks passed."
+  ],
+  "currentVerification": {
+    "fullSmoke": {
+      "status": "cancelled_by_user",
+      "rawExitCode": -15,
+      "entriesStarted": 65,
+      "inputFilesUnchanged": 1354,
+      "log": "/Users/youweichen/projects/pi-harness/release/omp-stage-closeout-ea4ca55/logs/omp-oauth-full-smoke.log",
+      "sha256": "6c643974a80158a97bdc3e1178a1fb30b444558f5840d5fc393cb8d1b3bbfdfe",
+      "complete": false
+    },
+    "mac": {
+      "status": "failed",
+      "failedCheck": "omp-session-storage-test",
+      "failure": "Storage test helper loaded pi-natives 18.20.3 from global Bun cache instead of app 18.20.0, then native addon failed to load. Not repaired during closeout.",
+      "recordedChecksPassed": 33,
+      "remainingPackageAndUiGates": "not run",
+      "evidence": "omp-oauth-desktop-progress.json"
+    },
+    "windows": {
+      "runId": 43834783659,
+      "status": "completed/cancelled_by_user"
+    },
+    "linux": {
+      "runId": 43834781671,
+      "status": "completed/cancelled_by_user"
+    }
+  },
+  "previousCompleteBaseline": "122/122 at 9d0a7df predates OAuth runtime changes; preserved in omp-smoke-current.json, not replaced by the cancelled run.",
+  "artifacts": [
+    {
+      "path": "/Users/youweichen/projects/pi-harness/release/omp-stage-closeout-ea4ca55/pi-1.34.2-omp-stage-mac-arm64.dmg",
+      "bytes": 280991161,
+      "sha256": "d1bd066392e539f15fa4db202058e8dfabc9994e7b05d257cc2ab0cec6037244",
+      "verifiedForRelease": false
+    },
+    {
+      "path": "/Users/youweichen/projects/pi-harness/release/omp-stage-closeout-ea4ca55/pi-1.34.2-omp-stage-mac-arm64.zip",
+      "bytes": 291831335,
+      "sha256": "b8fa4c2c80135017b68eda68685b5b0aa0bb054a0f25e3027775b94fe285450e",
+      "verifiedForRelease": false
+    }
+  ],
+  "previousLinuxArtifacts": "/Users/youweichen/projects/pi-harness/release/omp-migration-linux-x64-9d0a7df",
+  "remaining": [
+    "Native Task internal history storage does not inherit write protection; fresh diagnostic still fails.",
+    "Tool-level MCP authorization challenge is not forwarded on all native manager paths; fresh diagnostic still fails.",
+    "Fix packaged storage fixture runtime binding, then rerun full smoke and all required platform/package/UI gates.",
+    "Clear remaining old Desktop/shared Pi history after the user exits the active old application.",
+    "Run original Windows DeepSeek task and multi-tool/long-history cases three times with actual gateway/model/project inputs."
+  ],
+  "retainedEvidence": "/Users/youweichen/projects/pi-harness/release/omp-stage-closeout-ea4ca55",
+  "operations": {
+    "installedAppReplaced": false,
+    "formalReleasePublished": false,
+    "rootDistOverwritten": false,
+    "userProcessesPreserved": [
+      23786,
+      62015
+    ],
+    "localSchedulersStopped": true,
+    "remoteRunsCancelled": true,
+    "mountedVolumesDetached": true,
+    "ownedTemporaryCopiesRemoved": true
+  }
+}

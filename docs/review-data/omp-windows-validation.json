@@ -1,5 +1,5 @@
 {
-  "status": "completed/failure",
+  "status": "completed/cancelled_by_user",
   "branch": "feat/omp-validation-20261116",
   "attempts": [
     {
@@ -181,6 +181,16 @@
         "path": "/tmp/omp-windows-eighth-job.log",
         "sha256": "366c81108696ea04cb932cb3fe2d1668dd46bc1e0d4179a4e0f21be8db4eca90"
       }
+    },
+    {
+      "commit": "ea4ca55db289b0b242782ac432575e619f2975ae",
+      "runId": 43834783659,
+      "jobId": 133188608210,
+      "runUrl": "https://github.com/youweichen0208/pi-harness/actions/runs/43834783659",
+      "status": "completed",
+      "purpose": "Verify OAuth staged configuration commit and expanded 26-case regression plus portable restart storage fixture; full source/package/UI/install gates.",
+      "conclusion": "cancelled",
+      "reason": "User requested current-stage closeout and pause"
     }
   ],
   "fix": "Normalize TypeScript filenames through native path.resolve before containment checks; require server/index.ts in the source graph. Regression checks source counts and nested transitive output, and runs before typecheck in independent Windows CI.",
@@ -205,7 +215,7 @@
     "terminalChecksPassed": 43,
     "windowsVerification": "The original history-list assertion passes in all three terminal rounds. Exact path diagnostics pending completed logs."
   },
-  "lastObservedAt": "2026-11-16T08:48:26.261947+00:00",
+  "lastObservedAt": "2026-11-16T08:53:38.300024+00:00",
   "lastObservedStatus": "completed/failure: persistence fixture cleanup masked earlier fault injection",
   "runId": 43826720006,
   "runUrl": "https://github.com/youweichen0208/pi-harness/actions/runs/43826720006",
@@ -213,20 +223,13 @@
   "jobId": 133162197673,
   "lastObservedStep": "Verify OMP runtime, configuration and entry (plain Node)",
   "latestRun": {
-    "commit": "8ae3662a40d86bc46c8abebb005dd2f86faf8ffe",
-    "runId": 43831802804,
-    "jobId": 133178658840,
-    "runUrl": "https://github.com/youweichen0208/pi-harness/actions/runs/43831802804",
+    "commit": "ea4ca55db289b0b242782ac432575e619f2975ae",
+    "runId": 43834783659,
+    "jobId": 133188608210,
+    "runUrl": "https://github.com/youweichen0208/pi-harness/actions/runs/43834783659",
     "status": "completed",
-    "purpose": "Verify scoped native history I/O fault injection on Windows; retain source/package/UI/install gates.",
-    "lastObservedStep": "Verify OMP runtime, configuration and entry (plain Node)",
-    "conclusion": "failure",
-    "failedTest": "tests/omp-persistence-restart-test.mjs:68",
-    "failure": "Root fixture cleanup failed with EBUSY; earlier directory-obstruction setup or child failure may be masked. Needs separate diagnosis.",
-    "verified": "Previous Windows persistence I/O-fault regression now passed; both repetition protocols, Task compaction, retry/recovery, diagnostics and Playground drain also passed.",
-    "log": {
-      "path": "/tmp/omp-windows-eighth-job.log",
-      "sha256": "366c81108696ea04cb932cb3fe2d1668dd46bc1e0d4179a4e0f21be8db4eca90"
-    }
+    "purpose": "Verify OAuth staged configuration commit and expanded 26-case regression plus portable restart storage fixture; full source/package/UI/install gates.",
+    "conclusion": "cancelled",
+    "reason": "User requested current-stage closeout and pause"
   }
 }
