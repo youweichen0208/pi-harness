@@ -125,7 +125,8 @@ try {
 			// not catch a regression here.
 			const underLights = await page.evaluate(() => {
 				const box = { left: 18, top: 17, right: 70, bottom: 29 };
-				const nodes = [...document.querySelectorAll('.topbar > *, .sidebar-brand > *, .compact-brand > *, .wiki-window-header > *')];
+				const nodes = [...document.querySelectorAll('.topbar > *, .sidebar-brand > *, .compact-brand > *, .wiki-window-header > *')]
+					.filter(el => !el.closest('.desktop-window-controls'));
 				return nodes.map(el => el.getBoundingClientRect()).filter(rect => rect.width && rect.height)
 					.filter(rect => rect.left < box.right && rect.right > box.left && rect.top < box.bottom && rect.bottom > box.top)
 					.map(rect => [Math.round(rect.left), Math.round(rect.top), Math.round(rect.width), Math.round(rect.height)]);

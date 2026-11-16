@@ -202,8 +202,19 @@ try {
 	await input.fill("Existing draft");
 	await page.locator('.inputbar input[type=file]').first().setInputFiles({name: "attachment.txt", mimeType: "text/plain", buffer: Buffer.from("keep attachment")});
 	await page.locator(".attach-chip.file").waitFor();
-	await page.locator(".messages").evaluate(el => { el.scrollTop = 100; el.dispatchEvent(new Event("scroll")); });
-	const chatScroll = await page.locator(".messages").evaluate(el => el.scrollTop);
+	// Park the transcript with a real wheel gesture: a synthetic scroll event does not
+	// leave follow mode (only wheel/pointer intent does), so a hand-set scrollTop would
+	// be re-pinned by the next re-render and the check below would prove nothing.
+	await page.evaluate(() => document.fonts.ready);
+	await page.locator(".messages").hover();
+	await page.mouse.wheel(0, -1200);
+	await page.waitForTimeout(100);
+	const chatScroll = await page.locator(".messages").evaluate(el => {
+		const max = el.scrollHeight - el.clientHeight;
+		return { offset: el.scrollTop, max, distance: max - el.scrollTop };
+	});
+	assert(chatScroll.offset > 0, `fixture must park above the fold: ${JSON.stringify(chatScroll)}`);
+	assert(chatScroll.distance > 200, `fixture must park away from the end: ${JSON.stringify(chatScroll)}`);
 	await open();
 	assert.notEqual(wiki.state.conversation, ephemeral, "re-entering the same document reuses nothing: a fresh conversation is created");
 	// The ephemeral chat composer starts empty — it never inherits main-window drafts.
@@ -218,7 +229,10 @@ try {
 	await wiki.input.fill("");
 	await close();
 	assert.equal(await input.inputValue(), "Existing draft"); assert.equal(await page.locator(".attach-chip.file").count(), 1);
-	assert.equal(await page.locator(".messages").evaluate(el => el.scrollTop), chatScroll);
+	// Restoring the main transcript's scroll is async; sample once it settles instead
+	// of racing the first frame after the Wiki window closes.
+	await page.waitForFunction(offset => document.querySelector(".messages")?.scrollTop === offset, chatScroll.offset, { timeout: 5000 }).catch(() => {});
+	assert.equal(await page.locator(".messages").evaluate(el => el.scrollTop), chatScroll.offset);
 
 	// Immediate close joins the autosave and flushes pending edits.
 	await open();
