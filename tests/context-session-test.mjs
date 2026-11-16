@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";
-import { mkdtemp, writeFile, rm, symlink, realpath } from "node:fs/promises";
+import { mkdtemp, writeFile, rm, symlink, realpath, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -61,7 +61,7 @@ test("native baseline reads a copied corpus with no discovered user resources or
 		const result = await runQuestion(configuration(model), { arm: "baseline", question, corpus: source.corpus });
 		assert.equal(result.answer, finalAnswer);
 		assert.equal(model.requests.length, 2);
-		assert.deepEqual(model.requests[0].tools.map(tool => tool.function.name).sort(), ["find", "grep", "ls", "read"]);
+		assert.deepEqual(model.requests[0].tools.map(tool => tool.function.name).sort(), ["glob", "grep", "read"]);
 		assert.ok(!JSON.stringify(model.requests).includes("PRIVATE_CONTEXT_SENTINEL"));
 		assert.ok(!JSON.stringify(model.requests[0]).includes(source.root));
 		const readResult = model.requests[1].messages.find(message => message.role === "tool");
@@ -81,6 +81,67 @@ test("native tool guard blocks reads outside the copied corpus", async () => {
 		const result = await runQuestion(configuration(model), { arm: "baseline", question, corpus: source.corpus });
 		assert.equal(result.toolCalls[0].blocked, true);
 		assert.ok(!JSON.stringify(model.requests).includes("PRIVATE_CONTEXT_SENTINEL"));
+	} finally { await model.close(); await source.close(); }
+});
+
+test("native glob lists the copied corpus and cannot escape its root", async () => {
+	const source = await fixture();
+	const model = await mockModel([
+		{ tool: "glob", args: { path: "demo/*.md" } },
+		{ tool: "glob", args: { path: "**/*.md" } },
+		{ tool: "glob", args: { path: `${source.root}/*.md` } },
+		{ tool: "glob", args: { path: `demo/*.md, ${source.root}/*.md` } },
+		{ tool: "glob", args: { path: JSON.stringify(["demo/*.md", `${source.root}/*.md`]) } },
+		{ tool: "glob", args: { path: "demo/*.md, demo/note.md" } },
+	]);
+	try {
+		const result = await runQuestion(configuration(model), { arm: "baseline", question, corpus: source.corpus });
+		assert.equal(result.toolCalls[0].isError, false);
+		assert.match(model.requests[1].messages.find(message => message.role === "tool").content, /note\.md/);
+		assert.equal(result.toolCalls[1].isError, false);
+		assert.equal(result.toolCalls[2].blocked, true);
+		assert.equal(result.toolCalls[3].blocked, true, "every root of a native multi-path glob must be checked");
+		assert.equal(result.toolCalls[4].blocked, true, "string-encoded path arrays must use the same containment check");
+		assert.equal(result.toolCalls[5].isError, false, "multiple roots inside the corpus remain usable");
+		assert.ok(!JSON.stringify(model.requests).includes("PRIVATE_CONTEXT_SENTINEL"));
+	} finally { await model.close(); await source.close(); }
+});
+
+test("cancelling an in-flight worker closes its request and removes only its temporary corpus", async () => {
+	const source = await fixture();
+	let received;
+	const arrived = new Promise(resolve => { received = resolve; });
+	let disconnected;
+	const closed = new Promise(resolve => { disconnected = resolve; });
+	const model = await listen(async (req, res) => {
+		let raw = ""; for await (const chunk of req) raw += chunk;
+		res.once("close", disconnected);
+		received(JSON.parse(raw));
+	});
+	const controller = new AbortController();
+	try {
+		const run = runQuestion(configuration(model), { arm: "baseline", question, corpus: source.corpus, signal: controller.signal });
+		const rejected = assert.rejects(run, /fixture cancellation/);
+		const payload = await arrived;
+		const prompt = payload.messages.find(message => message.role === "user");
+		const cwd = prompt.content.find(part => part.text?.includes("current working directory:"))?.text.match(/current working directory: '([^']+)'/)?.[1];
+		assert.ok(cwd?.includes("omp-context-eval-"));
+		controller.abort(new Error("fixture cancellation"));
+		await rejected;
+		await closed;
+		await assert.rejects(stat(cwd), { code: "ENOENT" });
+		assert.ok((await stat(join(source.root, "note.md"))).isFile());
+	} finally { controller.abort(); await model.close(); await source.close(); }
+});
+
+test("worker preserves a large Unicode answer across pipe fragments", async () => {
+	const source = await fixture();
+	const answer = JSON.stringify({ ...JSON.parse(finalAnswer), answer: "原生证据🌱".repeat(50000) });
+	const model = await mockModel([{ answer }]);
+	try {
+		const result = await runQuestion(configuration(model), { arm: "baseline", question, corpus: source.corpus });
+		assert.equal(result.answer, answer);
+		assert.equal(model.requests.length, 1);
 	} finally { await model.close(); await source.close(); }
 });
 
@@ -151,16 +212,16 @@ test("native MCP exposes only the read-only allowlist and enforces source URI sc
 		res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ jsonrpc: "2.0", id: body.id, result }));
 	});
 	const model = await mockModel([
-		{ tool: "mcp__openviking__read", args: { uris: "viking://resources/evaluation/demo/note.md" } },
-		{ tool: "mcp__openviking__find", args: { target_uri: "viking://resources" } },
-		{ tool: "mcp__openviking__find", args: { uri: "viking://resources/evaluation/demo" } },
+		{ tool: "mcp__openviking_read", args: { uris: "viking://resources/evaluation/demo/note.md" } },
+		{ tool: "mcp__openviking_find", args: { target_uri: "viking://resources" } },
+		{ tool: "mcp__openviking_find", args: { uri: "viking://resources/evaluation/demo" } },
 	]);
 	try {
 		const config = { ...configuration(model), openviking: { url: `${mcp.url}/mcp`, apiKey: "runtime-only-key" } };
 		const result = await runQuestion(config, { arm: "openviking", question, corpus: source.corpus });
 		const names = model.requests[0].tools.map(tool => tool.function.name);
-		assert.ok(names.includes("mcp__openviking__read"));
-		for (const name of ["bash", "write", "codemode", "mcp__openviking__search", "mcp__openviking__write", "mcp__openviking__delete"]) assert.ok(!names.includes(name), name);
+		assert.ok(names.includes("mcp__openviking_read"));
+		for (const name of ["bash", "write", "codemode", "mcp__openviking_search", "mcp__openviking_write", "mcp__openviking_delete"]) assert.ok(!names.includes(name), name);
 		assert.equal(mcpCalls.length, 1);
 		assert.equal(result.toolCalls[1].blocked, true);
 		assert.equal(result.toolCalls[2].blocked, true);
@@ -239,7 +300,10 @@ test("both arms get identical PDF page text and provenance with dotted source ID
 		}
 		const baselinePrompt = model.requests[0].messages.find(message => message.role === "user").content;
 		const candidatePrompt = model.requests[2].messages.find(message => message.role === "user").content;
-		assert.deepEqual(baselinePrompt, candidatePrompt);
+		// Native date/cwd reminders differ for isolated runs; the actual question and corpus must match.
+		const evidenceText = parts => parts.filter(part => part.type === "text" && part.text.startsWith("Answer the question using only the registered corpus."));
+		assert.equal(evidenceText(baselinePrompt).length, 1);
+		assert.deepEqual(evidenceText(baselinePrompt), evidenceText(candidatePrompt));
 		assert.match(JSON.stringify(baselinePrompt), /manual\.v1/);
 		assert.match(JSON.stringify(baselinePrompt), /123abc/);
 		assert.match(JSON.stringify(baselinePrompt), /page-1\.txt/);
@@ -248,7 +312,7 @@ test("both arms get identical PDF page text and provenance with dotted source ID
 	} finally { await model.close(); await mcp.close(); await source.close(); }
 });
 
-test("selected Pi Anthropic model uses its pinned route and runtime-only credentials", async () => {
+test("selected OMP Anthropic model uses its pinned route and runtime-only credentials", async () => {
 	const source = await fixture();
 	const requests = [];
 	const model = await listen(async (req, res) => {
@@ -267,7 +331,7 @@ test("selected Pi Anthropic model uses its pinned route and runtime-only credent
 		res.end();
 	});
 	try {
-		const config = { ...configuration(model), model: { ...configuration(model).model, fromPi: true, provider: "intranet-provider", api: "anthropic-messages", baseUrl: `${model.url}/compatible/anthropic`, apiKey: "private-native-api-key", headers: { "X-Company-Gateway": "private-gateway-token" } } };
+		const config = { ...configuration(model), model: { ...configuration(model).model, fromOmp: true, provider: "intranet-provider", api: "anthropic-messages", baseUrl: `${model.url}/compatible/anthropic`, apiKey: "private-native-api-key", headers: { "X-Company-Gateway": "private-gateway-token" } } };
 		const result = await runQuestion(config, { arm: "baseline", question, corpus: source.corpus });
 		assert.equal(result.answer, finalAnswer);
 		assert.equal(requests[0].path, "/compatible/anthropic/v1/messages?beta=true");
@@ -275,7 +339,7 @@ test("selected Pi Anthropic model uses its pinned route and runtime-only credent
 		assert.equal(requests[0].headers["x-company-gateway"], "private-gateway-token");
 		assert.equal(requests[0].headers.authorization, undefined);
 		assert.ok(requests[0].headers["anthropic-version"]);
-		assert.deepEqual(requests[0].body.tools.map(tool => tool.name).sort(), ["find", "grep", "ls", "read"]);
+		assert.deepEqual(requests[0].body.tools.map(tool => tool.name).sort(), ["_glob", "_grep", "_read"]);
 		assert.ok(!JSON.stringify(requests[0].body).includes("private-native-api-key"));
 		assert.ok(!JSON.stringify(result).includes("private-gateway-token"));
 		assert.ok(result.usage.totalTokens > 0);
@@ -285,20 +349,20 @@ test("selected Pi Anthropic model uses its pinned route and runtime-only credent
 	} finally { await model.close(); await source.close(); }
 });
 
-test("selected Pi model still refuses redirects and unsupported API protocols", async () => {
+test("selected OMP model still refuses redirects and unsupported API protocols", async () => {
 	const source = await fixture();
 	let leaked = 0;
 	const target = await listen((_req, res) => { leaked++; res.end("unexpected"); });
 	const model = await mockModel([{ redirect: `${target.url}/leak` }]);
 	try {
-		const config = { ...configuration(model), model: { ...configuration(model).model, fromPi: true, provider: "selected-provider", api: "openai-completions", apiKey: "private-native-api-key" } };
+		const config = { ...configuration(model), model: { ...configuration(model).model, fromOmp: true, provider: "selected-provider", api: "openai-completions", apiKey: "private-native-api-key" } };
 		await assert.rejects(runQuestion(config, { arm: "baseline", question, corpus: source.corpus }), /Selected model failed/);
 		assert.equal(leaked, 0);
 		await assert.rejects(runQuestion({ ...config, model: { ...config.model, api: "unsupported-api" } }, { arm: "baseline", question, corpus: source.corpus }), /Unsupported evaluation model API/);
 	} finally { await model.close(); await target.close(); await source.close(); }
 });
 
-test("selected Pi Responses model keeps its native protocol and bearer credential", async () => {
+test("selected OMP Responses model keeps its native protocol and bearer credential", async () => {
 	const source = await fixture();
 	let captured;
 	const model = await listen(async (req, res) => {
@@ -317,7 +381,7 @@ test("selected Pi Responses model keeps its native protocol and bearer credentia
 		res.end();
 	});
 	try {
-		const config = { ...configuration(model), model: { ...configuration(model).model, fromPi: true, provider: "selected-provider", api: "openai-responses", apiKey: "private-responses-key" } };
+		const config = { ...configuration(model), model: { ...configuration(model).model, fromOmp: true, provider: "selected-provider", api: "openai-responses", apiKey: "private-responses-key" } };
 		const result = await runQuestion(config, { arm: "baseline", question, corpus: source.corpus });
 		assert.equal(captured.path, "/v1/responses");
 		assert.equal(captured.headers.authorization, "Bearer private-responses-key");

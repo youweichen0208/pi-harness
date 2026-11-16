@@ -1,5 +1,5 @@
 /**
- * pi-harness 的 pi 扩展 —— 提供命令行集成。
+ * pi-harness 的 OMP 扩展 —— 提供命令行集成。
  *
  * 能力：
  *   /webui                      启动本机 pi-harness 服务器，打开浏览器访问
@@ -9,12 +9,12 @@
  *   /webui status               查看运行状态 / URL
  *
  * 实现说明：
- *   - 不依赖全局 bin（pi install 后 pi-harness 命令不一定在 PATH），直接用
+ *   - 不依赖全局 bin（omp plugin install 后 pi-harness 命令不一定在 PATH），直接用
  *     node 调包内 dist/server/index.js，通过环境变量 PORT / PI_WEB_CWD /
  *     PI_WEB_DATA_DIR 控制。
- *   - 工作目录默认用当前 pi 会话的 ctx.cwd；可用 --cwd / path 覆盖。
- *   - 服务器作为子进程后台运行，/webui 不阻塞 pi。
- *   - 每个 pi 会话管理一个子进程；session_shutdown 时清理，避免孤儿进程。
+ *   - 工作目录默认用当前 OMP 会话的 ctx.cwd；可用 --cwd / path 覆盖。
+ *   - 服务器作为子进程后台运行，/webui 不阻塞 OMP。
+ *   - 每个 OMP 会话管理一个子进程；session_shutdown 时清理，避免孤儿进程。
  */
 
 import { spawn } from "node:child_process";
@@ -22,12 +22,13 @@ import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import net from "node:net";
-import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionCommandContext } from "@oh-my-pi/pi-coding-agent";
 
 // 本文件位于 <pkg>/extensions/webui.ts → 包根在上一级
 const PKG_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const SERVER_ENTRY = join(PKG_ROOT, "dist", "server", "index.js");
-const NODE = process.execPath;
+// OMP runs under Bun; the HTTP/PTY host still requires Node.
+const NODE = process.versions.bun ? "node" : process.execPath;
 
 /** 每个会话的服务器子进程 + 元数据 */
 interface RunningServer {

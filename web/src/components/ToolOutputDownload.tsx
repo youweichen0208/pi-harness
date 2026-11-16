@@ -7,8 +7,9 @@ export function ToolOutputDownload({ url, compact = false }: { url: string; comp
 	const t = useT();
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<number>();
+	const [partial, setPartial] = useState(false);
 	const [outputs, setOutputs] = useState<{ id: string; name: string }[]>();
-	useEffect(() => { setOutputs(undefined); setError(undefined); }, [url]);
+	useEffect(() => { setOutputs(undefined); setError(undefined); setPartial(false); }, [url]);
 	const fail = (status: number) => { setError(status); };
 	const download = async (id?: string, name = "tool-output.txt") => {
 		setBusy(true); setError(undefined);
@@ -29,11 +30,12 @@ export function ToolOutputDownload({ url, compact = false }: { url: string; comp
 		try {
 			const response = await fetch(withToken(url.replace("/api/tool-output?", "/api/tool-output-list?")));
 			if (!response.ok) { fail(response.status); return; }
-			const files = await response.json() as { id: string; name: string; default: boolean }[];
+			const files = await response.json() as { id: string; name: string; default: boolean; partial?: boolean }[];
+			setPartial(files.some(file => file.partial));
 			if (!files.length) await download();
 			else if (files.length === 1 && files[0].default) await download(files[0].id, files[0].name);
 			else setOutputs(files);
 		} catch { fail(500); } finally { setBusy(false); }
 	};
-	return <><button type="button" className={compact ? "tool-output-download-link" : "btn"} disabled={busy} onClick={() => void select()}>{compact && <FiDownload aria-hidden="true" />}{t("toolOutputDownload")}</button>{outputs && <span className="tool-output-files"><button disabled={busy} onClick={() => void download()}>{t("toolOutputText")}</button>{outputs.map(file => <button disabled={busy} key={file.id} onClick={() => void download(file.id, file.name)}>{file.name}</button>)}</span>}{error && <span role="alert">{t(error === 404 ? "toolOutputUnavailable" : error === 401 ? "toolOutputAuth" : error === 403 ? "toolOutputDenied" : "toolOutputError")}</span>}</>;
+	return <><button type="button" className={compact ? "tool-output-download-link" : "btn"} disabled={busy} onClick={() => void select()}>{compact && <FiDownload aria-hidden="true" />}{t("toolOutputDownloadSaved")}</button>{outputs && <span className="tool-output-files"><button disabled={busy} onClick={() => void download()}>{t("toolOutputDefault")}</button>{outputs.map(file => <button disabled={busy} key={file.id} onClick={() => void download(file.id, file.name)}>{file.name}</button>)}</span>}{partial && <span role="status">{t("toolOutputPartial")}</span>}{error && <span role="alert">{t(error === 404 ? "toolOutputUnavailable" : error === 401 ? "toolOutputAuth" : error === 403 ? "toolOutputDenied" : "toolOutputError")}</span>}</>;
 }

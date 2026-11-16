@@ -6,6 +6,7 @@ import { useDialogFocus } from "../use-dialog-focus";
 import { NodeAgentPanel } from "./NodeAgentPanel";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { randomUuid } from "../uuid";
+import { localRecoveryClock } from "../recovery-clock";
 import { useT } from "../i18n";
 import { RemoteTerminal } from "./node-terminal";
 
@@ -19,7 +20,7 @@ const hardUnsupported = (node: NodeProfile) => node.unsupported?.some(reason => 
 
 const draftNode = (): Partial<Node> => ({ name: "", group: "默认", host: "", port: 22, username: "root", auth: "password", defaultDir: "/" });
 
-export function NodeWorkbench({ send, active, dirBrowse }: { send: (msg: ClientMessage) => boolean; active: boolean; dirBrowse: DirBrowse | null }) {
+export function NodeWorkbench({ send, active, transportConnected, dirBrowse }: { send: (msg: ClientMessage) => boolean; active: boolean; transportConnected: boolean; dirBrowse: DirBrowse | null }) {
 	const t = useT();
 	const [sources, setSources] = useState<NodeSource[]>([]);
 	const [detected, setDetected] = useState<Partial<NodeSource>[]>([]);
@@ -110,13 +111,13 @@ export function NodeWorkbench({ send, active, dirBrowse }: { send: (msg: ClientM
 	const entries = listings[selected]?.path === path ? listings[selected].entries : [];
 
 	useEffect(() => {
-		if (!active) return;
+		if (!active || !transportConnected) return;
 		request("state"); request("source_detect");
 		const timer = setInterval(() => request("source_detect"), 30000);
 		const focus = () => request("source_detect");
 		window.addEventListener("focus", focus);
 		return () => { clearInterval(timer); window.removeEventListener("focus", focus); };
-	}, [active, request]);
+	}, [active, transportConnected, request]);
 
 	useEffect(() => { if (node) setPath(node.defaultDir); }, [selected, node?.defaultDir]);
 	useEffect(() => {
@@ -129,7 +130,7 @@ export function NodeWorkbench({ send, active, dirBrowse }: { send: (msg: ClientM
 				setNodes(list);
 				setAgents(before => {
 					const next: Record<string, NodeAgentState> = Object.fromEntries(Object.entries(before).map(([key, state]) => [key, { ...state, phase: "closed" as const, running: false, dialogs: [] }]));
-					for (const connection of (msg.data?.connections ?? []) as { nodeId: string; agent?: NodeAgentState }[]) if (connection.agent) next[connection.nodeId] = connection.agent;
+					for (const connection of (msg.data?.connections ?? []) as { nodeId: string; agent?: NodeAgentState }[]) if (connection.agent) next[connection.nodeId] = { ...connection.agent, recovery: localRecoveryClock(connection.agent.recovery) };
 					for (const key of Object.keys(next)) if (!list.some(node => node.id === key)) delete next[key];
 					return next;
 				});
@@ -150,7 +151,7 @@ export function NodeWorkbench({ send, active, dirBrowse }: { send: (msg: ClientM
 				});
 				return;
 			}
-			if (msg.event === "agent_state" && msg.data?.agent) { const agent = msg.data.agent as NodeAgentState; setAgents(all => ({ ...all, [id]: agent })); return; }
+			if (msg.event === "agent_state" && msg.data?.agent) { const agent = msg.data.agent as NodeAgentState; setAgents(all => ({ ...all, [id]: { ...agent, recovery: localRecoveryClock(agent.recovery) } })); return; }
 			if (msg.event === "terminal_output") {
 				const key = `${id}:${msg.terminalId}`;
 				terminalHistory.current.set(key, ((terminalHistory.current.get(key) ?? "") + String(msg.data?.text ?? "")).slice(-65536));
@@ -261,7 +262,7 @@ export function NodeWorkbench({ send, active, dirBrowse }: { send: (msg: ClientM
 			{showFiles && <><div className="node-filebar"><input value={path} onChange={(e) => setPath(e.target.value)} aria-label={t("nodeDefaultDir")} /><button disabled={connections[selected] !== "connected"} onClick={() => listFiles(path)}>{t("nodeBrowse")}</button></div><div className="node-files">{entries.map((entry) => { const target = `${path.replace(/\/$/, "")}/${entry.name}`; return <button key={entry.name} onClick={() => entry.type === "dir" ? (setPath(target), listFiles(target)) : openFile(target)}>{entry.type === "dir" ? "▸" : "·"} {entry.name}</button>; })}</div></>}
 			{file?.nodeId === selected && <div className="node-file-editor"><span>{file.path}</span><button onClick={saveFile}>{t("save")}</button><button onClick={() => setFile(null)}>{t("close")}</button><textarea aria-label={file.path} spellCheck={false} value={file.text} onChange={(e) => setFile({ ...file, text: e.target.value })} /></div>}
 			</div>
-			<div className="node-agent-container"><NodeAgentPanel key={selected} nodeId={selected} defaultDir={node.defaultDir} connected={connections[selected] === "connected"} agent={agents[selected]} request={request} draft={agentDrafts[selected] ?? ""} setDraft={value => setAgentDrafts(all => ({ ...all, [selected]: typeof value === "function" ? value(all[selected] ?? "") : value }))} consumedEditors={consumedAgentEditors.current} onViewTerminal={(terminalId, commandId) => {
+			<div className="node-agent-container"><NodeAgentPanel key={selected} nodeId={selected} defaultDir={node.defaultDir} connected={transportConnected && connections[selected] === "connected"} agent={agents[selected]} request={request} draft={agentDrafts[selected] ?? ""} setDraft={value => setAgentDrafts(all => ({ ...all, [selected]: typeof value === "function" ? value(all[selected] ?? "") : value }))} consumedEditors={consumedAgentEditors.current} onViewTerminal={(terminalId, commandId) => {
 				setActiveTabs(all => ({ ...all, [selected]: terminalId }));
 				requestAnimationFrame(() => window.dispatchEvent(new CustomEvent("pi-node-terminal-jump", { detail: { nodeId: selected, terminalId, commandId } })));
 			}} /></div>

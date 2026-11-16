@@ -1,7 +1,7 @@
 {
   "name": "@youweichen/pi-harness",
   "version": "1.34.2",
-  "description": "Web chat interface for the pi coding agent, powered by the pi SDK (@earendil-works/pi-coding-agent) — one-command run, Docker/systemd/launchd deployable",
+  "description": "Web and desktop interface for Oh My Pi (OMP), with isolated native agent sessions",
   "license": "MIT",
   "author": {
     "name": "youweichen",
@@ -24,7 +24,7 @@
   ],
   "keywords": [
     "pi",
-    "pi-package",
+    "omp-plugin",
     "coding-agent",
     "ai",
     "chat",
@@ -36,7 +36,7 @@
     "type": "git",
     "url": "git+https://github.com/youweichen0208/pi-harness.git"
   },
-  "pi": {
+  "omp": {
     "extensions": [
       "./extensions"
     ]
@@ -52,12 +52,12 @@
     "dev:web": "vite --config web/vite.config.ts",
     "build": "npm run build:web && npm run build:server",
     "build:web": "vite build --config web/vite.config.ts",
-    "build:server": "node scripts/clean-retired-plan.mjs && tsc -p tsconfig.server.json && npm run build:jdbc",
+    "build:server": "node scripts/clean-server-output.mjs && tsc -p tsconfig.production.json && node scripts/check-engine-boundary.mjs --built && npm run build:jdbc",
     "build:jdbc": "node scripts/build-database-jdbc.mjs",
-    "typecheck": "tsc -p tsconfig.server.json --noEmit && tsc -p web/tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit",
+    "typecheck": "npm run check:engine && tsc -p tsconfig.server.json --noEmit && tsc -p web/tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit && tsc -p tsconfig.extensions.json",
     "test": "node --test tests/check-design-tokens-test.mjs && npm run check:design && vitest run",
     "test:unit": "vitest run",
-    "test:context-eval": "node --test tests/context-corpus-test.mjs tests/context-eval-test.mjs tests/context-session-test.mjs tests/context-pi-model-test.mjs",
+    "test:context-eval": "node --test tests/context-corpus-test.mjs tests/context-eval-test.mjs tests/context-session-test.mjs tests/context-omp-model-test.mjs",
     "test:smoke": "node tests/run-smoke.mjs",
     "check:lockfile": "node scripts/check-lockfile.mjs",
     "check:protocol": "node scripts/check-protocol-sync.mjs",
@@ -71,7 +71,8 @@
     "build:electron:win": "electron-builder build --win",
     "build:electron:linux": "electron-builder build --linux",
     "publish:electron": "electron-builder build --publish always",
-    "check:design": "node scripts/check-design-tokens.mjs"
+    "check:design": "node scripts/check-design-tokens.mjs",
+    "check:engine": "node scripts/check-engine-boundary.mjs"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.4",
@@ -82,11 +83,14 @@
     "@codemirror/search": "^6.7.2",
     "@codemirror/state": "^6.7.6",
     "@codemirror/view": "^6.43.15",
-    "@earendil-works/pi-ai": "1.5.2",
-    "@earendil-works/pi-coding-agent": "1.5.2",
     "@lezer/highlight": "^1.2.5",
     "@lezer/python": "1.1.19",
+    "@oh-my-pi/pi-agent-core": "18.20.0",
+    "@oh-my-pi/pi-ai": "18.20.0",
+    "@oh-my-pi/pi-coding-agent": "18.20.0",
+    "@oh-my-pi/pi-tui": "18.20.0",
     "@vscode/ripgrep": "1.18.0",
+    "bun": "1.4.4",
     "codemirror": "^6.0.2",
     "compression": "^1.8.1",
     "cross-spawn": "7.0.6",
@@ -112,6 +116,7 @@
     "ws": "^8.18.0"
   },
   "devDependencies": {
+    "@types/bun": "1.4.4",
     "@types/compression": "^1.8.1",
     "@types/cross-spawn": "6.0.6",
     "@types/express": "^4.17.21",
@@ -150,6 +155,7 @@
   },
   "allowScripts": {
     "node-pty@1.1.0": true,
-    "electron@41.10.7": true
+    "electron@41.10.7": true,
+    "bun@1.4.4": true
   }
 }

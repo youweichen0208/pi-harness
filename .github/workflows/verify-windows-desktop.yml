@@ -1,7 +1,5 @@
-# 一次性验证用：在真机 Windows runner 上确认 Electron 桌面版能正常构建 + node-pty
-# 终端功能在 Windows 上真的能跑（本地在 mac/Linux 沙箱里只能跳过 rebuild 交叉出 zip，
-# 没法验证这一步）。手动触发（Actions 页 "Run workflow"），验证完可以把这个文件删掉，
-# 不是常驻 CI，不影响 ci.yml。
+# 独立 Windows 测试包：真实平台构建和 OMP 门禁，产物保存在 Actions。
+# 不经 Release 工作流；所有包内检查通过后才上传安装包。
 name: Verify Windows desktop build
 
 on:
@@ -12,11 +10,14 @@ on:
         type: string
         default: ""
 
+permissions:
+  contents: read
+
 jobs:
   verify:
     if: ${{ inputs.release_tag == '' }}
     runs-on: windows-2022
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5
 
@@ -39,6 +40,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Typecheck and protocol boundary
+        run: |
+          npm run typecheck
+          if ($LASTEXITCODE -ne 0) { throw "Typecheck failed" }
+          npm run check:protocol
+          if ($LASTEXITCODE -ne 0) { throw "Protocol boundary failed" }
+
       - name: Build web + server
         run: npm run build
 
@@ -58,16 +66,226 @@ jobs:
       # 把 node-pty 针对 Electron 的 Node ABI 重新编译一遍（这一步在 mac/Linux 上
       # 交叉构建时会直接报错，只有真机 Windows 才能跑；windows-latest runner 自带
       # 编译工具链，这里应该会成功）。产出 nsis 安装包 + portable 绿色版 + zip。
+      - name: Verify OMP runtime, configuration and entry (plain Node)
+        run: |
+          node tests/omp-runtime-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-runtime-test.mjs failed" }
+          node tests/omp-openai-proxy-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-openai-proxy-test.mjs failed" }
+          node tests/omp-proxy-transports-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-proxy-transports-test.mjs failed" }
+          node tests/omp-model-config-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-model-config-test.mjs failed" }
+          node tests/omp-model-catalog-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-model-catalog-test.mjs failed" }
+          node tests/omp-skill-settings-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-skill-settings-test.mjs failed" }
+          node tests/omp-extension-settings-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-extension-settings-test.mjs failed" }
+          node tests/omp-packages-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-packages-test.mjs failed" }
+          node tests/omp-marketplace-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-marketplace-test.mjs failed" }
+          node tests/omp-package-features-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-package-features-test.mjs failed" }
+          node tests/omp-package-settings-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-package-settings-test.mjs failed" }
+          node tests/omp-mcp-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-mcp-test.mjs failed" }
+          node tests/omp-mcp-auth-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-mcp-auth-test.mjs failed" }
+          node tests/omp-mcp-auth-reconnect-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-mcp-auth-reconnect-test.mjs failed" }
+          node tests/omp-stop-metadata-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-stop-metadata-test.mjs failed" }
+          node tests/omp-prompt-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-prompt-test.mjs failed" }
+          node tests/omp-tasks-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-tasks-test.mjs failed" }
+          node tests/omp-request-diagnostics-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-request-diagnostics-test.mjs failed" }
+          node tests/omp-task-output-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-task-output-test.mjs failed" }
+          node tests/omp-task-compaction-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-task-compaction-test.mjs failed" }
+          node tests/omp-mcp-diagnostics-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-mcp-diagnostics-test.mjs failed" }
+          node tests/reasoning-repetition-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "OMP reasoning interruption regression failed" }
+          node tests/omp-recovery-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-recovery-test.mjs failed" }
+          node tests/omp-restricted-recovery-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "Restricted OMP recovery failed" }
+          node tests/playground-drain-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "Playground drain failed" }
+          node tests/omp-persistence-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "OMP persistence failed" }
+          node tests/omp-persistence-restart-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "OMP persistence restart failed" }
+          node tests/omp-external-history-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-external-history-test failed" }
+          node tests/omp-session-storage-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-session-storage-test failed" }
+          node tests/omp-tree-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-tree-test.mjs failed" }
+          node tests/omp-skill-history-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-skill-history-test.mjs failed" }
+          node tests/omp-template-attachments-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-template-attachments-test.mjs failed" }
+          node tests/omp-entry-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-entry-test.mjs failed" }
+
+      - name: Install browser for toolbar regression
+        run: npx playwright-core install chromium
+
+      - name: Verify desktop toolbar layout on Windows
+        run: node tests/desktop-toolbar-test.mjs
+
       - name: Build Electron desktop app (real npmRebuild)
         run: npm run build:electron:win -- --publish never
 
       - name: Verify packaged server and portable relaunch
         shell: pwsh
         run: |
+          node tests/packaged-jdbc-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "Packaged JDBC bridge failed" }
           node tests/packaged-server-start-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
           if ($LASTEXITCODE -ne 0) { throw "Packaged server cannot start" }
+          node tests/omp-runtime-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "Packaged OMP runtime failed" }
+          node tests/omp-model-config-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "omp-model-config-test.mjs failed" }
+          node tests/omp-model-catalog-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "omp-model-catalog-test.mjs failed" }
+          node tests/omp-skill-settings-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "omp-skill-settings-test.mjs failed" }
+          node tests/omp-extension-settings-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "omp-extension-settings-test.mjs failed" }
+          node tests/omp-packages-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "omp-packages-test.mjs failed" }
+          node tests/omp-marketplace-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "omp-marketplace-test.mjs failed" }
+          node tests/omp-package-features-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "omp-package-features-test.mjs failed" }
+          node tests/omp-package-settings-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "omp-package-settings-test.mjs failed" }
+          node tests/omp-mcp-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "OMP MCP runtime failed" }
+          node tests/omp-mcp-auth-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "OMP MCP OAuth failed" }
+          node tests/omp-mcp-auth-reconnect-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "omp-mcp-auth-reconnect-test.mjs failed" }
+          node tests/omp-stop-metadata-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "OMP stop metadata failed" }
+          node tests/omp-prompt-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "OMP prompt files failed" }
+          node tests/omp-tasks-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "Packaged OMP configuration failed" }
+          node tests/omp-request-diagnostics-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "omp-request-diagnostics-test.mjs failed" }
+          node tests/omp-task-output-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "omp-task-output-test.mjs failed" }
+          node tests/omp-task-compaction-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "omp-task-compaction-test.mjs failed" }
+          node tests/omp-mcp-diagnostics-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "omp-mcp-diagnostics-test.mjs failed" }
+          node tests/reasoning-repetition-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "OMP reasoning interruption regression failed" }
+          node tests/omp-recovery-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "Packaged OMP recovery failed" }
+          node tests/omp-restricted-recovery-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "Restricted OMP recovery failed" }
+          node tests/playground-drain-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "Playground drain failed" }
+          node tests/omp-persistence-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "Packaged OMP persistence failed" }
+          node tests/omp-persistence-restart-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "OMP persistence restart failed" }
+          node tests/omp-external-history-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "omp-external-history-test failed" }
+          node tests/omp-session-storage-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "omp-session-storage-test failed" }
+          node tests/omp-skill-history-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "Packaged OMP skill history failed" }
+          node tests/omp-template-attachments-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "Packaged OMP template attachments failed" }
+          node tests/omp-entry-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "Packaged OMP entry failed" }
           $portable = Get-ChildItem release/*win-x64.exe | Select-Object -First 1
           ./tests/portable-relaunch-test.ps1 -PortableExe $portable.FullName
+
+      - name: Verify packaged OMP resources and rendering
+        shell: pwsh
+        run: |
+          node tests/windows-rendering-test.mjs release/win-unpacked/pi.exe
+          if ($LASTEXITCODE -ne 0) { throw "Packaged rendering failed" }
+          node tests/omp-resources-desktop-test.mjs release/win-unpacked/pi.exe
+          if ($LASTEXITCODE -ne 0) { throw "omp-resources-desktop-test.mjs failed" }
+          node tests/omp-packages-browser-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "Packaged OMP package settings UI failed" }
+          node tests/omp-mcp-browser-test.mjs release/win-unpacked/pi.exe
+          if ($LASTEXITCODE -ne 0) { throw "Packaged OMP resources failed" }
+          node tests/omp-prompt-browser-test.mjs release/win-unpacked/pi.exe
+          if ($LASTEXITCODE -ne 0) { throw "Packaged OMP prompt UI failed" }
+          node tests/omp-tasks-browser-test.mjs release/win-unpacked/pi.exe
+          if ($LASTEXITCODE -ne 0) { throw "Packaged OMP task UI failed" }
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: omp-validation-rendering-windows
+          path: |
+            tests/scratch/rendering
+            tests/scratch/omp-task-*.png
+            tests/scratch/omp-skill-settings*.png
+            tests/scratch/omp-extension-*.png
+            tests/scratch/omp-mcp-*.png
+            tests/scratch/omp-package-settings-*.png
+            tests/scratch/omp-package-features-*.png
+            tests/scratch/omp-packages-*.png
+            tests/scratch/omp-prompt-*.png
+          if-no-files-found: warn
+
+      - name: Verify ZIP in a path with spaces and Chinese characters
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem release/*win-x64.zip | Select-Object -First 1
+          if (-not $zip) { throw "Windows ZIP is missing" }
+          $dest = Join-Path $env:RUNNER_TEMP 'OMP 测试/portable pi'
+          Expand-Archive $zip.FullName $dest
+          node tests/packaged-server-start-test.mjs "$dest/pi.exe" "$dest/resources/app"
+          if ($LASTEXITCODE -ne 0) { throw "Extracted ZIP server failed" }
+          node tests/omp-task-compaction-test.mjs "$dest/pi.exe" "$dest/resources/app"
+          if ($LASTEXITCODE -ne 0) { throw "Extracted ZIP native Task failed" }
+
+      - name: Verify NSIS installation and previous-version data
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $previous = Join-Path $env:RUNNER_TEMP 'pi-previous'
+          $dest = Join-Path $env:LOCALAPPDATA 'Programs\pi-release-test'
+          # Previous version = latest published release; the first release has none and skips the upgrade-data check.
+          $prev = (gh release list --exclude-drafts --limit 1 --json tagName --jq '.[0].tagName // empty')
+          if ($prev) {
+            gh release download $prev --pattern '*win-x64.zip' --dir $previous
+            if ($LASTEXITCODE -ne 0) { throw 'Previous release download failed' }
+            $zip = Get-ChildItem "$previous/*win-x64.zip" | Select-Object -First 1
+            Expand-Archive $zip.FullName "$previous/app"
+            New-Item -ItemType Directory -Force -Path $dest | Out-Null
+            Copy-Item "$previous/app/*" $dest -Recurse
+            node tests/packaged-upgrade-test.mjs seed "$dest/pi.exe" "$dest/resources/app" "$env:RUNNER_TEMP/pi-upgrade-state"
+            if ($LASTEXITCODE -ne 0) { throw 'Previous runtime seed failed' }
+          }
+          $installer = Get-ChildItem release/*setup-x64.exe | Select-Object -First 1
+          $proc = Start-Process -FilePath $installer.FullName -ArgumentList @('/S', '/currentuser', "/D=$dest") -PassThru
+          if (-not $proc.WaitForExit(180000) -or $proc.ExitCode -ne 0) { throw 'NSIS installation failed' }
+          node tests/packaged-server-start-test.mjs "$dest/pi.exe" "$dest/resources/app"
+          if ($LASTEXITCODE -ne 0) { throw 'Installed server failed' }
+          if ($prev) {
+            node tests/packaged-upgrade-test.mjs verify "$dest/pi.exe" "$dest/resources/app" "$env:RUNNER_TEMP/pi-upgrade-state"
+            if ($LASTEXITCODE -ne 0) { throw 'Previous-version data failed' }
+          }
 
       - name: Upload installers
         uses: actions/upload-artifact@v4

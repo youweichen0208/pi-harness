@@ -1,0 +1,108 @@
+{
+  "platform": "darwin-arm64",
+  "protocol": 78,
+  "omp": "18.20.0",
+  "bun": "1.4.4",
+  "node": "26.0.0",
+  "status": "Opt-in provider request diagnostics locally verified; migration and Windows fault acceptance incomplete",
+  "source": {
+    "candidate": "/var/folders/41/07yyp3_12jddkkthmflqkbgw0000gn/T/omp-request-diagnostics-build-i4livhjm",
+    "filesCompared": 1346,
+    "fingerprintSha256": "67790892933813a95bbda631ef36e33f8bf05a72e6e049b642e7993ea14657eb",
+    "differencesFromCurrentRoot": [],
+    "docsExcluded": true
+  },
+  "changes": [
+    "Public native before_provider_request/after_provider_response and message event observers; never modify model payload or add calls.",
+    "HMAC content/model/endpoint/tool-schema digests, bounded history and tool structure, call/result pairing, numeric output/thinking controls and safe event metadata.",
+    "Private local key and per-file 8 MiB cap; absent flag or storage failure does not interrupt model execution. No total directory retention limit.",
+    "Shared host/provider run UUID; hashed session/parent/agent IDs. Metadata-only workers do not enable observer. Restricted sessions receive only the explicit observer.",
+    "Source and packaged desktop regression gates now include request and MCP connection diagnostics; workflows not executed."
+  ],
+  "verification": {
+    "build": {
+      "path": "/tmp/omp-request-diagnostics-build-settlement.log",
+      "exitCode": 0,
+      "sha256": "9638c6e77d87bc0d9f342a7fcdc41469f492c39dcef0c1b0359450a886e9f755"
+    },
+    "types": {
+      "path": "/tmp/omp-request-diagnostics-types-settlement.log",
+      "exitCode": 0,
+      "sha256": "20eba569f73b594b29f88375d81dbe413bbe134c5008159c58f8cd696a6e4b77"
+    },
+    "units": {
+      "path": "/tmp/omp-request-diagnostics-units-settlement.log",
+      "exitCode": 0,
+      "sha256": "5d04cabb3cdf277f92b4a60d20fc968dee21474242c5a937d83e9c58fe8ecfbf"
+    },
+    "related": {
+      "path": "/tmp/omp-request-diagnostics-related-final.log",
+      "exitCode": 0,
+      "sha256": "ed352432ed9c88449a25e8bbb8cb26e6c212b44f01e9f689238930efd21618ed"
+    },
+    "redBaseline": {
+      "path": "/tmp/omp-request-diagnostics-red-final.log",
+      "exitCode": 1,
+      "sha256": "8368bbb85b9d7d266f25250f6fa84ef90c0cedf37750717297edf3075ee60581"
+    },
+    "nativeRpc": {
+      "path": "/tmp/omp-request-diagnostics-native-accepted.log",
+      "exitCode": 0,
+      "sha256": "0616c4144696582cb91467155706be9ee1805d1b3e6d13787f7a8594350a1e2e"
+    }
+  },
+  "counts": {
+    "unitFiles": 174,
+    "unitPassed": 1078,
+    "unitSkipped": 1,
+    "relatedPassed": 7,
+    "relatedTotal": 7,
+    "currentSmokeEntries": 119,
+    "fullCurrentSmokeRun": false
+  },
+  "coverage": [
+    "Actual Anthropic/OpenAI HTTP requests, split tool arguments, outgoing limits and tools, paired history, response status, parsed stream events and host run correlation.",
+    "Default-off, unwritable directory, restricted sessions, privacy checks across all JSONL files, Stop without implicit request or worker revival.",
+    "Nine actual SDK Task child requests in-process, following native embedding behavior; separate real native CLI RPC validates nine children, at least one worker thread, and completed prompt_result."
+  ],
+  "nativeCliPrint": {
+    "status": "Unresolved native JSON/print event-loop exit, reproduced with observer and without observer",
+    "symptom": "Nine child requests and final assistant/agent_end occur, then CLI exits 1: event loop drained while launch still pending.",
+    "observer": {
+      "path": "/tmp/omp-request-diagnostics-native-wait.log",
+      "exitCode": 1,
+      "sha256": "8b2e377004dcc28a7033cab3b51373751a6929be3e1fdde4c58de1dd49e7807e"
+    },
+    "control": {
+      "path": "/tmp/omp-request-diagnostics-cli-control.log",
+      "exitCode": 1,
+      "sha256": "f4830b737a0a503587b328891dc8cdcc1d651fa78b6a6d7192368cb1a4ccbf12"
+    },
+    "reproduction": "HARNESS_TEST_OMP_CLI_MODE=print or print-control with tests/omp-request-diagnostics-test.mjs",
+    "boundary": "RPC completion does not establish print-mode completion. SDK embedding intentionally does not enable CLI worker host."
+  },
+  "limitations": [
+    "Parsed public-hook observation, not raw SSE or wire capture; later extension transformations may differ.",
+    "No parallel request/response causal correlation ID from public callbacks; no invented association.",
+    "HMAC JSON digests are order-sensitive; no raw schemas/content/IDs, and real model/gateway values still require manual recording.",
+    "No Windows original-task matrix, real provider accounts, installed/current-package acceptance or performance comparison.",
+    "Native Task storage protection, tool-level OAuth and selected-definition OAuth write-back CAS remain unresolved.",
+    "Native Task CLI-thread proxy routing remains unverified."
+  ],
+  "operations": {
+    "rootDist": "Not overwritten",
+    "userProcessesPreserved": [
+      23786,
+      62015
+    ],
+    "candidateRemoved": true,
+    "allVerificationHandlesTerminal": true,
+    "release": "No commit, push, publish or installed-app replacement"
+  },
+  "checks": [
+    "Protocol sync 78",
+    "316 isolated test scripts",
+    "git diff --check",
+    "Evidence JSON parsed successfully"
+  ]
+}

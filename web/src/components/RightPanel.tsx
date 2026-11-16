@@ -6,6 +6,7 @@ import { useT } from "../i18n";
 import { mentionedHiddenDirs } from "../conversation-files";
 import { CreateFileForm } from "./CreateFileForm";
 import { TaskProgressPanel } from "./TaskProgressPanel";
+import type { UiOmpTask } from "../types";
 
 // Icon accents are file categories; filenames and Git status retain their own styling.
 function fileIconCategory(name: string): string {
@@ -20,6 +21,7 @@ function fileIconCategory(name: string): string {
 
 type AttachMode = "inline";
 interface RightPanelProps extends CodemodeActivity {
+	ompTasks?: UiOmpTask[];
 	filesOnly?: boolean;
 	selectedPath?: string;
 	taskFocusRequest?: number;
@@ -42,7 +44,7 @@ interface RightPanelProps extends CodemodeActivity {
 	onPreview: (path: string, name: string) => void;
 }
 
-export const RightPanel = memo(function RightPanel({ filesOnly = false, selectedPath, codemode, liveOutputs, toolStatuses, taskFocusRequest = 0, onSearchFiles, active, files, fileChanged, changed, notRepo, widgets, messages, streamingMessage, isStreaming, taskProgress, conversationId, agentSilence, cwd, send, onAttach, onPreview }: RightPanelProps) {
+export const RightPanel = memo(function RightPanel({ filesOnly = false, selectedPath, codemode, liveOutputs, toolStatuses, taskFocusRequest = 0, onSearchFiles, active, files, fileChanged, changed, notRepo, widgets, messages, streamingMessage, isStreaming, taskProgress, ompTasks, conversationId, agentSilence, cwd, send, onAttach, onPreview }: RightPanelProps) {
 	const t = useT();
 	const tabId = useId();
 	const [tab, setTab] = useState<"files" | "task">("files");
@@ -233,7 +235,7 @@ export const RightPanel = memo(function RightPanel({ filesOnly = false, selected
 			</div>
 		</div>
 		</div>
-		<div className="panel-lower" role="tabpanel" id={`${tabId}-task`} aria-labelledby={`${tabId}-task-tab`} hidden={filesOnly || tab !== "task"}><TaskProgressPanel key={conversationId} send={send} codemode={codemode} conversationId={conversationId} liveOutputs={liveOutputs} toolStatuses={toolStatuses} task={taskProgress} streaming={isStreaming} live={streamingMessage} silence={agentSilence ?? null} cwd={cwd} messages={messages} onPreview={onPreview} /></div>
+		<div className="panel-lower" role="tabpanel" id={`${tabId}-task`} aria-labelledby={`${tabId}-task-tab`} hidden={filesOnly || tab !== "task"}><TaskProgressPanel key={conversationId} send={send} codemode={codemode} conversationId={conversationId} liveOutputs={liveOutputs} toolStatuses={toolStatuses} task={taskProgress} ompTasks={ompTasks} streaming={isStreaming} live={streamingMessage} silence={agentSilence ?? null} cwd={cwd} messages={messages} onPreview={onPreview} /></div>
 			{widgets.filter((w) => w.lines.length > 0).length > 0 && (
 				<div className="panel-widgets">
 					{widgets

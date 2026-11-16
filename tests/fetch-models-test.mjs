@@ -9,22 +9,22 @@
 //   4. error paths: invalid/unsupported baseUrl, empty list, non-JSON body
 //   5. concurrent requests: each result matches its own reqId
 //
-// Usage: npm run build && node fetch-models-test.mjs [port]
+// Usage: npm run build && node tests/fetch-models-test.mjs
+import assert from "node:assert/strict";
 import WebSocket from "ws";
 import { createServer } from "node:http";
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { spawn } from "node:child_process";
-import { realpathSync } from "node:fs";
+import { listenIsolated, startIsolatedHarness } from "./lib/isolated-server.mjs";
 import { testEnv } from "./lib/test-env.mjs";
 
-const PORT = Number(process.argv[2] || 8955);
-const MOCK_PORT = PORT + 1;
+let harness, c;
+let MOCK_PORT;
 const base = mkdtempSync(join(tmpdir(), "pi-web-fetchmodels-"));
 const workdir = join(base, "work");
 const dataDir = join(base, "data");
-const agentDir = join(base, "agent");
+const agentDir = join(dataDir, "omp/agent");
 mkdirSync(workdir, { recursive: true });
 mkdirSync(dataDir, { recursive: true });
 mkdirSync(agentDir, { recursive: true });
@@ -63,6 +63,12 @@ const mock = createServer((req, res) => {
 				},
 			],
 		});
+	if (url.pathname === "/precedence/models") return send(200, { data: [{
+		id: "native-wins", context_length: 64000, context_window: 32768,
+		display_name: "Alias name", metadata: { display_name: "Native name" },
+		input: ["text"], modalities: ["image"], supports_vision: true,
+		max_output_tokens: 5000,
+	}] });
 	if (url.pathname === "/empty/models") return send(200, { data: [] });
 	if (url.pathname === "/badjson/models") return send(200, "definitely-not-json");
 	if (url.pathname === "/models" || url.pathname === "/v1/models")
@@ -70,51 +76,14 @@ const mock = createServer((req, res) => {
 			data: [
 				// vLLM-style extended metadata is parsed into the form rows.
 				{ id: "mock-a", owned_by: "test", context_window: 32768, modalities: ["text", "image"] },
-				{ id: "mock-b", max_model_len: 128000, supports_vision: true, reasoning: true },
+				{ id: "mock-b", max_model_len: 128000, supports_vision: true, supported_reasoning_levels: ["low", "medium", "high"] },
 				{ id: "mock-a" }, // duplicate — must be deduped
-				{ id: "mock-c" },
+				{ id: "mock-c", reasoning: true },
 				{ id: "mock-d", display_name: "Mock D", max_output_tokens: 8192 },
 			],
 		});
 	send(404, { error: "no route" });
 });
-await new Promise((res) => mock.listen(MOCK_PORT, "127.0.0.1", res));
-console.log(`mock /models on :${MOCK_PORT}`);
-
-// Minimal agent config so the server starts cleanly.
-writeFileSync(
-	join(agentDir, "auth.json"),
-	JSON.stringify({ main: { type: "api_key", key: "main-key" } }),
-);
-writeFileSync(
-	join(agentDir, "models.json"),
-	JSON.stringify({
-		providers: {
-			main: {
-				api: "openai-completions",
-				baseUrl: `http://127.0.0.1:${MOCK_PORT}`,
-				apiKey: "main-key",
-				models: [{ id: "mock-a" }],
-			},
-		},
-	}),
-);
-
-const NODE = realpathSync(process.execPath);
-const server = spawn(NODE, ["dist/server/index.js"], {
-	env: {
-		...testEnv(),
-		PORT: String(PORT),
-		PI_WEB_DATA_DIR: dataDir,
-		PI_WEB_CWD: workdir,
-		PI_CODING_AGENT_DIR: agentDir,
-	},
-	stdio: ["ignore", "pipe", "pipe"],
-	windowsHide: true,
-});
-server.stdout.on("data", (d) => process.stdout.write(`[srv] ${d}`));
-server.stderr.on("data", (d) => process.stdout.write(`[srv-err] ${d}`));
-
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let passed = 0;
 /** JSON comparison that ignores object key order. */
@@ -163,43 +132,21 @@ class Client {
 }
 
 async function connect() {
-	for (let i = 0; i < 60; i++) {
-		try {
-			const ws = new WebSocket(`ws://127.0.0.1:${PORT}/ws`);
-			await new Promise((res, rej) => {
-				ws.on("open", res);
-				ws.on("error", rej);
-			});
-			return new Client(ws);
-		} catch {
-			await sleep(500);
-		}
-	}
-	throw new Error("server not ready");
+	const ws = new WebSocket(`ws://127.0.0.1:${harness.port}/ws`);
+	const client = new Client(ws);
+	await new Promise((resolve, reject) => { ws.once("open", resolve); ws.once("error", reject); });
+	return client;
 }
-
-let clean = false;
-async function cleanup() {
-	if (clean) return;
-	clean = true;
-	try {
-		process.kill(server.pid, "SIGTERM");
-	} catch {
-		/* gone */
-	}
-	mock.close();
-}
-process.on("exit", cleanup);
-process.on("SIGINT", async () => {
-	await cleanup();
-	process.exit(1);
-});
 
 try {
-	await sleep(1000);
-	const c = await connect();
+	MOCK_PORT = await listenIsolated(mock);
+	writeFileSync(join(agentDir, "config.yml"), JSON.stringify({ skills: { enabled: false }, cacheWarming: { enabled: false } }));
+	const env = testEnv({ PI_WEB_DATA_DIR: dataDir, PI_WEB_CWD: workdir });
+	for (const key of Object.keys(env)) if (/API_KEY|TOKEN|SECRET|PASSWORD|^ANTHROPIC_|^OPENAI_|^GOOGLE_|^GEMINI_|^AWS_|^AZURE_|^OMP_/.test(key)) env[key] = undefined;
+	harness = await startIsolatedHarness({ env });
+	c = await connect();
 	c.send({ type: "hello", clientId: "fetch-models-test" });
-	await c.waitFor("ready", 8000);
+	await c.waitFor("ready", 30000);
 	console.log("  · ready");
 
 	// 1) happy path with auth (openai-completions → Authorization: Bearer)
@@ -212,17 +159,18 @@ try {
 		api: "openai-completions",
 	});
 	const r1 = await c.waitFor("fetch_models_result", 10000, (m) => m.reqId === 1);
-	check(
-		"happy path: ok + deduped sorted models with metadata",
-		r1.ok &&
-			canon(r1.models) ===
-				canon([
-					{ id: "mock-a", contextWindow: 32768, input: ["text", "image"] },
-					{ id: "mock-b", reasoning: true, contextWindow: 128000, input: ["text", "image"] },
-					{ id: "mock-c" },
-					{ id: "mock-d", name: "Mock D", maxTokens: 8192 },
-				]),
-	);
+	assert.equal(r1.ok, true);
+	assert.deepEqual(r1.models.map(model => model.id), ["mock-a", "mock-b", "mock-c", "mock-d"]);
+	const [a, b, unknown, d] = r1.models;
+	assert.equal(a.contextWindow, 32768, "top-level gateway context alias survives native discovery");
+	assert.deepEqual(a.input, ["text", "image"]);
+	assert.equal(b.contextWindow, 128000);
+	assert.equal(b.reasoning, true, "native endpoint-declared reasoning ladder");
+	assert.deepEqual(b.input, ["text", "image"]);
+	assert.equal(d.name, "Mock D"); assert.equal(d.maxTokens, 8192);
+	assert.equal(unknown.reasoning, false, "a bare boolean does not invent a native reasoning ladder");
+	assert.equal(unknown.maxTokens, 32768, "OMP 18.20 discovery default, not the custom-model registration fallback");
+	check("native defaults, sorted unique IDs and advertised metadata", true);
 	check(
 		"auth header sent (Bearer test-key)",
 		authHeaders.some(
@@ -256,12 +204,12 @@ try {
 		api: "openai-completions",
 	});
 	const r3 = await c.waitFor("fetch_models_result", 10000, (m) => m.reqId === 3);
-	check("/v1 fallback works", r3.ok && canon(r3.models) === canon([{ id: "fb-only" }]));
+	check("/v1 fallback works", r3.ok && canon(r3.models.map(model => model.id)) === canon(["fb-only"]));
 
 	// 4) error paths
 	c.send({ type: "fetch_models", reqId: 4, baseUrl: "" });
 	const r4 = await c.waitFor("fetch_models_result", 10000, (m) => m.reqId === 4);
-	check("empty baseUrl → error", !r4.ok && r4.error.includes("baseUrl"));
+	check("empty baseUrl → error", !r4.ok && /地址/.test(r4.error));
 
 	c.send({ type: "fetch_models", reqId: 5, baseUrl: "ht!tp://nope" });
 	const r5 = await c.waitFor("fetch_models_result", 10000, (m) => m.reqId === 5);
@@ -269,7 +217,7 @@ try {
 
 	c.send({ type: "fetch_models", reqId: 6, baseUrl: `ftp://127.0.0.1:${MOCK_PORT}` });
 	const r6 = await c.waitFor("fetch_models_result", 10000, (m) => m.reqId === 6);
-	check("non-http(s) baseUrl → error", !r6.ok && r6.error.includes("http"));
+	check("non-http(s) baseUrl → error", !r6.ok && /http/i.test(r6.error));
 
 	c.send({
 		type: "fetch_models",
@@ -277,7 +225,7 @@ try {
 		baseUrl: `http://127.0.0.1:${MOCK_PORT}/empty`,
 	});
 	const r7 = await c.waitFor("fetch_models_result", 10000, (m) => m.reqId === 7);
-	check("empty model list → error", !r7.ok && r7.error.includes("未返回任何模型"));
+	check("empty model list → error", !r7.ok && r7.error.includes("未返回可用聊天模型"));
 
 	c.send({
 		type: "fetch_models",
@@ -285,7 +233,7 @@ try {
 		baseUrl: `http://127.0.0.1:${MOCK_PORT}/badjson`,
 	});
 	const r8 = await c.waitFor("fetch_models_result", 10000, (m) => m.reqId === 8);
-	check("non-JSON body → error", !r8.ok && r8.error.includes("JSON"));
+	check("non-JSON body → error", !r8.ok && !!r8.error && !r8.error.includes("definitely-not-json"));
 
 	c.send({
 		type: "fetch_models",
@@ -303,14 +251,13 @@ try {
 		api: "google-generative-ai",
 	});
 	const r10 = await c.waitFor("fetch_models_result", 10000, (m) => m.reqId === 10);
-	check(
-		"google format parsed (models/ prefix stripped, limits filled)",
-		r10.ok &&
-			canon(r10.models) ===
-				canon([
-					{ id: "gemini-flash", name: "Gemini Flash", contextWindow: 1048576, maxTokens: 8192 },
-				]),
-	);
+	assert.equal(r10.ok, true);
+	assert.equal(r10.models.length, 1);
+	assert.equal(r10.models[0].id, "gemini-flash");
+	assert.equal(r10.models[0].name, "Gemini Flash");
+	assert.equal(r10.models[0].contextWindow, 1048576);
+	assert.equal(r10.models[0].maxTokens, 8192);
+	check("google envelope normalized with native limits", true);
 
 	// 6) concurrent requests: reqIds stay matched
 	c.send({
@@ -329,12 +276,21 @@ try {
 	const r12 = await c.waitFor("fetch_models_result", 10000, (m) => m.reqId === 12);
 	check(
 		"concurrent reqIds matched",
-		r11.ok && canon(r11.models) === canon([{ id: "fb-only" }]) &&
+		r11.ok && canon(r11.models.map(model => model.id)) === canon(["fb-only"]) &&
 			r12.ok &&
 			canon(r12.models).includes('"id":"mock-a"') &&
 			canon(r12.models).includes('"contextWindow":32768'),
 	);
 
+	c.send({ type: "fetch_models", reqId: 13, baseUrl: `http://127.0.0.1:${MOCK_PORT}/precedence` });
+	const precedence = await c.waitFor("fetch_models_result", 10000, message => message.reqId === 13);
+	assert.equal(precedence.ok, true);
+	assert.equal(precedence.models[0].name, "Native name");
+	assert.equal(precedence.models[0].contextWindow, 64000);
+	assert.equal(precedence.models[0].maxTokens, 5000);
+	assert.deepEqual(precedence.models[0].input, ["text"]);
+	check("native metadata takes precedence over gateway aliases", true);
+	assert(!c.received.some(event => event.type === "notice" && event.level === "error"));
 	console.log(`\n${passed} checks passed`);
 } catch (err) {
 	// Debug aid: dump what actually arrived before the failure.
@@ -346,5 +302,8 @@ try {
 	}
 	throw err;
 } finally {
-	await cleanup();
+	c?.ws.terminate();
+	await harness?.stop();
+	mock.closeAllConnections(); await new Promise(resolve => mock.close(resolve));
+	rmSync(base, { recursive: true, force: true });
 }

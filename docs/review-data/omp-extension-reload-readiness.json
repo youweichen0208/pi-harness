@@ -1,0 +1,78 @@
+{
+  "platform": "darwin-arm64",
+  "protocol": 78,
+  "omp": "18.20.0",
+  "bun": "1.4.4",
+  "node": "26.0.0",
+  "status": "Reload completion timing in extension regression corrected; production admission unchanged",
+  "source": {
+    "candidate": "/var/folders/41/07yyp3_12jddkkthmflqkbgw0000gn/T/omp-task-output-build-n_s9wvsx",
+    "filesCompared": 1347,
+    "fingerprintSha256": "83a9ace932fc95187211d1da32b8ef4a13dc0adced0efb938fd0035b4aa441c1",
+    "fingerprintMethod": "sha256 of ordered path, NUL, binary sha256(file) tuples",
+    "docsExcluded": true,
+    "differencesFromCurrentRoot": [],
+    "missingFromCandidate": []
+  },
+  "reproduction": {
+    "original": "Full 119-entry baseline failed commandExecuted assertion after settings_state.",
+    "unmodifiedRepeat": {
+      "path": "/tmp/omp-extension-ui-repeat.log",
+      "exitCode": 0,
+      "sha256": "94a4164444bf1035afd5d91050ec9e0e7c84993b31f785aa2eeca9f0ae46798d"
+    },
+    "sixRepeats": {
+      "path": "/tmp/omp-extension-ui-repeats.log",
+      "exitCode": 0,
+      "sha256": "da69f39af1097e2983e471eba10c49e37bfa565440056714bc675d3db42c2b3a"
+    },
+    "heldRed": {
+      "path": "/tmp/omp-extension-ui-held-red.log",
+      "exitCode": 1,
+      "sha256": "4446ee79b0f91e845beced75a27f28316c212bcf155967812f7d5a5a1a63bb53"
+    },
+    "heldGreen": {
+      "path": "/tmp/omp-extension-ui-held-green.log",
+      "exitCode": 0,
+      "sha256": "94a4164444bf1035afd5d91050ec9e0e7c84993b31f785aa2eeca9f0ae46798d"
+    },
+    "finalWithoutProbe": {
+      "path": "/tmp/omp-extension-ui-final.log",
+      "exitCode": 0,
+      "sha256": "94a4164444bf1035afd5d91050ec9e0e7c84993b31f785aa2eeca9f0ae46798d"
+    }
+  },
+  "finding": "settings_state is emitted while nativeResources still owns the navigation lease. Delaying host command-catalog publication reproduced a rejected prompt receipt before release. A later idle snapshot is the public send-admission boundary.",
+  "change": "Wait for an idle snapshot for the same conversation after the reload settings message, then retain native /mcp commandExecuted and builtin precedence assertions. Include the receipt in a failed assertion for future diagnosis.",
+  "probe": "Temporary Node preload delayed host pushSlashCommands only while navigation was busy; no SDK edits. Removed after controlled red/green checks.",
+  "limitations": [
+    "Six ordinary passes alone did not explain the initial failure; controlled delay provides causal evidence for early send rejection.",
+    "Full baseline result remains a failure; focused success is not substituted into full-suite totals."
+  ],
+  "operations": {
+    "rootDist": "Not overwritten",
+    "userProcessesPreserved": [
+      23786,
+      62015
+    ],
+    "candidateRemoved": true,
+    "release": "No commit, push, publish or installed-app replacement",
+    "allVerificationHandlesTerminal": true
+  },
+  "finalSource": {
+    "candidate": "/var/folders/41/07yyp3_12jddkkthmflqkbgw0000gn/T/omp-task-output-build-n_s9wvsx",
+    "filesCompared": 1347,
+    "fingerprintSha256": "8eabb96528defc904fa8417cb0702f56b43dab651e8ef314ca722d0d8c7d03d7",
+    "fingerprintMethod": "sha256 of ordered path, NUL, binary sha256(file) tuples",
+    "docsExcluded": true,
+    "differences": []
+  },
+  "subsequentChanges": "Only editor/SSH fixture source and shared dependency preparation changed after these checks; production source unchanged.",
+  "checks": [
+    "Protocol sync 78",
+    "317 isolated test scripts",
+    "CI/release YAML parsed with Bun",
+    "Evidence JSON parsed",
+    "git diff --check"
+  ]
+}

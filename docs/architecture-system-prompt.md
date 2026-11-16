@@ -1,5 +1,23 @@
 # 原生系统提示词设置
 
+## OMP 入口（2026-11-15）
+
+主聊天和 Wiki 设置已使用 `OmpPromptPanel`、`server/omp/prompt-control.ts`。下面的 Pi 1.5.2 分段与 APPEND_SYSTEM 说明仅供旧实现参考，不能用作 OMP 的优先级或来源事实。
+
+OMP 页面直接展示公开 `session.systemPrompt` 的完整块；上下文来源使用 `systemPromptSources` 和原生 `claimPromptSources`，只标记仍与实际块匹配的来源。不会重新拼装、猜测或覆盖原生提示词。`discoverSystemPromptOverride` 决定磁盘选择：界面明确区分磁盘选中的文件与实际加载的上下文及全文，文件保存并不代表已生效。
+
+编辑目标由服务端限定：独立 agent 目录及项目 `.omp/` 中的 `SYSTEM.md` / `SYSTEM_TEMPLATE.md`、原生选中的其他来源、已加载上下文文件和当前 cwd 的 `AGENTS.md`。浏览器只提交不透明文件 ID。单文件 512 KiB，严格 UTF-8；拒绝文件和目录符号链接、非普通文件，版本包括固定路径与原始内容，原生跨进程文件锁内重新校验，随机临时文件原子替换并保留权限。可删除系统提示词或模板，不能在此删除上下文文件；删除后由原生发现决定回退来源。
+
+保存与重载分开：保存只落盘，页面提示待重载。显式重载调用 OMP 公开 `refreshSkillsAndCommands`，它重建提示词并重新发现上下文；不调用模型、不重写 transcript，也不切换会话身份。其他会话保持独立，需各自重载或重新打开。运行中、压缩/重试中及 Stop 后的待写操作被拒绝；失败保留编辑草稿，文件冲突需重新读取。当前实现不提供旧 Pi 的运行中保存后自动重载队列。
+
+HTTP `/api/system-prompt` 使用 OMP 的 get/read/save/delete/reload 操作，校验 Origin、JSON、客户端、工作区、对话与导航归属。受限 SSH/Playground 会话拒绝管理。get/read/save 不会隐式打开已停止 worker，只有显式 reload 可重新打开。界面切页、关闭和离开浏览器时保护草稿；元数据刷新不覆盖草稿，迟到回复不进入新对话。
+
+HTTP 宿主契约由 `tests/system-prompt-test.mjs` 验证：鉴权、Origin、JSON、客户端／对话／工作区归属、不透明文件 ID、冲突、运行中及停止后拒绝写入、保存后下一次请求仍使用旧提示词、显式重载后实际出站内容与原始历史保留、扩展临时覆盖与下一次原生准备恢复。历史文件名保留在全量冒烟中，已不再要求 Pi APPEND_SYSTEM 或自动重载。`--browser` 串行运行同一 HTTP 回归与 OMP 浏览器专项。
+
+真实 SDK 与浏览器/打包 Electron 回归分别在 `tests/omp-prompt-test.mjs` 和 `tests/omp-prompt-browser-test.mjs`；旧 Pi 专用测试不证明 OMP 行为。
+
+## 旧 Pi 实现参考
+
 设置 → 系统提示词对应设置 v2 设计。WebUI 读取当前会话的 Pi 1.5.2 提示词，提供原生文件编辑器；不保存一套 WebUI 提示词，也不向模型添加消息。
 
 ## 展示与来源

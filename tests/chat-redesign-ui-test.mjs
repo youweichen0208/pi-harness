@@ -1,28 +1,25 @@
 /** 3a/4a real-app regression with a deterministic, model-free reply. */
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { chromium } from 'playwright-core';
 import { CHROME_PATH } from './lib/chrome.mjs';
-import { portUp } from './lib/port-utils.mjs';
-import { testEnv } from "./lib/test-env.mjs";
-const port = 9242;
-assert.equal(await portUp(port), false, `Port ${port} busy`);
+import { startIsolatedHarness } from './lib/isolated-server.mjs';
 const root = mkdtempSync(join(tmpdir(), 'pi-design14-'));
 const cwd = join(root, 'workspace'); mkdirSync(cwd);
 writeFileSync(join(cwd, 'README.md'), '# Design review\n\n## Overview\n\nA local test document.\n');
 const time = Date.now();
 const reply = "## 当前设计树\n\n```text\n根: 产出架构\n├── A. 交付物（文档或代码） ← 本轮\n└── B. 部署（单机或集群） ← 本轮\n```\n\n❓ **Q1** - **交付物**：交付什么？\n(a) 文档;(b) 代码。\n➡️ 推荐 (a)。先定边界。\n\n❓ **Q2** - **仓库**：仓库的职责？\n(a) 主仓库;(b) 部署仓库。\n➡️ 推荐 (b)。独立部署。\n\n⚠️ 保留原有数据。\n\n## 部署问题\n\n❓ **Q3** - **部署位置**：部署到哪里？\n(a) 单机;(b) 集群。\n";
 let messages = [{id:"user",role:"user",timestamp:time,content:[{type:"text",text:"请设计架构"}]},{id:"reply",role:"assistant",timestamp:time+1,content:[{type:"text",text:reply}]}];
-let server, browser;
+let harness, browser;
 try {
-	server = spawn(process.execPath, ['dist/server/index.js'], { env: { ...testEnv(), PORT: String(port), PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(root, 'data'), PI_CODING_AGENT_DIR: join(root, 'agent') }, stdio: ['ignore', 'pipe', 'pipe'] });
-	let log = ''; server.stderr.on('data', data => log += data); server.stdout.on('data', data => log += data);
-	for (let i = 0; i < 100 && !await portUp(port); i++) await sleep(100);
-	assert(await portUp(port), log);
+	const agent = join(root, 'data/omp/agent'); mkdirSync(agent, { recursive: true });
+	writeFileSync(join(agent, 'config.yml'), JSON.stringify({ skills: { enabled: false }, cacheWarming: { enabled: false } }));
+	writeFileSync(join(agent, 'models.yml'), JSON.stringify({ providers: { fixture: { api: 'openai-completions', baseUrl: 'http://127.0.0.1:1', apiKey: 'fixture', models: [{ id: 'fixture' }] } } }));
+	harness = await startIsolatedHarness({ env: { PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(root, 'data') } });
+	const port = harness.port;
 	browser = await chromium.launch({ executablePath: CHROME_PATH });
 	const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, permissions: ['clipboard-read', 'clipboard-write'] });
 	const page = await context.newPage(); page.setDefaultTimeout(10000);
@@ -44,7 +41,7 @@ try {
 		upstream.onMessage(wire => {
 			const message = JSON.parse(String(wire));
 			if (message.type === 'snapshot') {
-				Object.assign(message.state, { messages, piConfigured: true, isStreaming: forceRunning });
+				Object.assign(message.state, { messages, isStreaming: forceRunning });
 				if (forceRunning) message.state.queue = { steering: ["skill:server-ops"], followUp: ["pending message"] };
 				message.state.taskProgress = null;
 				snapshot = structuredClone(message);
@@ -52,7 +49,8 @@ try {
 			if (message.type !== 'snapshot_delta') route.send(JSON.stringify(message));
 		});
 	});
-	await page.goto(`http://localhost:${port}`);
+	await page.goto(`http://127.0.0.1:${port}`);
+	await page.locator('.inputbar textarea:not(:disabled)').waitFor({ timeout: 30000 });
 	await page.locator('.question-answer-bar').waitFor();
 	assert.equal(await page.locator('.question-card').count(), 3);
 	assert.equal(await page.locator('.question-option.selected').count(), 2);
@@ -82,6 +80,6 @@ try {
 	console.log('PASS 3a/4a: tree, recommendations, notes, multi-section answers, selection, send and narrow layout');
 } finally {
 	await browser?.close();
-	if (server) { server.kill('SIGTERM'); if(server.exitCode===null) await new Promise(resolve=>server.once('exit',resolve)); }
+	await harness?.stop();
 	rmSync(root, {recursive:true,force:true});
 }

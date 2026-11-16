@@ -500,17 +500,21 @@ ipcMain.handle("pi-wiki-open-file", async (event, request) => {
 	const error = await shell.openPath(result.absolute);
 	if (error) throw new Error(error);
 });
-ipcMain.handle("pi-extension-open-path", async (event, request) => {
+// Retired clients cannot resolve Pi paths or wake an OMP worker.
+ipcMain.handle("pi-extension-open-path", () => { throw new Error("Pi extension paths have been retired"); });
+ipcMain.handle("omp-open-path", async (event, request) => {
 	const win = windowOf(event);
 	if (!win || win.isDestroyed() || event.senderFrame !== win.webContents.mainFrame) throw new Error("Forbidden");
-	if (!request || ![request.clientId, request.cwd, request.id].every(value => typeof value === "string")) throw new Error("Invalid package request");
-	const response = await fetch(`http://127.0.0.1:${serverPort}/api/extensions`, {
+	if (!request || ![request.clientId, request.cwd, request.conversationId].every(value => typeof value === "string")) throw new Error("Invalid OMP path request");
+	const response = await fetch(`http://127.0.0.1:${serverPort}/api/omp-paths`, {
 		method: "POST", headers: { "Content-Type": "application/json", ...bearerHeaders(serverToken) },
-		body: JSON.stringify({ clientId: request.clientId, cwd: request.cwd, id: request.id, action: "open-info" }),
+		body: JSON.stringify({ clientId: request.clientId, cwd: request.cwd, conversationId: request.conversationId, target: request.target, prepare: true }),
+		signal: AbortSignal.timeout(15000),
 	});
 	const result = await response.json();
-	if (!response.ok || typeof result.absolute !== "string") throw new Error(result.error || "Installed path unavailable");
-	if (request.id === "extensions:user") {
+	if (!response.ok || typeof result.absolute !== "string" || result.exists !== true || !["directory", "file"].includes(result.kind)) throw new Error("OMP path unavailable");
+	if (win.isDestroyed() || event.senderFrame !== win.webContents.mainFrame) throw new Error("Window closed");
+	if (result.kind === "directory") {
 		const error = await shell.openPath(result.absolute);
 		if (error) throw new Error(error);
 	} else shell.showItemInFolder(result.absolute);

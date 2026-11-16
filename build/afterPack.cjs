@@ -18,27 +18,65 @@
 const { execFileSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
+const { Arch } = require("builder-util");
 
-module.exports = async function afterPack(context) {
+function verifyPackagedRuntime(context) {
 	const product = context.packager.appInfo.productFilename;
 	const packagedRoot = context.electronPlatformName === "darwin"
 		? path.join(context.appOutDir, `${product}.app`, "Contents/Resources/app")
 		: path.join(context.appOutDir, "resources/app");
-	const sdkRoot = path.join(packagedRoot, "node_modules/@earendil-works/pi-coding-agent");
+	const sdkRoot = path.join(packagedRoot, "node_modules/@oh-my-pi/pi-coding-agent");
 	const manifest = JSON.parse(fs.readFileSync(path.join(packagedRoot, "package.json"), "utf8"));
-	if (fs.existsSync(path.join(packagedRoot, "extensions")) || manifest.pi?.extensions?.length) {
-		throw new Error("Desktop must not bundle application extensions; load user Pi extensions instead");
+	if (fs.existsSync(path.join(packagedRoot, "extensions")) || manifest.pi?.extensions?.length || manifest.omp?.extensions?.length) {
+		throw new Error("Desktop must not bundle application extensions; load user OMP extensions instead");
 	}
-	const expectedSdk = manifest.dependencies?.["@earendil-works/pi-coding-agent"];
+	const expectedSdk = manifest.dependencies?.["@oh-my-pi/pi-coding-agent"];
 	const actualSdk = JSON.parse(fs.readFileSync(path.join(sdkRoot, "package.json"), "utf8")).version;
 	if (!/^\d+\.\d+\.\d+(?:-[\w.-]+)?$/.test(expectedSdk ?? "") || actualSdk !== expectedSdk) {
-		throw new Error(`Unexpected packaged Pi SDK version: expected ${expectedSdk}, got ${actualSdk}`);
+		throw new Error(`Unexpected packaged OMP SDK version: expected ${expectedSdk}, got ${actualSdk}`);
 	}
-	if (!fs.readFileSync(path.join(sdkRoot, "docs/codemode.md"), "utf8").includes("generateImages")) throw new Error("Packaged codemode reference is missing");
-	for (const reference of ["README.md", "docs/extensions.md", "examples/extensions/README.md", "examples/extensions/hello.ts"]) {
-		const file = path.join(sdkRoot, reference);
-		if (!fs.existsSync(file) || !fs.statSync(file).isFile() || !fs.statSync(file).size) throw new Error(`Packaged Pi reference is missing: ${reference}`);
+	for (const reference of ["README.md", "CHANGELOG.md", "src/sdk.ts", "src/modes/rpc/rpc-mode.ts", "src/prompts"]) {
+		if (!fs.existsSync(path.join(sdkRoot, reference))) throw new Error(`Packaged OMP resource is missing: ${reference}`);
 	}
+	for (const name of ["pi-ai", "pi-coding-agent"]) {
+		if (fs.existsSync(path.join(packagedRoot, "node_modules/@earendil-works", name))) throw new Error(`Retired Pi runtime was packaged: ${name}`);
+	}
+	verifyServerOutput(packagedRoot);
+	const bun = path.join(packagedRoot, "node_modules/bun/bin/bun.exe");
+	if (!fs.existsSync(bun)) throw new Error("Bundled Bun runtime is missing");
+	// extraResources copies the installed host binary. Refuse cross packaging so
+	// a macOS Bun cannot silently end up inside a Windows/Linux application.
+	if (context.electronPlatformName !== process.platform || Arch[context.arch] !== process.arch) {
+		throw new Error("OMP Desktop must be built on a runner matching its target platform and architecture");
+	}
+	const runtime = JSON.parse(execFileSync(bun, ["--eval", "console.log(JSON.stringify({version:Bun.version,platform:process.platform,arch:process.arch}))"], {
+		encoding: "utf8", timeout: 10000, env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined },
+	}));
+	if (runtime.version !== manifest.dependencies.bun || runtime.platform !== context.electronPlatformName || runtime.arch !== Arch[context.arch]) {
+		throw new Error("Packaged Bun does not match the pinned version and target platform");
+	}
+}
+
+function verifyServerOutput(packagedRoot) {
+	const directory = path.join(packagedRoot, "dist/server");
+	for (const entry of ["index.js", "omp/worker.js", "omp/package-worker.js", "sqlite-worker.js", "wiki-pdf-worker.js", "plugin-updater.js"]) {
+		if (!fs.existsSync(path.join(directory, entry))) throw new Error(`Packaged server entry is missing: ${entry}`);
+	}
+	for (const retired of ["agent-service.js", "extensions-worker.js", "pi-environment.js", "pi-cli-status.js", "native-tools.js", "subagents"]) {
+		if (fs.existsSync(path.join(directory, retired))) throw new Error(`Retired Pi server output was packaged: ${retired}`);
+	}
+	function inspect(dir) {
+		for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+			const file = path.join(dir, entry.name);
+			if (entry.isDirectory()) inspect(file);
+			else if (entry.name.endsWith(".js") && fs.readFileSync(file, "utf8").includes("@earendil-works/")) throw new Error(`Retired Pi import was packaged: ${path.relative(directory, file)}`);
+		}
+	}
+	inspect(directory);
+}
+
+module.exports = async function afterPack(context) {
+	verifyPackagedRuntime(context);
 	if (context.electronPlatformName !== "darwin") return;
 
 	const appName = context.packager.appInfo.productFilename;
@@ -55,3 +93,5 @@ module.exports = async function afterPack(context) {
 	});
 	console.log("[afterPack] ad-hoc 签名完成");
 };
+module.exports.verifyPackagedRuntime = verifyPackagedRuntime;
+module.exports.verifyServerOutput = verifyServerOutput;

@@ -1,0 +1,71 @@
+{
+  "status": "Native extension UI bridge verified locally; full migration remains incomplete",
+  "verifiedAt": "2026-11-15 10:47:38 UTC",
+  "platform": "darwin",
+  "arch": "arm64",
+  "omp": "18.20.0",
+  "bun": "1.4.4",
+  "red": {
+    "command": "node tests/omp-extension-ui-test.mjs",
+    "failure": "Real extension emitted a dialog and notification but host emitted no widgets event."
+  },
+  "changes": [
+    "Translate native setWidget/setStatus/setTitle/set_editor_text and preserve scoped notice severity.",
+    "Map host UUID dialog handles to per-worker native IDs; require active conversation, current generation and valid value/option.",
+    "Replay outstanding dialogs and display state without replaying notifications or editor mutations.",
+    "Clear per-worker UI state on Stop, resource reload and process exit; reset browser state while preserving sibling conversations."
+  ],
+  "checks": {
+    "build": "passed",
+    "typecheck": "passed",
+    "unitFiles": 169,
+    "unitPassed": 1048,
+    "unitSkipped": 1,
+    "productionSources": 125,
+    "testEnvironmentScripts": 302,
+    "protocolVersion": 66,
+    "diff": "passed",
+    "workflowYaml": "passed"
+  },
+  "nativeUi": {
+    "command": "node tests/omp-extension-ui-test.mjs --browser",
+    "result": "passed",
+    "modelCalls": 0,
+    "coverage": [
+      "widgets/status/title/notices",
+      "invalid active-owner and value responses",
+      "select/editor/input timeout",
+      "WebSocket reconnect",
+      "Stop and explicit reopen",
+      "resource reload and stale dialog rejection",
+      "browser multiline draft",
+      "background request navigation",
+      "page refresh replay",
+      "browser Stop reset"
+    ]
+  },
+  "relatedSmoke": {
+    "passed": 4,
+    "total": 4,
+    "tests": [
+      "settings-test",
+      "omp-extension-settings-test",
+      "omp-stop-metadata-test",
+      "omp-command-output-test"
+    ]
+  },
+  "fullSmoke": {
+    "baseline": "omp-smoke-commands.json",
+    "repeated": false,
+    "passed": 76,
+    "total": 106,
+    "currentRunnerTests": 107
+  },
+  "remaining": [
+    "Old extension-ui-test async local-command receipts and attachment preservation are not replaced by this narrower UI bridge regression.",
+    "Native multi-question ask bridge remains unimplemented.",
+    "Task internal history guard, remaining host regressions, old-history cleanup and Windows original-task acceptance remain open."
+  ],
+  "desktopPackageBuilt": false,
+  "published": false
+}

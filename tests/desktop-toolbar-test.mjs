@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium } from 'playwright-core';
 import { CHROME_PATH } from './lib/chrome.mjs';
 import { testEnv } from "./lib/test-env.mjs";
 const data = mkdtempSync(join(tmpdir(), 'pi-toolbar-'));
+mkdirSync(join(data, 'omp', 'agent'), { recursive: true });
+writeFileSync(join(data, 'omp', 'agent', 'config.yml'), JSON.stringify({ skills: { enabled: false } }));
 const port = 8957;
 const server = spawn(process.execPath, ['dist/server/index.js'], { env: { ...testEnv(), PORT: String(port), PI_WEB_DATA_DIR: data, PI_WEB_CWD: data, PI_CODING_AGENT_DIR: join(data, 'agent') }, stdio: 'ignore' });
 let browser;
@@ -152,12 +154,12 @@ try {
 		await page.locator('.dd-menu').getByRole('button', { name: '所有设置', exact: true }).click();
 		await page.locator('.settings-tab[title="Extensions"]').click();
 		assert.equal(await page.locator('.set-row', { hasText: 'rpiv-todo' }).count(), 0, 'removed bundled todo must not return');
-		await page.locator('.extensions-panel .ext-header').getByRole('button', { name: '从 npm / git 安装', exact: true }).waitFor();
+		await page.locator('.settings-page-heading').getByRole('button', { name: '重载当前会话', exact: true }).waitFor();
+		await page.locator('.settings-paths code', { hasText: 'omp' }).waitFor();
 		await page.getByRole('button', { name: '系统提示词', exact: true }).click();
-		await page.locator('.system-prompt-panel .prompt-sections').waitFor();
-		await page.getByRole('button', { name: '原始文本', exact: true }).click();
-		await page.locator('.prompt-raw').waitFor();
-		assert.equal(await page.locator('.settings-modal textarea').count(), 0, 'raw native prompt stays read-only; editing starts from a source file');
+		await page.locator('.system-prompt-panel .prompt-raw').waitFor();
+		assert((await page.locator('.system-prompt-panel .prompt-raw').innerText()).trim().length > 0);
+		assert.equal(await page.locator('.settings-modal textarea').count(), 0, 'OMP native prompt is currently read-only');
 
 		await page.close();
 	}

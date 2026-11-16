@@ -1,3 +1,4 @@
+import { isVirtualToolCall } from "../../../server/tool-target.js";
 import { appendComposerText, openComposerModelSettings } from "../composer-text";
 import { UiIcon } from "./UiIcon";
 import { DelegateNotification } from "./DelegateNotification";
@@ -406,11 +407,11 @@ export const Message = memo(function Message({
 			const block = message.content[i];
 			if (skipText && block.type === "text") continue;
 			const first = asToolCall(block);
-			if (first?.name === "write" || first?.name === "edit") {
+			if (first && (first.name === "write" || first.name === "edit") && !isVirtualToolCall(first)) {
 				const changes: UiToolCallBlock[] = [first];
 				while (i + 1 < message.content.length) {
 					const next = asToolCall(message.content[i + 1]);
-					if (next?.name !== "write" && next?.name !== "edit") break;
+					if (!next || next.name !== "write" && next.name !== "edit" || isVirtualToolCall(next)) break;
 					changes.push(next);
 					i++;
 				}

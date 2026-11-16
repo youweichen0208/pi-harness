@@ -1,0 +1,175 @@
+{
+  "status": "Local OMP update/drain accounting verified; full migration and Windows acceptance incomplete",
+  "platform": "darwin-arm64",
+  "node": "26.0.0",
+  "electron": "41.10.7",
+  "electronNode": "24.18.0",
+  "omp": "18.20.0",
+  "bun": "1.4.4",
+  "protocol": 76,
+  "changes": [
+    "Main/Wiki active conversation count uses native session.busy instead of only running; includes native initialization, pending RPCs, queues, recovery and stop cleanup.",
+    "Shared Playground contributes one busy instance to local control status across subscribers, including open/changing/native work.",
+    "During drain, Playground open subscribes and returns the existing projection only. It never creates/revives a worker, including after Stop or a fresh host restart.",
+    "Drain continues to reject send/new/switch/model/thinking/reopen. Existing completion, Stop, scoped retry cancellation and receipt lookup remain available; explicit work resumes after unquiesce without replay.",
+    "SSH busy includes native work and a closing flag until disposal completes. Detached Agent cleanup promises remain counted until completion.",
+    "SSH user-operation admission preserves prior ready/running checks; native methods wait for cleanup. Broader drain accounting no longer causes erroneous model/new/reopen rejection.",
+    "New source smoke entry, Mac/Windows CI gate and six desktop source/packaged-root commands. Packaged mode launches the supplied Electron executable and app root, rather than a checkout server."
+  ],
+  "verification": {
+    "build": {
+      "path": "/tmp/omp-drain-verified-build.log",
+      "exitCode": 0,
+      "sha256": "ec05cd794ff15e05a998758ade2211b13ef7312d2b92a4a22d7ec71fdd7c8e07"
+    },
+    "types": {
+      "path": "/tmp/omp-drain-verified-types.log",
+      "exitCode": 0,
+      "sha256": "afe164d6475ab09607d600e330c778c40041826259c553a753499c927e4fbe92"
+    },
+    "units": {
+      "path": "/tmp/omp-drain-verified-units.log",
+      "exitCode": 0,
+      "sha256": "9e7c450618278144c9f9bb232797c9d6154e7755c7bed7d1e893d5f13ef6f62d",
+      "files": 171,
+      "passed": 1061,
+      "skipped": 1
+    },
+    "relatedSmoke": {
+      "path": "/tmp/omp-drain-verified-related.log",
+      "exitCode": 0,
+      "sha256": "5dc8ca0de0d116a7570ba4dc5372d2e0bb38ace1cfb82ba79c8ca547c80b80dc",
+      "passed": 8,
+      "total": 8,
+      "names": [
+        "playground-drain-test",
+        "quiesce-test",
+        "omp-restricted-recovery-test",
+        "omp-recovery-test",
+        "node-workbench-test",
+        "client-eviction-test",
+        "native-session-commands-test",
+        "omp-tree-test"
+      ]
+    },
+    "sourceDrain": {
+      "path": "/tmp/omp-drain-verified-source.log",
+      "exitCode": 0,
+      "sha256": "888766e189cdb36e6f75d7979fc200fe5882eb68ed0c0f3c69c5f3084d1a0309"
+    },
+    "electronHostDrain": {
+      "path": "/tmp/omp-drain-electron.log",
+      "exitCode": 0,
+      "sha256": "888766e189cdb36e6f75d7979fc200fe5882eb68ed0c0f3c69c5f3084d1a0309",
+      "note": "Local Electron executable runs isolated source build as Node; not a packaged installer acceptance."
+    },
+    "sshBrowser": {
+      "path": "/tmp/omp-drain-verified-node-browser.log",
+      "exitCode": 0,
+      "sha256": "21b668f37af9dbdb1a5720d3f03de0e90d4daec8fae0e039a64e83b442fcdbec"
+    },
+    "playgroundBrowser": {
+      "path": "/tmp/omp-drain-final-playground-browser.log",
+      "exitCode": 0,
+      "sha256": "d246df6bdfed2f386354284b06190915c60b69397338daa52b502c0ae31191ed",
+      "note": "Run after drain/count fixes, before final SSH-only admission correction; Playground production code unchanged afterward."
+    },
+    "checks": [
+      "Protocol 76 sync",
+      "312 isolated test scripts",
+      "Official HTTPS npm lockfile",
+      "131 source and built production engine boundary",
+      "git diff --check",
+      "CI/release YAML parse; six source/packaged-root drain commands"
+    ],
+    "fullSmoke": "Current list 116; complete baseline remains omp-smoke-proxy.json:114/114 before subsequent proxy/recovery/drain changes. No full 116 run."
+  },
+  "redEvidence": [
+    {
+      "symptom": "Playground native startup held; status reports 0 active conversations instead of 1.",
+      "log": {
+        "path": "/tmp/omp-drain-before.log",
+        "exitCode": 1,
+        "sha256": "606a1b6f09e53c1ee8a0e00ebff2c5ee8a3b361f7ec6f9c6003050743154f635"
+      }
+    },
+    {
+      "symptom": "After count fix, drain-time open starts a second Playground worker after Stop.",
+      "log": {
+        "path": "/tmp/omp-drain-count-only.log",
+        "exitCode": 1,
+        "sha256": "946e238ccffabd1f75789f0b835c613bb44bc89bef28964efd1cb9a4e2a86c14"
+      }
+    },
+    {
+      "symptom": "Main chat native startup held; status reports 0 instead of 1.",
+      "log": {
+        "path": "/tmp/omp-drain-host-before.log",
+        "exitCode": 1,
+        "sha256": "cff0c665af2afa1bc3db10c7a78f55b4638c8d2fbc8e37cd533a5c72922a8f9f"
+      }
+    },
+    {
+      "symptom": "SSH reports not busy before close Promise/native disposal completes.",
+      "log": {
+        "path": "/tmp/omp-drain-ssh-before.log",
+        "exitCode": 1,
+        "sha256": "7b6fda85752a6625b820d5647c07e1080798d545174af4fbd514863b0847d304"
+      }
+    },
+    {
+      "symptom": "Disconnected Agent with pending cleanup disappears from active count.",
+      "log": {
+        "path": "/tmp/omp-drain-detached-before.log",
+        "exitCode": 1,
+        "sha256": "4f3918fed353a82ef70547912c02194195e2646bf02f984e31c8122e7f5bfc21"
+      }
+    }
+  ],
+  "intermediateFailures": [
+    {
+      "description": "Retry fixture originally errored before emitting content, exercising provider transport retry rather than agent recovery. Bounded diagnostic showed repeated requests with empty recovery. Added thinking delta before overloaded error to exercise native cancellable retry. No SDK changes.",
+      "log": {
+        "path": "/tmp/omp-drain-retry-probe.log",
+        "exitCode": 1,
+        "sha256": "95fe522b938b4e86cf033d191e910c6d7345359b6c1d377692618e7650ebe0fa"
+      }
+    },
+    {
+      "description": "Broader SSH busy getter was also used as user-action admission. Existing model change and persistence reopen regressions failed; guards now preserve prior ready/running behavior while native methods await cleanup. Final relevant regressions passed.",
+      "related": {
+        "path": "/tmp/omp-drain-related.log",
+        "exitCode": 1,
+        "sha256": "dcdb6d4432f736a157073ad7ba170cd0549687bc611e3d4f00d0acec20a94fc2",
+        "passed": 6,
+        "total": 7
+      },
+      "browser": {
+        "path": "/tmp/omp-drain-final-node-browser.log",
+        "exitCode": 1,
+        "sha256": "02f71e39062213c40e2b0d6194b616ecbe71e856405f3e63d2b1ea4b13a2192c"
+      }
+    }
+  ],
+  "source": {
+    "candidate": "/var/folders/41/07yyp3_12jddkkthmflqkbgw0000gn/T/omp-playground-drain-4lsntvhn",
+    "filesCompared": 1329,
+    "fingerprintSha256": "6f88ee6210321fe9b9e7c15fdc2c525a436101033bb6e772a29db7e4966eff59",
+    "algorithm": "Sorted existing git tracked/untracked files excluding docs/ and AGENTS.md; SHA256(relative path + NUL + binary file SHA256) concatenation",
+    "differences": []
+  },
+  "limitations": [
+    "Local loopback provider and SSH fixtures; no original Windows DeepSeek task/gateway acceptance.",
+    "CI definitions updated but no remote workflow execution or current installer built.",
+    "Native Task internal history protection and MCP tool-level OAuth remain unresolved.",
+    "Old active desktop history cleanup, real-account OAuth, real database success and performance acceptance remain separate."
+  ],
+  "operations": {
+    "rootDist": "Not overwritten; isolated candidate only",
+    "userServicePid": 23786,
+    "oldDesktopPid": 62015,
+    "release": "No commit, push, publish or release",
+    "allVerificationHandlesTerminal": true,
+    "isolatedCandidateRemoved": true
+  }
+}

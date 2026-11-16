@@ -1,0 +1,150 @@
+{
+  "status": "Docker OMP native package persistence and CLI service configuration migrated; full migration incomplete",
+  "host": "darwin-arm64 with local Docker Desktop Linux arm64 daemon",
+  "protocol": 78,
+  "runtime": {
+    "node": "v22.23.5",
+    "bun": "1.4.4",
+    "omp": "18.20.0",
+    "platform": "linux",
+    "arch": "arm64",
+    "uid": 1000,
+    "nativeRoot": "/data/omp-native"
+  },
+  "source": {
+    "candidate": "/var/folders/41/07yyp3_12jddkkthmflqkbgw0000gn/T/omp-container-build-u433x09i",
+    "filesCompared": 1353,
+    "fingerprintSha256": "2e720cc874f5d7eee19da1d1486c9960718d146924c7ec8c57b6d1b52271cb89",
+    "fingerprintMethod": "sha256 of ordered path, NUL, binary sha256(file) tuples",
+    "docsExcluded": true,
+    "differences": []
+  },
+  "images": {
+    "baselineTag": {
+      "id": "sha256:59cd5494ce0fb9213b73b2dcb2eca872c605833bf80bf858e1ab585552ff33d0",
+      "os": "linux",
+      "arch": "arm64",
+      "sizeBytes": 625187282
+    },
+    "freshVolumeTag": {
+      "id": "sha256:b844eafa866fc64870ec1571555465bd70c2ebe873ce3d3be6bf642afe2d96cb",
+      "os": "linux",
+      "arch": "arm64",
+      "sizeBytes": 625187339
+    },
+    "finalTag": {
+      "id": "sha256:3216dffec306965db36d6ed90825f0eba4481668b6331d0ab08d069f08ec59cd",
+      "os": "linux",
+      "arch": "arm64",
+      "sizeBytes": 625188324
+    }
+  },
+  "reproduction": {
+    "seed": "Native package installed and loaded; actual HTTP/WebSocket/PTY/file tool passed.",
+    "replacementBeforeFix": "Package missing after first container removed and second created with the same named data volume; model configuration was still present.",
+    "cause": "Native global OMP package root is independent of agentDir and defaulted to /home/node/.omp outside /data."
+  },
+  "changes": [
+    "Docker links /home/node/.omp to /data/omp-native; preserves native path selection while persisting personal packages, caches and global state. App OMP configuration/history stay under /data/pi-harness/omp.",
+    "Non-root image entrypoint creates the native target directory on existing non-empty volumes, then delegates to the standard Node entrypoint. No startup chown or old-data deletion.",
+    "Remove unused PI_CODING_AGENT_DIR image override and old /data/pi-agent creation; document real application/config/native directories and explicit old-container recovery boundaries.",
+    "Use Debian official HTTPS for JDK downloads after original HTTP downloads failed; target native dependencies are still installed on Linux, not copied from macOS.",
+    "Exclude local agent state and package credentials from Docker build context.",
+    "CLI help, service environment and systemd description/template use OMP app data directory; explicit --data-dir overrides inherited PI_WEB_DATA_DIR. New service configs omit obsolete Pi directory override.",
+    "Add explicit Docker CI job; native container test remains outside default smoke because it requires local Docker. Add service-generation test to smoke, current default list 122."
+  ],
+  "verification": {
+    "originalHttpBuildFailure": {
+      "path": "/tmp/omp-container-baseline-build.log",
+      "exitCode": 1,
+      "sha256": "b0a7769b65bffa09dcd22477bcabf2aada64e127b02d2db26317e776480f0b7b"
+    },
+    "originalStorageWithHttpsBuild": {
+      "path": "/tmp/omp-container-baseline-https-build.log",
+      "exitCode": 0,
+      "sha256": "9a72c327a2822e7893c798e4b31a534877f879ba3b840e65a69a9d7c6a3d5a5c"
+    },
+    "containerRed": {
+      "path": "/tmp/omp-container-red.log",
+      "exitCode": 1,
+      "sha256": "d6db8e19c370ad3e89123c8a75d6e54ab88084a6769d5b9f9084cd61875d3f96"
+    },
+    "finalBuild": {
+      "path": "/tmp/omp-container-upgrade-build.log",
+      "exitCode": 0,
+      "sha256": "444459a20a4370a8b38cb37f4e8f6e4cd3e4ad6057ebf262814960be0d67c2b7"
+    },
+    "finalContainer": {
+      "path": "/tmp/omp-container-upgrade-green.log",
+      "exitCode": 0,
+      "sha256": "7c8546252aedadc2bab5e3624678e537c561f969465df264e752f905b30547ff"
+    },
+    "typecheck": {
+      "path": "/tmp/omp-container-types.log",
+      "exitCode": 0,
+      "sha256": "20eba569f73b594b29f88375d81dbe413bbe134c5008159c58f8cd696a6e4b77"
+    },
+    "cliRed": {
+      "path": "/tmp/omp-service-config-red.log",
+      "exitCode": 1,
+      "sha256": "12b79a0b280fca83b26dfb76803a8a4f8b48b6e6c57793591ea3d0089bfb7d4f"
+    },
+    "cliFinal": {
+      "path": "/tmp/omp-service-config-final.log",
+      "exitCode": 0,
+      "sha256": "22b9c20d529a0baad39893bf1176b8889f5a564bda62215270af6898d2ad65a0"
+    },
+    "freshVolumeBuild": {
+      "path": "/tmp/omp-container-final-build.log",
+      "exitCode": 0,
+      "sha256": "1f1e642392f37fb78b720b1f0363593ad272a5cdca56f67b089c277a550a3f46"
+    },
+    "freshVolumeTest": {
+      "path": "/tmp/omp-container-green-final.log",
+      "exitCode": 0,
+      "sha256": "6a6af84ab7e7915f926ac79a0fb6c4853e5093c9115393c5a71e59beaaabb095"
+    },
+    "existingVolumeRed": {
+      "path": "/tmp/omp-container-existing-volume-red.log",
+      "exitCode": 1,
+      "sha256": "3bc4e9cccf319f87f76cdbc8306c8930da8a5098bf4512b1b94af6b1b93fc3ce"
+    }
+  },
+  "coverage": [
+    "Image USER=node / uid=1000 and default production command, actual HTTP and WebSocket initialization, native read/task availability and absent retired Pi tool names.",
+    "Real locally served npm extension installed by production OMP package worker, loaded in the actual session before and after container replacement.",
+    "Two separate containers using the same owned volume, physical native package root under /data, preserved models.yml and native session ID/history, renewed runtime conversation handle.",
+    "Real model fixture receives native file-read result, no forced 128000 output limit, zero model requests during restoration, actual PTY command output and clean terminal exit in both containers.",
+    "No external network in fixture containers; no real credentials or project mounts. Containers and volumes created with UUID ownership labels and deleted only after identity verification.",
+    "CLI help and six dry-run service configurations (three platform generation branches, environment versus explicit data directory); external commands and filesystem mutation APIs rejected by test preload.",
+    "Existing non-empty volume lacking the new native directory: initial symlink-only candidate reproduced ENOENT; final entrypoint creates the directory as uid 1000 and preserves the old sentinel across both application containers."
+  ],
+  "intermediateFixtureCorrection": "Initial restore assertion incorrectly required the ephemeral host conversationId to survive. OmpClientSession.createChat always generates a new handle; final regression verifies stable native sessionId/history with a new runtime handle. Package retention assertions were kept.",
+  "checks": [
+    "Compose config validated",
+    "CI YAML parsed",
+    "JavaScript syntax checked",
+    "Protocol sync 78",
+    "320 test scripts environment check",
+    "git diff --check",
+    "POSIX entrypoint shell syntax checked"
+  ],
+  "limitations": [
+    "Local Linux arm64 image verification, not Linux desktop, Windows, x64, real gateway or real account acceptance. CI job added but not remotely executed.",
+    "No final full 122-entry smoke rerun; latest full baseline is separate earlier 120/120 (omp-smoke-task-output.json).",
+    "Native Task internal writer guard, OAuth write-back/tool-level auth, native CLI JSON/print exit, original Windows DeepSeek task and current desktop package acceptance remain.",
+    "Service test executes dry-run generation branches; it never installs launchd/systemd/Windows tasks.",
+    "No active old desktop history was cleared or application replaced."
+  ],
+  "operations": {
+    "rootDist": "Not overwritten",
+    "userProcessesPreserved": [
+      23786,
+      62015
+    ],
+    "release": "No commit, push, publish or installed-app replacement",
+    "allVerificationHandlesTerminal": true,
+    "temporaryResourcesRemoved": true,
+    "cleanup": "Owned test containers/volumes absent; three exact image tags removed after identity checks; isolated candidate removed. Shared images/build cache and user containers untouched. Evidence log hashes verified; protected processes remain alive."
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "status": "Credential picker regression test timing fixed; production code unchanged",
+  "failure": "Full 116 run selected an asynchronous initial models frame instead of the later model list published by set_provider_api_key.",
+  "probe": {
+    "command": "node tests/clear-provider-key-probe.mjs (isolated diagnostic; poll interval 1 ms)",
+    "log": {
+      "path": "/tmp/omp-clear-key-fast.log",
+      "exitCode": 1,
+      "sha256": "6039cd97e78ebab5d5eecc5502be3c154b0441994ea66fdcd8ebfbee7b4ac0e5"
+    },
+    "frames": [
+      [
+        "mistral",
+        "fixture"
+      ],
+      [
+        "deepseek",
+        "mistral",
+        "fixture"
+      ]
+    ],
+    "finding": "Both frames precede providers_status. Latest contains DeepSeek; first does not. Public UI consumes the latest model frame."
+  },
+  "change": "After providers_status, assert that a models frame was published and inspect the latest queued models frame. Preserve all credential persistence, provider scope, availability and secret-echo assertions. Faster polling retains startup overlap.",
+  "verification": {
+    "standalone": {
+      "path": "/tmp/omp-clear-key-fixed.log",
+      "exitCode": 0,
+      "sha256": "e4768eade9e24826053f3c957db83ed3a1b9b5aae0fbf2d7394cc3676441410b"
+    },
+    "smokeEntry": {
+      "path": "/tmp/omp-clear-key-smoke-fixed.log",
+      "exitCode": 0,
+      "sha256": "64ef10dbd484f554b6dc0c12d889bfc4130e7293b4a6c3ea931112fec83138dd"
+    }
+  },
+  "fullSmoke": "Full 116 run finished 114/116; both failed entries passed targeted follow-ups. See omp-smoke-drain.json; not a fresh full-pass run.",
+  "limitations": [
+    "No production credential or catalogue behavior changed.",
+    "Does not establish real-account provider authentication or Windows acceptance.",
+    "Full 116 finished 114/116 with both failed entries subsequently passing targeted reruns; see omp-smoke-drain.json."
+  ]
+}

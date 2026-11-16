@@ -1,0 +1,28 @@
+{
+  "status": "Proxy transport certificate fixture included in clean checkouts; targeted smoke passed",
+  "failure": {
+    "sourceLog": "/tmp/omp-full-116.log",
+    "test": "omp-proxy-transports-test",
+    "error": "ENOENT tests/fixtures/openai-proxy/relay-cert.pem",
+    "cause": "The required public test certificate was ignored by the blanket *.pem rule. Earlier local copies included it, but a copy derived from repository files did not."
+  },
+  "change": [
+    "Added only the exact relay-cert.pem path to existing public test certificate exceptions.",
+    "Documented the extra fixture names and shared public fixture key; no production credentials or trust-store changes."
+  ],
+  "verification": {
+    "command": "node tests/run-smoke.mjs omp-proxy-transports-test",
+    "log": "/tmp/omp-proxy-fixture-fixed.log",
+    "exitCode": 0,
+    "passed": 1,
+    "total": 1,
+    "sha256": "515763c24d472e827d6935b80d6d9b72256eb7950fa4df941c97688afeb7fd7f",
+    "publicKeyMatches": true,
+    "publicKeySha256": "6c703291f4428501c32f9766e62394f95f878c44ff28fdd22124b950af58df06"
+  },
+  "limitations": [
+    "Local synthetic TLS/HTTP/OAuth-refresh/WebSocket endpoints; not real provider or Windows acceptance.",
+    "Full 116 finished 114/116 with both failed entries subsequently passing targeted reruns; see omp-smoke-drain.json."
+  ],
+  "operations": "Copied fixture into existing isolated candidate; no dist rebuild, user process change or SDK patch."
+}

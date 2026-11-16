@@ -1,29 +1,27 @@
 // Self-contained WS regression: request identity, versions, errors and workspace checks.
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import WebSocket from "ws";
-import { portUp } from "./lib/port-utils.mjs";
+import { startIsolatedHarness } from "./lib/isolated-server.mjs";
 import { testEnv } from "./lib/test-env.mjs";
-const port = 8991;
-const root = mkdtempSync(join(tmpdir(), "file-editor-ws-"));
+const root = realpathSync(mkdtempSync(join(tmpdir(), "file-editor-ws-")));
+const agent = join(root, "data/omp/agent"); mkdirSync(agent, { recursive: true });
+writeFileSync(join(agent, "config.yml"), JSON.stringify({ skills: { enabled: false }, cacheWarming: { enabled: false } }));
 writeFileSync(join(root, "note.txt"), "before");
-let server, ws;
+let harness, ws;
 try {
-	assert.equal(await portUp(port), false);
-	server = spawn(process.execPath, ["dist/server/index.js"], { env: { ...testEnv(), PORT: String(port), PI_WEB_CWD: root, PI_WEB_DATA_DIR: join(root, "data"), PI_CODING_AGENT_DIR: join(root, "agent") }, stdio: "ignore" });
-	for (let n = 0; n < 80 && !(await portUp(port)); n++) await sleep(100);
-	assert.equal(await portUp(port), true);
+	harness = await startIsolatedHarness({ env: { ...testEnv(), PI_WEB_CWD: root, PI_WEB_DATA_DIR: join(root, "data") } });
+	const port = harness.port;
 	ws = new WebSocket(`ws://127.0.0.1:${port}/ws`);
 	const messages = [];
 	ws.on("message", (wire) => messages.push(JSON.parse(wire)));
 	await new Promise((resolve, reject) => { ws.once("open", resolve); ws.once("error", reject); });
 	const send = (msg) => ws.send(JSON.stringify(msg));
 	const wait = async (predicate) => {
-		for (let n = 0; n < 150; n++) {
+		for (let n = 0; n < 600; n++) {
 			const index = messages.findIndex(predicate);
 			if (index >= 0) return messages.splice(index, 1)[0];
 			await sleep(50);
@@ -31,6 +29,8 @@ try {
 		throw new Error("response timeout");
 	};
 	send({ type: "hello", clientId: "file-editor-protocol" });
+	await wait((m) => m.type === "ready");
+	send({ type: "get_state" });
 	await wait((m) => m.type === "snapshot");
 	send({ type: "read_file", path: "note.txt", cwd: root, requestId: "r1" });
 	const content = await wait((m) => m.type === "file_content" && m.requestId === "r1");
@@ -54,9 +54,7 @@ try {
 	}
 	console.log("PASS versioned file WS protocol and editor context rejection");
 } finally {
-	ws?.close();
-	if (server?.pid && server.exitCode === null && server.signalCode === null) {
-		server.kill("SIGTERM");
-		await new Promise((resolve) => server.once("exit", resolve));
-	}
+	ws?.terminate();
+	await harness?.stop();
+	rmSync(root, { recursive: true, force: true });
 }

@@ -54,6 +54,21 @@ jobs:
       - name: Protocol smoke tests
         run: node tests/run-smoke.mjs
 
+  container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Check lockfile registry
+        run: node scripts/check-lockfile.mjs
+      - name: Build OMP container
+        run: docker build --tag pi-harness-container-test:${{ github.sha }} .
+      - name: Verify native runtime and persistence across container replacement
+        run: node tests/omp-container-test.mjs pi-harness-container-test:${{ github.sha }}
+
   node-workbench:
     strategy:
       fail-fast: false
@@ -106,15 +121,119 @@ jobs:
           node tests/desktop-toolbar-test.mjs
       - name: DataGrip JDBC interface (local fixtures only)
         run: node tests/database-jdbc-browser-test.mjs
-      - name: Pi CLI detection and installation UI (no global installation)
-        run: |
-          npx vitest run tests/unit/pi-cli-status.test.ts
-          node tests/pi-cli-setup-browser-test.mjs
+      - name: OMP native package operations (isolated registry and package root)
+        run: node tests/omp-packages-test.mjs
+      - name: OMP Marketplace scopes (native fixtures)
+        run: node tests/omp-marketplace-test.mjs
+      - name: OMP optional package features (native loading)
+        run: node tests/omp-package-features-test.mjs
+      - name: OMP package settings (native persistence and precedence)
+        run: node tests/omp-package-settings-test.mjs
+      - name: OMP native MCP execution and conversation-owned image actions
+        run: node tests/codemode-mcp-test.mjs --browser
+      - name: OMP MCP service forms, scopes and native OAuth
+        run: node tests/omp-mcp-browser-test.mjs
+      - name: OMP restricted assistant recovery and drafts
+        run: node tests/node-agent-test.mjs --browser
+      - name: OMP reasoning interruption (Anthropic and OpenAI fixtures)
+        run: node tests/reasoning-repetition-test.mjs
+      - name: OMP package interface (isolated native endpoint)
+        run: node tests/omp-packages-browser-test.mjs
+      - name: OMP idle clients, background tasks and terminal ownership
+        run: node tests/client-eviction-test.mjs
+      - name: OMP drain admission and existing work completion
+        run: node tests/quiesce-test.mjs
+      - name: Playground drain, recovery and read-only reconnect
+        run: node tests/playground-drain-test.mjs
+      - name: OMP history deletion ownership
+        run: node tests/omp-history-ownership-test.mjs
+      - name: OMP terminal ownership during history deletion
+        run: node tests/delete-session-terminal-test.mjs
+      - name: OMP history switches preserve background tasks
+        run: node tests/switch-session-background-test.mjs
+      - name: OMP history discovery and recent project removal
+        run: node tests/left-panel-delete-test.mjs
+      - name: OMP project navigation and retained views
+        run: node tests/project-switch-test.mjs
+      - name: OMP workspace command history and timeline
+        run: node tests/conv-cwd-test.mjs --browser
+      - name: OMP model ask form and native selection state
+        run: node tests/omp-ask-tool-test.mjs --browser
+      - name: OMP database host tool authorization
+        run: node tests/omp-database-test.mjs
+      - name: OMP application database settings
+        run: node tests/builtin-extensions-test.mjs --browser
+      - name: OMP extension delegate notifications
+        run: node tests/delegate-notification-test.mjs --browser
+      - name: OMP durable prompt receipts and reconnect drafts
+        run: node tests/prompt-receipts-test.mjs --browser
+      - name: OMP asynchronous extension receipts and explicit attachments
+        run: node tests/omp-command-receipts-test.mjs --browser
+      - name: OMP Wiki asynchronous bootstrap and folder isolation
+        run: node tests/omp-wiki-bootstrap-test.mjs --browser
+      - name: OMP native tree filters and ordering
+        run: node tests/omp-tree-projection-test.mjs
+      - name: OMP branch summary cancellation and reconnect
+        run: node tests/omp-tree-cancel-browser-test.mjs
+      - name: OMP native session commands and stopped transitions
+        run: node tests/native-session-commands-test.mjs
+      - name: OMP new-session command draft ownership
+        run: node tests/new-session-draft-browser-test.mjs
+      - name: OMP native package update review and rollback
+        run: node tests/component-updates-test.mjs --browser
+      - name: OMP host extension editing and current settings shell
+        run: node tests/extensions-test.mjs --browser
+      - name: OMP shared model configuration and output defaults
+        run: node tests/model-sources-protocol-test.mjs --browser
+      - name: OMP unavailable models and native command admission
+        run: node tests/stale-model-selection-test.mjs
+      - name: OMP native command catalogue and picker
+        run: node tests/slash-commands-test.mjs --browser
+      - name: OMP local command output and draft completion
+        run: node tests/omp-command-output-test.mjs --browser
+      - name: OMP queued input and native writer isolation
+        run: node tests/steer-queue-smoke.mjs
+      - name: OMP incremental snapshots and reconnect
+        run: node tests/snapshot-delta-test.mjs --browser
+      - name: OMP Wiki document conversations
+        run: node tests/wiki-assistant-test.mjs
+      - name: OMP native output downloads
+        run: node tests/omp-tool-output-test.mjs --browser
+      - name: OMP native nested task output downloads
+        env:
+          HARNESS_TEST_BROWSER: "1"
+        run: node tests/omp-task-output-test.mjs
+      - name: OMP partial output capture notice
+        run: node tests/omp-tool-output-test.mjs --browser --partial
+      - name: OMP frozen attachment edits (browser and native runtime)
+        run: node tests/omp-attachments-browser-test.mjs
+      - name: OMP native skill history and frozen edits
+        run: node tests/omp-skill-history-test.mjs
+      - name: OMP skill attachment edits (browser)
+        run: node tests/omp-attachments-browser-test.mjs --skill
+      - name: OMP template attachment input boundary
+        run: node tests/omp-template-attachments-test.mjs
+      - name: OMP template attachment edits (browser)
+        run: node tests/omp-attachments-browser-test.mjs --template
+      - name: OMP native persistence and recovery
+        run: node tests/omp-persistence-test.mjs
+      - name: OMP failure recovery across host restart
+        run: node tests/omp-persistence-restart-test.mjs
+      - name: OMP external history isolation
+        run: node tests/omp-external-history-test.mjs
+      - name: OMP native storage compatibility
+        run: node tests/omp-session-storage-test.mjs
+      - name: OMP persistence interface (real filesystem failures)
+        run: node tests/omp-persistence-browser-test.mjs
+      - name: Embedded OMP setup (no external CLI or model calls)
+        run: node tests/omp-setup-browser-test.mjs
       - name: SCM operations and worktrees (local Git only)
         run: |
           npx vitest run tests/unit/scm-operations.test.ts
           node tests/scm-operations-browser-test.mjs
       - run: npx electron-builder install-app-deps
+      - name: OMP extension paths through real Electron IPC
+        run: node tests/extensions-directory-desktop-test.mjs
       - name: Actual Electron typography and DPI regression
         run: node tests/windows-rendering-test.mjs
       - uses: actions/upload-artifact@v4
@@ -123,6 +242,21 @@ jobs:
           name: desktop-rendering-${{ matrix.os }}
           path: tests/scratch/rendering/
           if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: omp-packages-${{ matrix.os }}
+          path: |
+            tests/scratch/omp-packages-*.png
+            tests/scratch/omp-package-features-*.png
+            tests/scratch/omp-package-settings-*.png
+            tests/scratch/omp-marketplace-*.png
+            tests/scratch/omp-setup/
+            tests/scratch/omp-output-*.png
+            tests/scratch/omp-wiki-assistant-*.png
+            tests/scratch/omp-*attachments-edit.png
+          if-no-files-found: warn
 
   typography-parity:
     needs: desktop-rendering

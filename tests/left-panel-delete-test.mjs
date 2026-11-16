@@ -1,27 +1,16 @@
 /**
  * 左栏删除功能协议冒烟（零 token）：
- *   - delete_session：删除 <agentDir>/sessions/ 下的会话文件（磁盘验证 + sessions 列表刷新）
+ *   - delete_session：删除 <dataDir>/omp/sessions/chat/ 下的会话文件（磁盘验证 + sessions 列表刷新）
  *   - delete_session 越界路径（会话目录之外）：报错且不动文件
  *   - remove_project：把工作区从最近项目列表移出（projects 消息不再包含）
- * 自起编译后的 server（隔离端口 8967 + 临时 data-dir + 临时 agent-dir），自行清理。
+ * 自起编译后的 server（隔离高端口 + 临时 data-dir + 原生 OMP 历史），自行清理。
  */
-import { portUp } from "./lib/port-utils.mjs";
-import { fileURLToPath } from "node:url";
-import { spawn } from "node:child_process";
-import {
-	existsSync,
-	mkdirSync,
-	mkdtempSync,
-	writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { setTimeout as sleep } from "node:timers/promises";
-import { testEnv } from "./lib/test-env.mjs";
-
-const REPO_ROOT = fileURLToPath(new globalThis.URL("../", import.meta.url));
-const PORT = 8967;
-const URL = `ws://localhost:${PORT}/ws`;
+import WebSocket from "ws";
+import { startIsolatedHarness } from "./lib/isolated-server.mjs";
+import { createOmpHistory } from "./lib/omp-history-fixture.mjs";
 
 let failures = 0;
 function check(name, ok, extra = "") {
@@ -30,84 +19,29 @@ function check(name, ok, extra = "") {
 }
 
 // 两个工作区：workDir 是 PI_WEB_CWD；otherDir 只作为最近项目条目存在
-const baseTmp = mkdtempSync(join(tmpdir(), "pi-web-lp-del-"));
+const baseTmp = realpathSync(mkdtempSync(join(tmpdir(), "omp-lp-del-")));
 const workDir = join(baseTmp, "proj");
 const otherDir = join(baseTmp, "other");
 mkdirSync(workDir, { recursive: true });
 mkdirSync(otherDir, { recursive: true });
 writeFileSync(join(workDir, "a.txt"), "keep me");
 
-const dataDir = mkdtempSync(join(tmpdir(), "pi-web-lp-del-data-"));
-const agentDir = join(baseTmp, "agent");
-
-// 种两个会话文件（workDir 一条 + otherDir 一条），格式与 pi CLI/TUI 相同
-function seedSession(dirName, id, cwd, text) {
-	const safePath = `--${cwd.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-")}--`;
-	const dir = join(agentDir, "sessions", dirName ?? safePath);
-	mkdirSync(dir, { recursive: true });
-	const file = join(dir, `2026-08-04T00-00-00-000Z_${id}.jsonl`);
-	writeFileSync(
-		file,
-		[
-			JSON.stringify({
-				type: "session",
-				version: 3,
-				id,
-				timestamp: "2026-08-04T00:00:00.000Z",
-				cwd,
-			}),
-			JSON.stringify({
-				type: "message",
-				id: "m1",
-				parentId: null,
-				timestamp: "2026-08-04T00:00:01.000Z",
-				message: {
-					role: "user",
-					content: [{ type: "text", text }],
-					timestamp: 1722700801000,
-				},
-			}),
-		].join("\n") + "\n",
-	);
-	return file;
-}
-const sess1 = seedSession(null, "del-target", workDir, "要删除的对话");
-const sess2 = seedSession(null, "del-keep", workDir, "要保留的对话");
-const sessOther = seedSession(null, "del-other", otherDir, "另一个项目的对话");
-
-let server = null;
-
-async function startServer() {
-	server = spawn("node", ["dist/server/index.js"], {
-		cwd: REPO_ROOT,
-		env: {
-			...testEnv(),
-			PORT: String(PORT),
-			PI_WEB_DATA_DIR: dataDir,
-			PI_CODING_AGENT_DIR: agentDir,
-			PI_WEB_CWD: workDir,
-		},
-		stdio: "ignore",
-	});
-	for (let i = 0; i < 40; i++) {
-		await sleep(250);
-		try {
-			if (await portUp(PORT)) return;
-		} catch {
-			// not up yet
-		}
-	}
-	throw new Error("server did not start");
-}
+const dataDir = join(baseTmp, "data"), agentDir = join(dataDir, "omp/agent");
+mkdirSync(agentDir, { recursive: true });
+writeFileSync(join(agentDir, "config.yml"), JSON.stringify({ skills: { enabled: false }, cacheWarming: { enabled: false } }));
+let harness, sess1, sess2, sessOther, otherBytes;
+const wikiOnly = join(baseTmp, "wiki-only"); mkdirSync(wikiOnly);
+const sockets = new Set();
 
 function connect() {
 	return new Promise((resolve, reject) => {
-		const ws = new WebSocket(URL);
+		const ws = new WebSocket(`ws://127.0.0.1:${harness.port}/ws`); sockets.add(ws);
 		const inbox = [];
 		const waiters = [];
 		const api = {
 			ws,
-			async next(pred, what, ms = 8000) {
+			discard: types => { for (let i = inbox.length - 1; i >= 0; i--) if (types.includes(inbox[i].type)) inbox.splice(i, 1); },
+			async next(pred, what, ms = 30000) {
 				const existing = inbox.findIndex(pred);
 				if (existing >= 0) return inbox.splice(existing, 1)[0];
 				return new Promise((res, rej) => {
@@ -140,22 +74,26 @@ function connect() {
 			} catch {
 				return;
 			}
-			inbox.push(msg);
 			for (let i = 0; i < waiters.length; i++) {
 				if (waiters[i](msg)) {
 					waiters.splice(i, 1);
-					i--;
+					return;
 				}
 			}
+			inbox.push(msg);
 		};
 		ws.onerror = reject;
 	});
 }
 
 async function run() {
-	await startServer();
-	await sleep(300);
+	const seed = async (cwd, text) => (await createOmpHistory({ dataDir, cwd, messages: [{ role: "user", content: text, timestamp: Date.now() }] })).sessionFile;
+	sess1 = await seed(workDir, "要删除的对话"); sess2 = await seed(workDir, "要保留的对话"); sessOther = await seed(otherDir, "另一个项目的对话");
+	otherBytes = readFileSync(sessOther);
+	await createOmpHistory({ dataDir, cwd: wikiOnly, kind: "wiki", messages: [{ role: "user", content: "Wiki only", timestamp: Date.now() }] });
+	harness = await startIsolatedHarness({ ...(process.argv.includes("--source") ? { args: ["--import", "tsx", "server/index.ts"] } : {}), env: { PI_WEB_DATA_DIR: dataDir, PI_WEB_CWD: workDir } });
 	const c = await connect();
+	await c.next(m => m.type === "ready", "OMP ready");
 
 	// 1) list_sessions 发现种下的两条（当前项目 workDir）
 	c.send({ type: "list_sessions" });
@@ -165,8 +103,9 @@ async function run() {
 
 	// Visit both sessions: the first remains warm after selecting the second.
 	for (const path of [sess1, sess2]) {
+		c.discard(["snapshot", "snapshot_delta"]);
 		c.send({ type: "switch_session", path });
-		await c.next((m) => (m.type === "snapshot" || m.type === "snapshot_delta") && m.state?.sessionFile === path, "selected session");
+		await c.next((m) => (m.type === "snapshot" || m.type === "snapshot_delta") && m.state?.sessionFile === path && !m.state.isStreaming, "selected session");
 	}
 	c.send({ type: "delete_session", path: sess2 });
 	await c.next((m) => m.type === "notice" && m.level === "warning", "active session protected");
@@ -198,9 +137,11 @@ async function run() {
 
 	// 4) remove_project：最近项目列表移除 otherDir
 	c.send({ type: "list_projects" });
-	const p1 = await c.next((m) => m.type === "projects", "projects #1");
+	const p1 = await c.next((m) => m.type === "projects" && m.projects.some(p => p.path === otherDir), "projects #1 includes native disk history");
 	const projPaths1 = (p1.projects ?? []).map((x) => x.path);
 	check("初始最近项目含 otherDir", projPaths1.includes(otherDir), projPaths1.join(","));
+	check("项目目录查询不混入 Wiki 历史", !projPaths1.includes(wikiOnly));
+	check("发现历史不修改原生 transcript", readFileSync(sessOther).equals(otherBytes));
 
 	c.send({ type: "remove_project", path: otherDir });
 	const p2 = await c.next(
@@ -215,6 +156,7 @@ async function run() {
 
 	// 5) 移除是持久的：重连后再查一次
 	const c2 = await connect();
+	await c2.next(m => m.type === "ready", "reconnected");
 	c2.send({ type: "list_projects" });
 	const p3 = await c2.next((m) => m.type === "projects", "projects #3");
 	check(
@@ -232,7 +174,8 @@ try {
 	console.error("FATAL:", err?.message ?? err);
 	failures++;
 } finally {
-	if (server?.pid) process.kill(server.pid, "SIGTERM");
-	await sleep(500);
+	for (const ws of sockets) ws.terminate();
+	await harness?.stop();
+	rmSync(baseTmp, { recursive: true, force: true });
 }
 process.exit(failures === 0 ? 0 : 1);

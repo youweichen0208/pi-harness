@@ -4,15 +4,17 @@
 
 右栏提供参数、输出、问 pi 三个页签；顶栏仅保留运行／停止操作，不显示问 pi、折叠按钮和快捷键徽标；结果面板常驻，通过问 pi 页签打开助手。编辑器持续显示，窄屏上下排列。独立输入不接主聊天附件、项目或终端；普通代码块仅复制。关闭运行或没有 Python 仍可问答。界面复用文档助手的欢迎文案和品牌标识，历史选择默认收起，消息独立滚动、输入框固定底部；Enter 发送，Shift+Enter 换行，输入法组合期间不提交。
 
-`server/playground-chat.ts` 管理安装级共享助手，历史、当前对话、模型及建议位于 `<dataDir>/playground-chat/`，原生 transcript 按独立对话目录保存。首次继承打开方模型与思考设置，之后独立保存。`playground_chat` 请求覆盖 open/send/stop/new/switch/model/thinking/receipt；独立 state/result/error 消息不修改主聊天快照。多标签页共享当前对话；运行期间禁止切换、新建或改模型。离开不停止任务，重启保留中断标记，不续跑。
+`server/playground-chat.ts` 管理安装级共享助手，历史、当前对话、模型及建议位于 `<dataDir>/omp/playground-chat/`，原生 transcript 按独立对话目录保存。首次继承打开方模型与思考设置，之后独立保存。`playground_chat` 请求覆盖 open/send/stop/cancel_recovery/reopen/new/switch/model/thinking/receipt；独立 state/result/error 消息不修改主聊天快照。多标签页共享当前对话；运行期间禁止切换、新建或改模型。离开不停止任务，重启保留中断标记，不续跑。
 
-原生资源加载关闭上下文文件、技能、扩展与模板，内存设置关闭预热；工具白名单仅 `propose_playground_code`，排除 MCP，创建后核验 active tools。认证和模型声明沿用原生文件；独立 runtime 接入共用 ModelSourceSync，保留来源开关与外部来源模型，并在关闭时解除绑定。发送前先确认所选模型属于可用目录；SDK 的 unknown 占位模型不得参与容量判断或下发为当前模型。首段流式消息包含角色，以 `agent_settled` 判定完成。使用独立目录下的 `PromptReceipts`，发送前持久化占位；重连查询，不自动重发。已接收后的模型错误不把回执改为拒绝。
+助手已切换到 OMP（全项目迁移进行中，见 `architecture-omp.md`）。`server/omp/session.ts` 通过捆绑 Bun 的原生 RPC 运行，关闭上下文文件、技能、扩展、模板、本机工具及 MCP，仅注册 `propose_playground_code` host tool，并核验实际工具列表。业务设置使用 OMP overlay，不写全局模型或思考偏好。模型来自 `<dataDir>/omp/agent` 原生目录，由应用的 OMP 模型管理配置。OMP 自身状态、回执与建议位于 `<dataDir>/omp/playground-chat/`，transcript 位于 `<dataDir>/omp/sessions/playground/`；按已批准边界不导入旧 Pi 历史；旧历史清理独立进行，不触及 OMP 对话、配置和项目文件，不能视为整个迁移已交付。
+
+发送前确认模型属于原生可用目录，并使用未截断的原生历史计算保守容量。消息只投影允许的展示字段，不传模型 headers 或密钥；以 `session_settled` 或原生 `prompt_result.sessionSettled` 判定结束，`agent_end` 不代表后台工作结束。发送前持久化回执占位，原生确认后记 accepted；确认丢失记 unknown，不自动重发。停止撤回待发、关闭所属 OMP 进程及后台工作；后续显式发送恢复原生历史，不自动续跑。
 
 发送冻结未保存代码（≤256 KiB）、当前函数/参数和最近结果。输出按 UTF-8 截到 64 KiB，附部分、过期、截断标记与独立运行 ID，引用可展开。服务端用源码 SHA-256 绑定建议基准，保守检查上下文容量；拒绝时保留问题，不静默删除源码。结果仅显式发送时进入助手。
 
 建议包含说明、完整代码和本轮基准，以差异卡片展示。应用同时检查 React 草稿和 CodeMirror 实际文档；基准不符仅允许复制或重新提问。应用使用隔离历史的单次事务，可一次撤销，沿用自动保存及签名参数迁移，不执行代码。草稿冲突后停止自动重试，保留本地编辑，提供复制和显式重新加载。
 
-验证：`node tests/playground-chat-test.mjs --browser` 使用本地模拟模型检查隔离、冻结、建议、去重、历史/重启、停止及浏览器应用/撤销；相关单测覆盖 UTF-8 输出边界及保存冲突。`node --import tsx tests/playground-model-admission-test.mjs` 覆盖无模型时 hello 的误报回归及外部来源目录同步，不调用真实模型。
+验证：`node tests/playground-chat-test.mjs --browser` 使用本地模拟模型检查隔离、冻结、建议、去重、历史/重启、停止及浏览器应用/撤销；相关单测覆盖 UTF-8 输出边界及保存冲突。`node --import tsx tests/playground-model-admission-test.mjs` 覆盖无模型时 hello 的误报回归及原生 OMP 模型目录，不调用真实模型。
 
 Playground 使用宿主 Python 3.9+ 运行聊天、小记中的 `python` / `py` / `python3` 代码块、右栏 `.py` 文件缓冲区以及左栏草稿。首次检测到可用解释器默认开启，保留已保存开关；`PI_WEB_PLAYGROUND=off` 硬关闭且锁定设置。运行结果默认不进入模型上下文、不持久化；Playground 问 pi 仅在显式发送时冻结结果到专属对话；显式「把结果发给 pi」仅追加到输入框。
 
@@ -85,3 +87,17 @@ export PI_WEB_PYTHON=/path/to/venv/bin/python
 函数选择随签名变化自动更新：停止编辑 500ms 后，当前签名失效时优先匹配同名函数；仅有一个旧函数消失和一个新函数出现时跟随重命名。新增无关函数不抢占有效选择，多个候选不猜测。参数按名称迁移，新增参数留空；目标签名已有记录时优先恢复，旧记录保留。
 
 新增参数初始值按注解生成：int/float 为 0，bool 为 false，str 为空文本，list 为 []，dict 为 {}，未识别或无注解为 null。非字符串输入清空后失焦恢复该初始值；已有非空值保留。此为可编辑的界面初始值，不读取 Python 签名中的默认表达式，不对自定义类型作实例化保证。
+
+
+## OMP 恢复操作（协议 v76）
+
+助手状态投影原生压缩／重试和历史持久化错误，复用主聊天提示与浏览器倒计时。取消与停止只控制已存在、conversationId 匹配的实例，不通过 open 路径重新启动已停止的 worker。取消另校验 operationId；静默排空期间允许停止／取消，拒绝重新读取历史等新工作。
+
+历史保护失败时保留当前实例和错误状态，禁止再次发送。发送异常同步原生运行状态，避免请求已被拒绝却保持运行态、进而无法恢复。用户可以在空闲时显式重新读取已保存历史；此操作不重发请求、不清空输入草稿。缺失历史的保护日志跨助手重建保留，恢复原文件后才能显式重新读取。窄屏恢复提示的说明可单独滚动，操作按钮完整可见。验证入口为 `omp-restricted-recovery-test.mjs` 和 `node-agent-test.mjs --browser`，既有 `playground-chat-test.mjs --browser` 继续验证建议应用、撤销及原业务流程。
+
+
+## 更新排空与忙碌计数
+
+Playground 在安装级共享，只向控制 socket 总计数贡献一个忙碌实例。忙碌覆盖 open、切换／恢复和底层 OMP 的请求、生成、重试与停止清理。排空期间查看助手只读已有投影：可以继续观察存量工作，但不会重启已停止的 worker，也不会为尚未打开的助手创建新会话。发送、新建、切换、改模型／思考和重新读取历史暂时拒绝；停止、取消恢复和回执查询继续可用。排空结束后用户明确发送才恢复工作，不回放被拒绝的消息。
+
+`tests/playground-drain-test.mjs` 通过真实控制 socket、WebSocket、原生 OMP 和本地模型验证初始化、共享计数、完成、重试取消、停止、只读重连／重启及明确恢复。worker 预加载夹具仅用于暂停初始化和计数启动，不修改 SDK 或生产代码。

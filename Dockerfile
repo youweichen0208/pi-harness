@@ -13,7 +13,9 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 FROM base AS build
-RUN apt-get update \
+# Certificates are installed by base; use HTTPS for the large JDK downloads.
+RUN sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources \
+    && apt-get update \
     && apt-get install -y --no-install-recommends openjdk-17-jdk-headless \
     && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json ./
@@ -30,16 +32,17 @@ RUN npm run check:lockfile && npm ci --omit=dev
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/web/dist ./web/dist
 ENV PORT=8787
-# Everything that must survive a rebuild lives under /data: pi config, auth and
-# chat sessions (PI_CODING_AGENT_DIR) and pi-harness state, uploads and Wiki
-# history (PI_WEB_DATA_DIR). Without these the server would write to the
-# node user's home, which is not a volume.
-ENV PI_CODING_AGENT_DIR=/data/pi-agent \
-    PI_WEB_DATA_DIR=/data/pi-harness \
+# OMP agent configuration and sessions live below PI_WEB_DATA_DIR/omp.
+# Its native global packages/state use ~/.omp independently of agentDir;
+# persist that native location too when a container is replaced.
+ENV PI_WEB_DATA_DIR=/data/pi-harness \
     PI_WEB_CWD=/workspace
-RUN mkdir -p /data/pi-agent /data/pi-harness /workspace \
+RUN mkdir -p /data/omp-native /data/pi-harness /workspace \
+    && ln -s /data/omp-native /home/node/.omp \
     && chown -R node:node /data /workspace
+COPY --chmod=755 scripts/docker-entrypoint.sh /usr/local/bin/pi-harness-entrypoint
 EXPOSE 8787
 VOLUME ["/data"]
 USER node
+ENTRYPOINT ["/usr/local/bin/pi-harness-entrypoint"]
 CMD ["node", "dist/server/index.js"]

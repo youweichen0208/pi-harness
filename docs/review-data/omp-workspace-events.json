@@ -1,0 +1,104 @@
+{
+  "status": "Workspace event persistence and five public host regressions verified locally; full OMP migration remains incomplete",
+  "verifiedAt": "2026-11-15T13:35:00.150306+00:00",
+  "platform": "darwin",
+  "arch": "arm64",
+  "omp": "18.20.0",
+  "bun": "1.4.4",
+  "protocolVersion": 67,
+  "findings": [
+    "OMP snapshots hardcoded cwdEvents to an empty array and native history projection omitted workspace metadata. Command navigation now appends a native custom entry and projects only the current native branch; UI navigation does not append entries.",
+    "Public search, preview and chat UI tests still used old readiness/configuration, fixed or probed ports, and in some cases rebuilt dist during tests. They now use isolated native OMP configuration, a bound port and the ready handshake, preserving existing assertions."
+  ],
+  "redEvidence": {
+    "test": "conv-cwd-test",
+    "failure": "command switch produces conversation event — []",
+    "log": "/tmp/omp-cwd-preview-red.log"
+  },
+  "checks": {
+    "build": "passed",
+    "typecheck": "passed",
+    "unitFiles": 169,
+    "unitPassed": 1049,
+    "unitSkipped": 1,
+    "designTokens": "passed",
+    "protocol": "passed",
+    "testEnvironmentScripts": 304,
+    "diff": "passed"
+  },
+  "native": {
+    "passed": 2,
+    "total": 2,
+    "tests": [
+      "conv-cwd-test",
+      "omp-workspaces-test"
+    ],
+    "coverage": [
+      "UI versus command navigation",
+      "per-project isolation",
+      "native model context unchanged",
+      "worker stop/reopen",
+      "client disposal/restoration",
+      "native new_session reset",
+      "failed preparation preserves records"
+    ]
+  },
+  "browser": {
+    "command": "node tests/conv-cwd-test.mjs --browser",
+    "result": "passed",
+    "coverage": [
+      "event in empty conversation",
+      "project isolation",
+      "reload without duplication"
+    ],
+    "ci": "added to macOS/Windows matrix; only local macOS executed"
+  },
+  "publicHost": {
+    "passed": 4,
+    "total": 4,
+    "tests": [
+      "global-search-ui-test",
+      "code-search-ui-test",
+      "chat-redesign-ui-test",
+      "preview-test"
+    ],
+    "extraCoverage": "Model search filters the real native model catalog and clearing restores it"
+  },
+  "relatedSmoke": {
+    "passed": 5,
+    "total": 5,
+    "tests": [
+      "project-switch-test",
+      "omp-wiki-bootstrap-test",
+      "native-session-commands-test",
+      "omp-external-history-test",
+      "omp-stop-metadata-test"
+    ]
+  },
+  "logs": [
+    "/tmp/omp-cwd-build.log",
+    "/tmp/omp-cwd-typecheck.log",
+    "/tmp/omp-cwd-units.log",
+    "/tmp/omp-cwd-native.log",
+    "/tmp/omp-cwd-browser.log",
+    "/tmp/omp-cwd-host-ui.log",
+    "/tmp/omp-cwd-related.log"
+  ],
+  "fullSmoke": {
+    "baseline": "omp-smoke-receipts.json",
+    "passed": 87,
+    "total": 108,
+    "repeatedAfterFinalFixes": false,
+    "currentManifestTests": 109
+  },
+  "remaining": [
+    "Other public host regressions",
+    "Native Task storage protection and UI gaps",
+    "Native multi-question ask and other integration gaps",
+    "Old Pi history cleanup",
+    "Desktop package and Windows original-task acceptance"
+  ],
+  "desktopPackageBuilt": false,
+  "windowsOriginalTaskVerified": false,
+  "published": false
+}

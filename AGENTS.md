@@ -21,14 +21,14 @@
 
 ## 1. 项目是什么
 
-pi-harness 是 pi 编码智能体（`@earendil-works/pi-coding-agent` SDK）的 Web 聊天界面：
+pi-harness 是 Oh My Pi（OMP，`@oh-my-pi/pi-coding-agent` SDK）的 Web 和桌面聊天界面：
 浏览器里对话、查看文件树、附加文件、内置终端（xterm.js + node-pty）、模型管理、
 声音提醒、中英文切换。一条命令可跑（`pi-harness`），可 Docker / systemd / launchd /
 Windows 计划任务部署。
 
 -   仓库（公开）：`git@github.com:youweichen0208/pi-harness.git`
 -   npm 包：`@youweichen/pi-harness`（发布者 npm 账号 `youweichen`；当前项目独立维护）
--   Node 要求：**\>= 22.19.0**（pi SDK 的 dist 使用了 `import … with { type: "json" }` 语法）
+-   Node 要求：**\>= 22.19.0**；OMP 在随包提供的 Bun 子进程运行。
 -   版本：`package.json` 与 `package-lock.json` 两处同步维护。
 
   
@@ -44,21 +44,21 @@ Windows 计划任务部署。
 | --- | --- |
 | 后端 | Node + Express（静态 + `/api/health`）+ `ws`（`/ws` WebSocket 协议） |
 | 前端 | React 18 + Vite 6 + react-markdown + highlight.js + xterm.js |
-| 智能体 | `@earendil-works/pi-coding-agent` SDK（进程内，读 `~/.pi/agent` 配置） |
+| 智能体 | OMP SDK（每会话独立 Bun 子进程，读 `<dataDir>/omp/agent` 配置） |
 | 终端 | node-pty（服务端 PTY）+ `@xterm/xterm`（浏览器渲染，经 terminal bridge 转发） |
 | 样式 | 单文件 `web/src/styles.css`（浅色/深色/跟随系统，CSS 变量） |
 
-SDK 与 pi-ai 精确锁定 1.5.2，不应用本项目的 SDK 补丁。升级契约与版本差异见 `docs/pi-1.5-upgrade.md`。Codemode 与工具搜索使用原生 defaultTools 默认开启，已有原生配置优先。
+迁移入口、运行时隔离、原生 API 和验收缺口见 `docs/architecture-omp.md`；修改智能体、配置、包管理、生命周期或打包前先读此文。OMP/Bun 版本以 `package.json` 的精确依赖为准，使用原版 SDK。代理实现位于 `server/omp/`；旧 Pi SDK、配套服务和专属测试的退休清单及替代覆盖见 `docs/omp-retirement.json`。公共宿主协议回归仍在迁移。
 系统提示词：修改分段来源、原生文件编辑或重载时，读取 `docs/architecture-system-prompt.md`。
 Extensions：修改内置扩展清单/状态、包安装、启停、更新、作用域迁移、目录浏览或单文件编辑时，读取 `docs/architecture-extensions.md`。
 Codemode 卡片与 MCP/Codemode 设置遵循 15a/15b 设计；状态、项目覆盖、费用及输出限制读取 `docs/architecture-plugins.md`。
 Playground：修改 Python 代码块运行入口、草稿页运行／用例保存、执行限制、Python 探测、编辑工具安装或总开关时，读取 `docs/architecture-playground.md`；首次检测到可用 Python 默认开启，保留已保存开关、明确非沙箱、结果不进模型上下文。草稿一次运行同时跑脚本与用例（服务端传 tests 时只跑用例，因此是串行的两次请求），用例面板是一行一条的表格，参数在该行下方展开。
 工程上下文：修改跨仓来源、OpenViking 接入或本地评测时，读取 `docs/engineering-context.md`；先验证检索收益，再增加产品界面。
-Subagents：修改 Workspace 分工、来源简介、知识库来源、报告证据核验、子会话工具/取消/预算或排队范围时，读取 `docs/architecture-subagents.md`。内置 `subagent` 默认开启，由父模型按问题调用；按显式任务分派，每项含 title/task/sourceIds；同仓任务不合并，一个任务可读取最多 8 个指定来源，不默认遍历全部仓库；支持独立停止、持久化执行记录与任务详情抽屉；`inspect` 提供有界本地简介，子会话只读调查并提交区分实现/文档/推断的报告，引用回读核对行号和指纹；不开后台任务、不递归、不改代码，沿用父模型并产生额外用量。
+Subagents：修改子任务展示、历史、嵌套任务或停止归属时，读取 `docs/architecture-subagents.md` 及 `docs/architecture-omp.md` 的原生任务章节。运行行为遵循 OMP 原生 Task；旧 Pi 只读调查工具仅作历史设计参考。
 
 发送回执：普通聊天与 Wiki 共用持久化请求去重和重连查询；修改发送确认或重试前读 `docs/architecture-core.md`「发送回执」。Wiki 切换与发送准入共用 `wiki-coordinator.ts`，修改时读 `docs/architecture-wiki.md`。
 
-SDK 生命周期：以 `agent_settled` 判定整个任务结束，`agent_end` 只表示一次循环结束。修改队列、纠正、压缩/重试状态、扩展 UI 对话隔离或工具完整输出下载前读 `docs/architecture-core.md`；修改桌面扩展子进程或打包前读 `docs/deployment.md`。
+SDK 生命周期：OMP 以 `session_settled` 区分任务稳定结束和 `agent_end` 循环结束。修改队列、纠正、压缩/重试状态、扩展 UI 对话隔离或工具完整输出下载前读 `docs/architecture-core.md` 和 OMP 接入契约；修改桌面子进程或打包前读 `docs/deployment.md`。
 
 ## 3. 目录结构
 
@@ -68,9 +68,7 @@ pi-harness/
 │   ├── index.ts                # 入口：express 静态 + /ws 端点、消息分发、心跳、优雅停机
 │   ├── app-version.ts          # 运行中 pi-harness 包版本（区别于 pi SDK VERSION）
 │   ├── protocol.ts             # ★ 唯一事实源：wire 协议类型（client↔server 消息）
-│   ├── wiki-conversations.ts   # Wiki 对话生命周期：文档绑定、历史操作、占用与运行实例编排；见 docs/architecture-wiki.md
-│   ├── agent-service.ts        # 核心：ClientSession（每客户端一个会话组，可并行多个对话）+ AgentService
-│   ├── serialize.ts            # SDK 消息 → UiMessage 序列化
+│   ├── omp/                    # 生产智能体：OmpChatService、会话/传输、Bun worker、原生资源管理
 │   ├── text-sniff.ts           # 文件预览纯函数（previewKind/looksLikeText/decodeText/sniffImageMime/hexDump/countLines）
 │   ├── process-utils.ts        # 进程工具：killPidTree
 │   ├── client-state.ts         # ClientStateStore：<dataDir>/client-state.json 持久化
@@ -80,21 +78,11 @@ pi-harness/
 │   ├── playground-python.ts       # Python 探测：命令解析（PI_WEB_PYTHON 优先）、懒探测 + TTL、失败只降级不崩服务
 │   ├── playground-run.ts       # Run 执行：语法检查后运行、临时目录、超时/超输出杀进程树、并发闸门
 │   ├── playground-source.ts    # 纯函数：Python 导入错误判定、输出限额、needs-the-project 判定
-│   ├── component-updates.ts    # pi Agent / 扩展版本检查、来源校验与包更新
 │   ├── extension-module-cache.ts # /restart、/reload 与扩展重载刷新扩展模块缓存（registerHooks 代数 + require.cache 清理，issue #64）
-│   ├── system-prompt-view.ts / system-prompt-files.ts / system-prompt-routes.ts # 原生提示词分段、文件编辑与 reload
-│   ├── session-reload.ts         # 提示词、设置、MCP 与斜杠命令共用的按会话重载队列
-│   ├── settings-service.ts     # 界面偏好与原生资源只读视图（扩展命名见 extension-display.ts）
 │   ├── task-progress.ts        # 从当前轮次工具记录推断任务进度与显式计划
-│   ├── slash-commands.ts       # 斜杠命令（NATIVE_COMMANDS 内置命令拦截执行 + 目录推送）
-│   ├── model-admin.ts          # 模型/服务商配置管理
 │   ├── model-config-merge.ts   # 聊天模型表单合并；保留 typed models 和未知字段
-│   ├── native-mcp-config.ts    # 原生 MCP 配置版本校验与敏感值；修改时读 docs/architecture-plugins.md
-│   ├── provider-auth.ts        # 官方 OAuth 登录桥；凭据由 SDK 保存，不下发浏览器
 │   ├── openai-proxy.ts / openai-proxy-routes.ts # 本机可配置 OpenAI 代理；修改分流、持久化或网络初始化时读 docs/architecture-core.md
-│   ├── native-tools.ts         # 原生 MCP/codemode/tool_search factories；见 docs/architecture-plugins.md
 │   ├── attachments.ts          # 附件构建（inline/reference/lines/imageData/fileData）
-│   ├── webui-context.ts        # 扩展 UI 桥（WebUIContext：widgets/statuses/dialog → 浏览器）
 │   ├── plugins.ts              # 可选界面组件插件（扫描 <dataDir>/plugins/<id>/）
 │   ├── files-service.ts        # 文件服务（readDirForUI/readFile/searchFiles/watcher）
 │   ├── code-search.ts          # ripgrep 代码搜索（search_content 分批推送、取消、限额）与 rg --files 文件名搜索
@@ -157,6 +145,7 @@ pi-harness/
 │   ├── release.md              # 发布流程（GitHub + npm）
 │   ├── deployment.md           # 部署（CLI / Docker）
 │   └── env-vars.md             # 环境变量参考
+├── tsconfig.production.json    # 生产入口及独立 worker 根文件；构建只遍历其依赖
 ├── tsconfig.server.json / tsconfig.extensions.json / tsconfig.tests.json / web/tsconfig.json
 ```
 
@@ -176,7 +165,7 @@ pi-harness/
 | `SCMPanel.tsx` | 源代码管理（Git）视图：status/branch/diff；提交/推送/拉取/切换分支 |
 | `TopBar.tsx` / `FooterBar.tsx` | 顶栏（项目／会话标题、视图切换、文件栏开关）、状态栏（连接／版本／分支／工作目录及扩展状态）；模型与思考强度在 `ChatInput.tsx` 底部 |
 | `Dialog.tsx` | 扩展 `ui.select/confirm/input` → 浏览器弹窗 |
-| `ModelConfigModal.tsx` / `PiSetupModal.tsx` | models.json 管理 / 首次配置引导 |
+| `ModelConfigModal.tsx` / `OmpSetupModal.tsx` | OMP models.yml 管理 / 首次配置引导，无外部 CLI 安装步骤 |
 | `SystemPromptPanel.tsx` | 原生提示词分段、全文复制、SYSTEM/APPEND/上下文文件编辑；见 `docs/architecture-system-prompt.md` |
 | `SettingsModal.tsx` | 设置面板（原生提示词/技能/扩展/MCP/更新；更新页不显示 pi-harness 本身；默认打开原生提示词，各页使用设置 v2 带用途说明的分组列表，MCP 常用控件自动保存；见 docs/ui-design.md） |
 | `ModelThinking.tsx` | 模型 + 思考强度下拉（模型下拉顶部有搜索过滤框；输入工具栏思考档位为带说明的四档菜单：关闭／极简／标准／深度） |
@@ -192,7 +181,9 @@ pi-harness/
 
 ## 原生代理边界
 
-pi SDK 和 pi-ai 精确锁定 1.5.2，使用原版 SDK，不应用本项目的 SDK 补丁。会话加载 pi 原生配置、上下文文件、技能、扩展与官方 Codemode/tool_search/MCP。WebUI 不覆盖 bash，不自动续跑或发起额外模型调用；仅保留一个例外，界面显示为自动提醒事件、每条用户请求最多 1 次：回复以“写成文本、未执行的工具调用”结尾时，请模型重新调用（见 `docs/architecture-core.md`「未执行的工具调用」）。内置 plan 扩展、开关和自动收尾提醒已移除，不应重新注册。设置中的提示词支持原生文件编辑与空闲时 reload，技能支持原生发现、筛选和启停（见 docs/architecture-extensions.md）；Extensions 管理原生包声明及资源过滤规则，变更通过新会话或用户重载生效。界面偏好不改变模型上下文。SSH 工作台连接后自动准备本机隔离 pi 会话，复用本机模型、仅启用 SSH 节点工具；节点会话不加载本机上下文、扩展、技能或 MCP。修改启动、消息流、工具或断开清理时读取 `docs/architecture-nodes.md`。
+普通与 Wiki 会话采用 OMP 原生工具、Task、设置和历史；宿主通过公开 API/RPC 接入，Node 服务不直接加载 Bun SDK。输出额度留空时由 OMP 模型默认值决定，显式配置仍可覆盖。WebUI 不把正文中的工具描述当指令执行，也不自动重发任务。界面偏好不改变模型上下文。SSH 会话仅开放节点工具；Playground 仅开放建议工具；数据库仍按当前对话授权连接。修改各业务接入时读取对应架构文档。
+
+生产构建由 `tsconfig.production.json` 定义根文件，构建前清空生成目录 `dist/server`，随后校验源依赖及全部输出。新增独立 worker 必须加入根文件清单并验证包内启动。`check:engine` 同时检查生产／开发依赖以及源码、测试和脚本中的旧 SDK 导入。完整宿主冒烟仍在迁移，局部 OMP 回归通过不等于迁移验收完成；Windows DeepSeek 原故障任务必须单独实测。
 
 ## 4. 核心架构（摘要）
 

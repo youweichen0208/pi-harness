@@ -3,7 +3,7 @@ import { jdbcJavaCandidates } from "./jdbc-runtime.js";
 import type { DatabaseJdbcSelection } from "../protocol.js";
 import { randomUUID } from "node:crypto";
 import type { DatabaseImportPreview, DatabaseOperation, DatabaseResponse } from "../protocol.js";
-import { getDocumentSettings } from "../document-extension-settings.js";
+import { DocumentSettingsConflictError, getDocumentSettings, getDocumentSettingsState, updateDocumentSettings } from "../document-extension-settings.js";
 import { deleteConnection, getConnection, listConnections, markMissing, markTested, saveConnection, restoreSource, validateConfig } from "./store.js";
 import { parseSource, loadSource, scanSources, type ImportedConnection } from "./sources.js";
 import { executeQuery } from "./query.js";
@@ -28,6 +28,16 @@ export async function databaseAction(owner: string, cwd: string, requestId: stri
 	if (agent && !["list", "run"].includes(op.action)) throw Error("Unsupported agent database action");
 	const state = () => ({ ...response, connections: listConnections(), grants: grantedConnections(owner).map(c => c.id), jdbcRuntime: jdbcJavaCandidates().length ? "detected" as const : "missing" as const });
 	switch (op.action) {
+		case "agent_settings": case "set_agent_settings": {
+			if (op.action === "set_agent_settings" && (typeof op.enabled !== "boolean" || typeof op.version !== "string" || !/^[a-f0-9]{64}$/.test(op.version))) throw Error("DATABASE_AGENT_SETTINGS_INVALID");
+			try {
+				if (op.action === "set_agent_settings") updateDocumentSettings({ databaseEnabled: op.enabled }, op.version);
+				const state = getDocumentSettingsState();
+				return { ...response, agentSettings: { enabled: state.settings.databaseEnabled, version: state.version } };
+			} catch (error) {
+				throw Error(error instanceof DocumentSettingsConflictError ? "DATABASE_AGENT_SETTINGS_CONFLICT" : "DATABASE_AGENT_SETTINGS_UNAVAILABLE");
+			}
+		}
 		case "sync": {
 			const before = new Map(listConnections().map(c => [c.id, c.version]));
 			try { response.syncIssues = synchronizeSources(cwd); }
@@ -101,7 +111,7 @@ export async function databaseAction(owner: string, cwd: string, requestId: stri
 			tickets.delete(op.ticket); return state();
 		}
 		case "grant": {
-			if (!getDocumentSettings().databaseEnabled) throw Error("Database tools disabled; enable the built-in extension");
+			if (!getDocumentSettings().databaseEnabled) throw Error("Database tools disabled; enable database conversation access in Extensions settings");
 			if (!Array.isArray(op.ids) || op.ids.length > 20) throw Error("Invalid connection selection");
 			if (!op.versions || op.ids.some(id => typeof op.versions[id] !== "string")) throw Error("Missing connection version");
 			const configs = op.ids.map(id => getConnection(id, op.versions[id]));

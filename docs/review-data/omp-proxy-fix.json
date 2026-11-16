@@ -1,0 +1,155 @@
+{
+  "checkedAt": "2026-11-15T19:34:17.027026+00:00",
+  "status": "Production proxy fix and final credential isolation verified locally; migration and release incomplete",
+  "platform": "darwin-arm64",
+  "omp": "18.20.0",
+  "bun": "1.4.4",
+  "protocol": 75,
+  "previousFailure": "omp-proxy-probe.json; preserved unchanged",
+  "changes": [
+    "Host captures active proxy configuration at startup, including disabled state; newly opened workers retain that snapshot until host restart.",
+    "Agent bootstrap carries active proxy configuration; metadata-only workers do not install relays.",
+    "Bun worker installs authenticated loopback HTTP and HTTPS relays via native HTTP_PROXY and HTTPS_PROXY before SDK initialization; no SDK patch or WebSocket replacement.",
+    "Only default TLS ports on api.openai.com, auth.openai.com and chatgpt.com select the application upstream. Other destinations retain captured ambient proxies and native bypass behavior.",
+    "HTTP and HTTPS upstreams, native OAuth refresh, global WebSocket and inspectable Bun ws are exercised using local fixtures. Upstream failure never triggers direct fallback.",
+    "Stop and shutdown close owned relay requests and sockets. Peer workers remain independent.",
+    "Native NO_PROXY and explicit per-request proxy priority remain unchanged; deliberate native bypass can bypass the relay.",
+    "Existing host/browser test uses OMP configuration and current model-management label; original auth, origin, persistence, restart and transport assertions retained.",
+    "Strip URL username/password from the address passed to http(s).request; emit upstream credentials exclusively in Proxy-Authorization. Preserve separately supplied origin Authorization. Real HTTP forwarding and CONNECT regression verifies encoded credentials and anonymous/authenticated targets."
+  ],
+  "verification": {
+    "build": {
+      "path": "/tmp/omp-proxy-final-build.log",
+      "exitCode": 0,
+      "sha256": "f03e5006a31940b3eabccd3880d12aeb1e88b56f116a72112788911417704647"
+    },
+    "typecheck": {
+      "path": "/tmp/omp-proxy-final-types.log",
+      "exitCode": 0,
+      "sha256": "afe164d6475ab09607d600e330c778c40041826259c553a753499c927e4fbe92"
+    },
+    "unit": {
+      "path": "/tmp/omp-proxy-final-units.log",
+      "exitCode": 0,
+      "sha256": "9b171ab12888ceab2b10de7bb54dc49ca93c5f1c2f6bf6296aedad15b5bbb006",
+      "files": 171,
+      "passed": 1061,
+      "skipped": 1
+    },
+    "browser": {
+      "path": "/tmp/omp-proxy-final-browser.log",
+      "exitCode": 0,
+      "sha256": "6ec82135785e9e252e438fc1ecbff5f42d81b35f4c535e7026904437c7288d23"
+    },
+    "relatedSmoke": {
+      "path": "/tmp/omp-proxy-final-related.log",
+      "exitCode": 0,
+      "sha256": "2e626367c581fd8abc8eae096a162c82cea23d4560191f8c182df0655ceec9f6",
+      "passed": 3,
+      "total": 3
+    },
+    "fullSmoke": "omp-smoke-proxy.json:114/114 passed before the follow-up credential isolation fix; no full rerun afterward",
+    "checks": [
+      "Protocol 75 sync",
+      "310 test environment scripts",
+      "Official HTTPS lockfile versions",
+      "131 production files and emitted engine boundary",
+      "git diff --check"
+    ]
+  },
+  "actualModel": {
+    "providerRequests": 1,
+    "proxyConnects": 1,
+    "blockedOfficialDirectRequests": 0,
+    "stopReason": "stop",
+    "response": "OMP_PROXY_VERIFIED"
+  },
+  "targetedTiming": "Full 114/114 run completed on frozen source, then additional HTTP proxy credential regression failed. After fixing URL credential handling and strengthening active-stream Stop coverage, rebuilt final source and passed types, units, browser and all 3 proxy smoke entries. Full 114 was not repeated after this isolated follow-up.",
+  "source": {
+    "candidate": "/var/folders/41/07yyp3_12jddkkthmflqkbgw0000gn/T/omp-proxy-fix-gbbc7ijd",
+    "filesCompared": 1314,
+    "fingerprintSha256": "f22664acc7ee5684fd7975b58946104f2a56226ae87f05a87bfa771531974f5e",
+    "differences": []
+  },
+  "intermediateFailures": [
+    "Initial TS7053 from deleting proxy-connection on an inferred header object; explicit OutgoingHttpHeaders fixed the type error.",
+    "First browser run used a retired Pi configuration fixture, so OMP setup intercepted the click. Fixture now uses models.yml/config.yml.",
+    "Next browser run looked for the retired 管理模型（新增 / 修改） label; changed to current 管理模型 without removing functional assertions.",
+    "Additional authenticated ambient-proxy HTTP test failed on an unintended origin Authorization header; final correction and real forwarding/CONNECT assertions passed."
+  ],
+  "limitations": [
+    "Local macOS fixture verification, not real-provider account OAuth or Windows networking acceptance.",
+    "No current packaged artifact or Windows original-task three-run acceptance.",
+    "MCP tool-level auth, native Task storage guard and other migration gaps remain.",
+    "This OpenAI proxy defect is not proof of the original DeepSeek repetition cause.",
+    "Native Task worker-thread proxy usage is not separately demonstrated; top-level/background sibling workers are covered."
+  ],
+  "operations": {
+    "rootDist": "Not overwritten; isolated candidate built and tested",
+    "userServicePid": 23786,
+    "oldDesktopPid": 62015,
+    "oldHistory": "No active user history deleted",
+    "release": "No commit, push, publish or release",
+    "isolatedCandidateRemoved": true,
+    "allVerificationHandlesTerminal": true
+  },
+  "previousVerification": {
+    "build": {
+      "path": "/tmp/omp-proxy-build-verified.log",
+      "exitCode": 0,
+      "sha256": "032f3aec4a2a429fe66f9f0fca7dbabfec8fa5b0fe56914a839537b9280b3eac"
+    },
+    "typecheck": {
+      "path": "/tmp/omp-proxy-types-verified.log",
+      "exitCode": 0,
+      "sha256": "afe164d6475ab09607d600e330c778c40041826259c553a753499c927e4fbe92"
+    },
+    "unit": {
+      "path": "/tmp/omp-proxy-units-verified.log",
+      "exitCode": 0,
+      "sha256": "148fc40d3531ef9231185791921a55a942bc296826c79eb05dedb9c9f385c7c5",
+      "files": 171,
+      "passed": 1061,
+      "skipped": 1
+    },
+    "browser": {
+      "path": "/tmp/omp-proxy-browser-verified.log",
+      "exitCode": 0,
+      "sha256": "6ec82135785e9e252e438fc1ecbff5f42d81b35f4c535e7026904437c7288d23"
+    },
+    "nativeModel": {
+      "path": "/tmp/omp-proxy-runtime-final.log",
+      "exitCode": 0,
+      "sha256": "327471fedf410de6e3cce49427e7d23bf49070b62ee58dc788d3d99138503f30"
+    },
+    "nativeTransports": {
+      "path": "/tmp/omp-proxy-protocols.log",
+      "exitCode": 0,
+      "sha256": "a8dcd42acbb169bcc81831eef64c8bacd3cb521cc96669191990d9b8b5618627"
+    },
+    "fullSmoke": {
+      "session": 76680,
+      "exitCode": 0,
+      "passed": 114,
+      "total": 114,
+      "record": "omp-smoke-proxy.json"
+    }
+  },
+  "credentialRegression": {
+    "before": {
+      "path": "/tmp/omp-proxy-auth-regression-before.log",
+      "exitCode": 1,
+      "sha256": "bc5d4adf750861152ba07a4f80714410d98dc1f7653e28cb7081c8ca79ba058d"
+    },
+    "cause": "Node-compatible http.request derives origin Authorization from credentials in its URL argument, even when Proxy-Authorization was supplied. The relay now passes a credential-free address and explicit proxy header.",
+    "final": "Included in final 3/3 related smoke; actual upstream and forwarded origin headers checked."
+  },
+  "activeStreamStop": {
+    "initialProbe": {
+      "path": "/tmp/omp-proxy-active-stop.log",
+      "exitCode": 0,
+      "sha256": "eac4fc60c5b72645e3ec8a4a2eb1c4db8886eb2264a0dd3880405a6a651eb277"
+    },
+    "final": "Integrated in omp-openai-proxy-test.mjs and passed in final 3/3. The provider holds an unfinished TLS response; Stop closes it and an independent worker completes afterward."
+  }
+}

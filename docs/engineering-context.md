@@ -2,11 +2,11 @@
 
 状态：个人使用的第一阶段验证方案。`dev/context-eval/` 提供离线资料盘点、隔离问答与引用校验；OpenViking 是待验证的可选检索后端，尚未成为产品依赖。新增来源管理界面以真实评测通过为前提。
 
-Workspace 现有项目与已配置知识库可通过内置只读 `subagent` 并行查证，见 [子代理架构](architecture-subagents.md)。它复用现有来源配置及本地精确搜索，不引入 OpenViking 或新来源管理界面；只在父模型明确调用工具时启动子会话。调用链和取消用模拟模型验证，检索收益与真实业务答案质量仍按本文评测。
+产品子任务现由 OMP 原生 Task 管理，见 [子代理架构](architecture-subagents.md)。旧 Pi 只读 `subagent` 已退休；本开发评测独立使用受限 OMP 会话，不引入 OpenViking 产品依赖或新来源管理界面。检索收益与真实业务答案质量仍按本文评测。
 
 ## 目标与设计修订
 
-在 pi-harness 中查证跨仓实现、个人经验及团队文档，答案能够回到明确版本的原始依据。资料与索引在本机管理；模型可使用公司内网 AI，当前验证允许显式复用 Pi 已配置的模型，无需先安装本机模型。首期采用两个仓库的相关模块、个人 Markdown 和可获得的文本 PDF，手动导入和刷新。
+在 pi-harness 中查证跨仓实现、个人经验及团队文档，答案能够回到明确版本的原始依据。资料与索引在本机管理；模型可使用公司内网 AI，当前验证允许显式复用 OMP 已配置的模型，无需先安装本机模型。首期采用两个仓库的相关模块、个人 Markdown 和可获得的文本 PDF，手动导入和刷新。
 
 | 原方案倾向 | 本方案决策 |
 | --- | --- |
@@ -15,7 +15,7 @@ Workspace 现有项目与已配置知识库可通过内置只读 `subagent` 并�
 | 第二阶段再加元数据 | 第一阶段就记录来源、内容版本、定位和索引时间 |
 | 代码索引天然拥有调用关系和 Git 历史 | 原仓库保有这些信息；索引是否支持相关查询单独测试 |
 | Knowledge → Memory → Skill 自动演进 | 三者分别管理，用户主动整理、检查后再复用 |
-| Pi 与 Hermes 同时集成 | 首期只接 Pi，Hermes 留作将来的另一客户端 |
+| OMP 与 Hermes 同时集成 | 首期只接 OMP，Hermes 留作将来的另一客户端 |
 
 OpenViking 当前使用向量召回与可选重排，因此保留原生精确搜索作为对照及核实手段。资料组织方式能否提高查证质量，需要通过相同问题的比较确认。[官方检索机制](https://docs.openviking.ai/en/concepts/07-retrieval)
 
@@ -24,7 +24,7 @@ OpenViking 当前使用向量召回与可选重排，因此保留原生精确搜
 ```text
 本地 Git / 个人 Markdown / 团队文档与 PDF
     → 来源登记、版本快照 → 可选 OpenViking 索引
-    → 原生 MCP 按需搜索、读取 → Pi 原生会话 + 明确选定的模型
+    → 原生 MCP 按需搜索、读取 → OMP 原生会话 + 明确选定的模型
     → pi-harness 对话与工具结果 → 回读原文件核实
 
 用户主动整理经验 → 普通 Markdown → Wiki 编辑确认 → 手动刷新索引
@@ -32,13 +32,13 @@ OpenViking 当前使用向量召回与可选重排，因此保留原生精确搜
 
 - 原文件是事实依据；索引、摘要和向量是可重建数据。代码描述的是某版本的实现，规范描述的是预期行为，个人笔记描述的是适用条件下的经验。
 - 发生冲突时同时列出依据、版本和差异。来源权威不等于适用于当前部署，不能用“官方优先”消除冲突。
-- Pi 保持原生会话、工具及上下文生命周期；harness 不增加自动模型调用，不覆盖 bash，不将检索结果暗中注入每轮请求。
-- OpenViking 仅负责显式检索；首期不采集 Pi 历史、不接管压缩、不自动写 Memory 或激活 Skill。官方 Pi 扩展默认包含自动召回、会话采集与上下文接管，因此本阶段使用原生 MCP。[官方 Pi 集成](https://docs.openviking.ai/en/agent-integrations/11-pi)
+- OMP 保持原生会话、工具及上下文生命周期；harness 不增加自动模型调用，不覆盖 bash，不将检索结果暗中注入每轮请求。
+- OpenViking 仅负责显式检索；首期不采集 OMP 历史、不接管压缩、不自动写 Memory 或激活 Skill。官方 Pi 扩展默认包含自动召回、会话采集与上下文接管，因此本阶段使用原生 MCP。[官方 Pi 集成](https://docs.openviking.ai/en/agent-integrations/11-pi)
 - harness 复用现有 MCP 设置和工具卡。Wiki 继续编辑当前工作区的笔记；跨仓来源不能通过放宽 Wiki 路径边界接入。[原生 MCP](architecture-plugins.md#原生-mcp-管理)、[Wiki 文件与索引](architecture-wiki.md#文件与索引)
 
-OpenViking Server 提供 Streamable HTTP MCP。接入已核实版本的本地服务后，以实际 `tools/list` 为准，只允许搜索、列表和正文读取工具；管理、写入、记忆与技能工具保持隐藏。原生配置和 `toolExposure` 遵循现有 MCP 设置，代码不自动改写用户配置。[官方 MCP 接口](https://docs.openviking.ai/en/guides/06-mcp-integration)
+OpenViking Server 提供 Streamable HTTP MCP。接入已核实版本的本地服务后，以实际 `tools/list` 为准，只允许搜索、列表和正文读取工具；管理、写入、记忆与技能工具保持隐藏。生产配置遵循现有 OMP MCP 设置；评测会话从原生 MCPManager 取得工具后按只读清单注册，代码不自动改写用户配置。[官方 MCP 接口](https://docs.openviking.ai/en/guides/06-mcp-integration)
 
-首期以一个明确登记的个人资料集为检索范围。需要项目间权限隔离时，必须在来源服务实施约束，不能仅依赖模型传入项目名称或客户端隐藏工具。MCP 只读暴露是本阶段的工具选择，不是对 Pi 其他原生工具的文件权限沙箱。
+首期以一个明确登记的个人资料集为检索范围。需要项目间权限隔离时，必须在来源服务实施约束，不能仅依赖模型传入项目名称或客户端隐藏工具。MCP 只读暴露是本阶段的工具选择，不是对 OMP 其他原生工具的文件权限沙箱。
 
 ## 来源与证据契约
 
@@ -65,11 +65,11 @@ Markdown 也可能按标题拆成目录与片段，检索 URI 不一定等于原
 
 ## 本地资料与模型访问边界
 
-用户所指的本地模型包括公司的内网 AI；当前阶段允许使用现有 Pi 模型。资料盘点、文件读取、PDF 提取、索引存储与报告在本机执行。Embedding、摘要、查询改写、重排和最终回答分别记录实际模型端点，只向显式选定的端点发送其所需资料，不自动回退到其他提供商。OpenViking 支持分别配置模型与服务，接入时逐项核对。[官方模型配置](https://docs.openviking.ai/en/guides/01-configuration)
+用户所指的本地模型包括公司的内网 AI；当前阶段允许使用现有 OMP 模型。资料盘点、文件读取、PDF 提取、索引存储与报告在本机执行。Embedding、摘要、查询改写、重排和最终回答分别记录实际模型端点，只向显式选定的端点发送其所需资料，不自动回退到其他提供商。OpenViking 支持分别配置模型与服务，接入时逐项核对。[官方模型配置](https://docs.openviking.ai/en/guides/01-configuration)
 
-显式 `model.fromPi: true` 使用 Pi 原生模型与凭据解析，默认选择其配置中的 provider/model，也可明确指定；这不修改 Pi 配置，不等同于读取某个活动浏览器会话临时切换的模型。当前评测仅支持可直接调用的 API-key／请求头认证，明确拒绝 OAuth／订阅凭据，不执行令牌刷新或声称保留其专用协议转换。被测回答可用选定片段作为上下文。“当前 Pi 模型”只说明配置来源，不能据此声称服务已确认属于公司内网。
+显式 `model.fromOmp: true` 使用 OMP 原生模型与凭据解析，默认选择其原生 `modelRoles.default`（含角色别名和思考后缀），也可明确指定 provider/id；`agentDir` 默认是 `~/.omp/agent`，桌面模型须显式指向 `<dataDir>/omp/agent`。解析只读配置，并在文件元数据前后检查一致时复制 SQLite 数据库及 WAL／回滚日志，在临时目录运行原生解析；源文件持续变化时明确失败；这不修改 OMP 配置，不等同于读取某个活动浏览器会话临时切换的模型。当前评测仅支持可直接调用的 API-key／请求头认证，明确拒绝 OAuth／订阅凭据，不执行令牌刷新或声称保留其专用协议转换。被测回答可用选定片段作为上下文。“当前 OMP 配置模型”只说明配置来源，不能据此声称服务已确认属于公司内网。
 
-验证时记录资料经由哪些端点处理，核对所选服务与公司的部署边界；保留所需内网连通性，并检查是否存在未声明的外部调用。本机端点或 Pi 配置检查只是预检，不能证明服务内部没有转发。若选择完全本机推理，可额外断网验证；内网推理无需安装本机模型，也不要求断开内网后继续回答。
+验证时记录资料经由哪些端点处理，核对所选服务与公司的部署边界；保留所需内网连通性，并检查是否存在未声明的外部调用。本机端点或 OMP 配置检查只是预检，不能证明服务内部没有转发。若选择完全本机推理，可额外断网验证；内网推理无需安装本机模型，也不要求断开内网后继续回答。
 
 首轮关闭可选重排与查询规划，限制导入并发；在实际机器测量内存和耗时后再调优。模型选择、上下文长度、并发、硬件和资料规模与每次报告一起记录，不预设大型代码仓的吞吐能力。
 
@@ -77,9 +77,9 @@ Markdown 也可能按标题拆成目录与片段，检索 URI 不一定等于原
 
 ### 开发工具与运行产物
 
-从 `dev/context-eval/` 开始准备资料和评测。工具独立于服务端及 Web，不更改协议、SDK、Wiki 索引和用户的 Pi 配置；真实资料、运行记录及模型回答放在本地输出目录，不提交到仓库。命令及参数以该目录的 CLI `--help` 为准。
+从 `dev/context-eval/` 开始准备资料和评测。工具独立于服务端及 Web，不更改协议、SDK、Wiki 索引和用户的 OMP 配置；真实资料、运行记录及模型回答放在本地输出目录，不提交到仓库。命令及参数以该目录的 CLI `--help` 为准。
 
-配置使用 `version: 1`：`model` 可设为 `{ "fromPi": true }` 复用 Pi 模型，也可指定本机 `baseUrl`、`id`、`contextWindow` 与 `maxTokens`；`openviking` 指定本机 MCP `url`、实测服务 `version` 和可选的密钥环境变量名 `apiKeyEnv`。`sources` 逐项登记 `id`、`kind`（`code`／`personal`／`reference`）、`root`、明确的相对 `files` 白名单及可选的 `vikingUri`；来源路径相对配置文件解析。`questions` 保存题目 `id`、`prompt`、`expectedEvidence`（`sourceId`、`path`）及可选的 `expectInsufficient`。`timeoutMs` 限制单题等待。
+配置使用 `version: 1`：`model` 可设为 `{ "fromOmp": true }` 复用 OMP 模型，也可指定本机 `baseUrl`、`id`、`contextWindow` 与 `maxTokens`；`openviking` 指定本机 MCP `url`、实测服务 `version` 和可选的密钥环境变量名 `apiKeyEnv`。`sources` 逐项登记 `id`、`kind`（`code`／`personal`／`reference`）、`root`、明确的相对 `files` 白名单及可选的 `vikingUri`；来源路径相对配置文件解析。`questions` 保存题目 `id`、`prompt`、`expectedEvidence`（`sourceId`、`path`）及可选的 `expectInsufficient`。`timeoutMs` 限制单题等待。
 
 安装本项目依赖后，可直接生成样例来源快照，输出目录必须尚不存在：
 
@@ -87,9 +87,9 @@ Markdown 也可能按标题拆成目录与片段，检索 URI 不一定等于原
 node dev/context-eval/index.mjs snapshot --config dev/context-eval/example.json --out .context-eval/example-snapshot
 ```
 
-样例使用本仓库、已安装的 Pi SDK 包、项目文档及明确标记为合成冲突案例的个人笔记，共 20 道样例题。SDK 包不是第二个 Git 仓库，样例也不是用户真实业务评测；PDF 相关样例题检查现有实现，实际 PDF 需加入自己的 `files` 白名单。
+样例使用本仓库、已安装的 OMP SDK 包、项目文档及明确标记为合成冲突案例的个人笔记，共 20 道样例题。SDK 包不是第二个 Git 仓库，样例也不是用户真实业务评测；PDF 相关样例题检查现有实现，实际 PDF 需加入自己的 `files` 白名单。
 
-个人配置可放在已忽略的 `dev/context-eval/local/config.json`。复制样例后重新设置来源 `root`（可用绝对路径），因为相对路径始终以配置文件目录为基准。选择 `model.fromPi: true` 或替换本机模型占位配置。运行 OpenViking 组前，替换其版本占位值，把快照文件手动导入各 `vikingUri` 并等待索引完成；原生基线组可先单独执行：
+个人配置可放在已忽略的 `dev/context-eval/local/config.json`。复制样例后重新设置来源 `root`（可用绝对路径），因为相对路径始终以配置文件目录为基准。选择 `model.fromOmp: true` 或替换本机模型占位配置。运行 OpenViking 组前，替换其版本占位值，把快照文件手动导入各 `vikingUri` 并等待索引完成；原生基线组可先单独执行：
 
 ```bash
 node dev/context-eval/index.mjs doctor --config dev/context-eval/local/config.json
@@ -97,13 +97,19 @@ node dev/context-eval/index.mjs run --config dev/context-eval/local/config.json 
 ```
 
 - `snapshot` 只复制白名单文件并生成 `corpus.json`，供手动导入独立后端。输出选择新目录；工具不自动安装模型、启动服务或提交导入。
-- `doctor` 检查本机服务可达性；本机模型模式另检查模型列表。Pi 模型模式仅解析原生配置与凭据，不发送模型请求，也不证明提供商可用、属于内网或其内部调用策略。
-- `run` 以同一个 Pi SDK 和模型依次执行两组独立会话；也可用 `--arm baseline` 或 `--arm openviking` 单独运行。当前自动基线提供原生 read/grep/find/ls 和已收集的 Git 元数据，不开放 shell，因此不覆盖 Git 历史查询的收益比较。
+- `doctor` 检查本机服务可达性；本机模型模式另检查模型列表。OMP 模型模式仅解析原生配置与凭据，不发送模型请求，也不证明提供商可用、属于内网或其内部调用策略。
+- `run` 由 Node 协调器启动随包 Bun，以同一个 OMP SDK 和模型依次执行两组独立会话；也可用 `--arm baseline` 或 `--arm openviking` 单独运行。当前自动基线提供原生 read/grep/glob（目录查看由原生文件工具完成）和已收集的 Git 元数据，不开放 shell，因此不覆盖 Git 历史查询的收益比较。
 - 自动报告检查引用形式、证据与预期文件覆盖；回答正确性、引用能否支持结论和资料不足时的行为仍须人工评审。样例问题用于验证评测流程，不能充当已经完成的 20 题业务评测。
 - `evidenceChecksPassed` 仅表示格式、精确引用、全部预期文件覆盖和资料不足标记符合题目要求；任一未通过时 CLI 返回非零退出码。这不是答案语义正确性的评分。
 - 报告分别记录暴露的工具、MCP 调用及成功次数。B 组允许模型选择原生工具，未调用 MCP 的样本不能归因于 OpenViking 检索收益。
 
 OpenViking 组目前只约束登记的 URI 前缀，尚不自动核对后端的全部文件与版本。相同前缀中残留的旧文档也可能进入检索结果。因此双组报告固定标注 `comparisonEligibility: requires_backend_inventory_verification`；正式比较前必须用独立空索引只导入本次快照，记录实际 URI、完成回执及文件指纹，并核对后端清单。不能把对原文的事后引用校验当作两组输入完全一致的证明。
+
+`model.fromPi` 已退休，旧配置会明确报错，不能静默读取旧 Pi 凭据。省略额度时遵循 OMP 原生模型值，不再将原生额度裁到 4096；样例的 4096 是显式评测预算。逐题结果记录实际原生模型额度，报告记录当前锁定的 OMP/Bun 版本。耗时包含 worker 启动，RSS 仅采样 Bun 评测 worker，不包含 Node 协调器或模型／检索服务。
+
+SQLite 的只读连接也可能创建 WAL 辅助文件，因此评测不在原凭据库上打开数据库连接；只在私有副本中让原生存储恢复日志。[SQLite WAL 只读数据库说明](https://www.sqlite.org/wal.html#read_only_databases)
+
+本地工具钩子在执行前校验物化语料路径，glob 使用 OMP 自身的多路径解析逐个检查根目录；MCP 只登记 find/read/list/grep/glob 并校验 URI 范围。重定向导致该题失败且不跟随、不重发。超时、取消或宿主断开会终止所属 worker，并删除它的临时语料与凭据副本，不影响其他会话。两组原生日期／工作目录提醒不同，题目、来源指纹和 PDF 页文本相同。
 
 `.context-eval/` 已被 Git 忽略，用于含原文引用的快照与报告。确定性回归使用 `npm run test:context-eval`，也纳入零 token 冒烟；CI 使用隔离夹具及本地模拟模型，真实模型/OpenViking 比较只在本机手动执行。
 

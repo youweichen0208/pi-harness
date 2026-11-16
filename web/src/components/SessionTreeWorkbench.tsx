@@ -35,7 +35,7 @@ export function SessionTreeWorkbench({ state, connected, send }: { state: UiStat
 	const previewId = useRef("");
 	const mutationId = useRef("");
 	const request = useCallback((message: TreeRequest, copy = false) => {
-		if (!["tree_get", "tree_preview", "tree_content"].includes(message.type)) mutationId.current = message.reqId;
+		if (!["tree_get", "tree_preview", "tree_content", "tree_cancel_summary"].includes(message.type)) mutationId.current = message.reqId;
 		requests.current.set(message.reqId, { type: message.type, targetId: "targetId" in message ? message.targetId : "entryId" in message ? message.entryId : undefined, copy });
 		if (!send(message)) { requests.current.delete(message.reqId); setError(t("treeDisconnected")); setWaiting(false); setLoading(false); }
 	}, [send, t]);
@@ -47,8 +47,8 @@ export function SessionTreeWorkbench({ state, connected, send }: { state: UiStat
 	useEffect(() => { const timer = setTimeout(getTree, 120); return () => clearTimeout(timer); }, [getTree, state?.tree?.revision]);
 	useEffect(() => {
 		requests.current.clear(); setNodes([]); setSelected(undefined); setNavigate(undefined); setLabel(undefined); setContent(undefined); setError(""); setWaiting(false); setFolded(new Set());
-		setFilter(stateRef.current?.tree?.filterMode ?? "default");
 	}, [state?.conversationId]);
+	useEffect(() => { setFilter(state?.tree?.filterMode ?? "default"); }, [state?.conversationId, state?.tree?.filterMode]);
 	useEffect(() => { if (!connected) { requests.current.clear(); setWaiting(false); setLoading(false); } }, [connected]);
 	const execute = useCallback((intent: Navigate) => {
 		const current = stateRef.current;
@@ -94,6 +94,7 @@ export function SessionTreeWorkbench({ state, connected, send }: { state: UiStat
 				if (action?.copy) void copyText(message.content, document).catch(() => setContent({ id: message.entryId, text: message.content, toolCallId: message.toolCallId }));
 				else setContent({ id: message.entryId, text: message.content, toolCallId: message.toolCallId });
 			}
+			if (message.type === "tree_cancel_result") { if (message.status === "stale") setError(t("treeSummaryStale")); return; }
 			if (message.type === "tree_navigate_result") {
 				const isMutation = message.reqId === mutationId.current;
 				if (isMutation) setWaiting(false);
@@ -120,6 +121,10 @@ export function SessionTreeWorkbench({ state, connected, send }: { state: UiStat
 	const disabled = !connected || waiting || state?.tree?.busy || state?.tree?.verifying || state?.tree?.externallyModified;
 	const context = () => ({ conversationId: state?.conversationId ?? "", reqId: randomUuid() });
 	return <>
+		{state?.branchSummary && <div className="tree-summary-progress" role="region" aria-label={t("treeSummaryProgress")}>
+			<span role="status">{t(state.branchSummary.cancelling ? "treeSummaryCancelling" : "treeSummaryProgress")}</span>
+			<button disabled={!connected || state.branchSummary.cancelling} onClick={() => request({ type: "tree_cancel_summary", ...context(), operationId: state.branchSummary!.operationId })}>{t("treeCancelSummary")}</button>
+		</div>}
 		{open && <aside className="session-tree-panel" aria-label={t("treeTitle")}>
 			<header><FiGitBranch /><h2>{t(mode === "fork" ? "treeFork" : "treeTitle")}</h2><button onClick={() => setOpen(false)} aria-label={t("close")}><FiX /></button></header>
 			<div className="session-tree-controls"><select aria-label={t("treeFilter")} value={mode === "fork" ? "user-only" : filter} disabled={mode === "fork"} onChange={e => setFilter(e.target.value as TreeFilterMode)}>{(["default", "no-tools", "user-only", "labeled-only", "all"] as const).map(value => <option key={value} value={value}>{t(`treeFilter_${value}`)}</option>)}</select><input aria-label={t("treeSearch")} placeholder={t("treeSearch")} value={query} onChange={e => setQuery(e.target.value)} /></div>

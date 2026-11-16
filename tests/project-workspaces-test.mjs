@@ -1,24 +1,17 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, existsSync, realpathSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createServer } from "node:net";
+import { startIsolatedHarness } from "./lib/isolated-server.mjs";
 import WebSocket from "ws";
-import { testEnv } from "./lib/test-env.mjs";
 
 const base = mkdtempSync(join(tmpdir(), "pi-workspace-groups-"));
 const projects = ["project-a", "project-b"].map((name) => join(base, name));
 for (const path of projects) mkdirSync(path);
-const probe = createServer();
-await new Promise((r) => probe.listen(0, "127.0.0.1", r));
-const port = probe.address().port;
-await new Promise((r) => probe.close(r));
-assert(port >= 8900);
-const server = spawn(process.execPath, ["dist/server/index.js"], { env: { ...testEnv(), PORT: String(port), PI_WEB_CWD: projects[0], PI_WEB_DATA_DIR: join(base, "data"), PI_CODING_AGENT_DIR: join(base, "agent"), PI_WEB_TOKEN: "" }, stdio: ["ignore", "pipe", "pipe"] });
-let logs = "";
-server.stdout.on("data", (data) => { logs += data; });
-server.stderr.on("data", (data) => { logs += data; });
+const nativeAgent = join(base, "data", "omp", "agent");
+mkdirSync(nativeAgent, { recursive: true });
+writeFileSync(join(nativeAgent, "config.yml"), JSON.stringify({ skills: { enabled: false }, cacheWarming: { enabled: false } }));
+let harness, port;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const sockets = [];
 let browser;
@@ -29,19 +22,16 @@ async function client(id) {
 	await new Promise((r, reject) => { socket.once("open", r); socket.once("error", reject); });
 	const send = (message) => socket.send(JSON.stringify(message));
 	const wait = async (test) => {
-		for (let i = 0; i < 500; i++) { const message = messages.find(test); if (message) return message; await sleep(20); }
-		throw new Error(`Message timeout: ${messages.slice(-5).map((m) => m.type)}\n${logs.slice(-2000)}`);
+		for (let i = 0; i < 1500; i++) { const message = messages.find(test); if (message) return message; await sleep(20); }
+		throw new Error(`Message timeout: ${messages.slice(-5).map((m) => m.type)}\n${harness?.logs.slice(-2000)}`);
 	};
-	send({ type: "hello", clientId: id }); await wait((m) => m.type === "snapshot");
+	send({ type: "hello", clientId: id }); await wait((m) => m.type === "ready");
 	send({ type: "list_project_workspaces" }); await wait((m) => m.type === "project_workspaces");
 	return { send, wait, messages };
 }
 try {
-	for (let i = 0; i < 150; i++) {
-		try { if ((await fetch(`http://127.0.0.1:${port}/api/health`)).ok) break; } catch {}
-		if (i === 149 || server.exitCode !== null) throw new Error(logs);
-		await sleep(100);
-	}
+	harness = await startIsolatedHarness({ env: { PI_WEB_CWD: projects[0], PI_WEB_DATA_DIR: join(base, "data"), PI_WEB_TOKEN: "" } });
+	port = harness.port;
 	if (process.argv.includes("--browser")) {
 		const { chromium } = await import("playwright-core");
 		const { CHROME_PATH } = await import("./lib/chrome.mjs");
@@ -50,7 +40,7 @@ try {
 		const first = await browser.newPage();
 		await first.addInitScript(() => localStorage.setItem("pi-harness:project-workspace", "deleted-workspace"));
 		await first.goto(`http://127.0.0.1:${port}`);
-		if (await first.locator(".setup-modal .modal-close").isVisible()) await first.locator(".setup-modal .modal-close").click();
+		await first.locator(".setup-modal .modal-close").click();
 		await first.getByRole("button", { name: "新建 Workspace", exact: true }).first().click();
 		await first.getByRole("dialog", { name: "新建 Workspace" }).getByRole("textbox").waitFor();
 		await first.getByRole("button", { name: "取消", exact: true }).click();
@@ -83,7 +73,7 @@ try {
 		const outgoing = [];
 		page.on("websocket", (socket) => socket.on("framesent", ({ payload }) => outgoing.push(JSON.parse(String(payload)))));
 		await page.goto(`http://127.0.0.1:${port}`);
-		if (await page.locator(".setup-modal .modal-close").isVisible()) await page.locator(".setup-modal .modal-close").click();
+		await page.locator(".setup-modal .modal-close").click();
 		const current = () => page.evaluate(() => document.querySelector(".compact-workspace-trigger > span")?.textContent ?? "");
 		const currentIs = (name) => page.waitForFunction((name) => document.querySelector(".compact-workspace-trigger > span")?.textContent === name, name);
 		await currentIs("Work");
@@ -119,7 +109,7 @@ try {
 		assert.equal(switches(), before, "new chat does not switch cwd when the current project is outside the selected Workspace");
 		assert.equal(await current(), "Work");
 		await page.reload();
-		if (await page.locator(".setup-modal .modal-close").isVisible()) await page.locator(".setup-modal .modal-close").click();
+		await page.locator(".setup-modal .modal-close").click();
 		await page.locator(`.project-item[title="${projects[1]}"]`).waitFor();
 		assert.equal(await current(), "Work");
 		await page.locator(".workspace-project-search").fill("missing");
@@ -244,8 +234,6 @@ try {
 } finally {
 	await browser?.close();
 	for (const socket of sockets) socket.close();
-	server.kill("SIGTERM");
-	await Promise.race([new Promise((r) => server.once("exit", r)), sleep(5000)]);
-	if (server.exitCode === null) { server.kill("SIGKILL"); await new Promise((r) => server.once("exit", r)); }
+	await harness?.stop();
 	rmSync(base, { recursive: true, force: true });
 }

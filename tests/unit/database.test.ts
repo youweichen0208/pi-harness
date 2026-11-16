@@ -10,6 +10,15 @@ const directories: string[] = [];
 afterEach(() => { vi.unstubAllEnvs(); directories.splice(0).forEach(p => rmSync(p, { recursive: true, force: true })); });
 function setup() { const dir = mkdtempSync(join(tmpdir(), "pi-db-unit-")); directories.push(dir); vi.stubEnv("PI_WEB_DATA_DIR", dir); return dir; }
 const config = { name: "analytics", driver: "postgres" as const, host: "localhost", port: 5432, user: "reader", db_name: "analytics" };
+describe("database agent settings boundary", () => {
+	it("never lets an agent read or alter its own access setting", async () => {
+		setup();
+		const state = await databaseAction("owner", "/work", "settings", { action: "agent_settings" });
+		await expect(databaseAction("owner", "/work", "read", { action: "agent_settings" }, undefined, true)).rejects.toThrow(/Unsupported agent/);
+		await expect(databaseAction("owner", "/work", "write", { action: "set_agent_settings", enabled: false, version: state.agentSettings!.version }, undefined, true)).rejects.toThrow(/Unsupported agent/);
+		expect((await databaseAction("owner", "/work", "verify", { action: "agent_settings" })).agentSettings?.enabled).toBe(true);
+	});
+});
 describe("database SQL boundary", () => {
 	for (const driver of ["mysql", "postgres"] as const) {
 		it(`${driver}: accepts analytical SELECT and CTEs`, () => {

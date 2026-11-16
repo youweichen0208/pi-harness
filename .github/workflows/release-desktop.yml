@@ -94,42 +94,109 @@ jobs:
       - name: Build web + server
         run: npm run build
 
-      - name: Verify native tools and OAuth (plain Node)
+      - name: Verify OMP runtime, configuration and entry (plain Node)
         run: |
           node tests/terminal-smoke-test.mjs
-          node tests/native-tools-desktop-test.mjs
-          node tests/provider-auth-test.mjs
-          node tests/model-config-preservation-test.mjs
-          node tests/model-sources-test.mjs
+          node tests/omp-runtime-test.mjs
+          node tests/omp-openai-proxy-test.mjs
+          node tests/omp-proxy-transports-test.mjs
+          node tests/omp-model-config-test.mjs
+          node tests/omp-model-catalog-test.mjs
+          node tests/omp-skill-settings-test.mjs
+          node tests/omp-extension-settings-test.mjs
+          node tests/omp-packages-test.mjs
+          node tests/omp-marketplace-test.mjs
+          node tests/omp-package-features-test.mjs
+          node tests/omp-package-settings-test.mjs
+          node tests/omp-mcp-test.mjs
+          node tests/omp-mcp-auth-test.mjs
+          node tests/omp-mcp-auth-reconnect-test.mjs
+          node tests/omp-stop-metadata-test.mjs
+          node tests/omp-prompt-test.mjs
+          node tests/omp-tasks-test.mjs
+          node tests/omp-request-diagnostics-test.mjs
+          node tests/omp-task-output-test.mjs
+          node tests/omp-task-compaction-test.mjs
+          node tests/omp-mcp-diagnostics-test.mjs
+          node tests/reasoning-repetition-test.mjs
+          node tests/omp-recovery-test.mjs
+          node tests/omp-restricted-recovery-test.mjs
+          node tests/playground-drain-test.mjs
+          node tests/omp-persistence-test.mjs
+          node tests/omp-persistence-restart-test.mjs
+          node tests/omp-external-history-test.mjs
+          node tests/omp-session-storage-test.mjs
+          node tests/omp-tree-test.mjs
+          node tests/omp-skill-history-test.mjs
+          node tests/omp-template-attachments-test.mjs
+          node tests/omp-entry-test.mjs
 
       - name: Build Electron (macOS)
         run: npx electron-builder build --mac --arm64 --publish never
 
-      - name: Verify packaged server, native worker and OAuth
+      - name: Verify packaged server and OMP integration
         run: |
           app="release/mac-arm64/pi.app"
           root="$app/Contents/Resources/app"
           executable="$app/Contents/MacOS/pi"
           node tests/packaged-server-start-test.mjs "$executable" "$root"
           node tests/packaged-jdbc-test.mjs "$executable" "$root"
-          node tests/native-tools-desktop-test.mjs "$executable" "$root"
-          ELECTRON_RUN_AS_NODE=1 "$executable" tests/provider-auth-test.mjs "$PWD/$root"
-          ELECTRON_RUN_AS_NODE=1 "$executable" tests/model-sources-test.mjs "$PWD/$root"
+          node tests/omp-runtime-test.mjs "$executable" "$root"
+          node tests/omp-model-config-test.mjs "$executable" "$root"
+          node tests/omp-model-catalog-test.mjs "$executable" "$root"
+          node tests/omp-skill-settings-test.mjs "$executable" "$root"
+          node tests/omp-extension-settings-test.mjs "$executable" "$root"
+          node tests/omp-packages-test.mjs "$executable" "$root"
+          node tests/omp-marketplace-test.mjs "$executable" "$root"
+          node tests/omp-package-features-test.mjs "$executable" "$root"
+          node tests/omp-package-settings-test.mjs "$executable" "$root"
+          node tests/omp-mcp-test.mjs "$executable" "$root"
+          node tests/omp-mcp-auth-test.mjs "$executable" "$root"
+          node tests/omp-mcp-auth-reconnect-test.mjs "$executable" "$root"
+          node tests/omp-stop-metadata-test.mjs "$executable" "$root"
+          node tests/omp-prompt-test.mjs "$executable" "$root"
+          node tests/omp-tasks-test.mjs "$executable" "$root"
+          node tests/omp-request-diagnostics-test.mjs "$executable" "$root"
+          node tests/omp-task-output-test.mjs "$executable" "$root"
+          node tests/omp-task-compaction-test.mjs "$executable" "$root"
+          node tests/omp-mcp-diagnostics-test.mjs "$executable" "$root"
+          node tests/reasoning-repetition-test.mjs "$executable" "$root"
+          node tests/omp-recovery-test.mjs "$executable" "$root"
+          node tests/omp-restricted-recovery-test.mjs "$executable" "$root"
+          node tests/playground-drain-test.mjs "$executable" "$root"
+          node tests/omp-persistence-test.mjs "$executable" "$root"
+          node tests/omp-persistence-restart-test.mjs "$executable" "$root"
+          node tests/omp-external-history-test.mjs "$executable" "$root"
+          node tests/omp-session-storage-test.mjs "$executable" "$root"
+          node tests/omp-skill-history-test.mjs "$executable" "$root"
+          node tests/omp-template-attachments-test.mjs "$executable" "$root"
+          node tests/omp-entry-test.mjs "$executable" "$root"
           codesign --verify --deep --strict "$app"
 
-      - name: Verify packaged extension worker and rendering
+      - name: Verify packaged OMP resources and rendering
         run: |
           executable="release/mac-arm64/pi.app/Contents/MacOS/pi"
-          ELECTRON_RUN_AS_NODE=1 "$executable" tests/extensions-worker-test.mjs release/mac-arm64/pi.app/Contents/Resources/app
-          ELECTRON_RUN_AS_NODE=1 "$executable" tests/extensions-local-test.mjs release/mac-arm64/pi.app/Contents/Resources/app
           node tests/windows-rendering-test.mjs "$executable"
-          node tests/extensions-directory-desktop-test.mjs "$executable"
+          node tests/omp-resources-desktop-test.mjs "$executable"
+          node tests/omp-packages-browser-test.mjs "$executable" "release/mac-arm64/pi.app/Contents/Resources/app"
+          node tests/omp-mcp-browser-test.mjs "$executable"
+          node tests/omp-prompt-browser-test.mjs "$executable"
+          node tests/omp-tasks-browser-test.mjs "$executable"
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: release-rendering-macos
-          path: tests/scratch/rendering
+          path: |
+            tests/scratch/rendering
+            tests/scratch/omp-task-*.png
+            tests/scratch/omp-skill-settings*.png
+            tests/scratch/omp-extension-*.png
+            tests/scratch/omp-mcp-*.png
+            tests/scratch/omp-package-settings-*.png
+            tests/scratch/omp-package-features-*.png
+            tests/scratch/omp-packages-*.png
+            tests/scratch/omp-prompt-*.png
           if-no-files-found: warn
 
       - name: Verify DMG installation and previous-version data
@@ -200,12 +267,74 @@ jobs:
       - name: Terminal smoke test (plain Node)
         run: node tests/terminal-smoke-test.mjs
 
-      - name: Verify native tools and OAuth (plain Node)
+      - name: Verify OMP runtime, configuration and entry (plain Node)
         run: |
-          node tests/native-tools-desktop-test.mjs
-          node tests/provider-auth-test.mjs
-          node tests/model-config-preservation-test.mjs
-          node tests/model-sources-test.mjs
+          node tests/omp-runtime-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-runtime-test.mjs failed" }
+          node tests/omp-openai-proxy-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-openai-proxy-test.mjs failed" }
+          node tests/omp-proxy-transports-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-proxy-transports-test.mjs failed" }
+          node tests/omp-model-config-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-model-config-test.mjs failed" }
+          node tests/omp-model-catalog-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-model-catalog-test.mjs failed" }
+          node tests/omp-skill-settings-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-skill-settings-test.mjs failed" }
+          node tests/omp-extension-settings-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-extension-settings-test.mjs failed" }
+          node tests/omp-packages-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-packages-test.mjs failed" }
+          node tests/omp-marketplace-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-marketplace-test.mjs failed" }
+          node tests/omp-package-features-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-package-features-test.mjs failed" }
+          node tests/omp-package-settings-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-package-settings-test.mjs failed" }
+          node tests/omp-mcp-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-mcp-test.mjs failed" }
+          node tests/omp-mcp-auth-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-mcp-auth-test.mjs failed" }
+          node tests/omp-mcp-auth-reconnect-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-mcp-auth-reconnect-test.mjs failed" }
+          node tests/omp-stop-metadata-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-stop-metadata-test.mjs failed" }
+          node tests/omp-prompt-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-prompt-test.mjs failed" }
+          node tests/omp-tasks-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-tasks-test.mjs failed" }
+          node tests/omp-request-diagnostics-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-request-diagnostics-test.mjs failed" }
+          node tests/omp-task-output-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-task-output-test.mjs failed" }
+          node tests/omp-task-compaction-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-task-compaction-test.mjs failed" }
+          node tests/omp-mcp-diagnostics-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-mcp-diagnostics-test.mjs failed" }
+          node tests/reasoning-repetition-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "OMP reasoning interruption regression failed" }
+          node tests/omp-recovery-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-recovery-test.mjs failed" }
+          node tests/omp-restricted-recovery-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "Restricted OMP recovery failed" }
+          node tests/playground-drain-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "Playground drain failed" }
+          node tests/omp-persistence-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "OMP persistence failed" }
+          node tests/omp-persistence-restart-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "OMP persistence restart failed" }
+          node tests/omp-external-history-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-external-history-test failed" }
+          node tests/omp-session-storage-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-session-storage-test failed" }
+          node tests/omp-tree-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-tree-test.mjs failed" }
+          node tests/omp-skill-history-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-skill-history-test.mjs failed" }
+          node tests/omp-template-attachments-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-template-attachments-test.mjs failed" }
+          node tests/omp-entry-test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "omp-entry-test.mjs failed" }
 
       - name: Install browser for toolbar regression
         run: npx playwright-core install chromium
@@ -223,37 +352,99 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Packaged JDBC bridge failed" }
           node tests/packaged-server-start-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
           if ($LASTEXITCODE -ne 0) { throw "Packaged server cannot start" }
-          node tests/native-tools-desktop-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
-          if ($LASTEXITCODE -ne 0) { throw "Packaged native tools failed" }
-          $env:ELECTRON_RUN_AS_NODE = "1"
-          # Electron is a GUI executable: a pipeline makes PowerShell wait and set LASTEXITCODE.
-          & ./release/win-unpacked/pi.exe tests/provider-auth-test.mjs "$PWD/release/win-unpacked/resources/app" | Out-Host
-          if ($LASTEXITCODE -ne 0) { throw "Packaged OAuth failed" }
-          & ./release/win-unpacked/pi.exe tests/model-sources-test.mjs "$PWD/release/win-unpacked/resources/app" | Out-Host
-          if ($LASTEXITCODE -ne 0) { throw "Packaged model discovery failed" }
-          Remove-Item Env:ELECTRON_RUN_AS_NODE
+          node tests/omp-runtime-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "Packaged OMP runtime failed" }
+          node tests/omp-model-config-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "omp-model-config-test.mjs failed" }
+          node tests/omp-model-catalog-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "omp-model-catalog-test.mjs failed" }
+          node tests/omp-skill-settings-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "omp-skill-settings-test.mjs failed" }
+          node tests/omp-extension-settings-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "omp-extension-settings-test.mjs failed" }
+          node tests/omp-packages-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "omp-packages-test.mjs failed" }
+          node tests/omp-marketplace-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "omp-marketplace-test.mjs failed" }
+          node tests/omp-package-features-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "omp-package-features-test.mjs failed" }
+          node tests/omp-package-settings-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "omp-package-settings-test.mjs failed" }
+          node tests/omp-mcp-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "OMP MCP runtime failed" }
+          node tests/omp-mcp-auth-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "OMP MCP OAuth failed" }
+          node tests/omp-mcp-auth-reconnect-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "omp-mcp-auth-reconnect-test.mjs failed" }
+          node tests/omp-stop-metadata-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "OMP stop metadata failed" }
+          node tests/omp-prompt-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "OMP prompt files failed" }
+          node tests/omp-tasks-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "Packaged OMP configuration failed" }
+          node tests/omp-request-diagnostics-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "omp-request-diagnostics-test.mjs failed" }
+          node tests/omp-task-output-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "omp-task-output-test.mjs failed" }
+          node tests/omp-task-compaction-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "omp-task-compaction-test.mjs failed" }
+          node tests/omp-mcp-diagnostics-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "omp-mcp-diagnostics-test.mjs failed" }
+          node tests/reasoning-repetition-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "OMP reasoning interruption regression failed" }
+          node tests/omp-recovery-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "Packaged OMP recovery failed" }
+          node tests/omp-restricted-recovery-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "Restricted OMP recovery failed" }
+          node tests/playground-drain-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "Playground drain failed" }
+          node tests/omp-persistence-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "Packaged OMP persistence failed" }
+          node tests/omp-persistence-restart-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "OMP persistence restart failed" }
+          node tests/omp-external-history-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "omp-external-history-test failed" }
+          node tests/omp-session-storage-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "omp-session-storage-test failed" }
+          node tests/omp-skill-history-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "Packaged OMP skill history failed" }
+          node tests/omp-template-attachments-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "Packaged OMP template attachments failed" }
+          node tests/omp-entry-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "Packaged OMP entry failed" }
           $portable = Get-ChildItem release/*win-x64.exe | Select-Object -First 1
           ./tests/portable-relaunch-test.ps1 -PortableExe $portable.FullName
 
-      - name: Verify packaged extension worker and rendering
+      - name: Verify packaged OMP resources and rendering
         shell: pwsh
         run: |
-          $env:ELECTRON_RUN_AS_NODE = "1"
-          & ./release/win-unpacked/pi.exe tests/extensions-worker-test.mjs release/win-unpacked/resources/app | Out-Host
-          if ($LASTEXITCODE -ne 0) { throw "Packaged extension worker failed" }
-          & ./release/win-unpacked/pi.exe tests/extensions-local-test.mjs release/win-unpacked/resources/app | Out-Host
-          if ($LASTEXITCODE -ne 0) { throw "Packaged local extensions failed" }
-          Remove-Item Env:ELECTRON_RUN_AS_NODE
           node tests/windows-rendering-test.mjs release/win-unpacked/pi.exe
           if ($LASTEXITCODE -ne 0) { throw "Packaged rendering failed" }
-          node tests/extensions-directory-desktop-test.mjs release/win-unpacked/pi.exe
-          if ($LASTEXITCODE -ne 0) { throw "Packaged extension directory failed" }
+          node tests/omp-resources-desktop-test.mjs release/win-unpacked/pi.exe
+          if ($LASTEXITCODE -ne 0) { throw "omp-resources-desktop-test.mjs failed" }
+          node tests/omp-packages-browser-test.mjs release/win-unpacked/pi.exe release/win-unpacked/resources/app
+          if ($LASTEXITCODE -ne 0) { throw "Packaged OMP package settings UI failed" }
+          node tests/omp-mcp-browser-test.mjs release/win-unpacked/pi.exe
+          if ($LASTEXITCODE -ne 0) { throw "Packaged OMP resources failed" }
+          node tests/omp-prompt-browser-test.mjs release/win-unpacked/pi.exe
+          if ($LASTEXITCODE -ne 0) { throw "Packaged OMP prompt UI failed" }
+          node tests/omp-tasks-browser-test.mjs release/win-unpacked/pi.exe
+          if ($LASTEXITCODE -ne 0) { throw "Packaged OMP task UI failed" }
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: release-rendering-windows
-          path: tests/scratch/rendering
+          path: |
+            tests/scratch/rendering
+            tests/scratch/omp-task-*.png
+            tests/scratch/omp-skill-settings*.png
+            tests/scratch/omp-extension-*.png
+            tests/scratch/omp-mcp-*.png
+            tests/scratch/omp-package-settings-*.png
+            tests/scratch/omp-package-features-*.png
+            tests/scratch/omp-packages-*.png
+            tests/scratch/omp-prompt-*.png
           if-no-files-found: warn
 
       - name: Verify NSIS installation and previous-version data
@@ -331,28 +522,82 @@ jobs:
       - name: Build web + server
         run: npm run build
 
-      - name: Verify native tools and OAuth (plain Node)
+      - name: Verify OMP runtime, configuration and entry (plain Node)
         run: |
           node tests/terminal-smoke-test.mjs
-          node tests/native-tools-desktop-test.mjs
-          node tests/provider-auth-test.mjs
-          node tests/model-config-preservation-test.mjs
-          node tests/model-sources-test.mjs
+          node tests/omp-runtime-test.mjs
+          node tests/omp-openai-proxy-test.mjs
+          node tests/omp-proxy-transports-test.mjs
+          node tests/omp-model-config-test.mjs
+          node tests/omp-model-catalog-test.mjs
+          node tests/omp-skill-settings-test.mjs
+          node tests/omp-extension-settings-test.mjs
+          node tests/omp-packages-test.mjs
+          node tests/omp-marketplace-test.mjs
+          node tests/omp-package-features-test.mjs
+          node tests/omp-package-settings-test.mjs
+          node tests/omp-mcp-test.mjs
+          node tests/omp-mcp-auth-test.mjs
+          node tests/omp-mcp-auth-reconnect-test.mjs
+          node tests/omp-stop-metadata-test.mjs
+          node tests/omp-prompt-test.mjs
+          node tests/omp-tasks-test.mjs
+          node tests/omp-request-diagnostics-test.mjs
+          node tests/omp-task-output-test.mjs
+          node tests/omp-task-compaction-test.mjs
+          node tests/omp-mcp-diagnostics-test.mjs
+          node tests/reasoning-repetition-test.mjs
+          node tests/omp-recovery-test.mjs
+          node tests/omp-restricted-recovery-test.mjs
+          node tests/playground-drain-test.mjs
+          node tests/omp-persistence-test.mjs
+          node tests/omp-persistence-restart-test.mjs
+          node tests/omp-external-history-test.mjs
+          node tests/omp-session-storage-test.mjs
+          node tests/omp-tree-test.mjs
+          node tests/omp-skill-history-test.mjs
+          node tests/omp-template-attachments-test.mjs
+          node tests/omp-entry-test.mjs
 
       - name: Build Electron (Linux)
         run: npx electron-builder build --linux --x64 --publish never
 
-      - name: Verify packaged server, native worker and OAuth
+      - name: Verify packaged server and OMP integration
         run: |
           root="$PWD/release/linux-unpacked/resources/app"
           executable="$PWD/release/linux-unpacked/pi-harness"
           node tests/packaged-server-start-test.mjs "$executable" "$root"
           node tests/packaged-jdbc-test.mjs "$executable" "$root"
-          node tests/native-tools-desktop-test.mjs "$executable" "$root"
-          ELECTRON_RUN_AS_NODE=1 "$executable" tests/provider-auth-test.mjs "$root"
-          ELECTRON_RUN_AS_NODE=1 "$executable" tests/model-sources-test.mjs "$root"
-          ELECTRON_RUN_AS_NODE=1 "$executable" tests/extensions-local-test.mjs "$root"
-          ELECTRON_RUN_AS_NODE=1 "$executable" tests/extensions-worker-test.mjs "$root"
+          node tests/omp-runtime-test.mjs "$executable" "$root"
+          node tests/omp-model-config-test.mjs "$executable" "$root"
+          node tests/omp-model-catalog-test.mjs "$executable" "$root"
+          node tests/omp-skill-settings-test.mjs "$executable" "$root"
+          node tests/omp-extension-settings-test.mjs "$executable" "$root"
+          node tests/omp-packages-test.mjs "$executable" "$root"
+          node tests/omp-marketplace-test.mjs "$executable" "$root"
+          node tests/omp-package-features-test.mjs "$executable" "$root"
+          node tests/omp-package-settings-test.mjs "$executable" "$root"
+          node tests/omp-mcp-test.mjs "$executable" "$root"
+          node tests/omp-mcp-auth-test.mjs "$executable" "$root"
+          node tests/omp-mcp-auth-reconnect-test.mjs "$executable" "$root"
+          node tests/omp-stop-metadata-test.mjs "$executable" "$root"
+          node tests/omp-prompt-test.mjs "$executable" "$root"
+          node tests/omp-tasks-test.mjs "$executable" "$root"
+          node tests/omp-request-diagnostics-test.mjs "$executable" "$root"
+          node tests/omp-task-output-test.mjs "$executable" "$root"
+          node tests/omp-task-compaction-test.mjs "$executable" "$root"
+          node tests/omp-mcp-diagnostics-test.mjs "$executable" "$root"
+          node tests/reasoning-repetition-test.mjs "$executable" "$root"
+          node tests/omp-recovery-test.mjs "$executable" "$root"
+          node tests/omp-restricted-recovery-test.mjs "$executable" "$root"
+          node tests/playground-drain-test.mjs "$executable" "$root"
+          node tests/omp-persistence-test.mjs "$executable" "$root"
+          node tests/omp-persistence-restart-test.mjs "$executable" "$root"
+          node tests/omp-external-history-test.mjs "$executable" "$root"
+          node tests/omp-session-storage-test.mjs "$executable" "$root"
+          node tests/omp-skill-history-test.mjs "$executable" "$root"
+          node tests/omp-template-attachments-test.mjs "$executable" "$root"
+          node tests/omp-entry-test.mjs "$executable" "$root"
 
       - name: Verify deb installation and previous-version data
         env:

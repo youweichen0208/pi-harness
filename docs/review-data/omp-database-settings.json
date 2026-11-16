@@ -1,0 +1,55 @@
+{
+  "status": "Local feature migration verified; full OMP migration remains incomplete",
+  "completedAt": "2026-11-15T14:58:56.150498+00:00",
+  "platform": "darwin-arm64",
+  "omp": "18.20.0",
+  "bun": "1.4.4",
+  "protocol": 70,
+  "changes": [
+    "Restore the global database conversation-access switch in Extensions settings through the scoped database HTTP API.",
+    "Validate file-content versions; retain unknown settings, reject malformed documents and expose fixed errors. Existing sessions enforce the current setting without reload.",
+    "Poll visible settings and refresh on focus; retain confirmed values on errors, require explicit reread after conflict, cancel on unmount, and never replay a save automatically.",
+    "Reject retired Pi extension actions with HTTP 410 before any OMP command. Remove unused legacy SkillsPanel/BuiltinExtensionsPanel and their exclusive protocol types."
+  ],
+  "evidence": {
+    "settingsVersion": "New unit regression failed before the versioned settings API and passed after implementation; whitespace and missing-file changes invalidate old versions.",
+    "missingEndpoint": "Ported real HTTP regression failed with 400 before the application build exposed agent_settings.",
+    "retiredWorkerReopen": "Native extension startup counter increased from three opens to four after skills-list on a stopped worker. Final regression verifies all five retired/unknown actions return 410 and preserve the counter and workerAvailable=false.",
+    "fixtureCorrections": "Use workerAvailable rather than expecting an error message after stopping an idle worker. Shorten the isolated temp-root prefix to fit macOS control-socket path limits."
+  },
+  "verification": {
+    "build": "passed",
+    "typecheck": "passed",
+    "unit": {
+      "files": 169,
+      "passed": 1055,
+      "skipped": 1
+    },
+    "browser": "builtin-extensions-test.mjs --browser passed: real OMP tool calls, two clients, concurrent saves, authentication/origin/ownership, corrupt settings, native resource independence, stopped worker, restart, keyboard, cross-window polling, conflicts, English and narrow viewport",
+    "relatedSmoke": {
+      "passed": 5,
+      "total": 5,
+      "tests": [
+        "omp-database-test",
+        "omp-extension-settings-test",
+        "omp-skill-settings-test",
+        "omp-stop-metadata-test",
+        "settings-test"
+      ]
+    },
+    "protocol": "v70 sync passed",
+    "engineBoundary": "126 source files and compiled output passed",
+    "testEnvironment": "306 scripts passed",
+    "ciYaml": "passed",
+    "diffCheck": "passed"
+  },
+  "fullSmoke": "Most recent complete run remains the historical pre-fix 102/110 in omp-smoke-ask.json. Current 111-test manifest has not been rerun in full; do not derive a new total from these targeted results.",
+  "remaining": [
+    "Extension source-file editing and other documented host migration gaps.",
+    "Native Task internal history guard and complete task outputs/tree metadata/recovery integration.",
+    "Old desktop history cleanup while the previous app is running; Windows original-task and cross-platform package acceptance."
+  ],
+  "desktopPackageBuilt": false,
+  "windowsOriginalTaskVerified": false,
+  "published": false
+}

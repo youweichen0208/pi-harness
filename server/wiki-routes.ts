@@ -1,5 +1,5 @@
 import type { Express, Request } from "express";
-import type { AgentService } from "./agent-service.js";
+import type { OmpChatService as AgentService } from "./omp/chat-service.js";
 import type { ProjectWorkspaceCatalog } from "./protocol.js";
 import { WikiService, WikiConflictError, wikiPath } from "./wiki-service.js";
 import { statSync } from "node:fs";
@@ -14,7 +14,8 @@ export function installWikiRoutes(app: Express, service: () => AgentService, dat
 		const { clientId, cwd, action, path, query, text, version, id, undo, conversationId, requestId, offset, kind } = req.body ?? {};
 		if (![clientId, cwd, action].every(v => typeof v === "string")) { res.status(400).json({ error: "Invalid request" }); return; }
 		const cs = service().get(clientId);
-		if (!cs || cs.switchingWorkspace || cs.cwd !== cwd) { res.status(409).json({ error: "Workspace unavailable" }); return; }
+		const readOnly = ["open-info", "state", "directory", "document-content", "document-references", "document", "change", "search", "refresh"].includes(action);
+		if (!cs || !cs.workspaceReady || !readOnly && cs.switchingWorkspace || cs.cwd !== cwd) { res.status(409).json({ error: "Workspace unavailable" }); return; }
 		const session = cs.session;
 		const valid = () => !cs.switchingWorkspace && cs.cwd === cwd && cs.session === session;
 		try {
@@ -67,15 +68,15 @@ export function installWikiRoutes(app: Express, service: () => AgentService, dat
 					const messageCount = session.messages.length;
 					let settled = false;
 					const finish = () => { if (settled) return; settled = true; off(); void wiki.finish(cwd, before, text, { conversationId, sessionId: session.sessionManager.getSessionId(), requestId, assistantTimestamp: session.messages.slice(messageCount).findLast(message => message.role === "assistant")?.timestamp }).catch(e => console.error(`Wiki history failed: ${e.message}`)); };
-					const off = session.subscribe(event => { if (event.type === "agent_settled") finish(); });
+					const off = session.subscribe(event => { if (event.type === "session_settled" || event.type === "session_shutdown") finish(); });
 					await new Promise<void>((resolve, reject) => {
-						void cs.prompt(text, undefined, false, requestId, ok => ok ? resolve() : reject(new Error("Pi rejected the request; check model configuration"))).finally(() => { finish(); resolve(); });
+						void cs.prompt(text, undefined, false, requestId, ok => { if (ok) resolve(); else { finish(); reject(new Error("OMP rejected the request; check model configuration")); } });
 					});
 					result = { accepted: true }; break;
 				}
 				default: throw new Error("Unknown Wiki action");
 			}
-			if (cs.switchingWorkspace || cs.cwd !== cwd || (["prompt", "write", "restore", "create-file", "create-directory", "delete-entry"].includes(action) && !valid())) { res.status(409).json({ error: "Workspace changed" }); return; }
+			if (!cs.workspaceReady || cs.cwd !== cwd || (!readOnly && !valid())) { res.status(409).json({ error: "Workspace changed" }); return; }
 			res.json(result);
 		} catch (error) { res.status(error instanceof WikiConflictError ? 409 : 400).json({ error: (error as Error).message, ...(error instanceof WikiConflictError ? { code: "version_conflict" } : {}) }); }
 	});
@@ -85,7 +86,7 @@ export function installWikiRoutes(app: Express, service: () => AgentService, dat
 			const { clientId, cwd, path } = req.query;
 			if (![clientId, cwd, path].every(v => typeof v === "string")) { res.sendStatus(400); return; }
 			const cs = service().get(clientId as string);
-			if (!cs || cs.switchingWorkspace || cs.cwd !== cwd) { res.sendStatus(409); return; }
+			if (!cs || !cs.workspaceReady || cs.cwd !== cwd) { res.sendStatus(409); return; }
 			const absolute = wikiPath(cwd as string, path as string);
 			if (!statSync(absolute).isFile()) { res.sendStatus(404); return; }
 			res.setHeader("Cache-Control", "no-store");

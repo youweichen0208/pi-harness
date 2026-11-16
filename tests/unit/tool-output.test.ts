@@ -1,22 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { createBashTool } from "@earendil-works/pi-coding-agent";
 import { toolOutputUpdate } from "../../server/tool-output.js";
 import { mergeLiveToolOutput } from "../../web/src/live-tool-output.js";
 
-describe("SDK tool output → wire update → live output", () => {
-	it("renders each line once when the real bash tool emits cumulative updates", async () => {
-		const outputs = ["PID: 123\n", "mock started\n", "HTTP 200\n"];
-		const tool = createBashTool(process.cwd(), { operations: { exec: async (_command, _cwd, { onData }) => {
-			for (const output of outputs) { onData(Buffer.from(output)); await new Promise((r) => setTimeout(r, 120)); }
-			return { exitCode: 0 };
-		} } });
-		let visible = "";
-		await tool.execute("test-bash", { command: "fixture" }, undefined, (partial) => {
-			const update = toolOutputUpdate(partial);
-			if (update) visible = mergeLiveToolOutput(visible, update);
-		});
-		expect(visible).toBe(outputs.join(""));
-	});
+describe("Wire snapshots and live output", () => {
 	it("replaces rolling snapshots and allows an empty snapshot to clear output", () => {
 		const snapshot = (text: string) => toolOutputUpdate({ content: [{ type: "text", text }] })!;
 		let visible = mergeLiveToolOutput("", snapshot("first\nsecond\n"));

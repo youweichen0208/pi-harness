@@ -1,0 +1,141 @@
+{
+  "status": "OMP per-server MCP configuration forms and public metadata masking verified locally; full migration incomplete",
+  "platform": "darwin-arm64",
+  "omp": "18.20.0",
+  "bun": "1.4.4",
+  "node": "26.0.0",
+  "protocol": 76,
+  "changes": [
+    "Added per-scope service list and stdio/HTTP/SSE add/edit/delete form through the existing native CAS configuration writer.",
+    "Preserve masks in the same server/field/position, unknown fields and native defaults; existing names cannot be renamed through the form.",
+    "Global enable edits follow native deny/allow precedence, project enabled edits do not rewrite global rules; deleting a definition retains discovery rules and OAuth credentials.",
+    "Independent raw/form drafts, unsaved navigation/unload guards, preserved conflicts and status polling, focus restoration, accessible field names and narrow bilingual controls.",
+    "Public metadata is no longer hidden because a server name contains env/secret. Allow only known enum values and valid non-secret booleans/timeouts; unknown enum strings and connection/credential data remain masked.",
+    "Expanded existing browser regression and added its source invocation to macOS/Windows CI. Existing packaged desktop regression invokes the same script."
+  ],
+  "verification": {
+    "build": {
+      "path": "/tmp/omp-mcp-form-build-final.log",
+      "exitCode": 0,
+      "sha256": "6d852f48d20217c018c7ce0901935cc5aeb391f9fd1b22837982ed50337f7e39"
+    },
+    "types": {
+      "path": "/tmp/omp-mcp-form-types-verified.log",
+      "exitCode": 0,
+      "sha256": "afe164d6475ab09607d600e330c778c40041826259c553a753499c927e4fbe92"
+    },
+    "units": {
+      "path": "/tmp/omp-mcp-form-units-verified.log",
+      "exitCode": 0,
+      "sha256": "f2d44f17194efa605262f193ec63af482aa0beacf1c3472725ebfbd36b1af1ca",
+      "files": 172,
+      "passed": 1067,
+      "skipped": 1
+    },
+    "relatedSmoke": {
+      "path": "/tmp/omp-mcp-form-related-final.log",
+      "exitCode": 0,
+      "sha256": "32886e4185daa24179d5ad8f89611dc04f1bf84fcc647c3427c51f93d44cb1a7",
+      "passed": 3,
+      "total": 3,
+      "names": [
+        "omp-mcp-test",
+        "omp-mcp-auth-test",
+        "codemode-mcp-test"
+      ]
+    },
+    "browser": {
+      "path": "/tmp/omp-mcp-form-browser-unload.log",
+      "exitCode": 0,
+      "sha256": "d9ec4a4f8036183ced02f8c6f8c08d706dccc3c64151086903dc314767f83f8b",
+      "includesActualReloadProtection": true
+    },
+    "checks": [
+      "Protocol 76 sync",
+      "131 production source/built engine boundary",
+      "313 isolated test scripts",
+      "Official HTTPS npm lockfile",
+      "git diff --check",
+      "PyYAML parsed CI and confirmed macOS/Windows MCP browser gate"
+    ],
+    "screenshots": [
+      {
+        "path": "tests/scratch/omp-mcp-form-light.png",
+        "sha256": "6bbf94dc05c674bcd90e913f69876b871872cc4c3e79df7da26d4d1d2214b201"
+      },
+      {
+        "path": "tests/scratch/omp-mcp-form-dark.png",
+        "sha256": "1e824ce63289e8b54180eba9b2733a2a8b36dc9e3ba76605cf049efa477e658c"
+      },
+      {
+        "path": "tests/scratch/omp-mcp-form-en.png",
+        "sha256": "0a69df668a0e9eabbc40029f883097582ebfbc1099a85b6191f0b4f9f7a21a01"
+      }
+    ]
+  },
+  "redEvidence": {
+    "case": "Service name secret-env tools masks type/enabled/instructions/timeout/requestIdFormat/headerPolicy, preventing the form from reading public metadata.",
+    "log": {
+      "path": "/tmp/omp-mcp-form-name-before.log",
+      "exitCode": 1,
+      "sha256": "12ceb2404b6c8b30452df136ce742a34586e3fcfddab1e2a9e2ecb17961847e7"
+    }
+  },
+  "intermediateFailures": [
+    {
+      "case": "Unit command overlapped the build and six Java tests reached JDBC before the jar existed. Sequential post-build rerun passed; final build/types/units also passed. No source changes made for this ordering failure.",
+      "log": {
+        "path": "/tmp/omp-mcp-form-units.log",
+        "exitCode": 1,
+        "sha256": "f853bab63ab3fea5e5ebf287739b52ecf1661e3981549f310178ab5d342f371a"
+      }
+    },
+    {
+      "case": "JSON textarea exact label lookup failed with nested content; added explicit accessible names to JSON fields and selects.",
+      "log": {
+        "path": "/tmp/omp-mcp-form-browser.log",
+        "exitCode": 1,
+        "sha256": "17bbd01ff3b4636cc1fb0abbd418d75b9d499870cc64a463c6dccf27e2a71c97"
+      }
+    },
+    {
+      "case": "Immediate focus assertion preceded requestAnimationFrame restoration; test now waits for actual focus.",
+      "log": {
+        "path": "/tmp/omp-mcp-form-browser-labels.log",
+        "exitCode": 1,
+        "sha256": "1a95e4fc68ab6e85c96a9515f64c37ce33d3ea1c5e8f2b88178df6176dacf319"
+      }
+    },
+    {
+      "case": "English reload started with collapsed narrow sidebar; fixture now opens settings at desktop size then verifies the English form at 390px.",
+      "log": {
+        "path": "/tmp/omp-mcp-form-browser-final.log",
+        "exitCode": 1,
+        "sha256": "d92f4c8278ae29a3d271e5b4f48ee417c503866ca23f6340fc088275d5215b2f"
+      }
+    }
+  ],
+  "source": {
+    "candidate": "/var/folders/41/07yyp3_12jddkkthmflqkbgw0000gn/T/omp-mcp-form-_mqf5xei",
+    "filesCompared": 1333,
+    "fingerprintSha256": "170812dc90ed2a17c897629981d7f52912ca742bbc25da4c13e3dabe9625b110",
+    "differences": []
+  },
+  "limitations": [
+    "MCP import and complete diagnostics remain; tool-level OAuth challenge is a separate unresolved path.",
+    "Native Task internal storage protection remains unresolved.",
+    "Full 116 baseline (114/116 plus two passing follow-ups, omp-smoke-drain.json) predates these production changes; not rerun in full.",
+    "Local Chromium/native fixtures only. CI definition is not remote execution or Windows/packaged acceptance.",
+    "Old active desktop history cleanup, real provider accounts and original Windows DeepSeek task acceptance remain."
+  ],
+  "operations": {
+    "rootDist": "Not overwritten",
+    "userProcessesPreserved": [
+      23786,
+      62015
+    ],
+    "candidateRemoved": true,
+    "allVerificationHandlesTerminal": true,
+    "release": "No commit, push, publish or installed-app replacement"
+  }
+}

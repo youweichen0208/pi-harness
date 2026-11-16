@@ -1,27 +1,25 @@
 // Zero-model regression: real native extension callbacks across two conversations.
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { spawn } from "node:child_process";
+import { startIsolatedHarness } from "./lib/isolated-server.mjs";
 import { setTimeout as sleep } from "node:timers/promises";
 import WebSocket from "ws";
 import { chromium } from "playwright-core";
 import { CHROME_PATH } from "./lib/chrome.mjs";
-import { portUp } from "./lib/port-utils.mjs";
+import { mergeSnapshot } from "./lib/snapshots.mjs";
 import { testEnv } from "./lib/test-env.mjs";
-const PORT = Number(process.env.PI_TEST_PORT || 9141);
-assert(PORT >= 8900); assert.equal(await portUp(PORT), false);
+let PORT, harness, state;
 const root = mkdtempSync(join(tmpdir(), "pi-extension-ui-"));
-const agent = join(root, "agent"), cwd = join(root, "work");
+const agent = join(root, "data", "omp", "agent"), cwd = join(root, "work");
 mkdirSync(join(agent, "extensions"), { recursive: true }); mkdirSync(cwd);
-writeFileSync(join(agent, "models.json"), JSON.stringify({ providers: { fixture: { api: "openai-completions", baseUrl: "http://127.0.0.1:1", apiKey: "unused", models: ["fixture", "fixture-alt"].map(id => ({ id, reasoning: true, input: ["text"], contextWindow: 32000, maxTokens: 1024 })) } } }));
-writeFileSync(join(agent, "auth.json"), JSON.stringify({ fixture: { type: "api_key", key: "unused" } }));
-const settings = JSON.stringify({ defaultProvider: "fixture", defaultModel: "fixture", retry: { enabled: true }, compaction: { enabled: true } });
-writeFileSync(join(agent, "settings.json"), settings);
+writeFileSync(join(agent, "models.yml"), JSON.stringify({ providers: { fixture: { api: "openai-completions", baseUrl: "http://127.0.0.1:1", apiKey: "unused", models: ["fixture", "fixture-alt"].map(id => ({ id, reasoning: true, thinking: { mode: "effort", efforts: ["low", "medium", "high"], defaultLevel: "medium" }, input: ["text"], contextWindow: 32000, maxTokens: 1024 })) } } }));
+const settings = JSON.stringify({ skills: { enabled: false }, cacheWarming: { enabled: false }, retry: { enabled: true }, compaction: { enabled: true } });
+writeFileSync(join(agent, "config.yml"), settings);
 writeFileSync(join(agent, "extensions/ui.ts"), `export default function(pi) {
  let calls = 0;
- pi.registerCommand("fixture-retain", { handler: async (args, ctx) => { calls++; await new Promise(resolve => setTimeout(resolve, 400)); ctx.ui.notify("retain-call:" + calls); if(args === "fail") throw new Error("fixture failure"); } });
+ pi.registerCommand("fixture-retain", { handler: async (args, ctx) => { calls++; await new Promise(resolve => setTimeout(resolve, 400)); ctx.ui.notify("retain-call:" + calls); ctx.ui.notify("retain-upload:" + args.includes("frozen upload")); if(args.split("\\n", 1)[0].trim() === "fail") throw new Error("fixture failure"); } });
  pi.registerCommand("fixture-ui", { handler: async (args, ctx) => {
   const ui = ctx.ui; ui.setWidget("same", [args]); ctx.ui.setStatus("same", args); ctx.ui.setTitle("title-" + args);
   pi.sendMessage({customType:"fixture", content:"fixture-" + args, display:true});
@@ -29,36 +27,39 @@ writeFileSync(join(agent, "extensions/ui.ts"), `export default function(pi) {
  }});
  pi.registerCommand("fixture-editor", { handler: async (args, ctx) => { const text = await ctx.ui.editor("multiline", "first\\nsecond"); if(text !== undefined) ctx.ui.setEditorText(text); } });
  pi.registerCommand("fixture-timeout", { handler: async (args, ctx) => { void ctx.ui.input("timeout", "", {timeout:200}).then(value => ctx.ui.notify("timeout:" + value)); } });
- pi.registerCommand("mcp", { handler: async (_args, ctx) => ctx.ui.notify("third-party-mcp") });
+ pi.registerCommand("fixture-mcp", { handler: async (_args, ctx) => ctx.ui.notify("third-party-mcp") });
+ pi.registerCommand("mcp", { handler: async (_args, ctx) => ctx.ui.notify("shadowed-native-mcp") });
 }`);
-const server = spawn(process.execPath, ["dist/server/index.js"], { env: { ...testEnv(), PORT: String(PORT), PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(root, "data"), PI_CODING_AGENT_DIR: agent }, stdio: ["ignore", "pipe", "pipe"] });
-let logs = ""; server.stdout.on("data", d => logs += d); server.stderr.on("data", d => logs += d);
 let ws, browser;
 const wire = [];
-async function wait(predicate, timeout = 12000) {
+async function wait(predicate, timeout = 30000) {
  const end = Date.now() + timeout;
  while (Date.now() < end) { const m = wire.find(predicate); if (m) return m; await sleep(20); }
- throw new Error("Timed out: " + predicate + "\n" + logs.slice(-1500));
+ throw new Error("Timed out: " + predicate + "\n" + harness?.logs.slice(-1500));
 }
 function send(message) { ws.send(JSON.stringify(message)); }
 async function connect() {
  ws = new WebSocket(`ws://127.0.0.1:${PORT}/ws`);
- ws.on("message", raw => wire.push(JSON.parse(raw)));
+ ws.on("message", raw => { const message = JSON.parse(raw); wire.push(message); state = mergeSnapshot(state, message); });
  await new Promise((resolve, reject) => { ws.once("open", resolve); ws.once("error", reject); });
- send({ type: "hello", clientId: "extension-ui-test", protocolVersion: 39 });
+ send({ type: "hello", clientId: "extension-ui-test" });
  await wait(m => m.type === "ready");
 }
 try {
- for (let n = 0; n < 100 && !(await portUp(PORT)); n++) await sleep(100);
+ const env = testEnv({ PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(root, "data") });
+ for (const key of Object.keys(env)) if (/API_KEY|TOKEN|SECRET|PASSWORD|^ANTHROPIC_|^OPENAI_|^GOOGLE_|^GEMINI_|^AWS_|^AZURE_|^OMP_/.test(key)) env[key] = undefined;
+ harness = await startIsolatedHarness({ env }); PORT = harness.port;
  await connect();
  const a = (await wait(m => m.type === "snapshot")).state.conversationId;
- const attachments = [{path:"missing", editorSnapshot:{cwd:"/wrong",text:"must not validate",dirty:true}}, {path:"",name:"not-uploaded.txt",fileData:"aGVsbG8="}];
- send({type:"prompt",text:"/fixture-retain",requestId:"retain-ok",attachments});
+ const file = join(cwd, "attachment.txt"); writeFileSync(file, "literal  attachment");
+ const attachments = [{path:file, mode:"inline"}];
+ send({type:"prompt",text:"/fixture-retain keep",requestId:"retain-ok",attachments});
  const accepted = await wait(m => m.type === "prompt_result" && m.requestId === "retain-ok");
- assert.equal(accepted.ok,true); assert.equal(accepted.commandExecuted,true); assert.equal(accepted.attachmentsConsumed,false); assert.equal(accepted.conversationId,a);
- assert.equal(existsSync(join(root,"data","uploads","extension-ui-test")),false);
+ assert.equal(accepted.ok,true); assert.notEqual(accepted.attachmentsConsumed,false); assert.equal(accepted.conversationId,a);
+ await wait(m => m.type === "notice" && m.text === "retain-call:1");
  send({type:"prompt",text:"/fixture-retain fail",requestId:"retain-fail",attachments});
- assert.equal((await wait(m => m.type === "prompt_result" && m.requestId === "retain-fail")).ok,false);
+ assert.equal((await wait(m => m.type === "prompt_result" && m.requestId === "retain-fail")).ok,true);
+ await wait(m => m.type === "notice" && m.level === "error");
  assert.equal(wire.filter(m => m.type === "notice" && m.text.startsWith("retain-call:")).length,2);
 
  send({ type: "prompt", text: "/fixture-ui A" });
@@ -107,9 +108,15 @@ try {
  wire.length = 0; send({ type: "switch_conversation", id: a });
  assertRunSettings((await wait(m => m.type === "snapshot" && m.state.conversationId === a)).state, false);
  send({ type: "prompt", text: "/fixture-ui reload" }); const old = await wait(m => m.type === "dialog" && m.title === "permission-reload");
- send({ type: "prompt", text: "/reload" }); await wait(m => m.type === "dialog_closed" && m.id === old.id);
- await wait(m => m.type === "reload_status" && m.phase === "done");
- send({ type: "prompt", text: "/mcp" }); await wait(m => m.type === "notice" && m.text === "third-party-mcp");
+ await wait(() => !state.isStreaming); wire.length = 0; send({ type: "extensions_reload" }); await wait(m => m.type === "dialog_closed" && m.id === old.id);
+ const reloadedSettings = await wait(m => m.type === "settings_state");
+ // Settings are published before the reload lease is released; only the later idle snapshot permits input.
+ await wait(m => ["snapshot", "snapshot_delta"].includes(m.type) && wire.indexOf(m) > wire.indexOf(reloadedSettings) && m.state.conversationId === a && m.state.isStreaming === false);
+ send({ type: "prompt", text: "/mcp list", requestId: "native-mcp" });
+ const mcpReceipt = await wait(m => m.type === "prompt_result" && m.requestId === "native-mcp");
+ assert.equal(mcpReceipt.commandExecuted, true, JSON.stringify(mcpReceipt));
+ assert(!wire.some(m => m.type === "notice" && m.text === "shadowed-native-mcp"), "native builtin precedence is preserved");
+ send({ type: "prompt", text: "/fixture-mcp" }); await wait(m => m.type === "notice" && m.text === "third-party-mcp");
  send({ type: "prompt", text: "/fixture-ui after-reload" }); const after = await wait(m => m.type === "dialog" && m.title === "permission-after-reload");
  assert.notEqual(after.id, old.id);
  send({ type: "dialog_response", conversationId: a, id: old.id, value: true });
@@ -117,34 +124,34 @@ try {
  await wait(m => m.type === "notice" && m.text === "answer-after-reload:false");
  wire.length = 0; send({ type: "get_state" });
  assertRunSettings((await wait(m => m.type === "snapshot" && m.state.conversationId === a)).state, false);
- const persisted = JSON.parse(readFileSync(join(agent, "settings.json"), "utf8"));
+ const persisted = JSON.parse(readFileSync(join(agent, "config.yml"), "utf8"));
  assert.equal(persisted.compaction.enabled, true); assert.equal(persisted.retry.enabled, true);
  assert.equal(persisted.defaultTools, undefined);
- assert.equal(persisted.defaultProvider, "fixture");
+ assert.equal(persisted.cacheWarming.enabled, false);
 
  if (process.argv.includes("--browser")) {
   browser = await chromium.launch({ executablePath: CHROME_PATH, headless: true });
   const page = await browser.newPage();
-  let browserSocket, snapshot; const sent = [];
+  let browserSocket, snapshot; const sent = [], received = [];
   await page.routeWebSocket("**/ws", route => {
    browserSocket = route; const upstream = route.connectToServer();
    route.onMessage(raw => { const m = JSON.parse(String(raw)); sent.push(m); if (m.type !== "cancel_recovery") upstream.send(raw); });
-   upstream.onMessage(raw => { const m = JSON.parse(String(raw)); if (m.type === "snapshot") snapshot = m.state; route.send(raw); });
+   upstream.onMessage(raw => { const m = JSON.parse(String(raw)); received.push(m); snapshot = mergeSnapshot(snapshot, m); route.send(raw); });
   });
   await page.addInitScript(() => sessionStorage.setItem("pi-web-client-id", "extension-ui-test"));
   await page.goto(`http://127.0.0.1:${PORT}`);
   await page.waitForSelector(".inputbox textarea");
   const composer = page.locator(".inputbox textarea");
   await page.locator('.inputbox input[type="file"]').setInputFiles({name:"retain.txt",mimeType:"text/plain",buffer:Buffer.from("frozen upload")});
-  await composer.fill("/fixture-retain"); await page.locator(".inputbox .btn.send:visible").click();
-  await page.waitForFunction(() => document.querySelector(".inputbox textarea")?.value === "" && document.querySelectorAll(".attach-chip.file").length === 1);
-  assert.equal(await composer.inputValue(), ""); assert.equal(await page.locator(".attach-chip.file").count(), 1);
-  await composer.fill("/fixture-retain fail"); await page.locator(".inputbox .btn.send:visible").click(); await sleep(650);
-  assert.equal(await composer.inputValue(), "/fixture-retain fail"); assert.equal(await page.locator(".attach-chip.file").count(), 1);
-  await composer.fill("/fixture-retain"); await page.locator(".inputbox .btn.send:visible").click(); await composer.fill("new draft");
+  await composer.fill("/fixture-retain"); await page.locator(".composer-action.send").click();
+  await page.waitForFunction(() => document.querySelector(".inputbox textarea")?.value === "" && document.querySelectorAll(".attach-chip.file").length === 0);
+  assert.equal(await composer.inputValue(), ""); assert.equal(await page.locator(".attach-chip.file").count(), 0);
+  await composer.fill("/fixture-retain fail"); await page.locator(".composer-action.send").click(); await sleep(650);
+  assert.equal(await composer.inputValue(), ""); assert.equal(await page.locator(".attach-chip.file").count(), 0);
+  await composer.fill("/fixture-retain"); await page.locator(".composer-action.send").click(); await composer.fill("new draft");
   await page.locator('.inputbox input[type="file"]').setInputFiles({name:"new.txt",mimeType:"text/plain",buffer:Buffer.from("new upload")});
-  await sleep(650); assert.equal(await composer.inputValue(), "new draft"); assert.equal(await page.locator(".attach-chip.file").count(), 2);
-  assert.equal(existsSync(join(root,"data","uploads","extension-ui-test")),false);
+  await sleep(650); assert.equal(await composer.inputValue(), "new draft"); assert.equal(await page.locator(".attach-chip.file").count(), 1);
+  assert(received.some(m => m.type === "notice" && m.text === "retain-upload:true"), "uploaded attachment reaches the native handler");
   send({ type: "prompt", text: "/fixture-editor" });
   await page.waitForSelector('[data-dialog-kind="editor"] textarea');
   assert.equal(await page.locator('[data-dialog-kind="editor"] textarea').inputValue(), "first\nsecond");
@@ -184,10 +191,10 @@ try {
   await page.locator('.agent-silence button', { hasText: "关闭" }).click();
   await page.getByText(/fixture compaction error/).waitFor({ state: "hidden" });
  }
- console.log("PASS native extension UI isolation, validation, reconnect, timeout, reload, override command and memory settings" + (browser ? ", browser multiline editor, background navigation and recovery phases" : ""));
+ console.log("PASS native extension UI isolation, validation, reconnect, timeout, reload, custom command and memory settings" + (browser ? ", browser multiline editor, background navigation and recovery phases" : ""));
 } catch (error) { console.error(error); process.exitCode = 1; }
 finally {
  await browser?.close(); ws?.close();
- const exited = new Promise(resolve => server.once("exit", resolve)); server.kill("SIGTERM"); await exited;
+ await harness?.stop();
  rmSync(root, { recursive: true, force: true });
 }

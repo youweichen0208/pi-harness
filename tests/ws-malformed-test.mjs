@@ -4,27 +4,23 @@
  * the server must stay up, report sync failures as a notice, and keep serving.
  */
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { once } from 'node:events';
 import { randomUUID } from 'node:crypto';
-import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import WebSocket from 'ws';
-import { testEnv } from "./lib/test-env.mjs";
+import { startIsolatedHarness } from './lib/isolated-server.mjs';
 
-const REPO = join(dirname(fileURLToPath(import.meta.url)), '..');
-const PORT = 8963;
 const root = mkdtempSync(join(tmpdir(), 'pi-malformed-'));
 const cwd = join(root, 'ws'); mkdirSync(cwd);
-const server = spawn(process.execPath, [join(REPO, 'dist', 'server', 'index.js')], {
-	env: { ...testEnv(), PORT: String(PORT), PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(root, 'data'), PI_CODING_AGENT_DIR: join(root, 'agent') },
-	stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true,
-});
-let exited = null, log = '';
-server.on('exit', (code, signal) => { exited = { code, signal }; });
-server.stdout.on('data', d => log += d); server.stderr.on('data', d => log += d);
+const dataDir = join(root, 'data'), agent = join(dataDir, 'omp/agent');
+mkdirSync(agent, { recursive: true });
+writeFileSync(join(agent, 'config.yml'), JSON.stringify({ skills: { enabled: false }, cacheWarming: { enabled: false } }));
+let harness, ws, exited = null;
+const notices = [], messages = [];
+const wait = async (predicate, label) => { for (let i = 0; i < 600; i++) { if (predicate()) return; await sleep(50); } throw Error('Timed out ' + label); };
 
 const CRASHERS = {
 	edit_message: { messageId: 'm', text: [] },
@@ -37,40 +33,45 @@ const CRASHERS = {
 	clone_provider: { provider: [], reqId: 1 },
 	terminal_input: {},
 	plugin_settings: {},
+	// Still dispatched synchronously by the host, independently of OMP.
+	project_workspace_action: { requestId: null },
 };
 
 try {
-	for (let i = 0; i < 100 && !exited; i++) { try { if ((await fetch(`http://127.0.0.1:${PORT}/api/health`)).ok) break; } catch {} await sleep(100); }
-	const ws = new WebSocket(`ws://127.0.0.1:${PORT}/ws`);
-	const notices = [];
-	await new Promise(resolve => ws.on('open', resolve));
-	ws.on('message', d => { const m = JSON.parse(d); if (m.type === 'notice') notices.push(m.text); });
+	harness = await startIsolatedHarness({ env: { PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: dataDir } });
+	const PORT = harness.port;
+	harness.child.on('exit', (code, signal) => { exited = { code, signal }; });
+	ws = new WebSocket(`ws://127.0.0.1:${PORT}/ws`);
+	ws.on('message', d => { const m = JSON.parse(d); messages.push(m); if (m.type === 'notice') notices.push(m); });
+	await once(ws, 'open');
 	ws.send(JSON.stringify({ type: 'hello', clientId: randomUUID() }));
-	await sleep(1500);
+	await wait(() => messages.some(message => message.type === 'ready'), 'OMP ready handshake');
 	for (const [type, fields] of Object.entries(CRASHERS)) {
 		ws.send(JSON.stringify({ type, ...fields }));
 		await sleep(60);
-		assert.equal(exited, null, `server must survive malformed "${type}"\n${log.slice(-600)}`);
+		assert.equal(exited, null, `server must survive malformed "${type}"\n${harness.logs.slice(-600)}`);
+		if (type === 'edit_message') await wait(() => notices.some(notice => notice.level === 'error'), 'asynchronous OMP rejection');
 	}
 	ws.send(JSON.stringify({ type: 'ping-after-malformed-and-not-a-real-type' }));
 	ws.send('not json at all');
+	const snapshotCount = messages.filter(message => message.type === 'snapshot').length;
 	ws.send(JSON.stringify({ type: 'get_state' }));
-	await sleep(500);
+	await wait(() => messages.filter(message => message.type === 'snapshot').length > snapshotCount, 'snapshot after malformed inputs');
 	assert.equal(exited, null);
 	assert((await fetch(`http://127.0.0.1:${PORT}/api/health`)).ok, 'server still answers HTTP');
-	assert(notices.some(t => /请求处理失败/.test(t)), 'synchronous failures are reported to the client');
+	await wait(() => notices.some(notice => notice.level === 'error' && /请求处理失败（project_workspace_action）/.test(notice.text)), 'synchronous host rejection');
 	ws.close();
 	// A clientId that could leave uploads/<clientId>/ is refused at the handshake (4400).
 	for (const bad of ['../../escape', 'a/b', '.hidden']) {
 		const evil = new WebSocket(`ws://127.0.0.1:${PORT}/ws`);
 		const closed = new Promise(resolve => evil.on('close', code => resolve(code)));
-		await new Promise(resolve => evil.on('open', resolve));
+		await once(evil, 'open');
 		evil.send(JSON.stringify({ type: 'hello', clientId: bad }));
 		assert.equal(await closed, 4400, `clientId ${bad} must be rejected`);
 	}
-	console.log('PASS malformed messages are contained; server stays up; unsafe clientIds are refused');
+	console.log('PASS malformed messages: OMP async and host sync errors are reported after ready, HTTP/snapshots remain available, unsafe clientIds are refused');
 } finally {
-	server.kill();
-	await sleep(300);
+	ws?.terminate();
+	await harness?.stop();
 	rmSync(root, { recursive: true, force: true });
 }

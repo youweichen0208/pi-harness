@@ -1,0 +1,119 @@
+{
+  "status": "Native model ask HTML-form RPC fallback verified locally; full OMP migration remains incomplete",
+  "verifiedAt": "2026-11-15T13:58:21.332237+00:00",
+  "platform": "darwin",
+  "arch": "arm64",
+  "omp": "18.20.0",
+  "bun": "1.4.4",
+  "protocolVersion": 69,
+  "findings": [
+    "The host discarded native selectionMarker, checkedIndices, markableCount, initialIndex and option descriptions, so the browser could not display authoritative choices.",
+    "After the first radio answer, the native multi-select path failed while reading theme.status for its Done row. The CLI initializes theme through public ensureTheme(), but the SDK worker had omitted that initialization."
+  ],
+  "changes": [
+    "Initialize native theme with the public ensureTheme() before creating a live SDK session; no theme watcher, SDK edits or replacement HTML parser.",
+    "Project select metadata through protocol v69 and render authoritative radio/checkbox state, action rows, descriptions and keyboard focus.",
+    "Honor native secret input requests using password controls.",
+    "Add a real local Anthropic fixture driving the native ask tool, with protocol coverage in smoke and browser coverage in macOS/Windows CI."
+  ],
+  "redEvidence": [
+    {
+      "test": "omp-ask-tool-test",
+      "failure": "native model form must retain its selection marker: undefined instead of radio",
+      "log": "/tmp/omp-ask-tool-red.log"
+    },
+    {
+      "test": "omp-ask-tool-test after metadata fix",
+      "failure": "native tool result: undefined is not an object (evaluating theme.status)",
+      "log": "/tmp/omp-ask-tool-field-failure.log"
+    }
+  ],
+  "checks": {
+    "build": "passed",
+    "typecheck": "passed",
+    "unitFiles": 169,
+    "unitPassed": 1052,
+    "unitSkipped": 1,
+    "designTokens": "passed",
+    "protocol": "passed v69",
+    "testEnvironmentScripts": 305,
+    "engineSourceFiles": 125,
+    "workflowYaml": "passed",
+    "diff": "passed"
+  },
+  "validationCorrection": {
+    "initialUnitResult": "6 JDBC tests failed because npm test was mistakenly started concurrently with a build clearing dist",
+    "finalResult": "all units passed after the build finished, then passed again after the native theme fix",
+    "workflowDocumentation": "Explicitly identifies npm test as a consumer of generated JDBC artifacts; builds and tests must run serially"
+  },
+  "nativeModelForm": {
+    "command": "node tests/omp-ask-tool-test.mjs --browser",
+    "result": "passed on final theme build",
+    "externalModelCalls": 0,
+    "localFixtureRequests": 6,
+    "coverage": [
+      "radio preselection and initial focus",
+      "checkbox toggle and native checked indices",
+      "Other custom input",
+      "Done remains a non-checkbox action",
+      "textarea prefill and multiline response",
+      "native number validation and rejected-input recovery",
+      "required text input",
+      "completed tool result reaches model",
+      "keyboard navigation",
+      "browser reload preserves native checked state",
+      "390px layout",
+      "Escape aborts without another model request",
+      "Wiki Stop",
+      "explicit reopening",
+      "native timeout preserves model defaults",
+      "expired reply cannot resume model"
+    ]
+  },
+  "extensionUi": {
+    "command": "node tests/omp-extension-ui-test.mjs --browser",
+    "result": "passed on final theme build",
+    "extraCoverage": [
+      "native select descriptions and initial focus",
+      "password input projection and browser masking"
+    ],
+    "retainedCoverage": "Multi-question askDialog, ordinary/Wiki ownership, timeout/cancellation, reconnect, Stop/reload and stale generation checks"
+  },
+  "relatedSmoke": {
+    "passed": 5,
+    "total": 5,
+    "tests": [
+      "omp-runtime-test",
+      "omp-stop-metadata-test",
+      "omp-workspaces-test",
+      "native-session-commands-test",
+      "omp-mcp-auth-test"
+    ]
+  },
+  "logs": [
+    "/tmp/omp-ask-tool-theme-build.log",
+    "/tmp/omp-ask-tool-theme-types.log",
+    "/tmp/omp-ask-tool-theme-units.log",
+    "/tmp/omp-ask-tool-final-browser.log",
+    "/tmp/omp-ask-tool-final-extension.log",
+    "/tmp/omp-ask-tool-related.log"
+  ],
+  "fullSmoke": {
+    "baseline": "omp-smoke-receipts.json",
+    "passed": 87,
+    "total": 108,
+    "repeatedAfterFinalFixes": false,
+    "currentManifestTests": 110
+  },
+  "remaining": [
+    "Native RPC renders field-by-field text; no claim of TUI whole-form/image/SVG presentation parity",
+    "Native Task internal history protection and remaining integration work",
+    "Other public host regressions and full smoke rerun",
+    "Old Pi history cleanup",
+    "Current desktop package and Windows original-task acceptance"
+  ],
+  "cleanup": "All owned test/build processes exited; no SDK modification, commit or release",
+  "desktopPackageBuilt": false,
+  "windowsOriginalTaskVerified": false,
+  "published": false
+}

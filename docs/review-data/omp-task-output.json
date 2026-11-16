@@ -1,0 +1,126 @@
+{
+  "platform": "darwin-arm64",
+  "protocol": 78,
+  "omp": "18.20.0",
+  "bun": "1.4.4",
+  "node": "26.0.0",
+  "status": "Native child tool-output downloads implemented and locally verified; full migration incomplete",
+  "source": {
+    "candidate": "/var/folders/41/07yyp3_12jddkkthmflqkbgw0000gn/T/omp-task-output-build-n_s9wvsx",
+    "filesCompared": 1347,
+    "fingerprintSha256": "83a9ace932fc95187211d1da32b8ef4a13dc0adced0efb938fd0035b4aa441c1",
+    "fingerprintMethod": "sha256 of ordered path, NUL, binary sha256(file) tuples",
+    "docsExcluded": true,
+    "differencesFromCurrentRoot": [],
+    "missingFromCandidate": []
+  },
+  "changes": [
+    "Preserve bounded child tool/result identity and issue conversation/task-scoped download links in host responses. Oversized IDs are withheld rather than truncated into another identity.",
+    "Resolve a unique visible ancestor chain from host task records; metadata-only Bun verifies each native task declaration and child transcript. No browser-supplied file paths.",
+    "Read child tool output metadata against the root ArtifactManager adopted by native Task; sibling duplicate tool IDs remain isolated.",
+    "Revalidate host task ownership after metadata read; Stop does not revive agents. Reopen invalidates old task IDs and branch navigation refuses hidden tasks.",
+    "Reuse existing download control before long child preview; native partial capture warnings remain distinct from preview truncation.",
+    "Added smoke entry (current list 120), six source/packaged desktop gates and actual-browser CI step; workflows not executed."
+  ],
+  "verification": {
+    "red": {
+      "path": "/tmp/omp-task-output-red-final.log",
+      "exitCode": 1,
+      "sha256": "ac4f7a0177ccb0c50f02ddf53555b2054e04466e764702e64ecaa4fa8e36f2d1"
+    },
+    "hostRed": {
+      "path": "/tmp/omp-task-output-host-red.log",
+      "exitCode": 1,
+      "sha256": "7d65ff76375595318931807222d63658e43578c63004e4c481cf49824d0b3af9"
+    },
+    "build": {
+      "path": "/tmp/omp-task-output-build-ui.log",
+      "exitCode": 0,
+      "sha256": "c3fbbd57a09bd0249df9d5123a656a98d9e121424a22308a417a9b86adcba013"
+    },
+    "types": {
+      "path": "/tmp/omp-task-output-types-ui.log",
+      "exitCode": 0,
+      "sha256": "20eba569f73b594b29f88375d81dbe413bbe134c5008159c58f8cd696a6e4b77"
+    },
+    "units": {
+      "path": "/tmp/omp-task-output-units-final.log",
+      "exitCode": 0,
+      "sha256": "0c2e1cbf759e8e9fbd31fed52c4d5c86d6d514f7544da3baa1e2debce1d41629"
+    },
+    "nativeBeforeFinalUiPlacement": {
+      "path": "/tmp/omp-task-output-native-final.log",
+      "exitCode": 0,
+      "sha256": "5929f20a58eb58fb435b06c97e8024430748ab038c213282751f8f683bcff509"
+    },
+    "relatedBeforeFinalUiPlacement": {
+      "path": "/tmp/omp-task-output-related.log",
+      "exitCode": 0,
+      "sha256": "458cecde7712b1f40f68bfdc1b0962f71e8da1b4d97b678ee6a8c7d4628608f1"
+    },
+    "finalNativeAndBrowser": {
+      "path": "/tmp/omp-task-output-browser-ui.log",
+      "exitCode": 0,
+      "sha256": "39980c3a0bee199339833cb9fd7fbca0aa5fea061b53324d5f6bab9e5d3e1427"
+    }
+  },
+  "counts": {
+    "unitFiles": 174,
+    "unitPassed": 1079,
+    "unitSkipped": 1,
+    "relatedPassed": 6,
+    "relatedTotal": 6,
+    "currentSmokeEntries": 120,
+    "fullCurrentSmokeRun": false
+  },
+  "coverage": [
+    "Real native bash spill and exact complete byte hash, short sibling fallback using the same call ID, nested task ancestry.",
+    "Actual authenticated HTTP attachment; foreign origin/task/conversation/output ID refused, duplicate task query rejected, missing files and artifact/transcript symlinks refused.",
+    "Stop, native history restoration, old handle invalidation, hidden branch denial, no history rewrite or additional model call.",
+    "Real browser restores explicitly selected nested history and shares the intended client identity; downloads original bytes and keeps the control visible in a 390px drawer."
+  ],
+  "screenshot": {
+    "path": "tests/scratch/omp-task-output.png",
+    "sha256": "79a3082c12c8ec86443615e707087b4cd437eb9c808bd94002677f13a4914ec6"
+  },
+  "intermediateFailures": [
+    "Initial throwaway probe assumed per-child artifact directories; native Task explicitly adopts the parent ArtifactManager, and corrected probe confirmed real saved output with no host download link.",
+    "Missing-artifact fixture renamed its backup inside the native artifact directory; native lookup correctly found that invalid backup and refused access. Moving the backup outside that directory exercises true absence.",
+    "Browser fixture initially assumed a literal grandchild title and identical default history selection across clients. Final fixture explicitly selects saved nested history, uses its task roster and binds the same client; no product assertion removed."
+  ],
+  "limitations": [
+    "Does not fix native Task internal storage writer protection or verify pre-compaction task catalogue recovery.",
+    "No Windows/current packaged or original DeepSeek task acceptance.",
+    "This final code adds one entry after the separate 119-entry baseline; no final 120-entry full run yet."
+  ],
+  "cleanup": [
+    "Throwaway task-output probe removed after permanent native regression passed.",
+    "Temporary reload delay preload removed and candidate test restored to repository source."
+  ],
+  "operations": {
+    "rootDist": "Not overwritten",
+    "userProcessesPreserved": [
+      23786,
+      62015
+    ],
+    "candidateRemoved": true,
+    "release": "No commit, push, publish or installed-app replacement",
+    "allVerificationHandlesTerminal": true
+  },
+  "finalSource": {
+    "candidate": "/var/folders/41/07yyp3_12jddkkthmflqkbgw0000gn/T/omp-task-output-build-n_s9wvsx",
+    "filesCompared": 1347,
+    "fingerprintSha256": "8eabb96528defc904fa8417cb0702f56b43dab651e8ef314ca722d0d8c7d03d7",
+    "fingerprintMethod": "sha256 of ordered path, NUL, binary sha256(file) tuples",
+    "docsExcluded": true,
+    "differences": []
+  },
+  "subsequentChanges": "Only editor/SSH fixture source and shared dependency preparation changed after these checks; production source unchanged.",
+  "checks": [
+    "Protocol sync 78",
+    "317 isolated test scripts",
+    "CI/release YAML parsed with Bun",
+    "Evidence JSON parsed",
+    "git diff --check"
+  ]
+}

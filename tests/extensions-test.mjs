@@ -1,132 +1,145 @@
-/** Isolated native package management + browser design regression; no model tokens or real installs. */
+/** Public host extension contracts using real OMP modules and native settings.
+ * Package installs/upgrades use omp-packages / component-updates regressions;
+ * Pi package tickets, pi.dev catalogue and auto-check preferences are retired. */
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, existsSync } from 'node:fs';
+import { createServer } from 'node:http';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { setTimeout as sleep } from 'node:timers/promises';
 import WebSocket from 'ws';
-import { chromium } from 'playwright-core';
-import { CHROME_PATH } from './lib/chrome.mjs';
-import { portUp } from './lib/port-utils.mjs';
-import { testEnv } from "./lib/test-env.mjs";
-const port=9210,token='extensions-fixture',clientId='extensions-fixture';
-assert.equal(await portUp(port),false,'Port busy');
-const root=mkdtempSync(join(tmpdir(),'extensions-e2e-')),cwd=join(root,'work'),agent=join(root,'agent'),pkg=join(root,'local-tools');
-for(const dir of [cwd,agent,pkg,join(pkg,'extensions'),join(agent,'extensions')])mkdirSync(dir);
-writeFileSync(join(pkg,'package.json'),JSON.stringify({name:'local-tools',version:'1.2.0',description:'Local package fixture for native Pi settings.',pi:{extensions:['extensions/main.js'],skills:[],prompts:[],themes:[]}}));
-writeFileSync(join(pkg,'extensions/main.js'),'export default () => {};');
-mkdirSync(join(agent,'skills/design-fixture'),{recursive:true});writeFileSync(join(agent,'skills/design-fixture/SKILL.md'),'---\nname: design-fixture\ndescription: Settings v2 native skill fixture\n---\nUse native behavior.');
-writeFileSync(join(agent,'extensions/footer.js'),'export default () => {};');
-for (const name of ['weather', 'deploy']) { mkdirSync(join(agent, 'extensions', name)); writeFileSync(join(agent, 'extensions', name, 'index.ts'), 'export default () => {};'); }
-writeFileSync(join(agent,'settings.json'),JSON.stringify({packages:[pkg],defaultProvider:'fixture',defaultModel:'fixture'}));
-writeFileSync(join(agent,'models.json'),JSON.stringify({providers:{fixture:{api:'openai-completions',baseUrl:'http://127.0.0.1:1',apiKey:'fixture',models:[{id:'fixture',name:'Fixture',input:['text'],contextWindow:32000,maxTokens:4000,cost:{input:0,output:0,cacheRead:0,cacheWrite:0}}]}}}));
-writeFileSync(join(agent,'webui-extensions.json'),JSON.stringify({autoCheck:false}));
-writeFileSync(join(agent,'auth.json'),JSON.stringify({fixture:{type:'api_key',key:'local'}}));
-const serverExecutable=process.argv.includes('--electron-node')?(await import('electron')).default:process.execPath;
-const server=spawn(serverExecutable,['dist/server/index.js'],{env:{...testEnv(),...(process.argv.includes('--electron-node')?{ELECTRON_RUN_AS_NODE:'1'}:{}),PORT:String(port),PI_WEB_TOKEN:token,PI_WEB_CWD:cwd,PI_CODING_AGENT_DIR:agent,PI_WEB_DATA_DIR:join(root,'data')},stdio:['ignore','pipe','pipe']});
-let logs='',ws,browser;server.stdout.on('data',d=>logs+=d);server.stderr.on('data',d=>logs+=d);
-const req=async(action,args={},headers={})=>{const res=await fetch(`http://127.0.0.1:${port}/api/extensions`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`,...headers},body:JSON.stringify({clientId,cwd,action,...args})});const text=await res.text();let body;try{body=JSON.parse(text);}catch{body={error:text};}return{status:res.status,...body};};
-const wait=async(fn)=>{for(let i=0;i<200;i++){const v=await fn();if(v)return v;await new Promise(r=>setTimeout(r,50));}throw Error('timeout '+logs.slice(-2000));};
-const mutation=async(state,operation)=>{const job=await req('start',{version:state.version,operation});assert.equal(job.status,200,JSON.stringify(job));const done=await wait(async()=>{const result=await req('job',{id:job.id});return result.phase!=='running'&&result;});assert.equal(done.phase,'done',JSON.stringify(done));return req('list');};
-try{
- await wait(()=>portUp(port));ws=new WebSocket(`ws://127.0.0.1:${port}/ws?token=${token}`);const messages=[];ws.on('message',d=>messages.push(JSON.parse(d)));await new Promise((r,j)=>{ws.on('open',r);ws.on('error',j);});ws.send(JSON.stringify({type:'hello',clientId}));await wait(()=>messages.some(m=>m.type==='snapshot'));
- assert.equal((await req('list',{}, {Origin:'https://evil.invalid'})).status,403);
- assert.equal((await req('list',{cwd:root})).status,409);
- assert.equal((await req('open-info',{id:'skills:user'})).absolute,join(agent,'skills'));
- assert.equal((await req('open-info',{id:'extensions:user'})).absolute,join(agent,'extensions'));
- assert.equal((await req('open-info',{id:'extensions:user',cwd:root})).status,409);
- assert.equal((await req('skills-list',{}, {Origin:'https://evil.invalid'})).status,403);
- assert.equal((await req('skills-list',{cwd:root})).status,409);
- const parallelLists=await Promise.all(Array.from({length:8},()=>req('list')));assert(parallelLists.every(result=>result.status===200),JSON.stringify(parallelLists.map(result=>({status:result.status,error:result.error}))));
- let state=await req('list');assert.equal(state.status,200,JSON.stringify(state));const item=state.packages.find(p=>p.name==='local-tools');assert(item);assert(state.packages.some(p=>p.kind==='file'));
- state=await mutation(state,{action:'toggle',id:item.id,enabled:false});assert.equal(state.packages.find(p=>p.id===item.id).enabled,false);
- state=await mutation(state,{action:'toggle',id:item.id,enabled:true});assert.equal(state.packages.find(p=>p.id===item.id).enabled,true);
- const another=join(root,'another-package');mkdirSync(another);writeFileSync(join(another,'package.json'),JSON.stringify({name:'another-package',version:'1.0.0',pi:{extensions:[]}}));
- const details=await req('details',{source:another});assert.equal(details.name,'another-package');assert.equal(details.ticket,undefined);
- assert.equal((await req('details',{source:another},{Origin:'https://evil.invalid'})).status,403);
- assert.equal((await req('details',{source:another,cwd:root})).status,409);
- const preview=await req('preview',{source:another});assert.equal(preview.name,'another-package');
- state=await mutation(state,{action:'install',scope:'user',ticket:preview.ticket});assert(state.packages.some(p=>p.name==='another-package'));
- state=await mutation(state,{action:'remove',id:state.packages.find(p=>p.name==='another-package').id});assert(existsSync(join(another,'package.json')));
+import { listenIsolated, startIsolatedHarness } from './lib/isolated-server.mjs';
+import { mergeSnapshot } from './lib/snapshots.mjs';
 
- const file=state.packages.find(p=>p.path===join(agent,'extensions/footer.js'));const opened=await req('file',{id:file.id});assert.equal(opened.status,200);
- assert.equal((await req('save-file',{id:file.id,version:'stale',content:'no'})).status,400);
- const edited='export default () => {}; // editor fixture';assert.equal((await req('save-file',{id:file.id,version:opened.version,content:edited})).status,200);assert.equal(readFileSync(file.path,'utf8'),edited);
- assert.equal((await req('file',{id:item.id})).status,400);
- assert.equal((await req('preferences',{enabled:false})).autoCheck,false);
- const assertFocusLoop = async (page, dialog) => {
-  const controls=dialog.locator('button:enabled:visible, input:enabled:visible, textarea:enabled:visible, select:enabled:visible, a[href]:visible');
-  await controls.last().focus();await page.keyboard.press('Tab');
-  assert(await controls.first().evaluate(el=>el===document.activeElement),'forward Tab stays in nested dialog');
-  await page.keyboard.press('Shift+Tab');
-  assert(await controls.last().evaluate(el=>el===document.activeElement),'reverse Tab stays in nested dialog');
- };
- if(process.argv.includes('--browser')){
-  browser=await chromium.launch({executablePath:CHROME_PATH||chromium.executablePath()});const page=await browser.newPage({viewport:{width:1440,height:1050}});page.setDefaultTimeout(20000);const errors=[];page.on('response',async res=>{if(res.url().includes('/api/extensions')&&res.status()>=400)console.error('API',await res.text());});page.on('pageerror',e=>errors.push(e.message));
-  await page.addInitScript(id=>{sessionStorage.setItem('pi-web-client-id',id);localStorage.setItem('pi-extensions-autocheck','false');},clientId);
-  await page.goto(`http://127.0.0.1:${port}/?token=${token}`);await page.getByRole('button',{name:'设置',exact:true}).first().click();await page.getByText('所有设置',{exact:true}).click();await page.getByRole('button',{name:'Extensions',exact:true}).click();
-  const panel=page.locator('.extensions-panel');await panel.getByText('local-tools',{exact:true}).waitFor();await panel.getByRole('button',{name:'复制个人扩展目录',exact:true}).waitFor();await panel.getByText('无需单独安装 pi。',{exact:false}).waitFor();
-  for (const name of ['weather', 'deploy']) await panel.getByRole('switch', {name: `启用 ${name}`, exact: true}).waitFor();
-  assert.equal(await panel.getByText('index.ts', {exact: true}).count(), 0);
-  await panel.getByRole('button',{name:'查看详情 local-tools',exact:true}).click();await panel.getByRole('button',{name:'移除引用',exact:true}).waitFor();
-  await page.screenshot({path:'tests/scratch/extensions-installed.png',fullPage:true});
-  await panel.getByRole('switch',{name:'启用 local-tools',exact:true}).click();await wait(async()=>Array.isArray(JSON.parse(readFileSync(join(agent,'settings.json'),'utf8')).packages[0].extensions)&&!JSON.parse(readFileSync(join(agent,'settings.json'),'utf8')).packages[0].extensions.length);
-  await panel.getByText('操作完成',{exact:true}).waitFor();await wait(async()=>!await panel.getByRole('switch',{name:'启用 local-tools',exact:true}).isChecked());await panel.getByRole('switch',{name:'启用 local-tools',exact:true}).click();await wait(async()=>await panel.getByRole('switch',{name:'启用 local-tools',exact:true}).isChecked());
-  await panel.getByRole('button',{name:'从 npm / git 安装',exact:true}).click();await panel.locator('.ext-dialog input').fill(another);await panel.getByRole('button',{name:'查看安装信息',exact:true}).click();await panel.locator('.ext-security').waitFor();await page.screenshot({path:'tests/scratch/extensions-install.png',fullPage:true});
-  const dialog=panel.locator('.ext-dialog');await assertFocusLoop(page,dialog);await dialog.getByRole('button',{name:'关闭',exact:true}).focus();await page.keyboard.press('Shift+Tab');assert.equal(await page.evaluate(()=>document.activeElement?.textContent),'安装');
-  let failedOnce=false;const failInstall=async route=>{const body=route.request().postDataJSON();if(body.action==='start'&&body.operation?.action==='install'&&!failedOnce){failedOnce=true;return route.fulfill({json:{id:'failed-fixture',phase:'error',error:'[extension-tool-missing:npm] Fixture install failure',log:'Step one\nFixture install failure'}});}return route.continue();};
-  await page.route('**/api/extensions**',failInstall);await dialog.getByRole('button',{name:'安装',exact:true}).click();await dialog.getByRole('alert').filter({hasText:'Fixture install failure'}).waitFor();assert(await dialog.isVisible());await dialog.getByRole('alert').filter({hasText:'找不到 npm'}).waitFor();
-  await dialog.getByRole('button',{name:'重试',exact:true}).click();await dialog.waitFor({state:'hidden'});await page.unroute('**/api/extensions**',failInstall);
-  await panel.getByRole('tab',{name:'已安装 · 2',exact:true}).waitFor();await panel.locator('.ext-new').waitFor();assert((await req('list')).packages.some(p=>p.name==='another-package'&&p.scope==='user'));
-  await panel.getByRole('button',{name:'查看详情 footer',exact:true}).click();await panel.getByRole('button',{name:'编辑文件',exact:true}).click();await assertFocusLoop(page,panel.locator('.ext-editor'));await panel.getByRole('textbox',{name:'编辑文件',exact:true}).fill('export default () => {}; // browser editor');await panel.getByRole('button',{name:'保存文件',exact:true}).click();await panel.locator('.ext-editor').waitFor({state:'hidden'});assert(readFileSync(file.path,'utf8').includes('browser editor'));
-  await page.route('**/api/extensions**',async route=>{const body=route.request().postDataJSON();if(body.action==='details')return route.fulfill({json:{source:body.source,name:'fixture-catalog',description:'Native extension catalog fixture.',license:'MIT',repository:'https://example.com/source',resources:{extensions:['main.ts'],skills:['skills/one','skills/two']},canPin:true}});
-  if(body.action!=='search')return route.continue();return route.fulfill({json:{page:1,pages:1,items:[{name:'fixture-catalog',description:'Native extension catalog fixture.',version:'1.2.3',author:'Pi community',downloads:12500,date:Date.now(),types:['extension','skill'],url:'https://pi.dev/packages/fixture-catalog'}]}});});
-  await panel.getByRole('tab',{name:/浏览 pi.dev/}).click();await panel.getByText('fixture-catalog',{exact:true}).waitFor();await panel.getByRole('button',{name:'查看详情 fixture-catalog',exact:true}).click();await panel.getByText('MIT',{exact:true}).waitFor();assert.equal(await panel.locator('.ext-catalog-detail .ext-resource-counts').innerText(),'扩展 1\n技能 2');
-  await page.screenshot({path:'tests/scratch/extensions-browse.png',fullPage:true});
-  await page.evaluate(()=>document.documentElement.setAttribute('data-appearance','dark'));await page.screenshot({path:'tests/scratch/extensions-browse-dark.png',fullPage:true});
-  await page.evaluate(()=>document.documentElement.setAttribute('data-appearance','light'));
-  await page.setViewportSize({width:390,height:844});assert(await panel.evaluate(el=>el.scrollWidth<=el.clientWidth+1));await page.screenshot({path:'tests/scratch/extensions-browse-mobile.png',fullPage:true});await page.setViewportSize({width:1440,height:1050});
-  await panel.getByRole('tab',{name:/已安装/}).click();
-  await page.getByRole('button',{name:'技能',exact:true}).click();
-  const skills=page.locator('.settings-skills');await skills.getByRole('switch',{name:'启用 design-fixture',exact:true}).waitFor();
-  await skills.getByRole('searchbox',{name:'搜索技能名称或描述'}).fill('design-fixture');
-  await skills.getByRole('switch',{name:'启用 design-fixture',exact:true}).click();
-  await wait(async()=>JSON.parse(readFileSync(join(agent,'settings.json'),'utf8')).skills?.some(p=>p.startsWith('-')&&p.includes('design-fixture')));
-  await skills.getByRole('button',{name:'重载当前会话',exact:true}).click();
-  await page.screenshot({path:'tests/scratch/settings-v2-skills.png',fullPage:true});
-  await page.getByRole('button',{name:'更新',exact:true}).click();await panel.getByText('local-tools',{exact:true}).waitFor();
-  assert(!await panel.getByText('pi-harness',{exact:true}).count());assert(!await panel.getByText('footer',{exact:true}).count());
-  await panel.getByRole('switch').waitFor();assert(!await panel.getByRole('switch').isChecked());
-  await panel.getByRole('switch').check();await wait(()=>JSON.parse(readFileSync(join(agent,'webui-extensions.json'),'utf8')).autoCheck===true);
-  await panel.getByRole('switch').uncheck();await wait(()=>JSON.parse(readFileSync(join(agent,'webui-extensions.json'),'utf8')).autoCheck===false);
-  await page.screenshot({path:'tests/scratch/settings-v2-updates.png',fullPage:true});
-  const failedCheck = async route => {
-   if(route.request().postDataJSON().action==='check') return route.fulfill({status:503,json:{error:'Fixture registry unavailable'}});
-   return route.fallback();
-  };
-  await page.route('**/api/extensions**',failedCheck);
-  await panel.getByRole('button',{name:'立即检查',exact:true}).click();
-  await panel.getByRole('alert').getByText('Fixture registry unavailable',{exact:false}).waitFor();
-  await page.setViewportSize({width:375,height:844});
-  assert(await panel.evaluate(el=>el.scrollWidth<=el.clientWidth+1));
-  await page.screenshot({path:'tests/scratch/settings-updates-error-mobile.png',fullPage:true});
-  await page.unroute('**/api/extensions**',failedCheck);
-  await panel.getByRole('alert').getByRole('button',{name:'刷新',exact:true}).click();
-  await panel.getByRole('alert').waitFor({state:'hidden'});
-  await page.setViewportSize({width:1440,height:1050});
-
-  await page.getByRole('button',{name:'MCP 与 Codemode',exact:true}).click();
-  const mcp=page.locator('.mcp-workbench');await mcp.getByRole('button',{name:'编辑 mcp.json',exact:true}).click();
-  const json=mcp.locator('.mcp-json-dialog');await assertFocusLoop(page,json);await json.locator('textarea').fill('{"mcpServers":{},"autoEnableCodemode":false}');
-  await json.getByRole('button',{name:'保存',exact:true}).click();await wait(()=>JSON.parse(readFileSync(join(agent,'mcp.json'),'utf8')).autoEnableCodemode===false);
-  await wait(async()=>await json.getByRole('button',{name:'保存',exact:true}).isDisabled());await json.getByRole('button',{name:'关闭',exact:true}).click();
-  assert.equal(await mcp.locator('textarea').count(),0);await page.screenshot({path:'tests/scratch/settings-v2-mcp.png',fullPage:true});
-  await page.setViewportSize({width:390,height:844});assert(await mcp.evaluate(el=>el.scrollWidth<=el.clientWidth+1));
-  await page.getByRole('button',{name:'技能',exact:true}).click();await skills.getByRole('switch',{name:'启用 design-fixture',exact:true}).waitFor();assert(await skills.evaluate(el=>el.scrollWidth<=el.clientWidth+1));
-  await page.getByRole('button',{name:'Extensions',exact:true}).click();await panel.getByText('local-tools',{exact:true}).waitFor();
-  await page.setViewportSize({width:390,height:844});await page.screenshot({path:'tests/scratch/extensions-mobile.png',fullPage:true});assert(await panel.evaluate(el=>el.scrollWidth<=el.clientWidth+1));
-  await page.setViewportSize({width:1440,height:1050});await page.evaluate(()=>localStorage.setItem('pi-harness:lang','en'));await page.reload();await page.getByRole('button',{name:'Settings',exact:true}).first().click();await page.getByText('All settings',{exact:true}).click();await page.getByRole('button',{name:'Extensions',exact:true}).click();await page.locator('.ext-header').getByRole('button',{name:'Install from npm / git',exact:true}).waitFor();await page.locator('.extensions-panel').getByText('local-tools',{exact:true}).waitFor();await panel.getByRole('button',{name:'Copy personal extensions folder',exact:true}).waitFor();await page.screenshot({path:'tests/scratch/extensions-en.png',fullPage:true});
-  assert.deepEqual(errors,[]);await browser.close();browser=undefined;
- }
- console.log('PASS native packages: auth/origin/cwd, list, toggle, preview, install, local remove, browser desktop/mobile');
-}catch(e){console.error(logs.slice(-4000));throw e;}finally{await browser?.close();ws?.terminate();server.kill();if(server.exitCode===null)await new Promise(r=>server.once('exit',r));rmSync(root,{recursive:true,force:true});}
+const root = realpathSync(mkdtempSync(join(tmpdir(), 'omp-extensions-host-'))), cwd = join(root, 'work'), data = join(root, 'data'), agent = join(data, 'omp/agent');
+const extensionDir = join(agent, 'extensions'), skillDir = join(root, 'skills'), counter = join(root, 'loads'), token = 'LOCAL_EXTENSION_TOKEN';
+for (const dir of [cwd, extensionDir, join(skillDir, 'fixture-skill')]) mkdirSync(dir, { recursive: true });
+writeFileSync(counter, '');
+writeFileSync(join(skillDir, 'fixture-skill/SKILL.md'), '---\nname: fixture-skill\ndescription: A short local fixture skill.\n---\nNo external services.\n');
+const source = version => `import { appendFileSync } from 'node:fs'; appendFileSync(${JSON.stringify(counter)}, '${version}\\n'); export default api => api.registerCommand('host-${version}', {description:'Host extension fixture', handler:async()=>{}});`;
+const file = join(extensionDir, 'host-fixture.js'); writeFileSync(file, source('v1'));
+writeFileSync(join(agent, 'config.yml'), JSON.stringify({ skills: { enabled: false, customDirectories: [skillDir], enableAgentsUser: false, enableAgentsProject: false, enablePiUser: false, enablePiProject: false, enableClaudeUser: false, enableClaudeProject: false, enableCodexUser: false }, cacheWarming: { enabled: false }, secretFuture: 'KEEP_PRIVATE_CONFIG' }));
+const clients = [], responses = []; let harness, browser, modelCalls = 0;
+const provider = createServer((req, res) => { modelCalls++; req.resume(); res.writeHead(500); res.end('No inference expected'); });
+const wait = async (predicate, label) => { for (let n = 0; n < 1000; n++) { const value = await predicate(); if (value) return value; await sleep(25); } throw Error(`Timed out: ${label}`); };
+async function connect(id) {
+	const client = { id, state: undefined, frames: [], ws: new WebSocket(`ws://127.0.0.1:${harness.port}/ws?token=${token}`) }; clients.push(client);
+	client.send = message => client.ws.send(JSON.stringify(message));
+	client.ws.on('message', raw => { const frame = JSON.parse(raw); client.frames.push(frame); client.state = mergeSnapshot(client.state, frame); });
+	await new Promise((resolve, reject) => { client.ws.once('open', resolve); client.ws.once('error', reject); });
+	client.send({ type: 'hello', clientId: id }); await wait(() => client.frames.some(frame => frame.type === 'ready'), 'client ready'); return client;
+}
+async function request(client, action, payload = {}, expected = 200, options = {}) {
+	const base = `http://127.0.0.1:${harness.port}`, path = options.path ?? '/api/omp-extensions';
+	const response = await fetch(`${base}${path}${options.noToken ? '' : `?token=${token}`}`, { method: 'POST', headers: { 'Content-Type': options.contentType ?? 'application/json', Origin: options.origin ?? base }, body: JSON.stringify({ clientId: client.id, cwd, conversationId: client.state.conversationId, action, ...payload }) });
+	assert.equal(response.status, expected, `${path} ${action}`); const raw = await response.text(); let result; try { result = JSON.parse(raw); } catch { result = { error: raw }; }
+	responses.push(result); return result;
+}
+const resources = client => request(client, 'omp-resources', {}, 200, { path: '/api/extensions' });
+async function commands(client) {
+	const start = client.frames.length; client.send({ type: 'get_commands' });
+	const frame = await wait(() => client.frames.slice(start).find(frame => frame.type === 'slash_commands'), 'commands'); return frame.commands.map(command => command.name);
+}
+try {
+	const port = await listenIsolated(provider);
+	writeFileSync(join(agent, 'models.yml'), JSON.stringify({ providers: { fixture: { api: 'anthropic-messages', baseUrl: `http://127.0.0.1:${port}`, apiKey: 'PRIVATE_MODEL_KEY', models: [{ id: 'fixture' }] } } }));
+	const executable = process.argv.includes('--electron-node') ? (await import('electron')).default : process.execPath;
+	harness = await startIsolatedHarness({ executable, env: { PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: data, PI_WEB_TOKEN: token, ...(process.argv.includes('--electron-node') ? { ELECTRON_RUN_AS_NODE: '1' } : {}) } });
+	const a = await connect('extensions-a'), b = await connect('extensions-b');
+	for (const options of [{ noToken: true }, { origin: 'https://foreign.example' }, { contentType: 'text/plain' }]) await request(a, 'get', {}, options.noToken ? 401 : 403, options);
+	for (const payload of [{ clientId: 'foreign' }, { cwd: root }, { conversationId: b.state.conversationId }]) await request(a, 'get', payload, 409);
+	const initialLoads = readFileSync(counter, 'utf8');
+	const views = await Promise.all(Array.from({ length: 8 }, () => request(a, 'get')));
+	let view = views[0], module = view.modules.find(module => module.name === 'host-fixture'); assert(module?.active && module.editable);
+	assert.equal(readFileSync(counter, 'utf8'), initialLoads, 'parallel metadata reads never import factories');
+	const sessionId = a.state.sessionId, sessionFile = a.state.sessionFile, original = await request(a, 'read-file', { moduleId: module.id });
+	assert.equal(original.content, source('v1'));
+	await request(a, 'read-file', { moduleId: '../config.yml' }, 400);
+	await request(a, 'save-file', { moduleId: module.id, version: 'stale', content: 'bad' }, 400);
+	const writes = await Promise.all([a, b].map(async (client, i) => {
+		const res = await fetch(`http://127.0.0.1:${harness.port}/api/omp-extensions?token=${token}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId: client.id, cwd, conversationId: client.state.conversationId, action: 'save-file', moduleId: module.id, version: original.version, content: source(`writer${i}`) }) });
+		return res.status;
+	}));
+	assert.deepEqual(writes.sort(), [200, 400], 'two clients cannot overwrite one source version');
+	const current = await request(a, 'read-file', { moduleId: module.id });
+	await request(a, 'save-file', { moduleId: module.id, version: current.version, content: source('v2') });
+	assert.equal(readFileSync(file, 'utf8'), source('v2')); assert.equal(readFileSync(counter, 'utf8'), initialLoads);
+	assert((await commands(a)).includes('host-v1')); assert(!(await commands(a)).includes('host-v2'));
+	view = await request(a, 'get'); const staleVersion = view.version;
+	await request(a, 'toggle', { version: view.version, moduleId: module.id, enabled: false });
+	await wait(async () => !(await commands(a)).includes('host-v1'), 'disabled current extension');
+	await wait(async () => !(await commands(b)).includes('host-v1'), 'shared setting reaches idle peer');
+	await request(b, 'toggle', { version: staleVersion, moduleId: module.id, enabled: true }, 400);
+	view = await request(a, 'get'); await request(a, 'toggle', { version: view.version, moduleId: module.id, enabled: true });
+	await wait(async () => (await commands(a)).includes('host-v1'), 'resume loaded extension');
+	assert.equal(readFileSync(counter, 'utf8'), initialLoads, 'suspend/resume does not execute saved source');
+	await request(a, 'restart'); await wait(async () => (await commands(a)).includes('host-v2'), 'explicit reload loads saved source');
+	assert.equal(a.state.sessionId, sessionId); assert.equal(a.state.sessionFile, sessionFile);
+	assert((await commands(b)).includes('host-v1'), 'reloading one client does not restart its peer');
+	const r = await resources(a); assert.equal(r.agentDir, realpathSync(agent)); assert(r.tools.includes('task'));
+	assert(!r.tools.includes('subagent') && !r.tools.includes('codemode'));
+	const skillView = await request(a, 'omp-save-skills', { version: r.skillSettings.version, patch: { enabled: true } }, 200, { path: '/api/extensions' });
+	assert(skillView.skills.some(skill => skill.name === 'fixture-skill'));
+	await request(b, 'omp-save-skills', { version: r.skillSettings.version, patch: { enabled: false } }, 400, { path: '/api/extensions' });
+	const beforeRetired = readFileSync(counter, 'utf8'), beforeConfig = readFileSync(join(agent, 'config.yml'), 'utf8');
+	for (const action of ['list', 'start', 'job', 'preview', 'details', 'search', 'check', 'preferences', 'file', 'save-file', 'open-info', 'skills-list', 'builtin-list']) await request(a, action, { source: root, operation: { action: 'install', source: 'arbitrary' }, content: 'bad' }, 410, { path: '/api/extensions' });
+	assert.equal(readFileSync(counter, 'utf8'), beforeRetired); assert.equal(readFileSync(join(agent, 'config.yml'), 'utf8'), beforeConfig);
+	if (process.argv.includes('--browser')) {
+		const { chromium } = await import('playwright-core'); const { CHROME_PATH } = await import('./lib/chrome.mjs');
+		browser = await chromium.launch({ executablePath: CHROME_PATH || chromium.executablePath(), headless: true });
+		const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } }), errors = [], requests = [];
+		page.on('pageerror', error => errors.push(error.message));
+		page.on('request', req => { if (req.method() === 'POST' && new URL(req.url()).pathname === '/api/extensions') requests.push(req.postDataJSON().action); });
+		await page.addInitScript(id => sessionStorage.setItem('pi-web-client-id', id), a.id);
+		await page.goto(`http://127.0.0.1:${harness.port}/?token=${token}`); await page.locator('.conn-dot.ok').first().waitFor({ state: 'attached' });
+		const openSettings = async () => { await page.getByRole('button', { name: /^(设置|Settings)$/ }).and(page.locator(':visible')).first().click(); await page.getByText(/^(所有设置|All settings)$/).click(); };
+		await openSettings();
+		const modal = page.locator('.settings-modal'), rail = modal.locator('.settings-rail');
+		assert.equal(await rail.locator('.settings-tab.active').innerText(), '系统提示词');
+		mkdirSync('tests/scratch', { recursive: true });
+		for (const width of [1440, 900, 390]) {
+			await page.setViewportSize({ width, height: 1000 }); let expected;
+			for (const name of ['系统提示词', '外观', '技能', 'Extensions', 'OMP 工具']) {
+				await rail.getByRole('button', { name, exact: true }).click();
+				const boxes = await page.evaluate(() => ['.settings-modal', '.settings-rail', '.modal-body'].map(selector => { const rect = document.querySelector(selector).getBoundingClientRect(); return [rect.x, rect.y, rect.width, rect.height].map(Math.round); }));
+				expected ??= boxes; assert.deepEqual(boxes, expected, `stable settings shell ${width}: ${name}`);
+				const rect = await modal.boundingBox(), close = await modal.locator('> .modal-head button').boundingBox();
+				assert(rect.x >= 0 && rect.x + rect.width <= width); assert(close.x > rect.x + rect.width - 90);
+			}
+		}
+		await rail.getByRole('button', { name: 'Extensions', exact: true }).click();
+		const panel = modal.locator('.omp-extension-panel'), row = panel.locator('.settings-skill-row').filter({ hasText: 'host-fixture' });
+		await row.getByRole('button', { name: '编辑 host-fixture 源码', exact: true }).click();
+		const editor = panel.locator('.omp-extension-editor'), text = editor.getByRole('textbox', { name: '编辑文件', exact: true });
+		assert.equal(await text.inputValue(), source('v2')); await text.fill(source('browser'));
+		page.once('dialog', dialog => dialog.dismiss()); await rail.getByRole('button', { name: '技能', exact: true }).click();
+		assert.equal(await text.inputValue(), source('browser'), 'cancelled navigation preserves the draft');
+		await editor.getByRole('button', { name: '保存文件', exact: true }).click();
+		await wait(() => readFileSync(file, 'utf8') === source('browser'), 'browser source save');
+		assert((await commands(a)).includes('host-v2'), 'saving does not silently reload code');
+		await modal.screenshot({ path: 'tests/scratch/omp-extension-host-narrow.png', animations: 'disabled' });
+		await page.setViewportSize({ width: 1440, height: 1000 });
+		const controls = modal.locator('button:enabled:visible, input:enabled:visible, textarea:enabled:visible, select:enabled:visible, a[href]:visible');
+		await controls.last().focus(); await page.keyboard.press('Tab'); assert(await controls.first().evaluate(node => node === document.activeElement));
+		await page.keyboard.press('Shift+Tab'); assert(await controls.last().evaluate(node => node === document.activeElement));
+		await modal.locator('> .modal-head button').click();
+		await page.evaluate(() => localStorage.setItem('pi-harness:lang', 'en')); await page.reload(); await openSettings();
+		await rail.getByRole('button', { name: 'Extensions', exact: true }).click(); await panel.getByText('host-fixture', { exact: true }).waitFor();
+		assert.equal(await rail.getByRole('button', { name: /Component updates|MCP and Codemode/ }).count(), 0);
+		assert(requests.every(action => ['omp-resources', 'omp-reload', 'omp-save-skills'].includes(action)), 'current settings never calls retired Pi extension actions');
+		assert.deepEqual(errors, []);
+		await browser.close(); browser = undefined;
+	}
+	a.send({ type: 'abort' }); await wait(async () => (await request(a, 'get')).available === false, 'stopped worker');
+	const stoppedLoads = readFileSync(counter, 'utf8'), stoppedFile = readFileSync(file, 'utf8');
+	await request(a, 'read-file', { moduleId: module.id }, 400); await request(a, 'save-file', { moduleId: module.id, version: original.version, content: 'bad' }, 400);
+	await request(a, 'skills-list', {}, 410, { path: '/api/extensions' });
+	assert.equal((await resources(a)).available, false); assert.equal(readFileSync(counter, 'utf8'), stoppedLoads); assert.equal(readFileSync(file, 'utf8'), stoppedFile);
+	assert((await request(b, 'get')).modules.some(module => module.active), 'stopping one conversation preserves its peer');
+	assert.equal(modelCalls, 0, 'metadata, editing, native settings and explicit reload never infer');
+	assert(readFileSync(join(agent, 'config.yml'), 'utf8').includes('KEEP_PRIVATE_CONFIG'));
+	for (const secret of ['PRIVATE_MODEL_KEY', 'KEEP_PRIVATE_CONFIG']) assert(!JSON.stringify([...responses, ...clients.flatMap(client => client.frames)]).includes(secret));
+	console.log('PASS OMP extension host: auth/ownership, concurrent metadata and CAS source edits, real toggle/reload/peer isolation, skill settings, retired APIs, stopped-worker reads, zero inference' + (process.argv.includes('--browser') ? ', current settings shell/focus/drafts and zh/en narrow UI' : ''));
+} finally {
+	await browser?.close(); for (const client of clients) client.ws.terminate(); await harness?.stop(); provider.closeAllConnections(); await new Promise(resolve => provider.close(resolve)); rmSync(root, { recursive: true, force: true });
+}

@@ -1,0 +1,792 @@
+{
+  "status": "Retirement inventory, not a declaration of completed migration",
+  "sourceFiles": [
+    "server/agent-service.ts",
+    "server/builtin-extensions.ts",
+    "server/cache-warming.ts",
+    "server/codemode-history.ts",
+    "server/component-updates.ts",
+    "server/conversation.ts",
+    "server/extension-updates.ts",
+    "server/extensions-model.ts",
+    "server/extensions-routes.ts",
+    "server/extensions-worker.ts",
+    "server/model-admin.ts",
+    "server/model-source-alias.ts",
+    "server/model-source-sync.ts",
+    "server/native-mcp-config.ts",
+    "server/native-prompt-template.ts",
+    "server/native-tools.ts",
+    "server/prompt-delivery.ts",
+    "server/provider-auth.ts",
+    "server/recovery-state.ts",
+    "server/serialize.ts",
+    "server/session-errors.ts",
+    "server/session-file-read.ts",
+    "server/session-reload.ts",
+    "server/session-tree-controller.ts",
+    "server/session-tree.ts",
+    "server/settings-service.ts",
+    "server/skills-service.ts",
+    "server/slash-commands.ts",
+    "server/system-prompt-files.ts",
+    "server/system-prompt-view.ts",
+    "server/webui-context.ts",
+    "server/wiki-chat-store.ts",
+    "server/wiki-conversations.ts",
+    "server/database/extension.ts",
+    "server/subagents/extension.ts",
+    "server/subagents/history.ts",
+    "server/subagents/inspect.ts",
+    "server/subagents/read-tools.ts",
+    "server/subagents/report.ts",
+    "server/subagents/request-recovery.ts",
+    "server/subagents/runner.ts",
+    "server/context-breakdown.ts",
+    "server/system-prompt-routes.ts",
+    "server/subagents/planning.ts",
+    "server/subagents/results.ts",
+    "server/subagents/tasks.ts",
+    "server/pi-environment.ts",
+    "server/subagents/sources.ts",
+    "server/subagents/settings.ts",
+    "server/subagents/scope.ts",
+    "web/src/components/BuiltinExtensionsPanel.tsx",
+    "web/src/components/SkillsPanel.tsx",
+    "web/src/components/ComponentUpdates.tsx",
+    "web/src/components/ComponentUpdatesPanel.tsx",
+    "web/src/components/ExtensionsPanel.tsx",
+    "web/src/components/ExtensionCatalogList.tsx",
+    "web/src/components/ExtensionJobResult.tsx"
+  ],
+  "groups": {
+    "task": {
+      "replacements": [
+        "tests/omp-tasks-test.mjs",
+        "tests/omp-tasks-browser-test.mjs",
+        "tests/unit/omp-tasks.test.ts",
+        "tests/omp-task-output-test.mjs",
+        "tests/omp-task-compaction-test.mjs"
+      ],
+      "remaining": "Native Task internal history writer guard remains a reproduced failure (docs/omp-task-storage-gap.md). Pre-compaction nested catalogue, selected branch/cache recovery and output ancestry are locally verified in docs/review-data/omp-task-compaction.json. Child spill downloads and browser verification are recorded in omp-task-output.json. Windows/current package acceptance remains."
+    },
+    "models": {
+      "replacements": [
+        "tests/omp-model-config-test.mjs",
+        "tests/omp-model-catalog-test.mjs",
+        "tests/stale-model-selection-test.mjs",
+        "tests/unit/omp-provider-auth.test.ts"
+      ],
+      "remaining": "Legacy automatic cross-client model binding is not an OMP feature. Native discovery and explicit models.yml configuration are covered; real provider OAuth accounts still need acceptance. Host and Bun native model/OAuth-refresh/WebSocket proxy fixtures pass in omp-proxy-fix.json; real accounts, Task-thread routing and platform acceptance remain separate."
+    },
+    "resources": {
+      "replacements": [
+        "tests/omp-extension-settings-test.mjs",
+        "tests/omp-skill-settings-test.mjs",
+        "tests/omp-packages-test.mjs",
+        "tests/omp-package-features-test.mjs",
+        "tests/omp-package-settings-test.mjs",
+        "tests/omp-prompt-test.mjs",
+        "tests/omp-template-attachments-test.mjs",
+        "tests/omp-mcp-test.mjs",
+        "tests/omp-mcp-auth-test.mjs",
+        "tests/slash-commands-test.mjs",
+        "tests/system-prompt-test.mjs",
+        "tests/omp-prompt-browser-test.mjs",
+        "tests/codemode-mcp-test.mjs"
+      ],
+      "remaining": "MCP tool-level auth remains pending. Bounded connection diagnostics and opt-in provider request projections are locally verified in omp-mcp-diagnostics.json and omp-request-diagnostics.json. Real gateway comparison and Windows/desktop acceptance remain. Native queued skills, template/file commands and Stop coverage retained."
+    },
+    "history": {
+      "replacements": [
+        "tests/omp-tree-test.mjs",
+        "tests/omp-skill-history-test.mjs",
+        "tests/omp-recovery-test.mjs",
+        "tests/omp-persistence-test.mjs",
+        "tests/omp-external-history-test.mjs",
+        "tests/omp-persistence-restart-test.mjs",
+        "tests/omp-stop-metadata-test.mjs",
+        "tests/omp-tool-output-test.mjs",
+        "tests/omp-history-ownership-test.mjs",
+        "tests/delete-session-terminal-test.mjs",
+        "tests/switch-session-background-test.mjs",
+        "tests/left-panel-delete-test.mjs",
+        "tests/omp-restricted-recovery-test.mjs",
+        "tests/node-agent-test.mjs",
+        "tests/playground-chat-test.mjs"
+      ],
+      "remaining": "Tree metadata and branch-summary cancellation remain locally verified. Dedicated SSH/Playground recovery, persistence protection and browser reconnect/drafts are now locally verified in omp-restricted-recovery.json. Windows and current packaged acceptance remain pending."
+    },
+    "core": {
+      "replacements": [
+        "tests/omp-entry-test.mjs",
+        "tests/omp-runtime-test.mjs",
+        "tests/reasoning-repetition-test.mjs",
+        "tests/unit/omp-presentation.test.ts",
+        "tests/omp-tool-output-test.mjs",
+        "tests/prompt-receipts-test.mjs",
+        "tests/wiki-protocol-test.mjs",
+        "tests/wiki-assistant-test.mjs",
+        "tests/file-editor-protocol-test.mjs",
+        "tests/native-session-commands-test.mjs",
+        "tests/new-session-draft-browser-test.mjs",
+        "tests/slash-commands-test.mjs",
+        "tests/omp-command-output-test.mjs",
+        "tests/unit/omp-command-output.test.ts",
+        "tests/tool-text-continue-test.mjs"
+      ],
+      "remaining": "This does not replace Windows real-gateway fault reproduction, long-history performance measurement or other separately recorded migration gaps."
+    },
+    "benchmark": {
+      "replacements": [],
+      "remaining": "Retired measurements depend on Pi process/layout/cache internals. Existing historical reports remain historical; new OMP performance measurements are still required."
+    }
+  },
+  "retiredTests": [
+    {
+      "file": "tests/recovery-service-test.mjs",
+      "targets": [
+        "server/agent-service"
+      ],
+      "group": "history"
+    },
+    {
+      "file": "tests/codemode-history-browser-test.mjs",
+      "targets": [
+        "@earendil-works/pi-coding-agent"
+      ],
+      "group": "history"
+    },
+    {
+      "file": "tests/extensions-worker-test.mjs",
+      "targets": [
+        "server/extensions-worker"
+      ],
+      "group": "resources"
+    },
+    {
+      "file": "tests/pi-message-cache-review-repro.mjs",
+      "targets": [
+        "@earendil-works/pi-coding-agent",
+        "server/agent-service"
+      ],
+      "group": "core"
+    },
+    {
+      "file": "tests/long-history-cache-test.mjs",
+      "targets": [
+        "server/agent-service"
+      ],
+      "group": "history"
+    },
+    {
+      "file": "tests/session-tree-test.mjs",
+      "targets": [
+        "@earendil-works/pi-coding-agent"
+      ],
+      "group": "history"
+    },
+    {
+      "file": "tests/native-tools-desktop-test.mjs",
+      "targets": [
+        "server/native-prompt-template",
+        "server/native-tools",
+        "server/serialize"
+      ],
+      "group": "resources"
+    },
+    {
+      "file": "tests/force-reset-session-test.mjs",
+      "targets": [
+        "server/agent-service"
+      ],
+      "group": "history"
+    },
+    {
+      "file": "tests/native-resource-benchmark.mjs",
+      "targets": [
+        "@earendil-works/pi-coding-agent"
+      ],
+      "group": "benchmark"
+    },
+    {
+      "file": "tests/restart-extension-cache-test.mjs",
+      "targets": [
+        "server/agent-service"
+      ],
+      "group": "resources"
+    },
+    {
+      "file": "tests/pi-104-prompt-contract-test.mjs",
+      "targets": [
+        "@earendil-works/pi-coding-agent",
+        "server/system-prompt-view",
+        "server/native-tools"
+      ],
+      "group": "resources"
+    },
+    {
+      "file": "tests/cache-warming-test.mjs",
+      "targets": [
+        "@earendil-works/pi-coding-agent",
+        "server/cache-warming",
+        "server/agent-service"
+      ],
+      "group": "core"
+    },
+    {
+      "file": "tests/provider-auth-test.mjs",
+      "targets": [
+        "server/provider-auth"
+      ],
+      "group": "models"
+    },
+    {
+      "file": "tests/native-features-browser-test.mjs",
+      "targets": [
+        "server/serialize"
+      ],
+      "group": "core"
+    },
+    {
+      "file": "tests/extension-diagnostics-test.mjs",
+      "targets": [
+        "@earendil-works/pi-coding-agent",
+        "server/agent-service"
+      ],
+      "group": "resources"
+    },
+    {
+      "file": "tests/tool-output-test.mjs",
+      "targets": [
+        "@earendil-works/pi-coding-agent"
+      ],
+      "group": "core"
+    },
+    {
+      "file": "tests/restart-session-test.mjs",
+      "targets": [
+        "@earendil-works/pi-coding-agent",
+        "server/agent-service"
+      ],
+      "group": "history"
+    },
+    {
+      "file": "tests/pi-140-sdk-test.mjs",
+      "targets": [
+        "@earendil-works/pi-coding-agent",
+        "server/native-tools",
+        "server/serialize"
+      ],
+      "group": "core"
+    },
+    {
+      "file": "tests/project-switch-benchmark.mjs",
+      "targets": [
+        "@earendil-works/pi-coding-agent"
+      ],
+      "group": "benchmark"
+    },
+    {
+      "file": "tests/pi-152-sdk-test.mjs",
+      "targets": [
+        "@earendil-works/pi-agent-core",
+        "@earendil-works/pi-coding-agent"
+      ],
+      "group": "core"
+    },
+    {
+      "file": "tests/project-switch-resources.mjs",
+      "targets": [
+        "@earendil-works/pi-coding-agent"
+      ],
+      "group": "benchmark"
+    },
+    {
+      "file": "tests/new-chat-context-test.mjs",
+      "targets": [
+        "@earendil-works/pi-coding-agent"
+      ],
+      "group": "core"
+    },
+    {
+      "file": "tests/subagents-test.mjs",
+      "targets": [
+        "@earendil-works/pi-coding-agent",
+        "server/subagents/runner"
+      ],
+      "group": "task"
+    },
+    {
+      "file": "tests/model-config-preservation-test.mjs",
+      "targets": [
+        "server/model-admin"
+      ],
+      "group": "models"
+    },
+    {
+      "file": "tests/native-interaction-benchmark.mjs",
+      "targets": [
+        "@earendil-works/pi-coding-agent"
+      ],
+      "group": "benchmark"
+    },
+    {
+      "file": "tests/native-resource-tools.mjs",
+      "targets": [
+        "@earendil-works/pi-coding-agent",
+        "server/native-tools"
+      ],
+      "group": "benchmark"
+    },
+    {
+      "file": "tests/model-sources-test.mjs",
+      "targets": [
+        "server/model-source-sync"
+      ],
+      "group": "models"
+    },
+    {
+      "file": "tests/gateway-error-test.mjs",
+      "targets": [
+        "server/agent-service"
+      ],
+      "group": "core"
+    },
+    {
+      "file": "tests/pi-150-sdk-test.mjs",
+      "targets": [
+        "@earendil-works/pi-agent-core",
+        "@earendil-works/pi-ai",
+        "server/serialize"
+      ],
+      "group": "core"
+    },
+    {
+      "file": "tests/pi152-model-compat-test.mjs",
+      "targets": [
+        "@earendil-works/pi-coding-agent"
+      ],
+      "group": "models"
+    },
+    {
+      "file": "tests/provider-catalog-test.mjs",
+      "targets": [
+        "server/model-admin",
+        "server/agent-service",
+        "server/slash-commands"
+      ],
+      "group": "models"
+    },
+    {
+      "file": "tests/claude-source-vision-test.mjs",
+      "targets": [
+        "@earendil-works/pi-coding-agent",
+        "server/model-source-sync"
+      ],
+      "group": "models"
+    },
+    {
+      "file": "tests/pi-104-upstream-fixes-test.mjs",
+      "targets": [
+        "@earendil-works/pi-coding-agent",
+        "server/native-tools",
+        "server/serialize"
+      ],
+      "group": "core"
+    },
+    {
+      "file": "tests/pi-native-review-repro.mjs",
+      "targets": [
+        "@earendil-works/pi-coding-agent",
+        "server/agent-service",
+        "server/slash-commands",
+        "server/system-prompt-files"
+      ],
+      "group": "core"
+    },
+    {
+      "file": "tests/fixtures/resource-sdk.mjs",
+      "targets": [
+        "@earendil-works/pi-coding-agent"
+      ],
+      "group": "benchmark"
+    },
+    {
+      "file": "tests/unit/subagent-extension.test.ts",
+      "targets": [
+        "@earendil-works/pi-coding-agent",
+        "server/subagents/extension",
+        "server/subagents/runner",
+        "server/subagents/inspect",
+        "server/subagents/tasks"
+      ],
+      "group": "task"
+    },
+    {
+      "file": "tests/unit/session-tree.test.ts",
+      "targets": [
+        "@earendil-works/pi-coding-agent",
+        "server/session-tree"
+      ],
+      "group": "history"
+    },
+    {
+      "file": "tests/unit/subagent-budget.test.ts",
+      "targets": [
+        "@earendil-works/pi-coding-agent",
+        "server/subagents/runner",
+        "server/subagents/report"
+      ],
+      "group": "task"
+    },
+    {
+      "file": "tests/unit/subagent-tasks.test.ts",
+      "targets": [
+        "server/subagents/tasks"
+      ],
+      "group": "task"
+    },
+    {
+      "file": "tests/unit/subagent-read-tools.test.ts",
+      "targets": [
+        "@earendil-works/pi-coding-agent",
+        "server/subagents/read-tools"
+      ],
+      "group": "task"
+    },
+    {
+      "file": "tests/unit/subagent-steps.test.ts",
+      "targets": [
+        "server/serialize",
+        "server/subagents/results",
+        "server/subagents/runner"
+      ],
+      "group": "task"
+    },
+    {
+      "file": "tests/unit/subagent-errors.test.ts",
+      "targets": [
+        "server/subagents/planning"
+      ],
+      "group": "task"
+    },
+    {
+      "file": "tests/unit/session-file-read.test.ts",
+      "targets": [
+        "@earendil-works/pi-coding-agent",
+        "server/session-file-read"
+      ],
+      "group": "history"
+    },
+    {
+      "file": "tests/unit/webui-context.test.ts",
+      "targets": [
+        "server/webui-context"
+      ],
+      "group": "core"
+    },
+    {
+      "file": "tests/unit/subagent-planning.test.ts",
+      "targets": [
+        "server/subagents/planning"
+      ],
+      "group": "task"
+    },
+    {
+      "file": "tests/unit/extensions.test.ts",
+      "targets": [
+        "@earendil-works/pi-coding-agent",
+        "server/extensions-worker",
+        "server/extensions-model"
+      ],
+      "group": "resources"
+    },
+    {
+      "file": "tests/unit/native-tool-defaults.test.ts",
+      "targets": [
+        "server/native-tools",
+        "@earendil-works/pi-coding-agent"
+      ],
+      "group": "core"
+    },
+    {
+      "file": "tests/unit/system-prompt.test.ts",
+      "targets": [
+        "@earendil-works/pi-coding-agent",
+        "server/system-prompt-files",
+        "server/system-prompt-view"
+      ],
+      "group": "resources"
+    },
+    {
+      "file": "tests/unit/subagent-results.test.ts",
+      "targets": [
+        "server/subagents/results",
+        "server/subagents/report",
+        "server/subagents/runner"
+      ],
+      "group": "task"
+    },
+    {
+      "file": "tests/unit/native-result-recovery.test.ts",
+      "targets": [
+        "@earendil-works/pi-coding-agent",
+        "server/serialize",
+        "server/recovery-state"
+      ],
+      "group": "history"
+    },
+    {
+      "file": "tests/unit/serialize-cache.test.ts",
+      "targets": [
+        "server/serialize"
+      ],
+      "group": "core"
+    },
+    {
+      "file": "tests/unit/prompt-delivery.test.ts",
+      "targets": [
+        "@earendil-works/pi-coding-agent",
+        "server/prompt-delivery"
+      ],
+      "group": "resources"
+    },
+    {
+      "file": "tests/unit/subagent-ui-presentation.test.ts",
+      "targets": [
+        "server/subagents/results",
+        "server/subagents/runner"
+      ],
+      "group": "task"
+    },
+    {
+      "file": "tests/unit/subagent-retry.test.ts",
+      "targets": [
+        "@earendil-works/pi-coding-agent",
+        "@earendil-works/pi-ai/compat",
+        "@earendil-works/pi-ai/utils/event-stream",
+        "server/subagents/runner"
+      ],
+      "group": "task"
+    },
+    {
+      "file": "tests/unit/recovery-clock.test.ts",
+      "targets": [
+        "server/recovery-state"
+      ],
+      "group": "history"
+    },
+    {
+      "file": "tests/unit/subagent-scope.test.ts",
+      "targets": [
+        "@earendil-works/pi-coding-agent",
+        "server/prompt-delivery"
+      ],
+      "group": "task"
+    },
+    {
+      "file": "tests/unit/wiki-chat-store.test.ts",
+      "targets": [
+        "@earendil-works/pi-coding-agent",
+        "server/wiki-chat-store"
+      ],
+      "group": "history"
+    },
+    {
+      "file": "tests/unit/subagent-activation.test.ts",
+      "targets": [
+        "@earendil-works/pi-coding-agent",
+        "server/builtin-extensions",
+        "server/native-tools",
+        "server/subagents/extension"
+      ],
+      "group": "task"
+    },
+    {
+      "file": "tests/unit/subagent-history.test.ts",
+      "targets": [
+        "@earendil-works/pi-coding-agent",
+        "server/subagents/tasks",
+        "server/subagents/history"
+      ],
+      "group": "task"
+    },
+    {
+      "file": "tests/unit/subagent-report.test.ts",
+      "targets": [
+        "@earendil-works/pi-coding-agent",
+        "server/subagents/report"
+      ],
+      "group": "task"
+    },
+    {
+      "file": "tests/unit/extension-updates.test.ts",
+      "targets": [
+        "@earendil-works/pi-coding-agent",
+        "server/extension-updates"
+      ],
+      "group": "resources"
+    },
+    {
+      "file": "tests/unit/delegate-notification.test.ts",
+      "targets": [
+        "server/serialize"
+      ],
+      "group": "core"
+    },
+    {
+      "file": "tests/unit/subagent-runner.test.ts",
+      "targets": [
+        "server/subagents/runner",
+        "@earendil-works/pi-coding-agent"
+      ],
+      "group": "task"
+    },
+    {
+      "file": "tests/unit/subagent-inspect.test.ts",
+      "targets": [
+        "server/subagents/inspect"
+      ],
+      "group": "task"
+    },
+    {
+      "file": "tests/unit/pi-one-services.test.ts",
+      "targets": [
+        "server/native-mcp-config",
+        "server/webui-context"
+      ],
+      "group": "resources"
+    },
+    {
+      "file": "tests/unit/codemode-history.test.ts",
+      "targets": [
+        "@earendil-works/pi-coding-agent",
+        "server/codemode-history",
+        "server/serialize",
+        "@earendil-works/pi-ai"
+      ],
+      "group": "history"
+    },
+    {
+      "file": "tests/unit/component-updates.test.ts",
+      "targets": [
+        "server/component-updates"
+      ],
+      "group": "core"
+    },
+    {
+      "file": "tests/unit/wiki-conversations.test.ts",
+      "targets": [
+        "@earendil-works/pi-coding-agent",
+        "server/wiki-conversations",
+        "server/wiki-chat-store"
+      ],
+      "group": "history"
+    },
+    {
+      "file": "tests/unit/tool-results.test.ts",
+      "targets": [
+        "server/serialize"
+      ],
+      "group": "core"
+    },
+    {
+      "file": "tests/unit/skills-service.test.ts",
+      "targets": [
+        "@earendil-works/pi-coding-agent",
+        "server/skills-service"
+      ],
+      "group": "resources"
+    },
+    {
+      "file": "tests/unit/context-breakdown.test.ts",
+      "targets": [
+        "server/context-breakdown",
+        "server/serialize"
+      ],
+      "group": "core"
+    },
+    {
+      "file": "tests/unit/pi-environment.test.ts",
+      "group": "resources",
+      "targets": [
+        "retired Pi CLI/extension management"
+      ]
+    },
+    {
+      "file": "tests/extensions-local-test.mjs",
+      "group": "resources",
+      "targets": [
+        "retired Pi CLI/extension management"
+      ]
+    },
+    {
+      "file": "tests/unit/subagent-sources.test.ts",
+      "group": "task",
+      "targets": [
+        "retired explicit Pi read-only investigation scope"
+      ]
+    }
+  ],
+  "preservedAndPorted": [
+    "tests/unit/user-attachments.test.ts",
+    "tests/unit/model-sources.test.ts",
+    "tests/unit/tool-output.test.ts",
+    "tests/unit/packaged-sdk-version.test.ts",
+    "tests/check-engine-boundary-test.mjs",
+    "tests/project-new-chat-test.mjs",
+    "tests/project-switch-test.mjs",
+    "tests/long-history-browser-test.mjs",
+    "tests/project-workspaces-test.mjs",
+    "tests/shared-workspaces-test.mjs",
+    "tests/builtin-extensions-test.mjs",
+    "tests/extensions-directory-desktop-test.mjs",
+    "tests/quiesce-test.mjs"
+  ],
+  "remainingSmoke": "Latest complete v78 baseline remains the earlier 120/120 (omp-smoke-task-output.json). Subsequent child-compaction and deployment changes have separate verified regressions (omp-task-compaction.json, omp-container.json). Current default list 122; no full run of the final changed version. Container integration is a separate Docker CI job. Native OAuth write-back/tool-level authorization, Task storage, native CLI JSON/print exit and Windows/real-gateway/package acceptance remain.",
+  "validation": {
+    "nativeSmoke": "21/21 passed after SDK removal; after workspace changes, 6/6 related native/entry tests plus 2/2 public Workspace protocol tests and persistence browser passed",
+    "unit": "174 files, 1079 passed, 1 skipped; omp-task-compaction.json",
+    "projectSwitch": "Passed protocol and browser: latest selection, native restoration, drafts, scroll, retained terminal and reconnect",
+    "fullSmoke": "Latest complete v78 baseline remains the earlier 120/120 (omp-smoke-task-output.json). Subsequent child-compaction and deployment changes have separate verified regressions (omp-task-compaction.json, omp-container.json). Current default list 122; no full run of the final changed version. Container integration is a separate Docker CI job. Native OAuth write-back/tool-level authorization, Task storage, native CLI JSON/print exit and Windows/real-gateway/package acceptance remain.",
+    "platforms": "macOS arm64 current DMG/desktop verified with fixture accounts; Linux arm64 container separately verified. Windows/Linux desktop and original Windows task remain.",
+    "container": "Linux arm64: production image and native package/history persistence verified, including old non-empty volume; omp-container.json. Not Linux desktop or x64 acceptance.",
+    "desktop": "omp-desktop-current.json: original 31-entry package batch passed plus separate OAuth reconnect entry; first DMG/UI batch 9/10, MCP fixture correction then passed on Desktop and Web. No new full 122-entry smoke claim."
+  },
+  "addedRegression": [
+    "tests/omp-workspaces-test.mjs",
+    "tests/omp-request-diagnostics-test.mjs",
+    "tests/native-session-commands-test.mjs",
+    "tests/omp-task-output-test.mjs",
+    "tests/omp-task-compaction-test.mjs",
+    "tests/omp-container-test.mjs",
+    "tests/omp-service-config-test.mjs"
+  ],
+  "builtinInventoryMigration": {
+    "nativeReplacements": [
+      "tests/omp-entry-test.mjs",
+      "tests/omp-extension-settings-test.mjs",
+      "tests/omp-skill-settings-test.mjs",
+      "tests/omp-packages-test.mjs",
+      "tests/omp-mcp-test.mjs",
+      "tests/omp-tasks-test.mjs"
+    ],
+    "preserved": "builtin-extensions-test now verifies the database global switch, conflicts, existing-call rejection, native resource inventory, removed conversion/OKF commands, new conversations, restart, errors, authentication, scoped ownership and browser behavior. Native Task replaces the former Pi subagent toggle; Codemode/tool-search inventory and pending-reload database enable behavior are not reinstated.",
+    "retiredRequests": "Legacy extensions actions return 410 without opening a worker. The reproduced stopped-worker revival is covered by an extension startup counter."
+  },
+  "extensionPathMigration": {
+    "evidence": "docs/review-data/omp-extension-paths.json",
+    "preserved": "Personal folder preparation, desktop open/module reveal, browser copy, installed package paths, file collision preservation, native scope and stopped-worker isolation. Old Pi IPC is explicitly retired.",
+    "remaining": "Other legacy extension/catalog/update expectations are not removed from the smoke suite by this change."
+  },
+  "hostContractChanges": {
+    "tool-text-continue-test.mjs": "Preserved smoke entry, ported to OMP. Pi automatic one-reminder replay intentionally retired. Native OpenAI and Anthropic negative textual-call coverage plus positive split-parameter real tool and explicit Stop/reopen continuation.",
+    "system-prompt-test.mjs": "Preserved smoke entry, ported to OMP HTTP. Pi APPEND_SYSTEM, automatic deferred reload and restore action replaced by native SYSTEM/SYSTEM_TEMPLATE and explicit reload/delete. Auth, ownership, CAS, actual outgoing prompt, history and extension override coverage retained; browser path delegates to native OMP browser regression.",
+    "codemode-mcp-test.mjs": "Preserved smoke entry, ported to native OMP xd:// tool routes using real HTTP MCP and provider streams. Pi Codemode scripts/mode/inlineBudget/exposure/trust expectations retired; native config/CAS/project precedence/OAuth/output spill covered by separate OMP regressions. Actual success/error/image delivery and image save/attach retained and browser regression fixed lost images caused by virtual writes being classified as file edits.",
+    "model-sources-protocol-test.mjs": "Preserved smoke entry, ported to real OMP host main/Wiki native config. Retired Pi cross-client discovery, sync aliases and fixed 128000 floor; actual credential/gateway rotation across a held native tool turn, native defaults, explicit/cleared limits, busy/invalid saves, restart/history isolation and secret projection retained. Browser verifies native config save/reopen and narrow layout.",
+    "component-updates-test.mjs": "Retained smoke entry; native isolated-registry install/upgrade/factory-error rollback, failed-registry result, preserved disabled state, no implicit reload, host bundled OMP version and explicit rejection of retired component messages. Browser updates use production HTTP routes and real native runner, with review/apply, truthful failed status and persisted jobs. Pi pinned/manual updater classification and batched Pi logs retired; native explicit package upgrade semantics retained. Desktop application updater remains separate.",
+    "extensions-test.mjs": "Retained public HTTP smoke entry, now real OMP discovery/toggle/file CAS/reload, two-client conflicts and isolation, native skills, secret projection, retired Pi HTTP 410 and stopped-worker safety. Browser preserves settings shell geometry, focus containment, draft navigation, real source save and zh/en/narrow layouts. Native packages/Marketplace installers and package-settings/features are independently exercised by omp-packages-test, component-updates-test, omp-marketplace-test, omp-package-settings-test, omp-package-features-test and omp-packages-browser-test; old Pi tickets/pi.dev catalogue/auto-check preferences retired.",
+    "extensions-update-browser-test.mjs": "Retained browser entry delegates to the real OMP component-updates browser scenario. Former synthetic Pi batch partial/warning/skipped statuses and raw worker logs replaced by native single-operation success/failed/unknown statuses; interrupted unknown status remains covered by omp-packages-test."
+  }
+}

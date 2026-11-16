@@ -2,34 +2,34 @@
 import assert from 'node:assert/strict';
 import WebSocket from 'ws';
 import { createServer } from 'node:http';
-import { spawn } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, unlinkSync, readdirSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, unlinkSync, readdirSync, existsSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium } from 'playwright-core';
 import { CHROME_PATH } from './lib/chrome.mjs';
-import { portUp } from './lib/port-utils.mjs';
-import { testEnv } from "./lib/test-env.mjs";
-const port=9330;
-assert(!await portUp(port)); assert(!await portUp(port+1));
-const base=mkdtempSync(join(tmpdir(),'wiki-assistant-')), cwd=join(base,'workspace'), agent=join(base,'agent');
-mkdirSync(cwd); mkdirSync(agent);
+import { listenIsolated, startIsolatedHarness } from './lib/isolated-server.mjs';
+import { scrubHostEnv } from './lib/test-env.mjs';
+scrubHostEnv();
+for (const key of Object.keys(process.env)) if (/API_KEY|TOKEN|SECRET|PASSWORD|^ANTHROPIC_|^OPENAI_/.test(key)) delete process.env[key];
+let port;
+mkdirSync('tests/scratch',{recursive:true});
+const base=realpathSync(mkdtempSync(join(tmpdir(),'wiki-assistant-'))), cwd=join(base,'workspace'), agent=join(base,'data/omp/agent');
+mkdirSync(cwd); mkdirSync(agent,{recursive:true});
 const knowledge=join(base,'knowledge');mkdirSync(knowledge);writeFileSync(join(knowledge,'source.md'),'# Reference evidence');
-mkdirSync(join(base,'data'));writeFileSync(join(base,'data','project-workspaces.json'),JSON.stringify({revision:1,workspaces:[{id:'research',name:'Research',paths:[knowledge]}]}));
+mkdirSync(join(base,'data'),{recursive:true});writeFileSync(join(base,'data','project-workspaces.json'),JSON.stringify({revision:1,workspaces:[{id:'research',name:'Research',paths:[knowledge]}]}));
 for(const [name,text] of [['note.md','# First document\n\nOriginal passage.\n'],['other.md','# Second document\n\nOther evidence.\n'],['third.txt','Third source.\n']]) writeFileSync(join(cwd,name),text);
 const requests=[];
 const mock=createServer(async(req,res)=>{let body='';for await(const part of req)body+=part;requests.push(JSON.parse(body));res.writeHead(200,{'content-type':'text/event-stream'});for(const [delta,finish_reason]of [[{role:'assistant',content:'Local answer with evidence.'},null],[{},'stop']])res.write(`data: ${JSON.stringify({id:'fixture',object:'chat.completion.chunk',choices:[{index:0,delta,finish_reason}]})}\n\n`);res.end('data: [DONE]\n\n');});
-await new Promise(resolve=>mock.listen(port+1,'127.0.0.1',resolve));
-writeFileSync(join(agent,'models.json'),JSON.stringify({providers:{fixture:{api:'openai-completions',baseUrl:`http://127.0.0.1:${port+1}`,apiKey:'unused',models:[{id:'fixture',name:'Local model',input:['text'],contextWindow:32000,maxTokens:4096}]}}}));
-writeFileSync(join(agent,'settings.json'),JSON.stringify({defaultProvider:'fixture',defaultModel:'fixture'}));
-writeFileSync(join(agent,'auth.json'),JSON.stringify({fixture:{type:'api_key',key:'unused'}}));
-let server,browser,page,otherSocket,log='';
-const start=async()=>{server=spawn(process.execPath,['dist/server/index.js'],{env:{...testEnv(),PORT:String(port),PI_WEB_TOKEN:'',PI_WEB_HOST:'127.0.0.1',PI_WEB_CWD:cwd,PI_WEB_DATA_DIR:join(base,'data'),PI_CODING_AGENT_DIR:agent},stdio:['ignore','pipe','pipe']});server.stdout.on('data',b=>log+=b);server.stderr.on('data',b=>log+=b);for(let i=0;i<150&&!await portUp(port);i++){assert.equal(server.exitCode,null,log);await new Promise(r=>setTimeout(r,100));}};
-const stop=async()=>{if(server?.exitCode===null){server.kill('SIGTERM');await new Promise(r=>server.once('exit',r));}};
+const modelPort=await listenIsolated(mock);
+writeFileSync(join(agent,'models.yml'),JSON.stringify({providers:{fixture:{api:'openai-completions',baseUrl:`http://127.0.0.1:${modelPort}`,apiKey:'unused',models:[{id:'fixture',name:'Local model',input:['text'],contextWindow:32000,maxTokens:4096}]}}}));
+writeFileSync(join(agent,'config.yml'),JSON.stringify({skills:{enabled:false},cacheWarming:{enabled:false},retry:{enabled:false},compaction:{enabled:false}}));
+let harness,browser,page,otherSocket,log='';
+const start=async()=>{harness=await startIsolatedHarness({env:{PI_WEB_CWD:cwd,PI_WEB_DATA_DIR:join(base,'data')},...(port?{nextPort:()=>port,attempts:1}:{}),onOutput:text=>{log=(log+text).slice(-7000);}});port=harness.port;};
+const stop=async()=>{await harness?.stop();harness=undefined;};
 try{
- await start();browser=await chromium.launch({executablePath:CHROME_PATH||chromium.executablePath()});page=await browser.newPage({viewport:{width:1440,height:1000}});page.setDefaultTimeout(12000);
+ await start();browser=await chromium.launch({executablePath:CHROME_PATH||chromium.executablePath()});page=await browser.newPage({viewport:{width:1440,height:1000}});page.setDefaultTimeout(30000);
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
- const url=`http://127.0.0.1:${port}/?${new URLSearchParams({'wiki-window':'1',cwd,doc:'note.md',client:'assistant-test'})}`;
+ const url=`http://127.0.0.1:${port}/?${new URLSearchParams({'wiki-window':'1',cwd,doc:'note.md',client:'assistant-test',model:'fixture/fixture'})}`;
  await page.goto(url);await page.locator('.wiki-prose .fp-rich-document').waitFor();
  const api=(action,args={})=>page.evaluate(async({action,args})=>{const state=JSON.parse(sessionStorage.getItem('pi-wiki-view'));const response=await fetch('/api/wiki',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({clientId:new URL(location.href).searchParams.get('client'),cwd:state.cwd,conversationId:state.conversationId,action,...args})});return {status:response.status,body:await response.json()};},{action,args});
  await page.locator('.wiki-ask-toggle').click();await page.locator('.wiki-assistant.is-floating').waitFor();
@@ -56,7 +56,7 @@ try{
   await page.locator('.wiki-assistant-context').click();await page.locator('.wiki-project-list .wiki-sheet-row').filter({hasText:'knowledge'}).click();await page.locator('.wiki-assistant-sheet').waitFor({state:'detached'});};
  await choose();await page.locator('.wiki-reference-chips').filter({hasText:'knowledge'}).waitFor();
  assert.equal((await api('chat-validate-project',{workspaceId:'research',path:cwd})).status,400);
- await page.screenshot({path:'/tmp/pi-wiki-document-analysis.png'});
+ await page.screenshot({path:'tests/scratch/omp-wiki-assistant-light.png'});
  await page.locator('.wiki-tree-row[title="other.md"]').click();
  await page.waitForFunction(()=>JSON.parse(sessionStorage.getItem('pi-wiki-view'))?.path==='other.md');
  await page.waitForFunction(()=>document.querySelector('.wiki-assistant textarea')?.value==='');
@@ -66,8 +66,13 @@ try{
  await page.waitForFunction(()=>document.querySelector('.wiki-assistant textarea')?.value==='Keep this draft');
  assert.equal((await api('chat-context')).body.sessionId,original,'blank document chat restored');
  assert.equal(await page.locator('.wiki-reference-chips').count(),0,'returning does not restore project');
- await choose();await input.fill('Analyze the project with this document');assert.equal(await input.inputValue(),'Analyze the project with this document');await input.press('Enter');
+ await choose();const previousRequests=requests.length;const previousReplies=(await page.locator('.wiki-assistant .messages').innerText()).split('Local answer with evidence.').length-1;await input.fill('Analyze the project with this document');assert.equal(await input.inputValue(),'Analyze the project with this document');await input.press('Enter');
  await page.waitForFunction(()=>document.querySelector('.wiki-assistant .messages')?.textContent.includes('Local answer with evidence.'));
+ for(let i=0;i<500&&requests.length===previousRequests;i++)await new Promise(r=>setTimeout(r,20));
+ assert(requests.length>previousRequests,'new analysis must reach the native provider');
+ await page.waitForFunction(previous=>(document.querySelector('.wiki-assistant .messages')?.textContent.match(/Local answer with evidence\./g)||[]).length>previous,previousReplies);
+ for(let i=0;i<500&&(await api('chat-context')).body.isStreaming;i++)await new Promise(r=>setTimeout(r,20));
+ assert.equal((await api('chat-context')).body.isStreaming,false);
  assert(!JSON.stringify(requests.at(-1)).includes('Python 示例默认应是可独立运行的完整代码块'));
  assert(JSON.stringify(requests.at(-1)).includes('knowledge'));assert(JSON.stringify(requests.at(-1)).includes('note.md'));
  await input.fill('Saved draft');
@@ -95,13 +100,14 @@ try{
  await page.setViewportSize({width:390,height:844});await page.waitForTimeout(250);
  let box=await page.locator('.wiki-assistant').boundingBox();assert(box.x>=0&&box.x+box.width<=391);
  await page.locator('.wiki-assistant-context').click();await sheet.waitFor();box=await sheet.boundingBox();assert(box.x>=0&&box.x+box.width<=391);await page.keyboard.press('Escape');
- await page.setViewportSize({width:1440,height:1000});await page.evaluate(()=>document.documentElement.dataset.appearance='dark');await page.screenshot({path:'/tmp/pi-wiki-document-analysis-dark.png'});
+ await page.setViewportSize({width:1440,height:1000});await page.evaluate(()=>document.documentElement.dataset.appearance='dark');await page.screenshot({path:'tests/scratch/omp-wiki-assistant-dark.png'});
  // Real runtime adapter: a second connected window cannot claim this history.
  otherSocket=new WebSocket(`ws://127.0.0.1:${port}/ws`);
  const otherState=await new Promise((resolve,reject)=>{
-  const timer=setTimeout(()=>reject(new Error('second Wiki client timeout')),10000);
+  let ready=false;
+  const timer=setTimeout(()=>reject(new Error('second Wiki client timeout')),30000);
   otherSocket.on('open',()=>otherSocket.send(JSON.stringify({type:'hello',clientId:'lifecycle-other',wikiCwd:cwd})));
-  otherSocket.on('message',wire=>{const message=JSON.parse(wire);if(message.type==='snapshot'){clearTimeout(timer);resolve(message.state);}});
+  otherSocket.on('message',wire=>{const message=JSON.parse(wire);if(message.type==='ready'){ready=true;otherSocket.send(JSON.stringify({type:'get_state'}));} if(ready&&message.type==='snapshot'){clearTimeout(timer);resolve(message.state);}});
   otherSocket.on('error',reject);
  });
  const occupied=await api('chat-open',{clientId:'lifecycle-other',conversationId:otherState.conversationId,id:original});
@@ -121,4 +127,4 @@ try{
  assert(existsSync(join(cwd,'note.md')),'deleting a Wiki conversation preserves its document');
  assert.deepEqual(errors,[]);
  console.log('PASS Wiki per-document chats, cleared project scope, native prompt scope, history isolation, drafts, restart, mobile, cross-window ownership and active history deletion');
-}catch(error){await page?.screenshot({path:'/tmp/pi-wiki-assistant-failure.png'}).catch(()=>{});console.error(log.slice(-7000));console.error(await page.locator('body').innerText());throw error;}finally{otherSocket?.terminate();await browser?.close();await stop();await new Promise(r=>mock.close(r));rmSync(base,{recursive:true,force:true});}
+}catch(error){await page?.screenshot({path:'tests/scratch/omp-wiki-assistant-failure.png'}).catch(()=>{});console.error(log.slice(-7000));console.error(await page.locator('body').innerText());throw error;}finally{otherSocket?.terminate();await browser?.close();await stop();mock.closeAllConnections();await new Promise(r=>mock.close(r));rmSync(base,{recursive:true,force:true});}

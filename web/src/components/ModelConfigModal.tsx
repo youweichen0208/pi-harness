@@ -1,4 +1,3 @@
-import { ModelSources } from "./ModelSources";
 import { useDialogFocus } from "../use-dialog-focus";
 import { OpenAIProxySettings } from "./OpenAIProxySettings";
 import { useEffect, useRef, useState } from "react";
@@ -14,7 +13,6 @@ import {
 } from "react-icons/fi";
 import type {
 	ClientMessage,
-	ModelSourceStatus,
 	ProviderStatus,
 	UiModelConfigEntry,
 	UiModelCompat,
@@ -23,9 +21,8 @@ import type {
 import { useT } from "../i18n";
 
 interface ModelConfigModalProps {
-	sources?: ModelSourceStatus[];
 	send: (msg: ClientMessage) => boolean;
-	/** Custom providers from agentDir/models.json. */
+	/** Custom providers from agentDir/models.yml. */
 	providers: UiProviderConfig[];
 	/** Built-in providers with auth status (key-only config). */
 	providerStatus: ProviderStatus[];
@@ -155,7 +152,6 @@ export function ModelConfigModal({
 	send,
 	providers,
 	providerStatus,
-	sources = [],
 	fetchModelsResult,
 	refreshProviderResult,
 	cloneProviderResult,
@@ -318,7 +314,7 @@ export function ModelConfigModal({
 	};
 
 	/** Re-fetch the SAVED provider's model list server-side (credentials stay
-	 *  on the server) and merge into its models.json entry. */
+	 *  on the server) and merge into its models.yml entry. */
 	const refreshProvider = (providerId: string) => {
 		if (refreshing[providerId]) return;
 		const reqId = ++refreshReqId.current + Date.now();
@@ -409,12 +405,11 @@ export function ModelConfigModal({
 					<span role="status">{t("providerResults", { n: custom.length + builtin.length })}</span>
 				</div>}
 				<div className="model-modal-body">
-				{!editing && <ModelSources sources={sources} send={send} />}
 				{!editing ? (
 					<>
 						{custom.length + builtin.length === 0 && <p className="modal-desc">{t("providerNoResults")}</p>}
 						<div className="form-section-title">{t("customProviders")}</div>
-						<p className="modal-desc">{t("customDesc")} {t("modelDetachHint")}</p>
+						<p className="modal-desc">{t("customDesc")} {t("nativeModelConfigHint")}</p>
 						{custom.length === 0 && (
 							<div className="dd-loading">{t("noCustomProviders")}</div>
 						)}
@@ -484,9 +479,10 @@ export function ModelConfigModal({
 											<h3>{t("providerOtherActions")}</h3>
 											<div className="provider-actions">
 												<button type="button" className="btn sm" disabled={cloning !== null} onClick={() => cloneBuiltin(p)}><FiCopy /> {t(cloning === p.id ? "cloning" : "cloneProvider")}</button>
+												{p.configured && p.source === "oauth" && <button type="button" className="btn sm danger" onClick={() => send({ type: "logout_provider", provider: p.id })}>{t("providerLogout")}</button>}
 												{p.configured && p.source === "stored" && <>
 													<button type="button" className="btn sm danger" onClick={() => clearBuiltinKey(p.id)}><FiTrash2 /> {t("clearKey")}</button>
-													{p.oauth && <button type="button" className="btn sm danger" onClick={() => send({ type: "logout_provider", provider: p.id })}>{t("providerLogout")}</button>}
+
 												</>}
 											</div>
 										</div>
@@ -650,8 +646,9 @@ export function ModelConfigModal({
 									type="number"
 									value={m.maxTokens}
 									onChange={(e) => setModel(i, { maxTokens: e.target.value })}
-									placeholder={t("maxOutput")}
-									title="maxTokens"
+									placeholder={t("maxOutputDefault")}
+									title={t("maxOutputDefaultHint")}
+									aria-label={t("maxOutput")}
 								/>
 								<button
 									type="button"

@@ -1,0 +1,61 @@
+{
+  "status": "Targeted model and settings regression passed; full OMP migration remains incomplete",
+  "verifiedAt": "2026-11-15 10:36:04 UTC",
+  "platform": "darwin",
+  "arch": "arm64",
+  "omp": "18.20.0",
+  "bun": "1.4.4",
+  "fix": {
+    "symptom": "A local gateway advertised top-level context_window=32768, but discovery returned the OMP fallback 128000; display_name and modality aliases were also lost.",
+    "redCommand": "node tests/fetch-models-test.mjs",
+    "redResult": "AssertionError: 128000 !== 32768 after native OMP fixture startup migration",
+    "change": "Normalize validated context_window, display_name, modalities and supports_vision aliases into the native discovery envelope without overriding native fields.",
+    "nativeBehavior": "OMP owns defaults, output limits and reasoning. A bare reasoning:true for an unknown model does not synthesize a reasoning ladder."
+  },
+  "checks": {
+    "build": "passed",
+    "typecheck": "passed",
+    "unitFiles": 168,
+    "unitPassed": 1045,
+    "unitSkipped": 1,
+    "engineBoundarySources": 124,
+    "testEnvironmentScripts": 301,
+    "protocolVersion": 66,
+    "lockfile": "passed",
+    "diff": "passed"
+  },
+  "targetedSmoke": {
+    "passed": 5,
+    "total": 5,
+    "tests": [
+      "fetch-models-test",
+      "refresh-models-test",
+      "clear-provider-key-test",
+      "omp-model-catalog-test",
+      "omp-model-config-test"
+    ]
+  },
+  "settingsStandalone": {
+    "test": "settings-test",
+    "passed": 19,
+    "failed": 0
+  },
+  "coverage": [
+    "Real WebSocket transport and Bun OMP workers, private native configuration, bound dynamic ports and awaited fixture cleanup.",
+    "Directory metadata and native precedence, explicit output limits and native defaults, authentication, v1 fallback, invalid responses and correlated concurrent requests.",
+    "Refresh preserves manual fields, top-level configuration metadata and server-side credentials; appends newly discovered models.",
+    "Stored keys save and clear across restart, picker updates, idempotent clear, unrelated/env/config keys survive, no secret echoes.",
+    "Native directory and file extension discovery, display preferences round-trip and reconnect, legacy prompt overrides ignored, explicit reload discovers a new module while retaining preferences and session identity."
+  ],
+  "fullSmoke": {
+    "baseline": "omp-smoke-commands.json",
+    "repeated": false,
+    "passed": 76,
+    "total": 106
+  },
+  "limitations": [
+    "No current desktop package or Windows original-task verification.",
+    "Native Task internal storage protection and other host regressions remain open.",
+    "No release or publication."
+  ]
+}

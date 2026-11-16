@@ -16,6 +16,7 @@ executableName: pi
 extraMetadata:
   # electron-builder merges arrays by index, so [] would retain ./extensions.
   pi: null
+  omp: null
 
 directories:
   output: release
@@ -45,12 +46,18 @@ asar: false
 # The native SDK prompt references these assets. Dependency pruning removes
 # examples and README files, so copy the original resources explicitly.
 extraResources:
-  - from: node_modules/@earendil-works/pi-coding-agent/README.md
-    to: app/node_modules/@earendil-works/pi-coding-agent/README.md
-  - from: node_modules/@earendil-works/pi-coding-agent/docs
-    to: app/node_modules/@earendil-works/pi-coding-agent/docs
-  - from: node_modules/@earendil-works/pi-coding-agent/examples
-    to: app/node_modules/@earendil-works/pi-coding-agent/examples
+  # electron-builder drops .exe files from dependencies on macOS/Linux, even
+  # though Bun uses this filename on every platform. Copy the installed binary.
+  - from: node_modules/bun/bin/bun.exe
+    to: app/node_modules/bun/bin/bun.exe
+  - from: node_modules/@oh-my-pi/pi-coding-agent/README.md
+    to: app/node_modules/@oh-my-pi/pi-coding-agent/README.md
+  - from: node_modules/@oh-my-pi/pi-coding-agent/CHANGELOG.md
+    to: app/node_modules/@oh-my-pi/pi-coding-agent/CHANGELOG.md
+  - from: node_modules/@oh-my-pi/pi-coding-agent/src
+    to: app/node_modules/@oh-my-pi/pi-coding-agent/src
+  - from: node_modules/@oh-my-pi/pi-coding-agent/examples
+    to: app/node_modules/@oh-my-pi/pi-coding-agent/examples
 
 # 默认会把整个项目目录带上，这里去掉运行时用不到的部分（源码、测试、CI 配置）。
 # 生产依赖 node_modules 由 electron-builder 自己剪枝并始终包含，不用在这里列。
@@ -130,7 +137,7 @@ win:
     - target: portable
       arch:
         - x64
-    - target: zip       # 不需要 wine 就能在非 Windows 机器上交叉构建（已验证）；nsis/portable 需要真机 Windows 或装了 wine 的机器
+    - target: zip       # OMP/Bun 原生依赖要求在目标平台构建和验收
       arch:
         - x64
   icon: build/icon.ico

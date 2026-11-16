@@ -1,7 +1,8 @@
 import { WikiReadingOutline } from "../wiki-reading-outline";
 import { WelcomeMotto } from "./WelcomeMotto";
 import { WikiProjectPicker } from "./WikiProjectPicker";
-import type { WikiProjectReference } from "../types";
+import type { ClientMessage, UiOmpTask, WikiProjectReference } from "../types";
+import { OmpTasksPanel } from "./OmpTasksPanel";
 import { WikiAssistantWindow } from "./WikiAssistantWindow";
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { FiBookOpen, FiMessageSquare, FiX, FiPlus, FiClock, FiChevronDown, FiMinimize2 } from "react-icons/fi";
@@ -14,9 +15,10 @@ import { DesktopWindowControls } from "./DesktopWindowControls";
 import { WikiResizeHandle } from "./WikiResizeHandle";
 
 type Geometry = { x: number; y: number; width: number; height: number };
-export function WikiWindowShell({ documentPath, loading = false, chatOpen, chatWidth, onChatOpen, onChatResize, onClose, chatHost, notices, children, cwd, conversationId, references = [], onReferences, onChatAction, empty, currentIncluded = true, project, onProject }: {
+export function WikiWindowShell({ documentPath, loading = false, navigationPending = false, chatOpen, chatWidth, onChatOpen, onChatResize, onClose, chatHost, notices, children, cwd, conversationId, references = [], onReferences, onChatAction, empty, currentIncluded = true, project, onProject, ompTasks, taskSend }: {
+	ompTasks?: UiOmpTask[]; taskSend?: (message: ClientMessage) => boolean;
 	project?: WikiProjectReference | null; onProject?: (project: WikiProjectReference | null) => void;
-	documentPath: string; loading?: boolean; chatOpen: boolean; chatWidth: number;
+	documentPath: string; loading?: boolean; navigationPending?: boolean; chatOpen: boolean; chatWidth: number;
 	onChatOpen: (open: boolean) => void; onChatResize: (width: number) => void; onClose: () => void;
 	chatHost: (node: HTMLDivElement | null) => void; notices?: ReactNode; children: ReactNode;
 	cwd?: string; conversationId?: string; references?: string[]; onReferences?: (paths: string[]) => Promise<void>;
@@ -64,7 +66,10 @@ export function WikiWindowShell({ documentPath, loading = false, chatOpen, chatW
 		event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId);
 		drag.current = { x: event.clientX, y: event.clientY, geometry, resize };
 	};
-	useEffect(() => { setSheet(null); }, [documentPath, conversationId]);
+	useEffect(() => {
+		setSheet(null);
+		if (panel.current) window.dispatchEvent(new CustomEvent("pi:chat-surface-moving", { detail: panel.current }));
+	}, [documentPath, conversationId]);
 	const documentName = documentPath.split("/").at(-1) || t("wikiChooseDocuments");
 	const detached = !!desktopAPI && !docked && chatOpen;
 	const float = !docked && (!narrow || !!desktopAPI);
@@ -78,7 +83,7 @@ export function WikiWindowShell({ documentPath, loading = false, chatOpen, chatW
 			<div id="wiki-modal-toolbar">{loading && <span className="wiki-breadcrumb">{documentName}</span>}</div>
 			<button className="wiki-agent-toggle" aria-label={t("richToc")} title={t("richToc")} aria-pressed={!(chatOpen && docked)} disabled={loading} onClick={() => { if (docked || narrow) onChatOpen(false); setMobileOutlineOpen(open => !open); }}><LuTableOfContents /></button>
 			<button className="wiki-agent-toggle wiki-ask-toggle" aria-label={t("wikiAskPi")} title={t("wikiAskPi")} aria-expanded={chatOpen} disabled={loading} onClick={() => { onChatOpen(!chatOpen); setMobileOutlineOpen(false); }}><FiMessageSquare /><span>{t("wikiAskPi")}</span></button>
-			{!desktopAPI && <button className="wiki-window-close" aria-label={t("wikiExitMode")} title={t("wikiExitMode")} onClick={onClose}><FiX /></button>}
+			{!desktopAPI && <button className="wiki-window-close" aria-label={t("wikiExitMode")} title={t("wikiExitMode")} disabled={navigationPending} onClick={onClose}><FiX /></button>}
 			<DesktopWindowControls />
 		</header>
 		<div ref={body} className="wiki-modal-body wiki-window-body" style={{ "--wiki-chat-width": `${chatWidth}px` } as CSSProperties}>
@@ -101,6 +106,10 @@ export function WikiWindowShell({ documentPath, loading = false, chatOpen, chatW
 				{empty && <div className="wiki-assistant-welcome wiki-analysis-welcome">
 					<WelcomeMotto plain />
 				</div>}
+				{chatOpen && conversationId && taskSend && !!ompTasks?.length && <details className="wiki-assistant-tasks" key={`${documentPath}:${conversationId}`}>
+					<summary>{t("ompTasks")} · {ompTasks.length}</summary>
+					<OmpTasksPanel tasks={ompTasks} conversationId={conversationId} send={taskSend} heading={false} />
+				</details>}
 
 				<div id="wiki-panel-chat" className="wiki-agent-host" ref={chatHost} />
 				{float && <button className="wiki-assistant-resize" aria-label={t("dragToResize")} onPointerDown={event => start(event, true)} onPointerMove={move} onPointerUp={finish} onPointerCancel={finish} onKeyDown={event => { if (!geometry || !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return; event.preventDefault(); setGeometry(clamp({ ...geometry, width: geometry.width + (event.key === "ArrowRight" ? 20 : event.key === "ArrowLeft" ? -20 : 0), height: geometry.height + (event.key === "ArrowDown" ? 20 : event.key === "ArrowUp" ? -20 : 0) })); }}>⌟</button>}

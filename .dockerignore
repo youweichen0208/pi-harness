@@ -7,6 +7,14 @@ release/
 .pi/
 .pi-web/
 .pi-subagents/
+.omp/
+.claude/
+.agents/
+.codex/
+.scratch/
+.context-eval/
+.playwright-mcp/
+.npmrc
 Claude outputs/
 .env
 .env.*
@@ -14,7 +22,7 @@ Claude outputs/
 *.tgz
 .DS_Store
 
-# Docker build only needs package files, server/, web/, and tsconfig.server.json
+# Docker build needs package files, server/, web/, scripts/ and TS configs.
 tests/
 dev/
 docs/

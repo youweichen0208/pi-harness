@@ -1,0 +1,83 @@
+{
+  "date": "2026-11-16",
+  "scope": "Native model configuration through real main/Wiki host WebSocket and browser; retained model-sources-protocol smoke entry",
+  "status": "Targeted verification passed; full migration remains active",
+  "runtime": {
+    "platform": "macOS arm64",
+    "node": "v26.0.0",
+    "omp": "18.20.0",
+    "bun": "1.4.4",
+    "protocol": 74
+  },
+  "changes": [
+    "Replace old cross-client Pi source-sync assertions with native models.yml configuration and no automatic external imports.",
+    "Verify credentials and gateway remain unchanged across a held streamed tool turn; only the next explicit request observes the shared update.",
+    "Verify main/Wiki history isolation, native default, explicit 128000 and clearing override, busy rejection, invalid configuration rollback, host restart and secret non-disclosure.",
+    "Correct model management Chinese/English copy that still advertised retired Pi models.json and Restore sync; remove unused source prop.",
+    "Browser save/reopen/default round-trip, native key stays blank, narrow viewport and English reload; subsequent explicit model request checks saved browser config.",
+    "Add browser mode to existing macOS/Windows CI job."
+  ],
+  "verification": {
+    "isolatedCandidate": "/var/folders/41/07yyp3_12jddkkthmflqkbgw0000gn/T/omp-model-host-g3whyqo4",
+    "sourceFilesCompared": 957,
+    "sourceFingerprintSha256": "c1409d5693c67ec479f932578a929c21372133c8e2ddbe2a77999dd074e9bf73",
+    "build": {
+      "full": "PASS, session 4417; /tmp/omp-model-host-build.log",
+      "finalWeb": "PASS, session 9639; /tmp/omp-model-host-web.log"
+    },
+    "typecheck": "PASS, final session 6835; /tmp/omp-model-host-types-final.log",
+    "unit": "PASS, session 95574: 171 files, 1060 passed, 1 skipped; /tmp/omp-model-host-units.log",
+    "hostAndBrowser": "PASS, session 27563; /tmp/omp-model-host-final.log; 7 explicit/real-tool model requests before browser, 0 during configuration/UI actions, 1 explicit request after browser saves",
+    "related": [
+      "omp-model-config-test.mjs PASS",
+      "clear-provider-key-test.mjs PASS",
+      "refresh-models-test.mjs PASS",
+      "stale-model-selection-test.mjs PASS",
+      "omp-model-catalog-test.mjs PASS"
+    ],
+    "relatedLogs": [
+      "/tmp/omp-model-host-related.log",
+      "/tmp/omp-model-host-catalog.log"
+    ],
+    "checks": [
+      "protocol v74 sync",
+      "308 test environments",
+      "129 production source dependencies and emitted output",
+      "design tokens (npm test)",
+      "CI YAML parsed with bundled Bun",
+      "git diff --check"
+    ],
+    "screenshots": [
+      "tests/scratch/omp-model-config.png",
+      "tests/scratch/omp-model-config-narrow.png",
+      "tests/scratch/omp-model-config-en.png"
+    ]
+  },
+  "failedAttemptsResolved": [
+    "Initial build was accidentally invoked in /tmp and exited 254 before building; corrected to isolated candidate, never wrote checkout dist.",
+    "Initial fixture expected no query string, but native Anthropic adds beta=true. Final test compares exact in-flight URL and checks the expected gateway pathname.",
+    "Browser interception produced no received frames; passive native WebSocket observation plus an actual ready barrier passed. Test also reopens the modal after save as the existing UI closes it.",
+    "Narrow-screen model text is hidden; use its visible parent button instead of clicking the hidden span.",
+    "Related batch attempted retired model-config-preservation-test.mjs and got MODULE_NOT_FOUND (4/5 passed in that batch). Its native replacement omp-model-catalog-test.mjs passed separately; no missing test claimed as a pass."
+  ],
+  "fullSmoke": {
+    "lastComplete": "102/110 passed; docs/review-data/omp-smoke-ask.json",
+    "currentManifest": 112,
+    "rerun": false,
+    "note": "Targeted passes do not revise the historical complete run."
+  },
+  "remaining": [
+    "Legacy component-updates and extensions host regression migration",
+    "Native Task internal storage guard and other documented migration gaps",
+    "Remaining old desktop history cleanup",
+    "Windows original task and representative task repeated acceptance",
+    "Current cross-platform packaged application acceptance"
+  ],
+  "operations": {
+    "runningApplicationReplaced": false,
+    "checkoutDistWritten": false,
+    "published": false,
+    "sdkModified": false,
+    "isolatedCandidateRemovedAfterAllHandlesExited": true
+  }
+}

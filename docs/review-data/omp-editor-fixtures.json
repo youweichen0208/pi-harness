@@ -1,0 +1,77 @@
+{
+  "status": "Editor and SSH fixtures now prepare locked dependencies offline; protocol and browser checks passed",
+  "platform": "darwin-arm64",
+  "protocol": 78,
+  "source": {
+    "candidate": "/var/folders/41/07yyp3_12jddkkthmflqkbgw0000gn/T/omp-task-output-build-n_s9wvsx",
+    "filesCompared": 1347,
+    "fingerprintSha256": "8eabb96528defc904fa8417cb0702f56b43dab651e8ef314ca722d0d8c7d03d7",
+    "fingerprintMethod": "sha256 of ordered path, NUL, binary sha256(file) tuples",
+    "docsExcluded": true,
+    "differencesFromCurrentRoot": [],
+    "missingFromCandidate": []
+  },
+  "originalFailure": {
+    "log": {
+      "path": "/tmp/omp-full-final-v78-smoke.log",
+      "exitCode": 1,
+      "sha256": "d597fee7486ae760b62766f216328d688666e4ccf46f17479f658f4348c4d791"
+    },
+    "test": "vscode-editor-plugin-test",
+    "result": "All 18 feature checks printed success, then rmSync failed ENOTEMPTY.",
+    "leftovers": [
+      "plugins/vscode-editor/package.json",
+      "plugins/vscode-editor/package-lock.json",
+      "plugins/vscode-editor/node_modules/ssh2"
+    ],
+    "diagnosis": "The fixture omitted ssh2 preparation; native plugin warmup falls back to npm install ssh2@latest. Leftovers match that installer. The full installer/shutdown timing was not instrumented, so no production cancellation fix is claimed."
+  },
+  "changes": [
+    "Shared mock SSH helper copies ssh2 and its required dependency subset from the installed repository dependency tree; missing packages fail instead of invoking npm/latest.",
+    "Editor fixture uses isolated OMP config with skills and cache warming off and asserts dependency-ready/not-installing before protocol operations. Cleanup errors remain fatal.",
+    "SSH browser fixture uses current accessible tab selection, isolated OMP model/config, occupied-port refusal, health PID verification, browser cleanup on failure and awaited owned-server exit before data removal."
+  ],
+  "verification": {
+    "editorProtocol": {
+      "path": "/tmp/omp-editor-plugin-offline.log",
+      "exitCode": 0,
+      "sha256": "29fe52fd60cef5084f483e523b6a881be644806e5a02ed51cfd42e5e832b8f0f"
+    },
+    "sshProtocol": {
+      "path": "/tmp/omp-editor-plugin-ssh.log",
+      "exitCode": 0,
+      "sha256": "6e597d4d5953946f9ff3677b3a1090b948c6b66d6399d562b96529b5b90c8de6"
+    },
+    "sshBrowser": {
+      "path": "/tmp/omp-editor-plugin-browser-omp.log",
+      "exitCode": 0,
+      "sha256": "9675afcab0a95ac69df82a41c80a1ea6cd09b2915fa3840d78cf8ab8e5083c65"
+    }
+  },
+  "intermediateFailures": [
+    "Old browser selector button.plugin-tab no longer exists; current UI exposes a tab role.",
+    "After selector correction, first-run setup blocked the fixture because it had no OMP model config; supplied a loopback unreachable fixture model without making inference requests.",
+    "Mock SSH close() is synchronous, not a Node server callback API. An attempted callback wait caused unsettled top-level await; corrected to the helper public contract."
+  ],
+  "limitations": [
+    "Fixture isolation only; the development plugin automatic installer cancellation on application exit remains a separate lifecycle concern, not a completed runtime fix.",
+    "No Windows/current packaged acceptance; full 120-entry suite not rerun."
+  ],
+  "operations": {
+    "candidateRemoved": true,
+    "rootDist": "Not overwritten",
+    "userProcessesPreserved": [
+      23786,
+      62015
+    ],
+    "release": "No commit, push, publish or installed-app replacement",
+    "allVerificationHandlesTerminal": true
+  },
+  "checks": [
+    "Protocol sync 78",
+    "317 isolated test scripts",
+    "CI/release YAML parsed with Bun",
+    "Evidence JSON parsed",
+    "git diff --check"
+  ]
+}

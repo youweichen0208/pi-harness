@@ -1,7 +1,7 @@
 # pi-harness systemd unit — Linux auto-start on boot.
 #
 # Install (adjust User/WorkingDirectory/Environment to taste):
-#   sudo npm i -g pi-harness
+#   sudo npm i -g @youweichen/pi-harness
 #   sudo cp deploy/pi-harness.service /etc/systemd/system/
 #   sudo systemctl daemon-reload
 #   sudo systemctl enable --now pi-harness
@@ -10,7 +10,7 @@
 # Logs: journalctl -u pi-harness -f
 
 [Unit]
-Description=pi-harness — web chat for the pi coding agent
+Description=pi-harness — web chat for Oh My Pi (OMP)
 After=network.target
 
 [Service]
@@ -20,8 +20,8 @@ User=YOUR_USER
 # The workspace the agent operates in (read/edit/bash/write)
 WorkingDirectory=/home/YOUR_USER
 Environment=PORT=8787
-# Point at your pi config dir if it's not the default ~/.pi/agent
-#Environment=PI_CODING_AGENT_DIR=/home/YOUR_USER/.pi/agent
+# Application data; OMP configuration is stored in <data-dir>/omp/agent.
+#Environment=PI_WEB_DATA_DIR=/home/YOUR_USER/.pi-web
 ExecStart=/usr/bin/pi-harness
 Restart=on-failure
 RestartSec=5

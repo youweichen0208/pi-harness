@@ -9,6 +9,7 @@ import { Dropdown, DropdownItem } from "./Dropdown";
 import { FiArrowUp, FiClock, FiCpu, FiPlus } from "react-icons/fi";
 import { WelcomeMotto } from "./WelcomeMotto";
 import { CopyButton } from "./copy-button";
+import { RecoveryStatus } from "./RecoveryStatus";
 
 const emptyMap = new Map();
 function ChatMessage({ message, streaming = false }: { message: UiMessage; streaming?: boolean }) {
@@ -71,8 +72,9 @@ export function PlaygroundChat({ context, apply }: { context: PlaygroundChatCont
 				<button className="btn" onClick={() => setDismissed(items => [...items, p.id])}>{t("pgChatIgnore")}</button>
 			</article>)}
 		</div>
+		<RecoveryStatus connected={connected} state={state ? { conversationId: state.id, isStreaming: state.running, recovery: state.recovery, sessionPersistence: state.sessionPersistence } : null} send={message => { playgroundChatRequest(message.type === "cancel_recovery" ? "cancel_recovery" : "reopen", { conversationId: message.conversationId, ...(message.type === "cancel_recovery" ? { operationId: message.operationId } : {}) }); return connected; }} />
 		{(error || state?.error || applyError) && <p role="alert">{applyError ? t("pgChatStaleProposal") : error === "pgChatUnconfirmed" ? t("pgChatUnconfirmed") : error === "Error: pgChatModelUnavailable" ? t("pgChatModelUnavailable") : error || state?.error}</p>}
-		{state && !modelReady && <p role="status">{t("pgChatModelUnavailable")}</p>}
+		{state && !modelReady && !state.sessionPersistence?.failed && <p role="status">{t("pgChatModelUnavailable")}</p>}
 		<div className="inputbar pg-chat-inputbar"><div className={`inputbox ${draft ? "has-draft" : ""}`}>
 		<div className="pg-chat-references">
 			<details><summary>@{t("pgChatCode")}</summary><pre>{context.code}</pre></details>
@@ -84,7 +86,7 @@ export function PlaygroundChat({ context, apply }: { context: PlaygroundChatCont
 			<div className="input-tools-left">
 			{modelSelect}
 			</div><div className="input-tools-right"><div className="inputbox-actions">
-			{state?.running ? <button className="btn composer-action stop" title={t("playgroundStop")} aria-label={t("playgroundStop")} disabled={!connected} onClick={() => playgroundChatRequest("stop")}><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="3" /></svg></button> : <button className="btn composer-action send" title={t("pgChatSend")} aria-label={t("pgChatSend")} disabled={locked || !modelReady || !draft.trim()} onClick={() => sendPlaygroundQuestion(context)}><FiArrowUp strokeWidth={3} aria-hidden="true" /></button>}
+			{state?.running ? <button className="btn composer-action stop" title={t("playgroundStop")} aria-label={t("playgroundStop")} disabled={!connected} onClick={() => playgroundChatRequest("stop")}><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="3" /></svg></button> : <button className="btn composer-action send" title={t("pgChatSend")} aria-label={t("pgChatSend")} disabled={locked || !modelReady || !!state?.sessionPersistence?.failed || !draft.trim()} onClick={() => sendPlaygroundQuestion(context)}><FiArrowUp strokeWidth={3} aria-hidden="true" /></button>}
 			</div></div>
 		</div>
 		</div></div>

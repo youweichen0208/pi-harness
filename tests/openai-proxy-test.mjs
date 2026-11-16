@@ -1,4 +1,4 @@
-/** Local CONNECT/TLS/WebSocket fixtures; no real credentials or external API calls. */
+/** Host transport CONNECT/TLS/WebSocket fixtures, not OMP worker/provider acceptance. */
 import assert from "node:assert/strict";
 import { createServer as httpServer } from "node:http";
 import { createServer as httpsServer } from "node:https";
@@ -17,23 +17,22 @@ if (process.argv[2] === "--network-child") {
 	const settings = new OpenAIProxySettings(process.argv[3]);
 	settings.install();
 	assert.equal(await (await fetch("https://api.openai.com/v1/responses")).text(), "fixture stream");
-	const { openaiCodexOAuth } = await import("../node_modules/@earendil-works/pi-ai/dist/auth/oauth/openai-codex.js");
-	const credential = await openaiCodexOAuth.refresh({ type: "oauth", access: "old", refresh: "fixture", expires: 0 }, new AbortController().signal);
-	assert.equal(credential.accountId, "fixture-account");
+	const credential = await (await fetch("https://auth.openai.com/oauth/token", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ grant_type: "refresh_token", refresh_token: "fixture" }) })).json();
+	assert.equal(credential.refresh_token, "fixture");
+	assert.equal(typeof credential.access_token, "string");
 	const socket = new WebSocket("wss://chatgpt.com/backend-api/codex/responses");
 	await new Promise((resolve, reject) => {
 		socket.addEventListener("message", event => { assert.equal(event.data, "fixture websocket"); socket.close(); resolve(); }, { once: true });
 		socket.addEventListener("error", reject, { once: true });
 	});
 	assert.equal(await (await fetch(`http://127.0.0.1:${process.argv[4]}`)).text(), "direct");
-	console.log("PASS proxy HTTP, SDK OAuth refresh, WebSocket and loopback bypass");
+	console.log("PASS host proxy HTTP, token endpoint, WebSocket and loopback bypass (OMP worker integration remains separate)");
 } else {
 	const directory = mkdtempSync(join(tmpdir(), "openai-proxy-"));
-	const data = join(directory, "data"), agent = join(directory, "agent");
-	mkdirSync(agent); mkdirSync(data);
-	writeFileSync(join(agent, "models.json"), JSON.stringify({ providers: { fixture: { api: "openai-completions", baseUrl: "http://127.0.0.1:9/v1", apiKey: "fixture", models: [{ id: "fixture", name: "Fixture", contextWindow: 32000, maxTokens: 4096 }] } } }));
-	writeFileSync(join(agent, "settings.json"), JSON.stringify({ defaultProvider: "fixture", defaultModel: "fixture" }));
-	writeFileSync(join(agent, "auth.json"), JSON.stringify({ fixture: { type: "api_key", key: "fixture" } }));
+	const data = join(directory, "data"), agent = join(data, "omp", "agent");
+	mkdirSync(agent, { recursive: true });
+	writeFileSync(join(agent, "models.yml"), JSON.stringify({ providers: { fixture: { api: "openai-completions", baseUrl: "http://127.0.0.1:9/v1", apiKey: "fixture", models: [{ id: "fixture", name: "Fixture", contextWindow: 32000, maxTokens: 4096 }] } } }));
+	writeFileSync(join(agent, "config.yml"), JSON.stringify({ defaultProvider: "fixture", defaultModel: "fixture", skills: { enabled: false }, retry: { enabled: false }, cacheWarming: { enabled: false } }));
 	const cert = resolve("tests/fixtures/openai-proxy/cert.pem"), key = resolve("tests/fixtures/openai-proxy/key.pem");
 	const hits = [], tunnels = [], sockets = new Set();
 	let tlsPort, proxyPort, directPort;
@@ -57,7 +56,7 @@ if (process.argv[2] === "--network-child") {
 	});
 	const direct = httpServer((_req, res) => res.end("direct"));
 	let server, browser;
-	const env = { PI_WEB_TOKEN: "fixture-token", PI_WEB_CWD: directory, PI_WEB_DATA_DIR: data, PI_CODING_AGENT_DIR: agent };
+	const env = { PI_WEB_TOKEN: "fixture-token", PI_WEB_CWD: directory, PI_WEB_DATA_DIR: data };
 	const start = async () => { server = await startIsolatedHarness({ env }); };
 	const stop = async () => { await server?.stop(); };
 	const request = (body, headers = {}) => fetch(`http://127.0.0.1:${server.port}/api/openai-proxy`, { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer fixture-token", ...headers }, body: JSON.stringify(body) });
@@ -88,7 +87,7 @@ if (process.argv[2] === "--network-child") {
 			await page.goto(`http://127.0.0.1:${server.port}/?token=fixture-token`);
 			await page.locator(".conn-dot.ok").first().waitFor({ state: "attached" });
 			await page.locator(".chip-model:visible").first().click();
-			await page.getByRole("button", { name: "管理模型（新增 / 修改）", exact: true }).click();
+			await page.getByRole("button", { name: "管理模型", exact: true }).click();
 			const panel = page.locator(".openai-proxy-settings");
 			await panel.waitFor({ timeout: 5000 });
 			await panel.locator("summary").click();
@@ -101,7 +100,7 @@ if (process.argv[2] === "--network-child") {
 		await request({ action: "save", version: state.version, config: { enabled: false, url: "" } });
 		await stop(); await start();
 		assert.equal((await (await request({ action: "get" })).json()).enabled, false);
-		console.log("PASS OpenAI proxy: default off, validation/auth/origin, persistence/restart, CONNECT, OAuth and WebSocket");
+		console.log("PASS OpenAI proxy: default off, validation/auth/origin, persistence/restart, CONNECT, token endpoint and WebSocket");
 	} finally {
 		await browser?.close(); await stop();
 		for (const socket of sockets) socket.destroy();

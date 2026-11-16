@@ -1,0 +1,464 @@
+{
+  "status": "Current macOS arm64 DMG/ZIP built and locally verified; full OMP migration incomplete",
+  "checkedAt": "2026-11-16T05:06:30.440596+00:00",
+  "runtime": {
+    "node": "v24.18.0",
+    "electron": "41.10.7",
+    "platform": "darwin",
+    "arch": "arm64",
+    "omp": "18.20.0",
+    "bun": "1.4.4",
+    "protocol": 78,
+    "buildAndOuterTestNode": "26.0.0"
+  },
+  "source": {
+    "candidate": "/private/var/folders/41/07yyp3_12jddkkthmflqkbgw0000gn/T/omp-desktop-current-g7xqh5e6",
+    "sourceInputsCompared": 673,
+    "sourceFingerprintSha256": "ff90d1d9072367ccdc8639cce49b751a2b09458ee3ebe207e850fa2a5a5f258c",
+    "method": "ordered path, NUL, binary sha256(file) tuples; docs, tests and workflow files excluded",
+    "runtimeSourceDifferences": [],
+    "nonRuntimeFollowupDifferences": [
+      ".github/workflows/release-desktop.yml",
+      "tests/diagnostics/omp-mcp-auth-conflict-probe.mjs",
+      "tests/fixtures/omp-task-compaction.mjs",
+      "tests/omp-mcp-auth-reconnect-test.mjs",
+      "tests/omp-mcp-browser-test.mjs",
+      "tests/omp-task-compaction-test.mjs"
+    ],
+    "installedCompiledFilesCompared": 413,
+    "compiledFingerprintSha256": "187a977eb21837e96a26cc08fed9ab507a472820baca76004bdce8fe635ce468",
+    "installedCompiledDifferences": []
+  },
+  "artifacts": [
+    {
+      "path": "/Users/youweichen/projects/pi-harness/release/omp-migration-macos-arm64-g7xqh5e6/pi-1.34.2-omp-test-mac-arm64.dmg",
+      "file": "pi-1.34.2-omp-test-mac-arm64.dmg",
+      "sha256": "464b6af9233a5efaab589ac540ca6a3021161d4edacdcd37b644ac4404950a45",
+      "bytes": 280871119
+    },
+    {
+      "path": "/Users/youweichen/projects/pi-harness/release/omp-migration-macos-arm64-g7xqh5e6/pi-1.34.2-omp-test-mac-arm64.zip",
+      "file": "pi-1.34.2-omp-test-mac-arm64.zip",
+      "sha256": "8c2f2859c32dd5a369b688281788158e183cc90226181064bb27451de16ae237",
+      "bytes": 291755508
+    }
+  ],
+  "verification": {
+    "sourceBuild": {
+      "path": "/tmp/omp-desktop-current-build.log",
+      "exitCode": 0,
+      "sha256": "dadf101151f1db3b78c6b54b901d0ab9e87757bce33b6bfc9e82909d3f452eef"
+    },
+    "electronBuild": {
+      "path": "/tmp/omp-desktop-current-package.log",
+      "exitCode": 0,
+      "sha256": "8022af10346d2959a1a342c592865cdeeba0e415331bb60062d3f94943778bf1"
+    },
+    "packagedGateBatch": [
+      {
+        "test": "tests/packaged-server-start-test.mjs",
+        "exitCode": 0,
+        "seconds": 15.53,
+        "log": "/tmp/omp-desktop-current-packaged-server-start-test.log",
+        "sha256": "286f19203cfb097d9b100f6e9d30fead30775016098282b3edbb5b4cf4cd5782"
+      },
+      {
+        "test": "tests/packaged-jdbc-test.mjs",
+        "exitCode": 0,
+        "seconds": 1.06,
+        "log": "/tmp/omp-desktop-current-packaged-jdbc-test.log",
+        "sha256": "e757efd679b2e4ae368e066a03747b2727cdd05d184bff87916bdbfe54809ef3"
+      },
+      {
+        "test": "tests/omp-runtime-test.mjs",
+        "exitCode": 0,
+        "seconds": 18.72,
+        "log": "/tmp/omp-desktop-current-omp-runtime-test.log",
+        "sha256": "31f9f139f2ef6a0aa48480a7ed932239e1a7d3348d422801d7216541ae2a5888"
+      },
+      {
+        "test": "tests/omp-model-config-test.mjs",
+        "exitCode": 0,
+        "seconds": 12.49,
+        "log": "/tmp/omp-desktop-current-omp-model-config-test.log",
+        "sha256": "94a65bec8ef88f0de505e60bf72fe1a4a4d38a4a812a7f74967d7b97169241c8"
+      },
+      {
+        "test": "tests/omp-model-catalog-test.mjs",
+        "exitCode": 0,
+        "seconds": 12.3,
+        "log": "/tmp/omp-desktop-current-omp-model-catalog-test.log",
+        "sha256": "9d8035b0724ec753b1678f438abc4565fb1c51b483851d4d78768b0c7b23cfa7"
+      },
+      {
+        "test": "tests/omp-skill-settings-test.mjs",
+        "exitCode": 0,
+        "seconds": 14.69,
+        "log": "/tmp/omp-desktop-current-omp-skill-settings-test.log",
+        "sha256": "6e0074f8f63402e1257bc7afe3e224ab3352df6e66870c1a5d2b84f86b752b91"
+      },
+      {
+        "test": "tests/omp-extension-settings-test.mjs",
+        "exitCode": 0,
+        "seconds": 13.91,
+        "log": "/tmp/omp-desktop-current-omp-extension-settings-test.log",
+        "sha256": "ca821f5d65710f101335918d57147027b49f60c41593f6b90fc33d1f7e5d65ed"
+      },
+      {
+        "test": "tests/omp-packages-test.mjs",
+        "exitCode": 0,
+        "seconds": 8.88,
+        "log": "/tmp/omp-desktop-current-omp-packages-test.log",
+        "sha256": "4295b7def103a683f1f61254b2d5cb4c0c8ada5c41a3885ffaa2d41b9d8a3075"
+      },
+      {
+        "test": "tests/omp-marketplace-test.mjs",
+        "exitCode": 0,
+        "seconds": 15.01,
+        "log": "/tmp/omp-desktop-current-omp-marketplace-test.log",
+        "sha256": "5010ed0a37f8eb0df4823613e33b8f9c69bae7506e129a1d09c2d455de0bf2ca"
+      },
+      {
+        "test": "tests/omp-package-features-test.mjs",
+        "exitCode": 0,
+        "seconds": 13.08,
+        "log": "/tmp/omp-desktop-current-omp-package-features-test.log",
+        "sha256": "6859d126317e8b9744828eb78ae830040037655903b510afc519d864bff0a9e7"
+      },
+      {
+        "test": "tests/omp-package-settings-test.mjs",
+        "exitCode": 0,
+        "seconds": 9.56,
+        "log": "/tmp/omp-desktop-current-omp-package-settings-test.log",
+        "sha256": "18ef915c2169fc58b3ae84a86c9cf65075ed4680234b583327c8ee3769d1c490"
+      },
+      {
+        "test": "tests/omp-mcp-test.mjs",
+        "exitCode": 0,
+        "seconds": 13.12,
+        "log": "/tmp/omp-desktop-current-omp-mcp-test.log",
+        "sha256": "daaf5fe4b3b274704752ccfdcaa2b6b95f2dfcbe9a78fa799e454a4e08eeb105"
+      },
+      {
+        "test": "tests/omp-mcp-auth-test.mjs",
+        "exitCode": 0,
+        "seconds": 13.4,
+        "log": "/tmp/omp-desktop-current-omp-mcp-auth-test.log",
+        "sha256": "020800299adb0469555f614badcdd725f18cbf736de55f515f190f2f77245eaf"
+      },
+      {
+        "test": "tests/omp-stop-metadata-test.mjs",
+        "exitCode": 0,
+        "seconds": 34.81,
+        "log": "/tmp/omp-desktop-current-omp-stop-metadata-test.log",
+        "sha256": "eed5b511b09bc7121a3d17a4bbd03bfdbe8a18d9899e35b66d85788eba122e56"
+      },
+      {
+        "test": "tests/omp-prompt-test.mjs",
+        "exitCode": 0,
+        "seconds": 13.93,
+        "log": "/tmp/omp-desktop-current-omp-prompt-test.log",
+        "sha256": "2b230d6c2bda05b2d7ed5b0bb0e9217a36f6d455645fca17ec4d41c0f6eb415a"
+      },
+      {
+        "test": "tests/omp-tasks-test.mjs",
+        "exitCode": 0,
+        "seconds": 15.67,
+        "log": "/tmp/omp-desktop-current-omp-tasks-test.log",
+        "sha256": "ba9c000be40c7bbe03bce50dcd72aa762f9a2a981da32d91052df3a35ff67d1c"
+      },
+      {
+        "test": "tests/omp-request-diagnostics-test.mjs",
+        "exitCode": 0,
+        "seconds": 16.41,
+        "log": "/tmp/omp-desktop-current-omp-request-diagnostics-test.log",
+        "sha256": "0616c4144696582cb91467155706be9ee1805d1b3e6d13787f7a8594350a1e2e"
+      },
+      {
+        "test": "tests/omp-task-output-test.mjs",
+        "exitCode": 0,
+        "seconds": 25.01,
+        "log": "/tmp/omp-desktop-current-omp-task-output-test.log",
+        "sha256": "5929f20a58eb58fb435b06c97e8024430748ab038c213282751f8f683bcff509"
+      },
+      {
+        "test": "tests/omp-task-compaction-test.mjs",
+        "exitCode": 0,
+        "seconds": 20.45,
+        "log": "/tmp/omp-desktop-current-omp-task-compaction-test.log",
+        "sha256": "fdd8c76b1c01ae1169b471c92856d795ccb2d90f2b6b4598352494760b84d238"
+      },
+      {
+        "test": "tests/omp-mcp-diagnostics-test.mjs",
+        "exitCode": 0,
+        "seconds": 13.0,
+        "log": "/tmp/omp-desktop-current-omp-mcp-diagnostics-test.log",
+        "sha256": "004d6aa1b0df69fe8922546886403634ffe67a98c65c8201efaeb4a7755370e9"
+      },
+      {
+        "test": "tests/reasoning-repetition-test.mjs",
+        "exitCode": 0,
+        "seconds": 36.03,
+        "log": "/tmp/omp-desktop-current-reasoning-repetition-test.log",
+        "sha256": "c898ad4a2f63e63ef9b9acc6e588f5aeb90398a289cfe7655eba1a6f0a135add"
+      },
+      {
+        "test": "tests/omp-recovery-test.mjs",
+        "exitCode": 0,
+        "seconds": 13.08,
+        "log": "/tmp/omp-desktop-current-omp-recovery-test.log",
+        "sha256": "3b6bb77b6326dcf2453e0443d66d394003184219021a51f149eb9e6dfb29db0c"
+      },
+      {
+        "test": "tests/omp-restricted-recovery-test.mjs",
+        "exitCode": 0,
+        "seconds": 9.27,
+        "log": "/tmp/omp-desktop-current-omp-restricted-recovery-test.log",
+        "sha256": "d7c3f5fab9ab2684ce5029d502dd9edcedc15f867a16e50e36d023b9dedbd61d"
+      },
+      {
+        "test": "tests/playground-drain-test.mjs",
+        "exitCode": 0,
+        "seconds": 5.54,
+        "log": "/tmp/omp-desktop-current-playground-drain-test.log",
+        "sha256": "888766e189cdb36e6f75d7979fc200fe5882eb68ed0c0f3c69c5f3084d1a0309"
+      },
+      {
+        "test": "tests/omp-persistence-test.mjs",
+        "exitCode": 0,
+        "seconds": 15.44,
+        "log": "/tmp/omp-desktop-current-omp-persistence-test.log",
+        "sha256": "03fab6b9624d71f02ec54fbe76503d58d2bdee511baa8c04ceb44c9379852ca2"
+      },
+      {
+        "test": "tests/omp-persistence-restart-test.mjs",
+        "exitCode": 0,
+        "seconds": 19.07,
+        "log": "/tmp/omp-desktop-current-omp-persistence-restart-test.log",
+        "sha256": "dc967e0971c33fc2a48cf544e3e0c236b03080b55e7cdbb4ae5ea452cc33edca"
+      },
+      {
+        "test": "tests/omp-external-history-test.mjs",
+        "exitCode": 0,
+        "seconds": 19.98,
+        "log": "/tmp/omp-desktop-current-omp-external-history-test.log",
+        "sha256": "0f8e6f9b503b448dfba6f08d483b3918ffc22eae594ff43b4543c3027787ce34"
+      },
+      {
+        "test": "tests/omp-session-storage-test.mjs",
+        "exitCode": 0,
+        "seconds": 0.5,
+        "log": "/tmp/omp-desktop-current-omp-session-storage-test.log",
+        "sha256": "c1ffd4925acb4d18d1377d63d8b75994960188b8cdc87eefabd8724db50e3025"
+      },
+      {
+        "test": "tests/omp-skill-history-test.mjs",
+        "exitCode": 0,
+        "seconds": 13.03,
+        "log": "/tmp/omp-desktop-current-omp-skill-history-test.log",
+        "sha256": "4e5e0d27d619f9545f333970c32c557aa811d82377eb058cbaf60beb3f8bcc99"
+      },
+      {
+        "test": "tests/omp-template-attachments-test.mjs",
+        "exitCode": 0,
+        "seconds": 17.72,
+        "log": "/tmp/omp-desktop-current-omp-template-attachments-test.log",
+        "sha256": "95288eee15b3eb044c7ab99f5d2a542217a4fac11ea9809d3316c41a98b5c8c5"
+      },
+      {
+        "test": "tests/omp-entry-test.mjs",
+        "exitCode": 0,
+        "seconds": 15.55,
+        "log": "/tmp/omp-desktop-current-omp-entry-test.log",
+        "sha256": "61a1ca00b8fe6672c717d4176bb251db3f0f36f8e44f0397870ac5d693f94271"
+      }
+    ],
+    "originalDmgBatch": [
+      {
+        "test": "signature",
+        "exitCode": 0,
+        "seconds": 2.33,
+        "log": "/tmp/omp-desktop-installed-signature.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "test": "dmg-start",
+        "exitCode": 0,
+        "seconds": 17.36,
+        "log": "/tmp/omp-desktop-installed-dmg-start.log",
+        "sha256": "af980e4bb6058b0ee4d3cf761f44cd0986d52f93fc5ca7facd5ca6d926f76353"
+      },
+      {
+        "test": "upgrade",
+        "exitCode": 0,
+        "seconds": 11.49,
+        "log": "/tmp/omp-desktop-installed-upgrade.log",
+        "sha256": "49cd643be0677f18d0f9766c5b4ea164883d0f9f903b7024ddc419de074567b7"
+      },
+      {
+        "test": "auth-reconnect",
+        "exitCode": 0,
+        "seconds": 11.98,
+        "log": "/tmp/omp-desktop-installed-auth-reconnect.log",
+        "sha256": "9749fce0adbc7d8f077f8a615522ea6998c20b8e26eb722c0c4a55fa66fc9f17"
+      },
+      {
+        "test": "windows-rendering-test",
+        "exitCode": 0,
+        "seconds": 14.57,
+        "log": "/tmp/omp-desktop-installed-windows-rendering-test.log",
+        "sha256": "a6210d3813717742f075a80c16278bfafad01cd6068e46bfb9867c0609e86793"
+      },
+      {
+        "test": "omp-resources-desktop-test",
+        "exitCode": 0,
+        "seconds": 26.97,
+        "log": "/tmp/omp-desktop-installed-omp-resources-desktop-test.log",
+        "sha256": "be5fea3af24bbf3e6be8d3f9bebb6e3f3185c381ddd604bd2fb36586ce2d2489"
+      },
+      {
+        "test": "omp-packages-browser-test",
+        "exitCode": 0,
+        "seconds": 69.13,
+        "log": "/tmp/omp-desktop-installed-omp-packages-browser-test.log",
+        "sha256": "03bb43fd7920d7525ec071725cb4e208966b8909a89da2d23452e4309127e517"
+      },
+      {
+        "test": "omp-mcp-browser-test",
+        "exitCode": 1,
+        "seconds": 308.24,
+        "log": "/tmp/omp-desktop-installed-omp-mcp-browser-test.log",
+        "sha256": "3ea26e744a8486258a46464114936e0f0d99de6a8aac766a0ab77a5082fcb67a"
+      },
+      {
+        "test": "omp-prompt-browser-test",
+        "exitCode": 0,
+        "seconds": 13.55,
+        "log": "/tmp/omp-desktop-installed-omp-prompt-browser-test.log",
+        "sha256": "ce74eda1ed2599eca980e99cb9046d610f84f97678dddae0785ab2c9220d14af"
+      },
+      {
+        "test": "omp-tasks-browser-test",
+        "exitCode": 0,
+        "seconds": 20.13,
+        "log": "/tmp/omp-desktop-installed-omp-tasks-browser-test.log",
+        "sha256": "fe15bd79e4b9dbd0e216ae07cb9ed3c3bb9196659de5764a8390f1df583632b2"
+      }
+    ],
+    "finalMcpDesktop": {
+      "path": "/tmp/omp-desktop-installed-mcp-final.log",
+      "exitCode": 0,
+      "sha256": "6c1351de7de29c4fe51ea009fce695bf9de8580f524699ca2a0746028f7369be"
+    },
+    "finalMcpBrowser": {
+      "path": "/tmp/omp-mcp-browser-web-final.log",
+      "exitCode": 0,
+      "sha256": "6c1351de7de29c4fe51ea009fce695bf9de8580f524699ca2a0746028f7369be"
+    },
+    "finalInstalledSignature": {
+      "path": "/tmp/omp-desktop-signature-final.log",
+      "exitCode": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "zipIntegrity": {
+      "path": "/tmp/omp-desktop-zip-integrity.log",
+      "exitCode": 0,
+      "sha256": "fc13bdb6fa8684fb5b6da6c236a66f13f11d4891fa8a94b959a918dcb3b2c5c1"
+    }
+  },
+  "testCorrections": {
+    "compactionRuntime": {
+      "before": {
+        "path": "/tmp/omp-desktop-compaction-resolution-red.log",
+        "exitCode": 1,
+        "sha256": "1f3bee91fe0e28f36ceaf73b1fd5a28de4a14ad8a54a3f6f8b59da9ba8e6b624"
+      },
+      "wrongRuntimeGuard": {
+        "path": "/tmp/omp-desktop-compaction-guard-red.log",
+        "exitCode": 1,
+        "sha256": "1c262d9af9440bbb5dfbe112294cd2364c76d7ba175789e764f2af7f03b6bbc5"
+      },
+      "cause": "Native compaction helper resolved Bun/SDK relative to checkout even when a target app was supplied. It now takes the app root, executes its Bun and resolves native public modules there; realpath containment/version assertions reject fallback before opening history. Packaged compaction test passed."
+    },
+    "nativeUnload": {
+      "originalFailure": "originalDmgBatch omp-mcp-browser-test exited 1 after 308.24 seconds",
+      "minimalRed": {
+        "path": "/tmp/omp-mcp-native-dialog-red.log",
+        "exitCode": 1,
+        "sha256": "2839ae07b4ef648df6792f91d10014346ac5486ff86cef54b909d273955e5e16"
+      },
+      "intermediateDefaultAutoDismissFailure": {
+        "path": "/tmp/omp-desktop-installed-mcp-native-only-red.log",
+        "exitCode": 1,
+        "sha256": "c9796642423d6c0674d925061abe817c3043947e7188e588b2ce9b080374f7e3"
+      },
+      "cause": "Electron owns beforeunload via will-prevent-unload/showMessageBoxSync. Both explicit and default Playwright CDP dismissal target an already handled notification. Minimal probe observed one native prompt, preserved draft and CDP No dialog is showing.",
+      "fix": "Observe but do not handle the Electron CDP notification; answer Cancel through a temporary native dialog function replacement. Assert actual native warning and preserved import/form drafts; restore the OS function afterwards. Browser mode still dismisses its real browser dialog with awaited handling.",
+      "scope": "Test fixture correction; production dialog/dirty guards unchanged. Native OS button response is simulated, not a manual OS-dialog visual acceptance."
+    },
+    "oauthReconnectGate": "Test accepts target executable/root and executes all 12 native reconnect scenarios in installed Electron/Bun. Added six source/packaged platform gates; remote workflows not run."
+  },
+  "knownNativeOAuthFailure": {
+    "path": "/tmp/omp-desktop-oauth-writeback-still-red.log",
+    "exitCode": 1,
+    "sha256": "3de7560bec0b3bd41436cdf7104cc5cbd51ca220ce9608032a3f550f3df372f1",
+    "expectedFailure": true,
+    "result": "A real local grant completes, but concurrent selected-definition edits are overwritten. sameEditPreserved=false; native writer CAS remains unresolved."
+  },
+  "coverage": {
+    "packagedIntegration": {
+      "passed": 32,
+      "details": "Original 31-entry batch passed; new 12-scenario OAuth reconnect entry passed separately against the DMG copy, total 32 distinct integration entries."
+    },
+    "desktop": {
+      "passed": 6,
+      "details": "Five entries passed in the original DMG batch; MCP initially failed, then passed after the fixture correction. No aggregate 10/10 rerun is claimed."
+    },
+    "installation": "Read-only DMG mount, copy to isolated install, detach, actual shipped server startup and final strict deep signature validation. Product settings/uploads preserved using fixture data seeded by the installed old runtime; no real histories loaded/deleted.",
+    "screenshots": [
+      {
+        "path": "/Users/youweichen/projects/pi-harness/release/omp-migration-macos-arm64-g7xqh5e6/screenshots/omp-extension-source-en.png",
+        "sha256": "cd44008b2dd05fcce1a247b3d9ef5a86734c61ac1ab89d0a0ffada1d477849a8"
+      },
+      {
+        "path": "/Users/youweichen/projects/pi-harness/release/omp-migration-macos-arm64-g7xqh5e6/screenshots/omp-mcp-diagnostics-en.png",
+        "sha256": "36698c7dc1dba2c32c20c0eaac1f6e4b481c7bf5e463d8dbc97923432b63441c"
+      },
+      {
+        "path": "/Users/youweichen/projects/pi-harness/release/omp-migration-macos-arm64-g7xqh5e6/screenshots/omp-task-light.png",
+        "sha256": "04294690caef61992829b23eae57ba8ca4365d5fda0eeeb66f7b3af770c02037"
+      },
+      {
+        "path": "/Users/youweichen/projects/pi-harness/release/omp-migration-macos-arm64-g7xqh5e6/screenshots/omp-task-wiki-floating.png",
+        "sha256": "79c09059dd8a814c99d81a9a5009c1d0ccbbc9b8af16748c07839fba099472cf"
+      }
+    ]
+  },
+  "checks": [
+    "320 test environment scripts",
+    "Protocol synchronization v78",
+    "Modified JavaScript syntax",
+    "Desktop workflow YAML parse",
+    "git diff --check"
+  ],
+  "limitations": [
+    "macOS arm64 local test packages only; no Windows/Linux desktop or original DeepSeek/gateway acceptance",
+    "Native Task internal history writer protection, OAuth selected-definition write-back CAS and tool-level authorization unresolved",
+    "Native CLI JSON/print early exit and active old Desktop history cleanup remain",
+    "Current 122-entry full smoke not rerun; latest full baseline remains separate earlier 120/120",
+    "No real-provider/account performance comparison; no published release, version bump or installed-app replacement"
+  ],
+  "operations": {
+    "rootDist": "Not overwritten",
+    "rootDependencies": "Only private cloned dependencies rebuilt for Electron; original dependency inodes separate",
+    "userProcessesPreserved": [
+      23786,
+      62015
+    ],
+    "mountedVolumesDetached": true,
+    "allVerificationHandlesTerminal": true,
+    "stagingRemoved": true,
+    "retainedArtifacts": "/Users/youweichen/projects/pi-harness/release/omp-migration-macos-arm64-g7xqh5e6",
+    "cleanup": "Owned build, DMG-install and Web staging removed after process checks; DMG detached; temporary reproduction script and identified failed MCP fixture removed. Signed test artifacts, selected screenshots and diagnostic logs retained. Original root dist, dependencies and protected user processes preserved."
+  }
+}

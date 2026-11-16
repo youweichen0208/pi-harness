@@ -1,14 +1,12 @@
 // Zero-token HTTP integration: authentication, real-path boundaries, PDF search, versioned edits and history.
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import WebSocket from 'ws';
-import { portUp } from './lib/port-utils.mjs';
+import { startIsolatedHarness } from './lib/isolated-server.mjs';
 import { testEnv } from "./lib/test-env.mjs";
-const port = 8996, clientId = 'wiki-protocol', token = 'wiki-test-only';
-assert.equal(await portUp(port), false, 'isolated port must be free');
+const clientId = 'wiki-protocol', token = 'wiki-test-only';
 const base = mkdtempSync(join(tmpdir(), 'wiki-protocol-')), workspace = join(base, 'work');
 mkdirSync(workspace); writeFileSync(join(workspace, 'note.md'), '# Notes\n\nsearch phrase');
 writeFileSync(join(base, 'outside.txt'), 'outside');
@@ -18,15 +16,18 @@ let pdf = '%PDF-1.4\n', offsets = [];
 for (let i = 0; i < objects.length; i++) { offsets.push(Buffer.byteLength(pdf)); pdf += `${i + 1} 0 obj\n${objects[i]}\nendobj\n`; }
 const xref = Buffer.byteLength(pdf); pdf += `xref\n0 6\n0000000000 65535 f \n${offsets.map(n => String(n).padStart(10, '0') + ' 00000 n ').join('\n')}\ntrailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
 writeFileSync(join(workspace, 'report.pdf'), pdf);
-const server = spawn(process.execPath, ['dist/server/index.js'], { env: { ...testEnv(), PORT: String(port), PI_WEB_TOKEN: token, PI_WEB_DATA_DIR: join(base, 'data'), PI_CODING_AGENT_DIR: join(base, 'agent'), PI_WEB_CWD: workspace }, stdio: 'ignore' });
+const agent = join(base, 'data/omp/agent'); mkdirSync(agent, { recursive: true });
+writeFileSync(join(agent, 'config.yml'), JSON.stringify({ skills: { enabled: false }, cacheWarming: { enabled: false } }));
+const harness = await startIsolatedHarness({ env: { ...testEnv(), PI_WEB_TOKEN: token, PI_WEB_DATA_DIR: join(base, 'data'), PI_WEB_CWD: workspace } });
+const port = harness.port;
 let ws;
 try {
-	for (let i = 0; i < 100 && !await portUp(port); i++) await new Promise(r => setTimeout(r, 100));
 	ws = new WebSocket(`ws://127.0.0.1:${port}/ws?token=${token}`);
 	const state = await new Promise((resolve, reject) => {
-		const timer = setTimeout(() => reject(new Error('snapshot timeout')), 10000);
+		let ready = false;
+		const timer = setTimeout(() => reject(new Error('ready snapshot timeout')), 30000);
 		ws.on('open', () => ws.send(JSON.stringify({ type: 'hello', clientId })));
-		ws.on('message', wire => { const m = JSON.parse(wire); if (m.type === 'snapshot') { clearTimeout(timer); resolve(m.state); } }); ws.on('error', reject);
+		ws.on('message', wire => { const m = JSON.parse(wire); if (m.type === 'ready') { ready = true; ws.send(JSON.stringify({ type: 'get_state' })); } if (ready && m.type === 'snapshot') { clearTimeout(timer); resolve(m.state); } }); ws.on('error', reject);
 	});
 	const cwd = state.cwd, endpoint = `http://127.0.0.1:${port}`;
 	const request = (action, args = {}, headers = {}) => fetch(endpoint + '/api/wiki', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...headers }, body: JSON.stringify({ action, clientId, cwd, ...args }) });
@@ -99,6 +100,16 @@ try {
 	const openInfo = await (await request('open-info', { path: 'note.md' })).json(); assert(openInfo.absolute.endsWith('note.md'));
 	assert.equal((await request('new-conversation', { path: '../outside.txt', conversationId: state.conversationId })).status, 400);
 	assert.equal((await request('new-conversation', { path: 'missing.md', conversationId: state.conversationId })).status, 400);
+	const unchanged = new Promise((resolve, reject) => {
+		const timer = setTimeout(() => reject(Error('post-rejection snapshot timeout')), 5000);
+		const receive = wire => {
+			const message = JSON.parse(wire);
+			if (message.type !== 'snapshot') return;
+			clearTimeout(timer); ws.off('message', receive); resolve(message.state);
+		};
+		ws.on('message', receive); ws.send(JSON.stringify({ type: 'get_state' }));
+	});
+	assert.equal((await unchanged).conversationId, state.conversationId, 'invalid documents cannot create or switch a conversation');
 	assert.equal((await request('new-conversation', { path: 'note.md', conversationId: 'stale' })).status, 400);
 	// A cold, asynchronous read survives a same-workspace native session switch.
 	const refreshing = request('refresh');
@@ -117,5 +128,5 @@ try {
 	assert.equal((await request('new-conversation', { path: 'note.md', conversationId: state.conversationId })).status, 400, 'stale navigation cannot replace current session');
 	console.log('PASS Wiki HTTP auth/origin/workspace boundaries, PDF full-text/media, saves and persistent undo');
 } finally {
-	ws?.terminate(); server.kill('SIGTERM'); if (server.exitCode === null) await new Promise(r => server.once('exit', r)); rmSync(base, { recursive: true, force: true });
+	ws?.terminate(); await harness.stop(); rmSync(base, { recursive: true, force: true });
 }

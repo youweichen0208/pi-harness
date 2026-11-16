@@ -1,148 +1,161 @@
-/** Actual Pi 1.4.0: MCP management, Codemode execution, output limits and image saves. Zero paid tokens. */
+/** Historical smoke entry, now OMP-native MCP execution through the real host.
+ * Pi Codemode scripting/settings are intentionally retired; tool results,
+ * errors, images and user image actions remain supported product behavior. */
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { spawn } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, realpathSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { setTimeout as sleep } from 'node:timers/promises';
 import WebSocket from 'ws';
 import { chromium } from 'playwright-core';
 import { CHROME_PATH } from './lib/chrome.mjs';
-import { portUp } from './lib/port-utils.mjs';
-import { testEnv } from "./lib/test-env.mjs";
-const port = 9204, token = 'codemode-fixture', clientId = 'codemode-mcp';
-for (const p of [port, port + 1]) assert.equal(await portUp(p), false, `Port ${p} busy`);
-const root = mkdtempSync(join(tmpdir(), 'codemode-mcp-')), cwd = join(root, 'work'), agent = join(root, 'agent');
-mkdirSync(cwd); mkdirSync(agent); writeFileSync(join(cwd, 'note.txt'), 'native fixture');
+import { listenIsolated, startIsolatedHarness } from './lib/isolated-server.mjs';
+import { mergeSnapshot } from './lib/snapshots.mjs';
+const root = realpathSync(mkdtempSync(join(tmpdir(), 'omp-mcp-execution-'))), cwd = join(root, 'workspace'), data = join(root, 'data'), agent = join(data, 'omp/agent');
+mkdirSync(cwd); mkdirSync(agent, { recursive: true });
 const image = 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEUlEQVR4nGOYUHDgPwgzwBgAX7QK/QPmt8EAAAAASUVORK5CYII=';
-const scripts = {
- success: '// @options: {"max_output_tokens":40}\nawait Promise.allSettled(Array.from({length:10},()=>tools.read({path:"note.txt"}))); text(await tools.mcp__echo__add({a:2,b:3})); image("data:image/png;base64,' + image + '"); text("x".repeat(4000));',
- failure: 'await tools.write({path:"partial.txt",content:"kept"}); await tools.nonexistent_fixture({});',
- limit: 'for (let i=0;i<100001;i++) text("");',
-};
-const issued = new Set();
-const mock = createServer(async (req, res) => {
- let raw = ''; for await (const chunk of req) raw += chunk;
- const body = JSON.parse(raw);
- const prompts = body.messages.filter(m => m.role === 'user').map(m => typeof m.content === 'string' ? m.content : m.content?.map(p => p.text ?? '').join(''));
- const kind = [...prompts].reverse().find(text => Object.hasOwn(scripts, text)) ?? 'success';
- const after = issued.has(kind); issued.add(kind);
- const delta = after ? { content: 'Done' } : { tool_calls: [{ index: 0, id: `script-${kind}`, type: 'function', function: { name: 'codemode', arguments: JSON.stringify({ code: scripts[kind] }) } }] };
- res.writeHead(200, { 'content-type': 'text/event-stream' });
- for (const choice of [{ index: 0, delta, finish_reason: null }, { index: 0, delta: {}, finish_reason: after ? 'stop' : 'tool_calls' }]) res.write(`data: ${JSON.stringify({ id: 'fixture', object: 'chat.completion.chunk', model: 'fixture', choices: [choice] })}\n\n`);
- res.end('data: [DONE]\n\n');
+const tools = [
+	{ name: 'add', description: 'Add two numbers', inputSchema: { type: 'object', properties: { a: { type: 'number' }, b: { type: 'number' } }, required: ['a', 'b'] } },
+	{ name: 'fail', description: 'Return a fixture error', inputSchema: { type: 'object', properties: {} } },
+	{ name: 'picture', description: 'Return a PNG', inputSchema: { type: 'object', properties: {} } },
+];
+const mcpCalls = [], modelCalls = [], events = []; let state, harness, socket, browser, expectedTool, providerError;
+const mcp = createServer(async (req, res) => {
+	if (req.method !== 'POST') { res.writeHead(405); res.end(); return; }
+	let raw = ''; for await (const part of req) raw += part;
+	const rpc = JSON.parse(raw); mcpCalls.push({ ...rpc, authorization: req.headers.authorization });
+	if (rpc.id === undefined) { res.writeHead(202); res.end(); return; }
+	const result = rpc.method === 'initialize' ? { protocolVersion: rpc.params.protocolVersion, capabilities: { tools: {} }, serverInfo: { name: 'fixture', version: '1' } }
+		: rpc.method === 'tools/list' ? { tools }
+		: rpc.method === 'tools/call' ? rpc.params.name === 'add' ? { content: [{ type: 'text', text: `SUM_RESULT_${rpc.params.arguments.a + rpc.params.arguments.b}` }] }
+			: rpc.params.name === 'fail' ? { isError: true, content: [{ type: 'text', text: 'MCP_EXPECTED_FAILURE' }] }
+			: { content: [{ type: 'text', text: 'MCP_IMAGE_RESULT' }, { type: 'image', mimeType: 'image/png', data: image }] } : {};
+	res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ jsonrpc: '2.0', id: rpc.id, result }));
 });
-await new Promise(r => mock.listen(port + 1, '127.0.0.1', r));
-writeFileSync(join(agent, 'settings.json'), JSON.stringify({ defaultProvider: 'fixture', defaultModel: 'fixture', defaultTools: ['+codemode', '+tool_search'], retry: { enabled: false } }));
-writeFileSync(join(agent, 'auth.json'), JSON.stringify({fixture:{type:'api_key',key:'local'}}));
-writeFileSync(join(agent, 'models.json'), JSON.stringify({ providers: { fixture: { api: 'openai-completions', baseUrl: `http://127.0.0.1:${port + 1}`, apiKey: 'local', models: [{ id: 'fixture', name: 'Fixture', input: ['text', 'image'], contextWindow: 32000, maxTokens: 4096 }] } } }));
-writeFileSync(join(agent, 'mcp.json'), '\uFEFF' + JSON.stringify({ extra: 'preserve', mcpServers: { echo: { command: process.execPath, args: [resolve('tests/fixtures/mcp-echo-server.mjs')], env: { PRIVATE: 'secret-value' }, exposure: 'codemode' }, disabled: { command: 'not-a-command', enabled: false } } }));
-const server = spawn(process.execPath, ['dist/server/index.js'], { env: { ...testEnv(), PORT: String(port), PI_WEB_TOKEN: token, PI_WEB_CWD: cwd, PI_CODING_AGENT_DIR: agent, PI_WEB_DATA_DIR: join(root, 'data') }, stdio: ['ignore', 'pipe', 'pipe'] });
-let browser, logs = '', ws, messages = [], counter = 0;
-server.stdout.on('data', d => logs += d); server.stderr.on('data', d => logs += d);
-const wait = async predicate => { const start = Date.now(); while (Date.now() - start < 20000) { const found = messages.find(predicate); if (found) return found; if (server.exitCode !== null) throw new Error(logs); await new Promise(r => setTimeout(r, 30)); } throw new Error('Message timeout: ' + logs.slice(-3000)); };
-const send = value => ws.send(JSON.stringify(value));
-const mcp = async (action, extra = {}) => { const requestId = `r${++counter}`; send({ type: 'native_mcp_request', cwd, scope: 'global', requestId, action, ...extra }); return wait(m => m.type === 'native_mcp_result' && m.requestId === requestId); };
+const model = createServer(async (req, res) => {
+	let raw = ''; for await (const part of req) raw += part;
+	const payload = JSON.parse(raw); modelCalls.push(payload);
+	const tool = expectedTool; expectedTool = undefined;
+	const policy = typeof payload.system === 'string' ? payload.system : payload.system?.map(p => p.text ?? '').join('\n') ?? '';
+	const route = tool ? new RegExp('"' + tool + '" → `([^`]+)`').exec(policy)?.[1] : undefined;
+	const actualName = route ? payload.tools?.find(t => t.name === '_write' || t.name === 'write')?.name : undefined;
+	if (tool && !actualName) providerError = `MCP ${tool} native route unavailable: ${policy.split('\n').filter(line => line.includes('fixture_')).join('\n')}`;
+	const input = route ? JSON.stringify({ path: route, content: JSON.stringify(tool === 'add' ? { a: 2, b: 3 } : {}) }) : '';
+	res.writeHead(200, { 'content-type': 'text/event-stream' });
+	const emit = (type, fields) => res.write(`event: ${type}\ndata: ${JSON.stringify({ type, ...fields })}\n\n`);
+	emit('message_start', { message: { id: `m-${modelCalls.length}`, type: 'message', role: 'assistant', model: 'fixture', content: [], stop_reason: null, usage: { input_tokens: 10, output_tokens: 0 } } });
+	emit('content_block_start', { index: 0, content_block: actualName ? { type: 'tool_use', id: `call-${tool}`, name: actualName, input: {} } : { type: 'text', text: '' } });
+	for (const text of actualName ? [input.slice(0, 12), input.slice(12)] : [`DONE_${modelCalls.length}`]) emit('content_block_delta', { index: 0, delta: actualName ? { type: 'input_json_delta', partial_json: text } : { type: 'text_delta', text } });
+	emit('content_block_stop', { index: 0 }); emit('message_delta', { delta: { stop_reason: actualName ? 'tool_use' : 'end_turn', stop_sequence: null }, usage: { output_tokens: 10 } }); emit('message_stop', {}); res.end();
+});
+const clientId = 'omp-mcp-execution', token = 'isolated-mcp-token';
+const send = value => socket.send(JSON.stringify(value));
+const wait = async (fn, label) => { for (let i = 0; i < 1000; i++) { if (providerError) throw Error(providerError); if (await fn()) return; await sleep(25); } throw Error(`Timed out ${label}; ${JSON.stringify(events.slice(-3))}\n${harness?.logs}`); };
+const post = async (action, args = {}, headers = {}) => {
+	const response = await fetch(`http://127.0.0.1:${harness.port}/api/omp-mcp`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...headers }, body: JSON.stringify({ clientId, cwd, conversationId: state.conversationId, scope: 'global', action, ...args }) });
+	return { status: response.status, ...await response.json() };
+};
 try {
- for (let i = 0; i < 100 && !await portUp(port); i++) await new Promise(r => setTimeout(r, 100));
- ws = new WebSocket(`ws://127.0.0.1:${port}/ws?token=${token}`); ws.on('message', wire => messages.push(JSON.parse(wire)));
- await new Promise((r, j) => { ws.on('open', r); ws.on('error', j); }); send({ type: 'hello', clientId }); await wait(m => m.type === 'snapshot');
- let config = await mcp('get'); assert(!config.error, config.error); assert(!JSON.stringify(config).includes('secret-value')); assert.equal(config.codemode.mode, 'on');
- for (let i = 0; i < 25 && !config.servers.some(s => s.name === 'echo' && s.state === 'connected'); i++) { await new Promise(r => setTimeout(r, 100)); config = await mcp('get'); }
- assert(config.servers.some(s => s.name === 'echo' && s.state === 'connected'), JSON.stringify(config)); assert(config.toolInfo.some(t => t.name === 'mcp__echo__add'));
- const saved = await mcp('save', { version: config.state.version, document: { ...config.state.document, autoEnableCodemode: false } }); assert(!saved.error, saved.error);
- assert.equal(JSON.parse(readFileSync(join(agent, 'mcp.json'))).mcpServers.echo.env.PRIVATE, 'secret-value');
- assert((await mcp('save', { version: config.state.version, document: config.state.document })).error?.includes('changed externally'));
- let settings = await mcp('codemode', { version: saved.codemode.version, codemode: { mode: 'only', inlineBudget: 1200 } }); assert(!settings.error, settings.error); assert.equal(settings.codemode.effectiveMode, 'only');
- assert.equal(JSON.parse(readFileSync(join(agent, 'settings.json'))).retry.enabled, false);
- settings = await mcp('codemode', { version: settings.codemode.version, codemode: { mode: 'on', inlineBudget: 3000 } }); assert(!settings.error);
- // Exercise BOM parsing in both scopes, including inherited settings and override validation.
- const globalRaw = readFileSync(join(agent, 'mcp.json'), 'utf8');
- writeFileSync(join(agent, 'mcp.json'), '\uFEFF' + globalRaw);
- assert((await mcp('save', { version: saved.state.version, document: saved.state.document })).error?.includes('changed externally'), 'adding only a BOM changes the conflict version');
- mkdirSync(join(cwd, '.pi'), { recursive: true });
- writeFileSync(join(cwd, '.pi', 'mcp.json'), '\uFEFF' + JSON.stringify({ extra: 'project-preserve', mcpServers: {} }));
- let project = await mcp('get', { scope: 'project' });
- assert.equal(project.state.inheritedAutoEnableCodemode, false, 'project switch inherits the global setting');
- project = await mcp('save', { scope: 'project', version: project.state.version, document: { mcpServers: { echo: { enabled: false } } } }); assert(!project.error, project.error);
- assert.equal(JSON.parse(readFileSync(join(cwd, '.pi', 'mcp.json'))).extra, 'project-preserve');
- project = await mcp('trust', { scope: 'project' }); assert(!project.error, project.error); assert(project.state.trusted);
- for (let i = 0; i < 25 && !project.servers.some(s => s.name === 'echo' && s.state === 'disabled'); i++) { await new Promise(r => setTimeout(r, 100)); project = await mcp('get', { scope: 'project' }); }
- assert(project.servers.some(s => s.name === 'echo' && s.state === 'disabled'));
- project = await mcp('save', { scope: 'project', version: project.state.version, document: { mcpServers: {} } }); assert(!project.error, project.error);
- config = await mcp('get');
- assert(!(await mcp('save', { version: config.state.version, document: config.state.document })).error);
- for (const kind of ['success', 'failure', 'limit']) {
-  send({ type: 'prompt', text: kind, requestId: kind });
-  const result = await wait(m => (m.type === 'snapshot' || m.type === 'snapshot_delta') && (m.state.messages ?? m.appended)?.some(v => v.toolCallId === `script-${kind}`));
-  const tool = (result.state.messages ?? result.appended).find(v => v.toolCallId === `script-${kind}`);
-  assert.equal(tool.isError, kind !== 'success', JSON.stringify(tool));
-  if (kind === 'success') { assert.equal(tool.codemode.totalCalls, 11); assert(tool.codemode.fullOutputPath); assert(tool.content.some(b => b.type === 'image')); assert(messages.some(m => m.type === 'tool_delta' && m.codemode?.calls.some(c => c.status === 'running'))); }
-  if (kind === 'failure') assert.equal(readFileSync(join(cwd, 'partial.txt'), 'utf8'), 'kept');
-  if (kind === 'limit') assert(tool.content.some(b => b.type === 'text' && /output|RangeError|limit/i.test(b.text)));
-  // Request an authoritative settled snapshot before the next prompt.
-  for (let i = 0; i < 100; i++) { const start = messages.length; send({ type: 'get_state' }); await new Promise(r => setTimeout(r, 50)); if (messages.slice(start).some(m => m.type === 'snapshot' && !m.state.isStreaming)) break; }
- }
- const imageRequest = (args = {}, headers = {}) => fetch(`http://127.0.0.1:${port}/api/codemode-image`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...headers }, body: JSON.stringify({ clientId, cwd, dataUrl: `data:image/png;base64,${image}`, ...args }) });
- assert.equal((await imageRequest({}, { Origin: 'https://evil.invalid' })).status, 403); assert.equal((await imageRequest({ cwd: root })).status, 409); assert.equal((await imageRequest({ dataUrl: 'data:image/svg+xml;base64,PHN2Zz4=' })).status, 400);
- const response = await imageRequest(); assert.equal(response.status, 200); const { path } = await response.json(); assert.equal(readFileSync(join(cwd, path)).toString('base64'), image);
-
- if (process.argv.includes('--browser')) {
-  browser = await chromium.launch({ executablePath: CHROME_PATH || chromium.executablePath() });
-  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } }); page.setDefaultTimeout(15000);
-  const errors = []; page.on('pageerror', error => errors.push(error.message));
-  await page.addInitScript(clientId => sessionStorage.setItem('pi-web-client-id', clientId), clientId);
-  await page.goto(`http://127.0.0.1:${port}/?token=${token}`);
-  const card = page.locator('.codemode-card[data-tool-call-id="script-success"]');
-  await card.waitFor(); await card.scrollIntoViewIfNeeded();
-  assert.equal(await card.locator('.codemode-call').count(), 8);
-  await card.getByRole('button', { name: /展开全部/ }).click(); assert.equal(await card.locator('.codemode-call').count(), 11);
-  await card.getByRole('tab', { name: '脚本', exact: true }).click(); assert((await card.locator('[role=tabpanel]').innerText()).includes('Promise.allSettled'));
-  await page.keyboard.press('ArrowRight'); assert.equal(await card.getByRole('tab', { name: '输出', exact: true }).getAttribute('aria-selected'), 'true');
-  await card.locator('.codemode-full-output').waitFor();
-  await card.getByRole('button', { name: '保存到当前目录', exact: true }).click(); await card.locator('.codemode-feedback', { hasText: '已保存' }).waitFor();
-  await card.getByRole('button', { name: '附加到下一条消息', exact: true }).click(); await page.locator('.attach-chip', { hasText: 'codemode-0.png' }).waitFor();
-  await card.getByRole('tab', { name: /调用/ }).click();
-  await page.screenshot({ path: 'tests/scratch/codemode-card.png', fullPage: true });
-  await page.getByRole('button', { name: '设置', exact: true }).first().click(); await page.getByText('所有设置', { exact: true }).click(); await page.getByText('MCP 与 Codemode', { exact: true }).first().click();
-  const echo = page.locator('.mcp-server', { has: page.locator('strong', { hasText: /^echo$/ }) }); await echo.locator('.mcp-server-toggle').click();
-  await echo.locator('.mcp-tool-table select').first().waitFor(); assert((await echo.innerText()).includes('add'));
-  assert.equal(await page.getByRole('button', { name: '保存并应用', exact: true }).count(), 0);
-  await page.getByRole('group', { name: 'codemode.inlineBudget', exact: true }).getByRole('button', { name: '8000', exact: true }).click();
-  await page.waitForFunction(() => document.querySelector('[aria-label="codemode.inlineBudget"] button[aria-pressed="true"]')?.textContent === '8000');
-  assert.equal(JSON.parse(readFileSync(join(agent, 'settings.json'))).codemode.inlineBudget, 8000);
-  await page.getByRole('group', { name: 'codemode.mode', exact: true }).getByRole('button', { name: 'only', exact: true }).click();
-  await page.waitForFunction(() => document.querySelector('[aria-label="codemode.mode"] button[aria-pressed="true"]')?.textContent === 'only');
-  assert.equal(JSON.parse(readFileSync(join(agent, 'settings.json'))).codemode.mode, 'only');
-  const auto = page.getByRole('switch', { name: 'autoEnableCodemode', exact: true });
-  await auto.check();
-  await page.waitForFunction(() => document.querySelector('.mcp-workbench')?.dataset.dirty === 'false');
-  assert.equal(JSON.parse(readFileSync(join(agent, 'mcp.json'))).autoEnableCodemode, true);
-  await echo.locator('.mcp-server-head select').selectOption('direct');
-  await page.waitForFunction(() => document.querySelector('.mcp-workbench')?.dataset.dirty === 'false');
-  assert.equal(JSON.parse(readFileSync(join(agent, 'mcp.json'))).mcpServers.echo.exposure, 'direct');
-  assert.equal(JSON.parse(readFileSync(join(agent, 'mcp.json'))).mcpServers.echo.env.PRIVATE, 'secret-value');
-  const external = JSON.parse(readFileSync(join(agent, 'mcp.json')));
-  writeFileSync(join(agent, 'mcp.json'), JSON.stringify({ ...external, externalSetting: 'preserve' }));
-  await echo.locator('.mcp-server-head select').selectOption('codemode');
-  await page.getByRole('alert').filter({ hasText: 'changed externally' }).waitFor();
-  assert.equal(JSON.parse(readFileSync(join(agent, 'mcp.json'))).mcpServers.echo.exposure, 'direct', 'conflict does not overwrite external changes');
-  await page.getByRole('button', { name: '重试保存', exact: true }).waitFor();
-  page.once('dialog', dialog => dialog.dismiss());
-  await page.locator('.settings-rail').getByRole('button', { name: '技能', exact: true }).click();
-  assert(await page.locator('.mcp-workbench').isVisible(), 'failed save draft guards navigation');
-  page.once('dialog', dialog => dialog.accept());
-  await page.locator('.mcp-error').getByRole('button').click();
-  await page.waitForFunction(() => document.querySelector('.mcp-workbench')?.dataset.dirty === 'false');
-  await echo.locator('.mcp-server-head select').selectOption('codemode');
-  await page.waitForFunction(() => document.querySelector('.mcp-workbench')?.dataset.dirty === 'false');
-  assert.equal(JSON.parse(readFileSync(join(agent, 'mcp.json'))).externalSetting, 'preserve');
-  await page.screenshot({ path: 'tests/scratch/codemode-mcp-connected.png', fullPage: true });
-  await page.setViewportSize({ width: 390, height: 844 }); await page.screenshot({ path: 'tests/scratch/codemode-mcp-mobile.png', fullPage: true });
-  assert(await page.locator('.settings-modal').evaluate(el => el.getBoundingClientRect().width <= window.innerWidth));
-  assert.deepEqual(errors, []); await browser.close(); browser = undefined;
-  console.log('PASS real browser Codemode tabs, call window, native images, attachment, MCP tools, saved settings, mobile layout');
- }
- console.log('PASS Pi 1.4.0 MCP status, secrets, config conflicts, project overrides, native settings, live Codemode, failure effects, output limit, images');
-} catch (error) { console.error(logs.slice(-4000)); throw error; }
-finally { await browser?.close(); ws?.terminate(); server.kill(); if (server.exitCode === null) await new Promise(r => server.once('exit', r)); mock.closeAllConnections(); await new Promise(r => mock.close(r)); rmSync(root, { recursive: true, force: true }); }
+	const mcpPort = await listenIsolated(mcp), modelPort = await listenIsolated(model);
+	writeFileSync(join(agent, 'models.yml'), JSON.stringify({ providers: { fixture: { api: 'anthropic-messages', baseUrl: `http://127.0.0.1:${modelPort}`, apiKey: 'MODEL_FIXTURE_SECRET', models: [{ id: 'fixture', input: ['text', 'image'], contextWindow: 200000 }] } } }));
+	writeFileSync(join(agent, 'config.yml'), JSON.stringify({ skills: { enabled: false }, retry: { enabled: false }, compaction: { enabled: false }, cacheWarming: { enabled: false } }));
+	harness = await startIsolatedHarness({ env: { PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: data, PI_WEB_TOKEN: token } });
+	socket = new WebSocket(`ws://127.0.0.1:${harness.port}/ws?token=${token}`);
+	socket.on('message', raw => { const event = JSON.parse(raw); events.push(event); state = mergeSnapshot(state, event); });
+	await new Promise((resolve, reject) => { socket.once('open', resolve); socket.once('error', reject); });
+	send({ type: 'hello', clientId }); await wait(() => events.some(e => e.type === 'ready'), 'ready');
+	let view = await post('get'); assert.equal(view.status, 200);
+	assert.equal((await post('get', { conversationId: 'foreign' })).status, 409);
+	const doc = { mcpServers: { fixture: { type: 'http', url: `http://127.0.0.1:${mcpPort}/mcp`, headers: { Authorization: 'Bearer MCP_FIXTURE_SECRET' } } } };
+	view = await post('save', { version: view.config.version, document: doc }); assert.equal(view.status, 200); assert(view.reloadRequired);
+	assert.equal(mcpCalls.length, 0, 'save alone does not connect');
+	assert(!JSON.stringify(view).includes('MCP_FIXTURE_SECRET'));
+	assert.equal((await post('reload')).status, 200);
+	await wait(async () => (await post('status')).servers.some(s => s.name === 'fixture' && s.tools.includes('picture')), 'native discovery');
+	assert(!state.tools.includes('codemode'), 'retired Pi Codemode is not registered');
+	const configBefore = readFileSync(join(agent, 'config.yml'), 'utf8'), mcpBefore = readFileSync(join(agent, 'mcp.json'), 'utf8');
+	send({ type: 'native_mcp_request', requestId: 'retired', cwd, scope: 'global', action: 'codemode', codemode: { mode: 'only', inlineBudget: 1 } });
+	await wait(() => events.some(e => e.type === 'notice' && e.level === 'error' && e.text.includes('native_mcp_request')), 'retired operation rejected');
+	assert.equal(readFileSync(join(agent, 'config.yml'), 'utf8'), configBefore); assert.equal(readFileSync(join(agent, 'mcp.json'), 'utf8'), mcpBefore);
+	for (const name of ['add', 'fail', 'picture']) {
+		const before = modelCalls.length; expectedTool = name;
+		send({ type: 'prompt', text: `Call native MCP ${name}`, requestId: name, target: { cwd, conversationId: state.conversationId, sessionId: state.sessionId } });
+		await wait(() => modelCalls.length === before + 2 && !state.isStreaming && state.messages.some(m => m.toolCallId === `call-${name}`), `${name} native tool and final answer`);
+		const result = state.messages.find(m => m.toolCallId === `call-${name}`);
+		assert.equal(result.isError, name === 'fail', JSON.stringify(result));
+		const text = JSON.stringify(modelCalls.at(-1).messages);
+		assert(text.includes(name === 'add' ? 'SUM_RESULT_5' : name === 'fail' ? 'MCP_EXPECTED_FAILURE' : 'MCP_IMAGE_RESULT'), 'actual tool result reaches subsequent model request');
+		if (name === 'picture') assert(result.content.some(p => p.type === 'image' && p.dataUrl === `data:image/png;base64,${image}`));
+	}
+	assert.deepEqual(mcpCalls.filter(c => c.method === 'tools/call').map(c => c.params.name), ['add', 'fail', 'picture']);
+	assert(mcpCalls.filter(c => c.method === 'tools/call').every(c => c.authorization === 'Bearer MCP_FIXTURE_SECRET'));
+	assert(!JSON.stringify(events).includes('MCP_FIXTURE_SECRET')); assert(!JSON.stringify(events).includes('MODEL_FIXTURE_SECRET'));
+	const imageRequest = (args = {}, headers = {}) => fetch(`http://127.0.0.1:${harness.port}/api/tool-image`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...headers }, body: JSON.stringify({ clientId, cwd, conversationId: state.conversationId, dataUrl: `data:image/png;base64,${image}`, ...args }) });
+	const beforeImages = readdirSync(cwd);
+	assert.equal((await imageRequest({}, { Origin: 'https://evil.invalid' })).status, 403);
+	assert.equal((await imageRequest({}, { Authorization: 'Bearer wrong' })).status, 401);
+	assert.equal((await imageRequest({ cwd: root })).status, 409);
+	assert.equal((await imageRequest({ conversationId: 'foreign' })).status, 409);
+	assert.equal((await imageRequest({ conversationId: undefined })).status, 409);
+	assert.equal((await imageRequest({ dataUrl: 'data:image/svg+xml;base64,PHN2Zz4=' })).status, 400);
+	assert.equal((await imageRequest({ dataUrl: 'data:image/png;base64,YmFk' })).status, 400);
+	assert.deepEqual(readdirSync(cwd), beforeImages, 'rejected saves create no files');
+	const savedPaths = [];
+	for (let i = 0; i < 2; i++) {
+		const response = await imageRequest(); assert.equal(response.status, 200);
+		const saved = await response.json(); savedPaths.push(saved.path);
+		assert.equal(readFileSync(join(cwd, saved.path)).toString('base64'), image);
+	}
+	assert.notEqual(savedPaths[0], savedPaths[1], 'each user save creates a new file');
+	assert.equal(modelCalls.length, 6, 'HTTP image saves never call the model');
+	if (process.argv.includes('--browser')) {
+		browser = await chromium.launch({ executablePath: CHROME_PATH }); const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } }); page.setDefaultTimeout(15000);
+		const errors = []; page.on('pageerror', error => errors.push(error.message));
+		await page.addInitScript(id => sessionStorage.setItem('pi-web-client-id', id), clientId);
+		await page.goto(`http://127.0.0.1:${harness.port}/?token=${token}`);
+		const card = page.locator('[data-tool-call-id="call-picture"]'); await card.waitFor();
+		if (!(await card.locator('.tool-result-image').count())) await card.locator('button[aria-expanded]').first().click();
+		await card.locator('.tool-result-image img').waitFor();
+		const savedResponse = page.waitForResponse(r => r.url().includes('/api/tool-image'));
+		await card.getByRole('button', { name: '保存到当前目录', exact: true }).click();
+		const saved = await (await savedResponse).json(); assert.equal(readFileSync(join(cwd, saved.path)).toString('base64'), image);
+		await card.getByRole('status').filter({ hasText: '已保存' }).waitFor();
+		await card.getByRole('button', { name: '附加到下一条消息', exact: true }).click();
+		await page.locator('.attach-chip').filter({ hasText: 'generated-0.png' }).waitFor();
+		assert.equal(modelCalls.length, 6, 'user image actions never invoke the model');
+		assert(await card.evaluate(el => el.classList.contains('toolcall-generic') && !el.classList.contains('change-card')), 'virtual write uses a tool result, not a file diff');
+		mkdirSync('tests/scratch', { recursive: true }); await page.screenshot({ path: 'tests/scratch/omp-mcp-image.png' });
+		await page.setViewportSize({ width: 390, height: 844 }); await card.scrollIntoViewIfNeeded();
+		assert(await card.locator('.tool-image-preview').evaluate(el => el.scrollWidth <= el.clientWidth + 1));
+		await page.screenshot({ path: 'tests/scratch/omp-mcp-image-narrow.png' });
+		// Delay a real save until another conversation becomes current. The old
+		// card's request must be rejected even when both chats share the same cwd.
+		const owner = state.conversationId, fileCount = readdirSync(cwd).length;
+		let intercepted, continueSave;
+		await page.route('**/api/tool-image**', async route => { intercepted = true; await new Promise(resolve => { continueSave = resolve; }); await route.continue(); });
+		await card.getByRole('button', { name: '保存到当前目录', exact: true }).click();
+		await wait(() => intercepted, 'delayed image save');
+		send({ type: 'new_chat' }); await wait(() => state.conversationId !== owner, 'other conversation');
+		const rejectedSave = page.waitForResponse(r => r.url().includes('/api/tool-image'));
+		continueSave(); assert.equal((await rejectedSave).status(), 409);
+		assert.equal(readdirSync(cwd).length, fileCount);
+		await page.locator('.attach-chip').waitFor({ state: 'hidden' });
+		send({ type: 'switch_conversation', id: owner }); await wait(() => state.conversationId === owner, 'original conversation');
+		await page.locator('.attach-chip').filter({ hasText: 'generated-0.png' }).waitFor();
+		assert.equal(modelCalls.length, 6);
+		assert.deepEqual(errors, []);
+	}
+	const sessionFile = state.sessionFile;
+	send({ type: 'abort' });
+	const promptState = async () => (await (await fetch(`http://127.0.0.1:${harness.port}/api/system-prompt`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ clientId, cwd, conversationId: state.conversationId, action: 'get' }) })).json());
+	await wait(async () => !(await promptState()).available, 'stopped worker');
+	const barrier = crypto.randomUUID(); send({ type: 'tree_get', reqId: barrier, conversationId: state.conversationId, filter: 'all' });
+	await wait(() => events.some(e => e.type === 'tree' && e.reqId === barrier), 'Stop completed');
+	const history = readFileSync(sessionFile, 'utf8');
+	assert.equal((await imageRequest()).status, 200, 'user image save works without a running agent');
+	assert.equal((await promptState()).available, false, 'saving must not revive the stopped worker');
+	assert.equal(readFileSync(sessionFile, 'utf8'), history, 'user image save does not alter native history');
+	assert.equal(modelCalls.length, 6);
+	console.log('PASS OMP MCP execution: native routes and split arguments, success/error/image feedback, image save/attach ownership, Stop isolation and retired Codemode controls');
+} finally { await browser?.close(); socket?.terminate(); await harness?.stop(); for (const server of [mcp, model]) { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); } rmSync(root, { recursive: true, force: true }); }

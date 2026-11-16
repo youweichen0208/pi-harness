@@ -47,8 +47,8 @@ mkdirSync(plugDst, { recursive: true });
 cpSync(join(REPO, "dev/plugins/vscode-editor/manifest.json"), join(plugDst, "manifest.json"));
 cpSync(join(REPO, "dev/plugins/vscode-editor/index.mjs"), join(plugDst, "index.mjs"));
 cpSync(join(REPO, "dev/plugins/vscode-editor/client"), join(plugDst, "client"), { recursive: true });
-// 准备 ssh2 依赖：离线拷本地构建目录；CI 上回退 npm install
-ensurePluginSsh2Dep(plugDst, join(REPO, "dev/plugins/vscode-editor"));
+// 准备 ssh2 依赖：离线拷贝仓库安装的锁定依赖，不调用 npm
+ensurePluginSsh2Dep(plugDst);
 
 // 本地工作区种一个文件（验证本地操作不受 Remote-SSH 改造影响）
 mkdirSync(join(dataDir, "local-proj"), { recursive: true });

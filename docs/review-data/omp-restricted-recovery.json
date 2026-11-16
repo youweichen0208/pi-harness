@@ -1,0 +1,165 @@
+{
+  "status": "Local restricted assistant recovery verified; full OMP migration and Windows acceptance incomplete",
+  "platform": "darwin-arm64",
+  "omp": "18.20.0",
+  "bun": "1.4.4",
+  "protocol": 76,
+  "changes": [
+    "Project native recovery and persistence state into SSH and Playground views; age remaining duration per snapshot and anchor to browser monotonic clock.",
+    "Scope cancellation to existing conversation/operation; Stop and cancellation never open a stopped worker. Reject stale and cross-conversation controls.",
+    "Retain persistence protection when history is missing across business-adapter restart. Explicit reopen rereads saved history without replaying prompts.",
+    "Prevent Playground sends while persistence is failed; sync native running state after prompt errors so recovery cannot become stuck behind an optimistic busy flag.",
+    "Require both browser transport and SSH connectivity for SSH assistant actions. Read current state after reconnect and preserve drafts.",
+    "Keep narrow recovery actions outside bounded, independently scrollable explanations.",
+    "Add actual native recovery smoke and Mac/Windows browser CI gate; source and packaged-root recovery commands added to desktop workflow. CI workflows not run remotely."
+  ],
+  "verification": {
+    "build": {
+      "path": "/tmp/omp-restricted-final-build.log",
+      "exitCode": 0,
+      "sha256": "5005853e5a030ff7d5c1e9f7ce0f35b167dbf7fc0f4e2a87d4f0a2d559806c25"
+    },
+    "typecheck": {
+      "path": "/tmp/omp-restricted-final-types.log",
+      "exitCode": 0,
+      "sha256": "afe164d6475ab09607d600e330c778c40041826259c553a753499c927e4fbe92"
+    },
+    "units": {
+      "path": "/tmp/omp-restricted-final-units-after-build.log",
+      "exitCode": 0,
+      "sha256": "d9814fe418910c0ca85ceaf767b1b19c90ed16eaa67a72ca3596d13aebf645b3",
+      "files": 171,
+      "passed": 1061,
+      "skipped": 1
+    },
+    "relatedSmoke": {
+      "path": "/tmp/omp-restricted-final-related.log",
+      "exitCode": 0,
+      "sha256": "01b8a60807fada768130e3e09f8c43a89766ac88f46beec6551eb179fd306ba3",
+      "passed": 6,
+      "total": 6,
+      "names": [
+        "omp-restricted-recovery-test",
+        "omp-recovery-test",
+        "omp-persistence-test",
+        "omp-persistence-restart-test",
+        "omp-external-history-test",
+        "quiesce-test"
+      ]
+    },
+    "restrictedBrowser": {
+      "path": "/tmp/omp-restricted-final-browser.log",
+      "exitCode": 0,
+      "sha256": "21b668f37af9dbdb1a5720d3f03de0e90d4daec8fae0e039a64e83b442fcdbec"
+    },
+    "playgroundBrowser": {
+      "path": "/tmp/omp-restricted-playground-second.log",
+      "exitCode": 0,
+      "sha256": "d246df6bdfed2f386354284b06190915c60b69397338daa52b502c0ae31191ed"
+    },
+    "checks": [
+      "Protocol 76 sync",
+      "311 isolated test scripts",
+      "Official HTTPS npm lockfile and matching versions",
+      "131 production files engine boundary",
+      "git diff --check",
+      "CI YAML parsed: 4 and 6 jobs"
+    ],
+    "screenshot": {
+      "path": "tests/scratch/omp-restricted-recovery-narrow.png",
+      "sha256": "d3bbe6e9d600e5629b2ef08c897fd7211fe67e456674b2676ea76c072fdc4389",
+      "inspection": "390px viewport dark theme; recovery button fully visible; browser asserts containment and >=44px touch height"
+    },
+    "fullSmoke": "Current list has 115 entries. Completed full baseline remains omp-smoke-proxy.json:114/114, before later proxy and restricted recovery changes. No full 115 rerun."
+  },
+  "coverage": [
+    "Native retry and manual compaction in both NodeAgent and PlaygroundChat business adapters; browser SSH compaction and both retry surfaces.",
+    "Cross-node/cross-assistant/stale operation rejection, Stop and no-worker revival, held peer remains running.",
+    "Same-length external history mutation, missing history, adapter restart, send rejection, explicit saved-history reopen and no automatic model replay.",
+    "Actual browser WebSocket close/reconnect during SSH native compaction; disabled controls while offline, no model replay, draft retained.",
+    "Playground proposal apply/undo, frozen source, prompt deduplication, history and restart, model-failure draft retention, stop and interrupt on restart."
+  ],
+  "intermediateFailures": [
+    {
+      "description": "Initial native test waited only for !running, racing the snapshot. Wait now requires a new assistant plus settled state.",
+      "log": {
+        "path": "/tmp/omp-restricted-native.log",
+        "exitCode": 1,
+        "sha256": "818299c8ccea2808f304002ade86d3d73803f8c66385190fe8d9c2c93984a12b"
+      }
+    },
+    {
+      "description": "Real Playground persistence-failure resend wedged optimistic running state and prevented reopen; production fixed.",
+      "log": {
+        "path": "/tmp/omp-restricted-native-second.log",
+        "exitCode": 1,
+        "sha256": "025799096d08d56e2db52a4fa556ac4fa20a7a7506e741f78a341270244a61f7"
+      }
+    },
+    {
+      "description": "Fixture initially required x-api-key; native custom Anthropic used Bearer. Assert either exact fixture credential, not absent auth.",
+      "log": {
+        "path": "/tmp/omp-restricted-browser.log",
+        "exitCode": 1,
+        "sha256": "5760834bd3e148542fe7ae6b8ead62afb9c13527c9ea8430247ce2331af51006"
+      }
+    },
+    {
+      "description": "Browser test attempted left navigation while Nodes hides sidebar; explicitly return to conversation tab.",
+      "log": {
+        "path": "/tmp/omp-restricted-browser-second.log",
+        "exitCode": 1,
+        "sha256": "0d838c876de0ec5ca20e08a4c5f3edfc2a2387b4ba82dcd73c9d3f32c6adc9c8"
+      }
+    },
+    {
+      "description": "Real browser disconnect left SSH compaction cancel enabled; pass browser ready state and reload node snapshot on reconnect.",
+      "log": {
+        "path": "/tmp/omp-restricted-offline-before.log",
+        "exitCode": 1,
+        "sha256": "3b46edd72d36e79a0e71a7c5af478ff257ebee1265764742c812b5a14927a79f"
+      }
+    },
+    {
+      "description": "Narrow screenshot showed button clipped by existing 100px alert max-height. Final CSS and bounds assertions pass."
+    },
+    {
+      "description": "Verification scheduling mistake: tests overlapped build cleanup, causing five JDBC_BRIDGE_MISSING failures. No production workaround; after build completed, all unit tests passed.",
+      "log": {
+        "path": "/tmp/omp-restricted-final-units.log",
+        "exitCode": 1,
+        "sha256": "cba893850cda11271e27e8a5bc98b4be9db2ec55a5b40cf8615ccb11a3635200"
+      }
+    },
+    {
+      "description": "Existing Playground browser clicked model menu before connection/catalog readiness; now wait for open connection and actual Mock model. All original business assertions retained.",
+      "log": {
+        "path": "/tmp/omp-restricted-final-playground.log",
+        "exitCode": 1,
+        "sha256": "b0fb338332d91ff5f5e0d86029a1687612abe55b02fcf1d703dff54fc1757cfb"
+      }
+    }
+  ],
+  "source": {
+    "candidate": "/var/folders/41/07yyp3_12jddkkthmflqkbgw0000gn/T/omp-restricted-recovery-y7p552xy",
+    "filesCompared": 1328,
+    "fingerprintSha256": "31dc1a729ef7166056a22ef2c8fa619d08caf8ae4429015df29077be86209fd9",
+    "algorithm": "Sorted git tracked/untracked existing files excluding docs/ and AGENTS.md; hash each relative path + NUL + binary SHA256, then SHA256 concatenation",
+    "differences": []
+  },
+  "limitations": [
+    "Local loopback model/SSH fixtures using native OMP, not Windows real-gateway acceptance or original DeepSeek root-cause proof.",
+    "No current packaged artifact or remote CI execution.",
+    "Native Task storage guard and tool-level MCP OAuth remain unresolved.",
+    "Playground active work is omitted from control socket additionalActiveConversations; needs implementation and drain/update regression.",
+    "Old active desktop history still pending safe cleanup; no running application replaced."
+  ],
+  "operations": {
+    "rootDist": "Not overwritten",
+    "userServicePid": 23786,
+    "oldDesktopPid": 62015,
+    "release": "No commit, push, publish or release",
+    "allVerificationHandlesTerminal": true,
+    "isolatedCandidateRemoved": true
+  }
+}

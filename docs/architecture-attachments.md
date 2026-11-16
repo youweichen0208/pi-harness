@@ -2,6 +2,20 @@
 
 > 覆盖附件三种模式、图片问答、视觉桥、文件上传/下载/预览协议。
 
+OMP 当前边界（2026-11-15）：普通发送、steer/follow-up 和编辑重问使用真实原生记录保存与恢复附件；运行中输入通过原生 `prompt` 的 streamingBehavior 完成技能／命令预处理后入队，不能用低层 follow_up 绕过技能展开。OMP 撤回技能时返回原始调用命令，执行时才使用原生构建的技能消息；不会把展开后的整篇技能正文塞回编辑器。
+
+模板附件适配位于原生 RPC 调用公开 `session.prompt()` 的边界：输入钩子先看到原始问题与附件，技能／内置命令由 RPC 分派，可执行扩展／自定义命令仍优先；文件命令与模板使用原生公开函数展开问题，然后附回原文并关闭再次展开。未修改 SDK 实例、原型或 node_modules。`current-file-protocol-test.mjs --browser`、`omp-template-attachments-test.mjs` 与浏览器 `--template` 已通过；空格、换行和 Tab 分隔符与不带附件的原生调用对照，不引入旧 Pi 的参数解析语义。OMP 插队提示向模型发送时会归一化 CRLF，测试对照原生插队并验证历史仍保留原始换行。
+
+用户主动调用的 OMP 技能保存为原生 `custom_message`，宿主将其投影为用户问题，编辑正文取原生保存的调用草稿，模型仍接收展开后的技能内容。附件从同一条技能记录的原始草稿解析并绑定 entryId；编辑／派生前回读完整内容，不用截断后的卡片预览恢复文件。自动加载的技能和普通扩展消息不因此获得用户编辑权限。`omp-skill-history-test.mjs` 覆盖原生历史、重启、原地重问、21 万字符快照与跨对话拒绝；`omp-attachments-browser-test.mjs --skill` 覆盖真实卡片及编辑控件。
+
+## OMP 工具图片（2026-11-16）
+
+原生 MCP 的 `write(xd://…)` 是虚拟工具路由，不能当成项目文件写入。界面仍保留真实调用名与参数，使用通用工具卡显示结果和图片；`server/tool-target.ts` 供消息卡与改动统计识别 URI，Windows 盘符路径继续按文件处理。投影规则不改写原生消息或模型上下文。
+
+普通工具图片共用 `ToolResultImage`，提供下载、保存到当前目录、附加到下一条消息。后两项依赖渲染会话的 `ToolImageContext`，断线或非活动视图禁用。保存使用 `/api/tool-image`，同时校验 clientId/cwd/conversationId、鉴权、Origin、JSON、排空状态、栅格格式及 6 MiB 限额；只以随机文件名独占新建，不覆盖已有文件。旧 `/api/codemode-image` 仅保留历史卡片兼容，不是新工具卡入口。
+
+附加复用图片缩放与草稿管线，异步转码完成后仍归最初点击的对话；不自动发送。保存和附加均不调用模型、不修改 transcript，也不需要重启已停止的 Agent。延迟到同目录其他对话才到达的保存请求返回 409。验证由 `codemode-mcp-test.mjs --browser` 使用真实 OMP／MCP／模型流完成；历史文件名保留在全量冒烟，原 Pi Codemode 脚本、模式和 inlineBudget 断言已按迁移边界退出。
+
 ## 附件三种模式
 
 `ClientMessage.prompt.attachments[].mode` 决定附件如何发送给模型：
@@ -94,11 +108,13 @@ Wiki 使用同一个富文本编辑器的专用编辑态：自动保存、H1–H
 
 ## 原生队列中的附件
 
-协议 v39：文件上下文与问题合并为同一条原生用户消息，图片使用 images 参数。模板携带文本附件时，通过锁定 SDK 1.4.0 内部 prompt-templates 实现（包含空引号参数保留修复）先展开用户命令，再附加原文，以 expandPromptTemplates:false 投递。此时扩展 input 钩子收到展开后的正文且仅调用一次；普通命令、无附件模板和技能沿用原入口。同名扩展命令优先。适配器加载失败直接拒绝发送，保留草稿。
+OMP 接入：普通发送与编辑重问共用附件构建，问题在前、完整附件块在末尾，一起作为一条原生用户消息发送，图片沿用原生 images。历史投影在截断前解析完整正文，仅将附件预览限制为 12000 字符。编辑提交先按当前会话原生 entryId/index 解析冻结原文并校验新附件，然后才导航或派生会话；错误不会先改变历史位置。停止后重开也从原生 transcript 恢复引用，不维护额外附件存储。早期 OMP 开发版本的前置附件正文保持原样，不猜测拆分，也不批量改写历史。
+
+`server/omp/rpc-session.ts` 给原生 RPC 提供公开会话接口的转发视图；所有方法仍以原实例为接收者，只有最终 prompt 调用在完整附件块存在且命中文件命令／模板时分离参数。原生 `expandSlashCommand` 先于 `expandPromptTemplate`；展开后以 `expandPromptTemplates:false` 交回原实例，生成正文即使以斜杠开头也不重新执行命令。没有额外输入钩子、请求票据或可执行队列。可执行自定义命令自行决定返回正文，宿主不强行向其结果追加附件。模板历史与原生 CLI 一样保存展开后的正文，编辑器恢复该正文；用户技能的原始调用则由原生详情恢复。
 
 `server/user-attachments.ts` 从原生完整正文派生末尾完整 `<file>`、`<folder>` 和编辑器快照块；围栏内示例、残缺和有歧义的块保持正文。questionText/userAttachments 仅用于展示，不改历史正文。附件预览最多 12000 字符，恢复引用为原生 entryId + index；服务端只在当前对话原生条目解析完整原文，分支切换前解析完成，拒绝伪造引用。内联文件、选中行和编辑器快照重发不读磁盘；引用块仍保留原生路径引用语义。旧独立 file 消息也从原文恢复，图片沿用原流程。解析后的冻结原文只存在本次请求，不建立会话私有存储。
 
-回归：`tests/unit/user-attachments.test.ts`、`tests/unit/prompt-delivery.test.ts`、`tests/current-file-protocol-test.mjs --browser`。撤回仍返回原生队列全文和图片，通过既有草稿保护恢复。
+回归：`tests/unit/user-attachments.test.ts`、`tests/omp-template-attachments-test.mjs`、`tests/omp-skill-history-test.mjs`、`tests/current-file-protocol-test.mjs --browser`。撤回仍返回原生队列全文和图片，通过既有草稿保护恢复。
 
 ### 附件围栏与模板空白兼容（0.99.7）
 

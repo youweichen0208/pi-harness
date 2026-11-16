@@ -30,7 +30,7 @@ interface Props {
 }
 
 export function isCurrentModelUnavailable(model: UiState["model"] | undefined, models: ModelInfo[], loading: boolean): boolean {
-	return !!model && !loading && models.length > 0 && !models.some(item => item.id === `${model.provider}/${model.id}`);
+	return !!model && !loading && !models.some(item => item.id === `${model.provider}/${model.id}`);
 }
 
 /** Shared model picker and native run settings. */

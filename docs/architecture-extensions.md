@@ -1,3 +1,110 @@
+> OMP 迁移更新（2026-11-15）：生产入口不再使用下文 Pi 扩展服务。OMP 技能设置、原生扩展模块、个人 npm/Git 包及 Marketplace 个人/项目安装、包可选功能与包设置已接入。下文旧 Pi 章节暂作原功能对照。
+
+## OMP 宿主扩展与更新回归（协议 v75）
+
+旧 Pi `check_component_updates`／`update_component` 请求和 `component_updates` 响应已从协议与前端状态机移除，旧请求仍由服务端拒绝。无人引用的 ComponentUpdates、ComponentUpdatesPanel、ExtensionsPanel、ExtensionCatalogList 和 ExtensionJobResult 页面已删除。安装包内的 OMP 引擎随应用发行，不通过插件更新替换；应用自身更新仍使用独立桌面 updater／应用版本入口。
+
+用户通过 Extensions 中的 OMP 安装包操作更新插件：先查看目标和目录，再明确执行。查看清单和预览不查询 registry、不执行工厂；真正升级使用原生 PluginManager，保留启停状态。失败标为失败，原生校验异常恢复旧版本；强杀等无法确认的结果保留 unknown，不自动重发。页面刷新恢复同一归属的任务记录，不将旧任务重新执行。OMP 的原生显式升级不沿用 Pi 的 pinned/manual 分类，也不伪造批量 partial 日志。
+
+`component-updates-test.mjs` 保留完整冒烟入口，使用私有本地 registry 和真实 OMP 验证安装／升级、停用保留、加载失败回滚、registry 不可用、秘密日志不投影及旧命令拒绝。`--browser` 经生产 HTTP routes 和隔离 runner 验证真实界面确认、结果、刷新恢复及中英文／窄屏主题；只转发包端点，不修改用户个人插件。`extensions-update-browser-test.mjs` 复用同一真实场景，替代旧伪造批量消息。
+
+`extensions-test.mjs` 保留宿主 HTTP／WebSocket 入口，验证真实原生发现、双客户端源码版本冲突、开关、保存与显式重载分离、技能配置、旧接口 410、停止后只读和兄弟会话隔离。`--browser` 检查当前五页设置外壳、焦点、源码草稿保护、实际保存与中英文窄屏；`--electron-node` 检查 Electron 的 Node 宿主。包安装、移除、Marketplace、功能和包设置继续由对应原生专项覆盖，未将这些能力删去以迁就旧断言。
+
+这些本地回归不代表 Windows 原任务、全部桌面包或完整迁移已验收。下方旧 Pi 章节仅作为已退休行为对照。
+
+
+## 应用数据库开关与旧接口退休（协议 v70）
+
+Extensions 页顶部的「数据库对话访问」是独立宿主设置，使用 `/api/database` 的 agent_settings / set_agent_settings，按版本保存并立即影响现有会话的下一次调用，无需原生重载。它不依赖扩展清单读取成功，详见 [数据库工作台](architecture-database.md#只读执行与-agent)。后面的模块、包和技能仍按各自原生生效规则运行。
+
+`/api/extensions` 只保留 omp-resources / omp-reload / omp-save-skills；旧 skills-list、builtin-list、builtin-toggle 及其他退休操作返回 410，不执行任何 OMP 命令。此前兼容分支为了返回空清单而调用 command，真实计数器复现其会重开已停止 worker；该分支已移除。无人引用的 Pi SkillsPanel、BuiltinExtensionsPanel 与专用协议类型一并退休。包管理和源码编辑的 OMP 替代及旧测试映射见上方 v75 章节；跨平台与整体迁移验收仍分别进行。
+
+## OMP 扩展与包目录入口（协议 v72）
+
+个人扩展目录显示实际 `<dataDir>/omp/agent/extensions`，不再使用旧 `PI_CODING_AGENT_DIR` 或 Pi 目录。读取目录信息不创建文件夹；点击桌面打开／浏览器复制时才准备这个固定目录。已有同名文件不覆盖，错误独立于模块与包清单，修复后可重试。停止聊天 worker 后仍可访问个人目录，不创建或恢复 agent。
+
+`/api/omp-paths` 使用当前 client/cwd/conversation 及同源检查，模块通过原生清单 ID 解析文件，个人包通过安装名解析目录，Marketplace 通过插件 ID、安装范围和当前清单中的路径选择副本。浏览器不能传任意目录让服务器创建或打开。异步清单返回后重新检查会话归属；不存在、类型不符或已移除的目标拒绝。包清单读取运行独立的只读原生包 worker，不导入工厂，不请求模型。
+
+桌面 `openOmpPath` 只允许本应用主 frame，通过带认证的本机接口取得确认路径。目录交给文件管理器打开，模块文件仅在文件管理器中显示，不能作为程序执行；窗口已关闭时不执行后续 OS 操作。旧 `openExtensionPath` IPC 明确拒绝，不再调用退休的 Pi HTTP 接口。浏览器先解析当前有效目标，再复制服务端路径，失败不复制陈旧缓存。
+
+`extensions-directory-desktop-test.mjs` 已迁移到 OMP，覆盖 Unicode 路径、缺失目录、同名文件保留、键盘打开、模块定位、错误身份、旧接口拒绝和 Stop 后不重开。资源浏览器回归验证复制固定目录；原生包和包浏览器回归验证已安装目录、链接源、个人/项目插件副本、伪造路径及异步归属变化。真实 Electron IPC 回归已加入 Mac/Windows CI；本地结果与尚未执行的平台验收分开记录。
+
+## OMP 本地扩展源码编辑（协议 v71）
+
+原生模块列表中可编辑的本地 JS/TS 入口提供「编辑文件」。目标必须来自 OMP 当前发现结果，并位于个人 extensions、当前项目 `.omp/extensions` 或原生显式配置的本地路径中。已安装插件入口和 node_modules 不开放源码写入；这里不是包目录浏览器，不允许客户端提交任意路径，也不会创建或删除文件。目录打开／定位入口已由 v72 的 OMP 路径接口接管。
+
+`harness_extensions` 增加 read-file / save-file，由 `/api/omp-extensions` 继续按 client/cwd/conversation、同源和 JSON 类型准入。读取仅使用现存 worker，停止后不会重开；保存还要求空闲、非受限、非排空并持有会话导航操作权。读取和保存均不导入工厂、不发送模型请求，也不自动重载。保存成功后的待重载提示只属于当前 worker，不代表其他已运行会话已经载入新代码。
+
+读取最多 512 KiB，拒绝非普通文件、替换后的符号链接、无效 UTF-8 与 NUL；保留 BOM。版本绑定实际路径、权限和文件内容。保存取得 OMP 公开文件锁后重查目标及版本，用同目录临时文件和公开 Windows rename retry 接口替换，保留权限；应用内两个 worker 使用同一旧版本时只有一个成功。外部编辑器不一定遵守该锁，版本检查不是跨进程文件系统事务。保存失败不自动重试。
+
+编辑器不受清单轮询覆盖；冲突保留草稿，重新读取前确认丢弃。切页、关闭设置和页面刷新沿用草稿保护；关闭编辑器恢复触发按钮的焦点。代码作为纯文本显示，窄屏使用 16px 等宽输入框，保存与重载是不同动作。
+
+回归扩展现有 `omp-extension-settings-test.mjs` 和 `omp-resources-desktop-test.mjs`：原生文件读取、外写冲突、跨 worker 并发、权限/BOM、非法编码/大小/目标替换、停止后禁止打开、保存不执行，以及界面草稿、冲突恢复、显式重载、中英文及窄屏。测试仍使用原版 OMP，不改 SDK 文件；平台实际运行结果见专项验证记录。
+
+## OMP 包设置
+
+`server/omp/package-settings.ts` 只读包 manifest 中的原生 string/number/boolean/enum 声明，使用 SDK 的 `validateSetting` 验证；读取不执行包模块。设置以 manifest 的包名为键，共用个人 `omp-plugins.lock.json` 和项目 `plugin-overrides.json`。设置范围与 Marketplace 安装范围独立，项目安装条目不会把设置写进其安装缓存锁文件；个人与项目安装的同名包共用设置。项目查找按运行时 loader 的原生发现顺序，页面显示实际文件路径。
+
+秘密字段只返回类型、是否配置与来源，不回显存储值、默认值或秘密 enum 候选；环境声明只显示变量名，不读取其值。普通字段区分此范围的值、项目覆盖与 manifest 声明默认，保留 false、0 和空字符串。保存使用单独的 HTTP/短期 Bun worker 操作，秘密输入通过 HTTP 请求体与子进程 stdin 传递，不进入包预览、持久化任务或原始错误日志。
+
+保存持有包管理锁，重读 manifest、个人配置及全部项目候选文件并检查版本；完整 patch 验证后一次原子写入，保留未知字段和其他包设置。个人配置用 SDK 的私有文件 writer；项目配置以随机 0600 临时文件和公开的 Windows rename retry 接口提交。未知键、类型/范围错误、非法秘密声明和非对象项目文件拒绝写入。删除覆盖只删除所选范围的字段。运行中/排空/切换会话时拒绝保存；不重启或自动打开 agent。
+
+界面按需读取，每个字段明确选择保留、设置或删除覆盖。错误保留草稿；切设置页、关闭窗口、切范围及重读前保护草稿，成功后清除输入中的秘密。保存成功不代表当前扩展已重新读取，用户需显式重载或新建会话。原生读取与持久化回归为 `omp-package-settings-test.mjs`，界面回归并入 `omp-packages-browser-test.mjs`，后者可接受桌面 executable 与 resources/app 两个参数。
+
+## OMP 原生扩展模块
+
+`server/omp/extension-settings.ts` 调用 `discoverExtensionPaths` / `listPackageExtensionModules` 做只读发现，不导入工厂；当前加载与活跃状态来自公开 extension runner。清单同时显示配置是否启用、模块是否加载及是否活跃，不能仅凭设置保存成功显示已运行。原生新来源需要重启，已导入模块可由 SDK 的 settings listener 停用/恢复；浏览和恢复不重新执行模块顶层代码。
+
+开关使用 OMP `extension-module:<name>` 标识，同名模块共用规则；原生显式文件路径绕过名称开关，因此页面不提供无效开关，可在原生 `extensions` 路径中移除。个人 `extensions` / `disabledExtensions` 通过公开 Settings 定义、writeValue/unsetGlobalValue/flush 保存，保留未知字段，允许删除覆盖恢复默认。有效值与来源单独展示，项目/运行时/环境覆盖下禁止声称个人开关可直接控制当前模块。只开放两个数组字段，限制数量、长度和请求大小。
+
+保存有设置版本、应用 worker 间的文件锁与原生落盘锁；先重读检查冲突，再保存并核对字段。其他空闲 worker 经公开 reloadFromDisk 同步，运行中等待下一次刷新；不强制重启它们。受限会话、运行中、压缩/重试及停止后的写入被拒绝，失败保留草稿。清单轮询不重置草稿，切页/关闭/刷新前保护未保存内容。
+
+设置页重载和 `extensions_reload` 使用 `OmpSession.reloadResources`：导航操作权覆盖停止旧 worker、打开同一原生历史、重新绑定宿主工具和推送元数据。OMP 的会话级 `session.reload()` 不重新导入模块，不能代替这个操作。保留模型、思考、运行偏好与会话身份，不重发任务；正常空闲重载保留原有任务错误/中断状态，不能制造一次假中断。排队输入和原生恢复操作期间拒绝重载。用户 Stop 取消操作权，禁止晚到的初始化继续重开；下一次显式重载才可继续。
+
+资源清单、扩展列表和 MCP 配置读取均只使用现存 worker，停止后返回不可用。MCP 的 `workerAvailable` 与 manager 的 `available` 分开，避免把禁用 MCP 当成 worker 已停止。只有明确的重载允许打开新 worker。
+
+OMP 18.20.0 的 PluginManager 使用独立 config-root 下的 plugins 目录；仅设置 `PI_CODING_AGENT_DIR` 不会把它移动到 agentDir/plugins。页面显示 SDK 实际返回的目录，与采用相同原生目录配置的 OMP CLI 共用个人包。应用覆盖 agentDir 并清除继承的 profile/config-dir 选择；不同 profile 或 XDG 布局的 CLI 可能使用另一目录，以界面实际路径为准。包管理不访问旧 Pi 包目录。
+
+回归：`omp-extension-settings-test.mjs` 使用真实模块计数器和命令验证只读发现、停用/恢复、重启后加载新代码、跨会话隔离、显式文件语义、冲突/默认值/校验与项目覆盖。`omp-resources-desktop-test.mjs` 通过浏览器及实际 Electron 覆盖开关、路径编辑、代码刷新、错误/草稿和窄屏；`omp-stop-metadata-test.mjs` 验证重载中 Stop 与停止后的被动读取。
+
+## OMP 个人包管理
+
+`/api/omp-packages` 沿用同源、JSON、client/cwd/conversation 归属检查。`OmpPackages` 启动独立 Bun `package-worker`，调用公开 PluginManager 的 list/install(dryRun)/install/link/upgrade/uninstall/setEnabled。只读清单和预览不导入工厂、不访问 registry；真正安装/更新遵循原生 SDK 的扩展加载校验和失败回滚，可能执行第三方代码。UI 先显示目标与实际个人目录，用户点击执行后才变更。不打开聊天 worker，不调用模型，不自动重载已有会话。
+
+新建本地链接拒绝覆盖已有 runtime 路径；移除链接沿用原生卸载，只删除注册和链接，不删除源文件。更新使用原生来源与状态保留逻辑；本地链接不能更新。个人启用与当前项目的有效启用分别投影，项目覆盖不会被个人开关偷偷删除。安装包清单只投影名称、版本、路径、启用及功能名，不返回 manifest/settings、凭据或任意工厂日志。
+
+写入前重新读取包清单、原生 manifests/lockfile/当前项目 override，核对预览版本；链接额外核对源 manifest。应用 package workers 在实际包根目录共用写锁，不宣称外部 OMP CLI 也遵守该锁。用户指定来源在安装过程中仍按原生语义解析，预览不是 registry 版本或代码快照。
+
+长操作立即返回 job ID，最长 20 分钟，与聊天 RPC 的 30 秒期限分离。`<dataDir>/omp/package-jobs` 持久化操作、归属及状态，同一请求 ID 不重复执行；同一客户端和对话可在切页/刷新后恢复记录，列表最多返回最近 50 条。不同对话不能读取/取消对方操作。quiesce 和当前模型任务运行中拒绝启动新包写操作；关闭设置页不取消后台包操作，显式停止包操作或服务关闭才结束 worker 进程树。聊天 Stop 不影响独立包任务。
+
+正常原生返回才记成功；原生错误记失败，强杀、超时或无法确认执行结果记 unknown。宿主重启发现原任务宿主 PID 已消失也记 unknown；不能确认 PID 已退出时不假定任务停止。未知结果和失败均要求检查本地状态后手动决定，绝不自动重发。同一请求 ID 即使失败也不能用于重试新操作。原生安装的正常异常回滚有测试；进程强杀不保证回滚，写锁可能等待 stale 期限才释放。
+
+`omp-packages-test.mjs` 通过临时本地 npm registry 和原生 config-root 隔离，验证真实安装、更新、失败回滚、启停、移除、链接源保留、读取不执行、预览冲突、实际 HTTP 权限/准入、持久化去重和停止。测试不修改 HOME，不触碰真实个人包。`omp-packages-browser-test.mjs` 将产品包 API 转发到使用生产 routes 和真实 worker 的隔离测试服务，验证界面写操作、冲突、记录恢复和窄屏；不是用户个人目录的写入验收。资源桌面测试另验证真实应用端点的列表及无副作用预览。
+
+## OMP Marketplace 与项目范围
+
+`marketplace-packages.ts` 在独立 package worker 内调用公开 `MarketplaceManager`，原生 helpers 决定个人 registry/cache 与 `resolveOrDefaultProjectRegistryPath(cwd)` 的项目位置。嵌套工作目录沿用原生项目锚点，不接受浏览器自选安装根目录。OMP 18.20.0 的直接 npm/Git/link 管理仍是个人范围，原生 CLI 对这些操作忽略 project scope，因此应用明确拒绝而非假装项目安装；Marketplace 插件通过原生接口支持个人/项目两种范围。
+
+来源支持原生本地目录、Git/GitHub 和 JSON 地址。查看列表读取缓存，不刷新网络；添加远端来源的预览只核对格式，确认执行后才获取。添加本地来源时原生解析 catalog，核对重复名称并绑定内容版本。来源刷新与已安装插件升级是两个动作；移除 Marketplace 仅移除来源及 catalog 缓存，保留已安装插件，仍可单独启停或移除它们。损坏或丢失的单个 catalog 标为不可读，保留来源管理入口。
+
+清单投影插件 ID、版本、说明、安装路径、范围及原生 enabled/shadowed 状态，不返回嵌入的 MCP/工具配置、manifest 设置或凭据。已有来源 URL 隐藏身份信息、query 和 fragment；新的带凭据/query URL 被拒绝，避免写入任务记录。启用状态是原生配置，不能替代当前会话已经加载的状态。显式重载后的原生发现与加载决定实际使用哪个副本。
+
+操作预览显示目标范围、实际目录、脱敏来源和可确定的升级前后版本。版本指纹包含个人/项目 registry、runtime 配置、项目引用索引和 catalog；本地安装源还绑定 package/plugin manifest。执行重读核对完整计划，目录或来源变化不继续使用旧预览。项目操作在共享个人包锁之外再取得项目目录锁；个人操作可能改变同 ID 的项目引用时也取得项目锁。原生同版本缓存跨范围共享，强制重装/升级可能同时影响引用它的副本，界面提前说明。应用锁不宣称覆盖外部 OMP CLI。
+
+所有变更共用既有持久化 job、身份/同源/quiesce 检查、去重和独立停止。项目/个人副本在列表中分别操作，不静默选择同 ID 的其他范围。已有聊天不自动重载或重发；UI 完成只代表包管理任务完成。
+
+`omp-marketplace-test.mjs` 使用独立临时 config 名称（不修改 HOME、不写 ~/.omp）和本地/HTTP 来源，验证只读/脱敏、嵌套项目定位、双范围安装、真正的原生扩展发现/加载、停用项目后的个人代码回退、按范围升级、跨项目缓存引用保留、版本冲突和缺失 catalog 恢复。`omp-packages-browser-test.mjs` 的隔离原生端点回归覆盖来源管理、scope 预览、覆盖/回退、按范围升级/移除和窄屏主题。远端 Git 托管服务和 Windows/Linux 实机仍须各自验证。
+
+## OMP 包可选功能
+
+个人 npm/Git/link 与 Marketplace 的个人/项目副本均按 manifest 展示可选功能。`null` 表示包默认，`[]` 表示不启用任何可选功能，非空数组表示明确选择；基础入口始终保留。当前安装范围的选择、项目覆盖后的选择与模块是否已加载分开，保存不重载会话。项目 `plugin-overrides.json` 的优先级使用 SDK 公开 `getConfigDirPaths` 顺序；不改写项目覆盖规则。
+
+功能变更仍使用 `/api/omp-packages` 的预览和持久化任务：旧表单版本在预览时拒绝，确认执行时再次检查安装状态、完整 manifest 与覆盖文件指纹，未知/重复功能名拒绝。个人范围调用 `PluginManager.setEnabledFeatures`；项目范围通过公开 `normalizePluginRuntimeConfig` / `writePluginRuntimeConfig` 更新对应运行目录，保留启停、版本、其他包、设置和未知顶层字段。项目写入同时取得个人包锁与项目目录锁，SDK 用私有权限的临时文件原子替换。共享缓存中的 manifest 和代码不变，不执行工厂。
+
+浏览器功能表单保留失败和外部变更时的草稿，切页/关闭/刷新页面保护未保存选择；预览显示确切选择和范围，确认后按任务记录恢复状态。只投影功能名、描述与默认标记，不发送包设置 schema、默认密钥或保存值。无可选功能的包不显示空表单；损坏或多个版本并存的 Marketplace 副本仍可移除，但不提供无法确定目标的功能编辑。
+
+`omp-package-features-test.mjs` 用真实原生加载器验证默认/全关/自选实际导入的模块、两个范围共享代码而分别保存功能、项目覆盖与停用回退、冲突和凭据不下发。`omp-packages-browser-test.mjs` 用真实生产包端点和隔离目录验证草稿、预览冲突、两个范围写入和窄屏浅深主题。
+
 # Extensions 原生包管理
 
 文档转 Markdown 与 OKF 知识蒸馏扩展均已移除，不再提供聊天工具、命令或设置条目；实现、Python 资源和打包支持也已删除。

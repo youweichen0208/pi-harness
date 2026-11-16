@@ -34,10 +34,10 @@ export async function listenIsolated(server, { nextPort = nextTestPort, attempts
 /** Start the real harness on a high port. Only bind collisions are retried;
  * other startup failures remain failures. Ready requires this child's bind log
  * and PID, so an unrelated HTTP server is never mistaken for the fixture. */
-export async function startIsolatedHarness({ env = {}, nextPort = nextTestPort, attempts = 8, timeoutMs = 20000, onOutput = () => {}, args = ["dist/server/index.js"] } = {}) {
+export async function startIsolatedHarness({ env = {}, executable = process.execPath, nextPort = nextTestPort, attempts = 8, timeoutMs = 20000, onOutput = () => {}, args = ["dist/server/index.js"] } = {}) {
 	for (let attempt = 0; attempt < attempts; attempt++) {
 		const port = checkedPort(nextPort());
-		const child = spawn(process.execPath, args, { env: testEnv({ ...env, PORT: String(port), PI_WEB_HOST: "127.0.0.1" }), stdio: ["ignore", "pipe", "pipe"] });
+		const child = spawn(executable, args, { env: testEnv({ ...env, PORT: String(port), PI_WEB_HOST: "127.0.0.1" }), stdio: ["ignore", "pipe", "pipe"] });
 		let logs = "", closed = false, spawnError;
 		const output = chunk => { logs = (logs + chunk).slice(-16000); onOutput(String(chunk)); };
 		child.stdout.on("data", output); child.stderr.on("data", output);

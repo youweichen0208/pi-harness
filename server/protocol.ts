@@ -109,6 +109,23 @@ export interface UiSubagentTaskDetail {
 export type SubagentRequest = { type: "subagent_request"; requestId: string; conversationId: string; taskId: string; action: "detail" | "stop"; cursor?: number };
 export type SubagentResponse = { type: "subagent_response"; requestId: string; conversationId: string; taskId: string; detail?: UiSubagentTaskDetail; error?: string };
 
+/** Native OMP task state; no provider objects, transcript paths or raw events. */
+export interface UiOmpTask {
+	id: string;
+	parentToolCallId: string;
+	agent: string;
+	title: string;
+	task?: string;
+	status: "pending" | "running" | "completed" | "failed" | "aborted" | "interrupted";
+	currentTool?: string;
+	durationMs?: number;
+	tokens?: number;
+	cost?: number;
+	canStop: boolean;
+}
+export type OmpTaskRequest = { type: "omp_task_request"; requestId: string; conversationId: string; taskId: string; action: "detail" | "stop"; cursor?: number };
+export type OmpTaskResponse = { type: "omp_task_response"; requestId: string; conversationId: string; taskId: string; task?: UiOmpTask; messages?: UiMessage[]; nextCursor?: number; hasMore?: boolean; truncated?: boolean; cancelled?: boolean; error?: string };
+
 export interface UiNestedToolCall {
 	id: string;
 	name: string;
@@ -155,16 +172,27 @@ export interface UiTreeState {
 	verifying: boolean;
 	busy: boolean;
 }
+export interface UiSessionPersistence {
+	/** Native store could not confirm durability; explicit reopen is required. */
+	failed: boolean;
+	externallyModified?: boolean;
+	/** Recovery metadata could not be read/written; do not promise survival across restart. */
+	recoveryStateUnavailable?: boolean;
+	/** OMP preserved the contested file and continued saving in a sibling. */
+	relocation?: { reason: "open-elsewhere" | "replaced" | "contested"; fromFile: string; toFile: string };
+}
 export type TreeRequest =
 	| { type: "tree_get"; conversationId: string; reqId: string; filter?: TreeFilterMode; query?: string }
 	| { type: "tree_content"; conversationId: string; reqId: string; entryId: string; codemodeToolCallId?: string }
 	| { type: "tree_preview"; conversationId: string; reqId: string; targetId: string }
 	| { type: "tree_navigate"; conversationId: string; reqId: string; targetId: string; summary: "none" | "default" | "custom"; customInstructions?: string; replaceInstructions?: boolean; label?: string; abortRunning?: boolean }
+	| { type: "tree_cancel_summary"; conversationId: string; reqId: string; operationId: string }
 	| { type: "tree_label"; conversationId: string; reqId: string; entryId: string; label: string | null }
 	| { type: "session_clone"; conversationId: string; reqId: string }
 	| { type: "session_fork"; conversationId: string; reqId: string; entryId: string; position: "before" | "at" }
 	| { type: "session_reopen"; conversationId: string; reqId: string };
 export type TreeResponse =
+	| { type: "tree_cancel_result"; conversationId: string; reqId: string; status: "requested" | "stale" }
 	| { type: "tree"; conversationId: string; reqId: string; revision: string; leafId: string | null; nodes: UiTreeNode[]; truncated: boolean }
 	| { type: "tree_changed"; conversationId: string; revision: string; branchPoints: number }
 	| { type: "tree_open"; conversationId: string; mode: "tree" | "fork" }
@@ -263,8 +291,8 @@ export interface UiModelInfo {
 /** remainingMs is sampled by the server; deadline is filled locally by the browser only. */
 export interface UiRecovery {
 	branch?: { id: string };
-	compaction?: { id: string; reason: "manual" | "threshold" | "overflow"; tokensBefore?: number };
-	lastCompaction?: { id: string; reason: "manual" | "threshold" | "overflow"; status: "completed" | "aborted" | "error"; tokensBefore?: number; tokensAfter?: number; error?: string };
+	compaction?: { id: string; reason: "manual" | "threshold" | "overflow" | "idle" | "incomplete"; tokensBefore?: number };
+	lastCompaction?: { id: string; reason: "manual" | "threshold" | "overflow" | "idle" | "incomplete"; status: "completed" | "aborted" | "error" | "skipped"; tokensBefore?: number; tokensAfter?: number; error?: string };
 	retry?: { id: string; phase: "waiting" | "running"; attempt: number; maxAttempts: number; remainingMs?: number; deadline?: number; error: string };
 	summary?: { id: string; source: "compaction" | "branchSummary"; phase: "waiting" | "running"; attempt?: number; maxAttempts?: number; remainingMs?: number; deadline?: number; error?: string };
 }
@@ -279,7 +307,18 @@ export interface UiCacheWarming {
 	cost: number;
 }
 
+export interface UiCommandOutput {
+	id: string;
+	timestamp: number;
+	text: string;
+	truncated?: boolean;
+}
+
 export interface UiState {
+	branchSummary?: { operationId: string; requestId: string; cancelling: boolean };
+	/** Recent local OMP output, transient and excluded from model history. */
+	commandOutputs?: UiCommandOutput[];
+	ompTasks?: UiOmpTask[];
 	subagentTasks?: { toolCallId: string; tasks: UiSubagentProgress[] }[];
 	tree?: UiTreeState;
 	recovery?: UiRecovery;
@@ -326,18 +365,17 @@ export interface UiState {
 	queue: { steering: string[]; followUp: string[] };
 	errorMessage?: string;
 	tools: string[];
+	sessionPersistence?: UiSessionPersistence;
 	/** Monotonic snapshot sequence — clients can use it to drop stale snapshots. */
 	version: number;
 	/**
-	 * Whether the pi agent config looks ready (agentDir + auth.json with at
-	 * least one provider credential). False → the client should offer the
-	 * one-time setup flow.
+	 * Whether the active engine exposes at least one configured model.
+	 * The wire name is retained for existing clients; OMP uses its native catalog.
 	 */
 	piConfigured: boolean;
 	/**
-	 * Whether the pi CLI binary is installed and runnable (`pi --version`
-	 * probe). True → the setup modal skips the install step and offers the
-	 * API key form directly; false → offer auto-install first.
+	 * Legacy wire field. OMP is embedded and sends true; the UI never probes or
+	 * installs an external Pi CLI. Retained until the old wire shape is retired.
 	 */
 	piAgentInstalled: boolean;
 	/** Live session stats for the footer status bar. */
@@ -391,18 +429,15 @@ export interface TerminalInfo {
 /** A slash command available in the chat input (the web counterpart of the
  *  pi CLI's "/" command menu). Names carry no leading slash. */
 export interface SlashCommandInfo {
-	/** Invokable command name without the leading slash (e.g. "new",
-	 *  "skill:review", "templatename"). Extension collisions with builtin
-	 *  names are suffixed by the SDK ("new:2"), like the CLI. */
+	/** Invokable command name or native alias without the leading slash. */
 	name: string;
 	description?: string;
 	descriptionEn?: string;
 	/** Argument placeholder shown in the picker (e.g. "<路径>", "[说明]"). */
 	argumentHint?: string;
 	argumentHintEn?: string;
-	/** Where the command comes from: web-native builtin / SDK extension /
-	 *  prompt template / skill / UI plugin（registerCommand）。 */
-	source: "builtin" | "extension" | "prompt" | "skill" | "plugin";
+	/** Native OMP source; prompt/plugin remain for host templates/UI plugins. */
+	source: "builtin" | "extension" | "prompt" | "skill" | "plugin" | "custom" | "mcp_prompt" | "file";
 }
 
 /** Attachment spec shared by "prompt" and "edit_message" client messages:
@@ -452,17 +487,35 @@ export interface NativeMcpTool { name: string; exposure: string; description: st
 export interface NativeCodemodeSettings { version: string; path: string; mode: "on" | "only"; inlineBudget: number; effectiveMode: "on" | "only"; effectiveInlineBudget: number; }
 export interface NativeMcpConfigState { path: string; paths?: { global: string; project: string }; scope: "global" | "project"; version: string; document: Record<string, unknown>; trusted: boolean; inheritedAutoEnableCodemode?: boolean; }
 
+/** Admission, not task success. commandExecuted identifies native local handling;
+ * an extension may still have emitted an execution error. */
 export type PromptResult = { type: "prompt_result"; requestId: string; ok: boolean; conversationId?: string; sessionId?: string; commandExecuted?: boolean; attachmentsConsumed?: boolean; receipt?: "processing" | "accepted" | "rejected" | "unknown" | "missing" | "expired" | "conflict" };
+
+/** Native OMP multi-question dialog, projected without SDK objects. */
+export interface UiAskQuestion {
+	id: string;
+	question: string;
+	header?: string;
+	options: { label: string; description?: string; preview?: string }[];
+	multi?: boolean;
+	recommended?: number;
+}
+export interface UiAskAnswer {
+	id: string;
+	selectedOptions: string[];
+	customInput?: string;
+}
 
 export type ClientMessage =
 	| PlaygroundChatRequest
 	| SubagentRequest
+	| OmpTaskRequest
 	| { type: "recall_queue"; conversationId: string; requestId: string }
 	| { type: "queue_recall_ack"; conversationId: string; requestId: string }
 	| TreeRequest
 	| { type: "native_mcp_request"; requestId: string; cwd: string; scope: "global" | "project"; action: "get" | "save" | "trust" | "command" | "radius" | "codemode" | "log"; codemode?: { mode: "on" | "only"; inlineBudget: number }; version?: string; document?: Record<string, unknown>; command?: "status" | "login" | "logout" | "reconnect"; name?: string }
 	| { type: "node_request"; requestId: string; action: string; nodeId?: string; terminalId?: string; conversationId?: string; payload?: Record<string, unknown> }
-	| { type: "hello"; clientId: string; protocolVersion?: number; wikiCwd?: string }
+	| { type: "hello"; clientId: string; protocolVersion?: number; wiki?: boolean; wikiCwd?: string }
 	/** Re-request the slash-command catalog (also pushed on attach / cwd change). */
 	| { type: "get_commands" }
 	| { type: "query_prompt_receipt"; requestId: string }
@@ -580,12 +633,10 @@ export type ClientMessage =
 	| { type: "set_run_settings"; conversationId: string; autoCompaction?: boolean; autoRetry?: boolean }
 	| { type: "set_cache_warming"; mode: CacheWarmingMode }
 	| { type: "get_cache_warming"; conversationId: string }
-	| { type: "dialog_response"; conversationId: string; id: string; value: string | boolean | null }
+	| { type: "dialog_response"; conversationId: string; id: string; value: string | boolean | UiAskAnswer[] | null }
 	// -- self-update ----------------------------------------------------------
 	/** Check the npm registry for a newer pi-harness version. */
 	| { type: "check_update" }
-	| { type: "check_component_updates"; requestId: string }
-	| { type: "update_component"; requestId: string; id: string }
 	// -- pi agent setup ------------------------------------------------------
 	/** Auto-install the pi agent (mkdir config dir + npm i -g the CLI). */
 	| { type: "install_pi_agent" }
@@ -1012,12 +1063,6 @@ export interface ScmWorktree {
 export interface ScmOperationRequest { clientId: string; cwd: string; conversationId: string; action: "switch" | "push" | "pull"; branch?: string; }
 export interface ScmOperationResult { cwd: string; conversationId: string; text?: string; error?: string; }
 
-export interface NativeSkillsState {
-	version: string;
-	paths: string[];
-	skills: (UiSkillInfo & { id: string; path: string; source: "user" | "project" | "temporary" | "package"; scope: "user" | "project" | "temporary"; canToggle: boolean; promptVisible: boolean })[];
-}
-
 export interface UiSkillInfo {
 	name: string;
 	description: string;
@@ -1026,18 +1071,6 @@ export interface UiSkillInfo {
 
 /** One loaded extension, with whether it is currently enabled. Disabled
  *  extensions are unloaded from the runtime (tools/commands disappear). */
-export interface ComponentUpdate {
-	id: string;
-	name: string;
-	current: string | null;
-	latest: string | null;
-	kind: "bundled" | "npm" | "git" | "local";
-	scope?: "user" | "project";
-	status: "available" | "current" | "pinned" | "manual" | "unknown" | "error";
-	canUpdate: boolean;
-	error?: string;
-}
-
 export interface UiExtensionInfo {
 	/** Stable identity for the toggle: the npm spec for packages, the resolved
 	 *  entry path otherwise. */
@@ -1069,6 +1102,7 @@ export interface UiSettingsState {
 export type ServerMessage =
 	| PlaygroundChatEvent
 	| SubagentResponse
+	| OmpTaskResponse
 	| { type: "queue_recalled"; conversationId: string; requestId: string; text: string; images: { data: string; mimeType: string }[] }
 	| TreeResponse
 	| { type: "native_mcp_result"; requestId: string; cwd: string; state?: NativeMcpConfigState; error?: string; pending?: boolean; tools?: string[]; toolInfo?: NativeMcpTool[]; servers?: NativeMcpServerStatus[]; statusText?: string; codemode?: NativeCodemodeSettings; log?: string }
@@ -1101,6 +1135,8 @@ export type ServerMessage =
 			rev: number;
 			baseRev: number;
 			appended: UiMessage[];
+			/** Complete light checkpoint, not a partial patch. Omitted optional
+			 * fields clear their previous values after JSON serialization. */
 			state: Omit<UiState, "messages" | "rev"> & { rev: number };
 	  }
 	| {
@@ -1326,7 +1362,15 @@ export type ServerMessage =
 			conversationId: string;
 			source: string;
 			id: string;
-			kind: "select" | "confirm" | "input" | "editor";
+			kind: "select" | "confirm" | "input" | "editor" | "ask";
+			questions?: UiAskQuestion[];
+			timeoutMs?: number;
+			optionDetails?: { description?: string }[];
+			initialIndex?: number;
+			selectionMarker?: "radio" | "checkbox";
+			checkedIndices?: number[];
+			markableCount?: number;
+			secret?: boolean;
 			title: string;
 			args: unknown[];
 	  }
@@ -1358,7 +1402,6 @@ export type ServerMessage =
 	 *  extensions, saved presets). Pushed on attach and after every settings
 	 *  change. */
 	| { type: "settings_state"; settings: UiSettingsState }
-	| { type: "component_updates"; requestId: string; cwd: string; phase: "checking" | "ready" | "updating" | "updated" | "error"; items: ComponentUpdate[]; restartRequired?: boolean; error?: string }
 	// -- plugins (<dataDir>/plugins) -----------------------------------------
 	/** Installed-plugin catalog. Pushed on attach (the dir is re-scanned each
 	 *  time so freshly dropped plugins appear without a server restart) and
@@ -1476,8 +1519,6 @@ export interface WikiDirectory {
 }
 
 // Extensions HTTP API: native Pi package management, separate from agent messages.
-export interface CliToolStatus { status: "available" | "missing" | "unusable"; version?: string; reason?: string; }
-export interface PiCliStatus { pi: CliToolStatus; node: CliToolStatus; npm: CliToolStatus; canInstall: boolean; }
 export type ExtensionScope = "user" | "project";
 export interface ExtensionPackage {
 	id: string; source: string; name: string; scope: ExtensionScope; kind: "npm" | "git" | "local" | "file";
@@ -1487,26 +1528,6 @@ export interface ExtensionPackage {
 }
 export interface ExtensionsState { packages: ExtensionPackage[]; version: string; trusted: boolean; checkedAt?: number; autoCheck?: boolean; updateResults?: ExtensionUpdateResult[]; }
 
-export type BuiltinExtensionId = "pi-harness-database" | "pi-harness-subagents" | "codemode" | "tool-search" | "mcp";
-export interface BuiltinExtensionState {
-	id: BuiltinExtensionId;
-	settingsVersion?: string;
-	status: "loaded" | "disabled" | "pending" | "unavailable" | "error";
-	enabled?: boolean;
-	reason?: "missing" | "conflict" | "filtered";
-	error?: string;
-	tools: string[];
-	commands: string[];
-}
-export interface BuiltinExtensionsState {
-	conversationId: string;
-	items: BuiltinExtensionState[];
-	documentVersion?: string;
-	canReload: boolean;
-}
-export type BuiltinExtensionsRequest =
-	| { action: "builtin-list"; conversationId: string }
-	| { action: "builtin-toggle"; conversationId: string; id: "pi-harness-database" | "pi-harness-subagents"; enabled: boolean; version: string };
 export interface ExtensionCatalogItem { name: string; description: string; descriptionZh?: string; version?: string; author?: string; downloads?: number; date?: number; types: string[]; image?: string; url: string; repository?: string; }
 export interface ExtensionCatalog { items: ExtensionCatalogItem[]; page: number; pages: number; total?: number; }
 export interface ExtensionPackageDetails { source: string; name: string; version?: string; description?: string; author?: string; repository?: string; license?: string; resources: Record<string, string[]>; canPin: boolean; }
@@ -1533,9 +1554,24 @@ export interface SystemPromptState {
 	custom: boolean; trusted: boolean; pending: boolean; reloadError?: string; busy: boolean;
 }
 
-/** One local native Pi session with SSH-only tools, isolated from the main chat. */
+/** OMP owns prompt composition; disk selection is distinct from the loaded prompt. */
+export interface UiOmpPromptFile {
+	id: string; path: string; kind: "system" | "template" | "context";
+	scope: "user" | "project" | "source"; exists: boolean; editable: boolean;
+	version: string; selectedOnDisk: boolean; error?: string;
+}
+export interface UiOmpPromptState {
+	available: boolean; blocks: string[]; files: UiOmpPromptFile[];
+	reloadRequired: boolean; reloadError?: string;
+	sources: { label: string; path?: string; text: string }[];
+}
+export interface UiOmpPromptDocument { file: UiOmpPromptFile; content: string; }
+
+/** One local native OMP session with SSH-only tools, isolated from the main chat. */
 export interface NodeAgentState {
 	stats?: UiState["stats"];
+	recovery?: UiRecovery;
+	sessionPersistence?: UiSessionPersistence;
 	id: string;
 	cwd: string;
 	phase: "starting" | "ready" | "closed";
@@ -1579,6 +1615,8 @@ export interface DatabaseImportPreview { ticket: string; source: string; items: 
 export interface DatabaseGrid { columns: string[]; rows: (string | number | boolean | null)[][]; truncated: boolean; elapsedMs: number; sql: string; database: string; connectionId: string }
 export type DatabaseOperation =
 	| { action: "list" }
+	| { action: "agent_settings" }
+	| { action: "set_agent_settings"; enabled: boolean; version: string }
 	| { action: "save"; connection: DatabaseConfig & { id?: string; version?: string; password?: string } }
 	| { action: "delete"; id: string; version: string }
 	| { action: "test"; connection: DatabaseConfig & { id?: string; version?: string; password?: string } }
@@ -1595,6 +1633,7 @@ export type DatabaseOperation =
 export type DatabaseRequest = DatabaseOperation & { clientId: string; cwd: string; conversationId: string; requestId: string };
 export interface DatabaseResponse {
 	requestId: string; error?: string; connections?: DatabaseConnection[]; grants?: string[];
+	agentSettings?: { enabled: boolean; version: string };
 	jdbcDrivers?: DatabaseJdbcDriver[]; jdbcRuntime?: "detected" | "missing";
 	syncIssues?: { path: string; sourceId?: string; issue: string; category?: "unsupported-driver" }[];
 	sources?: { kind: "datagrip" | "dbeaver"; path: string }[]; preview?: DatabaseImportPreview; grid?: DatabaseGrid;
@@ -1683,8 +1722,9 @@ export interface PlaygroundChatContext {
 }
 export interface PlaygroundChatRequest {
 	type: "playground_chat";
-	action: "open" | "send" | "stop" | "new" | "switch" | "model" | "thinking" | "receipt";
+	action: "open" | "send" | "stop" | "new" | "switch" | "model" | "thinking" | "receipt" | "cancel_recovery" | "reopen";
 	requestId: string;
+	operationId?: string;
 	conversationId?: string;
 	targetId?: string;
 	text?: string;
@@ -1694,6 +1734,8 @@ export interface PlaygroundChatRequest {
 }
 export interface PlaygroundChatState {
 	id: string;
+	recovery?: UiRecovery;
+	sessionPersistence?: UiSessionPersistence;
 	running: boolean;
 	messages: UiMessage[];
 	streaming?: UiMessage;
@@ -1717,4 +1759,104 @@ export interface ModelAccount {
 	enabled: boolean;
 	replaceKey: boolean;
 	error?: string;
+}
+/** Native OMP skill preferences; omitted global values inherit OMP defaults. */
+export type OmpSkillSettingKey = "enabled" | "enableSkillCommands" | "enableCodexUser" | "enableClaudeUser" | "enableClaudeProject" | "enablePiUser" | "enablePiProject" | "enableAgentsUser" | "enableAgentsProject" | "customDirectories" | "ignoredSkills" | "manualSkills" | "includeSkills";
+export type OmpSkillSettingValue = boolean | string[];
+export interface UiOmpSkillSettings {
+	version: string;
+	entries: { key: OmpSkillSettingKey; value: OmpSkillSettingValue; global: OmpSkillSettingValue | null; source: "env" | "runtime" | "overlay" | "project" | "global" | "default" }[];
+}
+
+export type OmpMcpScope = "global" | "project";
+export type OmpPathTarget = { kind: "extensions" } | { kind: "module"; id: string } | { kind: "package"; name: string } | { kind: "plugin"; id: string; scope: OmpPackageScope; path: string };
+export interface UiOmpPath { absolute: string; kind: "directory" | "file"; exists: boolean; }
+export type OmpExtensionSettingKey = "extensions" | "disabledExtensions";
+export interface UiOmpExtensionState {
+	available: boolean; version: string; restartRequired: boolean;
+	settings: { key: OmpExtensionSettingKey; value: string[]; global: string[] | null; source: "env" | "runtime" | "overlay" | "project" | "global" | "default" }[];
+	modules: { id: string; name: string; path: string; editable: boolean; enabled: boolean; loaded: boolean; active: boolean; toggleKey?: string }[];
+}
+export interface UiOmpExtensionDocument {
+	moduleId: string; path: string; content: string; version: string;
+}
+export interface UiOmpMcpAuth {
+	id: string; name: string; status: "pending" | "complete" | "cancelled" | "failed" | "signed_out" | "configuration_changed"; url?: string; inputRequired?: boolean;
+}
+/** Safe classification only: never contains native error text or response bodies. */
+export interface UiOmpMcpFailure {
+	transport: "http" | "stdio" | "unknown";
+	failure: "connect" | "timeout" | "eof" | "reset" | "malformed_response" | "json_rpc" | "http_status" | "closed" | "unknown";
+	httpStatus?: number;
+}
+export interface UiOmpMcpConnectionEvent {
+	sequence: number; observedAt: number; name: string;
+	type: "connecting" | "reconnecting" | "connected" | "failed";
+	origin: "snapshot" | "event";
+	transport: UiOmpMcpFailure["transport"];
+	failure?: UiOmpMcpFailure["failure"]; httpStatus?: number;
+}
+export interface UiOmpMcpRuntime {
+	auth?: UiOmpMcpAuth;
+	diagnostics?: { events: UiOmpMcpConnectionEvent[]; dropped: number };
+	workerAvailable: boolean;
+	available: boolean;
+	projectConfigEnabled?: boolean;
+	reloadRequired: boolean;
+	servers: { name: string; status: "connected" | "connecting" | "disconnected"; source?: string; tools: string[]; oauthAvailable?: boolean; authenticated?: boolean; failure?: UiOmpMcpFailure }[];
+}
+export interface UiOmpMcpState extends UiOmpMcpRuntime {
+	config: { scope: OmpMcpScope; path: string; version: string; document: Record<string, unknown> };
+}
+/** OMP user-scope packages. Marketplace packages have a separate native manager. */
+export type OmpPackageOperation = "install" | "link" | "update" | "remove" | "enable" | "disable" | "features"
+	| "marketplace-add" | "marketplace-refresh" | "marketplace-remove"
+	| "plugin-install" | "plugin-update" | "plugin-remove" | "plugin-enable" | "plugin-disable" | "plugin-features";
+export type OmpPackageScope = "user" | "project";
+export interface UiOmpPackageSetting {
+	key: string; type: "string" | "number" | "boolean" | "enum"; secret: boolean; configured: boolean; invalid: boolean;
+	source: "user" | "project" | "default" | "unset"; description?: string; env?: string;
+	value?: string | number | boolean; effective?: string | number | boolean;
+	values?: string[]; min?: number; max?: number; step?: number;
+}
+export interface UiOmpPackageSettings {
+	name: string; scope: OmpPackageScope; path: string; version: string; fields: UiOmpPackageSetting[];
+}
+export type OmpPackageSettingsPatch = Record<string, { action: "set"; value: string | number | boolean } | { action: "reset" }>;
+export interface UiOmpPackageFeatures {
+	selected: string[] | null;
+	effective: string[] | null;
+	overridden: boolean;
+	available: { name: string; default: boolean; description?: string }[];
+}
+export interface UiOmpMarketplaceState {
+	projectRoot?: string;
+	marketplaces: { name: string; source: string; available: boolean; plugins: { id: string; name: string; version?: string; description?: string }[] }[];
+	installed: { id: string; scope: OmpPackageScope; versions: string[]; paths: string[]; enabled: boolean; shadowed: boolean; featureConfig?: UiOmpPackageFeatures }[];
+}
+export interface UiOmpPackages {
+	root: string;
+	version: string;
+	items: { name: string; version: string; path: string; enabled: boolean; effectiveEnabled: boolean; updatable: boolean; features: string[] | null; featureConfig?: UiOmpPackageFeatures }[];
+	marketplace?: UiOmpMarketplaceState;
+}
+export interface UiOmpPackagePlan {
+	operation: OmpPackageOperation;
+	target: string;
+	root: string;
+	version: string;
+	scope?: OmpPackageScope;
+	sharedRoot?: string;
+	source?: string;
+	fromVersion?: string;
+	toVersion?: string;
+	selectedFeatures?: string[] | null;
+}
+export interface UiOmpPackageJob {
+	id: string;
+	plan: UiOmpPackagePlan;
+	phase: "running" | "success" | "failed" | "unknown";
+	startedAt: number;
+	finishedAt?: number;
+	error?: "conflict" | "busy" | "invalid" | "native" | "interrupted";
 }

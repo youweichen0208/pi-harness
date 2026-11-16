@@ -1,0 +1,29 @@
+{
+  "metadataUrl": "https://registry.npmjs.org/@oh-my-pi%2Fpi-coding-agent/latest",
+  "version": "18.20.2",
+  "tarball": "https://registry.npmjs.org/@oh-my-pi/pi-coding-agent/-/pi-coding-agent-18.20.2.tgz",
+  "integrity": "sha512-ljShWzxyd0+8TPbpqf1GiPAUFz7Pk7tn8ieXBE6jKC6Qy18iuGurq1j3054sYciYW+knBVvzMFkNueRlg25L7g==",
+  "verifiedIntegrity": true,
+  "files": {
+    "src/mcp/oauth-reauth.ts": {
+      "sha256": "5b4a8263d43123f255425d344c27a07c2aa29e874296a28dcb93b33424ef32e1",
+      "installedSha256": "5b4a8263d43123f255425d344c27a07c2aa29e874296a28dcb93b33424ef32e1",
+      "byteIdenticalToInstalled": true
+    },
+    "src/mcp/config-writer.ts": {
+      "sha256": "d12553b3581d263be6ef6b978171cd444824992cfe730ca6877800ac9b720e2a",
+      "installedSha256": "d12553b3581d263be6ef6b978171cd444824992cfe730ca6877800ac9b720e2a",
+      "byteIdenticalToInstalled": true
+    },
+    "src/mcp/manager.ts": {
+      "sha256": "14f699454fcb0b7ef560254ad52cf0874a87d90326f508cdd65ca0f9e1d9b527",
+      "installedSha256": "14f699454fcb0b7ef560254ad52cf0874a87d90326f508cdd65ca0f9e1d9b527",
+      "byteIdenticalToInstalled": true
+    }
+  },
+  "status": "Published source comparison; no dependency upgrade performed",
+  "installedVersion": "18.20.0",
+  "conclusion": "Latest metadata returned 18.20.2. OAuth reauth, locked config writer and manager are byte-identical to installed 18.20.0; this published update does not contain the identified write-back CAS or tool-level callback fix. This is source verification, not runtime acceptance of 18.20.2.",
+  "temporaryExtraction": "Tar archive inspected in memory; no package installation, extraction or SDK edits.",
+  "remaining": "A native lock-protected expected-definition comparison or public persistence seam is still required. Host reconnect guard is already separate in protocol 77."
+}

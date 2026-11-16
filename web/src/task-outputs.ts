@@ -1,3 +1,4 @@
+import { isVirtualToolPath } from "../../server/tool-target.js";
 import type { TaskProgress, UiMessage, UiToolCallBlock } from "../../server/protocol.js";
 import { editWriteChange } from "./edit-write-presentation.js";
 
@@ -30,7 +31,7 @@ export function taskOutputs(task: TaskProgress | null | undefined, messages: UiM
 		if (seen.has(artifact.toolCallId)) continue;
 		seen.add(artifact.toolCallId);
 		const result = results.get(artifact.toolCallId), call = calls.get(artifact.toolCallId);
-		if (!artifact.path || !["write", "edit"].includes(artifact.kind) || !result || result.isError) continue;
+		if (!artifact.path || isVirtualToolPath(artifact.path) || !["write", "edit"].includes(artifact.kind) || !result || result.isError) continue;
 		const path = outputPath(artifact.path, cwd);
 		const file = files.get(path) ?? { path, added: 0, removed: 0, counted: false };
 		const change = call && editWriteChange(call, result);

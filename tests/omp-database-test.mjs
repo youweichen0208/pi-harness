@@ -1,0 +1,102 @@
+/** Native OMP host tool authorization. Local model fixture; no database server is contacted. */
+import assert from 'node:assert/strict';
+import { createServer } from 'node:http';
+import { createServer as createTcpServer } from 'node:net';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { scrubHostEnv } from './lib/test-env.mjs';
+import { listenIsolated } from './lib/isolated-server.mjs';
+import { OmpChatService } from '../dist/server/omp/chat-service.js';
+import { databaseAction, databaseScope } from '../dist/server/database/service.js';
+import { saveConnection } from '../dist/server/database/store.js';
+import { updateDocumentSettings } from '../dist/server/document-extension-settings.js';
+scrubHostEnv();
+const root = realpathSync(mkdtempSync(join(tmpdir(), 'omp-database-'))), data = join(root, 'data'), agent = join(data, 'omp/agent');
+mkdirSync(agent, { recursive: true });
+process.env.PI_WEB_DATA_DIR = data;
+const requests = [];
+let service, nextCall, callSequence = 0, databaseConnections = 0;
+const databaseTrap = createTcpServer(socket => { databaseConnections++; socket.destroy(); });
+const wait = async (predicate, label) => { for (let i = 0; i < 800; i++) { if (predicate()) return; await new Promise(resolve => setTimeout(resolve, 25)); } throw Error(`Timed out: ${label}`); };
+const provider = createServer(async (req, res) => {
+	let raw = ''; for await (const chunk of req) raw += chunk;
+	requests.push(JSON.parse(raw));
+	const call = nextCall; nextCall = undefined;
+	res.writeHead(200, { 'content-type': 'text/event-stream' });
+	const emit = (type, payload) => res.write(`event: ${type}\ndata: ${JSON.stringify({ type, ...payload })}\n\n`);
+	emit('message_start', { message: { id: `fixture-${requests.length}`, type: 'message', role: 'assistant', model: 'fixture', content: [], usage: { input_tokens: 10, output_tokens: 0 } } });
+	emit('content_block_start', { index: 0, content_block: call ? { type: 'tool_use', id: call.id, name: requests.at(-1).tools.find(tool => /^(?:_)?database_read$/.test(tool.name))?.name ?? 'database_read', input: {} } : { type: 'text', text: '' } });
+	emit('content_block_delta', { index: 0, delta: call ? { type: 'input_json_delta', partial_json: JSON.stringify(call.args) } : { type: 'text_delta', text: 'Database fixture complete.' } });
+	emit('content_block_stop', { index: 0 });
+	emit('message_delta', { delta: { stop_reason: call ? 'tool_use' : 'end_turn' }, usage: { output_tokens: 5 } });
+	emit('message_stop', {}); res.end();
+});
+const owner = client => databaseScope(client.clientId, client.cwd, client.session.sessionManager);
+async function grant(client, connections) {
+	await databaseAction(owner(client), client.cwd, crypto.randomUUID(), { action: 'grant', ids: connections.map(c => c.id), versions: Object.fromEntries(connections.map(c => [c.id, c.version])) });
+}
+async function invoke(client, args, isError = false) {
+	const id = `database-${++callSequence}`, before = requests.length;
+	nextCall = { id, args };
+	await client.prompt(`Database fixture ${callSequence}`);
+	await wait(() => !client.session.state.running && client.session.state.messages.some(message => message.role === 'toolResult' && message.toolCallId === id), `${id}; model=${JSON.stringify(client.session.state.model)}; error=${client.session.state.error}; requests=${requests.length - before}`);
+	assert.equal(requests.length, before + 2, 'one native tool call and one final answer; no host retry');
+	const result = client.session.state.messages.find(message => message.role === 'toolResult' && message.toolCallId === id);
+	assert.equal(result.isError === true, isError, JSON.stringify(result));
+	assert(requests[before].tools.some(tool => /^(?:_)?database_read$/.test(tool.name)), `database tool reaches the native model schema: ${JSON.stringify(requests[before].tools.map(tool => tool.name))}`);
+	const returned = requests[before + 1].messages.flatMap(message => Array.isArray(message.content) ? message.content : []).find(part => part.type === 'tool_result' && part.tool_use_id === id);
+	assert(returned, 'native tool result must be returned to the model');
+	return result.content.filter(part => part.type === 'text').map(part => part.text).join('\n');
+}
+try {
+	const port = await listenIsolated(provider), databasePort = await listenIsolated(databaseTrap);
+	writeFileSync(join(agent, 'models.yml'), JSON.stringify({ providers: { fixture: { api: 'anthropic-messages', baseUrl: `http://127.0.0.1:${port}`, apiKey: 'fixture', models: [{ id: 'fixture', contextWindow: 1000000 }] } } }));
+	writeFileSync(join(agent, 'config.yml'), JSON.stringify({ skills: { enabled: false }, retry: { enabled: false }, compaction: { enabled: false }, cacheWarming: { enabled: false } }));
+	const firstConnection = saveConnection({ name: 'Attached fixture', driver: 'postgres', host: '127.0.0.1', port: databasePort, user: 'DB_USER_PRIVATE', db_name: 'fixture', password: 'DB_PASSWORD_PRIVATE' });
+	const secondConnection = saveConnection({ name: 'Unattached fixture', driver: 'mysql', host: '127.0.0.1', port: databasePort, user: 'OTHER_USER_PRIVATE', db_name: 'other', password: 'OTHER_PASSWORD_PRIVATE' });
+	service = new OmpChatService(root, join(data, 'client-state.json'));
+	const first = await service.attach('database-first', () => {});
+	await first.setModel('fixture/fixture');
+	assert.deepEqual(JSON.parse(await invoke(first, { action: 'list' })), []);
+	await grant(first, [firstConnection]);
+	assert.deepEqual(JSON.parse(await invoke(first, { action: 'list' })), [{ id: firstConnection.id, name: firstConnection.name, driver: 'postgres', database: 'fixture' }]);
+	await invoke(first, { action: 'query', connectionId: secondConnection.id, sql: 'SELECT 1' }, true);
+	await invoke(first, { action: 'query', connectionId: firstConnection.id, sql: 'DELETE FROM accounts' }, true);
+	assert.equal(databaseConnections, 0, 'unattached connections and write SQL are rejected before opening a database socket');
+	const second = await service.attach('database-second', () => {});
+	await second.setModel('fixture/fixture');
+	assert.deepEqual(JSON.parse(await invoke(second, { action: 'list' })), [], 'another client cannot inherit grants');
+	updateDocumentSettings({ databaseEnabled: false });
+	await invoke(first, { action: 'list' }, true);
+	await invoke(second, { action: 'list' }, true);
+	await assert.rejects(grant(second, [secondConnection]), /disabled/);
+	updateDocumentSettings({ databaseEnabled: true });
+	assert.equal(JSON.parse(await invoke(first, { action: 'list' })).length, 1, 'loaded sessions read the current setting on every invocation');
+	writeFileSync(join(data, 'document-extensions.json'), '{invalid');
+	await invoke(first, { action: 'list' }, true);
+	writeFileSync(join(data, 'document-extensions.json'), JSON.stringify({ databaseEnabled: true }));
+	const oldConversation = first.conversationId;
+	await first.newChat(true);
+	assert.deepEqual(JSON.parse(await invoke(first, { action: 'list' })), [], 'a fresh conversation cannot inherit grants');
+	await first.switchConversation(oldConversation);
+	assert.equal(JSON.parse(await invoke(first, { action: 'list' })).length, 1, 'returning to the owner retains its grant');
+	const otherProject = join(root, 'other-project'); mkdirSync(otherProject);
+	await first.setCwd(otherProject);
+	await wait(() => first.workspaceReady, 'other workspace ready');
+	assert.deepEqual(JSON.parse(await invoke(first, { action: 'list' })), [], 'changing workspace cannot inherit grants');
+	await first.setCwd(root);
+	await wait(() => first.workspaceReady, 'original workspace ready');
+	await first.switchConversation(oldConversation);
+	assert.equal(JSON.parse(await invoke(first, { action: 'list' })).length, 1);
+	saveConnection({ ...firstConnection, name: 'Changed fixture' });
+	assert.deepEqual(JSON.parse(await invoke(first, { action: 'list' })), [], 'a connection version change invalidates an old grant');
+	assert(!/DB_USER_PRIVATE|DB_PASSWORD_PRIVATE|OTHER_USER_PRIVATE|OTHER_PASSWORD_PRIVATE/.test(JSON.stringify(requests)), 'credentials and connection users never enter model context');
+	assert.equal(databaseConnections, 0, 'authorization regression must not contact a database server');
+	console.log('PASS OMP database host tool: native schema/result, conversation/client/workspace grants, read-only SQL, loaded-session disable, malformed settings, version invalidation and no credential projection');
+} finally {
+	await service?.disposeAll();
+	provider.closeAllConnections(); await new Promise(resolve => provider.close(resolve));
+	await new Promise(resolve => databaseTrap.close(resolve));
+	rmSync(root, { recursive: true, force: true });
+}

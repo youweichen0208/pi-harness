@@ -1,6 +1,7 @@
 import type { UiMessage } from "./protocol.js";
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { writeFileAtomic } from "./private-file.js";
 
 /** Per-conversation observed timings. Historical blocks without events stay unknown. */
 export class ThinkingTimings {
@@ -29,6 +30,9 @@ export class ThinkingTimings {
 		}
 		return result;
 	}
+	durations(timestamp: number, now = Date.now()): Record<string, number> {
+		return Object.fromEntries([...this.messages.get(timestamp) ?? []].map(([index, timing]) => [index, Math.max(0, (timing.end ?? now) - timing.start)]));
+	}
 	annotate(message: UiMessage | null, timestamp: number, now = Date.now()): UiMessage | null {
 		const blocks = this.messages.get(timestamp);
 		if (!message || !blocks) return message;
@@ -50,6 +54,9 @@ export class ThinkingDurationStore {
 		} catch { this.values = {}; }
 	}
 	private key(sessionFile: string, timestamp: number): string { return `${sessionFile}\u0000${timestamp}`; }
+	durations(sessionFile: string | undefined, timestamp: number): Readonly<Record<string, number>> | undefined {
+		return sessionFile ? this.values[this.key(sessionFile, timestamp)] : undefined;
+	}
 	save(sessionFile: string | null | undefined, timestamp: number, durations: Record<string, number>): void {
 		if (!sessionFile || !Number.isFinite(timestamp) || timestamp <= 0 || Object.keys(durations).length === 0) return;
 		const key = this.key(sessionFile, timestamp);
@@ -57,10 +64,7 @@ export class ThinkingDurationStore {
 		const keys = Object.keys(this.values);
 		for (const old of keys.slice(0, Math.max(0, keys.length - 2048))) delete this.values[old];
 		try {
-			mkdirSync(dirname(this.filePath), { recursive: true });
-			const tmp = `${this.filePath}.${process.pid}.tmp`;
-			writeFileSync(tmp, JSON.stringify(this.values));
-			renameSync(tmp, this.filePath);
+			writeFileAtomic(this.filePath, JSON.stringify(this.values));
 		} catch { /* Duration metadata must never interrupt a reply. */ }
 	}
 	annotate(message: UiMessage | null, sessionFile: string | null | undefined, timestamp: number): UiMessage | null {
@@ -73,4 +77,13 @@ export class ThinkingDurationStore {
 				? { ...block, durationMs } : block;
 		}) };
 	}
+}
+
+const durationStores = new Map<string, ThinkingDurationStore>();
+/** Sessions in one host share metadata so concurrent conversations cannot overwrite each other. */
+export function thinkingDurationsFor(path: string) {
+	const key = resolve(path);
+	let store = durationStores.get(key);
+	if (!store) { store = new ThinkingDurationStore(key); durationStores.set(key, store); }
+	return store;
 }

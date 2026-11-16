@@ -1,0 +1,12 @@
+{
+	"extends": "./tsconfig.server.json",
+	"include": ["server/**/*.d.ts"],
+	"files": [
+		"server/index.ts",
+		"server/omp/worker.ts",
+		"server/omp/package-worker.ts",
+		"server/sqlite-worker.ts",
+		"server/wiki-pdf-worker.ts",
+		"server/plugin-updater.ts"
+	]
+}

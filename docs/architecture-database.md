@@ -6,7 +6,7 @@
 
 `server/database/` 将配置、来源解析、SQL 校验、驱动执行、会话授权和 HTTP 路由分开。内置 MySQL/MariaDB 使用 mysql2，PostgreSQL 使用 pg/pg-cursor，依赖随 npm/桌面包分发，不在打开界面时安装。旧 db-client 插件保持独立，不导入它的写操作或自动迁移配置。
 
-`POST /api/database` 经过共享口令、同源、clientId、cwd、conversationId、quiesce 校验。协议类型在 protocol.ts；action 覆盖 list/sync/save/delete/test/scan/preview/import/grant/revoke/run/cancel，以及只读驱动发现 jdbc_drivers。HTTP 断开会取消当前查询；完成后重验会话及配置版本，前端 AbortController 和请求序号丢弃迟到响应。
+`POST /api/database` 经过共享口令、同源、clientId、cwd、conversationId、quiesce 校验。协议类型在 protocol.ts；action 覆盖 list/sync/save/delete/test/scan/preview/import/grant/revoke/run/cancel，以及只读驱动发现 jdbc_drivers。协议 v70 增加 agent_settings / set_agent_settings，管理数据库对话访问开关。HTTP 断开会取消当前查询；完成后重验会话及配置版本，前端 AbortController 和请求序号丢弃迟到响应。
 
 连接保存于 `<dataDir>/database/connections.json`，密码字段仅存 AES-256-GCM 密文，密钥为同目录 0600 的 key 文件。原子替换、随机配置版本和显式字段白名单避免覆盖及凭据回显；坏文件/无法解密直接报错，不回退明文。名称、host、port、user、db_name、driver 为核心字段，TLS 验证证书，允许提供 PEM CA。
 
@@ -28,7 +28,13 @@ DataGrip 从 dataSources.xml 读取连接，并合并相邻 dataSources.local.xm
 
 ## 只读执行与 Agent
 
-数据库工具通过可关闭、可替换的原生 inline extension `pi-harness-database` 注册 `database_read`，不修改 SDK、不由界面插件注入工具。内置扩展清单的开关复用版本化扩展设置；关闭立即拒绝执行，开启按原生 reload 生效。
+OMP 普通及 Wiki 会话通过公开 RPC host-tool 桥注册 `database_read`，数据库执行与授权保留在 Node 宿主，不修改 SDK。设置的 Extensions 页提供独立的「数据库对话访问」开关，复用 `<dataDir>/document-extensions.json`；关闭立即拒绝下一次工具执行和新授权，开启无需重载。原生工具声明仍可存在，不能把禁用访问描述成工具已卸载。手动工作台查询不受此开关影响。
+
+设置读取只返回布尔值与文件内容摘要，缺失文件有独立版本，默认开启；不下发未知字段。保存校验布尔类型和所读版本，同一服务同步执行读改写并原子替换文件，保留未知字段、清除已退休转换扩展的旧键。外部修改（包括只改空白）使旧版本失效；损坏文件拒绝读写并只返回固定错误码，不覆盖坏文件。此检查不构成对任意外部进程的文件事务锁。
+
+开关读写沿用活动会话、来源、鉴权和排空检查，但不会启动或重载 OMP，也不调用模型。模型工具不能调用设置动作。浏览器只显示服务器确认的值，页面可见时每五秒和聚焦时重读；配置冲突或失败后停止自动轮询，用户明确重新读取后才能再改。关闭／切换页取消请求和计时器；读取与写入互不覆盖，超时不自动重发。设置组件独立于原生扩展及包清单，资源清单失败时仍可使用。
+
+`builtin-extensions-test.mjs --browser` 已迁移为真实 OMP 与 HTTP/浏览器回归，覆盖已有会话调用、双客户端保存冲突、跨窗口状态、损坏配置、停止后不重开、重启持久化、键盘、中英文和窄屏。`omp-database-test.mjs` 另验证授权隔离和写入 SQL 在连接前被拒绝；两者不替代真实数据库驱动查询验收。
 
 点击问 pi 只追加有 ID 去重的引用和连接 chip，不自动发送。发送前 grant 对应连接及引用时的配置版本；授权单位为整个连接，表/数据库只是分析定位。授权使用客户端、工作区、SessionManager 实例和原生 session ID 的组合，不能靠复制引用文本获得权限；不落盘，恢复历史或重启需重新附加。移除 chip 或撤销访问取消对应会话进行中的查询。工具只能列举/查询已授权且版本未改变的连接，凭据从不进入模型参数或结果。关闭弹窗不撤销授权。
 
@@ -44,8 +50,10 @@ DataGrip 从 dataSources.xml 读取连接，并合并相邻 dataSources.local.xm
 - `tests/unit/database-sync.test.ts`：自动发现、持续同步、缺失恢复、删除排除、密码保留，以及虚拟时钟下的超时、前台操作和迟到响应隔离。
 - `tests/database-sync-browser-test.mjs`：本地模拟接口验证自动同步、表单草稿保留、立即同步和关闭清理，不连接数据库或调用模型。
 - `tests/unit/database.test.ts`：来源解析、SQL 拒绝边界、凭据加密、版本冲突、同步幂等、来源删除及授权隔离。
-- `tests/database-test.mjs --browser`：真实 MySQL/PostgreSQL、表结构/索引、跨 Schema、分页、BIGINT、写操作拒绝、查询取消；真实 SDK＋本地模型验证未授权拒绝、授权查询、撤销；浏览器验证弹窗、原聊天草稿/附件、引用、同步、焦点和小屏。
-- 集成测试仅针对临时测试数据库：默认 localhost:9277 PostgreSQL（postgres）及 :9278 MySQL（root），数据库 analytics，密码 pi_test_only；可用 PI_TEST_PG_PORT / PI_TEST_MYSQL_PORT 覆盖隔离端口。不要指向业务数据库，夹具会创建/重置测试表。
+- `node tests/database-integration-test.mjs --browser`：创建隔离容器，再运行 `database-test.mjs`；真实 MySQL/PostgreSQL、表结构/索引、跨 Schema、分页、BIGINT、写操作拒绝、查询取消；原生 OMP＋本地模型验证未授权拒绝、两种数据库授权查询、撤销及确切工具结果回传；浏览器验证弹窗、原聊天草稿/附件、引用授权、同步、焦点和小屏。
+- 集成入口要求本地 Docker context 和已有 `postgres:17-alpine`、`mysql:8.0` 镜像，不自动拉取。按镜像 ID 创建唯一名称与所属标签的临时容器，数据放 tmpfs，端口仅绑定 127.0.0.1 并由 Docker 分配；不挂载项目／用户数据。测试端口由入口传入，内部脚本不再默认连接固定端口。成功或失败后按确切容器 ID 和标签核对、移除本次容器；清理失败保留所属记录并报错。需要构建产物；运行中服务使用当前 dist 时，应在隔离检出中构建和执行。该测试依赖 Docker，不加入默认零依赖冒烟，不可用时明确失败。
+
+本地 OMP 18.20.0 在 PostgreSQL 17.10／MySQL 8.0.46 上已通过上述真实数据库与浏览器测试，见 [查询验证记录](review-data/omp-database-live.json)。该结论不涵盖 Windows、厂商 JDBC/GaussDB、远程 TLS 或真实模型账户。
 
 #152 回归：`tests/unit/datagrip-discovery.test.ts` 覆盖三平台配置根、非默认目录、注册表动态变化、Windows 路径、旧版列表、home 宏、去重、坏文件隔离及资源上限。注册格式参考 [JetBrains RecentProjectsManagerBase](https://github.com/JetBrains/intellij-community/blob/master/platform/platform-impl/src/com/intellij/ide/RecentProjectsManagerBase.kt)。
 

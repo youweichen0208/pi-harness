@@ -2,14 +2,8 @@ import { frozenAttachmentText } from "./user-attachments.js";
 /**
  * attachments — 附件构建：把 prompt.attachments（inline/reference/lines、
  * 粘贴图片 imageData、上传 fileData）转成独立的 custom message（asides）。
- * 视觉桥（纯文本主模型看图）也在这里接线：图片交给视觉模型转写成文字证据。
- *
- * 从 agent-service.ts 抽出，行为保持不变；上下文经 AttachmentContext 注入。
+ * 图片保留为原生 image content；不创建智能体或额外模型调用。
  */
-import type {
-	AgentSession,
-	ModelRuntime,
-} from "@earendil-works/pi-coding-agent";
 import { validateEditorSnapshots } from "./editor-snapshot.js";
 import type { PromptAttachment, ServerMessage } from "./protocol.js";
 import {
@@ -35,14 +29,20 @@ export interface AttachmentContext {
 	/** 上传文件归属的浏览器客户端。 */
 	clientId: string;
 	emit: (msg: ServerMessage) => void;
+}
 
-	session: AgentSession;
+/** Attachment construction is independent of either agent SDK. */
+export interface AttachmentMessage {
+	customType: "file";
+	content: string | ({ type: "text"; text: string } | { type: "image"; data: string; mimeType: string })[];
+	display: true;
+	details?: Record<string, unknown>;
 }
 
 export async function buildAttachmentMessages(
 	ctx: AttachmentContext,
 	attachments: PromptAttachment[] | undefined,
-): Promise<{ message: Parameters<AgentSession["sendCustomMessage"]>[0] }[]> {
+): Promise<{ message: AttachmentMessage }[]> {
 	if (!attachments || attachments.length === 0) return [];
 	validateEditorSnapshots(ctx.cwd, attachments);
 	const fs = await import("node:fs/promises");
@@ -75,7 +75,7 @@ export async function buildAttachmentMessages(
 		".svg": "image/svg+xml",
 	};
 
-	const out: { message: Parameters<AgentSession["sendCustomMessage"]>[0] }[] =
+	const out: { message: AttachmentMessage }[] =
 		[];
 
 	/** Push the aside for a raw uploaded file (fresh fileData or a restored
@@ -428,7 +428,7 @@ export async function buildAttachmentMessages(
 		}
 
 		const makeReference = (): {
-			message: Parameters<AgentSession["sendCustomMessage"]>[0];
+			message: AttachmentMessage;
 		} => ({
 			message: {
 				customType: "file",
@@ -445,7 +445,7 @@ export async function buildAttachmentMessages(
 		const makeInline = (
 			buf: Buffer,
 		): {
-			message: Parameters<AgentSession["sendCustomMessage"]>[0];
+			message: AttachmentMessage;
 		} => {
 			const lines = countLines(buf);
 			return {

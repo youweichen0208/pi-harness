@@ -10,8 +10,12 @@ export function WikiAssistantWindow({ detached, onClose, children }: { detached:
 	close.current = onClose;
 	const [container] = useState(() => document.createElement("div"));
 	useLayoutEffect(() => {
+		const move = (target: HTMLElement | null) => {
+			window.dispatchEvent(new CustomEvent("pi:chat-surface-moving", { detail: container }));
+			target?.appendChild(container);
+		};
 		container.className = "wiki-assistant-container";
-		home.current?.appendChild(container);
+		move(home.current);
 		if (!detached) return;
 		const popup = popupRef.current && !popupRef.current.closed ? popupRef.current : window.open("about:blank", "pi-wiki-assistant", "width=375,height=820");
 		popupRef.current = popup;
@@ -31,8 +35,8 @@ export function WikiAssistantWindow({ detached, onClose, children }: { detached:
 		const observer = new MutationObserver(syncTheme);
 		observer.observe(document.documentElement, { attributes: true });
 		target.body.className = "wiki-assistant-desktop design-workspace";
-		target.body.appendChild(container);
-		const restore = () => { home.current?.appendChild(container); close.current(); };
+		move(target.body);
+		const restore = () => { move(home.current); close.current(); };
 		popup.addEventListener("beforeunload", restore);
 		const closed = window.setInterval(() => { if (popup.closed) { window.clearInterval(closed); restore(); } }, 250);
 		void desktopAPI?.assistantVisibility?.(true);
@@ -43,7 +47,7 @@ export function WikiAssistantWindow({ detached, onClose, children }: { detached:
 			observer.disconnect();
 			window.clearInterval(closed);
 			popup.removeEventListener("beforeunload", restore);
-			home.current?.appendChild(container);
+			move(home.current);
 			void desktopAPI?.assistantVisibility?.(false);
 		};
 	}, [detached, container]);

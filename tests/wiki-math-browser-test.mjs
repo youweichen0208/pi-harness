@@ -1,22 +1,21 @@
 import { openKnowledge } from "./lib/open-knowledge.mjs";
 // Real Wiki formula rendering, source preservation, editing and native undo.
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
 import { mkdirSync, mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium } from 'playwright-core';
 import { CHROME_PATH } from './lib/chrome.mjs';
-import { portUp } from './lib/port-utils.mjs';
-import { testEnv } from "./lib/test-env.mjs";
-const port = 8998, base = mkdtempSync(join(tmpdir(), 'wiki-format-editor-'));
+import { startIsolatedHarness } from './lib/isolated-server.mjs';
+const base = mkdtempSync(join(tmpdir(), 'wiki-format-editor-'));
 const original = "# 数学公式\n\n中文 $E=mc^2$ 与分式 $\\frac{a}{b}$。\n\n$$\n\\sum_{i=1}^n i=\\frac{n(n+1)}{2}\n$$\n\n`$not_math$`\n\n```python\nprice = \"$5\"\n```\n\n错误 $\\notacommand{x}$\n\nInsert here.\n";
 writeFileSync(join(base, 'note.md'), original);
-let server, browser;
+const agent = join(base, 'data/omp/agent'); mkdirSync(agent, { recursive: true });
+writeFileSync(join(agent, 'config.yml'), JSON.stringify({ skills: { enabled: false }, cacheWarming: { enabled: false } }));
+let harness, browser;
 try {
-	assert.equal(await portUp(port), false);
-	server = spawn(process.execPath, ['dist/server/index.js'], { env: { ...testEnv(), PORT: String(port), PI_WEB_TOKEN: '', PI_WEB_CWD: base, PI_WEB_DATA_DIR: join(base, 'data'), PI_CODING_AGENT_DIR: join(base, 'agent') }, stdio: 'ignore' });
-	for (let i = 0; i < 100 && !await portUp(port); i++) await new Promise(r => setTimeout(r, 100));
+	harness = await startIsolatedHarness({ env: { PI_WEB_CWD: base, PI_WEB_DATA_DIR: join(base, 'data') } });
+	const port = harness.port;
 	browser = await chromium.launch({ executablePath: CHROME_PATH || chromium.executablePath() });
 	const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
 	await page.goto(`http://127.0.0.1:${port}`);
@@ -26,7 +25,7 @@ try {
 	await openKnowledge(page, base, "note.md");
 	const wiki = await popupPromise;
 	wiki.setDefaultTimeout(15000);
-	await wiki.locator('.setup-modal .modal-close').click().catch(() => {});
+	await wiki.locator('.setup-modal .modal-close').click();
 	const editor = wiki.locator('.wiki-prose .fp-rich-document');
 
 	await editor.locator('.katex').first().waitFor();
@@ -71,7 +70,6 @@ try {
 	console.log('PASS Wiki math rendering, invalid-source fallback, edit, insert, save and reload');
 } finally {
 	await browser?.close();
-	server?.kill('SIGTERM');
-	if (server) await new Promise(resolve => { server.once('exit', resolve); setTimeout(resolve, 3000); });
+	await harness?.stop();
 	rmSync(base, { recursive: true, force: true });
 }

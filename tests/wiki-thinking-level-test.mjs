@@ -3,22 +3,17 @@ import { openKnowledge } from "./lib/open-knowledge.mjs";
 // models (Volc GLM) reject the default "off" with a 400.
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { spawn } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium } from 'playwright-core';
 import { CHROME_PATH } from './lib/chrome.mjs';
-import { portUp } from './lib/port-utils.mjs';
-import { testEnv } from "./lib/test-env.mjs";
-const port = 8984, mockPort = 9084, base = mkdtempSync(join(tmpdir(), 'wiki-thinking-'));
+import { listenIsolated, startIsolatedHarness } from './lib/isolated-server.mjs';
+const base = mkdtempSync(join(tmpdir(), 'wiki-thinking-'));
 const cwd = join(base, 'workspace');
 mkdirSync(cwd);
 writeFileSync(join(cwd, 'note.md'), '# Note\n\nhello\n');
-mkdirSync(join(base, 'agent'));
-writeFileSync(join(base, 'agent', 'models.json'), JSON.stringify({ providers: { volc: { api: 'anthropic-messages', baseUrl: `http://127.0.0.1:${mockPort}`, apiKey: 'test-only', models: [{ id: 'glm', name: 'GLM test', reasoning: true, compat: { forceAdaptiveThinking: true }, input: ['text'], contextWindow: 32000, maxTokens: 4096 }] } } }));
-writeFileSync(join(base, 'agent', 'settings.json'), JSON.stringify({ defaultProvider: 'volc', defaultModel: 'glm', defaultThinkingLevel: 'medium' }));
-writeFileSync(join(base, 'agent', 'auth.json'), JSON.stringify({ volc: { type: 'api_key', key: 'test-only' } }));
+const agent = join(base, 'data/omp/agent'); mkdirSync(agent, { recursive: true });
 const thinking = [];
 const mock = createServer(async (req, res) => {
 	let body = '';
@@ -40,19 +35,19 @@ const mock = createServer(async (req, res) => {
 	event('message_stop', {});
 	res.end();
 });
-let server, browser;
+let harness, browser;
 try {
-	assert.equal(await portUp(port), false);
-	assert.equal(await portUp(mockPort), false);
-	await new Promise(r => mock.listen(mockPort, '127.0.0.1', r));
-	server = spawn(process.execPath, ['dist/server/index.js'], { env: { ...testEnv(), PORT: String(port), PI_WEB_TOKEN: '', PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(base, 'data'), PI_CODING_AGENT_DIR: join(base, 'agent') }, stdio: 'ignore' });
-	for (let i = 0; i < 100 && !await portUp(port); i++) await new Promise(r => setTimeout(r, 100));
+	const mockPort = await listenIsolated(mock);
+	writeFileSync(join(agent, 'models.yml'), JSON.stringify({ providers: { volc: { api: 'anthropic-messages', baseUrl: `http://127.0.0.1:${mockPort}`, apiKey: 'test-only', models: [{ id: 'glm', name: 'GLM test', reasoning: true, thinking: { mode: 'anthropic-adaptive', efforts: ['medium'], defaultLevel: 'medium' }, compat: { requiresThinkingEnabled: true }, input: ['text'], contextWindow: 32000, maxTokens: 4096 }] } } }));
+	writeFileSync(join(agent, 'config.yml'), JSON.stringify({ modelRoles: { default: 'volc/glm' }, defaultThinkingLevel: 'medium', skills: { enabled: false }, cacheWarming: { enabled: false } }));
+	harness = await startIsolatedHarness({ env: { PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(base, 'data') } });
+	const port = harness.port;
 	browser = await chromium.launch({ executablePath: CHROME_PATH || chromium.executablePath() });
 	const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
 	await page.goto(`http://127.0.0.1:${port}`);
 	// The native configuration supplies thinking; no manual UI is needed.
 	await page.locator('.file-name', { hasText: 'note.md' }).waitFor();
-	await page.locator('.input-tools-left > .dropdown .chip').click();
+	await page.locator('.input-tools-left .chip-model').click();
 	assert.equal(await page.locator('.dd-thinking-levels, .thinking-control').count(), 0);
 	await page.keyboard.press('Escape');
 	// ADR-0003: the Wiki chat runs in a detached window; the main window's
@@ -71,6 +66,6 @@ try {
 } finally {
 	await browser?.close();
 	await new Promise(r => mock.close(r));
-	if (server) { server.kill('SIGTERM'); if (server.exitCode === null) await new Promise(r => server.once('exit', r)); }
+	await harness?.stop();
 	rmSync(base, { recursive: true, force: true });
 }

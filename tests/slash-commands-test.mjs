@@ -1,246 +1,119 @@
-/* Smoke test: chat-input slash commands.
- *   - slash_commands catalog arrives on attach and on get_commands (builtin +
- *     extension + prompt template + skill commands).
- *   - Native commands (/new /model /cwd /help …) are intercepted
- *     server-side in AgentService.prompt() and never hit the SDK.
- *   - Non-native slash text falls through to the SDK prompt (no interception).
- *
- * Run:  node slash-commands-test.mjs
- */
-import { portUp, freePort } from "./lib/port-utils.mjs";
-import { execSync, spawn } from "node:child_process";
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { WebSocket } from "ws";
-import { testEnv } from "./lib/test-env.mjs";
-// fileURLToPath: URL.pathname 在 Windows 下是 /E:/... 形式，直接当 cwd 会失败
-const REPO_ROOT = fileURLToPath(new globalThis.URL("../", import.meta.url));
-
-const PORT = 18993;
-const WS_URL = `ws://localhost:${PORT}/ws`;
-// Unique per run — a persisted lastCwd from a previous run would restore /tmp
-// on attach and change the /cwd assertions.
-const CLIENT_ID = `slash-cmd-test-${Date.now()}`;
-const PROJ = REPO_ROOT;
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-const NATIVE_NAMES = [
-	"new",
-	"model",
-	"compact",
-	"cwd",
-	"resume",
-	"reload",
-	"help",
-	"copy",
-];
-
-function connect() {
-	return new Promise((resolve, reject) => {
-		const ws = new WebSocket(WS_URL);
-		const inbox = [];
-		const waiters = [];
-		ws.on("message", (d) => {
-			let msg;
-			try {
-				msg = JSON.parse(d.toString());
-			} catch {
-				return;
-			}
-			const idx = waiters.findIndex((w) => w.pred(msg));
-			if (idx >= 0) {
-				const [w] = waiters.splice(idx, 1);
-				w.resolve(msg);
-			} else {
-				inbox.push(msg);
-			}
-		});
-		ws.on("open", () =>
-			resolve({
-				ws,
-				send: (m) => ws.send(JSON.stringify(m)),
-				wait: (pred, timeout = 30000) =>
-					new Promise((res, rej) => {
-						const i = inbox.findIndex(pred);
-						if (i >= 0) {
-							res(inbox.splice(i, 1)[0]);
-							return;
-						}
-						const t = setTimeout(
-							() => rej(new Error("timeout waiting for message")),
-							timeout,
-						);
-						waiters.push({
-							pred,
-							resolve: (m) => {
-								clearTimeout(t);
-								res(m);
-							},
-						});
-					}),
-				close: () => ws.close(),
-			}),
-		);
-		ws.on("error", reject);
-	});
-}
-
-async function main() {
-	// Build + boot the server on a dedicated port.
-	try {
-		execSync("npm run build", { cwd: PROJ, stdio: "ignore" });
-	} catch {
-		console.error("build failed");
-		process.exit(1);
+/** Native OMP command catalogue and dispatch, with isolated files and a local provider. */
+import assert from 'node:assert/strict';
+import { createServer } from 'node:http';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, realpathSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { OmpChatService } from '../dist/server/omp/chat-service.js';
+import { listenIsolated, startIsolatedHarness } from './lib/isolated-server.mjs';
+import { scrubHostEnv } from './lib/test-env.mjs';
+scrubHostEnv();
+for (const key of Object.keys(process.env)) if (/API_KEY|TOKEN|SECRET|PASSWORD|^ANTHROPIC_|^OPENAI_/.test(key)) delete process.env[key];
+const root = realpathSync(mkdtempSync(join(tmpdir(), 'omp-slash-'))), data = join(root, 'data'), agent = join(data, 'omp/agent');
+for (const name of ['extensions', 'commands/fixture-custom', 'skills/fixture']) mkdirSync(join(agent, name), { recursive: true });
+const effects = join(root, 'effects.txt'); writeFileSync(effects, '');
+writeFileSync(join(agent, 'extensions/fixture.js'), `import { appendFileSync } from 'node:fs'; export default api => api.registerCommand('fixture-extension', { description: 'Native extension', handler: async args => { appendFileSync(${JSON.stringify(effects)}, args); } });`);
+writeFileSync(join(agent, 'commands/fixture-custom/index.js'), `export default () => ({ name: 'fixture-custom', description: 'Native custom command', execute: () => 'CUSTOM_COMMAND_BODY' });`);
+writeFileSync(join(agent, 'commands/fixture-file.md'), '---\ndescription: Native file command\nargument-hint: <file>\n---\nFILE_COMMAND_BODY $@');
+writeFileSync(join(agent, 'skills/fixture/SKILL.md'), '---\nname: fixture\ndescription: Native skill\n---\nSKILL_COMMAND_BODY');
+const requests = [], events = [];
+let service, harness, browser;
+const wait = async (predicate, label) => { for (let i = 0; i < 800; i++) { if (predicate()) return; await new Promise(resolve => setTimeout(resolve, 25)); } throw Error('Timed out ' + label); };
+const provider = createServer(async (req, res) => {
+	if (req.method !== 'POST') { res.writeHead(405); res.end(); return; }
+	let raw = ''; for await (const chunk of req) raw += chunk;
+	const message = JSON.parse(raw);
+	if (req.url === '/mcp') {
+		if (message.id === undefined) { res.writeHead(202); res.end(); return; }
+		const result = message.method === 'initialize' ? { protocolVersion: message.params.protocolVersion, serverInfo: { name: 'fixture', version: '1' }, capabilities: { prompts: {} } }
+			: message.method === 'prompts/list' ? { prompts: [{ name: 'catalog-prompt', description: 'Native MCP prompt', arguments: [{ name: 'text', required: true }] }] }
+			: message.method === 'tools/list' ? { tools: [] } : {};
+		res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ jsonrpc: '2.0', id: message.id, result })); return;
 	}
-	await freePort(PORT);
-	await sleep(500);
-	const server = spawn("node", ["dist/server/index.js"], {
-		cwd: PROJ,
-		env: {
-			...testEnv(),
-			PORT: String(PORT),
-			// 仓库根本身当工作区（跨平台）；隔离 client-state
-			PI_WEB_CWD: REPO_ROOT,
-			PI_WEB_DATA_DIR: mkdtempSync(join(tmpdir(), "piweb-slash-")),
-			// 隔离 agent 目录（无会话历史）——复现 CI 的空环境，防止本机
-			// 真实 ~/.pi/agent 里的历史会话掩盖 snapshot/delta 时序差异。
-			PI_CODING_AGENT_DIR: mkdtempSync(join(tmpdir(), "piweb-slash-agent-")),
-		},
-		stdio: "ignore",
-	});
-	for (let i = 0; i < 40 && !(await portUp(PORT)); i++) await sleep(250);
-	if (!(await portUp(PORT))) {
-		console.error("server failed to start");
-		process.exit(1);
-	}
-
-	const c = await connect();
-	c.send({ type: "hello", clientId: CLIENT_ID });
-	await c.wait((m) => m.type === "ready");
-
-	// --- 1. catalog arrives on attach ---
-	const cat = await c.wait((m) => m.type === "slash_commands");
-	const names = new Set(cat.commands.map((x) => x.name));
-	const missing = NATIVE_NAMES.filter((n) => !names.has(n));
-	if (cat.commands.some(command => command.source === "builtin" && command.name === "thinking")) throw new Error("Retired thinking control is still advertised");
-	if (missing.length > 0) {
-		throw new Error(`FAIL: builtin commands missing: ${missing.join(", ")}`);
-	}
-	const bySource = {};
-	for (const cmd of cat.commands) {
-		bySource[cmd.source] = (bySource[cmd.source] ?? 0) + 1;
-	}
-	console.log(
-		`[1] catalog on attach: ${cat.commands.length} commands`,
-		JSON.stringify(bySource),
-	);
-	if (cat.commands.length < NATIVE_NAMES.length) {
-		throw new Error("FAIL: catalog smaller than the native set");
-	}
-
-	// --- 2. get_commands re-request works ---
-	c.send({ type: "get_commands" });
-	const cat2 = await c.wait((m) => m.type === "slash_commands");
-	if (cat2.commands.length !== cat.commands.length) {
-		throw new Error(
-			`FAIL: get_commands returned ${cat2.commands.length}, expected ${cat.commands.length}`,
-		);
-	}
-	console.log(`[2] get_commands re-request: ${cat2.commands.length} commands`);
-
-	c.send({ type: "prompt", text: "/thinking high" });
-	await c.wait(m => m.type === "notice" && m.text.includes("手动思考档位已移除"), 6000);
-
-	// --- 3. native /cwd (valid + invalid) --- 跨平台：用临时目录而非 mac 专属的 /tmp
-	const TMP_CWD = mkdtempSync(join(tmpdir(), "slash-cwd-"));
-	const norm = (p) => p.replace(/\\/g, "/");
-	c.send({ type: "prompt", text: `/cwd ${TMP_CWD}` });
-	// 协议 v2：动作后的快照可能是全量 snapshot，也可能是 snapshot_delta
-	// （light state 同样携带 cwd）——两者都必须接受（见 conv-cwd-test 写法）。
-	await c.wait(
-		(m) =>
-			(m.type === "snapshot" || m.type === "snapshot_delta") &&
-			norm(m.state?.cwd) === norm(TMP_CWD),
-	);
-	const cwdOk = await c.wait((m) => (m.type === "snapshot" || m.type === "snapshot_delta") && m.state?.cwdEvents?.some((event) => norm(event.cwd) === norm(TMP_CWD)), 6000).catch(() => null);
-	if (!cwdOk) {
-		throw new Error("FAIL: /cwd valid path did not switch workspace");
-	}
-	console.log(`[3] /cwd valid → ${TMP_CWD}`);
-
-	c.send({ type: "prompt", text: "/cwd /nonexistent-zzz" });
-	const cwdBad = await c.wait((m) => m.type === "notice", 6000);
-	if (!cwdBad.text.includes("切换工作目录失败")) {
-		throw new Error("FAIL: /cwd invalid path should notice an error");
-	}
-	console.log(`[4] /cwd invalid → ${cwdBad.text}`);
-
-	// --- 4. native /model with no match ---
-	c.send({ type: "prompt", text: "/model 这个模型必然不存在xyz" });
-	const modelBad = await c.wait((m) => m.type === "notice", 6000);
-	if (!modelBad.text.includes("没有匹配到模型")) {
-		throw new Error("FAIL: /model no-match should notice an error");
-	}
-	console.log(`[5] /model no-match → ${modelBad.text}`);
-
-	// --- 5. native /help is swallowed (no prompt-send failure) ---
-	c.send({ type: "prompt", text: "/help" });
-	const leak = await c.wait(
-		(m) => m.type === "notice" && m.text.includes("提示发送失败"),
-		3000,
-	).catch(() => null);
-	if (leak) {
-		throw new Error("FAIL: /help leaked to the SDK prompt");
-	}
-	console.log("[6] /help intercepted, no SDK leak");
-
-	// --- 6. /new resets the current conversation and emits its summary ---
-	c.send({ type: "prompt", text: "/new", requestId: "new-command" });
-	await c.wait(m => m.type === "prompt_result" && m.requestId === "new-command");
-	const newChat = await c.wait((m) => m.type === "conversations", 6000);
-	if (!newChat.activeId) {
-		throw new Error("FAIL: /new did not emit the current conversation");
-	}
-	console.log(`[7] /new → active conversation ${newChat.activeId.slice(0, 8)}…`);
-
-	// --- 8. /reload re-discovers resources and re-pushes the catalog ---
-	// Like the browser, wait for the newly bound file's asynchronous validation
-	// before issuing a command that can write settings/session entries.
-	c.send({ type: "get_state" });
-	await c.wait(m => (m.type === "snapshot" || m.type === "snapshot_delta") && norm(m.state?.cwd ?? "") === norm(TMP_CWD) && m.state?.tree?.verifying === false);
-	const reloadRequestId = `reload-${Date.now()}`;
-	c.send({ type: "prompt", text: "/reload", requestId: reloadRequestId });
-	const running = await c.wait((m) => m.type === "reload_status" && m.requestId === reloadRequestId && m.phase === "running", 8000);
-	if (!running.conversationId) throw new Error("FAIL: /reload running event lacks conversation identity");
-	const catReloaded = await c.wait(
-		(m) => m.type === "slash_commands",
-		20000,
-	);
-	const done = await c.wait((m) => m.type === "reload_status" && m.requestId === reloadRequestId && m.phase === "done", 8000);
-	if (done.conversationId !== running.conversationId || !Number.isFinite(done.durationMs) || !Number.isInteger(done.extensions) || !Number.isInteger(done.skills) || !Number.isInteger(done.prompts) || !Array.isArray(done.errors) || !Array.isArray(done.resources?.skills)) {
-		throw new Error(`FAIL: /reload result incomplete: ${JSON.stringify(done)}`);
-	}
-	const namesAfterReload = new Set(catReloaded.commands.map((x) => x.name));
-	const missingAfterReload = NATIVE_NAMES.filter((n) => !namesAfterReload.has(n));
-	if (missingAfterReload.length > 0) {
-		throw new Error(
-			`FAIL: builtin commands missing after /reload: ${missingAfterReload.join(", ")}`,
-		);
-	}
-	console.log(
-		`[8] /reload → catalog re-pushed (${catReloaded.commands.length} commands), extensions=${done.extensions}, skills=${done.skills}, prompts=${done.prompts}, errors=${done.errors.length}`,
-	);
-
-	c.close();
-	server.kill();
-	console.log("\n✅ SLASH-COMMAND CHECKS PASSED");
-}
-
-main().catch(async (e) => {
-	console.error("❌", e.message);
-	await freePort(PORT);
-	process.exit(1);
+	requests.push(message);
+	res.writeHead(200, { 'content-type': 'text/event-stream' });
+	const emit = (type, data) => res.write(`event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`);
+	emit('message_start', { message: { id: 'fixture', type: 'message', role: 'assistant', model: 'fixture', content: [], usage: { input_tokens: 10, output_tokens: 0 } } });
+	emit('content_block_start', { index: 0, content_block: { type: 'text', text: '' } });
+	emit('content_block_delta', { index: 0, delta: { type: 'text_delta', text: 'Native command fixture reply.' } });
+	emit('content_block_stop', { index: 0 });
+	emit('message_delta', { delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 6 } });
+	emit('message_stop', {}); res.end();
 });
+try {
+	const port = await listenIsolated(provider);
+	writeFileSync(join(agent, 'mcp.json'), JSON.stringify({ mcpServers: { fixture: { type: 'http', url: `http://127.0.0.1:${port}/mcp` } } }));
+	writeFileSync(join(agent, 'models.yml'), JSON.stringify({ providers: { fixture: { api: 'anthropic-messages', baseUrl: `http://127.0.0.1:${port}`, apiKey: 'fixture', models: [{ id: 'fixture', contextWindow: 1000000 }] } } }));
+	writeFileSync(join(agent, 'config.yml'), JSON.stringify({ skills: { enabled: true, enableAgentsUser: false, enableAgentsProject: false, enablePiUser: false, enablePiProject: false, enableClaudeUser: false, enableClaudeProject: false, enableCodexUser: false, customDirectories: [join(agent, 'skills')] }, retry: { enabled: false }, compaction: { enabled: false }, cacheWarming: { enabled: false } }));
+	service = new OmpChatService(root, join(data, 'client-state.json'));
+	const client = await service.attach('commands', event => events.push(event));
+	await client.setModel('fixture/fixture'); await client.pushSlashCommands();
+	const catalog = () => events.filter(event => event.type === 'slash_commands').at(-1)?.commands ?? [];
+	const command = name => catalog().find(command => command.name === name);
+	assert.equal(command('fixture-extension')?.source, 'extension', 'native extension must not be mislabeled builtin');
+	assert.equal(command('fixture-custom')?.source, 'custom');
+	await wait(() => catalog().some(command => command.source === 'mcp_prompt'), 'native MCP prompt catalogue');
+	assert.equal(command('fixture-file')?.source, 'file');
+	assert.equal(command('fixture-file')?.argumentHint, '<file>');
+	assert.equal(command('skill:fixture')?.source, 'skill');
+	assert.equal(command('fixture-extension')?.argumentHint, 'arguments');
+	assert.equal(command('models')?.source, 'builtin', 'native builtin alias is selectable');
+	assert.equal(command('new')?.source, 'builtin');
+	assert.equal(new Set(catalog().map(command => command.name)).size, catalog().length);
+	await client.prompt('/fixture-extension expected');
+	await wait(() => readFileSync(effects, 'utf8') === 'expected', 'native extension side effect');
+	await wait(() => !client.session.state.running, 'extension settles');
+	assert.equal(requests.length, 0);
+	await client.prompt('/model fixture/fixture');
+	await wait(() => !client.session.state.running, 'model command settles');
+	assert.equal(requests.length, 0, 'native builtin stays local');
+	await client.prompt('/unknown-fixture ordinary text');
+	await wait(() => !client.session.state.running, 'unknown slash model reply');
+	assert.equal(requests.length, 1);
+	assert(JSON.stringify(requests[0].messages).includes('/unknown-fixture ordinary text'));
+	// Do not call the host's catalogue refresh: only the native event may update it.
+	writeFileSync(join(agent, 'commands/fixture-late.md'), '---\ndescription: Added by native reload\n---\nLATE_COMMAND_BODY');
+	await client.session.command('harness_mcp', { action: 'reload' });
+	await wait(() => command('fixture-late')?.source === 'file', 'native available_commands_update');
+	const first = client.session, firstId = client.conversationId;
+	await client.newChat(true);
+	const secondId = client.conversationId;
+	writeFileSync(join(agent, 'commands/fixture-background.md'), 'BACKGROUND_COMMAND_BODY');
+	const marker = events.length;
+	await first.command('harness_mcp', { action: 'reload' });
+	assert(!events.slice(marker).some(event => event.type === 'slash_commands' && event.commands.some(command => command.name === 'fixture-background')), 'background metadata cannot replace active catalogue');
+	await client.switchConversation(firstId);
+	assert.equal(command('fixture-background')?.source, 'file', 'switch publishes that conversation catalogue');
+	await client.abort(); const stopped = first.generation;
+	await client.pushSlashCommands();
+	assert.equal(first.generation, stopped, 'catalogue reads cannot revive a stopped worker');
+	assert.equal(command('fixture-background')?.source, 'file', 'stopped catalogue remains available');
+	await client.switchConversation(secondId);
+	assert.equal(requests.length, 1, 'metadata, reload and switching never call a model');
+	if (process.argv.includes('--browser')) {
+		await service.disposeAll(); service = undefined;
+		const { chromium } = await import('playwright-core');
+		const { CHROME_PATH } = await import('./lib/chrome.mjs');
+		harness = await startIsolatedHarness({ env: { PI_WEB_DATA_DIR: data, PI_WEB_CWD: root } });
+		browser = await chromium.launch({ executablePath: CHROME_PATH || chromium.executablePath() });
+		const page = await browser.newPage();
+		await page.goto(`http://127.0.0.1:${harness.port}`);
+		const input = page.locator('.inputbar textarea');
+		await input.waitFor();
+		await page.waitForFunction(() => !document.querySelector('.inputbar textarea')?.disabled);
+		for (const [name, source, label] of [['fixture-file', 'file', '文件命令'], ['fixture-custom', 'custom', '自定义命令'], ['fixture-extension', 'extension', '扩展'], ['skill:fixture', 'skill', '技能'], ['models', 'builtin', '内置']]) {
+			await input.fill('/' + name);
+			const item = page.locator('.slash-item').filter({ has: page.locator('.slash-name', { hasText: '/' + name }) }).first();
+			await item.waitFor();
+			assert.equal(await item.locator('.slash-source.' + source).textContent(), label);
+			if (source === 'file') assert.equal(await item.locator('.slash-hint').textContent(), '<file>');
+		}
+		await input.fill('/fixture-file'); await page.locator('.slash-item').first().waitFor();
+		await page.screenshot({ path: join(tmpdir(), 'omp-command-catalog.png') });
+		await page.locator('.slash-item').first().click();
+		assert.equal(await input.inputValue(), '/fixture-file ');
+		assert.equal(requests.length, 1, 'selecting a command only fills the draft');
+		console.log('PASS native command picker labels, hints, aliases and draft-only selection in browser');
+	}
+	console.log('PASS native slash catalogue: sources/hints/aliases, dispatch, dynamic reload, background isolation, switch and Stop cache');
+} finally { await browser?.close(); await harness?.stop(); await service?.disposeAll(); provider.closeAllConnections(); await new Promise(resolve => provider.close(resolve)); rmSync(root, { recursive: true, force: true }); }

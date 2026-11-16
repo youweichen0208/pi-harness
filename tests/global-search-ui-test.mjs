@@ -5,18 +5,11 @@
  */
 import { chromium } from "playwright-core";
 import { CHROME_PATH } from "./lib/chrome.mjs";
-import { portUp } from "./lib/port-utils.mjs";
-import { fileURLToPath } from "node:url";
-import { spawn } from "node:child_process";
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { startIsolatedHarness } from "./lib/isolated-server.mjs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
-import { testEnv } from "./lib/test-env.mjs";
-
-const REPO_ROOT = fileURLToPath(new globalThis.URL("../", import.meta.url));
-const PORT = 8963;
-const BASE = `http://localhost:${PORT}`;
 
 let failures = 0;
 function check(name, ok, extra = "") {
@@ -24,46 +17,26 @@ function check(name, ok, extra = "") {
 	if (!ok) failures++;
 }
 
-const workDir = join(mkdtempSync(join(tmpdir(), "pi-web-gsui-")), "proj");
+const root = mkdtempSync(join(tmpdir(), "omp-gsui-")), workDir = join(root, "proj");
 mkdirSync(join(workDir, "src"), { recursive: true });
 writeFileSync(join(workDir, "src", "alpha-util.ts"), "export {};");
 writeFileSync(join(workDir, "README.md"), "hi");
 
-const dataDir = mkdtempSync(join(tmpdir(), "pi-web-gsui-data-"));
-let server = null;
+const dataDir = join(root, "data"), agent = join(dataDir, "omp/agent");
+mkdirSync(agent, { recursive: true });
+writeFileSync(join(agent, "config.yml"), JSON.stringify({ skills: { enabled: false }, cacheWarming: { enabled: false } }));
+writeFileSync(join(agent, "models.yml"), JSON.stringify({ providers: { fixture: { api: "openai-completions", baseUrl: "http://127.0.0.1:1", apiKey: "fixture", models: [{ id: "alpha-model" }, { id: "beta-model" }] } } }));
+let harness = null;
 let browser = null;
 
 async function run() {
-	if (await portUp(PORT)) throw new Error(`Port ${PORT} busy`);
-	server = spawn("node", ["dist/server/index.js"], {
-		cwd: REPO_ROOT,
-		env: {
-			...testEnv(),
-			PORT: String(PORT),
-			PI_WEB_DATA_DIR: dataDir,
-			PI_WEB_CWD: workDir,
-		},
-		stdio: "ignore",
-	});
-	for (let i = 0; i < 40; i++) {
-		await sleep(250);
-		if (await portUp(PORT)) break;
-	}
-
+	harness = await startIsolatedHarness({ env: { PI_WEB_DATA_DIR: dataDir, PI_WEB_CWD: workDir } });
+	const BASE = `http://127.0.0.1:${harness.port}`;
 	browser = await chromium.launch({ executablePath: CHROME_PATH });
 	const page = await browser.newPage();
 	page.on("pageerror", (e) => console.log("pageerror:", e.message));
-	await page.routeWebSocket("**/ws", route => {
-		const upstream = route.connectToServer();
-		upstream.onMessage(wire => {
-			const message = JSON.parse(String(wire));
-			// Search does not need a provider; avoid the unrelated first-run setup dialog.
-			if (message.type === "snapshot") message.state.piConfigured = true;
-			route.send(JSON.stringify(message));
-		});
-	});
 	await page.goto(BASE);
-	await page.waitForSelector(".topbar", { timeout: 15000 });
+	await page.locator(".inputbar textarea:not(:disabled)").waitFor({ timeout: 30000 });
 
 	// 1) Global search keeps its keyboard entry after the topbar redesign.
 	await page.keyboard.press("Control+k");
@@ -95,9 +68,16 @@ async function run() {
 	check("Escape 关闭弹窗", (await page.locator(".gs-modal").count()) === 0);
 
 	// 5) 模型下拉搜索框
-	await page.locator(".inputbar .dropdown .chip").first().click();
+	await page.locator(".inputbar .chip-model").first().click();
 	await page.waitForSelector(".dd-search", { timeout: 3000 }).catch(() => {});
 	check("模型下拉出现搜索框", (await page.locator(".dd-search").count()) > 0);
+	await page.locator(".dd-model-name", { hasText: "beta-model" }).waitFor();
+	await page.locator(".dd-search").fill("alpha-model");
+	await page.locator(".dd-model-name", { hasText: "beta-model" }).waitFor({ state: "detached" });
+	check("模型搜索保留匹配项", await page.locator(".dd-model-name").allTextContents().then(names => names.length === 1 && names[0] === "alpha-model"));
+	await page.locator(".dd-search").fill("");
+	await page.locator(".dd-model-name", { hasText: "beta-model" }).waitFor();
+	check("清空模型搜索恢复列表", await page.locator(".dd-model-name").count() === 2);
 
 	await browser.close();
 }
@@ -109,7 +89,7 @@ try {
 	failures++;
 } finally {
 	await browser?.close();
-	if (server?.pid) process.kill(server.pid, "SIGTERM");
-	await sleep(500);
+	await harness?.stop();
+	rmSync(root, { recursive: true, force: true });
 }
 process.exit(failures === 0 ? 0 : 1);

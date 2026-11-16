@@ -1,4 +1,6 @@
 import { RunningIndicator } from "./RunningIndicator";
+import { OmpTasksPanel } from "./OmpTasksPanel";
+import type { UiOmpTask } from "../types";
 import { isToolTextContinuation } from "../../../server/tool-text";
 import { currentCodemodeGroups, type CodemodeActivity } from "../codemode-records";
 import { CodemodeRecords } from "./CodemodeRecords";
@@ -24,7 +26,7 @@ function compactDuration(ms: number): string | null {
 	return `${Math.floor(ms / 3_600_000)}h ${Math.floor(ms % 3_600_000 / 60_000)}m`;
 }
 
-type TaskProgressPanelProps = CodemodeActivity & { send?: (message: ClientMessage) => boolean; conversationId?: string; task?: TaskProgress | null; silence: Silence; cwd: string; messages: UiMessage[]; onPreview: (path: string, name: string) => void; streaming?: boolean; live?: UiMessage | null };
+type TaskProgressPanelProps = CodemodeActivity & { ompTasks?: UiOmpTask[]; send?: (message: ClientMessage) => boolean; conversationId?: string; task?: TaskProgress | null; silence: Silence; cwd: string; messages: UiMessage[]; onPreview: (path: string, name: string) => void; streaming?: boolean; live?: UiMessage | null };
 
 export function TaskProgressPanel(props: TaskProgressPanelProps) {
 	const history = props.codemode?.history ?? props.messages;
@@ -32,7 +34,7 @@ export function TaskProgressPanel(props: TaskProgressPanelProps) {
 	return <TaskProgressContent key={`${props.conversationId ?? ""}:${props.task?.sourceMessageId ?? request?.id ?? "empty"}`} {...props} />;
 }
 
-function TaskProgressContent({ send, codemode, liveOutputs, toolStatuses, conversationId, task, cwd, messages, onPreview, streaming, live }: TaskProgressPanelProps) {
+function TaskProgressContent({ send, codemode, liveOutputs, toolStatuses, conversationId, task, ompTasks, cwd, messages, onPreview, streaming, live }: TaskProgressPanelProps) {
 	const t = useT();
 	const codemodeGroups = useMemo(() => currentCodemodeGroups(messages, live, streaming ?? task?.status === "running", { codemode, liveOutputs, toolStatuses }, conversationId), [messages, live, streaming, task?.status, codemode, liveOutputs, toolStatuses, conversationId]);
 	const { locale } = useI18n();
@@ -152,6 +154,7 @@ function TaskProgressContent({ send, codemode, liveOutputs, toolStatuses, conver
 			{overviewOpen && <div className="task-overview-track" aria-hidden="true">{phases.map(phase => <i key={phase.id} className={phase.status} style={{ flexGrow: Math.max(400, phase.durationMs ?? 0) }} />)}</div>}
 		</div>}
 		<div className="task-sections-scroll" ref={scrollRef} onPointerDown={() => { userScrolled.current = true; }} onWheel={() => { userScrolled.current = true; }} onTouchMove={() => { userScrolled.current = true; }} onKeyDown={event => { if (["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End"].includes(event.key)) userScrolled.current = true; }}>
+			{ompTasks && conversationId && send && <OmpTasksPanel tasks={ompTasks} conversationId={conversationId} send={send} />}
 			{!empty && <>
 			<section className="task-section">
 				<button type="button" className="task-section-heading" aria-expanded={progressOpen} onClick={() => setProgressOpen(value => !value)}><FiChevronRight className={progressOpen ? "open" : ""} />{t(stepLog ? "taskStepsHeading" : "taskProgressHeading")}{stepLog && <span className="task-section-count">{t("completedOfTotal", { done: tally.done, total: tally.total })}</span>}</button>

@@ -1,0 +1,80 @@
+{
+  "status": "Native MCP execution and image presentation locally verified; full migration remains incomplete",
+  "updatedAt": "2026-11-15T17:20:39.336411+00:00",
+  "platform": "darwin-arm64",
+  "omp": "18.20.0",
+  "bun": "1.4.4",
+  "protocol": 74,
+  "reproduction": {
+    "browser": "Real native MCP returned an image through write(xd://…). The browser selected EditWriteCard and did not render the returned image. Initial --browser run failed waiting for .tool-result-image img.",
+    "unit": "tool-target.test.ts failed because xd://mcp__fixture_add was projected as a file diff; ordinary and Windows file paths passed."
+  },
+  "changes": [
+    "Virtual URI tool targets render generic tool results and do not contribute file diffs or file-change artifacts; Windows drive paths remain files. Native history and model input are unchanged.",
+    "ToolResultImage provides download/save/attach actions under a conversation context. Saving validates current client/workspace/conversation with random exclusive file creation; attaching uses the existing image and per-conversation draft pipeline.",
+    "Historical codemode-mcp smoke entry now validates OMP default xd:// routes from the actual provider system prompt and write declaration, success/failure/image delivery and negative legacy Codemode control behavior. Mac/Windows browser gate added."
+  ],
+  "verification": {
+    "typecheck": "passed final; exit 0",
+    "isolatedBuild": "passed; final web rebuild passed after tool identity attribute",
+    "units": {
+      "files": 171,
+      "passed": 1060,
+      "skipped": 1,
+      "exitCode": 0
+    },
+    "targetedUnits": "31 passed across four files",
+    "mcpHttpAndBrowser": "passed final; exit 0. Actual tool result images, saved bytes, explicit attach, no extra model calls, narrow layout, stale same-cwd save rejected, draft isolation, stopped save without revival/history mutation.",
+    "related": {
+      "passed": 5,
+      "total": 5,
+      "exitCode": 0,
+      "tests": [
+        "omp-mcp-test",
+        "omp-mcp-auth-test",
+        "omp-tool-output-test",
+        "changes-panel-ui-test",
+        "omp-entry-test"
+      ]
+    },
+    "protocol": "74 sync passed",
+    "design": "0 errors / 0 radius warnings",
+    "testEnvironment": "308 scripts passed",
+    "engine": "129 source files and built output passed",
+    "ciYaml": "Parsed using bundled Bun YAML; Node yaml package is unavailable.",
+    "diffCheck": "passed",
+    "visual": "Actual wide and narrow screenshots inspected; 2×2 fixture image is intentionally tiny; controls fit and attachment chip is visible."
+  },
+  "fixtureAdjustments": [
+    "Initial direct MCP declaration assumption was rejected by actual native request: OMP exposes virtual routes through write. Test now reads its exact route from native system policy.",
+    "Generic tool cards now carry the same data-tool-call-id identity as edit cards; browser locator retained.",
+    "Delayed-save route pattern expanded to include auth query string; original too-narrow route never intercepted the request."
+  ],
+  "sourceSha256": {
+    "server/tool-target.ts": "8566b8476b2ccf035cf03ea8e247ace371d8ec193f9643ba15dba1046d27cb85",
+    "server/task-progress.ts": "0e23e2b6852ea274f3b08bec52056a00ac39da26468329e8d1efb436e23077be",
+    "server/codemode-image-routes.ts": "4c1a422abcd5d1228047e81df08757a6a005aea4bf85b4682968f1a4e7b1cfc7",
+    "web/src/tool-image-context.ts": "90559ca006c4ee5312be7d5d137130a7c21fbc450465e72345bc18b4d25d56b2",
+    "web/src/components/ToolResultImage.tsx": "efca009f2f17aab975aac531b134d90f01551d7519d3f8186531c2ad3284e44e",
+    "web/src/components/ToolCallBlock.tsx": "6d678de1d33967dc78c00ca538368dc9cb47d6096c1bf003e21a56ae628308cf",
+    "web/src/components/Message.tsx": "c55c497746f0d872b4d12499186117793f0f87d8fdd7e2d3df9a6c578ba778c6",
+    "web/src/components/MessageList.tsx": "b5aac7ef6bd8b6934b2993b09a564bcaa712b6a70495e205201800f0f99c85ca",
+    "web/src/App.tsx": "a71cf65e82f41f84f7ecd9df24f4fe2b1048c64cae580c5b21991b2dd9cb8900",
+    "web/src/edit-write-presentation.ts": "8b04506a7572d479038292ddab43471991db78a8eef1528195af3919a3366846",
+    "web/src/task-outputs.ts": "b3f5676eda4e0b1e5874756bbe6623cac2310ce437449195bd7bfeb51aca44be",
+    "web/src/styles.css": "138f98b92845201c85a05a0410a08bd37c6800469234734dd25b78ffdc282ecd",
+    "tests/codemode-mcp-test.mjs": "0b5ad3ce1dac34d464e9415a55ff2ca75fc46498f92369d4ca12c48229b0dedb",
+    "tests/unit/tool-target.test.ts": "d8641064a1d473118831a7c05438e149931c9e47750243db7bb22909246d17a7"
+  },
+  "fullSmoke": "Manifest remains 112; full suite not rerun. Historical 102/110 baseline is unchanged by targeted passes.",
+  "isolation": "/var/folders/41/07yyp3_12jddkkthmflqkbgw0000gn/T/omp-mcp-execution-faa5vui_; all test/build processes terminal before cleanup; running checkout dist was not replaced.",
+  "remaining": [
+    "Legacy component-updates, extensions and model-sources protocol migration",
+    "MCP tool-level OAuth challenges, form/import/diagnostic gaps",
+    "Task storage guard and remaining recovery/authentication gaps",
+    "Old desktop history cleanup, Windows original-task matrix and packaged acceptance"
+  ],
+  "windowsVerified": false,
+  "desktopInstallerBuilt": false,
+  "published": false
+}

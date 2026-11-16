@@ -15,6 +15,7 @@ export function ChatDock({ target, children }: { target: HTMLElement | null; chi
 		const scroll = container.querySelector<HTMLElement>(".messages");
 		if (target && !docked.current) homeScroll.current = scroll?.scrollTop ?? 0;
 		const top = target ? scroll?.scrollTop ?? 0 : homeScroll.current;
+		window.dispatchEvent(new CustomEvent("pi:chat-surface-moving", { detail: container }));
 		(target ?? home.current)?.appendChild(container);
 		// Report the restored position now; a render before the native scroll event would follow a stale stick-to-bottom.
 		if (scroll) { scroll.scrollTop = top; scroll.dispatchEvent(new Event("scroll")); }

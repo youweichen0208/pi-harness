@@ -1,20 +1,13 @@
 /**
  * 全局搜索（search_files / search_files_result）协议冒烟。
- * 零 token：自起编译后的 server（隔离端口 8962 + 临时 data-dir），
+ * 零 token：自起编译后的 OMP server（隔离高端口 + 临时 data-dir），
  * 发 search_files 断言 reqId 回显与文件名匹配结果；空 query 返回空列表。
  */
-import { portUp } from "./lib/port-utils.mjs";
-import { fileURLToPath } from "node:url";
-import { spawn } from "node:child_process";
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { setTimeout as sleep } from "node:timers/promises";
-import { testEnv } from "./lib/test-env.mjs";
-
-const REPO_ROOT = fileURLToPath(new globalThis.URL("../", import.meta.url));
-const PORT = 8962;
-const URL = `ws://localhost:${PORT}/ws`;
+import WebSocket from "ws";
+import { startIsolatedHarness } from "./lib/isolated-server.mjs";
 
 let failures = 0;
 function check(name, ok, extra = "") {
@@ -23,7 +16,8 @@ function check(name, ok, extra = "") {
 }
 
 // 临时工作区：带嵌套目录 + node_modules（应被忽略）
-const workDir = join(mkdtempSync(join(tmpdir(), "pi-web-gs-test-")), "proj");
+const root = mkdtempSync(join(tmpdir(), "omp-gs-test-"));
+const workDir = join(root, "proj");
 mkdirSync(join(workDir, "src"), { recursive: true });
 mkdirSync(join(workDir, "node_modules", "somepkg"), { recursive: true });
 writeFileSync(join(workDir, "README.md"), "hi");
@@ -31,39 +25,19 @@ writeFileSync(join(workDir, "src", "alpha-util.ts"), "export {};");
 writeFileSync(join(workDir, "src", "beta.txt"), "x");
 writeFileSync(join(workDir, "node_modules", "somepkg", "util.js"), "y");
 
-const dataDir = mkdtempSync(join(tmpdir(), "pi-web-gs-data-"));
-let server = null;
-
-async function startServer() {
-	server = spawn("node", ["dist/server/index.js"], {
-		cwd: REPO_ROOT,
-		env: {
-			...testEnv(),
-			PORT: String(PORT),
-			PI_WEB_DATA_DIR: dataDir,
-			PI_WEB_CWD: workDir,
-		},
-		stdio: "ignore",
-	});
-	for (let i = 0; i < 40; i++) {
-		await sleep(250);
-		try {
-			if (await portUp(PORT)) return;
-		} catch {
-			// not up yet
-		}
-	}
-	throw new Error("server did not start");
-}
+const dataDir = join(root, "data"), agent = join(dataDir, "omp/agent");
+mkdirSync(agent, { recursive: true });
+writeFileSync(join(agent, "config.yml"), JSON.stringify({ skills: { enabled: false }, cacheWarming: { enabled: false } }));
+let harness, socket;
 
 function connect() {
 	return new Promise((resolve, reject) => {
-		const ws = new WebSocket(URL);
+		const ws = new WebSocket(`ws://127.0.0.1:${harness.port}/ws`); socket = ws;
 		const inbox = [];
 		const waiters = [];
 		const api = {
 			ws,
-			async next(pred, what, ms = 8000) {
+			async next(pred, what, ms = 30000) {
 				const existing = inbox.findIndex(pred);
 				if (existing >= 0) return inbox.splice(existing, 1)[0];
 				return new Promise((res, rej) => {
@@ -109,9 +83,9 @@ function connect() {
 }
 
 async function run() {
-	await startServer();
-	await sleep(300);
+	harness = await startIsolatedHarness({ env: { PI_WEB_DATA_DIR: dataDir, PI_WEB_CWD: workDir } });
 	const c = await connect();
+	await c.next(m => m.type === "ready", "OMP ready");
 
 	// 1) 文件搜索命中 + reqId 回显
 	c.send({ type: "search_files", reqId: 42, query: "util" });
@@ -171,7 +145,8 @@ try {
 	console.error("FATAL:", err?.message ?? err);
 	failures++;
 } finally {
-	if (server?.pid) process.kill(server.pid, "SIGTERM");
-	await sleep(500);
+	socket?.terminate();
+	await harness?.stop();
+	rmSync(root, { recursive: true, force: true });
 }
 process.exit(failures === 0 ? 0 : 1);

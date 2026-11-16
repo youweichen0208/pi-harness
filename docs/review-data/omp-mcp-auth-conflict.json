@@ -1,0 +1,151 @@
+{
+  "status": "Two actual OAuth configuration concurrency gaps reproduced; not fixed",
+  "platform": "darwin-arm64",
+  "omp": "18.20.0",
+  "bun": "1.4.4",
+  "protocol": 76,
+  "probe": "tests/diagnostics/omp-mcp-auth-conflict-probe.mjs",
+  "sourceSha256": "cf5ea3e3f71a9e053d62a6dba9a73ade84adba350f57195a65976c7e7e6280bd",
+  "cases": {
+    "control": {
+      "path": "/tmp/omp-auth-conflict-control-run.log",
+      "exitCode": 0,
+      "sha256": "5d2157279643a3aa40c9cb5bee5c2b90f00f5b7469d0915b1edccab087b9eef4",
+      "observed": {
+        "mode": "control",
+        "tokenCount": 1,
+        "authStatus": "complete",
+        "sameEditPreserved": false,
+        "peerEditPreserved": false,
+        "definitionPreserved": false,
+        "authenticatedAfterEdit": 0,
+        "connectionStatus": "connected",
+        "configAuthWritten": true,
+        "unrelatedRootPreserved": true
+      }
+    },
+    "peer": {
+      "path": "/tmp/omp-auth-conflict-peer.log",
+      "exitCode": 0,
+      "sha256": "84d7b075d4bacf938e6ca984dfea87c3356182c4f098d8daa42e4dd45e5f3df2",
+      "observed": {
+        "mode": "peer",
+        "tokenCount": 1,
+        "authStatus": "complete",
+        "sameEditPreserved": false,
+        "peerEditPreserved": true,
+        "definitionPreserved": false,
+        "authenticatedAfterEdit": 3,
+        "connectionStatus": "connected",
+        "configAuthWritten": true,
+        "unrelatedRootPreserved": true
+      }
+    },
+    "same-server": {
+      "path": "/tmp/omp-auth-conflict-same-server-run.log",
+      "exitCode": 1,
+      "sha256": "4d0c9a5298675b9175911dfd9509e69a967850f6b280aa0152c63df3e258fc50",
+      "observed": {
+        "mode": "same-server",
+        "tokenCount": 1,
+        "authStatus": "complete",
+        "sameEditPreserved": false,
+        "peerEditPreserved": false,
+        "definitionPreserved": false,
+        "authenticatedAfterEdit": 3,
+        "connectionStatus": "connected",
+        "configAuthWritten": true,
+        "unrelatedRootPreserved": true
+      }
+    },
+    "definition-only": {
+      "path": "/tmp/omp-auth-conflict-definition-only.log",
+      "exitCode": 1,
+      "sha256": "366a13f314edc701ed2bf50b34a47223d424a6d919d6dee0ad66f81af92a52f5",
+      "observed": {
+        "mode": "definition-only",
+        "tokenCount": 1,
+        "authStatus": "complete",
+        "sameEditPreserved": false,
+        "peerEditPreserved": false,
+        "definitionPreserved": true,
+        "authenticatedAfterEdit": 3,
+        "connectionStatus": "connected",
+        "configAuthWritten": false,
+        "unrelatedRootPreserved": true
+      }
+    }
+  },
+  "repeats": {
+    "same-server": {
+      "path": "/tmp/omp-auth-conflict-same-server-repeat.log",
+      "exitCode": 1,
+      "sha256": "4d0c9a5298675b9175911dfd9509e69a967850f6b280aa0152c63df3e258fc50"
+    },
+    "definition-only": {
+      "path": "/tmp/omp-auth-conflict-definition-only-repeat.log",
+      "exitCode": 1,
+      "sha256": "366a13f314edc701ed2bf50b34a47223d424a6d919d6dee0ad66f81af92a52f5"
+    }
+  },
+  "findings": [
+    "An unchanged bearer-config control completes one real native PKCE grant, writes auth binding and reconnects successfully.",
+    "While the authorization URL is open, changing the selected definition timeout and adding a field is overwritten by native OAuth completion. Status is complete and the old service connects. Repeated twice.",
+    "Changing a different disabled service in the same file survives the same native OAuth write; unrelated root fields also survive. This isolates selected-definition replacement rather than whole-file rollback.",
+    "For a definition-only server, changing its URL and setting enabled=false while authorization is open preserves the file, but the application still sends three authenticated RPC messages to the old endpoint and reports complete. Repeated twice.",
+    "Native reauthorizeMcpServer captures found.config before the user flow, then passes its derived updatedConfig to updateMCPServer. The latter locks and rereads the file but replaces the selected definition without comparing its prior value.",
+    "OmpMcpAuth.run then calls reconnectMcpManagerServer with the original selected config without revalidating the authoritative definition. Native matchingManagerServerConfig compares the live manager URL to that old selection, not to the current file."
+  ],
+  "nextActions": [
+    "Add an authoritative post-grant selection check in the host before reconnecting, covering deletion, disable, scope shadowing and URL/config edits. This can fix obsolete reconnect independently but cannot repair a definition already overwritten by native persistence.",
+    "Native OAuth persistence needs an expected-definition comparison inside the same config lock, or a public prepare/commit persistence seam. Current McpReauthOptions does not expose one.",
+    "Do not pretend polling or a pre-write check is atomic CAS, hold a file lock across user interaction, mark ordinary sessions acpOwned to suppress writes, patch node_modules, or duplicate private native OAuth/client-selection behavior.",
+    "Credentials can already be persisted before a conflict is detected. Report that distinction; do not imply rollback or delete another successful flow’s credentials."
+  ],
+  "limitations": [
+    "This is not the Windows DeepSeek root cause result.",
+    "Fake local issuer/resource only; no real accounts or Windows/packaged acceptance.",
+    "The diagnostic remains outside passing smoke and asserts the desired behavior; failure is not reclassified as success."
+  ],
+  "isolation": [
+    "Temporary agent/workspace, one real native grant per case, zero model calls.",
+    "Loopback-only worker fetch preload; inherited account/token/proxy environment removed.",
+    "All probe sessions and temporary data cleaned in finally. User service, live histories and SDK untouched."
+  ],
+  "initialHarnessFailure": {
+    "case": "A packaged-runtime helper interpreted the diagnostic mode argument as an executable argument. Switched the diagnostic to a direct relative import of the isolated built host.",
+    "log": {
+      "path": "/tmp/omp-auth-conflict-control.log",
+      "exitCode": 1,
+      "sha256": "7362897fda6bc2295434bc5af71094139fe77128caf5644e2b477cfa9a4be331"
+    }
+  },
+  "candidate": "/var/folders/41/07yyp3_12jddkkthmflqkbgw0000gn/T/omp-auth-conflict-mrxocud3",
+  "build": {
+    "path": "/tmp/omp-auth-conflict-build.log",
+    "exitCode": 0,
+    "sha256": "846237de0d767c953b136f6b6d60f3bd0cb719f8d057dd1e0c925503ea46479f"
+  },
+  "fullSmoke": {
+    "status": "complete",
+    "sessionId": 49873,
+    "log": "/tmp/omp-full-import.log",
+    "exitCode": 0,
+    "passed": 116,
+    "total": 116,
+    "evidence": "omp-smoke-import.json",
+    "scope": "Protocol 76 before the subsequent reconnect guard; not a passing result for either originally failing diagnostic.",
+    "candidateRemoved": true
+  },
+  "sourceParity": {
+    "filesCompared": 1337,
+    "fingerprintSha256": "548522f13b49bb804a4265ec62b9379b4e5dae021cbc5411c6e8a3ae92b967cb",
+    "differences": [],
+    "docsExcluded": true
+  },
+  "followUp": {
+    "reconnect": "Locally guarded in protocol 77; see omp-mcp-auth-reconnect.json. Original red evidence retained.",
+    "writeBack": "Same-server write-back still fails after the host guard; latest red log in follow-up record."
+  },
+  "upstreamVerification": "omp-oauth-upstream.json: published 18.20.2 OAuth reauth/config writer/manager are byte-identical to installed 18.20.0, integrity checked; no upgrade applied."
+}

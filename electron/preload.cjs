@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
 		ipcRenderer.on("pi-app-update-state", listener);
 		return () => ipcRenderer.removeListener("pi-app-update-state", listener);
 	},
+	openOmpPath: (request) => ipcRenderer.invoke("omp-open-path", { clientId: request.clientId, cwd: request.cwd, conversationId: request.conversationId, target: request.target }),
 	openExtensionPath: (request) => ipcRenderer.invoke("pi-extension-open-path", { clientId: request.clientId, cwd: request.cwd, id: request.id }),
 	openWikiFile: (request) => ipcRenderer.invoke("pi-wiki-open-file", { clientId: request.clientId, cwd: request.cwd, path: request.path }),
 	windowAction: (action) => {

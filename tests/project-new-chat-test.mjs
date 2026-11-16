@@ -1,7 +1,8 @@
 /** Switching projects must also change the owner of every new-chat entry point. */
-import { SessionManager } from "@earendil-works/pi-coding-agent";
+import { createOmpHistory } from "./lib/omp-history-fixture.mjs";
+import { createHash } from "node:crypto";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, realpathSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
@@ -11,15 +12,15 @@ import { CHROME_PATH } from "./lib/chrome.mjs";
 import { startIsolatedHarness } from "./lib/isolated-server.mjs";
 const root = mkdtempSync(join(tmpdir(), "pi-project-new-chat-"));
 const projects = ["project-1", "project-2"].map(name => join(root, name));
+let existingHistory;
 for (const p of projects) {
 	mkdirSync(p);
-	const sessionDir = join(root, "agent", "sessions", `--${p.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-")}--`);
-	if (p === projects[1]) SessionManager.create(p, sessionDir).appendMessage({ role: "user", content: "Existing conversation", timestamp: Date.now() });
+	if (p === projects[1]) existingHistory = await createOmpHistory({ dataDir: join(root, "data"), cwd: p, messages: [{ role: "user", content: "Existing conversation", timestamp: Date.now() }] });
 }
 let harness, socket, browser;
 async function wait(predicate, label) {
-	for (let i = 0; i < 400; i++) { if (predicate()) return; await delay(25); }
-	throw Error(`Timeout: ${label}`);
+	for (let i = 0; i < 1200; i++) { if (predicate()) return; await delay(25); }
+	throw Error(`Timeout: ${label}\n${harness?.logs}`);
 }
 try {
 	harness = await startIsolatedHarness({ env: { PI_WEB_CWD: projects[0], PI_WEB_DATA_DIR: join(root, "data"), PI_CODING_AGENT_DIR: join(root, "agent") } });
@@ -40,6 +41,10 @@ try {
 	}
 	browser = await chromium.launch({ executablePath: CHROME_PATH, headless: true });
 	const page = await browser.newPage();
+	await page.addInitScript(() => {
+		const NativeSocket = window.WebSocket;
+		window.WebSocket = class extends NativeSocket { constructor(...args) { super(...args); window.ompTestSocket = this; } };
+	});
 	let state, snapshots = 0; const outgoing = [];
 	page.on("websocket", ws => {
 		ws.on("framesent", ({ payload }) => outgoing.push(JSON.parse(String(payload))));
@@ -55,14 +60,16 @@ try {
 	const projectOneConversation = state.conversationId;
 	await page.locator(`.project-item[title=${JSON.stringify(projects[1])}]`).click();
 	await page.locator(`.project-item.active[title=${JSON.stringify(projects[1])}]`).waitFor();
-	await wait(() => state?.cwd === projects[1], "project-2 authoritative snapshot");
+	await wait(() => state?.cwd === projects[1] && !state.isStreaming && state.sessionFile, "project-2 authoritative snapshot");
+	await page.evaluate(path => window.ompTestSocket.send(JSON.stringify({ type: "switch_session", path })), existingHistory.sessionFile);
+	await wait(() => state?.sessionFile === existingHistory.sessionFile && !state.isStreaming, "existing OMP conversation opened");
 	const oldConversation = state.conversationId;
 	await page.locator(".lp-project-new").click();
 	await wait(() => outgoing.some(m => m.type === "new_chat"), "new-chat request");
-	await wait(() => state.conversationId !== oldConversation, "new conversation committed");
+	await wait(() => state.conversationId !== oldConversation && !state.isStreaming && state.sessionFile, "new conversation committed");
 	assert.deepEqual(outgoing.filter(m => m.type === "set_cwd").map(m => m.path), [projects[1]], "Browser must not navigate back to project-1");
 	assert.equal(state.cwd, projects[1], "New chat after selecting project-2 must belong to project-2, not project-1");
-	assert.equal(state.sessionFile?.includes("project-2"), true, `New session file must belong to project-2: ${state.sessionFile}`);
+	assert.equal(state.sessionFile?.includes(createHash("sha256").update(realpathSync(projects[1])).digest("hex").slice(0, 24)), true, `New session file must belong to project-2: ${state.sessionFile}`);
 	const newConversation = state.conversationId;
 	const before = snapshots;
 	await page.locator(".global-new-chat").click();

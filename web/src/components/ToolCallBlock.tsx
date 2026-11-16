@@ -1,4 +1,8 @@
+import { isVirtualToolCall } from "../../../server/tool-target.js";
+import { ToolResultImage } from "./ToolResultImage";
 import { OutputColor } from "./OutputColor";
+import { OmpTaskContext } from "../omp-task-context";
+import { OmpTasksPanel } from "./OmpTasksPanel";
 import { RunningIndicator } from "./RunningIndicator";
 import { SubagentTurnContext, SubagentTurnPanel } from "./SubagentTurnPanel";
 import { FiGitBranch } from "react-icons/fi";
@@ -303,6 +307,12 @@ type ToolCallBlockProps = {
 
 export const ToolCallBlock = memo(function ToolCallBlock(props: ToolCallBlockProps) {
 	const turns = useContext(SubagentTurnContext);
+	const omp = useContext(OmpTaskContext);
+	const tasks = omp?.tasks.filter(task => task.parentToolCallId === props.block.id);
+	if (props.block.name === "task" && omp && tasks?.length) return <div className="omp-task-call">
+		<RegularToolCallBlock {...props} />
+		<OmpTasksPanel tasks={tasks} conversationId={omp.conversationId} send={omp.send} enabled={omp.active} />
+	</div>;
 	const calls = turns.get(props.block.id);
 	if (calls && calls.length > 0) {
 		if (calls[0].block.id !== props.block.id) return null;
@@ -397,7 +407,7 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true, rawSubagen
 	const codeLang = !isMarkdown && !isError ? readTargetLanguage(block) : null;
 	// `write` calls: show the file content they're about to write as colored
 	// code instead of the raw {"path":...,"content":...} JSON blob.
-	const writePreview = writeTargetPreview(block);
+	const writePreview = isVirtualToolCall(block) ? null : writeTargetPreview(block);
 	// `edit` calls: the diff the tool itself computed (server-side, already
 	// line-numbered) — colored +/- with per-line syntax highlighting.
 	const editDiff = editResultDiff(block, view);
@@ -407,7 +417,7 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true, rawSubagen
 		try { editPath = JSON.parse(block.argumentsText ?? "").path ?? ""; } catch { /* keep the diff visible for malformed arguments */ }
 	}
 
-	const generic = !Object.hasOwn(TOOL_ICONS, block.name);
+	const generic = isVirtualToolCall(block) || !Object.hasOwn(TOOL_ICONS, block.name);
 	const output = view.result
 		? view.result.content.map((b) => (b.type === "text" ? b.text : "")).join("")
 		: (view.liveOutput ?? "");
@@ -523,10 +533,7 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true, rawSubagen
 				{view.result && !nestedCalls.complete && <p>{t("nestedToolCallsIncomplete")}</p>}
 			</details>}
 			{!generic && block.name !== "read" && view.result?.toolOutputUrl && <ToolOutputDownload url={view.result.toolOutputUrl} />}
-			{resultImages.map((url, index) => <div className="tool-image-preview" key={index}>
-				<a href={url} target="_blank" rel="noreferrer" className="tool-result-image" aria-label={t("zoomCode")}><img src={url} alt={targetPath || t("toolResultImage")} loading="lazy" /></a>
-				<div className="tool-image-actions"><a href={url} download={`generated-${index}.png`}>{t("downloadImage")}</a></div>
-			</div>)}
+			{resultImages.map((url, index) => <ToolResultImage key={index} url={url} index={index} alt={targetPath || t("toolResultImage")} />)}
 			{structured && output && <ToolStructuredOutput key={block.id} output={output} url={view.result?.toolOutputUrl} error={isError} truncated={!!view.result?.content.some(part => part.type === "text" && part.truncated)} />}
 			{output.length > 0 && !imageReadNotice && !subagent && !structured && (block.name === "bash" ? bashRun && bashView === "steps" ? <BashSteps run={bashRun} wrap={lineWrap} /> : bashDiagnostics.length > 0 ? <BashFailure diagnostics={bashDiagnostics} output={output} wrap={lineWrap} /> : <BashOutput output={output} wrap={lineWrap} cwd={differentCommandDirectory(block.argumentsText, cwd) ?? ""} searchOutput={searchOutputKind(block.argumentsText)} command={commandDisplay?.command ?? ""} /> : (
 				<div className="toolcall-output">
@@ -573,7 +580,7 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true, rawSubagen
 	);
 
 	return (
-		<div className={`toolcall ${block.name === "read" ? "toolcall-read" : ""} ${generic ? "toolcall-generic" : ""} ${structured ? "toolcall-structured" : ""} ${statusClass} ${block.name === "bash" ? "toolcall-bash" : ""} ${bashRun ? "toolcall-steps" : ""} ${bashDiagnostics.length ? "toolcall-diagnostics" : ""} ${subagent ? "toolcall-subagents" : ""} ${quietSubagent ? "toolcall-subagent-quiet" : ""}`} onMouseEnter={() => notifyToolHover(block.id)} onMouseLeave={() => notifyToolHover(null)}>
+		<div className={`toolcall ${block.name === "read" ? "toolcall-read" : ""} ${generic ? "toolcall-generic" : ""} ${structured ? "toolcall-structured" : ""} ${statusClass} ${block.name === "bash" ? "toolcall-bash" : ""} ${bashRun ? "toolcall-steps" : ""} ${bashDiagnostics.length ? "toolcall-diagnostics" : ""} ${subagent ? "toolcall-subagents" : ""} ${quietSubagent ? "toolcall-subagent-quiet" : ""}`} data-tool-call-id={block.id} onMouseEnter={() => notifyToolHover(block.id)} onMouseLeave={() => notifyToolHover(null)}>
 			{commandDisplay ? <BashCommandHeader command={commandDisplay.command} original={command!} directory={commandDisplay.directory ?? differentCommandDirectory(block.argumentsText, cwd)} running={isBashRunning} elapsed={elapsed} status={statusLabel} full={fullCommand} onFull={() => { setFullCommand((value) => !value); setOpen(true); }} onKill={onKillBash}>
 				{bashRun && <span className="bash-view-switch"><button type="button" className={bashView === "steps" ? "active" : ""} onClick={() => setBashView("steps")}>{t("bashSteps")}</button><button type="button" className={bashView === "raw" ? "active" : ""} onClick={() => setBashView("raw")}>{t("bashRaw")}</button></span>}
 				<button type="button" className="toolcall-wrap" aria-pressed={lineWrap} onClick={() => setLineWrap((value) => !value)}>{t("toolWrap")}</button>

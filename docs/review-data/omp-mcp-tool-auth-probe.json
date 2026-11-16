@@ -1,0 +1,260 @@
+{
+  "checkedAt": "2026-11-15T19:22:38.125072+00:00",
+  "status": "Reproduced application and native SDK tool-level OAuth gaps; not fixed",
+  "platform": "darwin-arm64",
+  "omp": "18.20.0",
+  "bun": "1.4.4",
+  "protocol": 75,
+  "probe": "tests/diagnostics/omp-mcp-tool-auth-probe.mjs",
+  "sourceSha256": "80990fd520d4390df1379308e664f012b6dea77f60f1e331b229a770c1d06215",
+  "cases": {
+    "application": {
+      "path": "/tmp/omp-mcp-tool-auth-application-final.log",
+      "exitCode": 1,
+      "sha256": "c83844727bdb19c84c0d10cba9fcb0b4065ff751c4bca1d9fca1d6e2424c61c3",
+      "observed": {
+        "mode": "application",
+        "handler": null,
+        "modelCalls": 2,
+        "challengedCalls": 2,
+        "issuerDiscovery": 0,
+        "authStatus": "absent",
+        "authorizationPresented": false,
+        "isStreaming": false,
+        "methods": [
+          "initialize",
+          "notifications/initialized",
+          "tools/list",
+          "tools/call",
+          "initialize",
+          "notifications/initialized",
+          "tools/list",
+          "tools/call"
+        ]
+      }
+    },
+    "handler": {
+      "path": "/tmp/omp-mcp-tool-auth-handler-final.log",
+      "exitCode": 1,
+      "sha256": "a12b5b24f6e8fcb9bd5d385f29eafcb1d6c8d1ae565e8fd554cb5290c3cc60e2",
+      "observed": {
+        "mode": "handler",
+        "handler": null,
+        "modelCalls": 2,
+        "challengedCalls": 2,
+        "issuerDiscovery": 0,
+        "authStatus": "absent",
+        "authorizationPresented": false,
+        "isStreaming": false,
+        "methods": [
+          "initialize",
+          "notifications/initialized",
+          "tools/list",
+          "tools/call",
+          "initialize",
+          "notifications/initialized",
+          "tools/list",
+          "tools/call"
+        ]
+      }
+    },
+    "reconnected": {
+      "path": "/tmp/omp-mcp-tool-auth-reconnected-final.log",
+      "exitCode": 0,
+      "sha256": "c383ac4c3ab45cafc65db05d4aaf48a7afae558360b9202068fcabdca893e09b",
+      "observed": {
+        "mode": "reconnected",
+        "handler": {
+          "name": "protected",
+          "challengeReceived": true
+        },
+        "modelCalls": 2,
+        "challengedCalls": 1,
+        "issuerDiscovery": 0,
+        "authStatus": "absent",
+        "authorizationPresented": false,
+        "isStreaming": false,
+        "methods": [
+          "initialize",
+          "notifications/initialized",
+          "tools/list",
+          "initialize",
+          "notifications/initialized",
+          "tools/list",
+          "tools/call"
+        ]
+      }
+    },
+    "refreshed": {
+      "path": "/tmp/omp-mcp-tool-auth-refreshed-final.log",
+      "exitCode": 1,
+      "sha256": "9e8bb08f37c3fddc9dbe350f79a466c788869640612ffd7b5d19c3d21c403dd7",
+      "observed": {
+        "mode": "refreshed",
+        "handler": null,
+        "modelCalls": 2,
+        "challengedCalls": 2,
+        "issuerDiscovery": 0,
+        "authStatus": "absent",
+        "authorizationPresented": false,
+        "isStreaming": false,
+        "methods": [
+          "initialize",
+          "initialize",
+          "notifications/initialized",
+          "notifications/initialized",
+          "tools/list",
+          "tools/list",
+          "tools/call",
+          "initialize",
+          "notifications/initialized",
+          "tools/list",
+          "tools/call"
+        ]
+      }
+    }
+  },
+  "findings": [
+    "Application mode discovers the MCP tool successfully without login. A real model calls the native write route once; the MCP server returns isError with mcp/www_authenticate metadata. No auth view appears; a second model request follows the failed result.",
+    "Installing the public MCPManager.setAuthHandler from a diagnostic session_start extension does not fix the initial connection path. The test separately confirms the extension installed its handler.",
+    "The same handler receives the exact scope challenge after an explicit native reconnect. The control intentionally returns undefined, so this verifies parameter delivery only, not successful OAuth.",
+    "The refreshed control reconnects then refreshes the server tool list through public SDK methods. The handler again receives nothing.",
+    "SDK manager.ts startup fulfilled/cached tool registration and refreshServerToolsOnce construct reconnect callbacks without forwarding options; doReconnect/new startup background path preserve authChallenge. No SDK files were edited.",
+    "The production OmpMcpAuth currently supports only idle manual login. A complete fix also needs an installed native auth handler, waitForUser behavior, in-task presentation/cancellation, and preservation of the native single-tool retry instead of host prompt replay."
+  ],
+  "limitations": [
+    "Diagnostic controls stop at challenge delivery; no real account or completed OAuth grant.",
+    "Existing manual OAuth regression and full smoke do not cover this intentionally failing diagnostic.",
+    "No forced reconnect workaround or SDK patch has been added to production.",
+    "This is an OMP migration gap, not the Windows DeepSeek root-cause result."
+  ],
+  "safety": [
+    "Temporary agent/workspace, isolated local HTTP model/MCP servers, fake credentials only.",
+    "Final four runs deny non-loopback worker fetches and remove inherited API keys/tokens/proxy variables.",
+    "No user service, SDK files, live histories or project files modified."
+  ],
+  "upstreamCheck": {
+    "version": "18.20.2",
+    "metadataUrl": "https://registry.npmjs.org/@oh-my-pi%2Fpi-coding-agent/18.20.2",
+    "tarball": "https://registry.npmjs.org/@oh-my-pi/pi-coding-agent/-/pi-coding-agent-18.20.2.tgz",
+    "integrity": "sha512-ljShWzxyd0+8TPbpqf1GiPAUFz7Pk7tn8ieXBE6jKC6Qy18iuGurq1j3054sYciYW+knBVvzMFkNueRlg25L7g==",
+    "verifiedIntegrity": true,
+    "mcpManagerSha256": "14f699454fcb0b7ef560254ad52cf0874a87d90326f508cdd65ca0f9e1d9b527",
+    "result": "mcp/manager.ts is byte-identical to installed 18.20.0, so the identified option-dropping paths are unchanged. This is source comparison, not a runtime test of 18.20.2. Task new/fork/warm/persisted-revive calls also still omit injected storage in inspected sources. No dependency update or installed SDK edit was made.",
+    "temporaryInspectionRemoved": true
+  },
+  "previousCases": {
+    "application": {
+      "exitCode": 1,
+      "log": "/tmp/omp-mcp-tool-auth-application-local.log",
+      "sha256": "073a95503ec457e6023fd1ea6d5c85242d76be619625a9d26bacc3ab471d7282",
+      "observed": {
+        "mode": "application",
+        "handler": null,
+        "modelCalls": 2,
+        "challengedCalls": 2,
+        "issuerDiscovery": 0,
+        "authStatus": "absent",
+        "authorizationPresented": false,
+        "isStreaming": false,
+        "methods": [
+          "initialize",
+          "notifications/initialized",
+          "tools/list",
+          "tools/call",
+          "initialize",
+          "notifications/initialized",
+          "tools/list",
+          "tools/call"
+        ]
+      }
+    },
+    "handler": {
+      "exitCode": 1,
+      "log": "/tmp/omp-mcp-tool-auth-handler-local.log",
+      "sha256": "0c627354ff5c93431333ef6ad05e2395ae7ae0358a263b9c189faa7e1c63de84",
+      "observed": {
+        "mode": "handler",
+        "handler": null,
+        "modelCalls": 2,
+        "challengedCalls": 2,
+        "issuerDiscovery": 0,
+        "authStatus": "absent",
+        "authorizationPresented": false,
+        "isStreaming": false,
+        "methods": [
+          "initialize",
+          "notifications/initialized",
+          "tools/list",
+          "tools/call",
+          "initialize",
+          "notifications/initialized",
+          "tools/list",
+          "tools/call"
+        ]
+      }
+    },
+    "reconnected": {
+      "exitCode": 0,
+      "log": "/tmp/omp-mcp-tool-auth-reconnected-local.log",
+      "sha256": "c383ac4c3ab45cafc65db05d4aaf48a7afae558360b9202068fcabdca893e09b",
+      "observed": {
+        "mode": "reconnected",
+        "handler": {
+          "name": "protected",
+          "challengeReceived": true
+        },
+        "modelCalls": 2,
+        "challengedCalls": 1,
+        "issuerDiscovery": 0,
+        "authStatus": "absent",
+        "authorizationPresented": false,
+        "isStreaming": false,
+        "methods": [
+          "initialize",
+          "notifications/initialized",
+          "tools/list",
+          "initialize",
+          "notifications/initialized",
+          "tools/list",
+          "tools/call"
+        ]
+      }
+    },
+    "refreshed": {
+      "exitCode": 1,
+      "log": "/tmp/omp-mcp-tool-auth-refreshed-local.log",
+      "sha256": "8be28ccf0b5d1834d5b184869adbd7d90c750df182e0ceeb72ed79582efa2ad5",
+      "observed": {
+        "mode": "refreshed",
+        "handler": null,
+        "modelCalls": 2,
+        "challengedCalls": 2,
+        "issuerDiscovery": 0,
+        "authStatus": "absent",
+        "authorizationPresented": false,
+        "isStreaming": false,
+        "methods": [
+          "initialize",
+          "initialize",
+          "notifications/initialized",
+          "notifications/initialized",
+          "tools/list",
+          "tools/list",
+          "tools/call",
+          "initialize",
+          "notifications/initialized",
+          "tools/list",
+          "tools/call"
+        ]
+      }
+    }
+  },
+  "commands": [
+    "node tests/diagnostics/omp-mcp-tool-auth-probe.mjs application",
+    "node tests/diagnostics/omp-mcp-tool-auth-probe.mjs handler",
+    "node tests/diagnostics/omp-mcp-tool-auth-probe.mjs reconnected",
+    "node tests/diagnostics/omp-mcp-tool-auth-probe.mjs refreshed"
+  ],
+  "sourceParity": "Final diagnostic copied into the rebuilt isolated candidate; four modes replayed against final production build. It remains outside passing smoke."
+}

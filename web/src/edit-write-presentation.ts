@@ -1,3 +1,4 @@
+import { isVirtualToolCall } from "../../server/tool-target.js";
 import type { UiMessage, UiToolCallBlock } from "../../server/protocol.js";
 
 export interface ChangeLine {
@@ -83,7 +84,7 @@ export function parseEditDiff(diff: string, context = 2): ChangeHunk[] {
 }
 
 export function editWriteChange(block: UiToolCallBlock, result?: UiMessage, context = 2): EditWriteChange | null {
-	if (block.name !== "edit" && block.name !== "write") return null;
+	if (block.name !== "edit" && block.name !== "write" || isVirtualToolCall(block)) return null;
 	let args: Record<string, unknown> = {};
 	try { args = JSON.parse(block.argumentsText ?? "{}"); } catch { /* streamed arguments may be incomplete */ }
 	// pi 的 edit/write 工具用的是 `file_path`，早期/自定义调用用 `path`。只读 `path`

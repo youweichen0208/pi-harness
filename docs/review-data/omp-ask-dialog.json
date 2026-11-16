@@ -1,0 +1,91 @@
+{
+  "status": "Native extension askDialog implemented and verified in ordinary/Wiki sessions; model ask HTML-form fallback remains a separate acceptance item",
+  "verifiedAt": "2026-11-15T13:44:50.858341+00:00",
+  "platform": "darwin",
+  "arch": "arm64",
+  "omp": "18.20.0",
+  "bun": "1.4.4",
+  "protocolVersion": 68,
+  "changes": [
+    "Main and Wiki sessions opt into native set_ask_dialog; other runtime consumers retain their defaults",
+    "Project native question metadata without copying arbitrary SDK objects",
+    "Validate ordered question IDs, offered labels, uniqueness, single-choice exclusivity and custom input before consuming replies",
+    "Render one accessible inline multi-question form with radio/checkbox choices, text answers, descriptions, escaped previews, recommendation labels and native timeout explanation",
+    "Retain generation/conversation isolation, reconnect replay, native cancellation and Stop cleanup"
+  ],
+  "redEvidence": {
+    "command": "npx vitest run tests/unit/omp-extension-ui.test.ts",
+    "failure": "Missing dialog for method ask",
+    "log": "/tmp/omp-ask-red.log"
+  },
+  "checks": {
+    "finalBuild": "passed",
+    "finalTypecheck": "passed",
+    "unitFiles": 169,
+    "unitPassed": 1051,
+    "unitSkipped": 1,
+    "designTokens": "passed",
+    "protocol": "passed v68",
+    "testEnvironmentScripts": 304,
+    "engineSourceFiles": 125,
+    "diff": "passed"
+  },
+  "nativeAndBrowser": {
+    "command": "node tests/omp-extension-ui-test.mjs --browser",
+    "result": "passed on final build",
+    "modelCalls": 0,
+    "coverage": [
+      "ordinary and Wiki sessions",
+      "single/multi/free-text answers",
+      "reordered answer rejected without consuming the request",
+      "request replay on reconnect",
+      "native timeout uses recommended options",
+      "explicit cancellation",
+      "browser option/text exclusivity",
+      "multi-choice plus custom text",
+      "plain-text preview",
+      "390px layout",
+      "page reload",
+      "Escape",
+      "Stop"
+    ]
+  },
+  "fixtureCorrection": "The recommended Preview option has an accessible name including its recommendation label. The browser locator now matches that name prefix; all selection/result assertions remain.",
+  "relatedSmoke": {
+    "passed": 6,
+    "total": 6,
+    "tests": [
+      "extension-ui-test",
+      "omp-stop-metadata-test",
+      "omp-mcp-auth-test",
+      "native-session-commands-test",
+      "ws-malformed-test",
+      "version-handshake-test"
+    ],
+    "buildScope": "Passed before the final timeout-explanation field and type-only cleanup; native/browser and unit suites rerun on final build"
+  },
+  "logs": [
+    "/tmp/omp-ask-final-build.log",
+    "/tmp/omp-ask-final-types.log",
+    "/tmp/omp-ask-final-units.log",
+    "/tmp/omp-ask-final-browser.log",
+    "/tmp/omp-ask-related.log"
+  ],
+  "fullSmoke": {
+    "baseline": "omp-smoke-receipts.json",
+    "passed": 87,
+    "total": 108,
+    "repeatedAfterFinalFixes": false,
+    "currentManifestTests": 109
+  },
+  "limitations": [
+    "Pinned OMP model ask tool uses HTML forms and RPC select/input/editor fallback, separate from extension askDialog; full fallback presentation/behavior not verified",
+    "Unsubmitted browser form drafts are not persisted across refresh or conversation unmount",
+    "No Windows original-task or current desktop-package acceptance",
+    "Remaining Task/history, host protocol and integration migration gaps"
+  ],
+  "cleanup": "All owned build and test processes exited; no SDK patches, commit or release",
+  "desktopPackageBuilt": false,
+  "windowsOriginalTaskVerified": false,
+  "published": false
+}

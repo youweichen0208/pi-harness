@@ -1,0 +1,106 @@
+/** Real native feature selection and loading, using isolated user/project roots. */
+import assert from 'node:assert/strict';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, realpathSync, statSync } from 'node:fs';
+import { join, basename } from 'node:path';
+import { homedir, tmpdir } from 'node:os';
+import { randomUUID } from 'node:crypto';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { pathToFileURL } from 'node:url';
+import { setTimeout as sleep } from 'node:timers/promises';
+import { testEnv } from './lib/test-env.mjs';
+import { loadOmpTestModule, ompTestRoot } from './lib/omp-runtime-location.mjs';
+const { OmpPackages, createOmpPackageRunner } = await loadOmpTestModule('packages.js');
+const root = realpathSync(mkdtempSync(join(tmpdir(), 'omp-features-')));
+const native = realpathSync(mkdtempSync(join(homedir(), '.omp-harness-features-'))), configName = basename(native);
+const cwd = join(root, 'workspace'), source = join(root, 'source'), counter = join(root, 'loaded');
+for (const dir of [cwd, join(cwd, '.git'), join(cwd, configName), source, join(root, 'agent')]) mkdirSync(dir, { recursive: true });
+writeFileSync(counter, '');
+const env = { ...testEnv(), PI_CONFIG_DIR: configName, PI_CODING_AGENT_DIR: join(root, 'agent'), BUN_INSTALL_CACHE_DIR: join(root, 'cache'), PATH: '', Path: '' };
+for (const key of Object.keys(env)) if (key.startsWith('OMP_') || key === 'ELECTRON_RUN_AS_NODE') delete env[key];
+const service = new OmpPackages(root, createOmpPackageRunner(root, { env }));
+const owner = { cwd, clientId: 'features-client', conversationId: 'features-conversation' };
+const manifest = name => ({ name, version: '1.0.0', type: 'module', omp: {
+	extensions: ['./base.js'], features: { recommended: { default: true, description: 'Recommended feature', extensions: ['./recommended.js'] }, optional: { default: false, extensions: ['./optional.js'] } },
+	settings: { token: { type: 'string', secret: true, default: 'MANIFEST_SECRET' } },
+} });
+const writePackage = (dir, name) => {
+	mkdirSync(dir, { recursive: true }); writeFileSync(join(dir, 'package.json'), JSON.stringify(manifest(name)));
+	for (const feature of ['base', 'recommended', 'optional']) writeFileSync(join(dir, feature + '.js'), `import {appendFileSync} from 'node:fs'; export default () => appendFileSync(${JSON.stringify(counter)}, ${JSON.stringify(feature + '\n')});`);
+};
+const apply = async (plan, expected = 'success') => {
+	const job = service.start(owner, randomUUID(), plan);
+	for (let i = 0; i < 600 && service.get(owner, job.id).phase === 'running'; i++) await sleep(50);
+	const result = service.get(owner, job.id); assert.equal(result.phase, expected, JSON.stringify(result)); return result;
+};
+const execute = async (operation, target, scope, features) => apply(await service.preview(cwd, operation, target, scope, features));
+const pluginLoader = pathToFileURL(join(ompTestRoot, 'node_modules/@oh-my-pi/pi-coding-agent/src/extensibility/plugins/loader.ts')).href;
+const extensionLoader = pathToFileURL(join(ompTestRoot, 'node_modules/@oh-my-pi/pi-coding-agent/src/extensibility/extensions/loader.ts')).href;
+const load = async (name, expected, scope = 'user') => {
+	const before = readFileSync(counter, 'utf8');
+	const script = `const {getEnabledPlugins,resolvePluginExtensionPaths}=await import(${JSON.stringify(pluginLoader)}); const {loadExtensions}=await import(${JSON.stringify(extensionLoader)}); const plugin=(await getEnabledPlugins(process.cwd())).find(p=>p.name===${JSON.stringify(name)}); if(!plugin) throw Error('Missing fixture'); const result=await loadExtensions(resolvePluginExtensionPaths(plugin),process.cwd()); if(result.errors.length) throw Error('Load failed'); console.log(JSON.stringify({scope:plugin.scope})); process.exit(0);`;
+	const result = await promisify(execFile)(join(ompTestRoot, 'node_modules/bun/bin/bun.exe'), ['-e', script], { cwd, env, timeout: 30000 });
+	assert.equal(JSON.parse(result.stdout.trim()).scope, scope);
+	assert.deepEqual(readFileSync(counter, 'utf8').slice(before.length).trim().split('\n').sort(), expected.sort());
+};
+try {
+	const name = 'omp-feature-fixture'; writePackage(source, name);
+	await execute('link', source);
+	let state = await service.list(cwd), view = state.items.find(item => item.name === name).featureConfig;
+	assert.equal(view.selected, null); assert.equal(view.effective, null); assert(!view.overridden);
+	assert(!JSON.stringify(state).includes('MANIFEST_SECRET'));
+	assert.equal(readFileSync(counter, 'utf8'), '', 'management never imports extension factories');
+	await load(name, ['base', 'recommended']);
+	const current = readFileSync(counter, 'utf8');
+	await execute('features', name, undefined, []); await load(name, ['base']);
+	await execute('features', name, undefined, ['optional']); await load(name, ['base', 'optional']);
+	await execute('features', name, undefined, null); await load(name, ['base', 'recommended']);
+	await assert.rejects(service.preview(cwd, 'features', name));
+	await assert.rejects(service.preview(cwd, 'features', name, undefined, ['missing']));
+	await assert.rejects(service.preview(cwd, 'features', name, undefined, ['optional', 'optional']));
+	await assert.rejects(service.preview(cwd, 'features', name, 'project', []));
+	const lock = join(native, 'plugins/omp-plugins.lock.json');
+	const saved = JSON.parse(readFileSync(lock, 'utf8')); saved.settings[name] = { token: 'RUNTIME_SECRET', preserve: 42 }; writeFileSync(lock, JSON.stringify(saved));
+	await execute('disable', name); await execute('features', name, undefined, ['optional']);
+	let config = JSON.parse(readFileSync(lock, 'utf8')); assert.equal(config.plugins[name].enabled, false); assert.equal(config.settings[name].token, 'RUNTIME_SECRET');
+	const stale = await service.preview(cwd, 'features', name, undefined, null);
+	const pkg = manifest(name); pkg.omp.features.optional.extensions = ['./recommended.js']; writeFileSync(join(source, 'package.json'), JSON.stringify(pkg));
+	assert.equal((await apply(stale, 'failed')).error, 'conflict', 'manifest paths participate in preview revision');
+	writeFileSync(join(source, 'package.json'), JSON.stringify(manifest(name)));
+	state = await service.list(cwd);
+	mkdirSync(join(cwd, '.omp'), { recursive: true });
+	const override = join(cwd, '.omp', 'plugin-overrides.json');
+	writeFileSync(override, JSON.stringify({ features: { [name]: ['recommended'] }, settings: { [name]: { token: 'PROJECT_SECRET' } } }));
+	await assert.rejects(service.preview(cwd, 'features', name, undefined, [], state.version), 'a stale editor cannot preview over an external change');
+	view = (await service.list(cwd)).items.find(item => item.name === name).featureConfig;
+	assert.deepEqual(view.selected, ['optional']); assert.deepEqual(view.effective, ['recommended']); assert(view.overridden);
+	await execute('features', name, undefined, []); await execute('enable', name); await load(name, ['base', 'recommended']);
+	assert(!JSON.stringify(await service.list(cwd)).includes('SECRET'));
+	rmSync(override); await execute('remove', name);
+	const market = join(root, 'market'), plugin = join(market, 'plugin'), marketName = 'omp-market-feature-fixture', id = 'fixture@features-market';
+	writePackage(plugin, marketName); mkdirSync(join(market, '.claude-plugin'));
+	writeFileSync(join(market, '.claude-plugin/marketplace.json'), JSON.stringify({ name: 'features-market', owner: { name: 'fixture' }, plugins: [{ name: 'fixture', version: '1.0.0', source: './plugin' }] }));
+	await execute('marketplace-add', market); await execute('plugin-install', id, 'user'); await execute('plugin-install', id, 'project');
+	state = await service.list(cwd); const projectRoot = state.marketplace.projectRoot;
+	assert.equal(state.marketplace.installed[0].paths[0], state.marketplace.installed[1].paths[0], 'one shared package cache');
+	await execute('plugin-features', id, 'user', ['optional']);
+	await execute('plugin-features', id, 'project', []);
+	state = await service.list(cwd);
+	assert.deepEqual(state.marketplace.installed.find(row => row.scope === 'user').featureConfig.selected, ['optional']);
+	assert.deepEqual(state.marketplace.installed.find(row => row.scope === 'project').featureConfig.selected, []);
+	await load(marketName, ['base'], 'project');
+	const projectLock = join(projectRoot, 'omp-plugins.lock.json');
+	config = JSON.parse(readFileSync(projectLock, 'utf8')); config.settings[marketName] = { token: 'PROJECT_RUNTIME_SECRET' }; config.fixtureUnknown = 42; writeFileSync(projectLock, JSON.stringify(config));
+	await execute('plugin-features', id, 'project', null);
+	config = JSON.parse(readFileSync(projectLock, 'utf8')); assert.equal(config.fixtureUnknown, 42); assert.equal(config.settings[marketName].token, 'PROJECT_RUNTIME_SECRET');
+	if (process.platform !== 'win32') assert.equal(statSync(projectLock).mode & 0o777, 0o600);
+	await load(marketName, ['base', 'recommended'], 'project');
+	await execute('plugin-disable', id, 'project'); await load(marketName, ['base', 'optional']);
+	await execute('plugin-features', id, 'project', ['recommended']);
+	assert.equal((await service.list(cwd)).marketplace.installed.find(row => row.scope === 'project').enabled, false, 'feature changes do not enable a disabled package');
+	const before = readFileSync(counter, 'utf8'); await service.list(cwd); await service.preview(cwd, 'plugin-features', id, 'project', []);
+	assert.equal(readFileSync(counter, 'utf8'), before);
+	assert(!JSON.stringify(await service.list(cwd)).includes('SECRET'));
+	assert(current.length > 0);
+	console.log('PASS OMP features: native default/none/custom loading, isolated scope state with shared cache, project override precedence, disabled preservation, secret projection, manifest conflicts and stale editor rejection');
+} finally { await service.close(); rmSync(root, { recursive: true, force: true }); rmSync(native, { recursive: true, force: true }); }

@@ -4,13 +4,13 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { spawn } from "node:child_process";
-import { createServer } from "node:net";
+import { startIsolatedHarness } from "./lib/isolated-server.mjs";
+import { createOmpHistory } from "./lib/omp-history-fixture.mjs";
 import { once } from "node:events";
 import WebSocket from "ws";
 import { chromium } from "playwright-core";
 import { CHROME_PATH } from "./lib/chrome.mjs";
-import { testEnv, scrubHostEnv } from "./lib/test-env.mjs";
+import { scrubHostEnv } from "./lib/test-env.mjs";
 
 scrubHostEnv();
 
@@ -20,31 +20,25 @@ const agentDir = join(root, "agent"), cwd = join(root, "work");
 mkdirSync(agentDir); mkdirSync(cwd);
 process.env.PI_CODING_AGENT_DIR = agentDir;
 writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ defaultTools: [], retry: { enabled: false } }));
-const { SessionManager } = await import("@earendil-works/pi-coding-agent");
-const manager = SessionManager.create(cwd);
+const messages = [];
 const usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
-for (let i = 0; i < count; i++) manager.appendMessage(i % 2
+for (let i = 0; i < count; i++) messages.push(i % 2
 	? { role: "assistant", content: [{ type: "text", text: `answer-${i}` }], timestamp: i + 1, api: "openai-completions", provider: "fixture", model: "fixture", usage, stopReason: "stop" }
 	: { role: "user", content: [{ type: "text", text: `question-${i}-unique` }], timestamp: i + 1 });
-const listener = createServer(); await new Promise(resolve => listener.listen(0, "127.0.0.1", resolve));
-const port = listener.address().port; await new Promise(resolve => listener.close(resolve)); assert(port >= 8900);
-const child = spawn(process.execPath, ["dist/server/index.js"], { env: { ...testEnv(), PORT: String(port), PI_WEB_DATA_DIR: join(root, "data"), PI_WEB_CWD: cwd }, stdio: ["ignore", "pipe", "pipe"] });
-let output = "", browser, ws;
-child.stdout.on("data", c => { output = (output + c).slice(-8000); }); child.stderr.on("data", c => { output = (output + c).slice(-8000); });
+const { sessionFile } = await createOmpHistory({ dataDir: join(root, "data"), cwd, messages });
+let harness, port, browser, ws;
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const received = [];
 async function waitFor(predicate) {
 	for (let i = 0; i < 300; i++) { const message = received.find(predicate); if (message) return message; await sleep(100); }
-	throw new Error(`snapshot timed out: ${output}`);
+	throw new Error(`snapshot timed out: ${harness?.logs}`);
 }
 try {
-	let ready = false;
-	for (let i = 0; i < 100; i++) { try { if ((await fetch(`http://127.0.0.1:${port}/api/health`)).ok) { ready = true; break; } } catch {} await sleep(100); }
-	assert(ready, output);
+	harness = await startIsolatedHarness({ env: { PI_WEB_DATA_DIR: join(root, "data"), PI_WEB_CWD: cwd } }); port = harness.port;
 	ws = new WebSocket(`ws://127.0.0.1:${port}/ws`); ws.on("message", raw => received.push(JSON.parse(raw)));
-	await once(ws, "open"); ws.send(JSON.stringify({ type: "hello", clientId: "long-history-ui", protocolVersion: 41 }));
+	await once(ws, "open"); ws.send(JSON.stringify({ type: "hello", clientId: "long-history-ui",  }));
 	await waitFor(m => m.type === "snapshot"); received.length = 0;
-	ws.send(JSON.stringify({ type: "switch_session", path: manager.getSessionFile() }));
+	ws.send(JSON.stringify({ type: "switch_session", path: sessionFile }));
 	await sleep(500);
 	ws.send(JSON.stringify({ type: "get_state" }));
 	const { state } = await waitFor(m => m.type === "snapshot" && m.state.messages.length === count);
@@ -68,8 +62,6 @@ try {
 	await page.locator(".search-input").fill("question-2-unique");
 	await page.waitForFunction(() => document.querySelector(".search-count")?.textContent?.replace(/\s/g, "").includes("1/1"));
 	await page.locator(`.msg[data-msg-id="${state.messages[2].id}"]`).waitFor();
-	const debuggerSession = await page.context().newCDPSession(page);
-	console.log("[history-listeners]", (await debuggerSession.send("Runtime.evaluate", { expression: "getEventListeners(window).keydown.map(x => x.listener.toString()).filter(x => x.includes('Escape'))", includeCommandLineAPI: true, returnByValue: true })).result.value);
 	await page.keyboard.press("Escape");
 	await page.locator(".search-input").waitFor({ state: "detached", timeout: 5000 });
 	await page.locator(".messages").evaluate(el => { el.scrollTop = el.scrollHeight; });
@@ -87,7 +79,6 @@ try {
 	})));
 	throw error;
 } finally {
-	await browser?.close(); ws?.terminate(); child.kill("SIGTERM");
-	await Promise.race([once(child, "exit"), sleep(5000)]); if (child.exitCode === null) child.kill("SIGKILL");
+	await browser?.close(); ws?.terminate(); await harness?.stop();
 	rmSync(root, { recursive: true, force: true });
 }

@@ -1,63 +1,60 @@
 import assert from "node:assert/strict";
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createServer } from "node:net";
+import { startIsolatedHarness } from "./lib/isolated-server.mjs";
 import WebSocket from "ws";
 import { chromium } from "playwright-core";
 import { CHROME_PATH } from "./lib/chrome.mjs";
-import { testEnv, scrubHostEnv } from "./lib/test-env.mjs";
+import { scrubHostEnv } from "./lib/test-env.mjs";
 
 scrubHostEnv();
 
 const base = mkdtempSync(join(tmpdir(), "pi-switch-"));
-const agent = join(base, "agent");
-process.env.PI_CODING_AGENT_DIR = agent;
-const { SessionManager } = await import("@earendil-works/pi-coding-agent");
+const { createOmpHistory } = await import("./lib/omp-history-fixture.mjs");
 const projects = ["short-a", "short-b", "long-c"].map((name) => join(base, name));
 for (const [i, project] of projects.entries()) {
 	mkdirSync(project, { recursive: true });
 	writeFileSync(join(project, `project-${i}.txt`), `project ${i}`);
-	const session = SessionManager.create(project);
+	const messages = [];
 	for (let n = 0; n < (i === 2 ? 250 : 2); n++) {
-		session.appendMessage({ role: "user", content: [{ type: "text", text: `fixture-${i}-${n}` }], timestamp: Date.now() });
-		session.appendMessage({ role: "assistant", content: [{ type: "text", text: `reply-${i}-${n} ` + "example text ".repeat(40) }], api: "openai-completions", provider: "test", model: "fixture", usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } }, stopReason: "stop", timestamp: Date.now() });
+		messages.push({ role: "user", content: [{ type: "text", text: `fixture-${i}-${n}` }], timestamp: Date.now() });
+		messages.push({ role: "assistant", content: [{ type: "text", text: `reply-${i}-${n} ` + "example text ".repeat(40) }], api: "openai-completions", provider: "test", model: "fixture", usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } }, stopReason: "stop", timestamp: Date.now() });
 	}
+	await createOmpHistory({ dataDir: join(base, "data"), cwd: project, messages });
 }
 assert.equal(spawnSync("git", ["init", "-q", projects[2]]).status, 0);
-const probe = createServer();
-await new Promise((r) => probe.listen(0, "127.0.0.1", r));
-const port = probe.address().port;
-await new Promise((r) => probe.close(r));
-assert(port >= 8900);
 mkdirSync(join(base, "data"), { recursive: true });
 writeFileSync(join(base, "data", "project-workspaces.json"), JSON.stringify({ revision: 1, workspaces: [{ id: "switch-fixture", name: "Projects", paths: projects }] }));
-const server = spawn(process.execPath, ["dist/server/index.js"], { env: { ...testEnv(), PORT: String(port), PI_WEB_CWD: projects[0], PI_WEB_DATA_DIR: join(base, "data"), PI_CODING_AGENT_DIR: agent }, stdio: ["ignore", "pipe", "pipe"] });
-let logs = ""; server.stderr.on("data", (d) => { logs += d; });
+const nativeAgent = join(base, "data", "omp", "agent");
+mkdirSync(nativeAgent, { recursive: true });
+writeFileSync(join(nativeAgent, "config.yml"), JSON.stringify({ skills: { enabled: false }, retry: { enabled: false } }));
+let harness;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let ws, browser;
 try {
-	for (let n = 0; n < 100; n++) {
-		try { if ((await fetch(`http://127.0.0.1:${port}/api/health`)).ok) break; } catch {}
-		if (n === 99) throw new Error(logs);
-		await sleep(100);
-	}
+	harness = await startIsolatedHarness({ env: { PI_WEB_CWD: projects[0], PI_WEB_DATA_DIR: join(base, "data") } });
+	const { port } = harness;
 	ws = new WebSocket(`ws://127.0.0.1:${port}/ws`);
 	const messages = [];
 	ws.on("message", (raw) => messages.push(JSON.parse(raw)));
 	await new Promise((r) => ws.once("open", r));
 	const send = (msg) => ws.send(JSON.stringify(msg));
 	const wait = async (test) => {
-		for (let n = 0; n < 300; n++) { const m = messages.find(test); if (m) return m; await sleep(20); }
-		throw new Error("message timeout: " + messages.slice(-3).map((m) => m.type));
+		for (let n = 0; n < 1500; n++) { const m = messages.find(test); if (m) return m; await sleep(20); }
+		throw new Error("message timeout: " + JSON.stringify(messages.filter(m => ["ready", "cwd_result", "notice"].includes(m.type)).slice(-15)));
 	};
 	send({ type: "hello", clientId: "switch-protocol" });
-	await wait((m) => m.type === "snapshot");
+	await wait((m) => m.type === "ready");
 	for (let n = 0; n < 12; n++) send({ type: "set_cwd", path: projects[n % 3], requestId: `rapid-${n}` });
 	const last = await wait((m) => m.type === "cwd_result" && m.requestId === "rapid-11");
-	assert.equal(last.ok, true); assert.equal(last.cwd, projects[2]);
+	assert.equal(last.ok, true, JSON.stringify(last)); assert.equal(last.cwd, projects[2]);
 	await wait((m) => m.type === "snapshot" && m.state.cwd === projects[2]);
+	const rapid = messages.filter(m => m.type === "cwd_result" && m.requestId.startsWith("rapid-"));
+	assert.equal(rapid.length, 12, "every selection receives exactly one acknowledgement");
+	assert.equal(new Set(rapid.map(m => m.requestId)).size, 12);
+	assert(rapid.some(m => !m.ok && m.error === "superseded"), "unstarted selections are coalesced");
 	send({ type: "set_cwd", path: join(base, "missing"), requestId: "failure" });
 	const failed = await wait((m) => m.type === "cwd_result" && m.requestId === "failure");
 	assert.equal(failed.ok, false); assert.equal(failed.cwd, projects[2]);
@@ -83,8 +80,7 @@ try {
 	await page.goto(`http://127.0.0.1:${port}`);
 	// Dismiss first-run model setup without configuring or invoking a model.
 	await page.waitForSelector("textarea");
-	await page.keyboard.press("Escape");
-	if (await page.locator(".setup-modal .modal-close").isVisible()) await page.locator(".setup-modal .modal-close").click();
+	await page.locator(".setup-modal .modal-close").click();
 	await page.waitForSelector(`.project-item[title="${projects[1]}"]`);
 	const select = async (i) => {
 		const elapsed = await page.evaluate(async ({ project, marker }) => {
@@ -152,7 +148,6 @@ try {
 } finally {
 	ws?.close();
 	await browser?.close();
-	server.kill("SIGTERM");
-	await new Promise((r) => { if (server.exitCode !== null) r(); else server.once("exit", r); });
+	await harness?.stop();
 	rmSync(base, { recursive: true, force: true });
 }

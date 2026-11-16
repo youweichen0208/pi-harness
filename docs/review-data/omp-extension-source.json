@@ -1,0 +1,63 @@
+{
+  "status": "Local source editing verified; full OMP migration remains incomplete",
+  "completedAt": "2026-11-15T15:13:04.620761+00:00",
+  "platform": "darwin-arm64",
+  "omp": "18.20.0",
+  "bun": "1.4.4",
+  "protocol": 71,
+  "changes": [
+    "Local discovered extension source editing with version checks and native file locks; installed plugin and node_modules sources are read-only.",
+    "Read/save neither execute code nor open stopped workers. Saved source requires explicit conversation reload.",
+    "Editor retains drafts on polling/errors/conflicts, confirms discards, restores trigger focus and supports narrow layouts and both languages."
+  ],
+  "evidence": {
+    "before": "Expanded native regression failed on missing editable metadata against the previous build.",
+    "native": "Real OMP workers verify bounded UTF-8/BOM, invalid content, external changes, concurrent writers, file permissions, substituted sources, protected node_modules paths, no factory execution on read/save, explicit reload and stopped/restricted guards.",
+    "browser": "Real application endpoint, source draft preservation, stale-save rejection and reread, actual saved bytes, no code execution before reload, focus return, ownership/origin rejection, English and 390px light/dark.",
+    "desktop": "Same resource regression passed in local Electron with isolated app data and empty external-tool PATH. This is not a packaged Windows test."
+  },
+  "verification": {
+    "build": "npm run build passed in isolated source snapshot",
+    "typecheck": "passed on workspace source",
+    "unit": {
+      "files": 169,
+      "passed": 1055,
+      "skipped": 1
+    },
+    "nativeSourceAndSettings": "passed",
+    "browser": "passed",
+    "electron": "passed",
+    "related": [
+      "omp-stop-metadata-test passed",
+      "omp-skill-settings-test passed"
+    ],
+    "protocol": "v71 sync passed",
+    "testEnvironment": "306 scripts passed",
+    "diffCheck": "passed"
+  },
+  "isolation": "A live service consumes the checkout dist. Build and tests used /tmp/omp-source-f1_xd7xk with identical production source; checkout dist and running service were not replaced or stopped. Temporary build removed after tests and evidence capture.",
+  "sourceSha256": {
+    "server/omp/extension-settings.ts": "1042deb195b7d9fd8a03d07229871938d308787ab4f79002408933fc4fa41179",
+    "server/omp/routes.ts": "38e47a10020918f9e47676c04b8e1fe3c317061a1f5716d4d3de4f9fcb0aa0d3",
+    "server/omp/chat-service.ts": "7b5947b3342b7d4fe142f1f42e806a12e5338dbaf386c6ecde87fcd6effbbf37",
+    "server/omp/session.ts": "8408e3667bea990d2e0d96c7c40835ae9fc397971e2e01fd72c793d8bd4f5599",
+    "server/omp/worker-control.ts": "2df88ab9eb6c895d185ffb345ba83afd634e4daa0fce04f945f893ad72ef9c1e",
+    "server/protocol.ts": "916b29ee382935b0345b61c44eb4da7ee182b5624094d1504a4c5b6714f64297",
+    "server/protocol-version.ts": "51da8ffb04c0c764cd49412f7ff8490045c9ddb6332b0cb980125d86770672cf",
+    "web/src/protocol-version.ts": "a1eab9d25060349b03abbd11fbdff581bae419e383bf98b7b7c388e32f4315f2",
+    "web/src/components/OmpExtensionPanel.tsx": "b377cc27a3872e738394f5a1c42408ff06e4cf51e5066d0ad702499cb6677bfb",
+    "web/src/styles.css": "c610b7d09d13a77e1c3ed3f76bb43cfa84901c85a86fd3de129f087552705e2a",
+    "web/src/i18n.tsx": "5054a38c41dbfdae9aee50f73d192d21e7f828dd8abf883778eb2880fecafc29",
+    "tests/omp-extension-settings-test.mjs": "091a882bf0a2c58936950be752e30e07a55849e5bd49324d5b4ec92a158fdb8e",
+    "tests/omp-resources-desktop-test.mjs": "1469b6b14280554e3a819b2b8de7accf2589ee301b29f4a49f11d54b6d23432e"
+  },
+  "fullSmoke": "Historical complete run remains 102/110 in omp-smoke-ask.json; 111-test current manifest not rerun. Targeted passes do not change that baseline.",
+  "remaining": [
+    "Extension folder opening and package-directory browsing; other host migration gaps.",
+    "Native Task internal history guard, full task output/tree metadata and recovery integration.",
+    "Old desktop history cleanup and Windows original-task/cross-platform packaged acceptance."
+  ],
+  "desktopInstallerBuilt": false,
+  "windowsVerified": false,
+  "published": false
+}

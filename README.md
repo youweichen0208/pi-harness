@@ -7,8 +7,10 @@
 
 [中文](#这是什么) · [English](#english)
 
-在**浏览器或桌面窗口**里使用 AI 编程助手 [pi](https://www.npmjs.com/package/@earendil-works/pi-coding-agent)：
+在**浏览器或桌面窗口**里使用 AI 编程助手 [Oh My Pi（OMP）](https://github.com/can1357/oh-my-pi)：
 用聊天的方式让 AI 阅读、修改、运行你的项目，同时看得到文件、终端和 Git 改动，不用记任何命令。
+
+> 当前分支正在迁移到 OMP，尚未完成全面验收或发布。安装命令指向已发布版本；当前实现、测试结果和剩余工作见 [OMP 迁移状态](docs/architecture-omp.md)。
 
 > 例如你可以直接说：“帮我看看这个项目是做什么的”、“这个接口为什么报 500？”、
 > “给 todos.js 写单元测试并跑一遍”、“帮我登录 web-01 看看磁盘还剩多少”。
@@ -35,8 +37,8 @@
 
 ## 这是什么
 
-**pi** 是一个开源的 AI 编程智能体（coding agent）：它能读文件、改代码、执行命令，
-帮你完成开发任务。pi 原本只在终端里使用，**pi-harness** 给它加上了图形界面：
+**OMP** 是一个开源的 AI 编程智能体（coding agent）：它能读文件、改代码、执行命令，
+帮你完成开发任务。**pi-harness** 为它提供浏览器和桌面图形界面：
 
 | 你看到的 | 说明 |
 | --- | --- |
@@ -69,9 +71,7 @@
 
 界面支持中文 / English（左下角 **设置** → 语言），任务完成时可以响铃提醒。**设置 → 外观** 提供 5 种背景色调（暖白、雾蓝、鼠尾草、燕麦、石墨），也可以跟随系统深浅色。
 
-**Workspace 子代理**默认开启，可在 **设置 → Extensions → 内置扩展**中关闭。先把相关仓库加入同一 Workspace，按需配置「知识库」文件夹，然后直接问“退款流程是怎样的？”或“这个项目的登录链路是怎样的？”。AI 根据问题和对话语境发现相关来源，涉及多来源或深入调查时自动分工；简单问题直接回答，无需点名仓库或子代理。子代理只读，沿用当前模型与思考档位，会产生额外模型用量；默认最多 3 个并行，点击停止会一并取消。详见[使用方式与限制](docs/architecture-subagents.md)。
-
-第二版支持先读取仓库简介辅助选仓，并提交区分代码实现、文档描述和推断的报告。报告引用核对实际读取行号及文件指纹；无法核验的结果会标明，跨仓关联和文档差异由主模型结合两侧依据分析。
+子任务使用 **OMP 原生 Task**，遵循原生权限与调度规则，会产生额外模型用量。界面展示任务详情、嵌套任务和停止操作；具体接入与尚未验收的边界见 [OMP 迁移状态](docs/architecture-omp.md)。旧 Workspace 只读调查扩展已退休。
 
 ---
 
@@ -167,7 +167,7 @@ pi-harness --port 9000 --cwd /path/to/project
 
 ![首次配置：选择服务商并填写 API 密钥](docs/assets/readme/first-run-setup.png)
 
-> 🔐 密钥只保存在你自己电脑的 `~/.pi/agent/auth.json` 中，不会显示在聊天里，也不会发给浏览器。
+> 🔐 OMP 配置和凭据保存在应用数据目录的 `omp/agent/` 中，与原 Pi CLI 配置分开；凭据值不会回传浏览器。
 
 以后想添加别的服务商、换密钥，或者用 ChatGPT / Claude / GitHub Copilot 账号登录：
 点输入框下方的模型名称 → **管理模型（新增 / 修改）**。
@@ -379,7 +379,8 @@ PI_WEB_TOKEN=换成你自己的长口令 PI_WEB_HOST=0.0.0.0 PI_WEB_ALLOW_HOSTS=
 
 | 内容 | 位置 |
 | --- | --- |
-| 模型配置、API 密钥、对话记录 | `~/.pi/agent`（与 pi 命令行共用） |
+| OMP 模型配置、凭据 | `<应用数据目录>/omp/agent` |
+| OMP 对话历史 | `<应用数据目录>/omp/sessions` |
 | 界面状态、上传的附件、插件 | `~/.pi-web` |
 
 已经在终端使用 pi 的用户，原有配置和对话会直接出现在 pi-harness 里。
@@ -414,7 +415,7 @@ PI_WEB_TOKEN=换成你自己的长口令 PI_WEB_HOST=0.0.0.0 PI_WEB_ALLOW_HOSTS=
 
 ## English
 
-pi-harness is a web and desktop interface for the [pi coding agent](https://www.npmjs.com/package/@earendil-works/pi-coding-agent). Chat with an AI agent that reads, edits and runs your project, while you see the file tree, file previews, a built-in terminal, Git changes, database queries and a built-in SSH workbench for remote servers. Everything runs on your own machine and listens on `127.0.0.1` by default.
+pi-harness is a web and desktop interface for [Oh My Pi (OMP)](https://github.com/can1357/oh-my-pi). Chat with an AI agent that reads, edits and runs your project, while you see the file tree, file previews, a built-in terminal, Git changes, database queries and a built-in SSH workbench for remote servers. Everything runs on your own machine and listens on `127.0.0.1` by default. This branch's OMP migration is still under development and has not been released or fully validated across platforms; see the [migration status](docs/architecture-omp.md).
 
 **Quick start**
 
@@ -427,7 +428,7 @@ pi-harness is a web and desktop interface for the [pi coding agent](https://www.
   pi-harness --port 9000 --cwd /path/to/project
   ```
 
-On first launch, pick a model provider (OpenAI, Anthropic, DeepSeek and many more) and paste an API key, or sign in with a supported account under *Manage models*. Keys stay in `~/.pi/agent` on your machine. Then create a workspace, add a project folder and start chatting. To switch the interface to English, open **设置** (Settings) at the bottom-left and choose **English**. Under *Settings → Appearance* you can pick one of five background tints (warm white, mist blue, sage, oat, graphite) or follow the system light/dark mode.
+On first launch, pick a model provider (OpenAI, Anthropic, DeepSeek and many more) and paste an API key, or sign in with a supported account under *Manage models*. OMP credentials stay in the application's `omp/agent` data directory. Then create a workspace, add a project folder and start chatting. To switch the interface to English, open **设置** (Settings) at the bottom-left and choose **English**. Under *Settings → Appearance* you can pick one of five background tints (warm white, mist blue, sage, oat, graphite) or follow the system light/dark mode.
 
 Before exposing the server to other devices, set `PI_WEB_TOKEN` and read the [deployment guide](docs/deployment.md). See also the [SSH workbench guide](docs/ssh-workbench.md) and [environment variables](docs/env-vars.md).
 

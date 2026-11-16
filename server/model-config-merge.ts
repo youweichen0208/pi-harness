@@ -34,7 +34,8 @@ function applyCompat(result: Record<string, unknown>, patch: UiModelCompat | und
 	else result.compat = compat;
 }
 
-export const isChatModelConfig = (model: Record<string, unknown>): boolean => model.type === undefined || model.type === "chat";
+export const isChatModelConfig = (model: Record<string, unknown>): boolean =>
+	(model.kind === undefined || model.kind === "chat") && (model.type === undefined || model.type === "chat");
 
 /** A chat editor owns chat fields only; keep provider operations and typed models intact. */
 export function mergeChatProvider(previous: Record<string, unknown>, config: UiProviderConfig): Record<string, unknown> {

@@ -1,32 +1,25 @@
 // Native resource views and display-only preferences; zero model calls.
 import WebSocket from "ws";
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { spawn } from "node:child_process";
+import { startIsolatedHarness } from "./lib/isolated-server.mjs";
+import { mergeSnapshot } from "./lib/snapshots.mjs";
 import { testEnv } from "./lib/test-env.mjs";
 
-const PORT = Number(process.argv[2] || 8931);
+let harness;
 const DATA_DIR = mkdtempSync(join(tmpdir(), "pi-web-set-test-"));
 console.log("data-dir:", DATA_DIR);
-const extensionRoot = join(DATA_DIR, "agent", "extensions");
+const agent = join(DATA_DIR, "omp/agent"), cwd = join(DATA_DIR, "workspace");
+const extensionRoot = join(agent, "extensions");
+mkdirSync(cwd);
 mkdirSync(join(extensionRoot, "sample-directory"), { recursive: true });
 writeFileSync(join(extensionRoot, "sample-directory", "index.ts"), "export default function () {}\n");
 writeFileSync(join(extensionRoot, "custom-footer.ts"), "export default function () {}\n");
 
-const server = spawn(process.execPath, ["dist/server/index.js"], {
-	env: {
-		...testEnv(),
-		PORT: String(PORT),
-		PI_WEB_DATA_DIR: DATA_DIR,
-		PI_WEB_CWD: process.cwd(),
-		PI_CODING_AGENT_DIR: join(DATA_DIR, "agent"),
-	},
-	stdio: ["ignore", "pipe", "pipe"],
-	windowsHide: true,
-});
-server.stdout.on("data", (d) => process.stdout.write(`[srv] ${d}`));
-server.stderr.on("data", (d) => process.stdout.write(`[srv-err] ${d}`));
+writeFileSync(join(agent, "config.yml"), JSON.stringify({ skills: { enabled: false }, cacheWarming: { enabled: false } }));
+const env = testEnv({ PI_WEB_DATA_DIR: DATA_DIR, PI_WEB_CWD: cwd });
+for (const key of Object.keys(env)) if (/API_KEY|TOKEN|SECRET|PASSWORD|^ANTHROPIC_|^OPENAI_|^GOOGLE_|^GEMINI_|^AWS_|^AZURE_|^OMP_/.test(key)) env[key] = undefined;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -34,17 +27,17 @@ class Client {
 	constructor(ws) {
 		this.ws = ws;
 		this.received = [];
-		ws.on("message", (d) => this.received.push(JSON.parse(d.toString())));
+		this.state = undefined;
+		ws.on("message", (d) => { const event = JSON.parse(d.toString()); this.received.push(event); this.state = mergeSnapshot(this.state, event); });
 	}
 	send(m) {
 		this.ws.send(JSON.stringify(m));
 	}
 	/** Wait for a message; optional predicate. `type` may be an array of
 	 *  acceptable types (snapshot OR snapshot_delta — incremental snapshots
-	 *  mean post-action checkpoints often arrive as deltas). A set_settings
-	 *  pushes settings_state twice (immediately + after the reload), so stale
-	 *  duplicates are consumed while scanning. */
-	async waitFor(type, timeout = 8000, pred) {
+	 *  mean post-action checkpoints often arrive as deltas). Unmatched older
+	 *  settings frames are consumed while scanning. */
+	async waitFor(type, timeout = 30000, pred) {
 		const start = Date.now();
 		const types = Array.isArray(type) ? type : [type];
 		while (Date.now() - start < timeout) {
@@ -62,19 +55,10 @@ class Client {
 }
 
 async function connect() {
-	for (let i = 0; i < 60; i++) {
-		try {
-			const ws = new WebSocket(`ws://127.0.0.1:${PORT}/ws`);
-			await new Promise((res, rej) => {
-				ws.on("open", res);
-				ws.on("error", rej);
-			});
-			return new Client(ws);
-		} catch {
-			await sleep(500);
-		}
-	}
-	throw new Error("server not ready");
+	const ws = new WebSocket(`ws://127.0.0.1:${harness.port}/ws`);
+	const client = new Client(ws);
+	await new Promise((resolve, reject) => { ws.once("open", resolve); ws.once("error", reject); });
+	return client;
 }
 
 let pass = 0;
@@ -91,6 +75,7 @@ function check(name, cond, extra = "") {
 
 let c;
 try {
+	harness = await startIsolatedHarness({ env });
 	c = await connect();
 	c.send({ type: "hello", clientId: "settings-test-client" });
 	await c.waitFor("ready");
@@ -102,8 +87,8 @@ try {
 	check("has skills array", Array.isArray(st0.settings.skills));
 	check("has extensions array", Array.isArray(st0.settings.extensions));
 	check("no bundled todo", !st0.settings.extensions.some(e => e.builtin === "todo"));
-	check("native directory extension loaded", st0.settings.extensions.some(e => e.name === "sample-directory"));
-	check("native standalone extension loaded", st0.settings.extensions.some(e => e.name === "custom-footer"));
+	check("native directory extension loaded", st0.settings.extensions.some(e => e.path.replaceAll("\\", "/").includes("/sample-directory/") && e.enabled));
+	check("native standalone extension loaded", st0.settings.extensions.some(e => e.name === "custom-footer.ts" && e.enabled));
 	check("native prompt available", typeof st0.settings.effectiveSystemPrompt === "string" && st0.settings.effectiveSystemPrompt.length > 0);
 	for (const field of ["promptMode", "customSystemPrompt", "terminalToolsEnabled", "visionBridgeEnabled", "presets"]) check(`${field} removed`, !(field in st0.settings));
 	const originalPrompt = st0.settings.effectiveSystemPrompt;
@@ -121,10 +106,16 @@ try {
 	check("display preferences survive reconnect", st9.settings.thinkingWrap === true && st9.settings.toolsWrap === false);
 	check("native prompt survives reconnect", st9.settings.effectiveSystemPrompt === originalPrompt);
 
-	// extensions_reload：外部变更（如终端里 pi remove 完成）后重发现扩展
+	// Explicit native resource reload must discover a newly added module.
+	const sessionId = c.state.sessionId;
+	writeFileSync(join(extensionRoot, "new-module.ts"), "export default function () {}\n");
+	c.received = c.received.filter(message => message.type !== "settings_state");
 	c.send({ type: "extensions_reload" });
-	await c.waitFor("settings_state", 15000);
-	check("extensions_reload re-pushes settings", true);
+	const reloaded = await c.waitFor("settings_state", 30000, message => message.settings.extensions.some(extension => extension.name === "new-module.ts"));
+	check("extensions_reload discovers new native module", reloaded.settings.extensions.some(extension => extension.name === "new-module.ts" && extension.enabled));
+	check("resource reload preserves display preferences", reloaded.settings.thinkingWrap === true && reloaded.settings.toolsWrap === false);
+	check("resource reload preserves session identity", c.state.sessionId === sessionId);
+
 	c.ws.close();
 
 	console.log(`\n${pass} passed, ${fail} failed`);
@@ -132,7 +123,8 @@ try {
 	console.error("TEST ERROR:", err.message);
 	fail++;
 } finally {
-	server.kill("SIGTERM");
-	await sleep(300);
+	c?.ws.terminate();
+	await harness?.stop();
+	rmSync(DATA_DIR, { recursive: true, force: true });
 }
-process.exit(fail > 0 ? 1 : 0);
+process.exitCode = fail > 0 ? 1 : 0;

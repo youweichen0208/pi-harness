@@ -19,7 +19,6 @@
 import { createServer, createConnection, type Server, type Socket } from "node:net";
 import { chmodSync, existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import type { AgentService } from "./agent-service.js";
 
 /** How long a control connection may sit idle before the server closes it. */
 const CONTROL_IDLE_TIMEOUT_MS = 5_000;
@@ -51,12 +50,20 @@ export interface ControlStatus {
 	/** Client sessions kept alive in memory (sockets attached or not). */
 	clientSessions?: number;
 	activeConversations?: number;
+	activePackageOperations?: number;
 	pendingMessages?: number;
+}
+
+/** Control transport depends on status and admission, not an agent implementation. */
+export interface ControllableService {
+	serviceStatus(): Omit<ControlStatus, "ok" | "error">;
+	quiesce(): void;
+	unquiesce(): void;
 }
 
 /** Start the control socket; returns a stop function. */
 export function startControlServer(opts: {
-	service: AgentService;
+	service: ControllableService;
 	additionalActiveConversations?: () => number;
 	dataDir: string;
 	port: number;

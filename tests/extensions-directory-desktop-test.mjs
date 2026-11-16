@@ -1,38 +1,80 @@
-/** Real Desktop directory IPC; only the OS file-manager call is intercepted. */
+/** Real OMP directory endpoint and Desktop IPC; intercept only OS file-manager calls. */
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, existsSync, realpathSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { _electron as electron } from 'playwright-core';
+import WebSocket from 'ws';
 import { testEnv } from './lib/test-env.mjs';
-const root = mkdtempSync(join(tmpdir(), 'pi-extension-directory-'));
-const cwd = join(root, 'workspace'), agent = join(root, '个人 agent'), empty = join(root, 'empty-bin');
-for (const dir of [cwd, agent, empty]) mkdirSync(dir);
-writeFileSync(join(agent, 'settings.json'), JSON.stringify({ defaultProvider: 'fixture', defaultModel: 'fixture' }));
-writeFileSync(join(agent, 'models.json'), JSON.stringify({ providers: { fixture: { api: 'openai-completions', baseUrl: 'http://127.0.0.1:1', apiKey: 'fixture', models: [{ id: 'fixture', name: 'Fixture', input: ['text'], contextWindow: 32000, maxTokens: 4000, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } }] } } }));
-let app;
+const root = realpathSync(mkdtempSync(join(tmpdir(), 'omp-dirs-')));
+const cwd = join(root, 'workspace'), data = join(root, '个人 data'), agent = join(data, 'omp/agent'), empty = join(root, 'empty-bin'), directory = join(agent, 'extensions');
+for (const dir of [cwd, agent, empty]) mkdirSync(dir, { recursive: true });
+writeFileSync(join(agent, 'config.yml'), JSON.stringify({ skills: { enabled: false } }));
+writeFileSync(join(agent, 'models.yml'), JSON.stringify({ providers: { fixture: { api: 'anthropic-messages', baseUrl: 'http://127.0.0.1:1', apiKey: 'fixture', models: [{ id: 'fixture' }] } } }));
+let app, socket;
+const wait = async predicate => { for (let i = 0; i < 250; i++) { if (await predicate()) return; await sleep(100); } throw Error('OMP directory test timed out'); };
 try {
 	const executable = process.argv[2];
-	app = await electron.launch({ ...(executable ? { executablePath: resolve(executable) } : {}), args: [...(executable ? [] : ['.']), `--user-data-dir=${join(root, 'profile')}`], env: testEnv({ PI_WEB_DATA_DIR: join(root, 'data'), PI_WEB_CWD: cwd, PI_CODING_AGENT_DIR: agent, PATH: empty, Path: empty }) });
+	app = await electron.launch({ ...(executable ? { executablePath: resolve(executable) } : {}), args: [...(executable ? [] : ['.']), `--user-data-dir=${join(root, 'profile')}`], env: testEnv({ PI_WEB_DATA_DIR: data, PI_WEB_CWD: cwd, PATH: empty, Path: empty }) });
 	let page;
-	for (let i = 0; i < 200; i++) { page = app.windows().find(window => window.url().startsWith('http://127.0.0.1:')); if (page) break; await sleep(100); }
-	assert(page); page.setDefaultTimeout(15000);
-	// Hosted Windows displays can clamp the initial window below the sidebar
-	// breakpoint. Keep this directory IPC test on a deterministic desktop canvas.
-	await app.evaluate(({ BrowserWindow }) => {
+	await wait(() => { page = app.windows().find(window => window.url().startsWith('http://127.0.0.1:')); return !!page; });
+	page.setDefaultTimeout(30000);
+	await app.evaluate(({ BrowserWindow, shell }) => {
 		const window = BrowserWindow.getAllWindows().find(w => w.webContents.getURL().startsWith('http://127.0.0.1:'));
 		window.setContentSize(1440, 900); window.show(); window.focus();
+		globalThis.openedOmpPaths = []; globalThis.revealedOmpFiles = [];
+		shell.openPath = async path => { globalThis.openedOmpPaths.push(path); return ''; };
+		shell.showItemInFolder = path => { globalThis.revealedOmpFiles.push(path); };
 	});
 	const cdp = await page.context().newCDPSession(page);
 	await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
 	await page.locator('.conn-dot.ok').first().waitFor({ state: 'attached' });
-	await app.evaluate(({ shell }) => { globalThis.openedExtensionFolders = []; shell.openPath = async path => { globalThis.openedExtensionFolders.push(path); return ''; }; });
+	let owner, endpoint;
+	page.on('request', request => { if (new URL(request.url()).pathname === '/api/omp-paths') { const body = request.postDataJSON(); owner ??= { clientId: body.clientId, cwd: body.cwd, conversationId: body.conversationId }; endpoint = request.url(); } });
 	await page.getByRole('button', { name: '设置', exact: true }).and(page.locator(':visible')).first().click();
 	await page.getByText('所有设置', { exact: true }).click();
 	await page.getByRole('button', { name: 'Extensions', exact: true }).click();
-	await page.getByRole('button', { name: '打开个人扩展目录', exact: true }).click();
-	for (let i = 0; i < 50 && !(await app.evaluate(() => globalThis.openedExtensionFolders.length)); i++) await sleep(100);
-	assert.deepEqual(await app.evaluate(() => globalThis.openedExtensionFolders), [join(agent, 'extensions')]);
-	console.log('PASS Desktop personal extension folder opens through validated IPC without system tools');
-} finally { await app?.close(); rmSync(root, { recursive: true, force: true }); }
+	const panel = page.getByRole('region', { name: '个人扩展目录', exact: true });
+	await panel.locator('code').waitFor(); await wait(() => owner);
+	const post = (payload = {}, origin = new URL(page.url()).origin) => fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: origin }, body: JSON.stringify({ ...owner, target: { kind: 'extensions' }, ...payload }) });
+	const unauthenticated = new URL(endpoint); unauthenticated.search = '';
+	assert.equal((await fetch(unauthenticated, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...owner, target: { kind: 'extensions' } }) })).status, 401);
+	assert.equal((await post({ conversationId: 'wrong' })).status, 409);
+	assert.equal((await post({}, 'https://untrusted.invalid')).status, 403);
+	assert.equal((await post({ target: { kind: 'module', id: '../config.yml' } })).status, 400);
+	assert.equal((await post({ target: { kind: 'directory', path: root } })).status, 400);
+	assert.equal((await post({ prepare: 'yes' })).status, 400);
+	// Explicitly remove only our empty fixture directory, if native initialization made it.
+	rmSync(directory, { recursive: true, force: true });
+	const absent = await (await post()).json(); assert.equal(absent.absolute, directory); assert.equal(absent.exists, false); assert(!existsSync(directory), 'reading must not create the directory');
+	writeFileSync(directory, 'KEEP_EXISTING_FILE');
+	await panel.getByRole('button', { name: '打开个人扩展目录', exact: true }).click();
+	await panel.getByRole('alert').waitFor(); assert.deepEqual(await app.evaluate(() => globalThis.openedOmpPaths), []);
+	assert.equal(readFileSync(directory, 'utf8'), 'KEEP_EXISTING_FILE'); rmSync(directory);
+	const button = panel.getByRole('button', { name: '打开个人扩展目录', exact: true }); await button.focus(); await page.keyboard.press('Enter');
+	await wait(async () => (await app.evaluate(() => globalThis.openedOmpPaths.length)) === 1);
+	assert.equal(await panel.getByRole('alert').count(), 0);
+	assert.deepEqual(await app.evaluate(() => globalThis.openedOmpPaths), [realpathSync(directory)]);
+	const modulePath = join(directory, 'directory-fixture.js'); writeFileSync(modulePath, "export default () => {}; // Keep this source\n");
+	const moduleRow = page.locator('.omp-extension-panel .settings-skill-row', { hasText: 'directory-fixture' }); await moduleRow.waitFor();
+	await moduleRow.getByRole('button', { name: '在文件管理器中显示', exact: true }).click();
+	await wait(async () => (await app.evaluate(() => globalThis.revealedOmpFiles.length)) === 1);
+	assert.deepEqual(await app.evaluate(() => globalThis.revealedOmpFiles), [realpathSync(modulePath)]);
+	// Reject both old Pi requests and stale/malformed new identities before OS calls.
+	assert(await page.evaluate(async owner => { try { await window.electronAPI.openExtensionPath({ ...owner, id: 'extensions:user' }); return false; } catch { return true; } }, owner));
+	assert(await page.evaluate(async owner => { try { await window.electronAPI.openOmpPath({ ...owner, conversationId: 'stale', target: { kind: 'extensions' } }); return false; } catch { return true; } }, owner));
+	const origin = new URL(page.url()).origin, wsUrl = new URL('/ws', origin); wsUrl.protocol = 'ws:'; wsUrl.search = new URL(endpoint).search;
+	socket = new WebSocket(wsUrl); await new Promise((resolve, reject) => { socket.once('open', resolve); socket.once('error', reject); });
+	let ready = false; socket.on('message', raw => { if (JSON.parse(raw).type === 'ready') ready = true; });
+	socket.send(JSON.stringify({ type: 'hello', clientId: owner.clientId })); await wait(() => ready); socket.send(JSON.stringify({ type: 'abort' }));
+	const statusUrl = new URL(endpoint); statusUrl.pathname = '/api/omp-mcp';
+	const status = async () => (await fetch(statusUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: origin }, body: JSON.stringify({ ...owner, action: 'status' }) })).json();
+	await wait(async () => (await status()).workerAvailable === false);
+	assert.equal((await post({ target: { kind: 'module', id: 'missing' }, prepare: true })).status, 400);
+	await button.click(); await wait(async () => (await app.evaluate(() => globalThis.openedOmpPaths.length)) === 2);
+	assert.equal((await status()).workerAvailable, false);
+	assert(readFileSync(modulePath, 'utf8').includes('Keep this source'));
+	assert.deepEqual(await app.evaluate(() => globalThis.revealedOmpFiles), [realpathSync(modulePath)]);
+	console.log('PASS OMP directory endpoint and Desktop IPC: Unicode, absent/conflicting paths, explicit create, module reveal, owner/Origin/target guards, retired Pi rejection and stopped-worker isolation without external tools');
+} finally { socket?.terminate(); await app?.close(); rmSync(root, { recursive: true, force: true }); }

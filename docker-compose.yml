@@ -19,8 +19,8 @@ services:
       PI_WEB_ALLOW_HOSTS: "localhost,127.0.0.1"
       # PI_WEB_TOKEN: "change-me"
     volumes:
-      # pi config, auth.json, models and chat sessions (/data/pi-agent) plus
-      # pi-harness state, uploads and Wiki history (/data/pi-harness).
+      # App data and isolated OMP configuration/history (/data/pi-harness),
+      # plus native OMP packages/state (/data/omp-native, linked from ~/.omp).
       - pi-harness-data:/data
       # The project the agent works in (PI_WEB_CWD=/workspace):
       # - /host/path/to/project:/workspace

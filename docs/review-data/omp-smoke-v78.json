@@ -1,0 +1,71 @@
+{
+  "platform": "darwin-arm64",
+  "protocol": 78,
+  "omp": "18.20.0",
+  "bun": "1.4.4",
+  "node": "26.0.0",
+  "status": "Full pre-request-diagnostics baseline failed one native /new case; not a final all-green run",
+  "source": {
+    "candidate": "/var/folders/41/07yyp3_12jddkkthmflqkbgw0000gn/T/omp-full-v78-uv7_9hbh",
+    "filesCompared": 1342,
+    "fingerprintSha256": "d03f21769f3ee095bc3f12028ceedc52f4f31e80f6bc0010ccc892377af9a788",
+    "differencesFromCurrentRoot": [
+      ".github/workflows/release-desktop.yml",
+      "server/model-diagnostics.ts",
+      "server/omp/runtime.ts",
+      "server/omp/session.ts",
+      "server/omp/worker.ts",
+      "tests/native-session-commands-test.mjs",
+      "tests/reasoning-repetition-test.mjs",
+      "tests/run-smoke.mjs"
+    ],
+    "docsExcluded": true
+  },
+  "verification": {
+    "build": {
+      "path": "/tmp/omp-full-v78-build.log",
+      "exitCode": 0,
+      "sha256": "23ddf90746b3b44d428493a6e3b476e8667393bb9d3c0abce8df3fd0889918cd"
+    },
+    "fullSmoke": {
+      "path": "/tmp/omp-full-v78-smoke.log",
+      "exitCode": 1,
+      "sha256": "4b79366180a8c348dd5e23836c1fa992454febb762b2168127798789c1585144"
+    },
+    "unmodifiedFocusedRepeat": {
+      "path": "/tmp/omp-full-v78-new-session-repeat.log",
+      "exitCode": 0,
+      "sha256": "785c1aa7d7a9eff59a1d0ff48283dfddd90afe09f91c0b1e5a604a5217e14296"
+    }
+  },
+  "counts": {
+    "passed": 117,
+    "total": 118,
+    "skipped": 0,
+    "currentSmokeEntries": 119,
+    "fullCurrentSmokeRun": false
+  },
+  "failure": {
+    "test": "tests/native-session-commands-test.mjs",
+    "location": "No-model /new identity assertion at original line 134",
+    "cause": "Passive native metadata synchronization occupied the worker mutation gate when new_session was sent concurrently. Host saw an unknown receipt and closed the worker.",
+    "resolution": "Fixed and separately verified in omp-new-session-race.json; no claim of a final full-suite rerun."
+  },
+  "latestCompleteAllGreen": "omp-smoke-import.json: protocol 76, 116/116",
+  "operations": {
+    "rootDist": "Not overwritten",
+    "userProcessesPreserved": [
+      23786,
+      62015
+    ],
+    "candidateRemoved": true,
+    "allVerificationHandlesTerminal": true,
+    "release": "No commit, push, publish or installed-app replacement"
+  },
+  "checks": [
+    "Protocol sync 78",
+    "316 isolated test scripts",
+    "git diff --check",
+    "Evidence JSON parsed successfully"
+  ]
+}

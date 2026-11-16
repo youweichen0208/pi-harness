@@ -95,7 +95,7 @@ export class NodeWorkbench {
 		const msg: ServerMessage = { type: "node_event", event, data, nodeId: ids.nodeId, terminalId: ids.terminalId, conversationId: ids.conversationId, requestId: ids.requestId };
 		for (const sink of this.sinks.get(clientId) ?? []) sink(msg);
 	}
-	activeAgents(): number { return [...this.connections.values()].filter(connection => connection.agentStarting || connection.agent?.busy).length; }
+	activeAgents(): number { return this.pendingAgentCleanup.size + [...this.connections.values()].filter(connection => connection.agentStarting || connection.agent?.busy).length; }
 	private authStatus(clientId: string, node: Node): Node["authStatus"] {
 		if (unsupportedOptions(node).some(reason => !["key", "authentication", "authentication-profile"].includes(reason))) return "unsupported";
 		if (this.authStates.has(identity(clientId, node.id))) return this.authStates.get(identity(clientId, node.id));
@@ -326,6 +326,8 @@ export class NodeWorkbench {
 				case "agent_status": this.agent(clientId, req).refresh(); break;
 				case "agent_prompt": await this.agent(clientId, req).prompt(field(p.text, "消息", 200000), p.queue === "steer" || p.queue === "followUp" ? p.queue : undefined); break;
 				case "agent_abort": await this.agent(clientId, req).abort(); break;
+				case "agent_cancel_recovery": await this.agent(clientId, req).cancelRecovery(field(p.operationId, "恢复操作", 256)); break;
+				case "agent_reopen": await this.agent(clientId, req).reopen(); break;
 				case "agent_new": await this.agent(clientId, req).newSession(); break;
 				case "agent_model": await this.agent(clientId, req).model(field(p.provider, "服务商"), field(p.modelId, "模型")); break;
 				case "agent_close": await this.agent(clientId, req).close(); break;
@@ -489,10 +491,13 @@ export class NodeWorkbench {
 		const connectionKey = identity(clientId, node.id), token = Symbol();
 		this.pendingConnections.set(connectionKey, token);
 		const revision = JSON.stringify(node);
+		const assertCurrent = () => {
+			if (this.disposed || this.pendingConnections.get(connectionKey) !== token || revision !== JSON.stringify(node) || this.node(node.id).sourceMissing) throw new Error("节点配置或连接请求已变化，请重试。");
+		};
 		let secret = overrideSecret ?? this.transientSecrets.get(connectionKey) ?? this.secrets.get(`node:${node.id}:secret`);
 		const source = this.sources.find(source => source.id === node.sourceId && source.kind === "xshell");
 		if (secret === undefined && source && !node.localAuth && !node.localUsername) secret = await this.xshellCredentials.read(clientId, source, node);
-		if (this.disposed || this.pendingConnections.get(connectionKey) !== token || revision !== JSON.stringify(node) || this.node(node.id).sourceMissing) throw new Error("节点配置或连接请求已变化，请重试。");
+		assertCurrent();
 		if (auth === "password" && secret === undefined) throw new NodeCredentialError("请填写登录密码。");
 		let keyChanged = false;
 		const opts: Parameters<Client["connect"]>[0] = { host: node.host, port: node.port, username: node.localUsername ?? node.username, readyTimeout: 15000, keepaliveInterval: 10000,
@@ -517,6 +522,9 @@ export class NodeWorkbench {
 			if (secret) opts.passphrase = secret;
 		}
 		await this.disconnect(clientId, node.id);
+		// Closing the previous OMP worker can outlast a newer SSH connection.
+		// Never overwrite that connection (and lose ownership of its Agent).
+		assertCurrent();
 		const client = new Client();
 		const c: Connection = { client, clientId, nodeId: node.id, terminals: new Map(), ready: false, startedAt: Date.now() };
 		const key = identity(clientId, node.id);
@@ -531,6 +539,7 @@ export class NodeWorkbench {
 				client.on("close", () => { if (!settled) { settled = true; reject(new Error("SSH 连接已关闭")); } this.drop(c); });
 				client.connect(opts);
 			});
+			assertCurrent();
 			if (this.connections.get(key) !== c) throw new Error("连接已被新的请求替代");
 			this.pendingConnections.delete(connectionKey); this.authStates.delete(connectionKey);
 			c.ready = true; c.connectedAt = Date.now(); node.lastConnected = c.connectedAt; this.save(); this.broadcastState();

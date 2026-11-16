@@ -1,0 +1,53 @@
+{
+  "status": "Verified local changes; full migration remains incomplete",
+  "completedAt": "2026-11-15T14:28:39.271984+00:00",
+  "platform": "darwin-arm64",
+  "omp": "18.20.0",
+  "bun": "1.4.4",
+  "protocol": 69,
+  "changes": [
+    "Restore strict ACP delegate notification UI projection through the existing parser; preserve native history, model input and entry ID.",
+    "Port the real-extension delegate regression to native OMP config and ready handshake; retain browser keyboard, narrow viewport and reload assertions.",
+    "Add native OMP database tool authorization regression with a local model and a TCP listener that verifies no database connection occurs."
+  ],
+  "reproductions": {
+    "delegateIntegration": "Failed before the fix: actual native extension reply settled, notification still projected as user rather than custom/acp-delegate.",
+    "delegateUnit": "Failed before the fix, then 7/7 projection cases passed.",
+    "databaseFixtureCorrections": "Native Anthropic wire tool names use a prefix, so the fixture responds with the actual advertised name. Direct workspace tests now wait for workspaceReady before prompting; neither fixture assumption required a production change."
+  },
+  "verification": {
+    "typecheck": "passed",
+    "build": "passed",
+    "unit": {
+      "files": 169,
+      "passed": 1053,
+      "skipped": 1
+    },
+    "delegateBrowser": "passed in isolated candidate and final rebuilt application; one local model request, original native user history preserved, native environment reminder allowed in provider payload",
+    "relatedSmoke": {
+      "passed": 5,
+      "total": 5,
+      "tests": [
+        "omp-database-test",
+        "omp-entry-test",
+        "omp-skill-history-test",
+        "omp-command-receipts-test",
+        "omp-extension-ui-test"
+      ]
+    },
+    "protocol": "v69 sync passed",
+    "testEnvironment": "306 scripts passed",
+    "engineBoundary": "126 production source files and emitted output passed; no retired Pi SDK",
+    "ciYaml": "passed",
+    "diffCheck": "passed"
+  },
+  "fullSmoke": "Separate pre-fix baseline omp-smoke-ask.json: 102/110. New database regression was not in that run. Later targeted passes do not revise its totals.",
+  "remaining": [
+    "Seven other failed host tests still require migration or explicit native-behavior replacement coverage; none removed or skipped.",
+    "Database enable/disable settings UI and extension source-file management are not yet restored.",
+    "Native Task internal history storage guard, other documented migration gaps, old running desktop history cleanup and Windows original-task acceptance remain."
+  ],
+  "desktopPackageBuilt": false,
+  "windowsOriginalTaskVerified": false,
+  "published": false
+}

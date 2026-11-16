@@ -1,0 +1,109 @@
+{
+  "completedAt": "2026-11-15T18:30:48.223152+00:00",
+  "status": "Navigation preview and custom-summary contracts verified locally; full migration remains active",
+  "platform": "darwin-arm64",
+  "omp": "18.20.0",
+  "bun": "1.4.4",
+  "protocol": 75,
+  "changes": [
+    "tree_preview now returns entryCount/commonAncestorId from the public native branch-summary collector, via the existing live/frozen/saved tree paths.",
+    "Declare already installed @oh-my-pi/pi-agent-core 18.20.0 as a direct dependency; no SDK patch or version change.",
+    "Preserve custom instructions through native navigate_tree, explicitly reject unsupported replacement and invalid custom input before Stop or worker startup.",
+    "Update stale aggregate records to the actual previous completed 112/112 full smoke baseline; preserve historical failing runs."
+  ],
+  "verification": {
+    "build": {
+      "exitCode": 0,
+      "session": 37055,
+      "log": "/tmp/omp-tree-preview-build-final.log",
+      "logSha256": "1442f477d9e247c59b03a2cf31e332c2b193adbc4725bfec368cc2d4a051ae86"
+    },
+    "typecheck": {
+      "exitCode": 0,
+      "session": 54421,
+      "log": "/tmp/omp-tree-preview-types-final.log",
+      "logSha256": "e5765c5aad4cc1218bce9bd9ba83b0ceee44a5f15d5910b2ac530ffa59a55161"
+    },
+    "unit": {
+      "exitCode": 0,
+      "session": 20704,
+      "log": "/tmp/omp-tree-preview-units-final.log",
+      "logSha256": "81baeab4290c2c1a341ad7b4a4edec659a679674c880ae502ccd13a274cd5fa2",
+      "files": 171,
+      "passed": 1060,
+      "skipped": 1
+    },
+    "browser": {
+      "exitCode": 0,
+      "session": 50354,
+      "log": "/tmp/omp-tree-preview-browser-final.log",
+      "logSha256": "876321303786bdb4e95cd9030381112bf354da4269f5ece13db35a80bf51d207"
+    },
+    "relatedSmoke": {
+      "exitCode": 0,
+      "session": 75211,
+      "log": "/tmp/omp-tree-preview-related-final.log",
+      "logSha256": "17ca22dc555b8e6b51195f945b96d2abc7abb0acb8ed14257df74580ec64e467",
+      "passed": 5,
+      "total": 5,
+      "tests": [
+        "omp-tree-test",
+        "omp-tree-projection-test",
+        "omp-stop-metadata-test",
+        "omp-skill-history-test",
+        "omp-persistence-test"
+      ]
+    },
+    "checks": [
+      "Protocol 75 sync",
+      "308 isolated test scripts",
+      "Lockfile HTTPS registry/version check",
+      "129 production source and emitted-output engine boundary",
+      "git diff --check"
+    ]
+  },
+  "coverage": [
+    "Live preview matches actual session_before_tree preparation for successful native custom summary.",
+    "Native helper parity across branches, same leaf, independent roots, empty leaf, tools, skills and compaction; frozen-memory and saved-file paths.",
+    "Stopped preview neither starts an Agent nor changes history or sends a model request.",
+    "Invalid/custom replacement requests cannot open a stopped worker or abort a running task.",
+    "Browser Chinese/English counts, actual custom instruction request, cancellation, reconnect, stopped preview, continued work and original sibling/bookmark checks."
+  ],
+  "reproduction": {
+    "log": "/tmp/omp-tree-preview-before.log",
+    "exitCode": 1,
+    "assertion": "preview must return the native summary entry count"
+  },
+  "testFixtureCorrection": {
+    "log": "/tmp/omp-tree-preview-related.log",
+    "exitCode": 1,
+    "result": "4/5 passed; summary preparation observation failed because its fixture extension used .mjs. Installed OMP auto-discovery accepts .ts/.js; changed fixture to .js, retained actual-hook assertion and final 5/5 passed."
+  },
+  "sourceParity": {
+    "candidate": "/var/folders/41/07yyp3_12jddkkthmflqkbgw0000gn/T/omp-tree-preview-8zgijd7j",
+    "files": 1132,
+    "fingerprintSha256": "4905b9a8288b3978074951e6f509dc948a5b1b9f56ae2c3c9b8a635bcbe44b56",
+    "scope": "Production, browser, tests, scripts, Electron, CLI, CI and build configuration; root and isolated candidate byte-for-byte identical."
+  },
+  "fullSmokeBaseline": "omp-smoke-resources.json: previous completed full 112/112 run. Not rerun after this preview change; current related checks above passed.",
+  "operations": {
+    "checkoutDistWritten": false,
+    "runningApplicationReplaced": false,
+    "sdkPatched": false,
+    "published": false,
+    "oldDesktopPidStillRunning": 62015,
+    "isolatedCandidateRemoved": true
+  },
+  "remaining": [
+    "Native Task internal-history storage guard and child-output coverage",
+    "Other MCP/auth/proxy/recovery gaps",
+    "Old desktop histories while old application is running",
+    "Real provider/database and performance acceptance",
+    "Windows original-task matrix and current cross-platform packages"
+  ],
+  "limits": [
+    "Preview is a read-time candidate entry count, not a token estimate or a guarantee after history/hooks change.",
+    "Native RPC ask-result re-answer remains unsupported and returns its native error.",
+    "Local fixture/browser validation does not establish Windows DeepSeek root cause or release readiness."
+  ]
+}

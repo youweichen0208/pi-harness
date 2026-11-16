@@ -1,0 +1,127 @@
+{
+  "checkedAt": "2026-11-15T18:42:45.379152+00:00",
+  "status": "Confirmed unresolved migration defect; not fixed",
+  "platform": "darwin-arm64",
+  "omp": "18.20.0",
+  "bun": "1.4.4",
+  "protocol": 75,
+  "probe": "tests/diagnostics/omp-openai-proxy-probe.mjs",
+  "application": {
+    "blockedHosts": [
+      "catalog.stencil.so",
+      "coding-intl.dashscope.aliyuncs.com",
+      "hyper.charm.land",
+      "api.commandcode.ai",
+      "api.kilo.ai",
+      "api.venice.ai",
+      "zenmux.ai",
+      "api.openai.com"
+    ],
+    "control": false,
+    "proxyConnects": 0,
+    "providerRequests": 0,
+    "blockedDirectRequests": 6,
+    "stopReason": "error",
+    "responseReceived": false
+  },
+  "repeat": {
+    "blockedHosts": [
+      "catalog.stencil.so",
+      "coding-intl.dashscope.aliyuncs.com",
+      "hyper.charm.land",
+      "api.commandcode.ai",
+      "api.kilo.ai",
+      "api.venice.ai",
+      "zenmux.ai",
+      "api.openai.com"
+    ],
+    "control": false,
+    "proxyConnects": 0,
+    "providerRequests": 0,
+    "blockedDirectRequests": 6,
+    "stopReason": "error",
+    "responseReceived": false
+  },
+  "nativeControl": {
+    "blockedHosts": [
+      "catalog.stencil.so",
+      "coding-intl.dashscope.aliyuncs.com",
+      "hyper.charm.land",
+      "api.commandcode.ai",
+      "api.kilo.ai",
+      "api.venice.ai",
+      "zenmux.ai"
+    ],
+    "control": true,
+    "proxyConnects": 1,
+    "providerRequests": 1,
+    "blockedDirectRequests": 0,
+    "stopReason": "stop",
+    "responseReceived": true
+  },
+  "verification": {
+    "build": {
+      "path": "/tmp/omp-proxy-probe-build.log",
+      "exitCode": 0,
+      "sha256": "1ac19b24d73c32ca8bad66d982f1c3834600f03b550425431e31c256b72517c2"
+    },
+    "application": {
+      "path": "/tmp/omp-proxy-probe-app-final.log",
+      "exitCode": 1,
+      "sha256": "bb4356920533d411def282c63722b96ac569053ec2ea4cdadb7bf98a57209430"
+    },
+    "repeat": {
+      "path": "/tmp/omp-proxy-probe-app-repeat.log",
+      "exitCode": 1,
+      "sha256": "bb4356920533d411def282c63722b96ac569053ec2ea4cdadb7bf98a57209430"
+    },
+    "nativeControl": {
+      "path": "/tmp/omp-proxy-probe-control-final.log",
+      "exitCode": 0,
+      "sha256": "5a0e78108689e435a3d9d70a605e3003ff4112b0f13e6615eb661f2445b4833a"
+    },
+    "hostRegression": {
+      "path": "/tmp/omp-proxy-probe-host.log",
+      "exitCode": 0,
+      "sha256": "6ec82135785e9e252e438fc1ecbff5f42d81b35f4c535e7026904437c7288d23"
+    }
+  },
+  "sourceSha256": "ba99e2ee1d84d71666ed6eebc3c4868de054917403211eb54cd264756960980e",
+  "causeEvidence": [
+    "The host installs its Undici dispatcher in server/index.ts; OMP runs in a separate Bun process.",
+    "OmpBootstrap and prepareLaunch contain no application proxy configuration; inherited PI_* values are intentionally removed.",
+    "The identical real OMP model request succeeds through the fixture CONNECT proxy when only the diagnostic preload sets native PI_PROXY.",
+    "Built-in Bun require(ws) bypasses globalThis.WebSocket; OMP Responses transport uses it for inspectUpgradeResponse. A global WebSocket replacement is incomplete."
+  ],
+  "rejectedAlternatives": [
+    "TLS certificate or proxy fixture failure: same TLS/CONNECT path succeeds in native control.",
+    "Native OMP cannot use proxies: contradicted by the real model control response.",
+    "Node host setting broken: retained host CONNECT/token/WebSocket regression passes."
+  ],
+  "safety": [
+    "Only fake fixture credentials, a temporary agent directory, isolated high ports and local TLS/CONNECT servers.",
+    "Preload denies every non-loopback fetch unless it explicitly uses the isolated fixture proxy; the fixture proxy only permits api.openai.com:443 and maps it to loopback.",
+    "Unrelated native startup catalog fetches are blocked in both cases; reported blockedDirectRequests counts only official OpenAI endpoints.",
+    "No credential/header/project content printed; only destination hostnames, counters and status."
+  ],
+  "testCorrection": "Initial native control counted seven unrelated blocked catalog fetches as proxy failures. Final diagnostic reports those hostnames separately and asserts official OpenAI fetch routing; real model/CONNECT assertions were unchanged.",
+  "completionBoundary": [
+    "This is an intentionally failing diagnostic, not added to passing smoke or converted to an expected-pass assertion.",
+    "Native-control mode changes only the isolated diagnostic environment; production proxy integration is unchanged.",
+    "Full smoke 112/112 does not cover this defect and remains historical evidence only.",
+    "This OpenAI-only feature gap is not evidence for the Windows DeepSeek repetition root cause."
+  ],
+  "nextRequirements": [
+    "Preserve exact official-host/default-TLS-port routing; custom gateways and callbacks must retain their existing path.",
+    "Exercise native fetch/OAuth and both global WebSocket and inspectable Bun ws transports without patching SDK modules.",
+    "Preserve startup activation/restart semantics across new, reloaded, background and restricted OMP workers.",
+    "Verify no fallback to direct on proxy failure and cancellation/shutdown without worker or socket leaks."
+  ],
+  "operations": {
+    "productionChanged": false,
+    "checkoutDistWritten": false,
+    "runningApplicationReplaced": false,
+    "published": false,
+    "isolatedCandidateRemoved": true
+  }
+}

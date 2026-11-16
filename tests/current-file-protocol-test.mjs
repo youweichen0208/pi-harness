@@ -1,23 +1,22 @@
 // Real SDK and local mock provider: frozen editor drafts, queue delivery and history reask.
 import assert from "node:assert/strict";
-import { portUp } from "./lib/port-utils.mjs";
+import { listenIsolated, startIsolatedHarness } from "./lib/isolated-server.mjs";
 import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { realpathSync } from "node:fs";
-import { spawn } from "node:child_process";
 import { setTimeout as sleep } from "node:timers/promises";
 import WebSocket from "ws";
-import { testEnv } from "./lib/test-env.mjs";
+import { scrubHostEnv } from "./lib/test-env.mjs";
+scrubHostEnv();
+for (const key of Object.keys(process.env)) if (/API_KEY|TOKEN|SECRET|PASSWORD|^ANTHROPIC_|^OPENAI_/.test(key)) delete process.env[key];
 
-const PORT = 8988;
-const MOCK_PORT = PORT + 1;
-const base = mkdtempSync(join(tmpdir(), "pi-web-switch-session-"));
+const base = realpathSync(mkdtempSync(join(tmpdir(), "omp-current-file-")));
 const workdir = join(base, "work");
 const dataDir = join(base, "data");
-const agentDir = join(base, "agent");
+const agentDir = join(dataDir, "omp/agent");
 mkdirSync(workdir, { recursive: true });
 mkdirSync(dataDir, { recursive: true });
 mkdirSync(agentDir, { recursive: true });
@@ -29,11 +28,9 @@ writeFileSync(join(agentDir, "skills", "queue-ops", "SKILL.md"), "---\nname: que
 const markdown = '# Markdown attachment\n```ts\nconst s = "a  b";\n```\n';
 writeFileSync(join(workdir, "guide.md"), markdown);
 mkdirSync(join(agentDir, "prompts"));
-writeFileSync(join(agentDir, "prompts", "review.md"), "Review carefully: $@");
+writeFileSync(join(agentDir, "prompts", "fixture-review.md"), "Review carefully: $@");
 const requests = [];
 writeFileSync(join(workdir, "note.txt"), "disk original");
-assert.equal(await portUp(PORT), false);
-assert.equal(await portUp(MOCK_PORT), false);
 const mock = createServer(async (req, res) => {
 	let body = "";
 	for await (const chunk of req) body += chunk;
@@ -51,7 +48,7 @@ const mock = createServer(async (req, res) => {
 		: last?.content?.filter?.((part) => part.type === "text").map((part) => part.text).join(" ") ?? "";
 	const slow = prompt === "SLOW";
 	const first = slow ? "background-" : "seed-";
-	const lastChunk = slow ? "finished" : "message";
+	const lastChunk = (slow ? "finished" : "message") + ` [fixture-reply-${requests.length}]`;
 	res.writeHead(200, {
 		"content-type": "text/event-stream",
 		"cache-control": "no-cache",
@@ -82,14 +79,14 @@ const mock = createServer(async (req, res) => {
 	res.write("data: [DONE]\n\n");
 	res.end();
 });
-await new Promise((resolve) => mock.listen(MOCK_PORT, "127.0.0.1", resolve));
+const MOCK_PORT = await listenIsolated(mock);
 
+writeFileSync(join(agentDir, "config.yml"), JSON.stringify({
+	skills: { enabled: true, enableAgentsUser: false, enableAgentsProject: false, enablePiUser: false, enablePiProject: false, enableClaudeUser: false, enableClaudeProject: false, enableCodexUser: false, customDirectories: [join(agentDir, "skills")] },
+	retry: { enabled: false }, cacheWarming: { enabled: false }, compaction: { enabled: false },
+}));
 writeFileSync(
-	join(agentDir, "auth.json"),
-	JSON.stringify({ main: { type: "api_key", key: "switch-session-test" } }),
-);
-writeFileSync(
-	join(agentDir, "models.json"),
+	join(agentDir, "models.yml"),
 	JSON.stringify({
 		providers: {
 			main: {
@@ -108,33 +105,8 @@ writeFileSync(
 	}),
 );
 
-const repoRoot = realpathSync(new URL("../", import.meta.url));
-const server = spawn(process.execPath, ["dist/server/index.js"], {
-	cwd: repoRoot,
-	env: {
-		...testEnv(),
-		PORT: String(PORT),
-		PI_WEB_DATA_DIR: dataDir,
-		PI_WEB_CWD: workdir,
-		PI_CODING_AGENT_DIR: agentDir,
-	},
-	stdio: "ignore",
-	windowsHide: true,
-});
-
-const waitForPort = async (port, timeout = 15000) => {
-	const started = Date.now();
-	while (Date.now() - started < timeout) {
-		try {
-			const response = await fetch(`http://127.0.0.1:${port}/health`);
-			if (response.ok) return;
-		} catch {
-			/* starting */
-		}
-		await sleep(100);
-	}
-	throw new Error(`server did not start on ${port}`);
-};
+let harness = await startIsolatedHarness({ env: { PI_WEB_DATA_DIR: dataDir, PI_WEB_CWD: workdir } });
+const PORT = harness.port;
 
 class Client {
 	constructor(ws) {
@@ -165,7 +137,7 @@ class Client {
 	send(message) {
 		this.ws.send(JSON.stringify(message));
 	}
-	async waitForType(type, predicate = () => true, timeout = 15000) {
+	async waitForType(type, predicate = () => true, timeout = 30000) {
 		const started = Date.now();
 		while (Date.now() - started < timeout) {
 			for (let i = 0; i < this.received.length; i++) {
@@ -178,7 +150,7 @@ class Client {
 		}
 		throw new Error(`timeout waiting for ${type}`);
 	}
-	async waitForState(predicate, timeout = 15000) {
+	async waitForState(predicate, timeout = 30000) {
 		const started = Date.now();
 		while (Date.now() - started < timeout) {
 			if (this.state && predicate(this.state)) return this.state;
@@ -186,7 +158,7 @@ class Client {
 		}
 		throw new Error(`timeout waiting for state (${requests.length} model requests)`);
 	}
-	async waitForMessage(predicate, timeout = 15000) {
+	async waitForMessage(predicate, timeout = 30000) {
 		const started = Date.now();
 		while (Date.now() - started < timeout) {
 			const message = this.messages.find(predicate);
@@ -199,7 +171,6 @@ class Client {
 
 let client;
 try {
-	await waitForPort(PORT);
 	const ws = new WebSocket(`ws://127.0.0.1:${PORT}/ws`);
 	await new Promise((resolve, reject) => { ws.once("open", resolve); ws.once("error", reject); });
 	client = new Client(ws);
@@ -218,8 +189,22 @@ try {
 	assert(JSON.stringify(requests[0]).includes("Prioritize"));
 	assert(!JSON.stringify(requests[0]).includes("disk original"));
 	await client.waitForState((s) => !s.isStreaming);
-	const savedThinking = JSON.parse(readFileSync(join(dataDir, "thinking-durations.json"), "utf8"));
+	const savedThinking = JSON.parse(readFileSync(join(dataDir, "omp/thinking-durations.json"), "utf8"));
 	assert(Object.values(savedThinking).some((blocks) => Object.values(blocks).some((ms) => ms >= 100)), "completed thinking duration is persisted");
+	const measuredMs = thought.durationMs, savedSessionId = client.state.sessionId, savedFile = client.state.sessionFile;
+	client.ws.terminate(); await harness.stop();
+	const historyBeforeRestart = readFileSync(savedFile);
+	harness = await startIsolatedHarness({ env: { PI_WEB_DATA_DIR: dataDir, PI_WEB_CWD: workdir }, nextPort: () => PORT, attempts: 1 });
+	const restoredSocket = new WebSocket(`ws://127.0.0.1:${PORT}/ws`);
+	client = new Client(restoredSocket);
+	await new Promise((resolve, reject) => { restoredSocket.once("open", resolve); restoredSocket.once("error", reject); });
+	client.send({ type: "hello", clientId: "current-file-protocol" });
+	await client.waitForType("ready"); client.send({ type: "get_state" });
+	await client.waitForState(state => state.sessionId === savedSessionId && state.messages.some(message => message.role === "assistant"));
+	assert.equal(client.messages.find(message => message.role === "assistant").content.find(block => block.type === "thinking").durationMs, measuredMs);
+	assert.deepEqual(readFileSync(savedFile), historyBeforeRestart, "timing restoration must not rewrite native history");
+	assert.equal(requests.length, 1, "host restart must not call the model");
+	console.log("PASS OMP thinking timing: native stream, host restart and unchanged transcript");
 	client.send({ type: "prompt", text: "SLOW" });
 	await client.waitForState((s) => s.isStreaming);
 	sendDraft("steering", "DRAFT_STEER");
@@ -256,7 +241,7 @@ try {
 	assert.equal((await client.waitForType("prompt_result", m => m.requestId === "recalled")).ok, true);
 	client.send({ type: "prompt", requestId: "queued-skill", queue: true, text: "/skill:queue-ops 检查状态" });
 	assert.equal((await client.waitForType("prompt_result", m => m.requestId === "queued-skill")).ok, true);
-	await client.waitForState(s => s.queue.followUp.includes("skill:queue-ops · 检查状态"));
+	await client.waitForState(s => s.queue.followUp.includes("/skill:queue-ops 检查状态"));
 	assert(!client.state.queue.followUp.some(text => text.includes("Queue skill instructions")));
 	const conversationId = client.state.conversationId;
 	client.send({ type: "recall_queue", conversationId: "wrong", requestId: "wrong-recall" });
@@ -265,7 +250,8 @@ try {
 	client.send({ type: "recall_queue", conversationId, requestId: "recall" });
 	const recalled = await client.waitForType("queue_recalled", m => m.requestId === "recall");
 	assert(recalled.text.includes("RECALLED_DRAFT"));
-	assert(recalled.text.includes(queueSkillBody.trim()), "recall retains the full skill body beyond 2000 characters");
+	assert(recalled.text.includes("/skill:queue-ops 检查状态"), "OMP restores the user invocation, not its generated skill body");
+	assert(!recalled.text.includes(queueSkillBody.trim()));
 	assert(recalled.text.includes("检查状态"));
 	client.send({ type: "recall_queue", conversationId, requestId: "recall" });
 	assert.deepEqual(await client.waitForType("queue_recalled", m => m.requestId === "recall"), recalled);
@@ -289,18 +275,46 @@ try {
 	assert(!client.received.some(m => m.type === "queue_recalled"), "acknowledged recall is not replayed");
 	assert(!JSON.stringify(requests).includes("RECALLED_DRAFT"));
 
+	const beforeSkill = requests.length;
+	client.send({ type: "prompt", requestId: "skill-parent", text: "SLOW" });
+	await client.waitForState(s => s.isStreaming);
+	client.send({ type: "prompt", requestId: "delivered-skill", queue: true, text: "/skill:queue-ops DELIVER_NATIVE_SKILL" });
+	assert.equal((await client.waitForType("prompt_result", m => m.requestId === "delivered-skill")).ok, true);
+	for (let n = 0; n < 600 && requests.length < beforeSkill + 2; n++) await sleep(50);
+	assert.equal(requests.length, beforeSkill + 2);
+	assert(JSON.stringify(requests.at(-1)).includes(JSON.stringify(queueSkillBody.trim()).slice(1, -1)), "queued skills must expand through the native prompt pipeline");
+	assert(JSON.stringify(requests.at(-1)).includes("DELIVER_NATIVE_SKILL"));
+	const waitForReply = count => client.waitForState(s => !s.isStreaming && !s.tree?.verifying && client.messages.some(m => m.role === "assistant" && m.content.some(b => b.type === "text" && b.text.includes(`[fixture-reply-${count}]`))));
+	await waitForReply(beforeSkill + 2);
+	await client.waitForMessage(m => m.role === "user" && m.entryId && m.content.some(b => b.type === "text" && b.text === "/skill:queue-ops DELIVER_NATIVE_SKILL"));
+
 	writeFileSync(join(workdir, "guide.md"), markdown);
+	const lastRequestText = () => {
+		const content = requests.at(-1).messages.at(-1).content;
+		return typeof content === "string" ? content : content.filter(b => b.type === "text").map(b => b.text).join("\n");
+	};
 	for (const [index, separator] of [" ", "\n", "\t", "\r\n"].entries()) {
+		// Compare with the same invocation through unmodified native expansion.
+		// OMP recognizes a literal space; other separators remain ordinary text.
+		const invocation = `/fixture-review${separator}"one two" three`;
+		const baselineCount = requests.length;
+		client.send({ type: "prompt", requestId: `template-baseline-${index}`, text: invocation });
+		assert.equal((await client.waitForType("prompt_result", m => m.requestId === `template-baseline-${index}`)).ok, true);
+		for (let n = 0; n < 200 && requests.length === baselineCount; n++) await sleep(50);
+		assert.equal(requests.length, baselineCount + 1);
+		await waitForReply(baselineCount + 1);
+		const nativeText = lastRequestText();
+		assert(nativeText.startsWith(separator === " " ? "Review carefully: one two three" : invocation), `native separator behavior: ${JSON.stringify(separator)}`);
 		const count = requests.length;
 		const requestId = `template-${index}`;
-		client.send({ type: "prompt", requestId, text: `/review${separator}"one two" three`, attachments: [{ path: "guide.md", mode: "inline" }] });
+		client.send({ type: "prompt", requestId, text: invocation, attachments: [{ path: "guide.md", mode: "inline" }] });
 		assert.equal((await client.waitForType("prompt_result", m => m.requestId === requestId)).ok, true);
 		for (let n = 0; n < 200 && requests.length === count; n++) await sleep(50);
 		assert.equal(requests.length, count + 1);
-		const content = requests.at(-1).messages.at(-1).content;
-		const text = typeof content === "string" ? content : content.filter(b => b.type === "text").map(b => b.text).join("\n");
-		assert(text.startsWith("Review carefully: one two three")); assert(text.includes(markdown));
-		await client.waitForState(s => !s.isStreaming && !s.tree?.verifying);
+		await waitForReply(count + 1);
+		const text = lastRequestText();
+		assert(text.startsWith(nativeText), `attachments must retain native invocation behavior: ${JSON.stringify(separator)}; native=${JSON.stringify(nativeText.slice(0, 140))}; attached=${JSON.stringify(text.slice(0, 140))}`);
+		assert(text.includes(markdown), "template expansion must preserve attachment whitespace and quotes");
 	}
 	if (process.argv.includes("--browser")) {
 		const { chromium } = await import("playwright-core");
@@ -322,11 +336,11 @@ try {
 			assert.equal(await page.locator(".msg-editor-img.file-chip").count(), 2);
 		} finally { await browser.close(); }
 	}
-	console.log("PASS actual SDK/model protocol: ordinary, steer, followUp receive frozen editor snapshots and source; history/reask preserved; disk unchanged");
+	console.log("PASS actual SDK/model protocol: ordinary, steer, followUp receive frozen snapshots; history/reask and queued skills preserved; template attachments retain exact bytes and native separator behavior; disk unchanged");
 } finally {
 	client?.ws.close();
-	server.kill("SIGTERM");
-	await new Promise((resolve) => server.once("exit", resolve));
+	await harness.stop();
+	mock.closeAllConnections();
 	await new Promise((resolve) => mock.close(resolve));
 	rmSync(base, { recursive: true, force: true });
 }

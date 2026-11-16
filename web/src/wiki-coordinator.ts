@@ -28,10 +28,25 @@ export class WikiCoordinator {
 			},
 		};
 	}
-	private notify() { for (const listener of this.listeners) listener(); }
+	private notify() { for (const listener of this.listeners) listener(); for (const waiter of this.waiters) waiter(); }
 	observe(conversationId: string, streaming: boolean, ready: boolean, sessionId?: string) {
 		this.observed = { conversationId, streaming, ready, sessionId };
 		for (const waiter of this.waiters) waiter();
+	}
+	/** HTTP can finish before React applies the new worker's authoritative identity. */
+	waitForTarget(target: Pick<WikiIdentity, "conversationId" | "sessionId">, source: WikiIdentity, operation: { current(): boolean }, timeout = 5000): Promise<void> {
+		return new Promise((resolve, reject) => {
+			const finish = (error?: Error) => { clearTimeout(timer); this.waiters.delete(check); error ? reject(error) : resolve(); };
+			const check = () => {
+				if (!operation.current()) { finish(new WikiCoordinationError("changed")); return; }
+				const current = this.observed;
+				if (!current?.ready) return;
+				if (current.conversationId === target.conversationId && (target.sessionId === undefined || current.sessionId === target.sessionId)) { finish(); return; }
+				if (current.conversationId !== source.conversationId && current.conversationId !== target.conversationId) finish(new WikiCoordinationError("changed"));
+			};
+			const timer = setTimeout(() => finish(new WikiCoordinationError("timeout")), timeout);
+			this.waiters.add(check); check();
+		});
 	}
 	waitSettled(conversationId: string, timeout = 30000, sessionId?: string): Promise<void> {
 		return new Promise((resolve, reject) => {

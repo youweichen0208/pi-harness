@@ -6,11 +6,11 @@
 
 保存后完全退出并重启桌面应用（仅关闭到托盘不够）；CLI 服务重启后生效。配置保存在各自数据目录的 `openai-proxy.json`，不修改其他用户的设置。只影响 OpenAI 官方认证与模型服务；浏览器登录页仍需浏览器网络可达。代理可达不保证 OpenAI 接受账号或地区。
 
-## 内置 Pi 与用户配置
+## 内置 OMP 与用户配置
 
-Desktop 使用安装包内精确锁定的 Pi SDK。桌面包不包含应用自己的 `extensions/`，包元数据不声明应用扩展；CLI 的 `/webui` 扩展只随 npm 包提供。用户扩展由原生资源加载器读取 `~/.pi/agent/extensions`、Pi settings.json 声明的本地/已安装扩展包和受信任项目 `.pi/extensions`；`PI_CODING_AGENT_DIR` 可指定其他用户配置目录。沿用原生启停、过滤和项目信任，不复制或删除用户文件。Codemode、tool_search、MCP 属于 Pi 原生能力，继续按原生配置启用。终端执行 `pi update` 更新的是外部 CLI，不会替换桌面内置依赖；内置版本随应用构建升级。用户安装的原生扩展和凭据则由 Desktop 使用的 agent 目录加载，重启或 `/reload` 可加载其变化；不要把“内置版本固定”理解为“用户扩展配置永远无效”。
+Desktop 使用安装包内精确锁定的 OMP SDK 和 Bun。配置位于 `<dataDir>/omp/agent`，原生包目录由 SDK 单独确定，见下文「OMP 桌面迁移」。桌面包不包含应用自己的 `extensions/`，包元数据不声明应用扩展；CLI 的 `/webui` 扩展只随 npm 包提供，采用原生 `omp` manifest。首次配置直接写原生凭据存储，无需安装外部 CLI。旧 Pi 的 agent 目录和配置不自动导入。
 
-Pi 1.0 的原生 MCP 配置入口和旧界面 MCP 桥不同，见 [插件文档](architecture-plugins.md)。模型管理提供官方账号登录桥，OpenAI 支持 ChatGPT 授权；真实账号授权由用户在浏览器完成。macOS 产物回归检查 ChatGPT 的 lazy 模块，不能仅凭应用能启动判断 OAuth 功能完整。
+技能、扩展和 MCP 遵循 OMP 原生资源发现与设置。安装或修改文件后显式重载才更新当前会话，不自动重发任务。模型账号登录桥已接入原生 RPC，真实账号 OAuth 和 MCP OAuth 的验收状态见 [OMP 接入契约](architecture-omp.md)，包内模块能加载不等于登录流程已验收。
 
 ## CLI
 
@@ -38,29 +38,42 @@ macOS 服务的 launchd 标识为 `com.youweichen.pi-harness`（`--name` 自定�
 
 > uninstall 会自动移除桌面图标；未装服务时桌面快捷方式启动的实例在 status/stop 中单独报告（PS1 前台+记录 PID）。
 
-开机自启安装保留显式 `PI_CODING_AGENT_DIR`，转换为绝对路径写入服务配置，避免服务启动后切回默认代理目录。桌面子进程诊断日志仅保留最后 64 Ki 个字符，不随长时间运行累计。
+开机自启安装保留 `--data-dir` 或 `PI_WEB_DATA_DIR`，转换为绝对路径写入服务配置；OMP 配置在该目录的 `omp/agent` 下，会话在 `omp/sessions` 下。旧 `PI_CODING_AGENT_DIR` 不控制应用的 OMP 配置，也不再写入新生成的服务配置。桌面子进程诊断日志仅保留最后 64 Ki 个字符，不随长时间运行累计。
 
 ## Docker
 
 构建和运行阶段都安装 Python、make、g++，供 Linux node-pty 原生编译；git 随运行镜像提供。两个依赖安装阶段先检查 lockfile。
 
-`docker compose up -d` 构建并启动。镜像以 `node` 用户运行，需要保留的数据都放在卷 `/data` 下：
+`docker compose up -d` 构建和运行。镜像使用锁定版本的 OMP SDK 和 Bun，以 UID/GID 1000 的 `node` 用户运行。数据保存在 `/data` 命名卷：
 
-| 路径 | 环境变量 | 内容 |
-| --- | --- | --- |
-| `/data/pi-agent` | `PI_CODING_AGENT_DIR` | pi 配置、`auth.json`、模型、技能与对话会话（`sessions/`） |
-| `/data/pi-harness` | `PI_WEB_DATA_DIR` | 客户端状态、上传文件、插件、Wiki 改动记录与独立聊天历史 |
-| `/workspace` | `PI_WEB_CWD` | 智能体工作的项目，按需绑定主机目录 |
+| 路径 | 用途 |
+| --- | --- |
+| `/data/pi-harness` | `PI_WEB_DATA_DIR`：客户端状态、上传、插件、Wiki 等应用数据 |
+| `/data/pi-harness/omp/agent` | OMP 原生配置、模型、凭据、个人技能及扩展 |
+| `/data/pi-harness/omp/sessions` | 应用按用途及工作目录隔离的 OMP 会话 |
+| `/data/omp-native` | 原生 OMP 个人包、缓存及全局状态；镜像将 `/home/node/.omp` 链接到此目录 |
+| `/workspace` | `PI_WEB_CWD`：项目目录，按需绑定主机项目 |
 
-会话写在 `PI_CODING_AGENT_DIR` 下，所以配置目录必须可写，不要以只读方式挂载。要沿用主机已有的 pi 配置，可把主机的 `~/.pi/agent` 读写挂载到 `/data/pi-agent`；否则首次打开页面按引导配置。
+原生个人包目录独立于 agentDir，单独挂载应用配置目录不足以保存这些包。保留整个 `/data` 卷，相关目录须可由 UID/GID 1000 写入。首次打开页面按 OMP 引导配置；旧 `/data/pi-agent` 和 `~/.pi/agent` 不会被应用加载，不把旧 Pi 历史复制进 OMP 会话目录。宿主路径不会自动映射到容器，模型配置中的本地文件、Git 工具或外部资源须在容器内可访问。
 
-compose 默认只把端口映射到 `127.0.0.1`，并设置 `PI_WEB_ALLOW_HOSTS=localhost,127.0.0.1`：容器内必须监听 `0.0.0.0`，这会关闭默认的 loopback Host 白名单，显式白名单用来防 DNS rebinding。智能体可以在容器内执行命令；对局域网或公网开放前，先设置 `PI_WEB_TOKEN`，把访问用的主机名加入 `PI_WEB_ALLOW_HOSTS`，再修改端口映射。
+compose 默认只把端口映射到 `127.0.0.1`，并设置 `PI_WEB_ALLOW_HOSTS=localhost,127.0.0.1`。对外开放前设置 `PI_WEB_TOKEN`，把访问主机名加入 `PI_WEB_ALLOW_HOSTS`，再修改端口映射。智能体可以在容器内执行命令。
 
-镜像**不捆绑 Python**（见下文「Python 代码运行」）。
+镜像包含构建 node-pty 所需的 Python 3、make、g++ 以及 Git；Playground 会检测到 Python，首次默认开启。需要禁用时设置 `PI_WEB_PLAYGROUND=off`。JDK 仅用于构建 JDBC 桥，运行镜像不带 Java 或厂商驱动。应用源码和依赖在目标 Linux 架构上安装、编译，不复制宿主的 macOS/Windows node_modules。
 
-### 旧容器迁移
+### 容器升级与验证
 
-重建旧容器前先停止服务并备份。旧版默认实际数据可能在容器的 `/home/node/.pi/agent` 和 `/home/node/.pi-web`，不是旧 compose 声明的 `/app/.pi-web` 卷；若设置过自定义环境变量，以容器配置里的实际目录为准。先用 `docker cp <旧容器>:<实际目录> <备份目录>` 导出两个目录，再将其内容分别复制到新卷的 `/data/pi-agent` 与 `/data/pi-harness`，设置为 UID/GID 1000 可写。核对新容器能列出旧会话、配置和附件后，才删除旧容器及备份；已有同名文件时先合并核对，不覆盖新数据。新容器的 `/data` 命名卷会在普通容器重建后保留，`docker compose down -v` 会删除卷，不能用于保留数据的升级。
+升级前停止旧服务并保留 `/data` 卷。旧版本若将 OMP 个人包写在容器的 `/home/node/.omp`，须在删除旧容器前导出该目录，再将其内容放入卷内 `/data/omp-native`；原有同名内容先核对，不覆盖新数据。较早 Pi 容器的数据可能位于 `/home/node/.pi/agent`、`/home/node/.pi-web` 或 `/data/pi-agent`；这些路径不能当作 OMP 配置或会话导入。已有宿主卷和项目文件不由应用自动删除。
+
+`docker compose down -v` 会删除命名卷，不能用于保留数据的升级。自定义 bind mount 的目录需要自行设置正确所有权；入口以普通用户创建 `/data/omp-native`（兼容缺少该目录的非空旧卷），不在启动时修改宿主目录所有权，也不删除原有文件。
+
+本地验证镜像可运行：
+
+```sh
+docker build -t pi-harness-omp-test .
+node tests/omp-container-test.mjs pi-harness-omp-test
+```
+
+测试要求本机 Docker，使用单独带归属标签的旧卷夹具和两个应用容器（另有卷准备步骤）。通过实际 HTTP/WebSocket 启动 OMP、安装本地测试包、执行原生文件读取与 PTY 命令，删除第一个容器后验证配置、包和历史恢复且无自动重发；容器禁用外网，不接触真实账号或项目。测试失败也按归属清理资源，不执行全局 prune。CI 的独立容器 job 执行同一测试；这不代替桌面安装包或 Windows 原故障验收。
 
 ## Linux 安装
 
@@ -85,15 +98,12 @@ push 一个 `v*` tag，`.github/workflows/release-desktop.yml` 会在 mac/win/li
 `GITHUB_TOKEN`，不需要额外配 secrets；当前不签名）。本地手动构建命令如下：
 
 ```bash
-npm install                    # 会装 electron / electron-builder / electron-updater（devDeps）
+npm run check:lockfile          # 每次依赖安装前校验
+npm ci                         # 安装锁定的依赖与本平台原生运行时
 npm run build                  # build:web + build:server（打包前必须先构建）
 npm run dev:electron           # 直接跑 electron .，加载本地构建，走 dev 模式（自动开 DevTools）
 npm run build:electron:mac     # 产出 dmg/zip（release/），需要在真机 macOS 上跑（原生模块要 rebuild）
 npm run build:electron:win     # 产出 nsis 安装包 + portable 绿色版 + zip
-npm run build:electron:win -- --win zip --x64 -c.npmRebuild=false
-                                # 只出 zip，能在 mac/Linux 上交叉构建（不需要 wine）；
-                                # nsis/portable 两个目标要跑 makensis，非 Windows 机器上必须装 wine，
-                                # 否则只能在真机 Windows 或 GitHub Actions windows runner 上出
 npm run build:electron:linux   # 产出 AppImage + deb
 npm run publish:electron       # 同 build，但 --publish always——本地跑这个会真的发到 GitHub Releases，
                                 # 平时发布走 push tag 让 CI 做，这个命令是给手动补发/重发用的
@@ -103,8 +113,8 @@ npm run publish:electron       # 同 build，但 --publish always——本地跑
 
 - 主进程 `fork()` 一个隐藏子进程跑 `dist/server/index.js`（`ELECTRON_RUN_AS_NODE=1`，
   即用 Electron 自带的 Node 运行时跑纯 Node 代码，不是渲染进程）。
-- 桌面 Pi SDK 精确锁定为 1.4.0；终端 `pi update` 只更新外部 CLI。
-- 打包排除仓库里的 `.pi`、`.omp`、`.env*`，以及本地 `.claude` 工作树、`.playwright-mcp`、`.scratch` 和 npm 压缩包。electron-builder 不读取 `.gitignore`，这些目录必须在 `files` 中显式排除，避免嵌套旧安装包和调试产物。产物运行 `tests/packaged-server-start-test.mjs`、`tests/native-tools-desktop-test.mjs`、`tests/provider-auth-test.mjs`，检查开发目录未被带入、终端、Codemode worker、SDK 文档、OAuth lazy 模块。
+- 桌面 OMP 和 Bun 使用 `package.json` 的精确版本，随应用更新；外部 CLI 更新不改变包内运行时。
+- 打包排除仓库里的 `.pi`、`.omp`、`.env*`，以及本地 `.claude` 工作树、`.playwright-mcp`、`.scratch` 和 npm 压缩包。electron-builder 不读取 `.gitignore`，这些目录必须在 `files` 中显式排除。`packaged-server-start-test.mjs` 检查包内运行时、原生工具、依赖和 worker；OMP 专用回归通过可选的 executable/appRoot 参数测试同一产物。
 
 - 通过 stdout 里的 `⚡ pi-harness` 标记（见 `server/index.ts` 的 `httpServer.listen` 回调）
   判断 server 就绪，再让 `BrowserWindow` 加载 `http://127.0.0.1:{随机空闲端口}`。
@@ -114,8 +124,7 @@ npm run publish:electron       # 同 build，但 --publish always——本地跑
   `process.resourcesPath`，即 `electron-builder.yml` 里 `extraResources` 复制的
   `dist/`、`web/dist/`）。
 - `PI_WEB_DATA_DIR` 桌面版单独用 `~/.pi-web-desktop`，和命令行版的 `~/.pi-web` 分开，
-  避免两边同时跑时抢 `client-state.json` 等运行时状态；对话历史本身走 SDK 的
-  `~/.pi/agent`，两边共享，不受影响。
+  避免两边同时跑时抢 `client-state.json` 等运行时状态；OMP 配置与会话也分别位于各自数据目录的 `omp/agent` 与 `omp/sessions`，不再共享旧 Pi 历史。
 - Workspace 列表两边共用：未显式设置 `PI_WEB_DATA_DIR` 时，主进程传
   `PI_WEB_WORKSPACES_FILE=~/.pi-web/project-workspaces.json`，桌面版与默认数据目录的命令行版读写同一份。
   启动时若 `~/.pi-web-desktop/project-workspaces.json` 仍存在，会并入共享文件（同名合并项目），
@@ -141,7 +150,7 @@ npm run publish:electron       # 同 build，但 --publish always——本地跑
   顶栏高 44px，项目栏全高显示；macOS 品牌区为原生窗口按钮留空，项目栏开关固定在红绿灯右侧，收起项目栏时标题仍避让这些控件。Windows/Linux 顶栏为右上角 132px 窗口按钮预留空间；顶栏横跨对话与文件栏，窗口按钮避让始终由顶栏承担。设置和文件按钮不压缩，视图入口在空间不足时依次将 Git、终端移入更多菜单。`tests/desktop-toolbar-test.mjs` 在 Chromium 中模拟两平台外壳，验证顶栏边界、状态数字与任务定位（不替代真机窗口验证）。详见 [界面布局](ui-design.md)。
 - 初始窗口背景匹配默认简白主题；界面优先使用随 web/dist 本地打包的 UI SC 与 JetBrains Mono，以 Mac Desktop 为视觉基准；字体子集外字符回退到系统字体。视觉以 `ui-design.md` 的语雀桌面参考为准。顶栏直接提供对话、终端、Git、数据库、节点与插件，窄屏横向滚动；Wiki 从左栏知识库进入；连接与路径位于底部状态栏。
 - 流畅界面与 Web 共用：窄窗口抽屉使用可中断弹簧与独立拖动区；系统减少动态效果/透明度与提高对比度设置有对应降级。窗口控件、拖动区域与 IPC 不变。
-- SDK 原生提示词引用的 README、docs 与 examples 通过 extraResources 原样保留，防止 electron-builder 的生产依赖剪枝删除扩展示例。afterPack 检查文档和示例入口；native-tools-desktop-test 使用包内 SDK 的真实路径读取资源，缺失时阻断打包回归。
+- OMP 原生提示词引用的 README、CHANGELOG、src 与 examples 通过 extraResources 原样保留，防止依赖剪枝删除运行资源。afterPack 检查资源和 worker 入口，缺失时阻断打包。
 - 原生模块（`node-pty`）：`electron-builder.yml` 里 `npmRebuild: true`，打包时自动
   rebuild 成 Electron 的 Node ABI，不需要手动 `electron-rebuild`；本机需要装好
   Xcode Command Line Tools（mac）/ Visual Studio Build Tools（win）。
@@ -152,19 +161,19 @@ npm run publish:electron       # 同 build，但 --publish always——本地跑
   在「设置 → 组件更新」点击「自动更新」下载，显示进度后点击「重启并安装」。
   安装前系统对话框提示保存文件并确认，不在普通退出时自动安装。检查/下载错误在设置页显示，
   开发模式禁用安装。`electron/app-updater.mjs` 管理状态及重复请求，preload 仅暴露固定操作，
-  主进程校验请求来自 app 窗口的主 frame；内置 Pi 跟随应用版本升级。
+  主进程校验请求来自 app 窗口的主 frame；内置 OMP 跟随应用版本升级。
 - 浏览器版的应用更新在可见终端运行固定的 `npm install -g @youweichen/pi-harness@<版本>`；
   registry 版本不高于当前版本时禁用，避免旧 npm 标签导致降级。成功后手动执行
-  `pi-harness server restart`。原生扩展更新继续使用 Pi 包管理器。
+  `pi-harness server restart`。OMP 原生包更新通过独立 Bun worker 使用原生包管理器。
 
 注意：这个 Electron 壳子和 CLI 共用同一份 `server/index.ts`，改 server 端代码
 时两边都要重新验证——尤其是 `resolvePkgRoot()`（`PI_WEB_PKG_ROOT` 覆盖逻辑）和
 启动就绪标记（`⚡ pi-harness` 字符串），main.mjs 依赖这两处约定。
 
-交叉构建 Windows 版的坑：
+Windows 构建要求：
 
 - `npmRebuild: true` 会触发 `@electron/rebuild` 用 node-gyp 从源码重编译 `node-pty`；node-gyp **不支持跨平台编译**，在 mac/Linux 上给 Windows target 跑会直接报错 `node-gyp does not support cross-compiling native modules from source`。在真机 Windows 上构建，或者 CI 用 windows runner 时不受影响，正常走 `npmRebuild: true` 即可。
-- 在非 Windows 机器上要出 zip（`-c.npmRebuild=false`）时，跳过的是重编译这一步，实际用的是 `node-pty` 包自带的 `prebuilds/win32-x64/pty.node`（跟 mac 版同理，不是本项目编译的，是 node-pty 官方发布时带的预编译产物）。electron-builder 会自动把 `.node` 原生模块解到 `app.asar.unpacked/`（不进 asar 压缩包），不需要手动配 `asarUnpack`。这条路径下**终端功能在 Windows 上是否正常没有用真机验证过**，其余功能（聊天/文件树/模型管理）不依赖 node-pty，应该没问题。
+- OMP/Bun 和可选原生依赖要求构建主机与目标平台、架构相同；禁用 npmRebuild 不能使 macOS/Linux 产出可用 Windows 包。Windows zip、NSIS 和 portable 均使用 Windows runner 构建和验收。
 - `npm run build:electron:win` 默认的 `nsis`/`portable` 两个 target 要跑 `makensis`，在非 Windows 机器上必须装 `wine`（本仓库开发用的沙箱环境没有 root 权限装不了）——要出正式的安装包，得在真机 Windows 上跑，或者接 GitHub Actions 的 `windows-latest` runner。
 - `artifactName` 模板别用 `${name}`——`package.json` 的 `name` 是 `@youweichen/pi-harness`（带 npm scope），`${name}` 里那个斜杠会被当成路径分隔符，实际文件会跑到 `release/@youweichen/` 子目录里而不是 `release/` 根目录，CI 里按 `release/*.exe` 收集产物会直接漏掉。已经全部改成 `${productName}`（就是 `pi`，干净的，不带 scope）。
 
@@ -178,21 +187,21 @@ npm run publish:electron       # 同 build，但 --publish always——本地跑
 
 Windows 发布先构建，再执行 `tests/packaged-server-start-test.mjs`（使用打包后的 Electron 加载懒加载 provider 并启动包内服务端）及 `tests/portable-relaunch-test.ps1`（首次启动、重复打开、原进程存活及模块保留），通过后才上传安装包；这些检查失败会阻断 Windows 发布。手动运行 `Verify Windows desktop build` 时传入 `release_tag`，可直接验证已发布的 ZIP、NSIS 和便携 EXE，无需重新构建。
 
-### Pi 1.4.0 原版 SDK
+### 原版 SDK 与依赖安装
 
 依赖安装前运行 `npm run check:lockfile`，验证 lockfile 下载地址全部使用 HTTPS npm 官方源，再运行 `npm ci`。常规 CI、桌面发布和 Windows 验证工作流均在每次安装前检查；不修改用户全局 npm 配置。
 
-不应用 WebUI 的 SDK 补丁，恢复行为遵循 pi 1.4.0。每个对话创建原生 SettingsManager，getDefaultTools() 原生返回 undefined 时才在读取时提供由公开 getter 解析的 `["+codemode", "+tool_search"]` 默认工具副本；不写入配置。对话级压缩/重试开关也仅在 getter 读取时应用内存覆盖，原生保存、reload 和信任切换均保留对话选择。已有原生选择（含空数组和禁用项）保持权威，不自动删除旧版已写入的值。MCP 使用原生 mcp.json，不配置外部服务器。
+使用原版 OMP SDK，不修改 node_modules。会话设置、默认工具、MCP 与恢复采用 OMP 公开 API，具体隔离和持久化规则见 [OMP 接入契约](architecture-omp.md)。旧 Pi 配置不自动导入。
 
 ### Wiki 文件与 PDF
 
 Wiki 的 PDF.js 依赖和 `wiki-pdf-worker` 随服务打包。PDF 解析复用桌面 Node 子进程环境，具体限制见 [Wiki 架构](architecture-wiki.md)。沙箱 preload 新增固定 `openWikiFile` 方法：主进程使用 clientId/cwd/path 向本机服务验证当前文件，再通过系统默认应用打开；渲染进程不直接传任意可执行路径。
 
-Extensions 包管理的 `extensions-worker` 与服务端一起编译打包，在 Electron 下使用 Node 子进程执行原生包管理。固定 `openExtensionPath` IPC 按服务器验证过的包 ID 在文件管理器中显示路径；不执行渲染进程传入的任意文件。
+OMP 包管理的 `omp/package-worker` 与服务端一起编译打包，由包内 Bun 执行。应用级界面插件的 `plugin-updater` 仍是独立 Node 入口；两者不能混同。
 
 服务端 Wiki 解析使用 `unified` 与 `remark-parse`，必须列入生产依赖。打包启动检查要求这两个模块解析到产物自身目录，禁止借用仓库上层 node_modules；仅清空 NODE_PATH 不会禁止 Node 向父目录查找模块。
 
-会话文件校验的 `session-record-worker` 随服务端编译打包，使用 Node worker_threads 处理超长 JSON 记录；不启动额外 Electron 窗口。开发态使用源文件 URL，生产与桌面态使用 dist 中的 JavaScript。
+会话历史由 OMP worker 内的原生 SessionManager 管理；旧 Pi `session-record-worker` 不进入生产构建。完整历史恢复保护仍在迁移，见 OMP 验收缺口。
 
 三平台发布上传前还验证实际安装产物：macOS 从 DMG 复制应用、Windows 静默安装 NSIS、Linux 安装 deb。`packaged-upgrade-test.mjs` 使用最近一个已公开 Release 的运行时（首次发布没有旧版本时跳过）生成隔离配置、凭据、会话与附件，再由新安装运行时读取；不调用真实模型或使用用户数据。
 
@@ -202,13 +211,13 @@ Wiki 的「问 pi」浮动模式使用独立无边框助手窗口，可拖动到
 
 Playground 使用宿主 Python 3.9+，安装包不捆绑解释器。`PI_WEB_PYTHON` 可指定虚拟环境，Jedi 补全与 Black 格式化需安装到同一环境。首次检测到可用 Python 默认开启，保留已保存选择；`PI_WEB_PLAYGROUND=off` 强制关闭。执行不是沙箱，仍拥有服务用户权限。详见 [Playground 架构](architecture-playground.md)。
 
-桌面模型来源发现由服务子进程读取当前用户目录，不依赖 Pi CLI。生产依赖包含 smol-toml 和 jsonc-parser；三平台打包回归运行 `tests/model-sources-test.mjs <appRoot>`，检查真实包内模块、凭据隔离与同步。支持目录覆盖与 Finder 环境差异见 [模型配置来源](architecture-model-sources.md)。
+桌面模型配置使用当前应用数据目录下的 `omp/agent/models.yml` 与原生供应商目录，不自动读取 Claude Code、Codex、OpenCode 或旧 Pi 的配置。三平台打包门禁运行 `omp-model-config-test.mjs` 和 `omp-model-catalog-test.mjs`，传入包内 executable/appRoot，验证配置、目录、凭据刷新与运行中任务隔离；原来源同步入口已退休。具体契约见 [模型配置来源](architecture-model-sources.md)。
 
 ### 扩展安装所需环境
 
-Desktop 包含 Pi SDK 和扩展运行环境，普通本地扩展不要求独立安装 pi 或 Node.js。在「设置 → Extensions」打开个人扩展目录，放入文件后重载或新建会话即可。Windows 默认目录为 `%USERPROFILE%\.pi\agent\extensions\`，macOS/Linux 为 `~/.pi/agent/extensions/`；自定义 `PI_CODING_AGENT_DIR` 时以页面实际路径为准。
+Desktop 包含 OMP SDK 和 Bun 运行时，普通本地扩展不要求独立安装 OMP 或系统 Node.js。在「设置 → Extensions」打开个人扩展目录，放入文件后显式重载或新建会话。目录为当前应用数据目录下的 `omp/agent/extensions`，以页面实际路径为准，不读取旧 Pi 的个人扩展目录。浏览器只复制服务端路径；桌面通过会话身份校验后的专用 IPC 打开目录或在文件管理器中定位模块，不执行模块文件。
 
-Desktop 不额外内置 Git、npm 或独立 Node.js。npm 来源社区包使用系统包管理工具（也支持 Pi 的自定义 `npmCommand`）；Git 来源需要 Git，包依赖或安装脚本可能还需要 npm/Node.js。缺失时界面提示安装并重试，PATH 变更后可能需要重启应用。远程 Web 部署需在运行服务的电脑上准备工具及扩展文件。
+Desktop 不额外内置 Git、npm 或独立 Node.js。包安装和依赖处理遵循原生 OMP PluginManager；第三方扩展调用外部程序时仍需宿主提供相应工具。PATH 变更后可能需要重启应用。远程 Web 部署需在运行服务的电脑上准备扩展文件和外部工具。
 
 ### GaussDB 本地 JDBC
 
@@ -219,3 +228,26 @@ Desktop 不额外内置 Git、npm 或独立 Node.js。npm 来源社区包使用�
 仓库根目录的 `vercel.json` 将 Vercel 构建固定为 `npm run build:web`，发布 `web/dist`。静态托管不需要编译 JDBC 桥接，因此不要求 JDK。完整的 `npm run build` 仍为 CLI、Docker 与桌面版构建服务端及 JDBC 桥接，必须具备 JDK 17+。
 
 Vercel 静态部署只提供前端资源，不运行本项目的常驻 WebSocket、PTY 或本机数据库服务；完整功能使用上述 CLI / Docker / 桌面部署。此配置不添加后端代理或改变 API 路由。
+
+### OMP 桌面迁移（开发中）
+
+主服务继续使用包内 Electron 的 Node 模式，智能体会话改由包内 Bun 1.4.4 执行 OMP 18.20.0 TypeScript SDK。生产和开发依赖均已移除旧 Pi SDK。打包必须保留 OMP 原生库和 src/prompts 等资源，不能用 Node 直接导入 OMP SDK。
+
+`afterPack` 校验 OMP 版本、运行资源和 Bun 可执行文件，并拒绝旧 Pi 运行时进入产物。Bun 使用本机安装的二进制，因此构建必须与目标平台和架构一致。`extraResources` 显式保留 Bun、OMP 的 CHANGELOG 和提示词等运行资源，避免默认依赖裁剪导致启动失败。
+
+服务端构建先清空生成目录 `dist/server`，再按 `tsconfig.production.json` 的生产入口及独立 worker 编译。源码边界检查包含类型依赖，输出检查拒绝多余的旧编译文件。afterPack 与包内启动回归同时校验必需 worker、旧 Pi 输出和 SDK 引用；退休清单见 `docs/omp-retirement.json`。打包会将工作区 node-pty 重建为 Electron ABI，完成后先运行 `npm run check:lockfile`，再用 `npm rebuild node-pty` 恢复本机 Node 开发环境。
+
+`packaged-server-start-test.mjs` 校验包内 Bun 版本，使用它导入 OMP/供应商模块，再由包内 Electron 启动 HTTP 服务，验证 OMP 原生工具与用户扩展。Windows 便携版重复启动检查使用 OMP 模块路径。当前 macOS arm64 DMG/ZIP 已构建；目录包、DMG 复制安装、隔离旧版数据升级和六项桌面界面通过验证，见 [当前包证据](review-data/omp-desktop-current.json)。Windows/Linux 桌面和安装器仍待真机验证，不能据此宣布三平台可用。
+
+OMP 个人包管理通过包内 Bun 的独立 worker 执行，npm 包的下载/移除不依赖系统 npm 或 Bun；Git 来源和第三方安装脚本仍可能需要宿主 Git/其他工具。安装目录由原生 SDK 确定并在操作预览中展示，与采用相同原生目录配置的 OMP CLI 个人包共用，不随 agentDir 自动迁移；CLI 的其他 profile 或 XDG 布局可能使用不同目录，以界面预览为准。长操作记录位于应用 dataDir/omp/package-jobs；升级或关闭服务前也需检查 `activePackageOperations`。macOS 目录包已用隔离本地 registry 验证包内安装、更新、失败回滚、链接、移除与停止，Windows/Linux 仍待真机门禁执行。
+
+OMP 包可选功能沿用包内 Bun worker 和原生运行目录，不更改共享插件缓存。个人和项目范围的默认/全关/自选加载、项目优先与回退、冲突保护已通过 macOS arm64 包内回归 `omp-package-features-test.mjs`；发布工作流在三平台执行源码与包内门禁，远端 Windows/Linux 结果仍待验证。
+
+
+OMP 请求诊断的 `omp/request-diagnostics-extension.js` 随服务编译打包，只有设置 `PI_WEB_MODEL_DIAGNOSTICS_DIR` 时加载。桌面源码与打包测试同时运行请求诊断、MCP 连接诊断；原生 CLI RPC 对照使用产物内 Bun 和 OMP bin。当前 macOS 包内检查通过，实际 Windows／Linux 包验收仍待执行，不能将源码测试当成交付包结果。SDK 嵌入的 Task 使用原生进程内路径，不声明 CLI worker host；原生 CLI JSON/print 退出缺口见请求诊断记录。
+
+Task 压缩夹具要求显式选择被测应用的 Bun 和 SDK，并在打开历史前核对真实路径归属；OAuth 重连门禁同样支持传入包内 executable/appRoot。MCP 桌面用例的未保存离开确认经过真实 `will-prevent-unload` 路径，测试仅替代原生对话框的用户按钮响应，验证取消后保留草稿；浏览器模式仍检查浏览器自己的 beforeunload。二者不能同时通过 CDP 处理同一次桌面确认。
+
+### 独立 Windows OMP 测试包
+
+`Verify Windows desktop build` 的空 `release_tag` 路径在 Windows runner 构建当前检出，执行与正式发布相同的 OMP 源码、包内和桌面门禁，并保留三轮终端、便携版重启、中文／空格路径 ZIP 与 NSIS 旧版隔离数据升级检查。只有全部成功才上传 Actions 安装包产物；截图即使失败也上传。该流程使用只读仓库权限，不创建 Release。真实 DeepSeek 原任务与网关对照仍需在故障环境单独完成。

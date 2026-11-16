@@ -1,0 +1,140 @@
+{
+  "status": "OMP MCP configuration import verified locally; full migration incomplete",
+  "platform": "darwin-arm64",
+  "omp": "18.20.0",
+  "bun": "1.4.4",
+  "node": "26.0.0",
+  "protocol": 76,
+  "changes": [
+    "Append-only strict JSON import for common mcpServers, VS Code servers, OpenCode v1 mcp and v2 mcp.servers connection definitions. Preview then save through the existing native CAS writer; no SDK or server mutations.",
+    "Convert command arrays, environment maps, supported placeholders and disabled flags. Fold source native allow/deny rules into definitions with deny precedence; reject rules for names outside the import and collisions with target definitions or rules.",
+    "Preserve existing masked credentials, unknown fields and scope ownership. Reject unsupported foreign semantics, external credential references, plugin-only policies not loaded by native configuration, duplicate keys, reserved __proto__ keys and oversized/deep input.",
+    "Import drafts are exclusive with form/raw editing, retained on polling/CAS failure, protected during scope/settings navigation and real reload, cleared on success/cancel with focus restoration; bilingual narrow controls reuse existing styling.",
+    "Expanded the existing browser test already used by source macOS/Windows CI and packaged desktop gates; no remote workflow run."
+  ],
+  "verification": {
+    "build": {
+      "path": "/tmp/omp-mcp-import-build-final.log",
+      "exitCode": 0,
+      "sha256": "f02c17325a2f29154c7db82441b2c632e787fd8ce8dcef7fd5523e0f35cbbd7f"
+    },
+    "buildThenTypesAndUnits": true,
+    "units": {
+      "path": "/tmp/omp-mcp-import-units-final.log",
+      "exitCode": 0,
+      "sha256": "3061f846ef5b504d25c556778e632c80dfe6392661aefe6a754db1a44924c786",
+      "files": 173,
+      "passed": 1075,
+      "skipped": 1
+    },
+    "relatedSmoke": {
+      "path": "/tmp/omp-mcp-import-related.log",
+      "exitCode": 0,
+      "sha256": "32886e4185daa24179d5ad8f89611dc04f1bf84fcc647c3427c51f93d44cb1a7",
+      "passed": 3,
+      "total": 3,
+      "names": [
+        "omp-mcp-test",
+        "omp-mcp-auth-test",
+        "codemode-mcp-test"
+      ]
+    },
+    "browser": {
+      "path": "/tmp/omp-mcp-import-browser-complete.log",
+      "exitCode": 0,
+      "sha256": "6c1351de7de29c4fe51ea009fce695bf9de8580f524699ca2a0746028f7369be",
+      "actualProjectScopeAndNativeEnvironmentExpansion": true,
+      "actualUnloadProtection": true
+    },
+    "checks": [
+      "Protocol 76 sync",
+      "131 production source/built engine boundary",
+      "313 isolated test scripts",
+      "Official HTTPS npm lockfile",
+      "git diff --check"
+    ],
+    "screenshots": [
+      {
+        "path": "tests/scratch/omp-mcp-import-light.png",
+        "sha256": "7755a3bbaba4b785f0143334a35db01ce4ec48906fd5c5d536957e430904259c"
+      },
+      {
+        "path": "tests/scratch/omp-mcp-import-dark.png",
+        "sha256": "f49ee2e1d280833a994acb7549dde22a77d3d87aa58926f9180999362dd9e866"
+      },
+      {
+        "path": "tests/scratch/omp-mcp-import-en.png",
+        "sha256": "043e48c5dcb40ca3398c5cafefc05f7a21ce3d73aedec461fdcb9db58fe9ad39"
+      }
+    ],
+    "types": {
+      "path": "/tmp/omp-mcp-import-types-final.log",
+      "exitCode": 0,
+      "sha256": "afe164d6475ab09607d600e330c778c40041826259c553a753499c927e4fbe92"
+    }
+  },
+  "intermediateFailures": [
+    {
+      "case": "Initial frontend typecheck caught control-flow narrowing through an inferred arrow function. Changed the never-returning helper to a function declaration.",
+      "log": {
+        "path": "/tmp/omp-mcp-import-types-initial.log",
+        "exitCode": 2,
+        "sha256": "a82ad7906fecad3c12fc810bc0683a4794a120df12c7d556b5c67bd881468026"
+      }
+    },
+    {
+      "case": "Full NodeNext test typecheck required an explicit .js suffix on the new pure helper import. Fixed before final build and tests.",
+      "log": {
+        "path": "/tmp/omp-mcp-import-types.log",
+        "exitCode": 2,
+        "sha256": "d972f1241a2bb66ec98deecf4ab2d64309d5d0e2c3df0c0bc94196d4250cc57e"
+      }
+    },
+    {
+      "case": "Project reload assertion read the previous connected UI state before the current reload completed. Test now waits for the corresponding HTTP reload response before inspecting captured requests.",
+      "log": {
+        "path": "/tmp/omp-mcp-import-browser-final.log",
+        "exitCode": 1,
+        "sha256": "df740a90e6cea3dc84faa3015c7b05f14ab91ff36252c3392e8ea9fa947f98f7"
+      }
+    },
+    {
+      "case": "Fixture variable used reserved OMP_ prefix removed by the existing worker isolation rule. Changed only the fixture variable to HARNESS_TEST_MCP_IMPORT_KEY; final actual native header expansion passed. Worker environment policy unchanged.",
+      "log": {
+        "path": "/tmp/omp-mcp-import-browser-verified.log",
+        "exitCode": 1,
+        "sha256": "f10cf5c0759bf5bb8ae8511741348110761f45b09b05739b2ee993a4f58c7b56"
+      }
+    }
+  ],
+  "source": {
+    "candidate": "/var/folders/41/07yyp3_12jddkkthmflqkbgw0000gn/T/omp-mcp-import-ltl205cg",
+    "filesCompared": 1336,
+    "fingerprintSha256": "de80b6a3bbcf4ca13d092ac1e6ff939fac92662ed386516b3160316a9c0af446",
+    "fingerprintMethod": "SHA256 of sorted [path, SHA256(content)] pairs in compact UTF-8 JSON; docs excluded",
+    "differences": []
+  },
+  "formatSources": [
+    "https://code.visualstudio.com/docs/agents/reference/mcp-configuration",
+    "https://opencode.ai/docs/mcp-servers",
+    "Locked OMP 18.20.0 discovery/builtin.ts, discovery/helpers.ts and mcp/config.ts"
+  ],
+  "limitations": [
+    "Import supports common connection fields, not arbitrary cross-client semantics. Strict JSON only; unsupported fields are rejected atomically and require manual native configuration.",
+    "Tool-level MCP OAuth challenge, complete diagnostics and external OAuth concurrency remain separate gaps.",
+    "Native Task internal storage protection remains unresolved.",
+    "Full 116 baseline (114/116 plus two passing targeted follow-ups) predates MCP form/import changes; no new full 116 run.",
+    "Local Chromium and native fixtures do not establish real provider, Windows original-task, packaged desktop or release acceptance.",
+    "Old active desktop history cleanup remains outstanding."
+  ],
+  "operations": {
+    "rootDist": "Not overwritten",
+    "userProcessesPreserved": [
+      23786,
+      62015
+    ],
+    "candidateRemoved": true,
+    "allVerificationHandlesTerminal": true,
+    "release": "No commit, push, publish or installed-app replacement"
+  }
+}

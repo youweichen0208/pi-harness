@@ -19,11 +19,15 @@ try {
 	assert.equal(events.find(e => e.type === 'playground_chat_error')?.error, 'Error: pgChatModelUnavailable');
 	assert.equal(state.model, undefined);
 	await chat.close();
-	mkdirSync(process.env.CLAUDE_CONFIG_DIR);
+	mkdirSync(process.env.CLAUDE_CONFIG_DIR, { recursive: true });
 	writeFileSync(join(process.env.CLAUDE_CONFIG_DIR, 'settings.json'), JSON.stringify({ env: { ANTHROPIC_API_KEY: 'fixture', ANTHROPIC_BASE_URL: 'http://127.0.0.1:8999', ANTHROPIC_MODEL: 'fixture-model' } }));
+	const ompAgent = join(root, 'imported', 'omp', 'agent');
+	mkdirSync(ompAgent, { recursive: true });
+	writeFileSync(join(ompAgent, 'models.yml'), JSON.stringify({ providers: { fixture: { api: 'anthropic-messages', apiKey: 'fixture', baseUrl: 'http://127.0.0.1:8999', models: [{ id: 'omp-model', name: 'OMP fixture', input: ['text'], contextWindow: 200000, maxTokens: 128000 }] } } }));
 	chat = new PlaygroundChat(join(root, 'imported'));
-	await chat.handle('test', { action: 'open', requestId: 'import' }, reply);
-	assert(state.models.some(m => m.id === 'fixture-model'), 'Imported models must be available in Playground');
+	await chat.handle('test', { action: 'open', requestId: 'import', model: { provider: 'fixture', id: 'omp-model' } }, reply);
+	assert(state.models.some(m => m.id === 'omp-model'), 'Native OMP model catalog must be available');
+	assert(!state.models.some(m => m.id === 'fixture-model'), 'Pi model-source discovery must not be used');
 	assert(state.models.some(m => m.id === state.model?.id && m.provider === state.model?.provider));
-	console.log('PASS: missing model rejects hello accurately; imported model catalog is available without model requests');
+	console.log('PASS: missing model rejects hello accurately; OMP catalog is available without model requests');
 } finally { await chat?.close(); rmSync(root, { recursive: true, force: true }); }

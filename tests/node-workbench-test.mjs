@@ -17,6 +17,7 @@ const mock = await startMockSsh(process.cwd(), port, [utils.parseKey(privateKey)
 const cryptoFixture = JSON.parse(readFileSync(new URL("./fixtures/xshell7-credentials.json", import.meta.url), "utf8"));
 const service = new NodeWorkbench(dataDir, new XshellCredentials(async () => cryptoFixture.identity));
 const events = [];
+const capturedAgents = new Set();
 const detach = service.attach("client-a", (event) => events.push(event));
 async function call(action, nodeId, payload = {}, terminalId, conversationId) {
 	const requestId = crypto.randomUUID();
@@ -36,8 +37,25 @@ try {
 	const trust = events.findLast((e) => e.event === "trust_required" && e.nodeId === nodeId);
 	assert.match(trust.data.fingerprint, /^SHA256:/);
 	assert.equal((await call("trust", nodeId, { fingerprint: trust.data.fingerprint })).event, "result");
-	const concurrent = await Promise.all([call("connect", nodeId), call("connect", nodeId)]);
-	assert.equal(concurrent.filter((response) => response.event === "result").length, 1);
+	// Hold the older reconnect at the real Agent shutdown boundary. A newer
+	// connection can finish while that shutdown is still being awaited.
+	const originalAgent = service.connections.values().next().value.agent;
+	const closeOriginal = originalAgent.close.bind(originalAgent);
+	let releaseClose, observedClose;
+	const closeGate = new Promise(resolve => { releaseClose = resolve; });
+	const closeReached = new Promise(resolve => { observedClose = resolve; });
+	originalAgent.close = async () => { await closeOriginal(); observedClose(); await closeGate; };
+	const olderConnect = call("connect", nodeId);
+	try {
+		await closeReached;
+		assert.equal(service.activeAgents(), 1, "detached Agent cleanup must remain visible to drain status");
+		assert.equal((await call("connect", nodeId)).event, "result");
+		const newerConnection = service.connections.values().next().value;
+		capturedAgents.add(newerConnection.agent);
+		releaseClose();
+		assert.equal((await olderConnect).event, "failure", "superseded reconnect must not replace the newer connection");
+		assert.equal(service.connections.values().next().value, newerConnection);
+	} finally { releaseClose(); await olderConnect; }
 	assert.equal(service.connections.size, 1);
 	assert.equal((await call("save", undefined, { id: nodeId, name: "alpha", group: "prod", host: "127.0.0.1", port, username: "tester", auth: "key", keyPath: "", defaultDir: "/" })).event, "failure");
 	assert.equal(service.connections.size, 1);
@@ -276,5 +294,12 @@ try {
 	console.log("✓ SSH trust, key change, authentication, terminal command/interrupt/truncation, SFTP and node isolation");
 } finally {
 	for (const c of [...service.connections.values()]) await call("disconnect", c.nodeId);
-	await service.dispose(); detach(); mock.close(); rmSync(dataDir, { recursive: true, force: true });
+	await service.dispose();
+	try {
+		for (const agent of capturedAgents) assert.equal(agent.snapshot().phase, "closed", "disposing the workbench must close every accepted Agent");
+	} finally {
+		// Keep a failed ownership assertion from leaking its real Bun child.
+		await Promise.all([...capturedAgents].map(agent => agent.close()));
+		detach(); mock.close(); rmSync(dataDir, { recursive: true, force: true });
+	}
 }

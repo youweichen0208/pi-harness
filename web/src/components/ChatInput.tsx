@@ -151,7 +151,7 @@ export const ChatInput = memo(function ChatInput({
 	}, [receiptWarning]);
 	const mounted = useRef(true);
 	const [submissionEpoch, setSubmissionEpoch] = useState(0);
-	const pendingSubmit = useRef<{ id: string; sessionId?: string; conversation: string; text: string; queued: boolean; newSessionCommand?: boolean; attachments: ChatInputProps["attachments"] } | null>(null);
+	const pendingSubmit = useRef<{ id: string; sessionId?: string; conversation: string; text: string; queued: boolean; extensionCommand?: boolean; newSessionCommand?: boolean; attachments: ChatInputProps["attachments"] } | null>(null);
 
 	const { locale } = useI18n();
 	const slashDesc = (c: SlashCommandInfo) =>
@@ -216,7 +216,9 @@ export const ChatInput = memo(function ChatInput({
 		if (promptResult.attachmentsConsumed !== false) onSent(pending.conversation, pending.attachments);
 		if (pending.conversation === activeConversationId && pending.sessionId === sessionId) {
 			setText((value) => value === pending.text ? "" : value);
-			if (!pending.queued && !promptResult.commandExecuted && pending.text.trim() !== "/reload") setPendingEcho(activeConversationId, pending.text.trim());
+			// Extension admission may precede handler completion without creating a
+			// user message. Wait for native history instead of inventing a model echo.
+			if (!pending.queued && !pending.extensionCommand && !promptResult.commandExecuted && pending.text.trim() !== "/reload") setPendingEcho(activeConversationId, pending.text.trim());
 		} else {
 			if (drafts.current.get(pending.conversation) === pending.text) drafts.current.delete(pending.conversation);
 		}
@@ -251,6 +253,7 @@ export const ChatInput = memo(function ChatInput({
 	const [completions, setCompletions] = useState<SlashCommandInfo[] | null>(
 		null,
 	);
+	useEffect(() => { if (!text.trim()) setCompletions(null); }, [text]);
 	const [completionIndex, setCompletionIndex] = useState(0);
 	/** /help modal — shows the full command catalog. */
 	const [showHelp, setShowHelp] = useState(false);
@@ -293,6 +296,9 @@ export const ChatInput = memo(function ChatInput({
 		prompt: t("slashPrompt"),
 		skill: t("slashSkill"),
 		plugin: t("slashPlugin"),
+		custom: t("slashCustom"),
+		mcp_prompt: t("slashMcpPrompt"),
+		file: t("slashFile"),
 	};
 
 	/** Recompute the command picker from the current input text. */
@@ -451,7 +457,15 @@ export const ChatInput = memo(function ChatInput({
 	const choices = answering?.questions ?? [];
 	const answeredCount = choices.filter(question => isAnswered(question, questionState.answers, questionState.custom)).length;
 	const unanswered = choices.filter(question => !isAnswered(question, questionState.answers, questionState.custom)).map(question => question.id);
-	const modelUnavailable = isCurrentModelUnavailable(modelState?.model ?? null, models, modelsLoading);
+	const modelUnavailable = !modelState?.model || isCurrentModelUnavailable(modelState.model, models, modelsLoading);
+	// Native commands decide their own model requirements. Do not classify
+	// extension/skill/MCP commands by guessing from their source or their name.
+	const isKnownCommand = (value: string) => {
+		const trimmed = value.trim();
+		if (trimmed === "/help" || trimmed === "/copy") return true;
+		const name = /^\/([^\s]+)/u.exec(trimmed)?.[1];
+		return !!name && slashCommands.some(command => command.name === name);
+	};
 	const submit = (queue = false, override?: string) => {
 		if (verifying) { onNotice("info", t("treeVerifying")); return; }
 		const trimmed = (override ?? text).trim();
@@ -475,7 +489,7 @@ export const ChatInput = memo(function ChatInput({
 			void copyLastAssistant();
 			return;
 		}
-		if (modelUnavailable) {
+		if (modelUnavailable && !isKnownCommand(trimmed)) {
 			onNotice("error", t("modelUnavailableSelectAnother"));
 			return;
 		}
@@ -513,8 +527,8 @@ export const ChatInput = memo(function ChatInput({
 				if (selectedProject) promptText += "\n\n" + t("wikiProjectPrompt", { workspace: selectedProject.workspaceName, path: JSON.stringify(selectedProject.path) });
 			}
 			if (send({ type: "prompt", target: sessionId ? { cwd, conversationId: activeConversationId, sessionId, workspaceId: analysisWorkspaceId } : undefined, text: promptText, queue, requestId, attachments: outgoing })) {
-				pendingSubmit.current = { id: requestId, sessionId, conversation: activeConversationId, text, queued: streaming, newSessionCommand: /^\/new(?:\s|$)/.test(trimmed), attachments };
-				try { sessionStorage.setItem(pendingKey, JSON.stringify({ id: requestId, sessionId, conversation: activeConversationId, text, queued: streaming })); } catch { /* Live connection still tracks the receipt. */ }
+				pendingSubmit.current = { id: requestId, sessionId, conversation: activeConversationId, text, queued: streaming, extensionCommand, newSessionCommand: /^\/new(?:\s|$)/.test(trimmed), attachments };
+				try { sessionStorage.setItem(pendingKey, JSON.stringify({ id: requestId, sessionId, conversation: activeConversationId, text, queued: streaming, extensionCommand })); } catch { /* Live connection still tracks the receipt. */ }
 				setSubmissionEpoch(value => value + 1);
 				setReceiptWarning(null);
 			}
@@ -600,7 +614,7 @@ export const ChatInput = memo(function ChatInput({
 		<div className="inputbox-actions">
 			{streaming && <button type="button" className="btn composer-action stop" title={`${t("stopTask")} · Esc`} aria-label={t("stopTask")} onClick={stop}><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="3" /></svg></button>}
 			<button type="button" className="btn composer-action send" title={t("sendTip")} aria-label={t("sendTip")}
-				disabled={!connected || verifying || (modelUnavailable && text.trim() !== "/help" && text.trim() !== "/copy") || (!text.trim() && !attachments.some(a => a.imageData || a.fileData))}
+				disabled={!connected || verifying || (modelUnavailable && !isKnownCommand(text)) || (!text.trim() && !attachments.some(a => a.imageData || a.fileData))}
 				onClick={() => submit()}><FiArrowUp strokeWidth={3} aria-hidden="true" /></button>
 		</div>
 	);

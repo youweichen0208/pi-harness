@@ -3,22 +3,16 @@ import { wikiToolbar, wikiInsert } from "./lib/wiki-toolbar.mjs";
 /** Real SDK, isolated workspace and local model: Wiki mode contracts (ADR-0003 独立窗口). */
 import { createServer } from "node:http";
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
-import { once } from "node:events";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chromium } from "playwright-core";
 import { CHROME_PATH } from "./lib/chrome.mjs";
-import { portUp } from "./lib/port-utils.mjs";
-import { testEnv } from "./lib/test-env.mjs";
+import { listenIsolated, startIsolatedHarness } from "./lib/isolated-server.mjs";
 
-const port = 9270;
-assert.equal(await portUp(port), false, "isolated port must be free");
-assert.equal(await portUp(port + 1), false);
 const base = realpathSync(mkdtempSync(join(tmpdir(), "doc-evidence-")));
-const cwd = join(base, "workspace"), agent = join(base, "agent");
-mkdirSync(agent); mkdirSync(join(cwd, "knowledge/evidence/source"), { recursive: true });
+const cwd = join(base, "workspace"), agent = join(base, "data/omp/agent");
+mkdirSync(agent, { recursive: true }); mkdirSync(join(cwd, "knowledge/evidence/source"), { recursive: true });
 writeFileSync(join(cwd, "README.md"), "# Knowledge entry\n\nSelected exact passage.\n\n[Other](./other.md)\n\n" + Array.from({length: 80}, (_, i) => `Paragraph ${i}.\n\n`).join(""));
 writeFileSync(join(cwd, "knowledge/manifest.json"), JSON.stringify({ kind: "pi-harness-knowledge", version: 1, evidenceDirectory: "evidence" }));
 const rawPath = join(cwd, "knowledge/evidence/source/original.md"), raw = "# Archived evidence\n\n原始文件内容应保持不变。\n";
@@ -34,36 +28,28 @@ const mock = createServer(async (req, res) => {
 	for (const [delta, finish_reason] of [[{role: "assistant", content: Array.from({length: 50}, (_, i) => `Reply paragraph ${i}.\n\n`).join("")}, null], [{}, "stop"]]) res.write(`data: ${JSON.stringify({id: "local", object: "chat.completion.chunk", choices: [{index: 0, delta, finish_reason}]})}\n\n`);
 	res.end("data: [DONE]\n\n");
 });
-await new Promise(r => mock.listen(port + 1, "127.0.0.1", r));
-writeFileSync(join(agent, "models.json"), JSON.stringify({ providers: { fixture: { api: "openai-completions", baseUrl: `http://127.0.0.1:${port + 1}`, apiKey: "unused", models: [{ id: "unused", name: "Unused local model", input: ["text"], contextWindow: 32000, maxTokens: 4096 }] } } }));
-writeFileSync(join(agent, "settings.json"), JSON.stringify({ defaultProvider: "fixture", defaultModel: "unused" }));
-writeFileSync(join(agent, "auth.json"), JSON.stringify({ fixture: { type: "api_key", key: "unused" } }));
-const server = spawn(process.execPath, ["dist/server/index.js"], { env: { ...testEnv(), PORT: String(port), PI_WEB_TOKEN: "", PI_WEB_HOST: "127.0.0.1", PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(base, "data"), PI_CODING_AGENT_DIR: agent }, stdio: ["ignore", "pipe", "pipe"] });
-let log = "", browser;
+const mockPort = await listenIsolated(mock);
+writeFileSync(join(agent, "models.yml"), JSON.stringify({ providers: { fixture: { api: "openai-completions", baseUrl: `http://127.0.0.1:${mockPort}`, apiKey: "unused", models: [{ id: "unused", name: "Unused local model", input: ["text"], contextWindow: 32000, maxTokens: 4096 }] } } }));
+writeFileSync(join(agent, "config.yml"), JSON.stringify({ modelRoles: { default: "fixture/unused" }, skills: { enabled: false }, cacheWarming: { enabled: false } }));
+let harness, browser;
 const errors = [];
-server.stdout.on("data", data => { log += data; }); server.stderr.on("data", data => { log += data; });
 try {
-	for (let i = 0; i < 150 && !await portUp(port); i++) {
-		assert.equal(server.exitCode, null, log);
-		await new Promise(resolve => setTimeout(resolve, 100));
-	}
-	const health = await (await fetch(`http://127.0.0.1:${port}/api/health`)).json();
-	assert.equal(health.pid, server.pid);
+	harness = await startIsolatedHarness({ env: { PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(base, "data") } });
+	const port = harness.port;
 	browser = await chromium.launch({ executablePath: CHROME_PATH || chromium.executablePath() });
 	const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
 	page.setDefaultTimeout(15000);
 	// 每个窗口自己的 WebSocket 上跟踪最新快照会话、发送的 prompt 与切会话导航。
 	const states = new Map();
-	// Conversation ids ("c2"…) are only unique WITHIN one ClientSession — every
-	// window counts its own. Qualify snapshots with the window's URL client id
-	// so cross-window comparisons (main vs Wiki, reused window vs before) are valid.
+	// Qualify conversation identity with its owning window so cross-window
+	// comparisons verify both the client and native conversation.
 	const clientOf = target => { try { return new URL(target.url()).searchParams.get("client") ?? "main"; } catch { return "main"; } };
 	const track = target => {
 		const state = { conversation: undefined, prompts: [], navigation: [] };
 		states.set(target, state);
 		target.on("pageerror", error => errors.push(error.message));
 		target.on("websocket", ws => {
-			ws.on("framereceived", ({payload}) => { const message = JSON.parse(String(payload)); if (message.type === "snapshot") state.conversation = `${clientOf(target)}:${message.state.conversationId}`; });
+			ws.on("framereceived", ({payload}) => { const message = JSON.parse(String(payload)); if (message.type === "snapshot" || message.type === "snapshot_delta") state.conversation = `${clientOf(target)}:${message.state.conversationId}`; });
 			ws.on("framesent", ({payload}) => { const message = JSON.parse(String(payload)); if (message.type === "switch_conversation") state.navigation.push(message); if (message.type === "prompt") state.prompts.push(message); });
 		});
 		return state;
@@ -259,7 +245,8 @@ try {
 	await wiki.input.fill('Retained during transition'); await wiki.input.press('Enter');
 	assert.equal(wiki.state.prompts.length, beforePrompts);
 	assert.equal(actions.filter(action => action === "chat-document").length, beforeTransitions + 1);
-	releaseDocument(); holdDocument = null;
+	try { assert.equal(await wiki.page.getByRole("button", { name: "退出 Wiki 模式", exact: true }).isDisabled(), true, "close reflects the pending navigation instead of silently ignoring clicks"); }
+	finally { releaseDocument(); holdDocument = null; }
 	await wiki.page.locator('.wiki-document-heading h1', { hasText: 'Other document' }).waitFor();
 	await wiki.page.locator('.wiki-tree-row[title="README.md"]').click();
 	await wiki.page.locator('.wiki-document-heading h1', { hasText: 'Knowledge entry' }).waitFor();
@@ -425,11 +412,11 @@ try {
 	await close();
 	assert.deepEqual(errors, []);
 	console.log("PASS wiki mode: detached window, persistent Wiki conversations, main-window isolation, interrupt confirm, window reuse, refresh restore, save/conflict/quote, explorer and mobile");
-} catch (error) { console.error("pageerrors:", errors); console.error(log.slice(-6000)); throw error; }
+} catch (error) { for (const context of browser?.contexts() ?? []) for (const page of context.pages()) console.error("Wiki failure page:", page.url(), (await page.locator("body").innerText()).slice(-2500)); console.error("pageerrors:", errors); console.error(harness?.logs.slice(-6000)); throw error; }
 finally {
 	releaseReply();
 	await browser?.close();
 	await new Promise(r => mock.close(r));
-	if (server.exitCode === null && server.signalCode === null) { const stopped = once(server, "exit"); server.kill(); await stopped; }
+	await harness?.stop();
 	rmSync(base, { recursive: true, force: true });
 }

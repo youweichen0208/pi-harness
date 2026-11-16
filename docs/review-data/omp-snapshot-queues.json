@@ -1,0 +1,72 @@
+{
+  "status": "Targeted verification; full OMP migration and Windows acceptance remain incomplete",
+  "completedAt": "2026-11-15T09:55:14.632Z",
+  "platform": "darwin",
+  "arch": "arm64",
+  "omp": "18.20.0",
+  "bun": "1.4.4",
+  "fullSmoke": {
+    "baseline": "omp-smoke-commands.json",
+    "repeated": false,
+    "passed": 76,
+    "total": 106
+  },
+  "checks": {
+    "build": "passed",
+    "typecheck": "passed",
+    "unitFiles": 168,
+    "unitPassed": 1045,
+    "unitSkipped": 1,
+    "protocolVersion": 66,
+    "testEnvironmentScripts": 301,
+    "productionSourceFiles": 124
+  },
+  "changes": [
+    "Track native write ownership so a passive reader cannot mark the active writer history as corrupt; retain strict actual-write guards.",
+    "Restore snapshot deltas, stable projected messages, full reconnect/get_state/backpressure checkpoints and browser gap recovery.",
+    "Replace light fields wholesale so omitted optional errors and recovery state clear correctly.",
+    "Display the native persisted branch, including failures, truncated thinking and summaries, without changing model context or transcript."
+  ],
+  "finalTargetedPasses": [
+    "steer-queue-smoke",
+    "snapshot-delta-test --browser",
+    "reasoning-repetition-test (Anthropic and OpenAI)",
+    "omp-recovery-test",
+    "omp-tree-test",
+    "omp-skill-history-test",
+    "omp-template-attachments-test",
+    "omp-tasks-test",
+    "omp-command-output-test --browser",
+    "omp-attachments-browser-test",
+    "omp-persistence-browser-test"
+  ],
+  "earlierRelatedChecks": {
+    "passed": [
+      "omp-entry-test",
+      "omp-workspaces-test",
+      "omp-persistence-test",
+      "omp-external-history-test",
+      "omp-persistence-restart-test",
+      "omp-session-storage-test",
+      "quiesce-test",
+      "client-eviction-test",
+      "new-session-draft-browser-test",
+      "stale-model-selection-test",
+      "omp-setup-browser-test",
+      "omp-tool-output-test --browser"
+    ],
+    "stopMetadata": "Passed after fixing the test to track each socket revision independently."
+  },
+  "unresolved": [
+    {
+      "test": "long-history-browser-test",
+      "result": "failed",
+      "detail": "4096 rows loaded, virtualized, navigated and searched; Escape did not detach the search input within 5 seconds. An earlier run passed. Cause unconfirmed; assertion retained."
+    }
+  ],
+  "acceptance": {
+    "desktopPackageBuilt": false,
+    "windowsOriginalTaskVerified": false,
+    "published": false
+  }
+}

@@ -1,0 +1,66 @@
+{
+  "status": "Native tree list semantics locally verified; full migration remains incomplete",
+  "completedAt": "2026-11-15T16:03:51.891444+00:00",
+  "platform": "darwin-arm64",
+  "omp": "18.20.0",
+  "protocol": 73,
+  "reproduction": {
+    "command": "node tests/omp-tree-projection-test.mjs on the previous isolated build",
+    "exitCode": 1,
+    "failure": "AssertionError: native default includes tool results",
+    "cause": "Host tree.ts used simplified independent filtering and chronological traversal rather than native selector semantics."
+  },
+  "implementation": [
+    "Bun uses public TreeSelectorComponent/getTreeList/pickerView; no private members or SDK patch. Query assigned directly through public input state, not interpreted as keys. No-op action callbacks and dispose after projection.",
+    "Node projects native order, depth, active path, label, preview and native entry kind. Full entry index remains available for details and mutation target validation.",
+    "Filter before the 5000-node output cap; original native transcript remains unchanged."
+  ],
+  "verification": {
+    "typecheck": "passed",
+    "isolatedBuild": "passed",
+    "units": {
+      "files": 169,
+      "passed": 1055,
+      "skipped": 1
+    },
+    "relatedSmoke": {
+      "passed": 4,
+      "total": 4,
+      "tests": [
+        "omp-tree-projection-test",
+        "omp-tree-test",
+        "omp-skill-history-test",
+        "omp-stop-metadata-test"
+      ]
+    },
+    "browser": "omp-tree-cancel-browser-test passed and exited 0",
+    "comparison": "Five native filters and fuzzy multi-term search; labels, 200-character native message search boundary, custom skills/advisor fields, active branch/root ordering, label clear, current empty assistant and error entries",
+    "longHistory": "10000 appended user entries: filter before truncation; observed 23ms for native search plus host projection in related batch (not a whole-application performance baseline)",
+    "checks": [
+      "protocol sync v73",
+      "308 test environment scripts",
+      "127 production source files and compiled boundary",
+      "CI YAML parsed and separate tree commands validated",
+      "git diff --check"
+    ]
+  },
+  "sourceSha256": {
+    "server/omp/tree-native.ts": "2f51f1dd310c90e2f1abecf9a96db71691b274b94414d4d098b3c2c5cf62e456",
+    "server/omp/tree.ts": "84eb0084c14453d7652e8251aba4e88c7188051fb90c61624c2f573427afaf02",
+    "server/omp/worker-control.ts": "46e99badfb15f02aace3ad1d414ccc36e1c9718aa05340725246a78d4372bb07",
+    "tests/fixtures/omp-tree-projection.mjs": "ddece375d5cd9280343358b48b90824f8ff637d2938e2c855bf36cb4ffda8293",
+    "tests/omp-tree-projection-test.mjs": "17c142ac3db3e79997ab4d2b5029583c7345b452e0fea379afce6bb70216ae99",
+    "tests/run-smoke.mjs": "f35ef7536061c976bad4dcd77e0f262bf9d2ccdc3ce6907f836d02dde516737a"
+  },
+  "isolation": "Built and tested in /var/folders/41/07yyp3_12jddkkthmflqkbgw0000gn/T/omp-tree-i4sn6xil; running checkout dist was not replaced. All test/build handles exited 0. Snapshot removed after cwd process check.",
+  "ci": "Added native tree projection comparison to smoke and Mac/Windows rendering workflow; remote jobs not run in this turn.",
+  "fullSmoke": "Current manifest 112. Latest full run remains historical 102/110 in omp-smoke-ask.json; targeted results do not modify it.",
+  "remaining": [
+    "Tree snapshot metadata, chat sibling controls, historical branch counts",
+    "Native Task storage boundary and other host migration gaps",
+    "Windows original-task matrix and packaged cross-platform acceptance"
+  ],
+  "windowsVerified": false,
+  "desktopInstallerBuilt": false,
+  "published": false
+}

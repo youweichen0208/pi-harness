@@ -2,19 +2,26 @@
  * commands protocol over WebSocket (no browser needed).
  * Run:  npm run build:server && node terminal-smoke-test.mjs */
 import { spawn, spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, realpathSync } from "node:fs";
+import { mkdtempSync, rmSync, realpathSync, mkdirSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { createRequire } from "node:module";
+import { dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import WebSocket from "ws";
-import { scrubHostEnv } from "./lib/test-env.mjs";
+import { scrubHostEnv, testEnv } from "./lib/test-env.mjs";
 
 scrubHostEnv();
+// The attachment admission check must never select a real provider account.
+for (const key of Object.keys(process.env)) if (/API_KEY|TOKEN|SECRET|PASSWORD|^ANTHROPIC_|^OPENAI_/.test(key)) delete process.env[key];
 
 const PORT = 20000 + Math.floor(Math.random() * 10000);
 const workdir = mkdtempSync(join(tmpdir(), "piweb-term-"));
 const dataDir = mkdtempSync(join(tmpdir(), "piweb-term-data-"));
-const agentDir = join(dataDir, "agent");
+const agentDir = join(dataDir, "omp", "agent");
+mkdirSync(agentDir, { recursive: true });
+writeFileSync(join(agentDir, "config.yml"), JSON.stringify({ skills: { enabled: false } }));
 process.env.PORT = String(PORT);
 process.env.PI_WEB_CWD = workdir;
 process.env.PI_WEB_DATA_DIR = dataDir;
@@ -138,7 +145,8 @@ async function main() {
 	console.log("ready received");
 	await sleep(300);
 	check("agent has no WebUI terminal tools", !snapshotReply?.tools?.some(name => name.startsWith("terminal_")));
-	check("agent has no bundled todo", !snapshotReply?.tools?.includes("todo") && !snapshotReply?.tools?.includes("task_plan"));
+	check("agent exposes native OMP tools", snapshotReply?.tools?.includes("task") && snapshotReply?.tools?.includes("read"));
+	check("retired harness plan tool stays absent", !snapshotReply?.tools?.includes("task_plan"));
 
 	// -- commands: list (fresh dir -> empty), save, list again -----------------
 	send({ type: "list_commands" });
@@ -208,58 +216,23 @@ async function main() {
 		);
 	}
 
-	// -- persisted sessions: shared pi session files appear in the list --------
-	// The CLI stores sessions in <agentDir>/sessions/--<cwd-sanitized>--; fabricate
-	// one there and check list_sessions discovers the same persisted file.
+	// -- persisted OMP history: seed through the shipped native SDK ------------
 	{
-		const { writeFileSync, mkdirSync } = await import("node:fs");
-		const safePath = `--${workdir.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-")}--`;
-		const tuiDir = join(agentDir, "sessions", safePath);
-		const tuiFile = join(
-			tuiDir,
-			"2026-08-04T00-00-00-000Z_tui-smoke-test.jsonl",
-		);
-		mkdirSync(tuiDir, { recursive: true });
-		writeFileSync(
-			tuiFile,
-			[
-				JSON.stringify({
-					type: "session",
-					version: 3,
-					id: "tui-smoke-test",
-					timestamp: "2026-08-04T00:00:00.000Z",
-					cwd: workdir,
-				}),
-				JSON.stringify({
-					type: "message",
-					id: "m1",
-					parentId: null,
-					timestamp: "2026-08-04T00:00:01.000Z",
-					message: {
-						role: "user",
-						content: [{ type: "text", text: "TUI 会话标题" }],
-						timestamp: 1722700801000,
-					},
-				}),
-			].join("\n") + "\n",
-		);
-		// Clean up the fabricated session on exit (best effort).
-		process.on("exit", () => {
-			try {
-				rmSync(tuiFile, { force: true });
-				rmSync(tuiDir, { recursive: true, force: true });
-			} catch {
-				/* ignore */
-			}
-		});
+		const sessionDir = join(dataDir, "omp", "sessions", "chat", createHash("sha256").update(realpathSync(workdir)).digest("hex").slice(0, 24));
+		const require = createRequire(import.meta.url);
+		const bun = join(dirname(require.resolve("bun/package.json")), "bin", "bun.exe");
+		const seeded = spawnSync(bun, ["--eval", `
+			import { SessionManager } from '@oh-my-pi/pi-coding-agent';
+			const session = SessionManager.create(process.env.TEST_OMP_CWD, process.env.TEST_OMP_SESSIONS);
+			session.appendMessage({role:'user',content:[{type:'text',text:'OMP terminal history'}],timestamp:Date.now()});
+			session.appendMessage({role:'assistant',content:[{type:'text',text:'Persisted fixture'}],api:'anthropic-messages',provider:'fixture',model:'fixture',stopReason:'stop',timestamp:Date.now(),usage:{input:0,output:0,cacheRead:0,cacheWrite:0,totalTokens:0,cost:{input:0,output:0,cacheRead:0,cacheWrite:0,total:0}}});
+			await session.flush();
+			console.log(session.getSessionFile());
+		`], { cwd: REPO, encoding: "utf8", timeout: 30000, env: testEnv({ ELECTRON_RUN_AS_NODE: undefined, TEST_OMP_CWD: realpathSync(workdir), TEST_OMP_SESSIONS: sessionDir }) });
+		if (seeded.status !== 0) throw Error(`Cannot seed OMP history: ${seeded.stderr}`);
+		const sessionFile = realpathSync(seeded.stdout.trim());
 		send({ type: "list_sessions" });
-		await sleep(1000);
-		check(
-			"persisted session appears in the conversation list",
-			sessionsReply?.some(
-				(s) => s.path === tuiFile && s.firstMessage === "TUI 会话标题",
-			) ?? false,
-		);
+		check("persisted OMP session appears in the conversation list", await waitFor(() => sessionsReply?.some(s => realpathSync(s.path) === sessionFile && s.firstMessage === "OMP terminal history")));
 	}
 
 	// -- plain terminal --------------------------------------------------------

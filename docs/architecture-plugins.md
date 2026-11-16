@@ -1,4 +1,8 @@
+> OMP 迁移更新（2026-11-15）：生产 MCP 已使用 OMP 原生配置路径、文件锁/校验/写入和会话 manager。全局/项目 JSON 配置、脱敏、连接状态、工具目录及显式重载/重连见 [OMP 迁移契约](architecture-omp.md#原生-mcp-配置与连接2026-11-15)。下文 Pi/Codemode 配置和命令仅保留为原功能对照，不是当前生产入口；OMP OAuth 登录、取消、手动回调和清除登录已接入，详见该契约末尾 MCP OAuth 章节；逐服务配置表单已接入（见下文），配置导入已接入（见下文），连接诊断已接入（见末尾章节），工具请求及网关诊断仍未完整验收。工具级 OAuth challenge 的宿主处理器及原生参数传递缺口已有真实调用证据，见 [对照记录](review-data/omp-mcp-tool-auth-probe.json)；手动登录通过不代表该路径已完成。
+
 # 插件系统
+
+OMP 原生执行回归：`tests/codemode-mcp-test.mjs` 保留历史冒烟入口，使用模型请求里实际声明的 `write` 工具和原生提示词提供的 `xd://` MCP 路径，验证分片参数、成功／失败／图片结果回传；不强制把 MCP 改成旧式直接工具注册。`--browser` 验证图片操作与会话归属，Mac/Windows CI 纳入该门禁。本地结果不代表 Windows 已通过。旧 Codemode 的 mode、inlineBudget、QuickJS 脚本与 exposure/trust 设置属于已退休的 Pi 行为，原生 MCP 配置／项目范围／冲突／OAuth 和完整输出由现有 OMP 专项继续覆盖。
 
 > 可选界面组件，存放在 `<dataDir>/plugins/`。不装即不存在，attach 时热重扫。
 
@@ -149,3 +153,48 @@ Codemode 压缩回归：`tests/unit/codemode-history.test.ts` 使用真实 SDK �
 ### ChatGPT / Kimi 账号模型入口
 
 共用模型菜单在滚动区顶部显示 ChatGPT（openai）与 Kimi Code（kimi-coding）。账号状态来自原生 SDK 认证类型与不含敏感信息的凭据元数据，API Key 不标为账号登录。登录成功不切换模型、不发送聊天请求；目录不代表逐项验证订阅权限。已保存原生密钥时先确认替换，服务端再次检查；来源停用时提供管理入口。协议 v56 的 models 携带 accounts 状态摘要，login_provider 支持 confirmReplaceKey。
+
+## OMP 逐服务配置表单
+
+设置 › OMP 工具 › 原生 MCP 在运行连接之外，单独列出当前全局或项目文件的服务。表单支持 stdio／HTTP／SSE、命令、工作目录、JSON 参数／环境变量／headers、超时及启停；高级字段保留在原始 JSON 中。已有名称只读，避免把掩码移到另一服务的恢复位置。保存仍调用既有原生校验／文件锁／版本校验接口，不自动启动、重载或重发模型任务。删除只移除本范围服务定义，保留原生全局规则与 OAuth 凭据；其他来源可能在重载后再次出现。
+
+表单只改明确编辑的配置，保留未知字段和同一位置的凭据掩码。全局启停显示原生优先级：disabledServers 优先于 enabledServers，再考虑服务的 enabled。明确改变全局启停会同步该名称的两份列表；选择原生默认会删除该服务的 enabled 与两份全局覆盖。未改变启停而编辑其它字段时不改规则。项目只写服务 enabled，不能绕过全局停用或强制启用，也不打开被禁用的项目配置。列表配置与当前会话实际连接状态分别展示。
+
+表单与 JSON 编辑互斥；读取、关闭设置、切页或切范围保护未保存内容，窗口关闭使用 beforeunload。轮询只更新运行状态；冲突、原生校验或网络失败保留输入。保存或取消后焦点返回原按钮。JSON 字段使用明确的可访问名称，避免 textarea 内容进入标签定位；按钮／控件至少 44px、输入文字 16px，沿用现有主题变量。
+
+配置投影只开放已知的连接类型、请求 ID／env／header 策略枚举，以及布尔 enabled/instructions 和非负有限 timeout。服务名称含 env/secret/token 不再把这些公共元数据变成掩码；未知枚举值、连接字符串、参数、凭据与未知字段仍隐藏。失败复现和最终回归见 [表单验证记录](review-data/omp-mcp-form.json)。该功能不解决工具级 OAuth challenge 缺口，未宣称 Windows／安装包验收。
+
+## OMP MCP 配置导入
+
+设置中的「导入 MCP 配置」接受严格 JSON：原生／通用 `mcpServers`、VS Code `servers`、OpenCode v1 `mcp` 服务表和 v2 `mcp.servers`。仅导入服务，不导入其它产品设置或已保存的登录记录。先预览服务名单，再明确保存到当前范围；保存走同一原生版本校验／文件锁接口，不连接服务、不重发模型任务。旧服务、未知字段与同位置凭据掩码保持原样。项目保存不改全局文件，仍受原生项目配置开关和全局规则约束。
+
+转换将 OpenCode local 的命令数组拆成 command/args，environment 改为 env，remote 改为 HTTP；v2 disabled 取反为 enabled。VS Code `${env:VAR}` 与 OpenCode `{env:VAR}` 转为 OMP `${VAR}`，原生 `${VAR:-default}` 保留；浏览器不展开变量，由 OMP worker 环境读取；宿主已有隔离规则仍剥除 PI_／OMP_ 前缀，外部变量应使用普通业务名称。只有 URL 且缺省类型时识别为 HTTP。原生源文件的启停列表折叠到所导入服务的 enabled，禁用优先；引用导入集合外名称的源列表拒绝导入，避免丢失发现规则。目标范围已有同名定义或启停规则时整批拒绝，不覆盖。
+
+不自动转换输入提示、envFile、工作区／文件／配置引用、OpenCode 显式 OAuth、timeout 对象、codemode/protocol/pool，以及未知字段。OMP 插件专用 envPolicy/envLiteralKeys/headerPolicy 虽在 SDK 类型里，但当前普通配置加载器不保留，故导入拒绝；已有文件的这些字段仍由原始编辑器保留。原生 oauth 客户端配置可导入，auth 中的外部凭据引用不导入。错误说明不回显配置值。用户须核对目标主机路径和认证设置；不声称任意客户端配置完全等价。
+
+输入限制 1 Mi 字符、合并后至多 256 个服务、语法树深度 32；重复 JSON 键、`__proto__` 键、无效连接及脱敏占位符整批拒绝。导入草稿与表单／原始编辑器互斥，轮询不改输入；冲突保留草稿，切范围／重新读取／设置导航／实际刷新沿用未保存保护。保存或取消清除输入并归还焦点，不把输入存入 localStorage。沿用逐服务表单的主题、窄屏和可访问控件。
+
+格式依据：[VS Code 配置参考](https://code.visualstudio.com/docs/agents/reference/mcp-configuration)、[OpenCode MCP 配置](https://opencode.ai/docs/mcp-servers)，以及锁定的 OMP 18.20.0 `discovery/builtin.ts`、`discovery/helpers.ts`、`mcp/config.ts`。回归与限制见 [导入记录](review-data/omp-mcp-import.json)。
+
+## OMP OAuth 外部配置并发缺口
+
+授权流程打开后，外部编辑器或另一会话仍可更改配置。原生 helper 在需要持久化 auth 时，把流程开始时的定义交给原生 writer；writer 虽锁住读改写，却未比较所选服务的旧版本，因此同一服务的新字段会丢失。其他服务和文件根字段保留。修正前，定义本身不需写回时，文件编辑被保留，但宿主仍用旧选择重连并显示 complete，包括服务已停用或换地址。两条问题均以真实本地 PKCE、明确的授权中编辑时点重复复现，见 [诊断记录](review-data/omp-mcp-auth-conflict.json)。
+
+协议 v77 已在重连前重新核对生效定义与来源；这不等于修复原生写回覆盖。完整并发保护需要原生 writer 锁内比较预期定义或公开 prepare/commit 接口。现有 onFlowComplete 在凭据写入后、配置 writer 前同步调用，不能提供跨后续写入的原子校验。不能声称提前轮询／检查等于 CAS，也不能伪造 ACP 所有权来跳过默认持久化。冲突时凭据可能已保存，不能暗示已回滚或盲删共享凭据。
+
+协议 v77 的重连保护使用公开 Settings.loadReadOnly、findMcpServerForAuth 和 loadAllMCPConfigs，不重写原生发现／启停优先级、不加载模型或执行工具。原生流程自己的 auth 写回与 undefined 字段省略按返回 outcome 比较，其他服务修改不会阻止正常登录。文件被删、改地址、停用、增加项目覆盖、全局禁用、项目开关变化以及扩展来源配置变化会阻止自动重连；读取异常同样要求用户重载。检查后仍核对 Stop／dispose。configuration_changed 状态与普通授权失败分开，说明凭据可能已保存，不删除凭据或声称回滚；既有连接仍遵循显式 reload 的原生规则。
+
+这是一项重连前检查，不是覆盖任意编辑器及后续网络操作的事务。原生写回若已丢失外部修改，事后检查不能恢复它。见 [最终重连验证](review-data/omp-mcp-auth-reconnect.json) 与仍失败的 same-server 诊断。
+
+官方 npm 的 18.20.2 包已校验 SHA-512 并与当前安装的 18.20.0 比较：oauth-reauth.ts、config-writer.ts、manager.ts 均逐字节相同，因此该发布版本不包含上述写回 CAS 或工具级 challenge 参数修复；没有据此更改依赖。见 [上游核验记录](review-data/omp-oauth-upstream.json)。这仅是发布源码比较，不是新版本运行验收。
+
+
+## OMP MCP 连接诊断（协议 v78）
+
+设置中的当前连接显示原生失败类别及 HTTP 状态码；下方「连接诊断」默认折叠，以最新在前显示最近 100 条连接事件。每个 worker 独立保存记录，显示移出的记录数量；读取不连接服务器、不调用模型、不影响配置草稿。停止后不重开 worker，重启清空记录。重新连接成功后当前错误消失，历史失败保留。删除服务后保留历史事件，当前服务列表仍由原生 manager 决定。
+
+实现使用公开 MCPManager.addConnectionStatusListener 和一次性的 waitForStartup(1)。后者仅补齐监听安装前的启动状态，标记为「启动快照」，时间为观察时间；不能传入表示无限等待的 0。Stop／输入结束时解除监听。原生事件中被字符串化的错误由 normalizeMCPTransportError 分类；结构化信息已丢失时可能为 unknown，不推测不存在的细节。
+
+浏览器只接收有界服务名称、事件序号／观察时间、原生事件类型、传输类别、失败枚举及有效 HTTP 状态码。不会下发原始错误正文、response body、traceId、命令、环境变量或连接参数；凭据无需依赖文本正则脱敏。诊断不持久化、不进入模型上下文、不自动重试。这不是工具请求追踪或原始网关／DeepSeek 请求对照。
+
+验证见 [诊断记录](review-data/omp-mcp-diagnostics.json)：实际本地 HTTP 失败／恢复、初始状态、慢启动、跨对话隔离、Stop／重开、有界缓冲及监听清理，中英文窄屏、配置／OAuth 关联回归。Windows、安装包与原故障任务仍待验收。

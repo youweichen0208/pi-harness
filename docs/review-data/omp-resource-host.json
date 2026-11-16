@@ -1,0 +1,97 @@
+{
+  "date": "2026-11-16",
+  "status": "Host component/extension replacements verified locally; full migration remains active",
+  "protocol": 75,
+  "omp": "18.20.0",
+  "bun": "1.4.4",
+  "platform": "darwin-arm64",
+  "changes": [
+    "Retain component-updates-test smoke entry with real isolated-registry native installation, upgrade, disabled-state preservation, factory-error rollback and unavailable-registry failure.",
+    "Retain extensions-test smoke entry with real host HTTP/WS auth, owner scope, parallel reads, dual-client source CAS, live module toggles, explicit reload, native skill settings and stopped-worker/peer isolation.",
+    "Replace old synthetic extensions-update-browser entry with the real component-update scenario.",
+    "Remove five unreachable Pi extension/update pages, their obsolete component-update wire types and frontend state; protocol bumped to 75.",
+    "Mac/Windows CI gains both browser modes; native package management and application updater remain separate."
+  ],
+  "retiredFrontend": [
+    "ComponentUpdates.tsx",
+    "ComponentUpdatesPanel.tsx",
+    "ExtensionsPanel.tsx",
+    "ExtensionCatalogList.tsx",
+    "ExtensionJobResult.tsx"
+  ],
+  "verification": {
+    "isolatedBuild": {
+      "exitCode": 0,
+      "session": 65707,
+      "log": "/tmp/omp-resource-host-build.log"
+    },
+    "typecheck": {
+      "exitCode": 0,
+      "session": 29173,
+      "log": "/tmp/omp-resource-host-types.log"
+    },
+    "unit": {
+      "exitCode": 0,
+      "files": 171,
+      "passed": 1060,
+      "skipped": 1,
+      "session": 17232,
+      "log": "/tmp/omp-resource-host-units.log"
+    },
+    "updateBrowser": {
+      "exitCode": 0,
+      "session": 7790,
+      "log": "/tmp/omp-resource-host-updates-final.log"
+    },
+    "extensionBrowser": {
+      "exitCode": 0,
+      "session": 75878,
+      "log": "/tmp/omp-resource-host-extensions.log"
+    },
+    "electronNodeHost": {
+      "exitCode": 0,
+      "session": 63672,
+      "log": "/tmp/omp-resource-host-electron.log",
+      "scope": "Electron Node server process; not an installer acceptance test"
+    },
+    "fullSmoke": "docs/review-data/omp-smoke-resources.json: 112/112, exit 0, no skips",
+    "checks": [
+      "Protocol v75 synchronized",
+      "308 test environments",
+      "129 production sources and emitted-output boundary",
+      "Design check via npm test",
+      "CI YAML parsed using bundled Bun",
+      "git diff --check"
+    ],
+    "sourceParity": {
+      "files": 963,
+      "fingerprintSha256": "2dedf5949365cedfd0ef76421e5b77b9cadf963cb51906340b09bd1c77097e2c"
+    },
+    "screenshots": [
+      "tests/scratch/omp-extension-host-narrow.png",
+      "tests/scratch/omp-updates-light-1440.png",
+      "tests/scratch/omp-updates-dark-1440.png",
+      "tests/scratch/omp-updates-light-390.png",
+      "tests/scratch/omp-updates-dark-390.png"
+    ]
+  },
+  "testFailureResolved": "Initial component browser run reached English reload at a 390px viewport where the navigation Settings button was hidden. Restoring the wide viewport before language reload matches existing responsive navigation; the native update, rollback, refresh and narrow-layout assertions were retained and final run passed.",
+  "boundary": "Browser package operations forward only the package endpoint to production routes with an isolated native config-root and real SDK runner, as the existing native package browser suite does. No real user plugin installation or external registry is used.",
+  "operations": {
+    "checkoutDistWritten": false,
+    "runningApplicationReplaced": false,
+    "sdkPatched": false,
+    "published": false,
+    "oldDesktopPidStillRunning": 62015,
+    "isolatedCandidateRemoved": true,
+    "cleanupCheck": "All tracked execution sessions terminal; ps command lines and lsof cwd contained no candidate references before removal."
+  },
+  "remaining": [
+    "Native tree navigation preview count and custom-summary contract",
+    "Native Task storage guard and child-output coverage",
+    "Other MCP/auth/proxy/recovery gaps recorded in architecture-omp.md",
+    "Remaining old desktop histories while old application is running",
+    "Performance and real database/provider acceptance",
+    "Windows original task matrix and current cross-platform packages"
+  ]
+}

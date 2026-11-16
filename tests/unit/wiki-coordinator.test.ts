@@ -40,3 +40,34 @@ it("rejects a reused runtime ID after server restart and ignores expired operati
 	const pending = expect(coordinator.waitSettled("c1", 30000, "original")).rejects.toThrow(/changed/);
 	coordinator.observe("c1", false, true, "replacement"); await pending;
 });
+
+it("waits through a provisional OMP identity when HTTP finishes before its snapshot", async () => {
+	const coordinator = new WikiCoordinator(), operation = coordinator.begin()!;
+	const source = { cwd: "/wiki", conversationId: "old", sessionId: "old-native" };
+	coordinator.observe("old", false, true, "old-native");
+	let finished = false;
+	const pending = coordinator.waitForTarget({ conversationId: "new", sessionId: "new-native" }, source, operation).then(() => { finished = true; });
+	coordinator.observe("new", true, true, "new"); await Promise.resolve(); expect(finished).toBe(false);
+	coordinator.observe("new", false, false, "new-native"); await Promise.resolve(); expect(finished).toBe(false);
+	coordinator.observe("new", false, true, "new-native"); await pending; expect(finished).toBe(true);
+	operation.release();
+});
+
+it("refuses an unrelated conversation or an expired Wiki navigation while awaiting a snapshot", async () => {
+	const coordinator = new WikiCoordinator(), source = { conversationId: "old", sessionId: "s" };
+	coordinator.observe("old", false, true, "s");
+	const first = coordinator.begin()!;
+	const changed = expect(coordinator.waitForTarget({ conversationId: "new", sessionId: "next" }, source, first)).rejects.toThrow(/changed/);
+	coordinator.observe("unrelated", false, true, "other"); await changed; first.release();
+	coordinator.observe("old", false, true, "s");
+	const second = coordinator.begin()!;
+	const expired = expect(coordinator.waitForTarget({ conversationId: "new", sessionId: "next" }, source, second)).rejects.toThrow(/changed/);
+	second.release(); await expired;
+});
+
+it("does not accept a wrong native identity after the target snapshot deadline", async () => {
+	vi.useFakeTimers(); const coordinator = new WikiCoordinator(), operation = coordinator.begin()!;
+	coordinator.observe("new", false, true, "wrong-native");
+	const rejected = expect(coordinator.waitForTarget({ conversationId: "new", sessionId: "expected" }, { conversationId: "old" }, operation)).rejects.toThrow(/timed out/);
+	await vi.advanceTimersByTimeAsync(5000); await rejected; operation.release();
+});

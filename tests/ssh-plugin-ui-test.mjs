@@ -10,12 +10,13 @@
  *
  * 运行：先 npm run build:server，再 node tests/ssh-plugin-ui-test.mjs
  */
+import { once } from "node:events";
 import { CHROME_PATH } from "./lib/chrome.mjs";
 import { portUp } from "./lib/port-utils.mjs";
 import { startMockSsh, ensurePluginSsh2Dep } from "./lib/mock-ssh.mjs";
 import { chromium } from "playwright-core";
 import { spawn } from "node:child_process";
-import { cpSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -24,6 +25,7 @@ import { testEnv } from "./lib/test-env.mjs";
 const PORT = 8965;
 const SSH_PORT = 22965;
 const URL = `http://localhost:${PORT}`;
+if (await portUp(PORT) || await portUp(SSH_PORT)) throw Error("Fixture port occupied; refusing to touch its owner");
 const REPO = realpathSync(new globalThis.URL("..", import.meta.url).pathname.replace(/^\/(?=[A-Za-z]:)/, ""));
 
 let failures = 0;
@@ -40,8 +42,13 @@ mkdirSync(plugDst, { recursive: true });
 cpSync(join(REPO, "dev/plugins/vscode-editor/manifest.json"), join(plugDst, "manifest.json"));
 cpSync(join(REPO, "dev/plugins/vscode-editor/index.mjs"), join(plugDst, "index.mjs"));
 cpSync(join(REPO, "dev/plugins/vscode-editor/client"), join(plugDst, "client"), { recursive: true });
-ensurePluginSsh2Dep(plugDst, join(REPO, "dev/plugins/vscode-editor"));
+ensurePluginSsh2Dep(plugDst);
 
+const agentDir = join(dataDir, "omp", "agent");
+mkdirSync(agentDir, { recursive: true });
+writeFileSync(join(agentDir, "models.yml"), JSON.stringify({ providers: { fixture: { api: "openai-completions", baseUrl: "http://127.0.0.1:1", apiKey: "unused", models: [{ id: "fixture" }] } } }));
+writeFileSync(join(agentDir, "config.yml"), JSON.stringify({ skills: { enabled: false }, cacheWarming: { enabled: false } }));
+let browser;
 let server = null;
 let sshServer = null;
 try {
@@ -55,15 +62,15 @@ try {
 	server.stderr.on("data", () => {});
 	for (let i = 0; i < 60 && !(await portUp(PORT)); i++) await sleep(250);
 	if (!(await portUp(PORT))) throw new Error("server did not start");
+	if ((await (await fetch(`${URL}/api/health`)).json()).pid !== server.pid) throw Error("Fixture server PID mismatch");
 
-	const browser = await chromium.launch({ executablePath: CHROME_PATH, headless: true });
+	browser = await chromium.launch({ executablePath: CHROME_PATH, headless: true });
 	const page = await browser.newPage();
 	page.on("pageerror", (e) => console.error("[pageerror]", e.message));
 	await page.goto(URL);
 
 	// -- 1. 插件 tab 出现并切换 -------------------------------------------------
-	await page.waitForSelector("button.plugin-tab", { timeout: 20000 });
-	await page.locator("button.plugin-tab", { hasText: "编辑器" }).first().click();
+	await page.getByRole("tab", { name: /编辑器/ }).click({ timeout: 20000 });
 	await page.waitForSelector(".vsc", { timeout: 15000 });
 	check("插件视图挂载", true);
 
@@ -137,16 +144,17 @@ try {
 	const phVisible = await page.locator(".vsc-empty").isVisible().catch(() => false);
 	check("断开后回到空视图", phVisible);
 
-	await browser.close();
 } catch (err) {
 	failures++;
 	console.error("test error:", err);
 } finally {
-	try {
-		sshServer?.close();
-		server?.kill("SIGTERM");
-	} catch {}
-	await sleep(400);
+	await browser?.close();
+	if (server?.pid && server.exitCode === null && server.signalCode === null) {
+		const exit = once(server, "exit"); server.kill("SIGTERM");
+		const force = setTimeout(() => { failures++; server.kill("SIGKILL"); }, 15000);
+		try { await exit; } finally { clearTimeout(force); }
+	}
+	sshServer?.close();
 	rmSync(dataDir, { recursive: true, force: true });
 }
 console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILURE(S)`);

@@ -1,0 +1,75 @@
+{
+  "status": "OMP path controls locally verified; full migration remains incomplete",
+  "completedAt": "2026-11-15T15:29:57.912307+00:00",
+  "platform": "darwin-arm64",
+  "omp": "18.20.0",
+  "bun": "1.4.4",
+  "protocol": 72,
+  "changes": [
+    "Restore personal extensions directory, native module reveal and installed package/Marketplace directory access. Desktop opens validated directories or reveals files; browser copies the freshly resolved server path.",
+    "Use current client/cwd/conversation ownership, recheck after asynchronous package lookup, accept only discovered/installed identities and refuse arbitrary paths.",
+    "Directory metadata does not create folders; explicit user action prepares only the fixed OMP extensions directory, preserving conflicting files. Quiesce blocks preparation; stopped agent stays stopped.",
+    "Old Pi directory IPC now rejects without contacting the retired HTTP endpoint. Added real Electron directory regression to Mac/Windows CI."
+  ],
+  "evidence": {
+    "oldInterface": "Source inspection found Electron still called retired /api/extensions open-info. A later comparison against the unchanged checkout build timed out waiting for the missing personal-folder copy entry. The isolated candidate passed.",
+    "nativePackages": "Real isolated native package workers resolve installed and linked directories without network access or factory execution, reject forged targets and recheck a conversation changed during delayed lookup.",
+    "desktop": "Real Electron with temporary Unicode data directory and empty external-tool PATH; only OS file-manager calls intercepted. Covers missing/colliding directories, preserved files, keyboard open, module reveal, missing auth, owner/Origin guards, old IPC rejection and stopped-worker isolation.",
+    "browser": "Real personal-directory clipboard invocation, narrow light/dark screenshots, complete resource/source editing regression; production package routes with isolated native workers cover linked package and Marketplace user/project paths, forged paths/scopes and clipboard invocation.",
+    "quiesce": "Real existing-task drain regression also proves directory reads remain available and explicit directory preparation is rejected without creating files."
+  },
+  "verification": {
+    "build": "Full npm run build passed in isolated snapshot",
+    "typecheck": "Workspace npm run typecheck passed",
+    "unit": {
+      "files": 169,
+      "passed": 1055,
+      "skipped": 1
+    },
+    "integrationPassed": [
+      "extensions-directory-desktop-test",
+      "omp-resources-desktop-test --browser",
+      "omp-packages-test",
+      "omp-packages-browser-test",
+      "quiesce-test"
+    ],
+    "protocol": "v72 sync passed",
+    "engineBoundary": "126 production files and compiled output passed",
+    "testEnvironment": "306 scripts passed",
+    "ciYaml": "passed",
+    "diffCheck": "passed"
+  },
+  "isolation": "Existing checkout service PID 23786 remained running. Identical production sources were built and tested in /tmp/omp-paths-k59gmotv; checkout dist was not replaced. Temporary build removed after verification.",
+  "sourceSha256": {
+    "server/omp/routes.ts": "0a2c508cfb715ddfc445529410aebbd76e05da2f958c71a4023968fe7d037ab8",
+    "server/omp/chat-service.ts": "46e275bba7b4a38cb8657e31b954e0c25469288ce5bacb4a2977bd61608dad20",
+    "server/protocol.ts": "69e70f52fb2c10646d6fdd177b078bd762ef9b8416ddeb61c2ea22857aaa86a2",
+    "server/protocol-version.ts": "f55b4763d73fdd05814398ec3796420a9f8e224a19b9cd8417321ced1d1d2e6d",
+    "web/src/protocol-version.ts": "1fd51ef1271957f7699027240fc84aa43e72222f00aac223cc9f700269a03972",
+    "web/src/desktop.ts": "f7e49e1fdda8728eb4195b0ca324681f6bd6fc739d4477c6523c873697ed134f",
+    "web/src/components/OmpPathButton.tsx": "5a5622cc10ceafb43260d2d490cb80f8f840fa6a3cb0dfe9c6a65c9963a8e862",
+    "web/src/components/OmpResourcesPanel.tsx": "1eb061fc6327b6d3fdcfea0c878a8366fd125a1e40782bf832d417df08470d16",
+    "web/src/components/OmpExtensionPanel.tsx": "713376b490da21093458a307b1e0616c8bfb92f9ddc884a5b58b5b4a0c2ee8fa",
+    "web/src/components/OmpPackagesPanel.tsx": "d84872c966a839f41f3eebacad16db7e9a259ebb1db58dea3975eeb7e9dcdd64",
+    "web/src/components/OmpMarketplacePanel.tsx": "8280d4eb4babe750b584c10aed70b093532cd9c71737fa49bd84b3385e84174e",
+    "web/src/styles.css": "0680f0a570abb429f70cdc2190053931b514b5b2340fca77d2c51198657b0505",
+    "web/src/i18n.tsx": "5d98f9142778a3f78fc21aec6ea02ff502d6bb77f43f53a58e911eb1ea13b1d7",
+    "electron/main.mjs": "4d4b71bfc3d9a9029161bc5eba7e310034aec1fc52d248821debaf4ae9e919dc",
+    "electron/preload.cjs": "557aa2b976aee45f1d2a029dff4a40eb33541a1539b0fe407b02015ad89bcd31",
+    "tests/extensions-directory-desktop-test.mjs": "ed9323d648cfeb03bc3c72a9107c9a4c42f6d7dbd10d702d9c63b8c3731ef26b",
+    "tests/omp-resources-desktop-test.mjs": "2e5b70fbdddc6c0fece0758cc02604a337213ee41ffbe68106aea674a46b206e",
+    "tests/omp-packages-test.mjs": "ceff36c440d62b2c55a29deed385041d863663ced2782b6018347b8b68235da4",
+    "tests/omp-packages-browser-test.mjs": "be673b93d1b5587b2dd3a0e99a8b8ad34c17cd14a158221bcb8cc6e3d8f51710",
+    "tests/quiesce-test.mjs": "601d65187c85c0c169eb08fe2ab6c7ec43494b5d824a78b967771505e9e7b9a9",
+    ".github/workflows/ci.yml": "7e339338607888b52566c31777771bf9732a058751cc4712a9ade9158c94a9b4"
+  },
+  "fullSmoke": "Last complete run remains historical 102/110 in omp-smoke-ask.json; current 111-test manifest has not been rerun. No totals inferred from targeted passes.",
+  "remaining": [
+    "Review and port remaining legacy host tests and native replacements.",
+    "Native Task internal history guard, complete task outputs/tree metadata, recovery and authentication gaps.",
+    "Old desktop history cleanup, Windows original-task and packaged cross-platform acceptance."
+  ],
+  "desktopInstallerBuilt": false,
+  "windowsVerified": false,
+  "published": false
+}

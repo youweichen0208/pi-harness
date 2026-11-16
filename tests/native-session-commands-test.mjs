@@ -1,3 +1,169 @@
-// Exercise native session semantics in CI without requiring a browser download.
-process.argv.push("--protocol-only");
-await import("./new-chat-context-test.mjs");
+/** Product /new uses OMP's public session transition, never an LLM prompt. */
+import assert from 'node:assert/strict';
+import { createServer } from 'node:http';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, realpathSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import lockfile from 'proper-lockfile';
+import { OmpChatService } from '../dist/server/omp/chat-service.js';
+import { createOmpHistory } from './lib/omp-history-fixture.mjs';
+import { listenIsolated } from './lib/isolated-server.mjs';
+import { scrubHostEnv } from './lib/test-env.mjs';
+
+scrubHostEnv();
+for (const key of Object.keys(process.env)) if (/API_KEY|TOKEN|SECRET|PASSWORD|^ANTHROPIC_|^OPENAI_/.test(key)) delete process.env[key];
+const root = realpathSync(mkdtempSync(join(tmpdir(), 'omp-session-commands-')));
+const data = join(root, 'data'), agent = join(data, 'omp/agent'), cwd = join(root, 'project');
+for (const path of [agent, cwd, join(agent, 'extensions')]) mkdirSync(path, { recursive: true });
+const cancel = join(root, 'cancel-new');
+const holdNew = join(root, 'hold-new'), enteredNew = join(root, 'entered-new');
+writeFileSync(join(agent, 'extensions/cancel-new.js'), `import { existsSync, writeFileSync } from 'node:fs'; export default api => api.on('session_before_switch', async event => {
+ if (event.reason !== 'new') return;
+ if (existsSync(${JSON.stringify(cancel)})) return { cancel: true };
+ if (existsSync(${JSON.stringify(holdNew)})) { writeFileSync(${JSON.stringify(enteredNew)}, 'entered'); while (existsSync(${JSON.stringify(holdNew)})) await new Promise(resolve => setTimeout(resolve, 20)); }
+});`);
+let calls = 0, service, emptyService, holdModel = false, releaseModels;
+const held = new Set();
+const wait = async (predicate, label) => { for (let i = 0; i < 800; i++) { if (predicate()) return; await new Promise(resolve => setTimeout(resolve, 25)); } throw Error('Timed out: ' + label); };
+const provider = createServer(async (req, res) => {
+	for await (const _ of req) {} calls++;
+	res.writeHead(200, { 'content-type': 'text/event-stream' });
+	const emit = (type, data) => res.write(`event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`);
+	emit('message_start', { message: { id: 'fixture', type: 'message', role: 'assistant', model: 'fixture', content: [], usage: { input_tokens: 10, output_tokens: 0 } } });
+	if (holdModel) await new Promise(resolve => { const release = () => { held.delete(release); resolve(); }; held.add(release); res.once('close', release); });
+	if (res.destroyed) return;
+	emit('content_block_start', { index: 0, content_block: { type: 'text', text: '' } });
+	emit('content_block_delta', { index: 0, delta: { type: 'text_delta', text: 'Unexpected model call.' } });
+	emit('content_block_stop', { index: 0 });
+	emit('message_delta', { delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 4 } });
+	emit('message_stop', {}); res.end();
+});
+try {
+	const port = await listenIsolated(provider);
+	writeFileSync(join(agent, 'models.yml'), JSON.stringify({ providers: { fixture: { api: 'anthropic-messages', baseUrl: `http://127.0.0.1:${port}`, apiKey: 'fixture', models: [{ id: 'fixture', contextWindow: 100000 }] } } }));
+	writeFileSync(join(agent, 'config.yml'), JSON.stringify({ skills: { enabled: false }, retry: { enabled: false }, compaction: { enabled: false }, cacheWarming: { enabled: false } }));
+	const original = await createOmpHistory({ dataDir: data, cwd, title: 'Keep original history', messages: [{ role: 'user', content: 'Original question', timestamp: Date.now() }] });
+	service = new OmpChatService(cwd, join(data, 'client-state.json'));
+	const events = [], client = await service.attach('commands', event => events.push(event));
+	await client.setModel('fixture/fixture');
+	const originalBytes = readFileSync(original.sessionFile), session = client.session, conversation = client.conversationId;
+	await client.handle({ type: 'terminal_create', terminalId: 'keep-terminal', cwd, cols: 60, rows: 16 });
+	const terminals = client.getTerminalManager();
+	await wait(() => terminals.list().some(item => item.id === 'keep-terminal' && item.running), 'manual PTY starts');
+	const oldId = session.state.sessionId;
+	await client.prompt('/new extra', undefined, undefined, 'invalid-new');
+	assert.equal(client.queryPromptReceipt('invalid-new').receipt, 'rejected', 'reserved command arguments never become a model prompt');
+	assert.equal(session.state.sessionId, oldId);
+	await client.prompt('/new', undefined, undefined, 'first-new');
+	await session.refresh();
+	assert.notEqual(session.state.sessionId, oldId, '/new must create a new native session instead of becoming model text');
+	assert.equal(calls, 0, '/new must never invoke the provider');
+	assert.equal(client.session, session, 'same worker wrapper');
+	assert.equal(client.conversationId, conversation, 'same product conversation');
+	assert.equal(client.getTerminalManager(), terminals);
+	assert(terminals.list().some(item => item.id === 'keep-terminal' && item.running), 'native reset retains manual PTY');
+	assert(readFileSync(original.sessionFile).equals(originalBytes), 'old history stays byte-identical');
+	assert.equal(session.state.messages.length, 0);
+	assert.equal(session.state.stats.tokens.total, 0);
+	assert.equal(session.state.model.id, 'fixture');
+	assert(events.some(event => event.type === 'slash_commands' && event.commands.some(command => command.name === 'new')));
+	assert(events.some(event => event.type === 'prompt_result' && event.requestId === 'first-new' && event.ok && event.commandExecuted));
+	const newFile = session.state.sessionFile, newId = session.state.sessionId;
+	assert(existsSync(newFile), 'empty new session must survive restart');
+	await client.prompt('/new', undefined, undefined, 'first-new');
+	assert.equal(session.state.sessionId, newId, 'receipt dedup must not create a second session');
+	writeFileSync(cancel, 'cancel');
+	await client.prompt('/new', undefined, undefined, 'cancel-new');
+	assert.equal(session.state.sessionId, newId, 'native cancellation preserves session identity');
+	assert(events.some(event => event.type === 'prompt_result' && event.requestId === 'cancel-new' && !event.ok && !event.commandExecuted));
+	rmSync(cancel);
+	await client.handle({ type: 'terminal_kill', terminalId: 'keep-terminal' });
+	await client.abort(); await session.open();
+	assert.equal(session.state.sessionId, newId, 'Stop/reopen restores the empty new session');
+	await service.disposeAll();
+	service = new OmpChatService(cwd, join(data, 'client-state.json'));
+	const restored = await service.attach('commands', () => {});
+	assert.equal(restored.session.state.sessionId, newId, 'host restart restores new identity');
+	await restored.handle({ type: 'switch_session', path: original.sessionFile });
+	assert.equal(restored.session.state.sessionId, oldId);
+	assert(restored.session.state.messages.some(message => message.role === 'user'));
+	assert.equal(calls, 0);
+	// A native reset aborts only its own active run, not another product conversation.
+	const foreground = restored.session, foregroundId = restored.conversationId;
+	await restored.newChat(true);
+	const background = restored.session;
+	holdModel = true;
+	await restored.prompt('Background held task'); await wait(() => held.size === 1, 'background request');
+	await restored.switchConversation(foregroundId);
+	await restored.prompt('Foreground held task'); await wait(() => held.size === 2, 'foreground request');
+	writeFileSync(cancel, 'cancel');
+	await restored.prompt('/new', undefined, undefined, 'cancel-running');
+	assert(foreground.state.running && background.state.running, 'cancellation must leave both runs active');
+	rmSync(cancel);
+	const beforeReset = foreground.state.sessionId;
+	await restored.prompt('/new', undefined, undefined, 'reset-running');
+	assert.notEqual(foreground.state.sessionId, beforeReset);
+	assert(!foreground.state.running && background.state.running, 'reset stops only its owning run');
+	assert.equal(foreground.state.messages.length, 0);
+	assert.equal(calls, 2, 'reset and cancelled reset add no model calls');
+	for (const release of held) release();
+	await wait(() => !background.state.running, 'background settles normally');
+	await background.refresh(); assert(background.state.messages.some(message => message.role === 'assistant'));
+	// A transition owns navigation; Stop revokes it even inside an extension hook.
+	writeFileSync(holdNew, 'hold');
+	const pending = restored.prompt('/new', undefined, undefined, 'stopped-new');
+	await wait(() => existsSync(enteredNew), 'native transition hook');
+	await assert.rejects(restored.switchConversation(conversation), /conversation change/);
+	await restored.prompt('/new', undefined, undefined, 'concurrent-new');
+	assert.equal(restored.queryPromptReceipt('concurrent-new').receipt, 'rejected');
+	const stopStarted = Date.now();
+	await restored.abort(); await pending;
+	assert(Date.now() - stopStarted < 25000, 'Stop must close a stuck transition before the 30-second RPC acknowledgement deadline');
+	assert.equal(restored.queryPromptReceipt('stopped-new').receipt, 'unknown', 'unconfirmed side effects cannot be reported as rejection or success');
+	assert.equal(foreground.generation, undefined, 'Stop must not reopen the worker');
+	rmSync(holdNew);
+	await restored.prompt('/new', undefined, undefined, 'explicit-new-after-stop');
+	assert.equal(restored.queryPromptReceipt('explicit-new-after-stop').commandExecuted, true);
+	assert.equal(calls, 2);
+	// Starting an empty conversation is a local action even before model setup.
+	const emptyData = join(root, 'empty-data'); mkdirSync(join(emptyData, 'omp/agent'), { recursive: true });
+	writeFileSync(join(emptyData, 'omp/agent/config.yml'), JSON.stringify({ skills: { enabled: false }, cacheWarming: { enabled: false } }));
+	emptyService = new OmpChatService(cwd, join(emptyData, 'client-state.json'));
+	const empty = await emptyService.attach('empty', () => {}), emptyId = empty.session.state.sessionId;
+	assert.equal(empty.session.state.model, undefined);
+	await empty.prompt('/new', undefined, undefined, 'empty-new');
+	assert.notEqual(empty.session.state.sessionId, emptyId);
+	assert.equal(empty.queryPromptReceipt('empty-new').commandExecuted, true);
+	// A passive refresh takes the native models lock. Keep that real operation
+	// pending so /new must wait for it rather than collide with the worker gate.
+	const blockedRefresh = async () => {
+		await empty.session.refresh();
+		releaseModels = await lockfile.lock(join(emptyData, 'omp/agent/models.yml'), { realpath: false });
+		const refresh = empty.session.refresh();
+		await Promise.resolve();
+		await empty.session.requestIfOpen('harness_sync_skills');
+		await empty.session.requestIfOpen('get_state');
+		return { refresh };
+	};
+	for (let i = 0; i < 3; i++) {
+		const previous = empty.session.state.sessionId, { refresh } = await blockedRefresh();
+		const transition = empty.prompt('/new', undefined, undefined, `metadata-race-${i}`);
+		await new Promise(resolve => setTimeout(resolve, 200));
+		await releaseModels(); releaseModels = undefined;
+		await transition; await refresh;
+		assert.equal(empty.queryPromptReceipt(`metadata-race-${i}`).commandExecuted, true, 'passive config sync cannot reject /new');
+		assert.notEqual(empty.session.state.sessionId, previous);
+		assert(empty.session.generation, 'successful reset retains its worker');
+	}
+	const beforeQueuedStop = empty.session.state.sessionId, { refresh } = await blockedRefresh();
+	const queuedNew = empty.prompt('/new', undefined, undefined, 'stop-before-metadata');
+	await new Promise(resolve => setTimeout(resolve, 50));
+	const stopping = empty.abort();
+	await releaseModels(); releaseModels = undefined;
+	await stopping; await queuedNew; await refresh;
+	assert.equal(empty.session.generation, undefined);
+	await empty.session.open();
+	assert.equal(empty.session.state.sessionId, beforeQueuedStop, 'Stop revokes a transition waiting behind metadata before dispatch');
+	assert.equal(calls, 2, 'metadata serialization and cancellation add no model calls');
+	console.log('PASS native /new: no model calls, identity/reset, PTY/old history, dedup/cancellation, restart, background isolation, concurrent navigation, Stop and no-model setup');
+} finally { await releaseModels?.(); for (const release of held) release(); await emptyService?.disposeAll(); await service?.disposeAll(); provider.closeAllConnections(); await new Promise(resolve => provider.close(resolve)); rmSync(root, { recursive: true, force: true }); }

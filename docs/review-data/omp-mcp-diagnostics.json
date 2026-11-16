@@ -1,0 +1,112 @@
+{
+  "status": "Bounded MCP connection diagnostics implemented and verified locally; full migration remains incomplete",
+  "platform": "darwin-arm64",
+  "protocol": 78,
+  "omp": "18.20.0",
+  "bun": "1.4.4",
+  "node": "26.0.0",
+  "changes": [
+    "Public native connection listener plus one-time positive-budget startup snapshot. Per-worker observation timestamps and event origin distinguish snapshots from actual listener events.",
+    "Latest 100 records, dropped count, 1000-entry current-failure bound; Stop/input-end unsubscribe, no implicit probe or model call.",
+    "Native failure classification only; arbitrary server error bodies, trace IDs, connection strings and credentials are not projected. Unknown classifications remain unknown.",
+    "Current errors clear on connection progress/recovery while bounded history remains. Read-only browser polling preserves drafts and cannot revive stopped workers.",
+    "Protocol 78, bilingual failure help, collapsed diagnostic list with narrow-screen wrapping. No SDK changes."
+  ],
+  "verification": {
+    "build": {
+      "path": "/tmp/omp-mcp-diagnostics-build.log",
+      "exitCode": 0,
+      "sha256": "06e35b45a924d51387fa86bba1d3af6f8e3551b2a6957c0b8290c22effd3e29b"
+    },
+    "types": {
+      "path": "/tmp/omp-mcp-diagnostics-types.log",
+      "exitCode": 0,
+      "sha256": "0556841c12f15475af211ff4c6de3e8e9ff001ab2238b76584a5f7ef4afdf239"
+    },
+    "units": {
+      "path": "/tmp/omp-mcp-diagnostics-units.log",
+      "exitCode": 0,
+      "sha256": "05b358b2a5ab9725a9a20716ae7db5c465a28eeb20107f64e4c8424bd11a06aa"
+    },
+    "native": {
+      "path": "/tmp/omp-mcp-diagnostics-native.log",
+      "exitCode": 0,
+      "sha256": "004d6aa1b0df69fe8922546886403634ffe67a98c65c8201efaeb4a7755370e9"
+    },
+    "browser": {
+      "path": "/tmp/omp-mcp-diagnostics-browser.log",
+      "exitCode": 0,
+      "sha256": "6c1351de7de29c4fe51ea009fce695bf9de8580f524699ca2a0746028f7369be"
+    },
+    "related": {
+      "path": "/tmp/omp-mcp-diagnostics-related.log",
+      "exitCode": 0,
+      "sha256": "f61a34e25773abe47a7dcc3717820c2f00807cfd5cda3dbb13a130f87c542ccd"
+    },
+    "red": {
+      "path": "/tmp/omp-mcp-diagnostics-red.log",
+      "exitCode": 1,
+      "sha256": "17cd2a7c3c8e40f1141a426af40137f7c5b32580092d41d807c8638ea2ba53e5"
+    }
+  },
+  "coverage": [
+    "Actual HTTP 403 failure at native startup and reconnect; arbitrary echoed credential absent from status response.",
+    "Polling causes no network probes or duplicate records; recovery retains earlier failure and clears current failure.",
+    "Separate conversations, slow pending startup with bounded status response, Stop/no revival and worker-restart window reset.",
+    "Bun fixture: native error normalization, 1200 failure events, buffer and map bounds, newer event wins startup race, snapshot copy isolation and idempotent listener disposal.",
+    "Actual browser failure/recovery, narrow zh/en light/dark screenshots, history after reload and stopped-worker UI cleanup; existing imports/forms/drafts/OAuth/ownership regressions retained."
+  ],
+  "counts": {
+    "unitFiles": 173,
+    "unitPassed": 1075,
+    "unitSkipped": 1,
+    "relatedPassed": 5,
+    "relatedTotal": 5,
+    "currentSmokeEntries": 118,
+    "fullCurrentSmokeRun": false
+  },
+  "checks": [
+    "Protocol sync 78",
+    "132 production source/built engine boundary",
+    "315 isolated test scripts",
+    "git diff --check"
+  ],
+  "source": {
+    "candidate": "/var/folders/41/07yyp3_12jddkkthmflqkbgw0000gn/T/omp-mcp-diagnostics-o811uujd",
+    "filesCompared": 1342,
+    "fingerprintSha256": "d03f21769f3ee095bc3f12028ceedc52f4f31e80f6bc0010ccc892377af9a788",
+    "differences": [],
+    "docsExcluded": true
+  },
+  "screenshots": [
+    {
+      "path": "tests/scratch/omp-mcp-diagnostics-light.png",
+      "sha256": "288e10e9c36e62bd8f79dc62d7019097515ee7b3c964b91bf65781417e39d8e0"
+    },
+    {
+      "path": "tests/scratch/omp-mcp-diagnostics-dark.png",
+      "sha256": "795a5182ed814e9e98500d89e4412dafb3645742223af6702ecc1e8c7e698473"
+    },
+    {
+      "path": "tests/scratch/omp-mcp-diagnostics-en.png",
+      "sha256": "f1fb0cbbcd4a21c0c2ec300636e789059e368daeddc99674ed3538d48c92c424"
+    }
+  ],
+  "intermediateFailure": "First build found MCPServerConfig union fields require in-operator narrowing; corrected without SDK edits, final complete build and typecheck passed.",
+  "limitations": [
+    "Connection lifecycle diagnostics only; no complete tool-request stream, gateway/model request comparison or Task subrequest diagnostic claim.",
+    "Native OAuth selected-definition write-back CAS, tool-level authorization and Task internal history protection remain unresolved.",
+    "No Windows original fault task, real-account or installed/current-package acceptance.",
+    "Latest complete suite remains protocol 76, 116/116 (omp-smoke-import.json); protocol 78 has only the recorded focused checks."
+  ],
+  "operations": {
+    "rootDist": "Not overwritten",
+    "userProcessesPreserved": [
+      23786,
+      62015
+    ],
+    "candidateRemoved": true,
+    "release": "No commit, push, publish or installed-app replacement",
+    "allVerificationHandlesTerminal": true
+  }
+}

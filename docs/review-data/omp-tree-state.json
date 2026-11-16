@@ -1,0 +1,97 @@
+{
+  "status": "Tree metadata and stopped-tree isolation locally verified; full migration remains incomplete",
+  "updatedAt": "2026-11-15T16:50:08.288801+00:00",
+  "platform": "darwin-arm64",
+  "omp": "18.20.0",
+  "bun": "1.4.4",
+  "protocol": 74,
+  "reproductions": [
+    {
+      "command": "node tests/omp-tree-test.mjs on pre-change isolated build",
+      "failure": "snapshot contains native tree metadata: actual undefined",
+      "exitCode": 1
+    },
+    {
+      "command": "node tests/omp-stop-metadata-test.mjs on candidate before read-only stopped-tree fix",
+      "failure": "reading the tree must not reopen a stopped worker: actual true, expected false",
+      "exitCode": 1
+    }
+  ],
+  "changes": [
+    "Authoritative tree revision, selected leaf, roots, branch counts and native default filter in snapshots; stable message bookmarks and sibling leaf navigation; summary entry IDs retained.",
+    "Read-only native disk history counts and parent-session links, bounded 200 rows / 8 readers / 1000 cached file stamps.",
+    "Stop captures a bounded native view within its existing deadline; subsequent tree reads use a metadata-only Bun process with public native index/selector, never an AgentSession. Saved-file fallback validates identity/version; unavailable unsaved trees report an error.",
+    "Stopped native tree cache is included in session eviction accounting. Browser revision updates do not alter model context or replay prompts."
+  ],
+  "verification": {
+    "typecheck": "passed",
+    "isolatedBuild": "passed",
+    "units": {
+      "files": 170,
+      "passed": 1058,
+      "skipped": 1
+    },
+    "browser": "passed; process exited 0. Includes native initial filter, live bookmark update/clear, keyboard sibling navigation, reload, stopped tree search, preserved leaf/file bytes and no model replay.",
+    "nativeBatch": {
+      "passed": 12,
+      "total": 12,
+      "exitCode": 0,
+      "tests": [
+        "omp-tree-projection-test",
+        "omp-tree-test",
+        "omp-skill-history-test",
+        "omp-stop-metadata-test",
+        "snapshot-delta-test",
+        "omp-persistence-test",
+        "switch-session-background-test",
+        "delete-session-terminal-test",
+        "reasoning-repetition-test",
+        "omp-recovery-test",
+        "omp-runtime-test",
+        "native-session-commands-test"
+      ]
+    },
+    "protocol": "v74 sync passed",
+    "testEnvironment": "308 scripts passed",
+    "engineBoundary": "129 source files and emitted output passed",
+    "diffCheck": "passed",
+    "ciYaml": "parsed",
+    "visual": "Inspected screenshot of actual 2/2 sibling controls in browser; keyboard and reconnect assertions passed."
+  },
+  "testNotes": [
+    "First expanded native test had a duplicate variable declaration; fixed without removing assertions, then passed.",
+    "Initial browser file-byte baseline was sampled while Stop still wrote its native session_exit record. The final test waits for the first stopped-tree read (a Stop completion barrier), then verifies subsequent search reads preserve exact bytes.",
+    "Snapshot capture is best effort within the unchanged Stop timeout; force-closed or oversized histories can use saved-file fallback, and missing/invalid history is not silently recreated."
+  ],
+  "sourceSha256": {
+    "server/omp/tree-metadata.ts": "b60932c62afe8b1cc28cb73cb48d7450ce0f709f8a244587d494b1de2c2329a4",
+    "server/omp/history-metadata.ts": "96ec23532ec3b07412378156c759e8dea53d1215ea799cb3b206310ba933c578",
+    "server/omp/tree-native.ts": "51e43da7075802b553b5f217b7f05b8333d2650c217ca92ff3e9a83847e0ba04",
+    "server/omp/tree.ts": "b60cbad8123405e6cb54cee395e5f9987a1ad347a22616238798a7b5e02274b1",
+    "server/omp/worker-control.ts": "fe014927e89eb69034f5786bc0ffc5724789913fbc813871e6c45f7ba59b916d",
+    "server/omp/worker.ts": "2f08c53d654042c01680e7acd5cead7a1d01113e0c5f50ab736471c781031097",
+    "server/omp/runtime.ts": "54db65268d915f8cb6b53120cbab5181a72ef97efaa767205e9ed4ff082cd55f",
+    "server/omp/bootstrap.ts": "492ca18e9727c2ef916baf56744bd4528116a63cb922e5c01dcd8b6ce8232244",
+    "server/omp/session.ts": "5d4b7cbdb62bbec458f394b4a56a8a0b81470878e2815e50c192b3caf279c764",
+    "server/omp/presentation.ts": "45aaca483825bc4a3583fa53770eab3e044e93ed7c7321a733db010daf8b945a",
+    "server/omp/chat-service.ts": "8fe39ec5b31ffb90fbfa2843ba0b5263ad3f0cfbf15f816bd4b74188bf682346",
+    "server/protocol-version.ts": "5923d12aff8b873f97b36c3f74b51d803a6f67e077ee14e30cba828ffe50b92a",
+    "web/src/protocol-version.ts": "921941ae2320f2f1f12ccd62a5a59c99ad1751703167dc79392d917a6e9f82da",
+    "web/src/components/SessionTreeWorkbench.tsx": "e7e5cc1e7299d3bf336786a670c2313d5527b79dad6244793096924f54b98f45",
+    "tests/unit/omp-tree-metadata.test.ts": "05d4b900a732b6cf4f43d1dc60356e207613d9610fe24da7df79e7809bcc7499",
+    "tests/fixtures/omp-tree-projection.mjs": "1561abd66ab53a9f3915160200f2c8b0798a19670e8cb466508a084fc3af522b",
+    "tests/omp-tree-test.mjs": "ff264f9d72314c568fa45559055098a56dae0e06b6bd4b6b7f4a6eae80142a39",
+    "tests/omp-tree-cancel-browser-test.mjs": "b4164b77dfcc9859bcad45f74a6318ebf3463ca4e85abb8fc3b5932378acf15f",
+    "tests/omp-stop-metadata-test.mjs": "0e82f3e3d84ba72bbe9e3d59580a79dd6230d9067a29ccb9560e8afdd4a3bd85"
+  },
+  "isolation": "Built/tested in /var/folders/41/07yyp3_12jddkkthmflqkbgw0000gn/T/omp-tree-state-xicp10s2, without replacing checkout dist used by existing service PID 23786. All test/build handles reached terminal status before cleanup.",
+  "fullSmoke": "Current manifest 112. Historical full baseline remains 102/110; targeted runs do not rewrite the aggregate.",
+  "remaining": [
+    "Review remaining native navigation preview/custom-summary options and legacy host regressions",
+    "Native Task storage guard and other recovery/authentication gaps",
+    "Old desktop history cleanup, Windows original-task matrix and cross-platform packaged acceptance"
+  ],
+  "windowsVerified": false,
+  "desktopInstallerBuilt": false,
+  "published": false
+}

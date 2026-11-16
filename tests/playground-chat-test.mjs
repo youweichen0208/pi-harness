@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import WebSocket from "ws";
@@ -28,9 +28,14 @@ const mock = createServer(async (req, res) => {
 const mockPort = await listenIsolated(mock);
 writeFileSync(join(agent, "models.json"), JSON.stringify({ providers: { fixture: { api: "openai-completions", baseUrl: `http://127.0.0.1:${mockPort}`, apiKey: "fixture", models: [{ id: "mock", name: "Mock", input: ["text"], contextWindow: 128000, maxTokens: 4096 }] } } }));
 writeFileSync(join(agent, "settings.json"), JSON.stringify({ defaultProvider: "fixture", defaultModel: "mock" }));
+const ompAgent = join(data, "omp", "agent");
+mkdirSync(ompAgent, { recursive: true });
+writeFileSync(join(ompAgent, "models.yml"), JSON.stringify({ providers: { fixture: { api: "openai-completions", baseUrl: `http://127.0.0.1:${mockPort}`, apiKey: "fixture", models: [{ id: "mock", name: "Mock", input: ["text"], contextWindow: 200000, maxTokens: 128000 }] } } }));
+const ompConfig = JSON.stringify({ modelRoles: { default: "fixture/mock" }, skills: { enabled: false }, retry: { enabled: false }, compaction: { enabled: false }, cacheWarming: { enabled: false } });
+writeFileSync(join(ompAgent, "config.yml"), ompConfig);
 const env = { PI_WEB_CWD: root, PI_WEB_DATA_DIR: data, PI_CODING_AGENT_DIR: agent, PI_WEB_PLAYGROUND: "off" };
 let harness, ws, state, main, browser, events = [];
-const wait = async fn => { for (let i = 0; i < 400; i++) { if (fn()) return; await new Promise(r => setTimeout(r, 25)); } throw Error("Timed out " + JSON.stringify(events.slice(-3)) + harness.logs); };
+const wait = async fn => { for (let i = 0; i < 1600; i++) { if (fn()) return; await new Promise(r => setTimeout(r, 25)); } throw Error("Timed out " + JSON.stringify(events.slice(-3)) + harness.logs); };
 async function connect() {
 	ws = new WebSocket(`ws://127.0.0.1:${harness.port}/ws`);
 	ws.on("message", data => { const m = JSON.parse(data); events.push(m); if (m.type === "playground_chat_state") state = m.state; if (m.type === "snapshot") main = m.state; });
@@ -48,6 +53,7 @@ try {
 	const requestId = "same-request";
 	send("send", { requestId, text: "Review", context });
 	await wait(() => state.proposals.length === 1 && !state.running && requests.length === 2);
+	assert.equal(readFileSync(join(ompAgent, "config.yml"), "utf8"), ompConfig, "Business model/thinking must not change global OMP settings");
 	assert.equal(state.proposals[0].base, context.code);
 	assert.equal(state.proposals[0].code, "print(42)\n");
 	const payload = JSON.stringify(requests[0]);
@@ -76,6 +82,8 @@ try {
 		await page.goto(`http://127.0.0.1:${harness.port}`);
 		await page.getByRole("button", { name: "Playground", exact: true }).click();
 		await page.getByRole("tab", { name: "AI助手", exact: true }).click();
+		await page.locator(".conn-dot.ok").first().waitFor({ state: "attached" });
+		await page.locator(".pg-chat .chip-model", { hasText: "Mock" }).waitFor();
 		await page.locator(".pg-chat .input-tools .dropdown > button").first().click();
 		await page.locator(".pg-chat .dd-menu").waitFor();
 		await page.keyboard.press("Escape");

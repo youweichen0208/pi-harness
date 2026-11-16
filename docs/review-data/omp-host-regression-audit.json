@@ -1,0 +1,156 @@
+{
+  "status": "Remaining host migration audit; not release approval",
+  "database": {
+    "nativeCoverage": "tests/omp-database-test.mjs",
+    "verified": "Native tool schema/results, per-client/conversation/workspace grants, read-only SQL rejected before connection, global disable on already loaded sessions, corrupt configuration, version invalidation, credentials omitted from model input.",
+    "remaining": [
+      "Windows/vendor JDBC/GaussDB and remote TLS/real provider account acceptance are not established by the local native database fixture."
+    ],
+    "settings": "Restored and verified in omp-database-settings.json: global switch UI, version-checked save, cross-window refresh, errors, stopped-worker isolation and restart persistence.",
+    "realQueries": "Verified locally: omp-database-live.json. Native OMP/tool results plus PostgreSQL 17.10/MySQL 8.0.46, real cancellation and browser passed."
+  },
+  "delegateNotifications": {
+    "reproduction": "A real OMP extension sendUserMessage reaches the model, but the host projects the notification as an ordinary user message. Both the integration probe and projection regression fail on this symptom.",
+    "candidate": "Implemented in server/omp/presentation.ts. Both isolated and final rebuilt application browser checks passed; original notification stays intact in native history and model input. Projection unit regression passed."
+  },
+  "extensionFiles": {
+    "verified": "Source editing: omp-extension-source.json. Personal directory/module reveal and installed package/Marketplace paths: omp-extension-paths.json. Native, browser and local Electron verification passed.",
+    "remaining": "Windows/packaged validation and other separately documented migration gaps; retained legacy host extension/update entries now exercise OMP replacements."
+  },
+  "legacyOnlyExpectations": [
+    "Pi Codemode/codemode-specific settings and inline limits are not OMP native behavior.",
+    "Host automatic replay of textual tool descriptions is intentionally absent under the OMP boundary.",
+    "Old forced 128000 output limits and automatic cross-client Pi model alias binding do not apply to OMP defaults."
+  ],
+  "testDisposition": "Latest complete v78 baseline remains the earlier 120/120 (omp-smoke-task-output.json). Subsequent child-compaction and deployment changes have separate verified regressions (omp-task-compaction.json, omp-container.json). Current default list 122; no full run of the final changed version. Container integration is a separate Docker CI job.",
+  "platform": "darwin-arm64; Windows original-task acceptance remains outstanding",
+  "fullSmokeBaseline": "Latest completed all-green: v78 120/120 (omp-smoke-task-output.json), before the subsequent child-compaction catalogue fix.",
+  "retiredExtensionRequests": "Old Pi actions now return 410 without executing an OMP command; a native startup counter reproduced and verifies the stopped-worker revival fix.",
+  "sessionTree": {
+    "verified": "Independent cancellation and native list semantics remain verified in earlier records. Protocol 74 tree snapshots, message labels/siblings, history branch counts and stopped-tree isolation are locally verified in omp-tree-state.json: browser plus 12/12 related native checks passed. Preview/custom-summary contract: omp-tree-preview.json, native and stopped reads, actual native preparation, custom instructions, browser and 5/5 related checks passed.",
+    "remaining": "Windows/packaged acceptance; native RPC ask-result re-answer is explicitly unsupported. Task storage and other separately recorded gaps remain."
+  },
+  "nativeHostContracts": {
+    "verified": "omp-host-contracts.json: textual-call non-replay on two protocols and native prompt HTTP/browser contracts passed; original smoke entries retained. Model source host contract passed in omp-model-host.json. Component updates and extension host contracts now ported and targeted browser/native checks passed; full v75 rerun completed: 112/112 passed in omp-smoke-resources.json.",
+    "remaining": []
+  },
+  "mcpExecution": {
+    "verified": "omp-mcp-execution.json: native default virtual tool routes and image HTTP/browser behavior verified; file-change misclassification fixed.",
+    "remaining": "MCP tool-level OAuth challenges and complete diagnostic/external OAuth concurrency gaps",
+    "nextEvidence": "Actual model/MCP diagnostic confirms two gaps: host has no tool-level handler; SDK startup and refreshed-tool reconnect callbacks drop authChallenge even with a handler installed. Same native handler receives the challenge after explicit reconnect. Evidence: omp-mcp-tool-auth-probe.json. Do not declare full OAuth support or force reconnects as a universal fix."
+  },
+  "previousFullSmokeBaseline": "omp-smoke-resources.json: 112/112 passed, exit 0, no skips; full local macOS run, protocol 75.",
+  "openAIProxy": {
+    "verified": "Production Bun worker startup proxy, actual model/OAuth refresh/WebSocket transports, ambient credentials, active TLS stream Stop, peer isolation and browser verified in omp-proxy-fix.json. Full 114/114 before final credential fix; final 3/3 proxy entries after it.",
+    "remaining": "Windows/current packaged acceptance, real-provider account OAuth and native Task thread routing remain unverified."
+  },
+  "olderFullSmokeBaseline": "omp-smoke-ask.json: 102/110, before final notification fix and before adding the database test.",
+  "restrictedRecovery": {
+    "verified": "Protocol 76: native SSH/Playground retry/compaction, scoped cancellation, Stop isolation, persistence failure/reopen across adapter restart, browser disconnect/reconnect, draft retention and narrow recovery controls. See omp-restricted-recovery.json.",
+    "remaining": "Windows and current packaged acceptance. Playground drain/accounting is now locally verified with the main/SSH lifecycle checks in omp-drain.json."
+  },
+  "drain": {
+    "verified": "omp-drain.json: main and Playground native startup count, shared Playground count, read-only drain reconnect, existing completion, retry cancellation/Stop, SSH close and detached cleanup, idle reset, no replay. Native Node host and Electron host fixtures passed; all 8 related regressions passed.",
+    "remaining": "Windows/current packaged acceptance; no remote workflow execution. Metadata-only reads are not treated as model tasks."
+  },
+  "mcpForms": {
+    "verified": "Native per-server forms, public metadata masking, global/project rules, CAS/drafts/focus and bilingual narrow browser passed; see omp-mcp-form.json.",
+    "remaining": [
+      "Real gateway/request comparison; bounded connection and provider diagnostics now implemented",
+      "Tool-level OAuth challenge",
+      "Windows/packaged acceptance"
+    ]
+  },
+  "mcpImport": {
+    "verified": "omp-mcp-import.json: common format conversion, append-only preview/save, source enable precedence and target collisions, native CAS, masks, drafts, actual unload, bilingual narrow browser, project isolation and native environment expansion.",
+    "remaining": [
+      "Real gateway/request comparison; bounded connection and provider diagnostics now implemented",
+      "Tool-level OAuth challenge and external OAuth concurrency",
+      "Windows/packaged acceptance"
+    ],
+    "unsupported": "Foreign prompts/files, explicit OpenCode OAuth/advanced settings, native plugin-only policies and unknown fields are rejected for manual configuration; not universal client equivalence."
+  },
+  "mcpAuthConcurrency": {
+    "status": "Post-grant reconnect locally guarded; native write-back CAS unresolved",
+    "evidence": [
+      "omp-mcp-auth-conflict.json",
+      "omp-mcp-auth-reconnect.json"
+    ],
+    "verified": "Protocol 77: 12 actual native scenarios, five related checks and browser; build/types/1075 units (1 skipped).",
+    "remaining": [
+      "Native selected-definition CAS during OAuth write-back",
+      "Windows/packaged acceptance"
+    ],
+    "fullSmoke": "Included in complete v78 120/120 baseline; current child-compaction follow-up has separate checks, not a full 122-entry run.",
+    "upstream": "omp-oauth-upstream.json: official 18.20.2 reauth/config-writer/manager sources byte-identical to installed 18.20.0, verified tar integrity; no upgrade applied."
+  },
+  "mcpDiagnostics": {
+    "status": "Bounded connection diagnostics verified; opt-in provider request diagnostics separately verified",
+    "evidence": "omp-mcp-diagnostics.json",
+    "verified": "Protocol 78: build/types/1075 units (1 skipped), native lifecycle/bounds/isolation regression, five related entries and bilingual narrow browser.",
+    "remaining": [
+      "Real gateway/model request comparison and raw-wire evidence",
+      "Windows original task and packaged acceptance"
+    ],
+    "fullSmoke": "Included in complete v78 120/120 baseline; subsequent child-compaction and deployment changes have separate checks, not a full 122-entry run."
+  },
+  "requestDiagnostics": {
+    "evidence": "omp-request-diagnostics.json",
+    "verified": "Public-hook projections, actual Anthropic/OpenAI tools and history, SDK child sessions and CLI RPC threads; no raw content or credentials.",
+    "remaining": [
+      "Original Windows/gateway comparison",
+      "Native CLI JSON/print early event-loop exit with and without observer",
+      "Raw transport correlation and real-account acceptance"
+    ],
+    "fullSmoke": "Included in complete v78 120/120 baseline; current child-compaction follow-up has separate checks, not a full 122-entry run."
+  },
+  "newSessionRace": {
+    "evidence": "omp-new-session-race.json",
+    "status": "Fixed and verified through native lock-controlled regression, browser and related suite"
+  },
+  "taskOutput": {
+    "evidence": "omp-task-output.json",
+    "verified": "Native shared-root child spills, nested and sibling identity, Stop/restore, scoped downloads, paths and actual browser.",
+    "remaining": [
+      "Native Task internal history writer protection",
+      "Windows/current packaged acceptance"
+    ]
+  },
+  "hostFixtureCorrections": {
+    "evidence": [
+      "omp-extension-reload-readiness.json",
+      "omp-editor-fixtures.json"
+    ],
+    "verified": "Reload idle-admission boundary, offline locked SSH dependencies, current browser entry and owned cleanup.",
+    "remaining": "No claim to fix the development plugin auto-installer lifecycle."
+  },
+  "taskCompaction": {
+    "evidence": "omp-task-compaction.json",
+    "verified": "Complete native selected child branch restores pre-compaction nested Task catalogue; repeated/main compaction, branch isolation, same-host cache invalidation, output metadata and no replay/history writes verified. Build/types/1079 units (1 skipped) and 6/6 related passed.",
+    "remaining": [
+      "Native Task internal history writer protection",
+      "Windows/original gateway/current packaged acceptance"
+    ]
+  },
+  "deployment": {
+    "evidence": "omp-container.json",
+    "verified": "Real Linux arm64 image, native package persistence across container replacement, old-volume initialization as non-root, HTTP/WebSocket/PTY and history with no replay. CLI three-platform dry-run service generation passed.",
+    "remaining": [
+      "Remote container CI/x64 execution",
+      "Actual Windows service and desktop package acceptance",
+      "Original Windows DeepSeek real gateway validation"
+    ]
+  },
+  "desktopCurrent": {
+    "evidence": "omp-desktop-current.json",
+    "verified": "Fresh macOS arm64 DMG/ZIP; 31 packaged integration entries plus the 12-scenario reconnect entry; DMG copy/start/upgrade/signature and six desktop entries have passing results. MCP native-dialog fixture failed first and passed after correction; Web branch also passed. Native compaction fixture now enforces target Bun/SDK ownership.",
+    "remaining": [
+      "Windows/Linux desktop packages and original Windows DeepSeek/gateway task",
+      "Native Task internal writer guard",
+      "Native MCP OAuth write-back CAS and tool-level challenge handling",
+      "Native CLI JSON/print exit",
+      "Current full 122-entry smoke and active legacy Desktop history cleanup"
+    ],
+    "release": "Local test artifacts only; no installed app replacement or publishing"
+  }
+}

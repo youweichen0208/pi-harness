@@ -1,0 +1,75 @@
+{
+  "status": "Full 116-entry run finished 114/116; both failures corrected and individually rerun successfully. Not a fresh 116/116 run or migration acceptance.",
+  "platform": "darwin-arm64",
+  "omp": "18.20.0",
+  "bun": "1.4.4",
+  "protocol": 76,
+  "fullRun": {
+    "path": "/tmp/omp-full-116.log",
+    "exitCode": 1,
+    "sha256": "8975150151f745f5726f93411ea56480c34244899b316f3f2be73a4bee791ddc",
+    "passed": 114,
+    "total": 116,
+    "skipped": 0,
+    "failed": [
+      "clear-provider-key-test",
+      "omp-proxy-transports-test"
+    ]
+  },
+  "followups": {
+    "clear-provider-key-test": {
+      "path": "/tmp/omp-clear-key-smoke-fixed.log",
+      "exitCode": 0,
+      "sha256": "64ef10dbd484f554b6dc0c12d889bfc4130e7293b4a6c3ea931112fec83138dd",
+      "details": "omp-key-test-timing.json"
+    },
+    "omp-proxy-transports-test": {
+      "path": "/tmp/omp-proxy-fixture-fixed.log",
+      "exitCode": 0,
+      "sha256": "515763c24d472e827d6935b80d6d9b72256eb7950fa4df941c97688afeb7fd7f",
+      "details": "omp-proxy-fixture.json"
+    }
+  },
+  "coverage": "Every entry has a passing execution against unchanged production source, combining the original run and two targeted reruns. Original full-run exit remains 1; no retroactive green result.",
+  "build": {
+    "path": "/tmp/omp-full-116-build.log",
+    "exitCode": 0,
+    "sha256": "72190fdf568936818001565c28297bb8dc0801a53a5ce3ffc09a5ce19c7a3683"
+  },
+  "typesAndUnits": "Unchanged production source since omp-drain.json: types passed; 171 unit files, 1061 passed, 1 skipped. No new type/unit run for test and fixture-only corrections.",
+  "source": {
+    "candidate": "/var/folders/41/07yyp3_12jddkkthmflqkbgw0000gn/T/omp-full-116-e8ov5sso",
+    "filesCompared": 1331,
+    "fingerprintSha256": "21cd5ccd7de21774331351d6bbbf90934912b88f76ef6bcb509015512d2c2891",
+    "differences": []
+  },
+  "sourceNotes": [
+    "Candidate was frozen before the full run. No production source/build mutated while tests ran.",
+    "After their original executions, clear-provider-key-test was corrected and relay certificate added; each rerun passed. Database integration scripts were updated separately and are not in the full 116 list.",
+    "Final source parity compares repository tracked and nonignored untracked files except docs/ and AGENTS.md."
+  ],
+  "checks": [
+    "Protocol 76 sync",
+    "131-source production engine boundary",
+    "Official HTTPS npm lockfile",
+    "313 isolated test scripts",
+    "git diff --check"
+  ],
+  "limitations": [
+    "Local smoke/native model fixtures do not prove original Windows DeepSeek task success.",
+    "Native Task storage and tool-level MCP OAuth diagnostics remain failing outside smoke.",
+    "MCP per-server forms/import and other migration work remain.",
+    "No current Windows installer, real account OAuth or performance acceptance."
+  ],
+  "operations": {
+    "userProcessesPreserved": [
+      23786,
+      62015
+    ],
+    "rootDist": "Not overwritten",
+    "fullSmokeHandle": 66531,
+    "fullSmokeTerminal": true,
+    "candidateRemoved": true,
+    "release": "No commit, push, publish or installed-app replacement"
+  }
+}

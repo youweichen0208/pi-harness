@@ -16,12 +16,15 @@ import { testEnv } from "./lib/test-env.mjs";
 
 const [executable, appRoot] = process.argv.slice(2).map((p) => realpathSync(resolve(p)));
 assert(executable && appRoot, "Usage: node tests/packaged-server-start-test.mjs <executable> <resources/app>");
+const { verifyServerOutput } = createRequire(import.meta.url)("../build/afterPack.cjs");
+verifyServerOutput(appRoot);
 assert(!existsSync(join(appRoot, "extensions")), "Desktop must not ship application extensions");
 assert(!existsSync(join(appRoot, ".context-eval")), "Desktop must not ship local evaluation data");
 for (const directory of [".claude", ".playwright-mcp", ".scratch"]) {
 	assert(!existsSync(join(appRoot, directory)), `Desktop must not ship local development directory ${directory}`);
 }
-assert(!JSON.parse(readFileSync(join(appRoot, "package.json"), "utf8")).pi?.extensions?.length, "Desktop must not declare application extensions");
+const appMetadata = JSON.parse(readFileSync(join(appRoot, "package.json"), "utf8"));
+assert(!appMetadata.pi?.extensions?.length && !appMetadata.omp?.extensions?.length, "Desktop must not declare application extensions");
 // A checkout-local package can otherwise hide missing runtime dependencies by
 // resolving them from the repository's parent node_modules directory.
 const packagedRequire = createRequire(join(appRoot, "package.json"));
@@ -30,18 +33,23 @@ for (const name of ["undici", "unified", "remark-parse", "@vscode/ripgrep", "@le
 	const inside = relative(appRoot, resolved);
 	assert(!isAbsolute(inside) && inside !== ".." && !inside.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`), `${name} must resolve inside the packaged app: ${resolved}`);
 }
-// Pi packages expose import-only entry points; resolve them with the shipped ESM loader.
-execFileSync(executable, ["--input-type=module", "--eval", `
+// OMP exports TypeScript and native Bun modules: load it with the bundled runtime.
+const bun = join(appRoot, "node_modules/bun/bin/bun.exe");
+assert(existsSync(bun), "The application must bundle Bun");
+const manifest = JSON.parse(readFileSync(join(appRoot, "package.json"), "utf8"));
+assert.equal(execFileSync(bun, ["--version"], { encoding: "utf8" }).trim(), manifest.dependencies.bun);
+for (const name of ['pi-ai', 'pi-coding-agent']) assert(!existsSync(join(appRoot, 'node_modules/@earendil-works', name)), 'Legacy Pi must not ship');
+execFileSync(bun, ["--eval", `
 	import assert from 'node:assert/strict';
 	import {relative, isAbsolute, sep} from 'node:path';
 	import {fileURLToPath} from 'node:url';
-	for (const name of ['@earendil-works/pi-schema','@earendil-works/pi-ai','@earendil-works/pi-coding-agent','@earendil-works/pi-mcp','@earendil-works/pi-codemode']) {
+	for (const name of ['@oh-my-pi/pi-ai','@oh-my-pi/pi-coding-agent','@oh-my-pi/pi-tui']) {
 		const resolved = import.meta.resolve(name);
 		const inside = relative(process.cwd(), fileURLToPath(resolved));
 		assert(!isAbsolute(inside) && inside !== '..' && !inside.startsWith('..' + sep), name + ' escaped the package');
 		await import(resolved);
 	}
-`], {cwd:appRoot,env:{...testEnv(),ELECTRON_RUN_AS_NODE:"1",NODE_PATH:"",NODE_OPTIONS:""},timeout:30000,stdio:"pipe"});
+`], {cwd:appRoot,env:{...testEnv(),ELECTRON_RUN_AS_NODE:undefined,NODE_PATH:"",NODE_OPTIONS:""},timeout:30000,stdio:"pipe"});
 console.log("PASS runtime dependencies resolve inside the packaged app");
 const playgroundMethods = pathToFileURL(join(appRoot, "dist/server/playground-methods.js")).href;
 execFileSync(executable, ["--input-type=module", "--eval", `
@@ -68,19 +76,18 @@ if (process.platform === "win32") {
 	console.log("PASS packaged node-pty includes the ConPTY cleanup patch");
 }
 // Loading the lazy provider is essential: startup alone does not import it.
-for (const module of ["api/anthropic-messages.js", "auth/oauth/openai-chatgpt.js", "auth/oauth/anthropic.js", "auth/oauth/radius.js"]) {
-const provider = pathToFileURL(join(appRoot, "node_modules/@earendil-works/pi-ai/dist", module)).href;
-execFileSync(executable, ["--input-type=module", "--eval", `await import(${JSON.stringify(provider)})`], {
-	env: { ...testEnv(), ELECTRON_RUN_AS_NODE: "1", NODE_PATH: "", NODE_OPTIONS: "" },
-	timeout: 30000,
-	stdio: "pipe",
-});
+for (const module of ["providers/anthropic.ts", "registry/oauth/openai-codex.ts", "registry/oauth/anthropic.ts"]) {
+	const provider = pathToFileURL(join(appRoot, "node_modules/@oh-my-pi/pi-ai/src", module)).href;
+	execFileSync(bun, ["--eval", `await import(${JSON.stringify(provider)})`], {
+		cwd: appRoot, env: { ...testEnv(), ELECTRON_RUN_AS_NODE: undefined, NODE_PATH: "", NODE_OPTIONS: "" }, timeout: 30000, stdio: "pipe",
+	});
 }
 const temp = mkdtempSync(join(tmpdir(), "pi-packaged-start-"));
 const workspace = join(temp, "workspace");
 mkdirSync(workspace);
-const marker = join(temp, "user-extension-loaded"), agent = join(temp, "agent");
+const marker = join(temp, "user-extension-loaded"), agent = join(temp, "data", "omp", "agent");
 mkdirSync(join(agent, "extensions"), { recursive: true });
+writeFileSync(join(agent, "config.yml"), JSON.stringify({ skills: { enabled: false } }));
 writeFileSync(join(agent, "extensions/local.js"), `import { writeFileSync } from 'node:fs'; export default pi => pi.on('session_start', () => writeFileSync(${JSON.stringify(marker)}, 'loaded'));`);
 // Use the packaged runtime and worker, not the checkout's SQLite reader.
 const databasePath = join(workspace, "graph.db");
@@ -160,6 +167,7 @@ try {
 			const response = await fetch(`http://127.0.0.1:${port}/api/health`, { signal: AbortSignal.timeout(1000) });
 			const health = await response.json();
 			assert.equal(health.ok, true);
+			assert.equal(health.agentEngine, "omp");
 			assert.equal(health.pid, child.pid);
 			healthy = true;
 			break;
@@ -178,15 +186,17 @@ try {
 	assert.equal(formatted.status, 503, "missing host Python must report unavailability without crashing the packaged server");
 	assert.equal(typeof (await formatted.json()).error, "string");
 	console.log("PASS packaged Python formatter reports missing host runtime");
+	let nativeTools = [];
 	const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`);
 	try {
 		await new Promise((resolve, reject) => {
-			const timer = setTimeout(() => reject(new Error("Packaged session startup timed out")), 15000);
+			const timer = setTimeout(() => reject(new Error("Packaged session startup timed out")), 40000);
 			ws.on("error", error => { clearTimeout(timer); reject(error); });
 			ws.on("open", () => ws.send(JSON.stringify({ type: "hello", clientId: "packaged-local-extensions" })));
-			ws.on("message", data => { if (JSON.parse(data).type === "snapshot") { clearTimeout(timer); resolve(); } });
+			ws.on("message", data => { const event = JSON.parse(data); if (event.type === "snapshot") nativeTools = event.state.tools; if (event.type === "ready") { clearTimeout(timer); resolve(); } });
 		});
-		assert.equal(readFileSync(marker, "utf8"), "loaded", "packaged server loads the user's native Pi extensions");
+		assert(nativeTools.includes("read") && nativeTools.includes("task"), "packaged OMP must initialize native tools");
+		assert.equal(readFileSync(marker, "utf8"), "loaded", "packaged server loads the user's native OMP extensions");
 	} finally { ws.terminate(); }
 	console.log(`PASS packaged server: ${appRoot}`);
 } catch (error) {

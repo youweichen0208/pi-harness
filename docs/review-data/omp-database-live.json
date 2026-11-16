@@ -1,0 +1,114 @@
+{
+  "status": "Real PostgreSQL/MySQL native OMP host-tool queries and browser verified locally; full migration acceptance incomplete",
+  "platform": "darwin-arm64",
+  "omp": "18.20.0",
+  "bun": "1.4.4",
+  "node": "26.0.0",
+  "protocol": 76,
+  "command": "node tests/database-integration-test.mjs --browser",
+  "changes": [
+    "Migrated real database fixture from Pi Codemode to OMP native database_read and isolated native models.yml/config.yml.",
+    "New wrapper owns local Docker context containers, cached image IDs, loopback dynamic ports and tmpfs data; no image pulls, project mounts or business databases. Cleanup checks exact container IDs and ownership labels on success and failure.",
+    "Waits for matching tool-call ID and settled transcript rather than stale pre-prompt idle snapshots; verifies exact result rows and model tool-result pairing.",
+    "Cancellation waits for an actually active PostgreSQL query, then confirms its release."
+  ],
+  "verified": [
+    "PostgreSQL 17.10 and MySQL 8.0.46 real driver metadata, index/structure, cross-schema and pagination.",
+    "50-row pages, 1000-row query bound, truncation, BIGINT precision, SQL write rejection and encrypted persisted credentials.",
+    "Native model schema, ungranted failure, grant/query/revoke, cross-client grant isolation, both database counts exactly 120, actual tool results returned to the model; credentials absent.",
+    "Actual query cancellation and unchanged 120-row source table.",
+    "Browser draft/attachment preservation, one shared chat, reference grant, actual successful tool-result rows, import/sync, keyboard focus and narrow layout."
+  ],
+  "verification": {
+    "build": {
+      "path": "/tmp/omp-full-116-build.log",
+      "exitCode": 0,
+      "sha256": "72190fdf568936818001565c28297bb8dc0801a53a5ce3ffc09a5ce19c7a3683"
+    },
+    "integration": {
+      "path": "/tmp/omp-database-live-final.log",
+      "exitCode": 0,
+      "sha256": "4176f1ce1e75eb8a977ea9c4b713b8ff1a0f44914baa830de88dbcf74a062556"
+    },
+    "earlierExactResults": {
+      "path": "/tmp/omp-database-integration-exact.log",
+      "exitCode": 0,
+      "sha256": "e9aaf80f2ffd1cce4126553add636eaa7b5e058bd485820c5cc5e052d1d10e45"
+    },
+    "checks": [
+      "node --check both database scripts",
+      "313 test environment isolation scripts",
+      "git diff --check"
+    ],
+    "screenshot": {
+      "path": "tests/scratch/omp-database-live.png",
+      "sha256": "199a16d93f30825b9cd679a085214ebbc6b71273c20134af4d09b84f46412617",
+      "note": "Three clients share this isolated project. Native concurrent-history relocation notice is visible; original history is preserved. Database assertions separately verify browser grant and exact tool result."
+    },
+    "priorTypesAndUnits": "Production unchanged since omp-drain.json: typecheck/build passed, 1061 units passed, 1 skipped. Not rerun for test/doc-only changes."
+  },
+  "fixtures": [
+    {
+      "database": "postgres",
+      "image": "sha256:dc17045ccfd343b49600570ea734b9c4991cf1c3f3302e67df51e3b402dd55c4",
+      "digests": [
+        "postgres@sha256:dc17045ccfd343b49600570ea734b9c4991cf1c3f3302e67df51e3b402dd55c4"
+      ],
+      "port": 55029,
+      "container": "44d2e3325efddcc55144c650c84409ec3f1840bdc0b2e24217133c9b205a4697"
+    },
+    {
+      "database": "mysql",
+      "image": "sha256:7dcddc01f13bab2f15cde676d44d01f61fc9f99fe7785e86196dfc07d358ae2b",
+      "digests": [
+        "mysql@sha256:7dcddc01f13bab2f15cde676d44d01f61fc9f99fe7785e86196dfc07d358ae2b"
+      ],
+      "port": 55030,
+      "container": "b5b45eb83d91ec9eb025c2e92d2e5998fc6cc0b2d82f649564bdbc2acf776348"
+    },
+    {
+      "postgres": "PostgreSQL 17.10 on aarch64-unknown-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit",
+      "mysql": "8.0.46"
+    }
+  ],
+  "intermediateFailures": [
+    {
+      "cause": "Retired Pi test expected raw not-attached error; OMP host tool bridge intentionally redacts raw exceptions. Kept error assertion and verified native redaction; no production behavior changed.",
+      "log": {
+        "path": "/tmp/omp-database-integration-detail.log",
+        "exitCode": 1,
+        "sha256": "7ce097750b0be3be7b1f7e69e97fd9cc663958edb8a0ee3dee4791dd13769711"
+      }
+    },
+    {
+      "cause": "Old test read pre-prompt idle snapshot before native tool result reached the UI. Wait now requires exact tool-call ID and final assistant message.",
+      "log": {
+        "path": "/tmp/omp-database-integration-native.log",
+        "exitCode": 1,
+        "sha256": "e31005f93a66840a083103fd505300cda40d638dde53288efea8c61f9e8f5301"
+      }
+    }
+  ],
+  "source": {
+    "candidate": "/var/folders/41/07yyp3_12jddkkthmflqkbgw0000gn/T/omp-full-116-e8ov5sso",
+    "filesCompared": 1330,
+    "fingerprintSha256": "5571032c133b304b54f2804534a1c93e4c830bb9f95efac132c2ab3b55271b3a",
+    "differences": []
+  },
+  "limitations": [
+    "Local Docker database versions only; no Windows, vendor JDBC/GaussDB or remote TLS acceptance.",
+    "Native SDK plus local model fixture; no paid model/real provider account acceptance.",
+    "Native Task storage, tool-level MCP OAuth and other migration gaps remain.",
+    "Full 116 finished 114/116 with both failed entries subsequently passing targeted reruns; see omp-smoke-drain.json."
+  ],
+  "operations": {
+    "userProcessesPreserved": [
+      23786,
+      62015
+    ],
+    "rootDist": "Not overwritten",
+    "containers": "All owned containers removed and label search empty",
+    "candidate": "Full-smoke candidate removed after terminal handles and cwd checks.",
+    "release": "No commit, push, publish or installed-app replacement"
+  }
+}

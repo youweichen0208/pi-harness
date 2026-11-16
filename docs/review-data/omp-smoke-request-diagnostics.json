@@ -1,0 +1,88 @@
+{
+  "status": "Full 119-entry v78 baseline completed: two failures; not a final all-green run",
+  "platform": "darwin-arm64",
+  "protocol": 78,
+  "omp": "18.20.0",
+  "bun": "1.4.4",
+  "source": {
+    "candidate": "/var/folders/41/07yyp3_12jddkkthmflqkbgw0000gn/T/omp-full-final-v78-9r3v19ct",
+    "filesCompared": 1346,
+    "fingerprintSha256": "03b240b44e38c7f96781f361d9a8f8b057bbc14c382a1a42c77d861b66b6eec6",
+    "fingerprintMethod": "sha256 of ordered path, NUL, binary sha256(file) tuples",
+    "docsExcluded": true,
+    "differencesFromCurrentRoot": [
+      ".github/workflows/ci.yml",
+      ".github/workflows/release-desktop.yml",
+      "server/index.ts",
+      "server/omp/bootstrap.ts",
+      "server/omp/chat-service.ts",
+      "server/omp/runtime.ts",
+      "server/omp/session.ts",
+      "server/omp/tasks.ts",
+      "server/omp/tool-output-native.ts",
+      "server/omp/tool-output.ts",
+      "server/omp/worker.ts",
+      "tests/extension-ui-test.mjs",
+      "tests/lib/mock-ssh.mjs",
+      "tests/run-smoke.mjs",
+      "tests/ssh-plugin-test.mjs",
+      "tests/ssh-plugin-ui-test.mjs",
+      "tests/unit/omp-tasks.test.ts",
+      "tests/vscode-editor-plugin-test.mjs",
+      "web/src/components/OmpTasksPanel.tsx"
+    ],
+    "missingFromCandidate": [
+      "tests/omp-task-output-test.mjs"
+    ]
+  },
+  "verification": {
+    "build": {
+      "path": "/tmp/omp-full-final-v78-build.log",
+      "exitCode": 0,
+      "sha256": "d52f818234332df9d009ed72f284726ad701db9bd7e3d47948df5499e123c92f"
+    },
+    "smoke": {
+      "path": "/tmp/omp-full-final-v78-smoke.log",
+      "exitCode": 1,
+      "sha256": "d597fee7486ae760b62766f216328d688666e4ccf46f17479f658f4348c4d791"
+    }
+  },
+  "counts": {
+    "passed": 117,
+    "total": 119,
+    "skipped": 0,
+    "currentSmokeEntries": 120,
+    "fullCurrentSmokeRun": false
+  },
+  "failures": [
+    {
+      "test": "extension-ui-test",
+      "symptom": "Native /mcp commandExecuted missing immediately after settings_state during reload",
+      "followup": "omp-extension-reload-readiness.json: controlled rejection while navigation lease held; corrected wait and normal/controlled checks passed."
+    },
+    {
+      "test": "vscode-editor-plugin-test",
+      "symptom": "All plugin protocol assertions passed, then temporary directory cleanup failed with ENOTEMPTY. Leftovers were automatically installed ssh2 artifacts.",
+      "followup": "omp-editor-fixtures.json: offline locked dependencies and current OMP fixture setup; editor protocol, SSH protocol and browser passed. Production installer cancellation is not claimed."
+    }
+  ],
+  "scope": "Includes request diagnostics and the /new fix. Predates child-output implementation and later fixture corrections. Snapshot source fingerprint remained unchanged throughout the run.",
+  "latestCompleteAllGreen": "omp-smoke-import.json: protocol 76, 116/116",
+  "operations": {
+    "rootDist": "Not overwritten",
+    "userProcessesPreserved": [
+      23786,
+      62015
+    ],
+    "candidateRemoved": true,
+    "allVerificationHandlesTerminal": true,
+    "release": "No commit, push, publish or installed-app replacement"
+  },
+  "checks": [
+    "Protocol sync 78",
+    "317 isolated test scripts",
+    "CI/release YAML parsed with Bun",
+    "Evidence JSON parsed",
+    "git diff --check"
+  ]
+}

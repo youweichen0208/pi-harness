@@ -1,0 +1,131 @@
+{
+  "status": "Native child compaction catalogue fixed and locally verified; full migration incomplete",
+  "platform": "darwin-arm64",
+  "protocol": 78,
+  "omp": "18.20.0",
+  "bun": "1.4.4",
+  "node": "26.0.0",
+  "source": {
+    "candidate": "/var/folders/41/07yyp3_12jddkkthmflqkbgw0000gn/T/omp-task-compaction-build-71yx8hrv",
+    "filesCompared": 1349,
+    "fingerprintSha256": "702eee36e4108f3308087e20117e137491415d74a57ef72210bd4fde07c68f0d",
+    "fingerprintMethod": "sha256 of ordered path, NUL, binary sha256(file) tuples",
+    "docsExcluded": true,
+    "differences": []
+  },
+  "reproduction": {
+    "before": 3,
+    "afterChildCompactionBeforeFix": 2,
+    "nativeBranchTaskCalls": 1,
+    "collapsedDisplayTaskCalls": 0,
+    "modelRequestsDuringRead": 0
+  },
+  "cause": "Task catalogue and ancestry used the native collapsed display transcript. The nested Task still existed in the native active branch but was omitted before host task projection.",
+  "changes": [
+    "Use public native file loader, in-memory migrator and SessionEntryIndex to recover task declarations from the complete selected child branch, including pre-compaction messages.",
+    "Keep task detail on native collapsed display transcript; never replay hidden history to the model, open a child writer, revive or prompt.",
+    "Validate native headers, malformed records, duplicate IDs, real paths and file identity before/after the two read-only views; invalidate cached metadata on file change.",
+    "Clone derived cached task rows before scanning to avoid stale ancestry mutation across scans.",
+    "Add native regression to default smoke (121 entries) and six source/packaged desktop gates. Workflows not executed."
+  ],
+  "coverage": [
+    "Actual three-task nested execution, public native compaction after writers close, restoration in fresh host with all three completed tasks.",
+    "Repeated child compaction and compaction in both parent/child preserve task catalogue and native collapsed details.",
+    "Native child branch switch hides abandoned nested task, restoring branch recovers it; no all-file branch leakage.",
+    "Same host cache sees native child branch changes; removed history handle rejected, restored task gets a new handle.",
+    "Nested output reader resolves original tool result through compacted ancestry.",
+    "Every read leaves all transcript byte hashes unchanged and causes zero model calls; parent close may append only native session_exit metadata, all child bytes unchanged."
+  ],
+  "verification": {
+    "originalReproduction": {
+      "path": "/tmp/omp-task-compaction-red.log",
+      "exitCode": 1,
+      "sha256": "a6c96199e07bfddaa8b2b116b86a2d3386571a60bda13567aab9f143f0f7da56"
+    },
+    "boundaryReproduction": {
+      "path": "/tmp/omp-task-compaction-boundary-red.log",
+      "exitCode": 1,
+      "sha256": "71985036b0cc7d8460472ba372910619ef48f06de14f0e1f0e0eadf6e2735ce6"
+    },
+    "build": {
+      "path": "/tmp/omp-task-compaction-build.log",
+      "exitCode": 0,
+      "sha256": "db981c9b8ccfedc7d9605b3e9afa99300a6fcb6333f0b5b4fbc9e35397b8fdbc"
+    },
+    "typecheck": {
+      "path": "/tmp/omp-task-compaction-types-final.log",
+      "exitCode": 0,
+      "sha256": "20eba569f73b594b29f88375d81dbe413bbe134c5008159c58f8cd696a6e4b77"
+    },
+    "units": {
+      "path": "/tmp/omp-task-compaction-units.log",
+      "exitCode": 0,
+      "sha256": "12d02f633bd8c4d82144b68714393fa7562771f3fcac02e0b246dd05845382fd"
+    },
+    "originalProbeGreen": {
+      "path": "/tmp/omp-task-compaction-green.log",
+      "exitCode": 0,
+      "sha256": "552ee18f88dbec8ad77ceb925515f1287e7182b82dc72aafa937bb8d37ae7c4b"
+    },
+    "finalNativeRegression": {
+      "path": "/tmp/omp-task-compaction-output-final.log",
+      "exitCode": 0,
+      "sha256": "fdd8c76b1c01ae1169b471c92856d795ccb2d90f2b6b4598352494760b84d238"
+    },
+    "related": {
+      "path": "/tmp/omp-task-compaction-related.log",
+      "exitCode": 0,
+      "sha256": "81558d5ab464d4eedc6df6fa66458a36314f67ee2ec1541eb464732c7da18d4c"
+    },
+    "permanentRegressionAgainstOldCandidate": {
+      "path": "/tmp/omp-task-compaction-permanent-red.log",
+      "exitCode": 1,
+      "sha256": "1fbb3062079da15bf497e5c319550f85fcfb798a30987d12793a818f913f2938",
+      "assertion": "child compaction must retain all nested tasks: 2 !== 3"
+    }
+  },
+  "counts": {
+    "unitFiles": 174,
+    "unitPassed": 1079,
+    "unitSkipped": 1,
+    "relatedPassed": 6,
+    "relatedTotal": 6,
+    "currentSmokeEntries": 121,
+    "fullCurrentSmokeRun": false
+  },
+  "intermediateFixtureCorrections": [
+    "Initial all-file hash assertion included closing the live parent host. Boundary log proved OMP appends its normal session_exit record on dispose; final test asserts unchanged bytes during reads, strict exit-only parent append and unchanged children after close.",
+    "macOS /var versus /private/var path aliases prevented excluding the parent from post-close child hashes; fixture now canonicalizes its owned temporary root.",
+    "Stale history-handle rejection is deliberately sanitized by host transport; final assertion checks actual harness_task_history command rejection and successful fresh handle access."
+  ],
+  "limitations": [
+    "Current full 120-entry baseline is a separate immutable candidate predating this production fix; do not label focused checks as a 121-entry full pass.",
+    "Native Task internal writer protection remains unresolved; this fix only changes read-only catalogue recovery.",
+    "No original Windows DeepSeek task, real gateway, current installer or remote desktop workflow acceptance.",
+    "Native OAuth selected-definition write-back conflict, tool-level OAuth, CLI JSON/print exit and old active desktop history cleanup remain separate gaps."
+  ],
+  "operations": {
+    "rootDist": "Not overwritten",
+    "userProcessesPreserved": [
+      23786,
+      62015
+    ],
+    "release": "No commit, push, publish or installed-app replacement",
+    "candidateRemoved": true,
+    "allVerificationHandlesTerminal": true
+  },
+  "commands": [
+    "npm run typecheck",
+    "npm run build (isolated candidate)",
+    "npm test (isolated candidate)",
+    "node tests/omp-task-compaction-test.mjs <node executable> <isolated candidate>",
+    "node tests/run-smoke.mjs omp-tasks-test omp-task-output-test omp-recovery-test omp-tree-test omp-persistence-test omp-session-storage-test"
+  ],
+  "checks": [
+    "Protocol sync 78",
+    "318 isolated test scripts",
+    "CI/release YAML parsed with Bun",
+    "git diff --check"
+  ],
+  "baselineFullSmoke": "omp-smoke-task-output.json: separate earlier candidate passed 120/120; does not include this production fix."
+}

@@ -1,6 +1,5 @@
 import { CodeWorkspace } from "./components/CodeWorkspace";
 import { langFromPath } from "./hljs-lite";
-import { PI_CLI_INSTALL_COMMAND } from "./pi-cli-install";
 import { useWikiCoordinator } from "./use-wiki-coordinator";
 import { WikiCoordinationError, type WikiOperation } from "./wiki-coordinator";
 import type { WikiProjectReference } from "./types";
@@ -76,7 +75,7 @@ import {
 	subscribeLoadedPluginViews,
 	type LoadedPluginView,
 } from "./plugin-loader";
-import { PiSetupModal } from "./components/PiSetupModal";
+import { OmpSetupModal } from "./components/OmpSetupModal";
 import { ModelConfigModal } from "./components/ModelConfigModal";
 
 import { SettingsModal } from "./components/SettingsModal";
@@ -502,6 +501,7 @@ export function App() {
 				if (refreshed.cwd !== wikiCwd || !refreshed.conversationId || refreshed.conversationId === activeId) throw error;
 				result = await create(refreshed.conversationId);
 			}
+			await wikiCoordinator.waitForTarget(result, current, operation);
 			if (!operation.accepts(wikiCurrent.current, current, { cwd: wikiCwd, conversationId: result.conversationId, sessionId: result.sessionId })) return false;
 			// Wiki 独立窗口没有可回切的普通对话锚点——退出即关窗。
 			const anchor = isWikiWindow ? null : view === "wiki" && wikiFileRequest ? wikiNormalAnchor.current : { cwd: wikiCwd, conversationId: activeId };
@@ -550,6 +550,7 @@ export function App() {
 			if (wikiRequestRef.current?.token !== current.token || !await wikiSave.current?.()) return;
 			if (!operation.current() || wikiRequestRef.current?.token !== current.token) return;
 			const result = await wikiRequest<{ conversationId: string; sessionId: string }>(current.cwd, action, { conversationId: current.conversationId, id, path: current.path });
+			await wikiCoordinator.waitForTarget(result, source, operation);
 			if (!operation.accepts(wikiCurrent.current, source, { cwd: current.cwd, conversationId: result.conversationId, sessionId: result.sessionId })) return;
 			setWikiFileRequest({ ...current, conversationId: result.conversationId, token: randomUuid() });
 			wikiPersist({ client: wikiWindowClient(), cwd: current.cwd, conversationId: result.conversationId, sessionId: result.sessionId, path: current.path, anchor: wikiNormalAnchor.current });
@@ -920,21 +921,7 @@ export function App() {
 	const openFileSearch = useCallback(() => { setGlobalSearchFilesOnly(true); setGlobalSearchOpen(true); }, []);
 
 	const [terminalFocus, setTerminalFocus] = useState<{ id: string }>();
-	const installPiCli = () => {
-		const conversationId = chat.activeConversationId || chat.state?.conversationId;
-		if (!chat.ready || switching || !conversationId || !chat.state?.cwd) return;
-		const existing = chat.terminals.find(item => item.conversationId === conversationId && item.command?.command === PI_CLI_INSTALL_COMMAND);
-		const id = existing?.id ?? randomUuid();
-		const command: CommandDef = { name: "Install Pi CLI", command: PI_CLI_INSTALL_COMMAND, cwd: "${pwd}" };
-		if (!existing) terminal.create({ id, conversationId, title: command.name, cwd: chat.state.cwd, cols: 80, rows: 24, running: true, exitCode: null, command });
-		else if (!existing.running) {
-			terminal.restart(id);
-			send({ type: "run_command", terminalId: id, conversationId, command, cols: 80, rows: 24 });
-		}
-		setTerminalFocus({ id });
-		setSettingsOpen(false);
-		setView("terminal");
-	};
+
 
 	// 插件视图桥：插件无 chat 上下文，通过窗口事件请求在可见终端执行命令
 	// （与 SCM 面板同款：已有同名 tab 原地重跑，否则新建并自动切到终端视图）。
@@ -1135,6 +1122,16 @@ export function App() {
 				mimeType: img.mimeType,
 			}, owner);
 	};
+	const toolImageAttachRef = useRef(attachImage);
+	toolImageAttachRef.current = attachImage;
+	const attachToolImage = useCallback(async (file: File, owner: string) => {
+		if (!chat.ready || switching || owner !== chat.activeConversationId || owner !== attachmentKey.current) return false;
+		const image = await fileToProcessedImage(file);
+		if (!image) return false;
+		// Conversion may finish after navigation; keep it in the original draft.
+		toolImageAttachRef.current(image, owner);
+		return true;
+	}, [chat.ready, switching, chat.activeConversationId]);
 	const addImageFiles = async (files: File[], owner = attachmentKey.current) => {
 		for (const f of files) {
 			const img = await fileToProcessedImage(f);
@@ -1484,7 +1481,9 @@ export function App() {
 						<ChatDock target={wikiFileRequest || databaseOpen || documentPreview ? wikiChatHost : null}>
 							{conversationState ? (
 								<WorkspacePathContext.Provider value={conversationState.cwd}><MessageList recovery={{ ...toolRecovery, models: chat.models, onLoadModels: () => { if (!chat.models.length && !chat.modelsLoading) send({ type: "list_models" }); } }}
-									active={!notesOpen && !scratchOpen && (view === "chat" || view === "wiki" || databaseOpen)}
+									active={!notesOpen && !scratchOpen && (view === "chat" || view === "wiki" && wikiChatOpen || databaseOpen)}
+									ompTaskSend={send}
+									onAttachToolImage={attachToolImage}
 									connected={chat.ready}
 									silenceNotified={chat.agentSilence?.conversationId === conversationState.conversationId && chat.agentSilence.phase === "silent"}
 									key={conversationState.conversationId}
@@ -1578,6 +1577,7 @@ export function App() {
 									messages={conversationState?.messages ?? []}
 									streamingMessage={conversationState?.streamingMessage ?? null}
 									taskProgress={conversationState?.taskProgress}
+									ompTasks={conversationState?.ompTasks}
 									isStreaming={conversationState?.isStreaming}
 									conversationId={chat.activeConversationId}
 									agentSilence={chat.agentSilence}
@@ -1600,21 +1600,24 @@ export function App() {
 							onProject={setWikiProject}
 							cwd={wikiFileRequest.cwd}
 							conversationId={wikiFileRequest.conversationId}
+							ompTasks={conversationState?.conversationId === wikiFileRequest.conversationId ? conversationState.ompTasks : undefined}
+							taskSend={send}
 							references={wikiReferences}
 							currentIncluded={wikiCurrentIncluded}
 							onReferences={updateWikiReferences}
 							onChatAction={wikiChatAction}
-							empty={!conversationState?.messages.some(message => message.role === "user") && !conversationState?.isStreaming}
+							empty={!conversationState?.messages.some(message => message.role === "user") && !conversationState?.commandOutputs?.length && !conversationState?.isStreaming}
 							notices={chat.notices.length > 0 && <div className="notices wiki-status-notices">{chat.notices.map(n => <NoticeToast key={n.id} notice={n} onDismiss={dismissNotice} onOpenExtensions={openExtensionSettings} onSelectDirectory={() => setCwdNoticePicker(n.id)} />)}</div>}
 							chatOpen={wikiChatOpen}
 							chatWidth={wikiChatWidth}
 							onChatOpen={setWikiChatOpen}
 							onChatResize={resizeWikiChat}
 							onClose={exitWiki}
+							navigationPending={wikiBusy}
 							chatHost={setWikiChatHost}
 						>
 							{wikiFileRequest.cwd === chat.state?.cwd && wikiFileRequest.conversationId === chat.activeConversationId ? <WikiWorkbench coordinator={wikiCoordinator} key={wikiFileRequest.cwd} cwd={wikiFileRequest.cwd} conversationId={wikiFileRequest.conversationId} fileRequest={wikiFileRequest} streaming={!!conversationState?.isStreaming} active={view === "wiki"} ready={chat.ready && !switching} writingBlocked={!!switching || !!conversationState?.isStreaming} openDocument={openWikiDocument} onOpenFolder={() => { setWikiFolderError(undefined); setWikiFolderPicker(true); }} folderBusy={!chat.ready || !!switching || !!wikiFolderPending || wikiBusy} connected={chat.ready} guard={wikiGuard} saveBeforePrompt={wikiSave} contextReader={wikiContextReader} contextSaver={wikiContextSaver} onContextChange={setWikiCurrentFile} onReference={receiveWikiReference} /> : <div className="boot-wait">{chat.ready ? t("loadingSession") : t("connectingServer")}</div>}
-						</WikiWindowShell> : <WikiWindowShell notices={chat.notices.length > 0 && <div className="notices wiki-status-notices">{chat.notices.map(n => <NoticeToast key={n.id} notice={n} onDismiss={dismissNotice} onOpenExtensions={openExtensionSettings} onSelectDirectory={() => setCwdNoticePicker(n.id)} />)}</div>} documentPath={wikiWindowParams().doc ?? ""} loading chatOpen={false} chatWidth={wikiChatWidth} onChatOpen={setWikiChatOpen} onChatResize={resizeWikiChat} onClose={exitWiki} chatHost={setWikiChatHost}><div className="boot-wait" role="status">{chat.ready ? t("loadingSession") : t("connectingServer")}</div></WikiWindowShell>)}
+						</WikiWindowShell> : <WikiWindowShell notices={chat.notices.length > 0 && <div className="notices wiki-status-notices">{chat.notices.map(n => <NoticeToast key={n.id} notice={n} onDismiss={dismissNotice} onOpenExtensions={openExtensionSettings} onSelectDirectory={() => setCwdNoticePicker(n.id)} />)}</div>} documentPath={wikiWindowParams().doc ?? ""} loading navigationPending={wikiBusy} chatOpen={false} chatWidth={wikiChatWidth} onChatOpen={setWikiChatOpen} onChatResize={resizeWikiChat} onClose={exitWiki} chatHost={setWikiChatHost}><div className="boot-wait" role="status">{chat.ready ? t("loadingSession") : t("connectingServer")}</div></WikiWindowShell>)}
 					</div>
 					<div className={`view-pane ${view === "terminal" ? "" : "hidden"}`}>
 						<TerminalViewBoundary onBack={() => setView("chat")}>
@@ -1624,7 +1627,7 @@ export function App() {
 						</TerminalViewBoundary>
 					</div>
 					<div className={`view-pane ${view === "nodes" ? "" : "hidden"}`}>
-						<Suspense fallback={null}>{visited.current.has("nodes") && <NodeWorkbench active={view === "nodes"} send={send} dirBrowse={chat.dirBrowse} />}</Suspense>
+						<Suspense fallback={null}>{visited.current.has("nodes") && <NodeWorkbench active={view === "nodes"} transportConnected={chat.ready} send={send} dirBrowse={chat.dirBrowse} />}</Suspense>
 					</div>
 					<div className={`view-pane ${view === "git" ? "" : "hidden"}`}>
 						{visited.current.has("git") && <ScmPanel
@@ -1678,23 +1681,20 @@ export function App() {
 			{chat.ready &&
 				chat.state &&
 				chat.state.piConfigured === false &&
+				!chat.state.sessionPersistence?.failed &&
 				!setupDismissed &&
 				!manageModelsOpen && (
-					<PiSetupModal
-						sources={chat.modelSources}
+					<OmpSetupModal
 						onManage={() => setManageModelsOpen(true)}
 						send={send}
-						piConfigured={chat.state.piConfigured}
-						piAgentInstalled={chat.state.piAgentInstalled}
+						configured={chat.state.piConfigured}
 						providers={chat.providers}
-						installResult={chat.installResult}
 						onClose={() => setSetupDismissed(true)}
 					/>
 				)}
 			<ProviderAuthModal state={chat.providerAuth} send={send} />
 			{manageModelsOpen && (
 				<ModelConfigModal
-					sources={chat.modelSources}
 					send={send}
 					providers={chat.modelsConfig}
 					providerStatus={chat.providers}
@@ -1708,7 +1708,6 @@ export function App() {
 			{settingsOpen && (
 				<SettingsModal
 					initialTab={settingsInitialTab}
-					onInstallPiCli={installPiCli}
 					chat={chat}
 					send={send}
 					onClose={() => setSettingsOpen(false)}

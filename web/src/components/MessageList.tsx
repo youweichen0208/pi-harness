@@ -1,4 +1,7 @@
+import { ToolImageContext } from "../tool-image-context";
 import { subagentTurns } from "../subagent-turns";
+import { OmpTaskContext } from "../omp-task-context";
+import { OmpCommandOutput } from "./OmpCommandOutput";
 import { SubagentTurnContext, type SubagentTurnCall } from "./SubagentTurnPanel";
 import { answerHistory } from "../answer-history";
 import { WelcomeMotto } from "./WelcomeMotto";
@@ -74,6 +77,8 @@ function hasToolCall(m: UiMessage): boolean {
 }
 
 interface MessageListProps {
+	onAttachToolImage?: (file: File, conversationId: string) => Promise<boolean>;
+	ompTaskSend?: (message: import("../types").ClientMessage) => boolean;
 	recovery?: ToolRecoveryActions;
 	active?: boolean;
 	connected?: boolean;
@@ -129,8 +134,10 @@ function ReloadEvent({ event }: { event: ReloadStatus }) {
 	</div>;
 }
 
-export const MessageList = memo(function MessageList({ recovery, state, connected = true, silenceNotified = false, liveOutputs, toolStatuses, onEdit, onKillBash, onStop, thinkingWrap, toolsWrap, pendingEcho, reloadEvents = [] }: MessageListProps) {
+export const MessageList = memo(function MessageList({ onAttachToolImage, ompTaskSend, active = true, recovery, state, connected = true, silenceNotified = false, liveOutputs, toolStatuses, onEdit, onKillBash, onStop, thinkingWrap, toolsWrap, pendingEcho, reloadEvents = [] }: MessageListProps) {
 	const t = useT();
+	const toolImages = useMemo(() => ({ cwd: state.cwd, conversationId: state.conversationId, active: active && connected, attach: onAttachToolImage }), [state.cwd, state.conversationId, active, connected, onAttachToolImage]);
+	const ompTasks = useMemo(() => ompTaskSend ? { tasks: state.ompTasks ?? [], conversationId: state.conversationId, active, send: ompTaskSend } : null, [ompTaskSend, state.ompTasks, state.conversationId, active]);
 	const projectedMessages = useMemo(() => projectToolTextMessages(withoutRetiredPlans(state.messages)), [state.messages]);
 	state = { ...state, messages: projectedMessages };
 	const incidentState = useMemo(() => toolTextIncidents(state.streamingMessage ? [...state.messages, state.streamingMessage] : state.messages, state.isStreaming), [state.messages, state.streamingMessage, state.isStreaming]);
@@ -139,6 +146,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 		const events = [
 			...reloadEvents.filter((event) => event.conversationId === state.conversationId).map((event) => ({ kind: "reload" as const, event })),
 			...state.cwdEvents.filter((event) => event.cwd === state.cwd).map((event) => ({ kind: "cwd" as const, event })),
+			...(state.commandOutputs ?? []).map(event => ({ kind: "command" as const, event })),
 		].sort((a, b) => a.event.timestamp - b.event.timestamp);
 		const items: ({ kind: "message"; message: UiMessage; index: number } | (typeof events)[number])[] = [];
 		let next = 0;
@@ -148,7 +156,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 		});
 		while (next < events.length) items.push(events[next++]);
 		return items;
-	}, [state.messages, state.conversationId, state.cwd, state.cwdEvents, reloadEvents]);
+	}, [state.messages, state.conversationId, state.cwd, state.cwdEvents, state.commandOutputs, reloadEvents]);
 	const scrollRef = useRef<HTMLDivElement>(null);
 	/** 底部 1px 哨兵：内容高度变化的唯一探测点（见下方 IntersectionObserver）。 */
 	const endRef = useRef<HTMLDivElement>(null);
@@ -814,7 +822,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 	const many = markerGroups.some((group) => group.ids.length > 1);
 
 	return (
-		<SubagentTurnContext.Provider key={`${state.conversationId}:${state.sessionId}`} value={subagentGroups}><div className="messages-wrap">
+		<ToolImageContext.Provider value={toolImages}><OmpTaskContext.Provider value={ompTasks}><SubagentTurnContext.Provider key={`${state.conversationId}:${state.sessionId}`} value={subagentGroups}><div className="messages-wrap">
 			<div className="messages" ref={scrollRef} onScroll={onScroll} onWheelCapture={onWheelCapture} onPointerDown={onPointerDown} onTouchStart={onTouchStart} onTouchMove={onTouchMove}>
 				{timeline.length === 0 && !state.streamingMessage && (
 					<div className="empty-state">
@@ -823,6 +831,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 					</div>
 				)}
 				{timeline.map((item) => {
+					if (item.kind === "command") return <OmpCommandOutput key={item.event.id} output={item.event} />;
 					if (item.kind === "reload") return <ReloadEvent key={`reload-${item.event.requestId}`} event={item.event} />;
 					if (item.kind === "cwd") return <div key={`cwd-${item.event.timestamp}`} className="goal-event cwd-event" role="status"><UiIcon name="turn" /><span>{t("cwdSwitchEvent", { path: item.event.cwd.replace(/^\/(?:Users|home)\/[^/]+(?=\/|$)/, "~") })}</span></div>;
 					const { message: m, index: i } = item;
@@ -1011,7 +1020,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 					)}
 				</div>
 			)}
-		</div></SubagentTurnContext.Provider>
+		</div></SubagentTurnContext.Provider></OmpTaskContext.Provider></ToolImageContext.Provider>
 	);
 } , (prev, next) => {
 	if (prev.active === false && next.active === false && prev.state.conversationId === next.state.conversationId) return true;

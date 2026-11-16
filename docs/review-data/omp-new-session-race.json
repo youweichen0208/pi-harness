@@ -1,0 +1,82 @@
+{
+  "platform": "darwin-arm64",
+  "protocol": 78,
+  "omp": "18.20.0",
+  "bun": "1.4.4",
+  "node": "26.0.0",
+  "status": "Metadata refresh versus /new race reproduced, fixed and locally verified",
+  "source": {
+    "candidate": "/var/folders/41/07yyp3_12jddkkthmflqkbgw0000gn/T/omp-request-diagnostics-build-i4livhjm",
+    "filesCompared": 1346,
+    "fingerprintSha256": "67790892933813a95bbda631ef36e33f8bf05a72e6e049b642e7993ea14657eb",
+    "differencesFromCurrentRoot": [],
+    "docsExcluded": true
+  },
+  "changes": [
+    "Serialize native new_session through the existing metadata queue. Recheck writable state, runtime identity, input epoch and Stop after waiting.",
+    "Only close the matching failed runtime, avoiding an old operation stopping a newer worker. Keep unknown/no-automatic-replay behavior."
+  ],
+  "verification": {
+    "originalFullFailure": {
+      "path": "/tmp/omp-full-v78-smoke.log",
+      "exitCode": 1,
+      "sha256": "4b79366180a8c348dd5e23836c1fa992454febb762b2168127798789c1585144"
+    },
+    "naturalRace": {
+      "path": "/tmp/omp-new-session-race-red.log",
+      "exitCode": 1,
+      "sha256": "9b08441eea0772b4c5d6506cd07875b215e2e4c2292d98751e38a8b8a26b1d64"
+    },
+    "lockedRed": {
+      "path": "/tmp/omp-new-session-race-locked-red.log",
+      "exitCode": 1,
+      "sha256": "cfec745d2a5fd92ce9e5d277ebe98ddf5e005e075a3944b47ab649c69e7b0d37"
+    },
+    "lockedGreen": {
+      "path": "/tmp/omp-new-session-race-probe-green.log",
+      "exitCode": 0,
+      "sha256": "dd94a360f811f172562c90560d425ee999489666a4f4800b2d4885ef908ac908"
+    },
+    "permanentRegression": {
+      "path": "/tmp/omp-new-session-race-green.log",
+      "exitCode": 0,
+      "sha256": "785c1aa7d7a9eff59a1d0ff48283dfddd90afe09f91c0b1e5a604a5217e14296"
+    },
+    "browser": {
+      "path": "/tmp/omp-new-session-race-browser.log",
+      "exitCode": 0,
+      "sha256": "6019c72c12cfb2fd92e3ad015582dd92d36c5275018e545c7c171c39057a1e0d"
+    },
+    "relatedFinal": {
+      "path": "/tmp/omp-request-diagnostics-related-final.log",
+      "exitCode": 0,
+      "sha256": "ed352432ed9c88449a25e8bbb8cb26e6c212b44f01e9f689238930efd21618ed"
+    }
+  },
+  "coverage": [
+    "Three controlled native model-configuration-lock iterations: refresh occupies admission, /new waits and succeeds with new identity and no model call.",
+    "Stop while waiting cancels transition, preserves previous identity on reopen, and does not dispatch late or revive worker.",
+    "Existing PTY/history/receipts/hooks/cancellation/background/no-model behavior retained; browser preserves newer drafts and reload behavior."
+  ],
+  "temporaryProbe": "Deleted after permanent regression added to tests/native-session-commands-test.mjs; logs retained.",
+  "limitations": [
+    "Local macOS verification only.",
+    "117/118 full run predates fix; final 119-entry full suite not rerun."
+  ],
+  "operations": {
+    "rootDist": "Not overwritten",
+    "userProcessesPreserved": [
+      23786,
+      62015
+    ],
+    "candidateRemoved": true,
+    "allVerificationHandlesTerminal": true,
+    "release": "No commit, push, publish or installed-app replacement"
+  },
+  "checks": [
+    "Protocol sync 78",
+    "316 isolated test scripts",
+    "git diff --check",
+    "Evidence JSON parsed successfully"
+  ]
+}

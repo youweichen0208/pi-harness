@@ -27,6 +27,13 @@ describe("chat provider editing", () => {
 	it("removes deleted chat rows, retaining non-chat rows", () => {
 		expect(mergeChatProvider({ models: [{ id: "old" }, { id: "image", type: "image" }] }, { providerId: "fixture", models: [{ id: "new" }] }).models).toEqual([{ id: "new" }, { id: "image", type: "image" }]);
 	});
+	it("preserves OMP native kinds when an editor saves only chat rows", () => {
+		const embedding = { id: "shared", kind: "embedding", api: "openai-embeddings", dimensions: 1024 };
+		const previous = { models: [embedding, { id: "shared", kind: "chat", maxTokens: 128000, thinking: { mode: "auto" } }] };
+		expect(mergeChatProvider(previous, { providerId: "fixture", models: [{ id: "shared", name: "Edited" }] }).models).toEqual([
+			{ id: "shared", kind: "chat", thinking: { mode: "auto" }, name: "Edited" }, embedding,
+		]);
+	});
 	it("allows IDs shared across operations and rejects duplicate chat IDs", () => {
 		expect(mergeChatProvider({ models: [{ id: "shared", type: "image" }, { id: "shared", type: "chat", cost: { input: 1 } }] }, { providerId: "fixture", models: [{ id: "shared", name: "Edited" }] }).models).toEqual([{ id: "shared", type: "chat", cost: { input: 1 }, name: "Edited" }, { id: "shared", type: "image" }]);
 		expect(() => mergeChatProvider({}, { providerId: "fixture", models: [{ id: "a" }, { id: " a " }] })).toThrow("Duplicate");

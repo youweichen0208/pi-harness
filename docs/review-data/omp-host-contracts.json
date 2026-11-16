@@ -1,0 +1,44 @@
+{
+  "status": "Two legacy host smoke entries migrated and locally verified; full migration incomplete",
+  "updatedAt": "2026-11-15T17:03:56.723220+00:00",
+  "platform": "darwin-arm64",
+  "omp": "18.20.0",
+  "bun": "1.4.4",
+  "protocol": 74,
+  "scope": "Regression and contract documentation migration only; no production runtime changes in this step. Existing smoke entries retained, manifest remains 112.",
+  "contracts": {
+    "tool-text-continue-test": "Real OMP with local OpenAI and Anthropic streams: no execution or automatic replay of textual tools, no file side effects, preserved native thinking split, actual streamed read tool/result, no replay after real tool progress, Stop and explicit continuation preserve native history.",
+    "system-prompt-test": "Real production HTTP: auth/Origin/JSON/owner guards, opaque file IDs and CAS, actual wire prompt before and after explicit reload, busy and stopped writes rejected, native fallback, byte-identical history on refresh, extension turn override and subsequent base-policy restoration. --browser delegates to native browser regression after HTTP fixture cleanup."
+  },
+  "verification": {
+    "isolatedBuild": "passed; exit 0",
+    "typecheck": "passed; exit 0",
+    "toolTextBothProtocols": "passed; exit 0",
+    "httpAndBrowser": "passed final expanded test; exit 0",
+    "nativePrompt": "passed; exit 0",
+    "testEnvironment": "308 scripts passed",
+    "engineBoundary": "129 files and built output passed",
+    "diffCheck": "passed",
+    "unitSuite": "Not rerun for test/document-only edits; previous recorded baseline remains 1058 passed, 1 skipped."
+  },
+  "testNotes": [
+    "Initial tool-text assertion expected leaked thinking to remain entirely in text. It failed with one settled model request and a native thinking/text split. Updated the assertion to preserve and verify native splitting; no execution or request-count assertions removed.",
+    "Old Pi automatic one-reminder replay and APPEND_SYSTEM/deferred reload expectations were explicitly superseded by the approved OMP boundary; no SDK behavior was changed to satisfy them."
+  ],
+  "sourceSha256": {
+    "tests/tool-text-continue-test.mjs": "48501aa64d1e78607110b1e4fa9988101764d8308b0fe55b45e7edabfc6cc2cb",
+    "tests/system-prompt-test.mjs": "72348b8235a25ef5bd747112824ab00f998b31b39023fdcc3293f50038bc2de8"
+  },
+  "fullSmoke": "Not rerun. Historical complete baseline remains 102/110 in omp-smoke-ask.json; targeted passes are not a revised aggregate.",
+  "remainingLegacyHostEntries": [
+    "component-updates-test",
+    "extensions-test",
+    "codemode-mcp-test",
+    "model-sources-protocol-test"
+  ],
+  "remainingGoal": "Native Task storage guard, further recovery/authentication gaps, history cleanup, cross-platform package acceptance and Windows original-task matrix remain open.",
+  "isolation": "/var/folders/41/07yyp3_12jddkkthmflqkbgw0000gn/T/omp-host-contracts-pnlxyf08; checkout dist used by existing user service was not replaced. All test/build handles terminal before cleanup.",
+  "windowsVerified": false,
+  "desktopInstallerBuilt": false,
+  "published": false
+}

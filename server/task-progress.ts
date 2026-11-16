@@ -1,3 +1,4 @@
+import { isVirtualToolPath } from "./tool-target.js";
 import { isToolTextContinuation } from "./tool-text.js";
 import { taskFailed, unrecoveredFailures } from "./task-recovery.js";
 import type { TaskProgress, TaskStep, UiMessage, UiToolCallBlock } from "./protocol.js";
@@ -38,7 +39,7 @@ function artifact(call: UiToolCallBlock): TaskStep["artifacts"][number] {
 	// The command row is read back on demand, so keep the whole command (one line,
 	// no sentence splitting) instead of the 78-character display summary.
 	const commandLabel = command?.replace(/\s+/g, " ").trim().slice(0, 400);
-	return { toolCallId: call.id, kind: call.name, label: path ?? (commandLabel ? commandLabel : call.name), ...(path ? { path } : {}) };
+	return { toolCallId: call.id, kind: path && isVirtualToolPath(path) ? "tool" : call.name, label: path ?? (commandLabel ? commandLabel : call.name), ...(path && !isVirtualToolPath(path) ? { path } : {}) };
 }
 
 function defaultTitle(calls: UiToolCallBlock[]): string {

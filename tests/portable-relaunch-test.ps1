@@ -18,7 +18,7 @@ try {
   }
   if (-not $main) { throw 'First portable app never started' }
   $appDir = Split-Path $main.ExecutablePath
-  $module = Join-Path $appDir 'resources/app/node_modules/@earendil-works/pi-ai/dist/api/anthropic-messages.js'
+  $module = Join-Path $appDir 'resources/app/node_modules/@oh-my-pi/pi-ai/src/providers/anthropic.ts'
   if (-not (Test-Path $module)) { throw "Missing module on first launch: $module" }
   Write-Host "First launch module exists: $module"
   # Confirm the shipped module itself loads, without making any model call.

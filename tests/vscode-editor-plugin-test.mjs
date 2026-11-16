@@ -18,6 +18,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import WebSocket from "ws";
 import { testEnv } from "./lib/test-env.mjs";
+import { ensurePluginSsh2Dep } from "./lib/mock-ssh.mjs";
 
 const PORT = 8967;
 const BASE = `http://127.0.0.1:${PORT}`;
@@ -27,9 +28,9 @@ const repoRoot = join(import.meta.dirname, "..");
 let proc = null;
 const dataDir = mkdtempSync(join(tmpdir(), "pi-web-vsc-plugin-"));
 const workspace = join(dataDir, "workspace");
-const agentDir = join(dataDir, "agent");
-mkdirSync(agentDir);
-writeFileSync(join(agentDir, "settings.json"), "{}");
+const agentDir = join(dataDir, "omp", "agent");
+mkdirSync(agentDir, { recursive: true });
+writeFileSync(join(agentDir, "config.yml"), JSON.stringify({ skills: { enabled: false }, cacheWarming: { enabled: false }, retry: { enabled: false } }));
 if (await portUp(PORT)) throw new Error(`Port ${PORT} occupied; refusing to touch its owner`);
 
 function fail(msg) {
@@ -43,6 +44,7 @@ mkdirSync(plugDst, { recursive: true });
 cpSync(join(repoRoot, "dev", "plugins", "vscode-editor", "manifest.json"), join(plugDst, "manifest.json"));
 cpSync(join(repoRoot, "dev", "plugins", "vscode-editor", "index.mjs"), join(plugDst, "index.mjs"));
 cpSync(join(repoRoot, "dev", "plugins", "vscode-editor", "client"), join(plugDst, "client"), { recursive: true });
+ensurePluginSsh2Dep(plugDst);
 
 // 工作区：src/main.js + GBK 中文 txt + node_modules 噪音
 mkdirSync(join(workspace, "src"), { recursive: true });
@@ -141,6 +143,8 @@ try {
 	if (!me || me.hasClient !== true || me.error !== undefined) {
 		fail(`vscode-editor not listed correctly: ${JSON.stringify(me)}`);
 	} else console.log("✓ plugins 清单含 vscode-editor（hasClient）");
+	const deps = await rpc(sock, { action: "state" });
+	if (!deps.ok || !deps.state?.depsReady || deps.state?.depsInstalling) throw Error("Editor fixture must use its prepared offline SSH dependency");
 
 	// -- 2. list：根目录（目录优先排序、node_modules 被跳过） -------------------
 	let r = await rpc(sock, { action: "list", dir: "" });

@@ -1,0 +1,137 @@
+{
+  "status": "Wiki startup, folder identity and closed-window handoff verified locally; full OMP migration remains incomplete",
+  "verifiedAt": "2026-11-15T12:19:18.277256+00:00",
+  "platform": "darwin",
+  "arch": "arm64",
+  "omp": "18.20.0",
+  "bun": "1.4.4",
+  "protocolVersion": 67,
+  "findings": [
+    "Knowledge-library configuration can arrive after hello. A Wiki popup was initialized as ordinary chat, then chat-document failed with Open a Wiki window first. The handshake now carries independent boolean Wiki intent, retaining legacy wikiCwd support.",
+    "set_cwd always selected an ordinary conversation and could restore ordinary project history into a Wiki window. It now retains the active conversation kind and selects only the matching kind in the target folder.",
+    "A disconnected idle window was rejected as an active history owner while a passive project catalog read or app version lookup was pending. These reads no longer count as conversation operations; disposal still waits for the catalog read and aborts the version fetch.",
+    "The Web exit button remained enabled during coordinated document navigation although its click was ignored. It now reflects the coordinator lock; model execution still follows the existing interrupt confirmation."
+  ],
+  "redEvidence": [
+    {
+      "test": "omp-wiki-bootstrap-test",
+      "failure": "changing folders must retain Wiki identity: false !== true"
+    },
+    {
+      "test": "omp-wiki-bootstrap-test after folder-only fix",
+      "failure": "Wiki intent cannot depend on when configuration arrives: false !== true"
+    },
+    {
+      "test": "omp-workspaces-test",
+      "failure": "a passive project catalog read must not block history handoff: false !== true"
+    },
+    {
+      "test": "omp-workspaces-test with held fetch",
+      "failure": "a passive app version lookup must not block history handoff: false !== true"
+    },
+    {
+      "test": "omp-wiki-bootstrap-test --browser with held document navigation",
+      "failure": "close reflects pending navigation rather than ignoring clicks: false !== true"
+    }
+  ],
+  "checks": {
+    "build": "passed after all production changes and before tests",
+    "typecheck": "passed",
+    "unitFiles": 169,
+    "unitPassed": 1049,
+    "unitSkipped": 1,
+    "designTokens": "passed",
+    "protocol": "passed",
+    "testEnvironmentScripts": 304,
+    "engineSourceFiles": 125,
+    "workflowYaml": "passed",
+    "diff": "passed"
+  },
+  "bootstrap": {
+    "command": "node tests/omp-wiki-bootstrap-test.mjs --browser",
+    "result": "passed on final build",
+    "coverage": [
+      "hello before delayed library configuration",
+      "legacy Wiki URL",
+      "folder switch and return",
+      "ordinary history isolation",
+      "normal-client document request refusal",
+      "invalid Wiki flag refusal",
+      "service restart",
+      "public knowledge-library navigation",
+      "navigation lock on exit",
+      "page reload"
+    ]
+  },
+  "publicWiki": {
+    "initialFinalBuildBatch": {
+      "passed": 5,
+      "total": 6,
+      "failed": [
+        "wiki-bootstrap-model-test"
+      ]
+    },
+    "fixtureCorrection": "OMP persists empty bound histories. Fresh model-inheritance cases now use unbound documents, preserving the initial-runtime reuse assertion. Previously each case reused README history from earlier window-control cases.",
+    "correctedRerun": {
+      "command": "node tests/wiki-bootstrap-model-test.mjs",
+      "result": "passed on the same final build"
+    },
+    "finalPassedTests": [
+      "wiki-bootstrap-model-test",
+      "wiki-modal-browser-test",
+      "wiki-thinking-level-test",
+      "wiki-math-browser-test",
+      "wiki-format-editor-test",
+      "wiki-insert-position-test"
+    ],
+    "coverage": [
+      "Windows/Linux window-control layout in Chromium (not native OS validation)",
+      "slow handshake",
+      "legacy/qualified/unavailable/stalled model inheritance",
+      "native adaptive thinking request",
+      "main window isolation",
+      "window reuse and refresh",
+      "interrupt confirmation",
+      "save failure and version conflicts",
+      "selection quoting and drafts",
+      "tree creation/deletion",
+      "mobile layout",
+      "formula source preservation and unsafe-link handling",
+      "format aliases and heading levels",
+      "color save/reload/native undo",
+      "insertion anchors and narrow viewport bounds"
+    ]
+  },
+  "relatedSmoke": {
+    "passed": 6,
+    "total": 6,
+    "tests": [
+      "omp-workspaces-test",
+      "wiki-protocol-test",
+      "wiki-assistant-test",
+      "client-eviction-test",
+      "ws-malformed-test",
+      "version-handshake-test"
+    ]
+  },
+  "fullSmoke": {
+    "baseline": "omp-smoke-receipts.json",
+    "passed": 87,
+    "total": 108,
+    "failed": 21,
+    "repeatedAfterFinalFixes": false,
+    "currentManifestTests": 109,
+    "note": "Local targeted results do not revise the earlier full-run baseline."
+  },
+  "cleanup": "Temporary owner instrumentation and owned math probe removed; all test/build processes exited.",
+  "remaining": [
+    "Other public host regressions",
+    "Native Task internal history protection and remaining Task UI coverage",
+    "Native multi-question ask UI and other integration gaps",
+    "Old Pi history cleanup",
+    "Desktop package and Windows original-task acceptance"
+  ],
+  "desktopPackageBuilt": false,
+  "windowsOriginalTaskVerified": false,
+  "published": false
+}

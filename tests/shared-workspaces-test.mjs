@@ -1,13 +1,11 @@
 // Two servers with separate data dirs share one workspace file (desktop + CLI):
 // an older per-app catalog is merged once, and a change in one shows up in the other.
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createServer } from "node:net";
+import { startIsolatedHarness } from "./lib/isolated-server.mjs";
 import WebSocket from "ws";
-import { testEnv } from "./lib/test-env.mjs";
 
 const base = mkdtempSync(join(tmpdir(), "pi-shared-workspaces-"));
 const project = join(base, "project");
@@ -17,31 +15,16 @@ const legacyFile = join(base, "desktop-data", "project-workspaces.json");
 mkdirSync(join(base, "desktop-data"));
 writeFileSync(legacyFile, JSON.stringify({ revision: 2, workspaces: [{ id: "old-desktop", name: "Desktop", paths: [project] }] }));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-async function freePort() {
-	const probe = createServer();
-	await new Promise((r) => probe.listen(0, "127.0.0.1", r));
-	const port = probe.address().port;
-	await new Promise((r) => probe.close(r));
-	assert(port >= 8900);
-	return port;
-}
 const servers = [];
 async function start(dataDir, workspacesFile) {
-	const port = await freePort();
-	const env = { ...testEnv(), PORT: String(port), PI_WEB_CWD: project, PI_WEB_DATA_DIR: join(base, dataDir), PI_CODING_AGENT_DIR: join(base, "agent"), PI_WEB_TOKEN: "" };
-	delete env.PI_WEB_WORKSPACES_FILE;
+	const nativeAgent = join(base, dataDir, "omp", "agent");
+	mkdirSync(nativeAgent, { recursive: true });
+	writeFileSync(join(nativeAgent, "config.yml"), JSON.stringify({ skills: { enabled: false }, cacheWarming: { enabled: false } }));
+	const env = { PI_WEB_CWD: project, PI_WEB_DATA_DIR: join(base, dataDir), PI_WEB_TOKEN: "" };
 	if (workspacesFile) env.PI_WEB_WORKSPACES_FILE = workspacesFile;
-	const server = spawn(process.execPath, ["dist/server/index.js"], { env, stdio: ["ignore", "pipe", "pipe"] });
-	const entry = { server, port, logs: "" };
-	server.stdout.on("data", (data) => { entry.logs += data; });
-	server.stderr.on("data", (data) => { entry.logs += data; });
-	servers.push(entry);
-	for (let i = 0; i < 150; i++) {
-		try { if ((await fetch(`http://127.0.0.1:${port}/api/health`)).ok) return entry; } catch {}
-		if (server.exitCode !== null) break;
-		await sleep(100);
-	}
-	throw new Error(entry.logs);
+	const harness = await startIsolatedHarness({ env });
+	servers.push(harness);
+	return harness;
 }
 const sockets = [];
 async function client({ port, logs }, id) {
@@ -51,10 +34,10 @@ async function client({ port, logs }, id) {
 	await new Promise((r, reject) => { socket.once("open", r); socket.once("error", reject); });
 	const send = (message) => socket.send(JSON.stringify(message));
 	const wait = async (test) => {
-		for (let i = 0; i < 300; i++) { const message = messages.findLast(test); if (message) return message; await sleep(20); }
+		for (let i = 0; i < 1500; i++) { const message = messages.findLast(test); if (message) return message; await sleep(20); }
 		throw new Error(`Message timeout: ${messages.slice(-5).map((m) => m.type)}\n${logs.slice(-2000)}`);
 	};
-	send({ type: "hello", clientId: id }); await wait((m) => m.type === "snapshot");
+	send({ type: "hello", clientId: id }); await wait((m) => m.type === "ready");
 	send({ type: "list_project_workspaces" });
 	return { send, wait };
 }
@@ -82,10 +65,6 @@ try {
 	console.log("shared-workspaces-test: ok");
 } finally {
 	for (const socket of sockets) socket.close();
-	for (const { server } of servers) {
-		server.kill("SIGTERM");
-		await Promise.race([new Promise((r) => server.once("exit", r)), sleep(5000)]);
-		if (server.exitCode === null) { server.kill("SIGKILL"); await new Promise((r) => server.once("exit", r)); }
-	}
+	await Promise.all(servers.map(server => server.stop()));
 	rmSync(base, { recursive: true, force: true });
 }

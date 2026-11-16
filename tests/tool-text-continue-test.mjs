@@ -1,91 +1,94 @@
-/**
- * A reply that ends with a tool call written as text (the call never ran) is
- * continued automatically: the model is asked to re-issue it, the tool then runs
- * and the task finishes. Without real tool progress in between it is asked once only.
- */
+/** OMP never executes tool descriptions or replays a settled request automatically.
+ * The historical filename stays in the full smoke manifest; Pi's one-reminder
+ * policy was intentionally retired. Actual protocol tool calls still execute. */
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import WebSocket from 'ws';
-import { testEnv } from "./lib/test-env.mjs";
+import { listenIsolated, startIsolatedHarness } from './lib/isolated-server.mjs';
+import { mergeSnapshot } from './lib/snapshots.mjs';
 
-const REPO = join(dirname(fileURLToPath(import.meta.url)), '..');
-// The shape seen in the field: leaked reasoning, then only the tail of the call.
-const LEAKED = '先验证改动。</think>\n<parameter name="command">echo AUTO_OK</parameter>\n</invoke>';
-
-async function scenario(port, replies) {
-	const root = mkdtempSync(join(tmpdir(), 'pi-tooltext-'));
-	const cwd = join(root, 'ws'); mkdirSync(cwd);
-	let calls = 0;
+const LEAKED = '先验证改动。</think>\n<parameter name="command">echo UNEXECUTED > must-not-exist.txt</parameter>\n</invoke>';
+const DESCRIBED = '<tool_call>{"name":"write","arguments":{"path":"must-not-exist.txt","content":"UNEXECUTED"}}</tool_call>';
+for (const api of ['openai-completions', 'anthropic-messages']) {
+	const root = mkdtempSync(join(tmpdir(), 'omp-tool-text-'));
+	const cwd = join(root, 'workspace'), data = join(root, 'data'), agent = join(data, 'omp/agent');
+	mkdirSync(cwd); mkdirSync(agent, { recursive: true });
+	writeFileSync(join(cwd, 'fixture.txt'), 'REAL_TOOL_RESULT_SENTINEL');
+	const requests = []; let replies = [], unexpected = 0, state, harness, socket;
+	const events = [];
 	const model = createServer(async (req, res) => {
-		for await (const _ of req) { /* drain */ }
-		const reply = replies(++calls);
-		const chunk = (delta, finish) => `data: ${JSON.stringify({ id: 'f', object: 'chat.completion.chunk', created: 1, model: 'fixture', choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`;
+		let raw = ''; for await (const part of req) raw += part;
+		requests.push(JSON.parse(raw));
+		const reply = replies.shift() ?? (unexpected++, { text: 'UNEXPECTED_AUTOMATIC_REQUEST' });
 		res.writeHead(200, { 'content-type': 'text/event-stream' });
-		if (reply.tool) res.write(chunk({ role: 'assistant', tool_calls: [{ index: 0, id: `call-${calls}`, type: 'function', function: { name: 'bash', arguments: JSON.stringify({ command: reply.tool }) } }] }, null));
-		else res.write(chunk({ role: 'assistant', content: reply.text }, null));
-		res.write(chunk({}, reply.tool ? 'tool_calls' : 'stop'));
-		res.write(`data: ${JSON.stringify({ id: 'f', object: 'chat.completion.chunk', created: 1, model: 'fixture', choices: [], usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } })}\n\n`);
-		res.end('data: [DONE]\n\n');
-	});
-	await new Promise(resolve => model.listen(0, '127.0.0.1', resolve));
-	const agent = join(root, 'agent'); mkdirSync(agent);
-	writeFileSync(join(agent, 'models.json'), JSON.stringify({ providers: { fixture: { api: 'openai-completions', baseUrl: `http://127.0.0.1:${model.address().port}/v1`, apiKey: 'x', models: [{ id: 'fixture', name: 'Fixture', input: ['text'], contextWindow: 64000, maxTokens: 1024 }] } } }));
-	writeFileSync(join(agent, 'settings.json'), JSON.stringify({ defaultProvider: 'fixture', defaultModel: 'fixture', compaction: { enabled: false }, retry: { enabled: false } }));
-	const server = spawn(process.execPath, [join(REPO, 'dist', 'server', 'index.js')], {
-		env: { ...testEnv(), PORT: String(port), PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(root, 'data'), PI_CODING_AGENT_DIR: agent },
-		stdio: 'ignore', windowsHide: true,
-	});
-	try {
-		for (let i = 0; i < 100; i++) { try { if ((await fetch(`http://127.0.0.1:${port}/api/health`)).ok) break; } catch {} await sleep(100); }
-		const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`);
-		const notices = []; let snapshot = null;
-		await new Promise(resolve => ws.on('open', resolve));
-		ws.on('message', d => { const m = JSON.parse(d); if (m.type === 'notice') notices.push(m.text); if (m.type === 'snapshot') snapshot = m.state; });
-		ws.send(JSON.stringify({ type: 'hello', clientId: randomUUID() }));
-		await sleep(1500);
-		ws.send(JSON.stringify({ type: 'prompt', text: 'verify the change', requestId: 'r1' }));
-		let stableSince = Date.now(), lastCalls = -1;
-		for (let i = 0; i < 300; i++) {
-			if (calls !== lastCalls) { lastCalls = calls; stableSince = Date.now(); }
-			ws.send(JSON.stringify({ type: 'get_state' }));
-			await sleep(100);
-			if (calls > 0 && snapshot && !snapshot.isStreaming && Date.now() - stableSince > 2500) break;
+		if (api === 'openai-completions') {
+			const emit = (delta, finish_reason = null) => res.write(`data: ${JSON.stringify({ id: 'f', object: 'chat.completion.chunk', model: 'fixture', choices: [{ index: 0, delta, finish_reason }] })}\n\n`);
+			if (reply.tool) {
+				emit({ role: 'assistant', tool_calls: [{ index: 0, id: `read-${requests.length}`, type: 'function', function: { name: 'read', arguments: '{"path":' } }] });
+				emit({ tool_calls: [{ index: 0, function: { arguments: '"fixture.txt"}' } }] });
+			} else for (const text of [reply.text.slice(0, 17), reply.text.slice(17)]) emit({ content: text });
+			emit({}, reply.tool ? 'tool_calls' : 'stop'); res.end('data: [DONE]\n\n');
+		} else {
+			const emit = (type, fields) => res.write(`event: ${type}\ndata: ${JSON.stringify({ type, ...fields })}\n\n`);
+			emit('message_start', { message: { id: `m-${requests.length}`, type: 'message', role: 'assistant', model: 'fixture', content: [], stop_reason: null, usage: { input_tokens: 10, output_tokens: 0 } } });
+			emit('content_block_start', { index: 0, content_block: reply.tool ? { type: 'tool_use', id: `read-${requests.length}`, name: 'read', input: {} } : { type: 'text', text: '' } });
+			for (const text of reply.tool ? ['{"path":', '"fixture.txt"}'] : [reply.text.slice(0, 17), reply.text.slice(17)]) emit('content_block_delta', { index: 0, delta: reply.tool ? { type: 'input_json_delta', partial_json: text } : { type: 'text_delta', text } });
+			emit('content_block_stop', { index: 0 });
+			emit('message_delta', { delta: { stop_reason: reply.tool ? 'tool_use' : 'end_turn', stop_sequence: null }, usage: { output_tokens: 20 } });
+			emit('message_stop', {}); res.end();
 		}
-		ws.close();
-		return { calls, notices, text: JSON.stringify(snapshot?.messages ?? []) };
+	});
+	const wait = async (fn, label) => {
+		for (let i = 0; i < 1000; i++) { if (fn()) return; await sleep(25); }
+		throw Error(`${api}: timed out ${label}; calls=${requests.length}; replies=${replies.length}; state=${JSON.stringify({running: state?.isStreaming, messages: state?.messages, notices: events.filter(e => e.type === "notice")})}\n${harness?.logs}`);
+	};
+	const send = value => socket.send(JSON.stringify(value));
+	const run = async (text, responses) => {
+		assert.equal(replies.length, 0); replies = [...responses];
+		const before = requests.length, expected = before + responses.length, requestId = crypto.randomUUID();
+		send({ type: 'prompt', text, requestId, target: { cwd, conversationId: state.conversationId, sessionId: state.sessionId } });
+		await wait(() => requests.length >= expected && !state.isStreaming && state.messages.some(m => m.role === 'assistant' && m.content.map(b => b.text ?? b.thinking ?? '').join('').replaceAll('</think>', '') === responses.at(-1).text.replaceAll('</think>', '')), 'settled native reply');
+		await wait(() => events.some(e => e.type === 'prompt_result' && e.requestId === requestId && e.receipt === 'accepted'), 'receipt');
+		await sleep(750);
+		assert.equal(requests.length, expected, 'no automatic replay after the final response');
+		assert.equal(unexpected, 0); assert.equal(replies.length, 0);
+		assert(!existsSync(join(cwd, 'must-not-exist.txt')), 'textual commands never cause file side effects');
+		assert(!state.messages.some(m => m.origin === 'auto-reminder'));
+	};
+	try {
+		const port = await listenIsolated(model);
+		writeFileSync(join(agent, 'models.yml'), JSON.stringify({ providers: { fixture: { api, baseUrl: `http://127.0.0.1:${port}`, apiKey: 'FIXTURE_ONLY', models: [{ id: 'fixture', contextWindow: 200000 }] } } }));
+		writeFileSync(join(agent, 'config.yml'), JSON.stringify({ skills: { enabled: false }, retry: { enabled: false }, compaction: { enabled: false }, cacheWarming: { enabled: false } }));
+		harness = await startIsolatedHarness({ env: { PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: data } });
+		socket = new WebSocket(`ws://127.0.0.1:${harness.port}/ws`);
+		socket.on('message', raw => { const event = JSON.parse(raw); events.push(event); state = mergeSnapshot(state, event); });
+		await new Promise((resolve, reject) => { socket.once('open', resolve); socket.once('error', reject); });
+		send({ type: 'hello', clientId: `tool-text-${api}` }); await wait(() => events.some(e => e.type === 'ready'), 'ready');
+		if (state.model?.id !== 'fixture') send({ type: 'set_model', modelId: 'fixture/fixture' }); await wait(() => state.model?.id === 'fixture', 'model');
+		await run('First textual command', [{ text: LEAKED }]);
+		if (api === 'openai-completions') assert(state.messages.some(m => m.role === 'assistant' && m.content.some(b => b.type === 'thinking' && b.thinking === '先验证改动。')), 'native leaked-thinking split is preserved');
+		await run('Another textual tool description', [{ text: DESCRIBED }]);
+		assert(!state.messages.some(m => m.role === 'toolResult'), 'text descriptions create no tool result');
+		assert(!state.messages.some(m => m.content.some(b => b.type === 'toolCall')), 'text descriptions create no tool call');
+		await run('Explicitly read fixture.txt', [{ tool: true }, { text: `After real tool progress: ${LEAKED}` }]);
+		assert(requests.some(r => JSON.stringify(r.messages).includes('REAL_TOOL_RESULT_SENTINEL')), 'real streamed tool parameters execute and results return to the model');
+		assert(state.messages.some(m => m.role === 'toolResult' && JSON.stringify(m).includes('REAL_TOOL_RESULT_SENTINEL')));
+		const file = state.sessionFile, sessionId = state.sessionId, calls = requests.length;
+		send({ type: 'abort' });
+		const status = async () => (await (await fetch(`http://127.0.0.1:${harness.port}/api/system-prompt`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId: `tool-text-${api}`, cwd, conversationId: state.conversationId, action: 'get' }) })).json()).available;
+		for (let i = 0; await status() && i < 400; i++) await sleep(25);
+		assert.equal(await status(), false); assert.equal(requests.length, calls);
+		await run('Explicit user continuation', [{ text: 'NORMAL_FINAL_ANSWER' }]);
+		assert.equal(state.sessionFile, file); assert.equal(state.sessionId, sessionId);
+		const history = readFileSync(file, 'utf8');
+		assert(history.includes('must-not-exist.txt')); assert(!history.includes('auto-reminder'));
+		assert(JSON.stringify(requests.at(-1).messages).includes('must-not-exist.txt'), 'original textual description remains in restored model history');
+		console.log(`PASS ${api}: textual tools remain text, no automatic replay before/after real tools, split parameters execute, Stop and explicit continuation preserve history`);
 	} finally {
-		server.kill(); model.close();
-		await sleep(300);
-		rmSync(root, { recursive: true, force: true });
+		socket?.terminate(); await harness?.stop(); model.closeAllConnections(); await new Promise(resolve => model.close(resolve)); rmSync(root, { recursive: true, force: true });
 	}
 }
-
-// 1) The call written as text is re-issued after one automatic request and runs.
-const fixed = await scenario(8974, n => n === 1 ? { text: LEAKED } : n === 2 ? { tool: 'echo AUTO_OK' } : { text: '验证完成。' });
-assert.equal(fixed.calls, 3, 'leaked reply, re-issued tool call, final answer');
-assert(fixed.text.includes('没有被执行'), 'the automatic request is a visible user message');
-assert(/AUTO_OK/.test(fixed.text.replace(/echo AUTO_OK/g, '')), 'the tool actually ran and returned its output');
-assert(fixed.text.includes('"origin":"auto-reminder"'), 'reminder is projected as an event');
-assert(fixed.text.includes('"incidentId"'), 'incident metadata survives native serialization');
-
-// 2) Real progress does not reset the one-reminder limit within a user request.
-const repeated = await scenario(8978, n => [null, { text: LEAKED }, { tool: 'echo AUTO_OK' }, { text: LEAKED }, { tool: 'echo AUTO_OK' }, { text: '完成。' }][n] ?? { text: '完成。' });
-assert.equal(repeated.calls, 3, 'one reminder per user request even after real progress');
-assert.equal((repeated.text.match(/"origin":"auto-reminder"/g) ?? []).length, 1);
-
-// 3) A model that keeps writing calls as text without running anything is asked once, then stops.
-const stubborn = await scenario(8976, () => ({ text: LEAKED }));
-assert.equal(stubborn.calls, 2, 'one automatic continuation, no loop');
-
-// 4) A normal answer is never continued.
-const plain = await scenario(8977, () => ({ text: '这是一个普通回答。' }));
-assert.equal(plain.calls, 1, 'plain answers end the run as before');
-
-console.log('PASS tool calls written as text are reminded at most once per user request');

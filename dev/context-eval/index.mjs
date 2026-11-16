@@ -1,10 +1,12 @@
 #!/usr/bin/env node
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, writeFile, readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { loadConfig, reportConfig } from "./config.mjs";
 import { snapshotSources, readSnapshotBytes } from "./corpus.mjs";
 import { evaluateAnswer, summarize } from "./evaluate.mjs";
+
+const runtimeManifest = JSON.parse(await readFile(new URL("../../package.json", import.meta.url), "utf8"));
 
 const HELP = `Local engineering context evaluation (development only)
 
@@ -14,7 +16,7 @@ node dev/context-eval/index.mjs run --config <json> --out <new-directory> [--arm
 
 snapshot: copy only declared files and record original hashes/version metadata.
 doctor: check explicit endpoints/configuration; no corpus is sent.
-run: isolated Pi sessions with local endpoint or model.fromPi=true; saves local evidence.
+run: isolated OMP sessions with local endpoint or model.fromOmp=true; saves local evidence.
 
 Reports contain source quotations. Use .context-eval/ or another private ignored directory.
 Endpoint validation does not prove OpenViking/model subprocesses have no outbound network.
@@ -37,7 +39,7 @@ async function jsonRequest(url, headers = {}) {
 
 export async function doctor(config) {
 	const checks = [];
-	if (config.model.fromPi) {
+	if (config.model.fromOmp) {
 		checks.push({ name: "model", ok: true, provider: config.model.provider, model: config.model.id, endpoint: config.model.baseUrl, validation: "native_configuration_and_credentials_only", requestNotSent: true });
 	} else try {
 		const models = await jsonRequest(`${config.model.baseUrl}/models`);
@@ -54,7 +56,7 @@ export async function doctor(config) {
 			checks.push({ name: "openviking", ok: true, versionCheck: health.version ? "matched" : "not_reported_by_server" });
 		} catch (error) { checks.push({ name: "openviking", ok: false, error: error.message }); }
 	}
-	return { ok: checks.every((check) => check.ok), checks, modelTransport: config.model.fromPi ? "explicit_pi_provider" : "loopback", backendEgress: "not_verified", indexFreshness: "not_verified" };
+	return { ok: checks.every((check) => check.ok), checks, modelTransport: config.model.fromOmp ? "explicit_omp_provider" : "loopback", backendEgress: "not_verified", indexFreshness: "not_verified" };
 }
 
 async function exportSnapshot(config, corpus, output) {
@@ -115,13 +117,13 @@ export async function runEvaluation(config, corpus, output, arm, runner) {
 		process.removeListener("SIGTERM", interrupt);
 		await writeJson(join(output, "report.json"), {
 			createdAt: new Date().toISOString(), config: reportConfig(config),
-			node: process.version, sdk: "1.2.0", interrupted: controller.signal.aborted,
+			node: process.version, engine: "omp", sdk: runtimeManifest.dependencies["@oh-my-pi/pi-coding-agent"], bun: runtimeManifest.dependencies.bun, interrupted: controller.signal.aborted,
 			completedSamples: samples.length, plannedSamples, evidenceChecksPassed: evidenceChecksPassed(),
 			summary: summarize(samples), humanCorrectness: "ungraded", promotionDecision: "pending_real_data_and_human_review",
 			backendEgress: "not_verified", indexFreshness: arm === "baseline" ? "not_applicable" : "not_verified",
 			comparisonEligibility: arm === "baseline" ? "no_comparison" : "requires_backend_inventory_verification",
 			corpusScope: { baseline: "staged_file_allowlist", openviking: "registered_uri_prefixes_only" },
-			memoryMeasurement: "runner process only; excludes local model and OpenViking service",
+			memoryMeasurement: "Bun evaluation worker RSS only; excludes Node coordinator, local model and OpenViking service",
 		});
 	}
 	return evidenceChecksPassed();

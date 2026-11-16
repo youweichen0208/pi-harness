@@ -1,0 +1,64 @@
+{
+  "status": "Targeted migration completed; full OMP migration and Windows acceptance remain incomplete",
+  "verifiedAt": "2026-11-15 10:26:03 UTC",
+  "platform": "darwin",
+  "arch": "arm64",
+  "omp": "18.20.0",
+  "bun": "1.4.4",
+  "changes": [
+    "Replace development evaluation Pi SDK imports with isolated bundled-Bun OMP sessions and native model/configuration resolution.",
+    "Preserve read-only corpus and MCP URI boundaries; validate every native glob root, including delimited paths and string-encoded arrays.",
+    "Copy stable SQLite database and recovery logs into private storage; preserve original configuration and credential bytes, including live WAL.",
+    "Use native model output defaults; retain explicit evaluation limits, reject retired fromPi configuration, and report actual runtime versions.",
+    "Handle cancellation, cleanup, redirected requests and large Unicode worker results; scan development evaluation imports in engine boundary guard."
+  ],
+  "checks": {
+    "build": "passed",
+    "typecheck": "passed",
+    "unitFiles": 168,
+    "unitPassed": 1045,
+    "unitSkipped": 1,
+    "contextTestsPassed": 43,
+    "contextTestsFailed": 0,
+    "protocolVersion": 66,
+    "testEnvironmentScripts": 301,
+    "engineBoundary": "passed, including development evaluator",
+    "lockfile": "passed",
+    "diff": "passed",
+    "exampleSnapshot": {
+      "sources": 4,
+      "documents": 17,
+      "modelRequests": 0
+    }
+  },
+  "finalTargetedSmoke": {
+    "passed": 5,
+    "total": 5,
+    "tests": [
+      "check-engine-boundary-test",
+      "context-corpus-test",
+      "context-eval-test",
+      "context-session-test",
+      "context-omp-model-test"
+    ]
+  },
+  "longHistory": {
+    "messages": 4096,
+    "probeRemoved": true,
+    "standalone": "passed",
+    "earlierSixCaseBatch": "passed",
+    "intermittentEscapeRootCause": "unconfirmed; original assertion retained"
+  },
+  "fullSmoke": {
+    "baseline": "omp-smoke-commands.json",
+    "repeated": false,
+    "passed": 76,
+    "total": 106
+  },
+  "acceptance": {
+    "desktopPackageBuilt": false,
+    "windowsOriginalTaskVerified": false,
+    "realOpenVikingComparison": false,
+    "published": false
+  }
+}

@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import { resolvePiModel } from "./pi-model.mjs";
+import { resolveOmpModel } from "./omp-model.mjs";
 
 export function loopbackUrl(value, label) {
 	let url;
@@ -22,7 +22,8 @@ export async function loadConfig(path, env = process.env) {
 	const configPath = resolve(path);
 	const data = JSON.parse(await readFile(configPath, "utf8"));
 	if (data.version !== 1) throw new Error("Unsupported evaluation config version (expected 1)");
-	if (!data.model || (data.model.fromPi !== true && (typeof data.model.id !== "string" || !data.model.id.trim()))) throw new Error("model.id is required unless model.fromPi=true");
+	if (data.model?.fromPi) throw new Error("model.fromPi is retired; select model.fromOmp and an OMP agentDir");
+	if (!data.model || (data.model.fromOmp !== true && (typeof data.model.id !== "string" || !data.model.id.trim()))) throw new Error("model.id is required unless model.fromOmp=true");
 	if (!Array.isArray(data.sources) || !data.sources.length) throw new Error("sources must be a nonempty explicit file allowlist");
 	if (!Array.isArray(data.questions) || !data.questions.length) throw new Error("questions must not be empty");
 	const sourceIds = new Set(data.sources.map((source) => source.id));
@@ -40,14 +41,14 @@ export async function loadConfig(path, env = process.env) {
 			if (!source?.files?.includes(expected.path)) throw new Error(`${question.id}: expected evidence is not in source allowlist`);
 		}
 	}
-	const model = data.model.fromPi === true ? await resolvePiModel(data.model, dirname(configPath)) : {
+	const model = data.model.fromOmp === true ? await resolveOmpModel(data.model, dirname(configPath)) : {
 		baseUrl: loopbackUrl(data.model.baseUrl, "model.baseUrl"),
 		id: data.model.id,
-		contextWindow: positiveInteger(data.model.contextWindow, 32768, "model.contextWindow", 1048576),
-		maxTokens: positiveInteger(data.model.maxTokens, 4096, "model.maxTokens", 65536),
+		contextWindow: data.model.contextWindow,
+		maxTokens: data.model.maxTokens,
 	};
-	model.contextWindow = positiveInteger(model.contextWindow, 32768, "model.contextWindow", 1048576);
-	model.maxTokens = positiveInteger(model.maxTokens, 4096, "model.maxTokens", 65536);
+	if (model.contextWindow !== undefined) model.contextWindow = positiveInteger(model.contextWindow, undefined, "model.contextWindow", Number.MAX_SAFE_INTEGER);
+	if (model.maxTokens !== undefined) model.maxTokens = positiveInteger(model.maxTokens, undefined, "model.maxTokens", Number.MAX_SAFE_INTEGER);
 	if (model.maxTokens >= model.contextWindow) throw new Error("model.maxTokens must be smaller than contextWindow");
 	let openviking;
 	if (data.openviking) {
@@ -68,7 +69,7 @@ export async function loadConfig(path, env = process.env) {
 export function reportConfig(config) {
 	return {
 		version: config.version, model: {
-			fromPi: config.model.fromPi === true, provider: config.model.provider,
+			fromOmp: config.model.fromOmp === true, provider: config.model.provider,
 			id: config.model.id, api: config.model.api ?? "openai-completions", baseUrl: config.model.baseUrl,
 			contextWindow: config.model.contextWindow, maxTokens: config.model.maxTokens,
 		}, timeoutMs: config.timeoutMs,

@@ -2,8 +2,7 @@ import { scmOperation } from "./scm-operation.js";
 import { installNoteAssets } from "./note-assets.js";
 import { installLinkPreview } from "./link-preview.js";
 import { installDatabaseRoutes } from "./database/routes.js";
-import { installSystemPromptRoutes } from "./system-prompt-routes.js";
-import { installExtensionsRoutes } from "./extensions-routes.js";
+import { installOmpRoutes } from "./omp/routes.js";
 import { installCodemodeImageRoutes } from "./codemode-image-routes.js";
 import { installKnowledgeLibraryRoutes } from "./knowledge-library.js";
 import { installWikiRoutes } from "./wiki-routes.js";
@@ -22,11 +21,8 @@ import { installOpenAIProxyRoutes } from "./openai-proxy-routes.js";
  *   PORT            HTTP port (default 8787)
  *   PI_WEB_CWD      workspace the agent operates in (default: process.cwd())
  *   PI_WEB_DATA_DIR where per-client UI state is stored (client-state.json,
- *   default: <home>/.pi-web). Chat sessions are NOT stored here — they live
- *   in the pi agent's global TUI session dir (~/.pi/agent/sessions/--<cwd>--/)
- *   via the SDK default, so this web UI, the dev instance, and the pi CLI/TUI
- *   all share one conversation list per project.
- *   PI_CODING_AGENT_DIR  pi config dir (auth/models/skills) — passed to the SDK
+ *   default: <home>/.pi-web). OMP config and chat sessions live under
+ *   <dataDir>/omp. Legacy Pi transcripts are not loaded by this entry.
  */
 import { existsSync } from "node:fs";
 import { stat } from "node:fs/promises";
@@ -40,14 +36,14 @@ import { randomUUID } from "node:crypto";
 import express from "express";
 import compression from "compression";
 import { WebSocket, WebSocketServer } from "ws";
-import { VERSION, getAgentDir } from "@earendil-works/pi-coding-agent";
+import { OMP_VERSION as VERSION } from "./omp/bootstrap.js";
 import { PROTOCOL_VERSION } from "./protocol-version.js";
 import { appVersion } from "./app-version.js";
 import {
-	AgentService,
+	OmpChatService as AgentService,
 	workspacePath,
 	QuiesceRejectedError,
-} from "./agent-service.js";
+} from "./omp/chat-service.js";
 import { isRealPathInWorkspace } from "./files-service.js";
 import { previewKind } from "./text-sniff.js";
 import { startControlServer } from "./control-socket.js";
@@ -99,10 +95,8 @@ const AUTH_TOKEN = process.env.PI_WEB_TOKEN?.trim() ?? "";
 // worker processes inherit process.env, so leaving it there would hand the secret to
 // anything the agent runs (and into model context via `env`). Nothing re-reads it.
 delete process.env.PI_WEB_TOKEN;
-// Root of the SDK default per-project session dirs — chat transcripts live in
-// <SESSION_DIR_ROOT>/--<cwd>--/, shared with the pi CLI/TUI (getAgentDir
-// honors PI_CODING_AGENT_DIR).
-const SESSION_DIR_ROOT = join(getAgentDir(), "sessions");
+// OMP sessions are isolated by kind and canonical workspace hash.
+const SESSION_DIR_ROOT = join(DATA_DIR, "omp", "sessions");
 
 // Windows 轻量 bash 兜底：把 <home>/.pi-web/bin 前置到 PATH（SDK 的 bash 工具经
 // findBashOnPath 会找到其中的 bash.exe），并在无 Git Bash 时后台下载 busybox-w32。
@@ -175,14 +169,13 @@ const playgroundChat = new PlaygroundChat(DATA_DIR);
 const stopPlayground = installPlaygroundRoutes(app, { dataDir: DATA_DIR, allowed: originAllowed });
 installCodemodeImageRoutes(app, () => service, originAllowed);
 installOpenAIProxyRoutes(app, openAIProxy, originAllowed);
-installExtensionsRoutes(app, () => service, originAllowed);
+installOmpRoutes(app, () => service, originAllowed);
 installDatabaseRoutes(app, () => service, originAllowed);
-installSystemPromptRoutes(app, () => service, originAllowed);
 installKnowledgeLibraryRoutes(app, DATA_DIR, originAllowed);
 installWikiRoutes(app, () => service, join(DATA_DIR, "wiki"), originAllowed, () => projectWorkspaces.read());
 
 app.get("/api/health", (_req, res) => {
-	res.json({ ok: true, piVersion: VERSION, pid: process.pid });
+	res.json({ ok: true, piVersion: VERSION, agentEngine: "omp", ompVersion: VERSION, pid: process.pid });
 });
 
 app.get("/api/sqlite", async (req, res) => {
@@ -241,15 +234,15 @@ app.post("/api/markdown-image", (req, res) => {
  */
 app.get(["/api/tool-output", "/api/tool-output-list"], async (req, res) => {
 	if (!originAllowed(req)) { res.status(403).end("Forbidden"); return; }
-	const { clientId, conversationId, toolCallId } = req.query;
-	if (typeof clientId !== "string" || typeof conversationId !== "string" || typeof toolCallId !== "string") { res.status(400).end("Invalid request"); return; }
+	const { clientId, conversationId, toolCallId, taskId } = req.query;
+	if (typeof clientId !== "string" || typeof conversationId !== "string" || typeof toolCallId !== "string" || taskId !== undefined && (typeof taskId !== "string" || !taskId || taskId.length > 200)) { res.status(400).end("Invalid request"); return; }
 	try {
 		const cs = service.get(clientId);
 		if (!cs) { res.status(403).end("Output access denied"); return; }
 		if (req.path === "/api/tool-output-list") {
-			res.json((await cs.listToolOutputs(conversationId, toolCallId)).map(({ id, name, default: isDefault }) => ({ id, name, default: isDefault }))); return;
+			res.json((await cs.listToolOutputs(conversationId, toolCallId, taskId)).map(({ id, name, default: isDefault, ...metadata }) => ({ id, name, default: isDefault, partial: "partial" in metadata && metadata.partial === true }))); return;
 		}
-		const { handle, name } = await cs.downloadToolOutput(conversationId, toolCallId, typeof req.query.outputId === "string" ? req.query.outputId : undefined);
+		const { handle, name } = await cs.downloadToolOutput(conversationId, toolCallId, typeof req.query.outputId === "string" ? req.query.outputId : undefined, taskId);
 		res.attachment(name);
 		res.setHeader("X-Content-Type-Options", "nosniff");
 		const stream = handle.createReadStream();
@@ -584,6 +577,7 @@ wss.on("connection", (ws) => {
 	// cached client-session objects).
 	service.noteSocketOpen();
 	let clientId: string | null = null;
+	let sessionAttached = false;
 	let closed = false;
 	let unsubscribePlayground: (() => void) | undefined;
 	/** 最近一份全量 snapshot 的估算字节数（UTF-16 ×2），供背压相对阈值用（issue #11）。 */
@@ -628,7 +622,7 @@ wss.on("connection", (ws) => {
 			if (!snapshotRetryTimer) {
 				snapshotRetryTimer = setTimeout(() => {
 					snapshotRetryTimer = null;
-					service.get(clientId ?? "")?.flushSnapshot();
+					service.get(clientId ?? "")?.flushSnapshot(true);
 				}, SNAPSHOT_RETRY_MS);
 			}
 			return;
@@ -655,7 +649,11 @@ wss.on("connection", (ws) => {
 	};
 
 	const dispatchUnsafe = (msg: ClientMessage): void => {
-		if (!clientId) {
+		// OMP can emit a provisional snapshot while opening its worker. The
+		// browser requests files/SCM immediately, before attach has completed.
+		// Keep those requests for the ready replay instead of dropping them in
+		// the workspace-switch guard. Startup extension dialogs must still work.
+		if (!clientId || (!sessionAttached && msg.type !== "dialog_response")) {
 			pending.push(msg);
 			return;
 		}
@@ -665,7 +663,7 @@ wss.on("connection", (ws) => {
 			pending.push(msg);
 			return;
 		}
-		if (cs.switchingWorkspace && msg.type !== "prompt" && msg.type !== "query_prompt_receipt" && msg.type !== "set_cwd" && msg.type !== "get_state" && msg.type !== "node_request" && msg.type !== "playground_chat" && msg.type !== "list_project_workspaces" && msg.type !== "project_workspace_action") {
+		if (cs.switchingWorkspace && msg.type !== "dialog_response" && msg.type !== "prompt" && msg.type !== "query_prompt_receipt" && msg.type !== "set_cwd" && msg.type !== "get_state" && msg.type !== "node_request" && msg.type !== "playground_chat" && msg.type !== "list_project_workspaces" && msg.type !== "project_workspace_action") {
 			if (msg.type === "read_file" || msg.type === "write_file") send({
 				type: "file_result", operation: msg.type === "read_file" ? "read" : "write",
 				requestId: msg.requestId, cwd: msg.cwd ?? cs.cwd, path: msg.path,
@@ -675,58 +673,17 @@ wss.on("connection", (ws) => {
 		}
 		switch (msg.type) {
 			case "playground_chat":
-				if (service.quiesceInfo().quiesced && !["open", "receipt", "stop"].includes(msg.action)) { send({ type: "playground_chat_error", requestId: msg.requestId, error: "Service paused" }); break; }
+				if (service.quiesceInfo().quiesced && !["open", "receipt", "stop", "cancel_recovery"].includes(msg.action)) { send({ type: "playground_chat_error", requestId: msg.requestId, error: "Service paused" }); break; }
 				unsubscribePlayground ??= playgroundChat.subscribe(send);
+				if (service.quiesceInfo().quiesced && msg.action === "open") { send({ type: "playground_chat_state", state: playgroundChat.snapshot() }); break; }
 				void playgroundChat.handle(clientId, msg, send);
 				break;
 			case "node_request":
-				if (service.quiesceInfo().quiesced && ["connect", "trust", "credential_test", "xshell_unlock", "agent_start", "agent_prompt", "agent_new", "agent_model"].includes(msg.action)) {
+				if (service.quiesceInfo().quiesced && ["connect", "trust", "credential_test", "xshell_unlock", "agent_start", "agent_prompt", "agent_new", "agent_model", "agent_reopen"].includes(msg.action)) {
 					send({ type: "node_event", event: "failure", requestId: msg.requestId, nodeId: msg.nodeId, conversationId: msg.conversationId, data: { action: msg.action, message: "服务暂停接收新操作。" } });
 					break;
 				}
 				void nodeWorkbench.handle(clientId, msg);
-				break;
-			case "query_prompt_receipt":
-				send(cs.queryPromptReceipt(msg.requestId));
-				break;
-			case "prompt":
-				void cs.prompt(msg.text, msg.attachments, msg.queue, msg.requestId, undefined, msg.target);
-				break;
-			case "subagent_request":
-				void cs.subagentRequest(msg);
-				break;
-			case "abort":
-				void cs.abort();
-				break;
-			case "retry_silent_prompt":
-				void cs.retrySilentPrompt(msg.conversationId, msg.text);
-				break;
-
-			case "new_chat":
-				void cs.newChat();
-				break;
-			case "tree_get": case "tree_content": case "tree_preview": case "tree_navigate": case "tree_label": case "session_clone": case "session_fork": case "session_reopen":
-				void cs.treeRequest(msg);
-				break;
-			case "edit_message":
-				void cs.editMessage(msg.messageId, msg.text, msg.attachments, msg);
-				break;
-			case "cycle_model":
-				void cs.cycleModel();
-				break;
-			case "cycle_thinking":
-				cs.cycleThinking();
-				break;
-			case "get_state":
-				// Always a FULL snapshot: the client is (re)connecting or detected
-				// a rev/seq gap — it needs an authoritative state to rebuild from.
-				cs.flushSnapshot(true);
-				break;
-			case "get_commands":
-				void cs.pushSlashCommands();
-				break;
-			case "list_sessions":
-				void cs.refreshSessions();
 				break;
 			case "list_project_workspaces":
 				workspaceSubscribers.add(send);
@@ -745,216 +702,6 @@ wss.on("connection", (ws) => {
 				}
 				break;
 			}
-			case "list_projects":
-				void cs.pushProjects();
-				break;
-			case "remove_project":
-				void cs.removeProject(msg.path);
-				break;
-			case "delete_session":
-				void cs.deleteSession(msg.path);
-				break;
-			case "rename_session":
-				void cs.renameSession(msg.path, msg.name);
-				break;
-			case "browse_dirs":
-				void cs.browseDirs(msg.path);
-				break;
-			case "switch_session":
-				void cs.switchSession(msg.path);
-				break;
-			case "switch_conversation":
-				void cs.switchConversation(msg.id);
-				break;
-			case "list_files":
-				void cs.listFiles(msg.path);
-				break;
-			case "check_conversation_files":
-				cs.checkConversationFiles(msg.cwd, msg.reqId, msg.paths);
-				break;
-			case "search_files":
-				void cs.searchFiles(msg.query, msg.reqId);
-				break;
-			case "search_content":
-				cs.searchContent(msg);
-				break;
-			case "get_git_branch":
-				void cs.gitBranch();
-				break;
-			case "scm_diff":
-				void cs.scmQuery("diff", msg.reqId, { scope: msg.scope, base: msg.base });
-				break;
-			case "scm_status":
-				void cs.scmQuery("status", msg.reqId);
-				break;
-			case "scm_history":
-				void cs.scmQuery("history", msg.reqId);
-				break;
-			case "scm_filediff":
-				void cs.scmQuery("filediff", msg.reqId, { path: msg.path });
-				break;
-			case "scm_commit":
-				void cs.scmQuery("commit", msg.reqId, { hash: msg.hash });
-				break;
-			case "read_file":
-				void cs.readFile(msg.path, msg);
-				break;
-			case "write_file":
-				void cs.writeFile(msg.path, msg.text, msg);
-				break;
-			case "list_models":
-				void cs.listModels();
-				break;
-			case "set_model":
-				void cs.setModel(msg.modelId);
-				break;
-			case "set_thinking":
-				cs.setThinking(msg.level);
-				break;
-			case "set_cwd":
-				void cs.setCwd(msg.path, msg.requestId, msg.source);
-				break;
-			case "complete_path":
-				void cs.completePath(msg.path);
-				break;
-			case "check_component_updates":
-				void cs.checkComponentUpdates(msg.requestId);
-				break;
-			case "update_component":
-				if (service.quiesceInfo().quiesced || service.activeConversations() || nodeWorkbench.activeAgents() || service.pendingMessages()) {
-					send({ type: "component_updates", requestId: msg.requestId, cwd: cs.cwd, phase: "error", items: [], error: "请等待所有任务结束后再更新扩展" });
-				} else {
-					service.quiesce();
-					void cs.updateComponent(msg.requestId, msg.id).finally(() => service.unquiesce());
-				}
-				break;
-			case "check_update":
-				void cs.checkUpdate();
-				break;
-			case "queue_recall_ack":
-				cs.acknowledgeQueueRecall(msg.conversationId, msg.requestId); break;
-			case "recall_queue":
-				cs.recallQueue(msg.conversationId, msg.requestId); break;
-			case "cancel_recovery":
-				cs.cancelRecovery(msg.conversationId, msg.operationId); break;
-			case "set_run_settings":
-				cs.setRunSettings(msg); break;
-			case "set_cache_warming":
-				void cs.setCacheWarming(msg.mode); break;
-			case "get_cache_warming":
-				cs.refreshCacheWarming(msg.conversationId); break;
-			case "dialog_response":
-				cs.resolveDialog(msg.conversationId, msg.id, msg.value);
-				break;
-			case "install_pi_agent":
-				void cs.installPiAgent();
-				break;
-			case "logout_provider":
-				void cs.providerAuth.logout(msg.provider);
-				break;
-			case "native_mcp_request":
-				void cs.nativeMcpRequest(msg);
-				break;
-			case "login_provider":
-				void cs.providerAuth.login(msg.provider, msg.confirmReplaceKey);
-				break;
-			case "cancel_provider_login":
-				cs.providerAuth.cancel(msg.requestId);
-				break;
-			case "provider_auth_response":
-				cs.providerAuth.respond(msg.requestId, msg.promptId, msg.value);
-				break;
-			case "set_provider_api_key":
-				void cs.setProviderApiKey(msg.provider, msg.apiKey);
-				break;
-			case "clear_provider_api_key":
-				void cs.clearProviderApiKey(msg.provider);
-				break;
-			case "sync_model_sources":
-				void cs.syncModelSources(msg.source, msg.enabled, msg.restore);
-				break;
-			case "list_models_config":
-				void cs.listModelsConfig();
-				break;
-			case "save_model_config":
-				void cs.saveModelConfig(msg.providerId, msg.config);
-				break;
-			case "delete_model_config":
-				void cs.deleteModelConfig(msg.providerId);
-				break;
-			case "list_providers":
-				void cs.listProviders();
-				break;
-			case "fetch_models":
-				void cs.fetchModelsList(
-					msg.reqId,
-					msg.baseUrl,
-					msg.apiKey,
-					msg.authHeader,
-					msg.api,
-				);
-				break;
-			case "refresh_provider_models":
-				void cs.refreshProviderModels(msg.providerId, msg.reqId);
-				break;
-			case "clone_provider":
-				void cs.cloneProvider(msg.provider, msg.reqId);
-				break;
-			case "terminal_create": {
-				const tm = cs.getTerminalManager(msg.conversationId);
-				if (tm) tm.create(msg.terminalId, msg.cwd, msg.cols, msg.rows, cs.getTerminalCwd(msg.conversationId));
-				break;
-			}
-			case "terminal_input":
-				cs.getTerminalManager(msg.conversationId)?.input(msg.terminalId, msg.data);
-				break;
-			case "terminal_replay": {
-				const output = cs.getTerminalManager(msg.conversationId)?.replay().find(item => item.terminalId === msg.terminalId);
-				if (output) send({ type: "terminal_output", conversationId: msg.conversationId, terminalId: msg.terminalId, data: output.data, reset: true });
-				break;
-			}
-			case "terminal_resize":
-				cs.getTerminalManager(msg.conversationId)?.resize(msg.terminalId, msg.cols, msg.rows);
-				break;
-			case "terminal_kill":
-				cs.getTerminalManager(msg.conversationId)?.kill(msg.terminalId);
-				break;
-			case "terminal_rename":
-				cs.getTerminalManager(msg.conversationId)?.rename(msg.terminalId, msg.title);
-				break;
-			case "run_command":
-				cs.getTerminalManager(msg.conversationId)?.runCommand(
-					msg.terminalId,
-					msg.command,
-					msg.cols,
-					msg.rows,
-					cs.getTerminalCwd(msg.conversationId),
-				);
-				break;
-			case "list_commands":
-				void cs.listCommands();
-				break;
-			case "save_commands":
-				void cs.saveCommands(msg.commands);
-				break;
-
-			case "get_settings":
-				cs.pushSettings();
-				break;
-			case "set_settings":
-				void cs.setSettings({
-
-					editResendNewSession: msg.editResendNewSession,
-					disabledPlugins: msg.disabledPlugins,
-
-					thinkingWrap: msg.thinkingWrap,
-					toolsWrap: msg.toolsWrap,
-
-				});
-				break;
-			case "extensions_reload":
-				void cs.reloadExtensions();
-				break;
 			case "plugin_message":
 				pluginMgr.handleMessage(msg.pluginId, msg.payload, clientId ?? undefined);
 				break;
@@ -972,6 +719,7 @@ wss.on("connection", (ws) => {
 				break;
 
 			default:
+				void cs.handle(msg);
 				break;
 		}
 	};
@@ -985,6 +733,7 @@ wss.on("connection", (ws) => {
 		}
 
 		if (msg.type === "hello") {
+			if (msg.wiki !== undefined && typeof msg.wiki !== "boolean") { ws.close(4400, "invalid Wiki intent"); return; }
 			if (msg.wikiCwd !== undefined && (typeof msg.wikiCwd !== "string" || !msg.wikiCwd.trim())) { ws.close(4400, "invalid Wiki workspace"); return; }
 			if (msg.clientId !== undefined && msg.clientId !== "" && !isValidClientId(msg.clientId)) {
 				ws.close(4400, "invalid clientId");
@@ -992,10 +741,12 @@ wss.on("connection", (ws) => {
 			}
 			const cid = msg.clientId || randomUUID();
 			clientId = cid;
+			sessionAttached = false;
 			service
-				.attach(cid, send, msg.wikiCwd)
+				.attach(cid, send, msg.wikiCwd, msg.wiki)
 				.then((cs) => {
-					if (closed) return;
+					if (closed) { service.detach(cid, send); return; }
+					sessionAttached = true;
 					detachNodes?.();
 					detachNodes = nodeWorkbench.attach(cid, send);
 					send({
@@ -1092,11 +843,11 @@ if (process.env[RESTART_CHILD_ENV] === "1") {
 
 httpServer.listen(PORT, HOST, () => {
 	console.log("");
-	console.log("  ⚡ pi-harness — web chat for the pi coding agent");
+	console.log("  ⚡ pi-harness — web chat powered by Oh My Pi");
 	console.log(`    http://localhost:${PORT}`);
 	console.log(`    workspace   : ${CWD}`);
 	console.log(`    session dir : ${SESSION_DIR_ROOT}`);
-	console.log(`    pi SDK      : v${VERSION}`);
+	console.log(`    OMP SDK     : v${VERSION}`);
 	// 泄漏排查：被 PI_WEB_PKG_ROOT 重定向时，这里一眼就能看出伺服的是哪份前端。
 	console.log(`    web dist    : ${webDist}${existsSync(webDist) ? "" : " (missing)"}`);
 	console.log(`    bind        : ${HOST}:${PORT}`);
@@ -1108,7 +859,7 @@ scheduleUploadCleanup();
 
 // Local control socket (status / quiesce / unquiesce) — same data dir the
 // CLI uses, so `pi-harness server status|quiesce|unquiesce` just works.
-const stopControl = startControlServer({ service, dataDir: DATA_DIR, port: PORT, additionalActiveConversations: () => nodeWorkbench.activeAgents() });
+const stopControl = startControlServer({ service, dataDir: DATA_DIR, port: PORT, additionalActiveConversations: () => nodeWorkbench.activeAgents() + Number(playgroundChat.busy) });
 
 let shuttingDown = false;
 async function shutdown(): Promise<void> {

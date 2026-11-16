@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { isOpenAIOrigin, OpenAIProxySettings, validateOpenAIProxy } from "../../server/openai-proxy.js";
+import { activeOpenAIProxy, isOpenAIOrigin, OpenAIProxySettings, validateOpenAIProxy } from "../../server/openai-proxy.js";
 
 describe("OpenAI proxy", () => {
 	it("only routes official TLS endpoints, not callbacks or lookalike hosts", () => {
@@ -13,6 +13,18 @@ describe("OpenAI proxy", () => {
 		expect(validateOpenAIProxy({ enabled: true, url: " http://127.0.0.1:12345/ " })).toEqual({ enabled: true, url: "http://127.0.0.1:12345" });
 		expect(validateOpenAIProxy({ enabled: true, url: "https://[::1]:6789" }).url).toBe("https://[::1]:6789");
 		for (const url of ["", "127.0.0.1:10809", "socks5://localhost:10808", "http://user:secret@localhost:1234", "http://localhost/path", "http://localhost/?key=secret"]) expect(() => validateOpenAIProxy({ enabled: true, url })).toThrow();
+	});
+	it("keeps the host startup snapshot for workers created after a settings save", () => {
+		const directory = mkdtempSync(join(tmpdir(), "openai-proxy-snapshot-"));
+		try {
+			const settings = new OpenAIProxySettings(directory);
+			settings.install(); // disabled: no global network changes
+			settings.save({ enabled: true, url: "http://localhost:12345" }, settings.state().version);
+			expect(activeOpenAIProxy(directory)).toEqual({ enabled: false, url: "" });
+			const copy = activeOpenAIProxy(directory); copy.enabled = true;
+			expect(activeOpenAIProxy(directory).enabled).toBe(false);
+			expect(settings.state().restartRequired).toBe(true);
+		} finally { rmSync(directory, { recursive: true, force: true }); }
 	});
 	it("persists per installation, requires restart and rejects stale saves", () => {
 		const directory = mkdtempSync(join(tmpdir(), "openai-proxy-"));

@@ -1,174 +1,179 @@
-/** Real Web chat transport + SDK + local fixture model. --browser adds the settings UI. */
-import assert from "node:assert/strict";
-import { createServer } from "node:http";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, realpathSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import WebSocket from "ws";
-import { listenIsolated, startIsolatedHarness } from "./lib/isolated-server.mjs";
-
-const root = realpathSync(mkdtempSync(join(tmpdir(), "pi-builtin-chat-"))), agent = join(root, "agent"), data = join(root, "data");
-mkdirSync(agent); mkdirSync(data);
-writeFileSync(join(agent, "auth.json"), JSON.stringify({ fixture: { type: "api_key", key: "fixture" } }));
-writeFileSync(join(agent, "webui-extensions.json"), JSON.stringify({ autoCheck: false }));
-let child, harness, browser, logs = "", nextCode, calls = 0, port, holdNext = false, release;
-const clients = [];
-const model = createServer(async (req, res) => {
-	for await (const _part of req) { /* Consume the local request, never log prompt contents. */ }
-	calls++;
-	if (holdNext) { holdNext = false; await new Promise(resolve => { release = resolve; }); }
-	const code = nextCode; nextCode = undefined;
-	const delta = code ? { tool_calls: [{ index: 0, id: `call-${calls}`, type: "function", function: { name: "codemode", arguments: JSON.stringify({ code }) } }] } : { content: "Local document verification completed." };
-	res.writeHead(200, { "content-type": "text/event-stream" });
-	for (const choice of [{ index: 0, delta, finish_reason: null }, { index: 0, delta: {}, finish_reason: code ? "tool_calls" : "stop" }]) res.write(`data: ${JSON.stringify({ id: "fixture", object: "chat.completion.chunk", model: "fixture", choices: [choice] })}\n\n`);
-	res.end("data: [DONE]\n\n");
+/** OMP application database capability; native resources replace the retired Pi built-in inventory. */
+import assert from 'node:assert/strict';
+import { createServer } from 'node:http';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, realpathSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import WebSocket from 'ws';
+import { listenIsolated, startIsolatedHarness } from './lib/isolated-server.mjs';
+import { mergeSnapshot } from './lib/snapshots.mjs';
+const root = realpathSync(mkdtempSync(join(tmpdir(), 'omp-db-'))), data = join(root, 'data'), agent = join(data, 'omp/agent'), cwd = join(root, 'work');
+for (const dir of [cwd, join(agent, 'extensions')]) mkdirSync(dir, { recursive: true });
+const settingsFile = join(data, 'document-extensions.json'), counter = join(root, 'worker-opens.txt'), token = 'local-settings-fixture';
+const clients = [], requests = [], withBrowser = process.argv.includes('--browser');
+let harness, browser, nextCall, holdNext = false, release;
+const wait = async (predicate, label) => { for (let i = 0; i < 800; i++) { if (await predicate()) return; await new Promise(resolve => setTimeout(resolve, 25)); } throw Error(`Timed out ${label}\n${harness?.logs ?? ''}`); };
+const provider = createServer(async (req, res) => {
+	let raw = ''; for await (const chunk of req) raw += chunk; const payload = JSON.parse(raw); requests.push(payload);
+	if (holdNext) { holdNext = false; await new Promise(resolve => { release = resolve; res.once('close', resolve); }); }
+	if (res.destroyed) return;
+	const call = nextCall; nextCall = undefined;
+	res.writeHead(200, { 'content-type': 'text/event-stream' });
+	const emit = (type, data) => res.write(`event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`);
+	emit('message_start', { message: { id: `m-${requests.length}`, type: 'message', role: 'assistant', model: 'fixture', content: [], usage: { input_tokens: 10, output_tokens: 0 } } });
+	emit('content_block_start', { index: 0, content_block: call ? { type: 'tool_use', id: call, name: payload.tools.find(tool => /^(?:_)?database_read$/.test(tool.name)).name, input: {} } : { type: 'text', text: '' } });
+	emit('content_block_delta', { index: 0, delta: call ? { type: 'input_json_delta', partial_json: '{"action":"list"}' } : { type: 'text_delta', text: 'Fixture finished.' } });
+	emit('content_block_stop', { index: 0 });
+	emit('message_delta', { delta: { stop_reason: call ? 'tool_use' : 'end_turn' }, usage: { output_tokens: 5 } });
+	emit('message_stop', {}); res.end();
 });
-const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-async function wait(check, label) {
-	for (let i = 0; i < 600; i++) { if (await check()) return; if (child?.exitCode != null) throw Error(logs); await sleep(50); }
-	throw Error(`Timeout: ${label}\n${logs}`);
-}
 async function connect(id) {
-	const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`);
-	const client = { id, ws, state: undefined, wire: [], send: message => ws.send(JSON.stringify(message)) }; clients.push(client);
-	// Exercise delayed snapshots: model completion must never expose a previous turn as settled.
-	ws.on("message", raw => setTimeout(() => {
-		const message = JSON.parse(raw); client.wire.push(message);
-		if (message.type === "snapshot") client.state = message.state;
-		if (message.type === "snapshot_delta" && client.state) client.state = { ...client.state, ...message.state, messages: [...client.state.messages, ...(message.appended ?? [])] };
-	}, 200));
-	await new Promise((resolve, reject) => { ws.once("open", resolve); ws.once("error", reject); });
-	client.send({ type: "hello", clientId: id, protocolVersion: 41 });
-	await wait(() => client.state && !client.state.tree?.verifying, "initial snapshot");
+	const client = { id, wire: [], state: undefined, ws: new WebSocket(`ws://127.0.0.1:${harness.port}/ws?token=${token}`) }; clients.push(client);
+	client.send = message => client.ws.send(JSON.stringify(message));
+	client.ws.on('message', raw => { const event = JSON.parse(raw); client.wire.push(event); client.state = mergeSnapshot(client.state, event); });
+	await new Promise((resolve, reject) => { client.ws.once('open', resolve); client.ws.once('error', reject); });
+	client.send({ type: 'hello', clientId: id }); await wait(() => client.wire.some(event => event.type === 'ready'), 'client ready');
 	return client;
 }
-async function request(client, action, extra = {}, expectedStatus = 200) {
-	const response = await fetch(`http://127.0.0.1:${port}/api/extensions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clientId: client.id, cwd: root, conversationId: client.state.conversationId, action, ...extra }) });
-	const value = await response.json(); assert.equal(response.status, expectedStatus, JSON.stringify(value)); return value;
+async function request(client, action, extra = {}, expected = 200, options = {}) {
+	const response = await fetch(`http://127.0.0.1:${harness.port}${options.path ?? '/api/database'}${options.noToken ? '' : `?token=${token}`}`, { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: options.origin ?? `http://127.0.0.1:${harness.port}` }, body: JSON.stringify({ clientId: client.id, cwd, conversationId: client.state.conversationId, requestId: crypto.randomUUID(), action, ...extra }) });
+	if (expected !== null) assert.equal(response.status, expected);
+	const raw = await response.text(); let value; try { value = JSON.parse(raw); } catch { value = { error: raw }; }
+	return expected === null ? { status: response.status, value } : value;
 }
-const item = (state, id) => state.items.find(item => item.id === id);
-async function toggle(client, id, enabled) {
-	const state = await request(client, "builtin-list");
-	return request(client, "builtin-toggle", { id, enabled, version: item(state, id)?.settingsVersion ?? state.documentVersion });
+const settings = async client => (await request(client, 'agent_settings')).agentSettings;
+const save = (client, state, enabled, status = 200) => request(client, 'set_agent_settings', { version: state.version, enabled }, status);
+async function invoke(client, isError = false) {
+	const id = `database-${requests.length}`, before = requests.length; nextCall = id;
+	client.send({ type: 'prompt', text: 'Read attached database connections', requestId: crypto.randomUUID() });
+	await wait(() => !client.state.isStreaming && client.state.messages.some(message => message.role === 'toolResult' && message.toolCallId === id), 'native host tool');
+	assert.equal(client.state.messages.find(message => message.toolCallId === id)?.isError === true, isError);
+	assert.equal(requests.length, before + 2, 'one tool round; no automatic repeat');
 }
-async function prompt(client, text, code) {
-	nextCode = code; const before = calls;
-	client.send({ type: "prompt", text, requestId: `fixture-${before}` });
-	// Model HTTP completion can precede the throttled WebSocket snapshot.
-	await wait(() => calls >= before + 2 && !client.state.isStreaming &&
-		client.state.messages.some(message => message.role === "toolResult" && message.toolCallId === `call-${before + 1}`), text);
-	assert.equal(calls, before + 2, "one requested tool turn and one final answer");
-}
-async function reload(client) {
-	client.send({ type: "extensions_reload" });
-	await wait(async () => item(await request(client, "builtin-list"), "pi-harness-database").status === "loaded", "reload");
-}
-
 try {
-	await listenIsolated(model);
-	writeFileSync(join(agent, "models.json"), JSON.stringify({ providers: { fixture: { api: "openai-completions", baseUrl: `http://127.0.0.1:${model.address().port}`, apiKey: "fixture", models: [{ id: "fixture", input: ["text"], contextWindow: 64000, maxTokens: 8000 }] } } }));
-	writeFileSync(join(agent, "settings.json"), JSON.stringify({ defaultProvider: "fixture", defaultModel: "fixture", defaultTools: ["+codemode", "+tool_search"], retry: { enabled: false }, compaction: { enabled: false } }));
-	harness = await startIsolatedHarness({ env: { PI_WEB_TOKEN: "", PI_WEB_CWD: root, PI_WEB_DATA_DIR: data, PI_CODING_AGENT_DIR: agent }, onOutput: value => { logs = (logs + value).slice(-16000); } });
-	child = harness.child; port = harness.port;
-	const a = await connect("builtin-a"), b = await connect("builtin-b");
-	const state = await request(a, "builtin-list"); assert.equal(state.items.length, 5);
-	assert.equal(item(state, "pi-harness-subagents").status, "loaded");
-	await toggle(a, "pi-harness-subagents", false);
-	assert.equal(item(await request(b, "builtin-list"), "pi-harness-subagents").status, "disabled");
-	assert.match((await request(a, "builtin-toggle", { id: "pi-harness-subagents", enabled: true, version: item(state, "pi-harness-subagents").settingsVersion }, 400)).error, /changed/);
-	await toggle(a, "pi-harness-subagents", true);
-	assert.equal(item(state, "pi-harness-pdf-markdown"), undefined);
-	assert.match((await request(a, "builtin-toggle", { id: "pi-harness-pdf-markdown", enabled: true, version: state.documentVersion }, 400)).error, /Invalid/);
-	assert.equal(item(state, "pi-harness-database").status, "loaded");
-	assert.equal(item(state, "codemode").status, "loaded");
-	assert.equal(item(state, "tool-search").status, "loaded");
-	assert.equal((await request(a, "list")).packages.length, 0);
-	assert.match((await request(a, "builtin-list", { conversationId: "stale" }, 400)).error, /Conversation changed/);
-	assert.match((await request(a, "builtin-toggle", { id: "mcp", enabled: false, version: state.documentVersion }, 400)).error, /Invalid/);
-	a.send({ type: "get_commands" });
-	await wait(() => a.wire.some(message => message.type === "slash_commands"), "slash commands");
-	const commands = a.wire.findLast(message => message.type === "slash_commands").commands;
-	assert(!commands.some(command => ["documents", "pdf-md", "okf"].includes(command.name)), "conversion and OKF commands removed");
-	await prompt(a, "Check removed conversion tool", 'text(["document_to_markdown", "okf_ingest"].some(name => name in tools));');
-	assert.match(JSON.stringify(a.state.messages.findLast(message => message.role === "toolResult")), /false/);
-	await prompt(a, "Check enabled tool", 'text(await tools.database_read({action:"list"}));');
-	assert(!a.state.messages.findLast(message => message.role === "toolResult")?.isError, "enabled database tool runs");
-	await toggle(a, "pi-harness-database", false);
-	assert.equal(item(await request(b, "builtin-list"), "pi-harness-database").status, "disabled");
-	assert.match((await request(a, "builtin-toggle", { id: "pi-harness-database", enabled: true, version: state.documentVersion }, 400)).error, /changed/);
-	await prompt(a, "Check disabled tool", 'text(await tools.database_read({action:"list"}));');
-	const rejected = a.state.messages.findLast(message => message.role === "toolResult");
-	assert(rejected?.isError && /disabled/.test(JSON.stringify(rejected)), "disabled tool rejects an already loaded call");
-	holdNext = true;
-	a.send({ type: "prompt", text: "Hold the fixture turn", requestId: "busy-check" });
-	await wait(() => release && a.state.isStreaming, "running fixture");
-	assert.equal((await request(a, "builtin-list")).canReload, false);
-	release(); release = undefined;
-	await wait(() => !a.state.isStreaming, "settled fixture");
-	const old = a.state.conversationId; a.send({ type: "new_chat", fresh: true });
-	await wait(() => a.state.conversationId !== old && !a.state.tree?.verifying, "new chat");
-	assert.equal(item(await request(a, "builtin-list"), "pi-harness-database").status, "disabled");
-	assert.equal(item(await toggle(a, "pi-harness-database", true), "pi-harness-database").status, "pending");
-	await reload(a);
-	assert.equal(JSON.parse(readFileSync(join(data, "document-extensions.json"), "utf8")).databaseEnabled, true);
-	const c = await connect("builtin-c"); assert.equal(item(await request(c, "builtin-list"), "pi-harness-database").status, "loaded");
-	const saved = readFileSync(join(data, "document-extensions.json"), "utf8");
-	writeFileSync(join(data, "document-extensions.json"), "broken-json");
-	const broken = await request(a, "builtin-list"); assert.equal(broken.items.length, 5); assert.equal(item(broken, "pi-harness-database").status, "error"); assert.equal(item(broken, "codemode").status, "loaded");
-	writeFileSync(join(data, "document-extensions.json"), saved);
-	console.log("PASS built-in inventory, removed conversion/OKF, version conflicts, cross-client settings, disabled calls and new chat/reload");
-
-	if (process.argv.includes("--browser")) {
-		const { chromium } = await import("playwright-core"), { CHROME_PATH } = await import("./lib/chrome.mjs");
+	const port = await listenIsolated(provider);
+	writeFileSync(join(agent, 'models.yml'), JSON.stringify({ providers: { fixture: { api: 'anthropic-messages', baseUrl: `http://127.0.0.1:${port}`, apiKey: 'fixture', models: [{ id: 'fixture', contextWindow: 1000000 }] } } }));
+	writeFileSync(join(agent, 'config.yml'), JSON.stringify({ skills: { enabled: false }, retry: { enabled: false }, compaction: { enabled: false }, cacheWarming: { enabled: false } }));
+	writeFileSync(join(agent, 'extensions', 'counter.ts'), `import {appendFileSync} from "node:fs"; export default () => appendFileSync(${JSON.stringify(counter)}, "open\\n");`);
+	harness = await startIsolatedHarness({ env: { PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: data, PI_WEB_TOKEN: token } });
+	const a = await connect('builtin-a'), b = await connect('builtin-b');
+	const initial = await settings(a); assert.equal(initial.enabled, true); assert.match(initial.version, /^[a-f0-9]{64}$/);
+	const resources = await request(a, 'omp-resources', {}, 200, { path: '/api/extensions' });
+	assert(resources.tools.includes('database_read') && resources.tools.includes('task'));
+	assert(!resources.tools.some(name => ['subagent', 'codemode', 'document_to_markdown', 'okf_ingest'].includes(name)), 'retired Pi and removed conversion tools cannot return');
+	a.send({ type: 'get_commands' }); await wait(() => a.wire.some(event => event.type === 'slash_commands'), 'commands');
+	assert(!a.wire.findLast(event => event.type === 'slash_commands').commands.some(command => ['documents', 'pdf-md', 'okf'].includes(command.name)));
+	assert.equal(requests.length, 0, 'settings and inventory are metadata only');
+	await invoke(a);
+	await save(a, initial, false);
+	assert.equal((await settings(b)).enabled, false, 'shared service setting reaches another client');
+	assert.equal((await save(b, initial, true, 400)).error, 'DATABASE_AGENT_SETTINGS_CONFLICT');
+	await invoke(a, true);
+	await save(b, await settings(b), true); await invoke(a);
+	const before = await settings(a);
+	writeFileSync(settingsFile, JSON.stringify({ databaseEnabled: true, secretFuture: 'PRIVATE_SETTINGS_VALUE', pdfEnabled: true }));
+	assert.equal((await save(a, before, false, 400)).error, 'DATABASE_AGENT_SETTINGS_CONFLICT');
+	const external = await settings(a); assert(!JSON.stringify(external).includes('PRIVATE_SETTINGS_VALUE'));
+	await save(a, external, false);
+	assert.deepEqual(JSON.parse(readFileSync(settingsFile, 'utf8')), { databaseEnabled: false, secretFuture: 'PRIVATE_SETTINGS_VALUE' });
+	const race = await settings(a);
+	const raced = await Promise.all([save(a, race, true, null), save(b, race, true, null)]);
+	assert.deepEqual(raced.map(result => result.status).sort(), [200, 400]);
+	assert.equal(raced.find(result => result.status === 400).value.error, 'DATABASE_AGENT_SETTINGS_CONFLICT');
+	for (const bad of [{ enabled: 'false', version: race.version }, { enabled: false, version: '' }]) assert.equal((await request(a, 'set_agent_settings', bad, 400)).error, 'DATABASE_AGENT_SETTINGS_INVALID');
+	await request(a, 'agent_settings', {}, 401, { noToken: true });
+	await request(a, 'agent_settings', {}, 403, { origin: 'https://untrusted.invalid' });
+	await request(a, 'agent_settings', { conversationId: 'stale' }, 409);
+	await request(a, 'set_agent_settings', { version: race.version, enabled: false, cwd: root }, 409);
+	holdNext = true; a.send({ type: 'prompt', text: 'Held model request', requestId: 'held' });
+	await wait(() => release && a.state.isStreaming, 'running request');
+	await save(b, await settings(b), false);
+	release(); release = undefined; await wait(() => !a.state.isStreaming, 'settled');
+	await invoke(a, true);
+	const previous = a.state.conversationId; a.send({ type: 'new_chat', fresh: true });
+	await wait(() => a.state.conversationId !== previous && !a.state.isStreaming && a.state.tools.includes('database_read'), 'new conversation');
+	assert.equal((await settings(a)).enabled, false); await invoke(a, true);
+	await save(a, await settings(a), true); await invoke(a);
+	const validSettings = readFileSync(settingsFile, 'utf8');
+	writeFileSync(settingsFile, 'PRIVATE_BROKEN_CONFIG');
+	assert.equal((await request(a, 'agent_settings', {}, 400)).error, 'DATABASE_AGENT_SETTINGS_UNAVAILABLE');
+	assert.equal((await save(a, race, true, 400)).error, 'DATABASE_AGENT_SETTINGS_UNAVAILABLE');
+	assert.equal(readFileSync(settingsFile, 'utf8'), 'PRIVATE_BROKEN_CONFIG');
+	assert((await request(a, 'omp-resources', {}, 200, { path: '/api/extensions' })).tools.includes('task'), 'broken database setting does not disable unrelated OMP resources');
+	writeFileSync(settingsFile, validSettings);
+	const workerStatus = () => request(a, 'status', {}, 200, { path: '/api/omp-mcp' });
+	a.send({ type: 'abort' }); await wait(async () => (await workerStatus()).workerAvailable === false, 'stopped worker');
+	const opens = readFileSync(counter, 'utf8'), beforeStopReads = requests.length;
+	for (const action of ['skills-list', 'builtin-list', 'builtin-toggle', 'list', 'unknown']) {
+		const retired = await request(a, action, {}, null, { path: '/api/extensions' });
+		assert.equal(readFileSync(counter, 'utf8'), opens, 'retired requests must not start a stopped OMP worker');
+		assert.equal(retired.status, 410);
+	}
+	await save(a, await settings(a), false); await settings(a);
+	assert.equal(readFileSync(counter, 'utf8'), opens, 'reading/saving settings must not reopen a stopped OMP worker');
+	assert.equal(requests.length, beforeStopReads);
+	assert.equal((await workerStatus()).workerAvailable, false);
+	if (withBrowser) {
+		const { chromium } = await import('playwright-core'), { CHROME_PATH } = await import('./lib/chrome.mjs');
 		browser = await chromium.launch({ executablePath: CHROME_PATH || chromium.executablePath() });
-		const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
-		await context.addInitScript(() => { if (!localStorage.getItem("pi-harness:lang")) localStorage.setItem("pi-harness:lang", "zh"); });
-		const page = await context.newPage(), errors = []; page.on("pageerror", error => errors.push(error.message)); page.setDefaultTimeout(15000);
-		await page.goto(`http://127.0.0.1:${port}`);
-		async function openSettings(en = false) {
-			try { await page.getByRole("button", { name: en ? "Settings" : "设置", exact: true }).first().click(); }
-			catch (error) { throw Error(`${error.message}\nPage errors: ${JSON.stringify(errors)}\nPage: ${(await page.locator("body").innerText()).slice(0, 3000)}`); }
-			await page.getByText(en ? "All settings" : "所有设置", { exact: true }).click();
-			await page.getByRole("button", { name: "Extensions", exact: true }).click();
-			await page.locator('[data-builtin-id="pi-harness-database"]').waitFor();
+		const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } }), other = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+		const errors = []; for (const target of [page, other]) target.on('pageerror', error => errors.push(error.message));
+		async function openSettings(target, id, english = false) {
+			await target.addInitScript(id => { sessionStorage.setItem('pi-web-client-id', id); if (!localStorage.getItem('pi-harness:lang')) localStorage.setItem('pi-harness:lang', 'zh'); }, id);
+			await target.goto(`http://127.0.0.1:${harness.port}/?token=${token}`);
+			await target.getByRole('button', { name: english ? 'Settings' : '设置', exact: true }).first().click();
+			await target.getByText(english ? 'All settings' : '所有设置', { exact: true }).click();
+			await target.getByRole('button', { name: 'Extensions', exact: true }).click();
+			await wait(async () => await target.locator('.database-agent-settings [role=switch]').isEnabled(), 'settings switch');
 		}
-		await openSettings();
-		const panel = page.locator(".builtin-extensions"), database = panel.locator('[data-builtin-id="pi-harness-database"]');
-		assert.equal(await panel.locator(".builtin-row").count(), 6);
-		const subagents = panel.locator('[data-builtin-id="pi-harness-subagents"]');
-		await subagents.getByRole("switch").click(); await wait(() => JSON.parse(readFileSync(join(data, "subagents.json"), "utf8")).enabled === false, "subagents off");
-		await subagents.getByRole("switch").click(); await wait(() => JSON.parse(readFileSync(join(data, "subagents.json"), "utf8")).enabled === true, "subagents on");
-		await page.getByRole("tab", { name: "已安装 · 0", exact: true }).waitFor();
-		await database.getByRole("switch").click(); await wait(() => JSON.parse(readFileSync(join(data, "document-extensions.json"), "utf8")).databaseEnabled === false, "browser toggle off");
-		await database.getByRole("switch").click(); await wait(() => JSON.parse(readFileSync(join(data, "document-extensions.json"), "utf8")).databaseEnabled === true, "browser toggle on");
-		assert.equal(await panel.locator('[data-builtin-id="pi-harness-okf"]').count(), 0);
-		assert.equal(await panel.locator('[data-builtin-id="pi-harness-pdf-markdown"]').count(), 0);
-		await panel.locator('[data-builtin-id="codemode"]').getByRole("button", { name: "查看设置", exact: true }).click();
-		await page.locator(".native-mcp-panel").waitFor();
-		await page.getByRole("button", { name: "Extensions", exact: true }).click();
-		await page.route("**/api/extensions", async route => {
-			if (route.request().postDataJSON()?.action === "list") return route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "Package fixture unavailable" }) });
+		await openSettings(page, 'database-ui-a'); await openSettings(other, 'database-ui-b');
+		const panel = page.locator('.database-agent-settings'), toggle = panel.getByRole('switch');
+		assert.equal(await toggle.isChecked(), false);
+		await toggle.focus(); await page.keyboard.press('Space');
+		await wait(async () => await toggle.isChecked(), 'keyboard enables access');
+		await wait(async () => await other.locator('.database-agent-settings [role=switch]').isChecked(), 'other window polling');
+		let conflict = true;
+		await page.route('**/api/database*', async route => {
+			if (conflict && route.request().postDataJSON()?.action === 'set_agent_settings') { conflict = false; writeFileSync(settingsFile, JSON.stringify({ databaseEnabled: true, external: 'KEEP_EXTERNAL' })); }
 			await route.continue();
 		});
-		await page.reload(); await openSettings(); assert.equal(await panel.locator(".builtin-row").count(), 6);
-		await page.getByText("Package fixture unavailable", { exact: false }).waitFor();
-		await page.unroute("**/api/extensions"); await page.reload(); await openSettings();
-		mkdirSync("tests/scratch", { recursive: true });
-		await page.screenshot({ path: "tests/scratch/builtin-extensions-zh.png", fullPage: true });
-		await page.setViewportSize({ width: 390, height: 844 });
-		await page.evaluate(() => document.documentElement.dataset.appearance = "dark");
+		await toggle.click(); await panel.getByRole('alert').waitFor();
+		assert.equal(await toggle.isChecked(), true, 'failed save keeps the last confirmed value');
+		assert.equal(JSON.parse(readFileSync(settingsFile, 'utf8')).databaseEnabled, true);
+		await panel.getByRole('button', { name: '重新读取设置' }).click();
+		await wait(async () => await toggle.isEnabled(), 'conflict reload'); await toggle.click();
+		await wait(async () => !await toggle.isChecked(), 'disable after explicit reload');
+		assert.equal(JSON.parse(readFileSync(settingsFile, 'utf8')).external, 'KEEP_EXTERNAL');
+		await page.route('**/api/extensions*', async route => route.request().postDataJSON()?.action === 'omp-resources' ? route.fulfill({ status: 500, json: { error: 'Native resources fixture unavailable' } }) : route.continue());
+		await openSettings(page, 'database-ui-a');
+		await page.getByText('Native resources fixture unavailable', { exact: true }).waitFor();
+		assert.equal(await toggle.isChecked(), false, 'database settings survive unrelated native resource failures');
+		await toggle.click(); await wait(async () => await toggle.isChecked(), 'independent toggle');
+		writeFileSync(settingsFile, 'PRIVATE_INVALID_SETTINGS');
+		await panel.getByRole('button', { name: '重新读取设置' }).click(); await panel.getByRole('alert').waitFor();
+		assert.equal(await toggle.isEnabled(), false); assert(!(await panel.innerText()).includes('PRIVATE_INVALID_SETTINGS'));
+		writeFileSync(settingsFile, JSON.stringify({ databaseEnabled: false }));
+		await panel.getByRole('button', { name: '重新读取设置' }).click(); await wait(async () => await toggle.isEnabled(), 'repair reread');
+		await page.setViewportSize({ width: 390, height: 844 }); await page.evaluate(() => document.documentElement.dataset.appearance = 'dark');
 		assert(await panel.evaluate(element => element.scrollWidth <= element.clientWidth + 1));
-		await page.screenshot({ path: "tests/scratch/builtin-extensions-narrow.png", fullPage: true });
+		await page.screenshot({ path: join(tmpdir(), 'omp-database-settings-narrow.png') });
 		await page.setViewportSize({ width: 1440, height: 1000 });
-		await page.evaluate(() => localStorage.setItem("pi-harness:lang", "en")); await page.reload(); await openSettings(true);
-		assert.equal(await panel.getByText("Document to Markdown", { exact: true }).count(), 0);
-		await page.screenshot({ path: "tests/scratch/builtin-extensions-en.png", fullPage: true });
-		assert.deepEqual(errors, []); assert(!existsSync(join(data, "runtimes")));
-		console.log("PASS built-in browser: six entries, toggles, settings links, package failure isolation, Chinese/English and narrow layout");
+		await page.unroute('**/api/extensions*');
+		await page.evaluate(() => localStorage.setItem('pi-harness:lang', 'en'));
+		await openSettings(page, 'database-ui-a', true);
+		assert.equal(await panel.getByRole('switch', { name: 'Allow conversations to query databases' }).isChecked(), false);
+		await page.screenshot({ path: join(tmpdir(), 'omp-database-settings-en.png') });
+		assert.deepEqual(errors, []);
+		assert.equal(requests.length, beforeStopReads, 'settings UI never invokes a model');
 	}
+	await browser?.close(); browser = undefined;
+	for (const client of clients) client.ws.close();
+	await harness.stop();
+	harness = await startIsolatedHarness({ env: { PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: data, PI_WEB_TOKEN: token } });
+	const restored = await connect('settings-after-restart');
+	assert.equal((await settings(restored)).enabled, false, 'saved disable survives a fresh service');
+	console.log('PASS OMP application database settings: native resources, active-call enforcement, version conflicts, simultaneous clients, stopped workers, corrupt settings, restart, auth and scope' + (withBrowser ? ', keyboard, cross-window polling, conflict recovery, independent errors, English and narrow layout' : ''));
 } finally {
-	release?.();
-	await browser?.close(); for (const client of clients) client.ws.terminate();
-	await harness?.stop();
-	model.closeAllConnections(); if (model.listening) await new Promise(resolve => model.close(resolve)); rmSync(root, { recursive: true, force: true });
+	release?.(); await browser?.close(); for (const client of clients) client.ws.close(); await harness?.stop();
+	provider.closeAllConnections(); await new Promise(resolve => provider.close(resolve)); rmSync(root, { recursive: true, force: true });
 }

@@ -1,41 +1,33 @@
-/** The footer must receive pi-harness's release version, not the pi SDK version. */
+/** The footer receives the application's release version independently of the OMP SDK. */
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
-import { readFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { setTimeout as sleep } from 'node:timers/promises';
 import WebSocket from 'ws';
-import { portUp } from './lib/port-utils.mjs';
-import { testEnv } from "./lib/test-env.mjs";
+import { startIsolatedHarness } from './lib/isolated-server.mjs';
 
-const port = 8998;
-const root = mkdtempSync(join(tmpdir(), 'pi-version-handshake-'));
+const root = mkdtempSync(join(tmpdir(), 'omp-version-handshake-'));
+const data = join(root, 'data'), agent = join(data, 'omp/agent');
+mkdirSync(agent, { recursive: true });
+writeFileSync(join(agent, 'config.yml'), JSON.stringify({ skills: { enabled: false }, cacheWarming: { enabled: false } }));
 const expected = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
-let server;
+let harness, socket;
 try {
-	assert.equal(await portUp(port), false);
-	server = spawn(process.execPath, ['dist/server/index.js'], { env: { ...testEnv(), PORT: String(port), PI_WEB_CWD: root, PI_WEB_DATA_DIR: join(root, 'data'), PI_CODING_AGENT_DIR: join(root, 'agent') }, stdio: ['ignore', 'pipe', 'pipe'] });
-	let stderr = '';
-	server.stderr.on('data', (chunk) => { stderr += chunk; });
-	for (let i = 0; i < 80 && !await portUp(port); i++) await sleep(200);
-	assert(await portUp(port), stderr);
+	harness = await startIsolatedHarness({ env: { PI_WEB_CWD: root, PI_WEB_DATA_DIR: data } });
 	const version = await new Promise((resolve, reject) => {
-		const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`, { headers: { Origin: `http://127.0.0.1:${port}` } });
-		const timer = setTimeout(() => { socket.terminate(); reject(new Error('ready timeout')); }, 8000);
+		socket = new WebSocket(`ws://127.0.0.1:${harness.port}/ws`, { origin: `http://127.0.0.1:${harness.port}` });
+		const timer = setTimeout(() => { socket.terminate(); reject(new Error('ready timeout')); }, 30000);
 		socket.on('open', () => socket.send(JSON.stringify({ type: 'hello', clientId: 'version-regression' })));
-		socket.on('message', (data) => {
-			const message = JSON.parse(data.toString());
+		socket.on('message', raw => {
+			const message = JSON.parse(raw);
 			if (message.type !== 'ready') return;
-			clearTimeout(timer);
-			socket.close();
-			resolve(message.serverVersion);
+			clearTimeout(timer); resolve(message.serverVersion);
 		});
-		socket.on('error', (error) => { clearTimeout(timer); reject(error); });
+		socket.on('error', error => { clearTimeout(timer); reject(error); });
+		socket.on('close', () => { clearTimeout(timer); reject(Error('Closed before ready')); });
 	});
 	assert.equal(version, expected, `ready.serverVersion should be pi-harness ${expected}, got ${version}`);
 	console.log(`PASS ready.serverVersion is pi-harness v${expected}`);
 } finally {
-	if (server) { server.kill(); await Promise.race([new Promise((resolve) => server.once('exit', resolve)), sleep(2000)]); }
-	rmSync(root, { recursive: true, force: true });
+	socket?.terminate(); await harness?.stop(); rmSync(root, { recursive: true, force: true });
 }

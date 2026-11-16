@@ -1,5 +1,5 @@
 import { it, expect } from "vitest";
-import { ThinkingTimings, ThinkingDurationStore } from "../../server/thinking-timing.js";
+import { ThinkingTimings, ThinkingDurationStore, thinkingDurationsFor } from "../../server/thinking-timing.js";
 import type { UiMessage } from "../../server/protocol.js";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -34,5 +34,18 @@ it("restores measured block durations after a service restart, scoped to the tra
 		expect(restored.annotate(message, "/sessions/one.jsonl", 42)?.content[0]).toMatchObject({ durationMs: 1200 });
 		expect(restored.annotate(message, "/sessions/two.jsonl", 42)).toBe(message);
 		expect(restored.annotate(message, "/sessions/one.jsonl", 43)).toBe(message);
+	} finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+it("preserves two conversations sharing one host metadata file", () => {
+	const dir = mkdtempSync(join(tmpdir(), "omp-thinking-shared-"));
+	try {
+		const file = join(dir, "durations.json");
+		const first = thinkingDurationsFor(file), second = thinkingDurationsFor(file);
+		first.save("/one.jsonl", 42, { 0: 100 });
+		second.save("/two.jsonl", 42, { 0: 200 });
+		const restored = new ThinkingDurationStore(file);
+		expect(restored.durations("/one.jsonl", 42)).toEqual({ 0: 100 });
+		expect(restored.durations("/two.jsonl", 42)).toEqual({ 0: 200 });
 	} finally { rmSync(dir, { recursive: true, force: true }); }
 });

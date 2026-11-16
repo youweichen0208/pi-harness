@@ -48,10 +48,18 @@ test("config pins loopback endpoints, resolves corpus relative to config, and re
 	assert.equal(config.openviking.apiKey, "test-secret");
 	assert(!JSON.stringify(reportConfig(config)).includes("test-secret"));
 	assert.equal(corpus.documents.length, 1);
+	assert.equal(config.model.maxTokens, undefined, "omitted limits are left for OMP to resolve");
 	for (const url of ["https://api.example.com/v1", "http://localhost:8000", "http://10.0.0.1/v1", "http://127.0.0.1/?key=secret", "http://secret@127.0.0.1/"]) {
 		assert.throws(() => loopbackUrl(url, "test"), /loopback|127\.0\.0\.1/);
 	}
 	assert.equal(loopbackUrl("http://[::1]:8000/v1/", "test"), "http://[::1]:8000/v1");
+});
+
+test("retired Pi configuration fails explicitly instead of using old credentials", async t => {
+	const { data, configPath } = await fixture(t);
+	data.model = { fromPi: true };
+	await writeFile(configPath, JSON.stringify(data));
+	await assert.rejects(loadConfig(configPath), /fromPi is retired/);
 });
 
 test("config rejects duplicate questions and evidence outside explicit allowlists", async (t) => {

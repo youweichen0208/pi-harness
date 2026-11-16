@@ -1,0 +1,123 @@
+{
+  "status": "Native asynchronous receipts, bare-command attachments and SSH reconnect ownership verified locally; full migration remains incomplete",
+  "verifiedAt": "2026-11-15T11:45:45.098082+00:00",
+  "platform": "darwin",
+  "arch": "arm64",
+  "omp": "18.20.0",
+  "bun": "1.4.4",
+  "findings": [
+    "Withholding explicit extension attachments violated the existing native template/extension regression; removed the withholding.",
+    "An unsolicited second receipt for the same ID caused prompt-receipts-test to observe accepted instead of conflict; terminal annotations are persisted for query only.",
+    "Native extension handler exceptions may still end with local completed; commandExecuted identifies local handling, never task success.",
+    "Appending attachments to a bare extension command without a literal space changed native command parsing and caused one unintended model request. The host now inserts the argument delimiter only for a bare slash input when adding text attachments; real native tests finish with zero model requests.",
+    "Concurrent SSH reconnects could overwrite a newer connection after awaiting old Agent shutdown, leaving an unowned ready Agent/Bun child. Revalidate request token, node revision and lifecycle after shutdown and SSH handshake."
+  ],
+  "checks": {
+    "build": "passed after all production changes; integration tests started only after build completion",
+    "typecheck": "passed",
+    "unitFiles": 169,
+    "unitPassed": 1049,
+    "unitSkipped": 1,
+    "protocolVersion": 66,
+    "testEnvironmentScripts": 303,
+    "diff": "passed",
+    "workflowYaml": "passed"
+  },
+  "verificationOrdering": "Initial unit run overlapped build cleanup and had three JDBC_BRIDGE_MISSING failures. Reran all units after build completed; all passed. Subsequent integration tests used the completed build.",
+  "browser": [
+    {
+      "command": "node tests/omp-command-receipts-test.mjs --browser",
+      "result": "passed",
+      "modelCalls": 0,
+      "coverage": [
+        "native admission before handler completion",
+        "verbatim explicit attachments and upload consumption",
+        "no second unsolicited receipt",
+        "same-ID result correlation and ledger reload",
+        "deduplicated side effects",
+        "visible redacted handler failure",
+        "no phantom optimistic echo",
+        "newer draft and attachment protection",
+        "bare-command attachment dispatch without model call",
+        "invalid attachments rejected before ordinary or extension execution"
+      ]
+    },
+    {
+      "command": "node tests/prompt-receipts-test.mjs --browser",
+      "result": "passed",
+      "coverage": [
+        "conflicts",
+        "target ownership",
+        "restart",
+        "crash unknown",
+        "reconnect/refresh query without replay",
+        "new drafts",
+        "explicit retry"
+      ]
+    },
+    {
+      "command": "node tests/extension-ui-test.mjs --browser",
+      "result": "passed on final build",
+      "coverage": [
+        "native config and model/thinking settings",
+        "explicit attachment delivery",
+        "builtin MCP precedence",
+        "scoped dialogs and reconnect",
+        "resource reload",
+        "multiline editor",
+        "background navigation",
+        "recovery phase presentation"
+      ]
+    },
+    {
+      "command": "node tests/node-agent-test.mjs --browser",
+      "result": "passed on final build",
+      "coverage": [
+        "automatic readiness",
+        "model/tool isolation",
+        "SSH commands and SFTP",
+        "streaming and queue",
+        "abort and timeout",
+        "reconnect/history",
+        "narrow browser layout"
+      ]
+    }
+  ],
+  "relatedSmoke": {
+    "passed": 4,
+    "total": 4,
+    "build": "final",
+    "tests": [
+      "omp-template-attachments-test",
+      "omp-skill-history-test",
+      "steer-queue-smoke",
+      "current-file-protocol-test"
+    ]
+  },
+  "fullSmoke": {
+    "baseline": "omp-smoke-receipts.json",
+    "passed": 87,
+    "total": 108,
+    "failed": 21,
+    "repeatedAfterFinalFixes": false,
+    "note": "Bare-command separator, combined extension test migration and SSH ownership fixes have separate final-build verification; baseline counts are not rewritten."
+  },
+  "remaining": [
+    "Other public host regressions from the full-run baseline require migration or fixes.",
+    "Native multi-question ask UI, Task internal history protection, old-history cleanup and Windows original-task acceptance remain open."
+  ],
+  "desktopPackageBuilt": false,
+  "published": false,
+  "sshReconnect": {
+    "red": "node tests/node-workbench-test.mjs: deterministic close gate observed superseded reconnect returning result instead of failure on the old build.",
+    "final": "node tests/node-workbench-test.mjs passed and exited normally on the rebuilt application.",
+    "coverage": [
+      "older reconnect held during actual Agent shutdown",
+      "newer connection completes first",
+      "superseded request rejected",
+      "newer connection identity retained",
+      "workbench disposal closes every captured Agent"
+    ],
+    "testFailureCleanup": "Captured test Agents are explicitly closed in finally even if an ownership assertion fails; lifecycle assertions still fail."
+  }
+}

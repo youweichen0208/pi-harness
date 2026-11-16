@@ -3,25 +3,22 @@
 //
 // Usage: npm run build && node tests/switch-session-background-test.mjs [port]
 import { createServer } from "node:http";
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { realpathSync } from "node:fs";
-import { spawn } from "node:child_process";
 import { setTimeout as sleep } from "node:timers/promises";
 import WebSocket from "ws";
-import { testEnv } from "./lib/test-env.mjs";
+import { listenIsolated, startIsolatedHarness } from "./lib/isolated-server.mjs";
 
-const PORT = Number(process.argv[2] || 8955);
-const MOCK_PORT = PORT + 1;
 const base = mkdtempSync(join(tmpdir(), "pi-web-switch-session-"));
 const workdir = join(base, "work");
 const dataDir = join(base, "data");
-const agentDir = join(base, "agent");
+const agentDir = join(dataDir, "omp/agent");
 mkdirSync(workdir, { recursive: true });
 mkdirSync(dataDir, { recursive: true });
 mkdirSync(agentDir, { recursive: true });
 
+let finish, requests = 0;
 const mock = createServer(async (req, res) => {
 	let body = "";
 	for await (const chunk of req) body += chunk;
@@ -36,6 +33,7 @@ const mock = createServer(async (req, res) => {
 	const prompt = typeof last?.content === "string"
 		? last.content
 		: last?.content?.filter?.((part) => part.type === "text").map((part) => part.text).join(" ") ?? "";
+	requests++;
 	const slow = prompt.includes("SLOW");
 	const first = slow ? "background-" : "seed-";
 	const lastChunk = slow ? "finished" : "message";
@@ -53,7 +51,7 @@ const mock = createServer(async (req, res) => {
 		})}\n\n`,
 	);
 	writeChunk(first);
-	if (slow) await sleep(2500);
+	if (slow) await new Promise(resolve => { finish = resolve; });
 	writeChunk(lastChunk);
 	res.write(
 		`data: ${JSON.stringify({
@@ -67,59 +65,7 @@ const mock = createServer(async (req, res) => {
 	res.write("data: [DONE]\n\n");
 	res.end();
 });
-await new Promise((resolve) => mock.listen(MOCK_PORT, "127.0.0.1", resolve));
-
-writeFileSync(
-	join(agentDir, "auth.json"),
-	JSON.stringify({ main: { type: "api_key", key: "switch-session-test" } }),
-);
-writeFileSync(
-	join(agentDir, "models.json"),
-	JSON.stringify({
-		providers: {
-			main: {
-				api: "openai-completions",
-				baseUrl: `http://127.0.0.1:${MOCK_PORT}`,
-				apiKey: "switch-session-test",
-				models: [{
-					id: "switch-session-mock",
-					name: "Switch Session Mock",
-					input: ["text"],
-					contextWindow: 32000,
-					maxTokens: 4096,
-				}],
-			},
-		},
-	}),
-);
-
-const repoRoot = realpathSync(new URL("../", import.meta.url));
-const server = spawn(process.execPath, ["dist/server/index.js"], {
-	cwd: repoRoot,
-	env: {
-		...testEnv(),
-		PORT: String(PORT),
-		PI_WEB_DATA_DIR: dataDir,
-		PI_WEB_CWD: workdir,
-		PI_CODING_AGENT_DIR: agentDir,
-	},
-	stdio: "ignore",
-	windowsHide: true,
-});
-
-const waitForPort = async (port, timeout = 15000) => {
-	const started = Date.now();
-	while (Date.now() - started < timeout) {
-		try {
-			const response = await fetch(`http://127.0.0.1:${port}/health`);
-			if (response.ok) return;
-		} catch {
-			/* starting */
-		}
-		await sleep(100);
-	}
-	throw new Error(`server did not start on ${port}`);
-};
+let harness;
 
 class Client {
 	constructor(ws) {
@@ -150,7 +96,7 @@ class Client {
 	send(message) {
 		this.ws.send(JSON.stringify(message));
 	}
-	async waitForType(type, predicate = () => true, timeout = 15000) {
+	async waitForType(type, predicate = () => true, timeout = 30000) {
 		const started = Date.now();
 		while (Date.now() - started < timeout) {
 			for (let i = 0; i < this.received.length; i++) {
@@ -163,7 +109,7 @@ class Client {
 		}
 		throw new Error(`timeout waiting for ${type}`);
 	}
-	async waitForState(predicate, timeout = 15000) {
+	async waitForState(predicate, timeout = 30000) {
 		const started = Date.now();
 		while (Date.now() - started < timeout) {
 			if (this.state && predicate(this.state)) return this.state;
@@ -171,7 +117,7 @@ class Client {
 		}
 		throw new Error("timeout waiting for state");
 	}
-	async waitForMessage(predicate, timeout = 15000) {
+	async waitForMessage(predicate, timeout = 30000) {
 		const started = Date.now();
 		while (Date.now() - started < timeout) {
 			const message = this.messages.find(predicate);
@@ -184,8 +130,11 @@ class Client {
 
 let client;
 try {
-	await waitForPort(PORT);
-	const ws = new WebSocket(`ws://127.0.0.1:${PORT}/ws`);
+	const mockPort = await listenIsolated(mock);
+	writeFileSync(join(agentDir, "config.yml"), JSON.stringify({ skills: { enabled: false }, cacheWarming: { enabled: false }, retry: { enabled: false }, compaction: { enabled: false } }));
+	writeFileSync(join(agentDir, "models.yml"), JSON.stringify({ providers: { main: { api: "openai-completions", baseUrl: `http://127.0.0.1:${mockPort}`, apiKey: "fixture-only", models: [{ id: "switch-session-mock", name: "Fixture", input: ["text"], contextWindow: 32000 }] } } }));
+	harness = await startIsolatedHarness({ ...(process.argv.includes("--source") ? { args: ["--import", "tsx", "server/index.ts"] } : {}), env: { PI_WEB_DATA_DIR: dataDir, PI_WEB_CWD: workdir } });
+	const ws = new WebSocket(`ws://127.0.0.1:${harness.port}/ws`);
 	await new Promise((resolve, reject) => {
 		ws.once("open", resolve);
 		ws.once("error", reject);
@@ -200,16 +149,17 @@ try {
 
 	client.send({ type: "prompt", text: "seed" });
 	await client.waitForMessage((message) => message.role === "assistant");
+	await client.waitForState(state => !state.isStreaming);
 	const historyPath = client.state.sessionFile;
 	if (!historyPath) throw new Error("seed session was not persisted");
 
 	const seedConversationId = client.state.conversationId;
 	client.send({ type: "new_chat" });
-	await client.waitForState((state) => state.conversationId !== seedConversationId);
+	await client.waitForState((state) => state.conversationId !== seedConversationId && !state.isStreaming);
 
 	client.send({ type: "prompt", text: "SLOW background run" });
 	const streamingState = await client.waitForState(
-		(state) => state.isStreaming && state.conversationId !== seedConversationId,
+		(state) => finish && state.isStreaming && state.conversationId !== seedConversationId,
 	);
 	const backgroundConversationId = streamingState.conversationId;
 
@@ -226,6 +176,8 @@ try {
 	client.send({ type: "delete_session", path: streamingState.sessionFile });
 	await client.waitForType("notice", (m) => m.level === "warning" && m.text.includes("后台任务"));
 	console.log("✓ deleting a background streaming session is refused");
+	if (requests !== 2) throw Error("History switch must not issue another model request");
+	finish();
 
 
 	await client.waitForType(
@@ -243,12 +195,15 @@ try {
 			message.role === "assistant" &&
 			JSON.stringify(message.content).includes("background-finished"),
 	);
+	await client.waitForState(state => !state.isStreaming);
+	if (requests !== 2) throw Error("Background completion must not retry or replay a prompt");
 	console.log("✓ background response completes and remains recoverable");
 } catch (error) {
 	console.error(`✗ ${error.message}`);
 	process.exitCode = 1;
 } finally {
-	client?.ws.close();
-	server.kill();
-	mock.close();
+	client?.ws.terminate();
+	finish?.();
+	await harness?.stop(); mock.closeAllConnections(); await new Promise(resolve => mock.close(resolve));
+	rmSync(base, { recursive: true, force: true });
 }

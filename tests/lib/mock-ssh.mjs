@@ -11,9 +11,9 @@
  * - sftp：内存文件系统（见 dirs/files 导出），支持 REALPATH/STAT/OPENDIR/
  *   READDIR/OPEN/READ/WRITE/CLOSE/MKDIR/REMOVE/RMDIR/RENAME
  */
-import { join } from "node:path";
-import { cpSync, existsSync } from "node:fs";
-import { execFileSync } from "node:child_process";
+import { join, dirname } from "node:path";
+import { cpSync } from "node:fs";
+import { createRequire } from "node:module";
 import { gzipSync } from "node:zlib";
 
 const SFTP = { READ: 1, WRITE: 2, APPEND: 4, CREAT: 8, TRUNC: 16, EXCL: 32 };
@@ -23,26 +23,14 @@ const SSH2_PKGS = ["ssh2", "asn1", "bcrypt-pbkdf", "safer-buffer", "tweetnacl"];
 
 /**
  * 给临时插件目录准备 ssh2 依赖：
- * 1. 离线优先——从本地构建目录（dev/plugins/vscode-editor/node_modules）拷贝；
- * 2. 本地没有（如 CI）→ 回退 npm install（需要网络）。
+ * 使用仓库安装的锁定依赖，不在测试期间安装 latest 或启动后台安装器。
+ * 缺少依赖时失败，由正常 check:lockfile / npm ci 流程准备。
  */
-export function ensurePluginSsh2Dep(plugDst, devPlugDir) {
+export function ensurePluginSsh2Dep(plugDst) {
+	const require = createRequire(import.meta.url);
 	for (const pkg of SSH2_PKGS) {
-		const src = join(devPlugDir, "node_modules", pkg);
-		if (existsSync(src)) {
-			cpSync(src, join(plugDst, "node_modules", pkg), { recursive: true });
-		}
-	}
-	if (!existsSync(join(plugDst, "node_modules", "ssh2", "package.json"))) {
-		console.log("[mock-ssh] 本地无 ssh2 依赖，回退 npm install…");
-		execFileSync(
-			"npm",
-			["install", "--prefix", plugDst, "ssh2@latest", "--no-audit", "--no-fund"],
-			{ stdio: "inherit", timeout: 180_000, shell: process.platform === "win32" },
-		);
-	}
-	if (!existsSync(join(plugDst, "node_modules", "ssh2", "package.json"))) {
-		throw new Error("ssh2 依赖准备失败（拷贝与 npm install 均未成功）");
+		const src = dirname(require.resolve(`${pkg}/package.json`));
+		cpSync(src, join(plugDst, "node_modules", pkg), { recursive: true });
 	}
 }
 

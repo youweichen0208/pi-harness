@@ -2,6 +2,7 @@ import { playgroundChatEvent, playgroundChatConnection } from "./playground-chat
 import { useT } from "./i18n";
 import { promptWorkspaceTarget, selectedProjectWorkspace } from "./project-workspaces";
 import { localRecoveryClock } from "./recovery-clock";
+import { applySnapshotDelta } from "./snapshot-delta";
 import { emitTreeResponse, queueTreeDraft } from "./tree-events";
 import { discardExtensionEditor, queueExtensionEditor } from "./extension-editor";
 import type { UiMessage } from "./types";
@@ -120,12 +121,9 @@ export interface ChatState {
 	modelSources: ModelSourceStatus[];
 	/** Built-in providers with auth status (key-only config). */
 	providers: ProviderStatus[];
-	/** Result of the last install_pi_agent run (null while not started/running). */
-	installResult: { ok: boolean; detail: string } | null;
 	/** Path completions for the cwd input. */
 	pathCompletions: { name: string; path: string; type: "dir" | "file" }[];
 	providerAuth: Extract<ServerMessage, { type: "provider_auth" }>["state"] | null;
-	componentUpdates: Extract<ServerMessage, { type: "component_updates" }> | null;
 	/** Self-update status (result of check_update). */
 	update: {
 		current: string;
@@ -272,7 +270,6 @@ type Action =
 			};
 	  }
 	| { type: "scm_changed" }
-	| { type: "install_result"; result: { ok: boolean; detail: string } }
 	| {
 			type: "path_completions";
 			completions: { name: string; path: string; type: "dir" | "file" }[];
@@ -287,9 +284,7 @@ type Action =
 				error?: string;
 			};
 	  }
-	| { type: "component_updates"; result: Extract<ServerMessage, { type: "component_updates" }> }
-	| { type: "component_updates_start"; requestId: string; cwd: string; updating: boolean }
-	| { type: "extension_ui"; message: Extract<ServerMessage, { type: "widgets" | "statuses" | "dialog" | "dialog_closed" | "extension_title" }> }
+	| { type: "extension_ui"; message: Extract<ServerMessage, { type: "widgets" | "statuses" | "dialog" | "dialog_closed" | "extension_title" | "extension_ui_reset" }> }
 
 	| { type: "commands"; commands: CommandDef[]; path: string }
 	| { type: "slash_commands"; commands: SlashCommandInfo[] }
@@ -470,7 +465,8 @@ function reducer(state: ChatState, action: Action): ChatState {
 		case "snapshot":
 			return {
 				...state,
-				ready: true,
+				// OMP can publish provisional state while its first worker opens.
+				// Only the ready handshake admits commands and Wiki HTTP actions.
 				state: action.state,
 				// Terminal lists are conversation-owned. Clear the old view before
 				// the new conversation's terminal_list arrives after this snapshot.
@@ -496,15 +492,9 @@ function reducer(state: ChatState, action: Action): ChatState {
 			const d = action.msg;
 			if (!ui || ui.conversationId !== d.conversationId || ui.rev !== d.baseRev)
 				return state;
-			const merged: UiState = {
-				...ui,
-				...d.state,
-				messages:
-					d.appended.length > 0 ? [...ui.messages, ...d.appended] : ui.messages,
-			};
+			const merged = applySnapshotDelta(ui, d)!;
 			return {
 				...state,
-				ready: true,
 				state: merged,
 				agentSilence: merged.isStreaming ? state.agentSilenceByConversation[merged.conversationId] ?? null : null,
 				activeConversationId: merged.conversationId,
@@ -613,8 +603,6 @@ function reducer(state: ChatState, action: Action): ChatState {
 			return { ...state, refreshProviderResult: action.result };
 		case "clone_provider_result":
 			return { ...state, cloneProviderResult: action.result };
-		case "install_result":
-			return { ...state, installResult: action.result };
 		case "scm_data":
 			return { ...state, scmData: action.data, ...(action.data.type === "scm_data" && action.data.reqId > 0 ? { scmPanelResults: { ...state.scmPanelResults, [action.data.kind]: action.data } } : {}), ...(action.data.type === "scm_data" && action.data.kind === "diff" ? { scmDiffData: action.data } : {}) };
 		case "file_search_result":
@@ -623,15 +611,11 @@ function reducer(state: ChatState, action: Action): ChatState {
 			return { ...state, scmDirty: state.scmDirty + 1 };
 		case "path_completions":
 			return { ...state, pathCompletions: action.completions };
-		case "component_updates_start":
-			return { ...state, componentUpdates: { type: "component_updates", requestId: action.requestId, cwd: action.cwd, phase: action.updating ? "updating" : "checking", items: action.updating && state.componentUpdates?.cwd === action.cwd ? state.componentUpdates.items : [] } };
-		case "component_updates":
-			if (state.componentUpdates?.requestId !== action.result.requestId) return state;
-			return { ...state, componentUpdates: { ...action.result, items: action.result.items.length ? action.result.items : state.componentUpdates.items } };
 		case "update_status":
 			return { ...state, update: action.status };
 		case "extension_ui": {
 			const m = action.message;
+			if (m.type === "extension_ui_reset") { const extensionUi = { ...state.extensionUi }; delete extensionUi[m.conversationId]; return { ...state, extensionUi, pendingDialogs: state.pendingDialogs.filter(dialog => dialog.conversationId !== m.conversationId) }; }
 			if (m.type === "dialog") return { ...state, pendingDialogs: [...state.pendingDialogs.filter(d => d.id !== m.id), m] };
 			if (m.type === "dialog_closed") return { ...state, pendingDialogs: state.pendingDialogs.filter(d => d.id !== m.id || d.conversationId !== m.conversationId) };
 			return { ...state, extensionUi: { ...state.extensionUi, [m.conversationId]: { ...state.extensionUi[m.conversationId], ...(m.type === "widgets" ? { widgets: m.widgets } : m.type === "statuses" ? { statuses: m.statuses } : { title: m.title }) } } };
@@ -777,10 +761,8 @@ export function useChat() {
 		modelsConfig: [],
 		modelSources: [],
 		providers: [],
-		installResult: null,
 		pathCompletions: [],
 		update: null,
-		componentUpdates: null,
 		providerAuth: null,
 		extensionUi: {},
 		pendingDialogs: [],
@@ -904,7 +886,6 @@ export function useChat() {
 		}
 		if (ws && ws.readyState === WebSocket.OPEN) {
 			if (!snapshotReady.current && msg.type !== "get_state") return false;
-			if (msg.type === "check_component_updates" || msg.type === "update_component") dispatch({ type: "component_updates_start", requestId: msg.requestId, cwd: authoritative.current.state?.cwd ?? "", updating: msg.type === "update_component" });
 			if (msg.type === "set_cwd") {
 				const current = authoritative.current;
 				const display = cache.current.get(msg.path);
@@ -971,6 +952,7 @@ export function useChat() {
 				JSON.stringify({
 					type: "hello",
 					clientId: getClientId(),
+					...(isWikiWindow ? { wiki: true } : {}),
 					...(isWikiWindow && wikiWindowParams().cwd ? { wikiCwd: wikiWindowParams().cwd! } : {}),
 				} satisfies ClientMessage),
 			);
@@ -990,6 +972,9 @@ export function useChat() {
 					playgroundChatEvent(msg); break;
 				case "subagent_response":
 					window.dispatchEvent(new CustomEvent("pi:subagent-response", { detail: msg }));
+					break;
+				case "omp_task_response":
+					window.dispatchEvent(new CustomEvent("pi:omp-task-response", { detail: msg }));
 					break;
 				case "node_event":
 					window.dispatchEvent(new CustomEvent("pi-node-event", { detail: msg }));
@@ -1231,14 +1216,8 @@ export function useChat() {
 				case "scm_changed":
 					dispatch({ type: "scm_changed" });
 					break;
-				case "install_result":
-					dispatch({ type: "install_result", result: msg });
-					break;
 				case "path_completions":
 					dispatch({ type: "path_completions", completions: msg.completions });
-					break;
-				case "component_updates":
-					dispatch({ type: "component_updates", result: msg });
 					break;
 				case "update_status":
 					dispatch({ type: "update_status", status: msg });
@@ -1251,9 +1230,10 @@ export function useChat() {
 					dispatch({ type: "extension_ui", message: msg });
 					break;
 				case "extension_ui_reset":
+					dispatch({ type: "extension_ui", message: msg });
 					discardExtensionEditor(msg.conversationId);
 					break;
-				case "tree": case "tree_changed": case "tree_open": case "tree_content_result": case "tree_preview_result": case "tree_navigate_result":
+				case "tree_cancel_result": case "tree": case "tree_changed": case "tree_open": case "tree_content_result": case "tree_preview_result": case "tree_navigate_result":
 					if (msg.type === "tree_navigate_result") {
 						if (msg.reqId.startsWith("edit-") && msg.status !== "ok") dispatch({ type: "notice", notice: {
 							id: ++noticeId.current, conversationId: msg.conversationId, level: "warning",

@@ -2,21 +2,20 @@ import { openKnowledge } from "./lib/open-knowledge.mjs";
 import { wikiToolbar } from "./lib/wiki-toolbar.mjs";
 // Real Chromium regression for slash aliases, heading levels and persisted selection colors.
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
-import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium } from 'playwright-core';
 import { CHROME_PATH } from './lib/chrome.mjs';
-import { portUp } from './lib/port-utils.mjs';
-import { testEnv } from "./lib/test-env.mjs";
-const port = 8999, base = mkdtempSync(join(tmpdir(), 'wiki-format-editor-'));
+import { startIsolatedHarness } from './lib/isolated-server.mjs';
+const base = mkdtempSync(join(tmpdir(), 'wiki-format-editor-'));
 writeFileSync(join(base, 'note.md'), '# Code\n\n```java\npublic class Original {}\n```\n\nInsert here.\n');
-let server, browser;
+const agent = join(base, 'data/omp/agent'); mkdirSync(agent, { recursive: true });
+writeFileSync(join(agent, 'config.yml'), JSON.stringify({ skills: { enabled: false }, cacheWarming: { enabled: false } }));
+let harness, browser;
 try {
-	assert.equal(await portUp(port), false);
-	server = spawn(process.execPath, ['dist/server/index.js'], { env: { ...testEnv(), PORT: String(port), PI_WEB_TOKEN: '', PI_WEB_CWD: base, PI_WEB_DATA_DIR: join(base, 'data'), PI_CODING_AGENT_DIR: join(base, 'agent') }, stdio: 'ignore' });
-	for (let i = 0; i < 100 && !await portUp(port); i++) await new Promise(r => setTimeout(r, 100));
+	harness = await startIsolatedHarness({ env: { PI_WEB_CWD: base, PI_WEB_DATA_DIR: join(base, 'data') } });
+	const port = harness.port;
 	browser = await chromium.launch({ executablePath: CHROME_PATH || chromium.executablePath() });
 	const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
 	await page.goto(`http://127.0.0.1:${port}`);
@@ -26,7 +25,7 @@ try {
 	await openKnowledge(page, base, "note.md");
 	const wiki = await popupPromise;
 	wiki.setDefaultTimeout(15000);
-	await wiki.locator('.setup-modal .modal-close').click().catch(() => {});
+	await wiki.locator('.setup-modal .modal-close').click();
 	const editor = wiki.locator('.wiki-prose .fp-rich-document');
 	await wiki.waitForFunction(() => [...(CSS.highlights.get('rich-code-keyword') ?? [])].some(range => range.toString() === 'public'));
 	const failures = [], errors = [];
@@ -70,21 +69,21 @@ try {
 	await wiki.keyboard.press('ControlOrMeta+z');
 	check(await editor.locator('p:not([data-rich-tail])').last().locator('span[style*="background-color"]').count() === 0, 'highlight supports native undo');
 	await wiki.keyboard.press('ControlOrMeta+Shift+z');
-	await wiki.keyboard.press('Meta+s');
+	await wiki.keyboard.press('ControlOrMeta+s');
 	await wiki.locator('.wiki-save-status.saved').waitFor();
 	let source = readFileSync(join(base, 'note.md'), 'utf8');
 	check(source.includes('Before <mark style="background-color: #fff3a3">marked words</mark> after'), 'selected background persists to disk as mark HTML');
 	await wiki.reload();
-	await wiki.locator('.setup-modal .modal-close').click().catch(() => {});
+	await wiki.locator('.setup-modal .modal-close').click();
 	// Wiki mode restores after reload (ADR-0003) — the popup keeps its URL
-	// client id, so the same ephemeral conversation reattaches with the document.
+	// client id, so the selected OMP conversation reattaches with the document.
 	await wiki.locator('.wiki-view:not(.hidden)').waitFor();
 	await editor.locator('p:not([data-rich-tail])').last().waitFor();
 	check(await editor.locator('p:not([data-rich-tail])').last().locator('span').evaluateAll(spans => spans.some(span => span.style.backgroundColor === 'rgb(255, 243, 163)')), 'highlight survives reload');
 	await selectWords(); await highlight('绿色背景');
 	check(await editor.locator('p:not([data-rich-tail])').last().locator('span').evaluateAll(spans => spans.some(span => span.style.backgroundColor === 'rgb(204, 235, 197)')), 'reopened highlight can change color');
 	await selectWords(); await highlight('清除背景标记');
-	await wiki.keyboard.press('Meta+s');
+	await wiki.keyboard.press('ControlOrMeta+s');
 	await wiki.locator('.wiki-save-status.saved').waitFor();
 	source = readFileSync(join(base, 'note.md'), 'utf8');
 	check(source.includes('Before marked words after') && !source.includes('<mark'), 'clear removes color without losing text');
@@ -92,6 +91,6 @@ try {
 	assert.deepEqual(failures, []);
 } finally {
 	await browser?.close();
-	if (server) { server.kill('SIGTERM'); if (server.exitCode === null) await new Promise(r => server.once('exit', r)); }
+	await harness?.stop();
 	rmSync(base, { recursive: true, force: true });
 }

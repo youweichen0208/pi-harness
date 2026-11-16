@@ -1,28 +1,26 @@
 /** Real WebSocket/ripgrep/browser regression, with stale batches injected at the UI boundary. */
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { chromium } from "playwright-core";
 import { CHROME_PATH } from "./lib/chrome.mjs";
-import { portUp } from "./lib/port-utils.mjs";
-import { testEnv } from "./lib/test-env.mjs";
+import { startIsolatedHarness } from "./lib/isolated-server.mjs";
 
-const port = 9244;
-assert.equal(await portUp(port), false, `Port ${port} busy`);
 const root = mkdtempSync(join(tmpdir(), "pi-code-search-ui-"));
 const cwd = join(root, "workspace");
 mkdirSync(cwd);
 writeFileSync(join(cwd, "order.ts"), Array.from({ length: 50 }, (_, i) => i === 19 ? "const placeOrder = 1;" : `// line ${i + 1}`).join("\n"));
-let server, browser, socket;
+let harness, browser, socket;
 let failFileSearch = true;
 const requests = [], errors = [];
 try {
-	server = spawn(process.execPath, ["dist/server/index.js"], { env: { ...testEnv(), PORT: String(port), PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(root, "data"), PI_CODING_AGENT_DIR: join(root, "agent") }, stdio: "ignore" });
-	for (let i = 0; i < 100 && !await portUp(port); i++) await sleep(100);
-	assert(await portUp(port));
+	const agent = join(root, 'data/omp/agent'); mkdirSync(agent, { recursive: true });
+	writeFileSync(join(agent, 'config.yml'), JSON.stringify({ skills: { enabled: false }, cacheWarming: { enabled: false } }));
+	writeFileSync(join(agent, 'models.yml'), JSON.stringify({ providers: { fixture: { api: 'openai-completions', baseUrl: 'http://127.0.0.1:1', apiKey: 'fixture', models: [{ id: 'fixture' }] } } }));
+	harness = await startIsolatedHarness({ env: { PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(root, 'data') } });
+	const port = harness.port;
 	browser = await chromium.launch({ executablePath: CHROME_PATH });
 	const page = await browser.newPage();
 	page.setDefaultTimeout(10000);
@@ -42,8 +40,8 @@ try {
 		});
 		upstream.onMessage(wire => route.send(wire));
 	});
-	await page.goto(`http://localhost:${port}`);
-	await page.locator(".conn-dot.ok").first().waitFor({ state: "attached" });
+	await page.goto(`http://127.0.0.1:${port}`);
+	await page.locator(".inputbar textarea:not(:disabled)").waitFor({ timeout: 30000 });
 	await page.keyboard.press("Control+p");
 	const input = page.locator(".cs-head input");
 	await input.fill("placeOrder");
@@ -115,7 +113,6 @@ try {
 	console.log("PASS code search: streamed hits, preview window, open line, cancellation, stale identity, regex, filename failure and retry");
 } finally {
 	await browser?.close();
-	server?.kill();
-	if (server && server.exitCode === null) await new Promise(resolve => server.once("exit", resolve));
+	await harness?.stop();
 	rmSync(root, { recursive: true, force: true });
 }

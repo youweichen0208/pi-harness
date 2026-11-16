@@ -6,14 +6,11 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
-const base = mkdtempSync(join(tmpdir(), 'pi-rendering-')), cwd = join(base, 'project'), agent = join(base, 'agent');
+const base = mkdtempSync(join(tmpdir(), 'pi-rendering-')), cwd = join(base, 'project');
 const output = resolve(process.env.PI_RENDER_OUTPUT || 'tests/scratch/rendering');
-mkdirSync(cwd); mkdirSync(agent); mkdirSync(output, { recursive: true });
+mkdirSync(cwd); mkdirSync(output, { recursive: true });
 for (const name of ['.ruff_cache', 'raw', 'scripts', 'skills', ...Array.from({ length: 40 }, (_, i) => `source-${String(i).padStart(2, '0')}`)]) mkdirSync(join(cwd, name));
 writeFileSync(join(cwd, 'README.md'), '# 本质：渲染验收\n\n同一份离线测试资料。\n');
-writeFileSync(join(agent, 'auth.json'), JSON.stringify({ fixture: { type: 'api_key', key: 'unused' } }));
-writeFileSync(join(agent, 'settings.json'), JSON.stringify({ defaultProvider: 'fixture', defaultModel: 'render-test' }));
-writeFileSync(join(agent, 'models.json'), JSON.stringify({ providers: { fixture: { api: 'openai-completions', baseUrl: 'http://127.0.0.1:1', apiKey: 'unused', models: [{ id: 'render-test', input: ['text'], contextWindow: 32000, maxTokens: 4096 }] } } }));
 const timestamp = 1791547200000;
 const transcript = [
 	{ id: 'render-user', role: 'user', content: [{ type: 'text', text: '请说明这个项目的本质，并检查文档转换与知识整理。' }], timestamp },
@@ -24,6 +21,9 @@ const transcript = [
 let app;
 try {
 	for (const scale of process.platform === 'win32' ? [1, 1.25, 1.5] : [1]) {
+		const agent = join(base, `data-${scale}`, 'omp', 'agent');
+		mkdirSync(agent, { recursive: true });
+		writeFileSync(join(agent, 'config.yml'), JSON.stringify({ skills: { enabled: false } }));
 		app = await electron.launch({ ...(process.argv[2] ? { executablePath: resolve(process.argv[2]) } : {}), args: [...(process.argv[2] ? [] : ['.']), `--force-device-scale-factor=${scale}`, `--user-data-dir=${join(base, `profile-${scale}`)}`], env: { ...testEnv(), PI_WEB_CWD: cwd, PI_WEB_DATA_DIR: join(base, `data-${scale}`), PI_CODING_AGENT_DIR: agent } });
 		let page;
 		for (let i = 0; i < 200; i++) { page = app.windows().find(p => p.url().startsWith('http://127.0.0.1:')); if (page) break; await sleep(100); }

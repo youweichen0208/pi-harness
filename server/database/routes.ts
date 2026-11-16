@@ -1,5 +1,5 @@
 import type { Express, Request } from "express";
-import type { AgentService } from "../agent-service.js";
+import type { OmpChatService as AgentService } from "../omp/chat-service.js";
 import type { DatabaseRequest } from "../protocol.js";
 import { databaseAction, databaseScope } from "./service.js";
 export function installDatabaseRoutes(app: Express, service: () => AgentService, originAllowed: (req: Request) => boolean) {

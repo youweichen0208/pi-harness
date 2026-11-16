@@ -1,8 +1,8 @@
 # 内置 SSH 节点工作台
 
-节点 Agent 使用与主聊天相同的全局缓存预热模式，原生设置缺省为仅运行时；模型、工具与上下文隔离规则不变。用量详情复用 `UsagePopover`，仅打开时每 5 秒通过 `agent_status` 刷新原生状态和费用。预热 usage 只刷新统计，不生成任务、工具或聊天消息。
+节点 Agent 使用本机独立 OMP/Bun 进程，共享 `<dataDir>/omp/agent` 模型目录，使用原生 Settings overlay，切换模型不改全局配置。仅允许 remote_command、remote_read、remote_write 三个宿主工具；禁用本机上下文、技能、扩展、MCP、模型回退与缓存预热。模型正文不作为命令执行。
 
-`NodeAgent.close()` 返回可等待且幂等的 Promise：立即取消操作与订阅，等待已开始的创建过程结束、原生 abort/dispose，以及 `ModelRuntime.settleCredentialWrites()`。替换会话同样等待旧会话凭据落盘，关闭与创建交错时销毁迟到的会话。`NodeWorkbench` 跟踪断开后的清理 Promise，`dispose()` 和 server shutdown 等待全部完成，避免 SSH-only OAuth 刷新凭据因退出丢失。回归：`tests/cache-warming-test.mjs`。
+`NodeAgent.close()` 返回可等待且幂等的 Promise：立即取消宿主操作和待确认请求，等待已开始的创建过程和 OMP 进程退出。停止同样关闭该会话进程，下一次明确发送才重新打开，不重发可能产生副作用的任务。`NodeWorkbench` 跟踪断开后的清理 Promise，`dispose()` 和 server shutdown 等待全部完成。
 
 顶栏「节点」打开节点来源与分组详情，连接后提供 Agent 工作台和 SSH PTY/SFTP 手动工作台。Windows/macOS 客户端都由本机 Node 服务通过 `ssh2` 连接 Linux/macOS SSH 服务；远端账号或容器决定实际权限。
 
@@ -15,6 +15,7 @@
 ## 连接、终端与 Agent
 
 - `NodeWorkbench` 按 `clientId:nodeId` 保存连接，终端按 `terminalId` 定位，所有可变请求要求与节点和会话身份匹配。断线时保留浏览器的已断开标签。浏览器 WebSocket 重连恢复同一连接上的 Agent 状态；SSH 断开会终止该连接的 Agent 和终端；重新连接自动准备新的隔离 Agent 实例。
+- 重连等待旧 Agent 关闭后、SSH 握手结束后，都重新校验请求 token、节点版本与服务生命周期。旧请求可能在等待期间被新请求替代，不能覆盖新连接并丢失其 Agent 的关闭归属。`node-workbench-test.mjs` 用真实 Agent 关闭闸门控制这个顺序，要求旧请求失败、新连接保持原实例，dispose 后 Agent 已关闭；失败清理仍关闭测试捕获的子进程，不能靠强制退出把资源泄漏算作通过。
 - SFTP 浏览、读取与 UTF-8 写入按远端账号权限执行；单次读写限制 512 KiB。工具结果与终端捕获输出限制 64 KiB。
 
 ## 协议与验证
@@ -55,7 +56,7 @@ Xshell 公钥登录节点可在凭据弹窗指定本机 OpenSSH 私钥路径（�
 
 ## 节点 Agent Chat（#54）
 
-连接成功后左侧显示 SSH 终端与文件，右侧直接显示 Agent Chat；窄屏上下排列。`node-agent.ts` 使用本机原版 pi 1.4.0 SDK、本机模型和凭据创建隔离会话。连接只准备会话，用户发送消息才调用模型；节点不需要 Node、pi 或模型配置。手动关闭 Agent 后不会立即重开，右侧保留重开和目录选择入口。初始化失败只影响聊天，SSH 终端仍可用。
+连接成功后左侧显示 SSH 终端与文件，右侧直接显示 Agent Chat；窄屏上下排列。`node-agent.ts` 使用本机 OMP/Bun、共享 OMP 模型目录和凭据创建隔离会话。连接只准备会话，用户发送消息才调用模型；节点不需要 Node、OMP 或模型配置。手动关闭 Agent 后不会立即重开，右侧保留重开和目录选择入口。初始化失败只影响聊天，SSH 终端仍可用。
 
 每个 client/node 的会话位于 `<dataDir>/node-sessions/<clientId 的 SHA-256>/<nodeId>/`。同一服务重连后恢复最近历史，新的实例 ID 拒绝旧请求；新对话新建历史文件；SDK 在首条回复后才写文件，`fresh-session.json` 记住尚未写入的新对话，重连或重开时继续该空对话，不回到上一段历史（#74）。模型只返回思考就结束时，聊天区提示可发送「继续」。模型切换只影响该节点会话，不写本机默认模型。浏览器只接收模型名称等白名单字段，本机凭据不进入 SSH 命令或节点文件。
 
@@ -75,11 +76,11 @@ Xshell 公钥登录节点可在凭据弹窗指定本机 OpenSSH 私钥路径（�
 
 读写文件走现有 SFTP，UTF-8 文件限制 512 KiB；所有工具捕获原连接，不能在异步期间改投到新节点。中断写入可能留下部分内容。
 
-运行结束以 `agent_settled` 为准，`agent_end` 不清除工作状态。SDK 提供流式回复、原生工具记录、排队/纠正、停止和模型切换，界面发送确认后才清空输入。节点任务计入应用更新的忙碌检查；quiesce 拒绝连接、凭据验证及新 Agent 工作，允许停止和断开。普通 WebSocket 重连恢复同一 Agent 状态；SSH 断开取消该会话任务。历史由本机 SDK 保存，界面保留最多 200 条或约 4 MiB 的最近消息。
+运行结束以 OMP `session_settled` 为准，`agent_end` 不清除工作状态。SDK 提供流式回复、原生工具记录、排队/纠正、停止和模型切换，界面发送确认后才清空输入。节点任务计入应用更新的忙碌检查；quiesce 拒绝连接、凭据验证及新 Agent 工作，允许停止和断开。普通 WebSocket 重连恢复同一 Agent 状态；SSH 断开取消该会话任务。历史由本机 SDK 保存，界面保留最多 200 条或约 4 MiB 的最近消息。
 
-原生远端 RPC 方案已由上述本机 Agent + SSH 工具方案替换。现有远端 pi 历史保持原处，本次不会下载或迁移；此前本机 `node-sessions` 下的历史可继续使用。
+原生远端 RPC 方案已由上述本机 Agent + SSH 工具方案替换。现有远端 pi 历史保持原处，本次不会下载或迁移；此前本机 `node-sessions` 下的 Pi 历史保留但不交给 OMP 打开。新原生历史保存在 `<dataDir>/omp/sessions/ssh/<cwd-hash>`，原节点目录中的 `omp-session.json` 仅记录当前 OMP 历史指针；恢复路径由运行时校验，不接受越界文件。空白新对话不会回退到旧历史。
 
-回归：`tests/node-agent-test.mjs` 使用本机原版 SDK、本地模型 HTTP 夹具及无 pi/模型配置的 SSH 服务夹具，验证连接即就绪、工具和凭据隔离、共享 SSH PTY/SFTP、确认与拒绝、排队、取消、超时和重连历史；`--browser` 验证连接即聊天、左右分栏及窄屏。命令引用与错误目录由 `tests/unit/node-command.test.ts` 验证；真实生产 Linux 节点仍需实际环境验收。
+回归：`tests/node-agent-test.mjs` 使用真实 OMP SDK/Bun、本地模型 HTTP 夹具及无 pi/模型配置的 SSH 服务夹具，验证连接即就绪、工具和凭据隔离、共享 SSH PTY/SFTP、确认与拒绝、排队、取消、超时和重连历史；`--browser` 验证连接即聊天、左右分栏及窄屏。命令引用与错误目录由 `tests/unit/node-command.test.ts` 验证；真实生产 Linux 节点仍需实际环境验收。
 
 节点添加页仅展示 SSH 连接与 Xshell 导入两个入口。SSH 表单提供导入 SSH config 的次级入口；来源管理默认折叠，同步和 JSON 导入导出按需展开。来源导入只保留一个提交按钮，通过自动同步复选框选择后续同步行为。节点详情突出连接操作，认证及元数据放在「连接设置与详情」折叠区；缺少凭据时连接操作仍主动引导填写，原有主机信任与认证校验不变。
 
@@ -96,3 +97,13 @@ Xshell 显式 PrivateKey／PublicKeyFile 路径优先于 UserKey 密钥名称；
 节点自动发现：打开节点页时自动接入检测到的 Xshell 7 会话目录与 `~/.ssh/config`，页面激活期间每 30 秒及窗口重新获得焦点时检查新来源。来源注册后复用服务端每 5 秒持续同步，关闭节点页后已注册来源仍同步、重启恢复。自动发现不发起 SSH 连接，不读取私钥内容；保留已有来源的暂停状态及 SSH `selectedKeys`，新自动来源同步全部具体 Host。自定义路径仍通过手动来源入口添加，最多 10 个来源，超出项保留手动入口。多个发现请求共用进行中的扫描，服务销毁后丢弃结果。来源变更沿用原凭据／指纹清理与断开规则，未变化的节点不受影响。
 
 自动发现回归：`tests/unit/node-discovery.test.ts` 使用临时 SSH / Xshell 来源验证自动接入、并发去重、增量同步、暂停与重启、既有选择范围和销毁隔离；`tests/node-discovery-browser-test.mjs` 使用本地 WebSocket 夹具验证打开、定时、焦点刷新及切页停止发现。
+
+
+## OMP 恢复与历史保护（协议 v76）
+
+节点状态包含原生恢复操作及历史持久化状态，复用主聊天的恢复提示。每次推送重新计算剩余退避时间，浏览器用本机单调时钟显示倒计时。取消绑定 client/node/conversation 和 operationId；过期、跨节点或已停止的操作被拒绝，不启动新 worker。浏览器连接和 SSH 连接都可用时才允许恢复操作；重连读取当前状态，保留输入草稿，不重发任务。
+
+历史被外部修改或丢失时停止所属会话，禁用发送，提供「重新读取已保存历史」。显式重新读取在会话空闲时进行，不自动重发模型请求。持久化日志中的保护状态跨 NodeAgent 重建保留；受保护历史缺失时不会新建同名文件覆盖。参见 `tests/omp-restricted-recovery-test.mjs` 与 `tests/node-agent-test.mjs --browser`。这些本地原生及浏览器夹具不等于 Windows 真机验收。
+
+
+SSH 忙碌统计包含原生会话的初始化、待处理 RPC、恢复及清理。`close()` 尚未完成时仍报告忙碌；断开后即使连接已经从目录移除，工作台仍把跟踪中的清理 Promise 计入排空状态，完成后移除。新连接可独立建立，旧清理不能使新连接漏记，也不能永久保持忙碌。验证见 `node-workbench-test.mjs` 的真实 Agent 关闭边界，以及 `omp-restricted-recovery-test.mjs` 的原生关闭／恢复检查。

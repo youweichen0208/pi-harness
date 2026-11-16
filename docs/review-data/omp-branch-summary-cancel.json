@@ -1,0 +1,59 @@
+{
+  "status": "Independent native branch-summary cancellation locally verified; full migration incomplete",
+  "completedAt": "2026-11-15T15:53:41.342932+00:00",
+  "platform": "darwin-arm64",
+  "omp": "18.20.0",
+  "protocol": 73,
+  "verification": {
+    "build": "Full isolated npm run build passed",
+    "typecheck": "npm run typecheck passed",
+    "unit": {
+      "files": 169,
+      "passed": 1055,
+      "skipped": 1
+    },
+    "native": "omp-tree-test passed including provider rejection and normal summary success; process exited 0",
+    "browser": "omp-tree-cancel-browser-test passed; process exited 0",
+    "relatedSmoke": {
+      "passed": 4,
+      "total": 4,
+      "tests": [
+        "omp-stop-metadata-test",
+        "native-session-commands-test",
+        "ws-malformed-test",
+        "prompt-receipts-test"
+      ]
+    },
+    "sourceComparison": "All listed source files match tested candidate"
+  },
+  "coverage": [
+    "Operation ID, conversation and worker generation binding; stale, duplicate, malformed and wrong-owner cancellation",
+    "Cancellation before native summary initialization; no navigation or model replay",
+    "Cancelled navigation retains leaf and worker; background task continues; normal next prompt succeeds",
+    "Normal summary success and provider rejection clear progress with original native outcome",
+    "Browser refresh restores operation; keyboard cancellation, English/Chinese narrow light/dark views"
+  ],
+  "isolation": "Tested /tmp/omp-summary-ig_q2u0t without replacing checkout dist used by service PID 23786. Candidate processes completed before cleanup.",
+  "sourceSha256": {
+    "server/omp/chat-service.ts": "b6a2219d0eb504bc41a0aa5a21f9089f9a70eb74e2b0c5b7233bf5fdde10d914",
+    "server/protocol.ts": "dd91fd014377a31cb103f4dce6fc8daa24700a78b9bb70cc04ed21af0a759f4a",
+    "server/protocol-version.ts": "bac0ca55d20a685720070fe22ffa8676d78ba7ef060412fa53184dada0fb1034",
+    "web/src/protocol-version.ts": "bdd7eb93b6d35eb66c0ef71fc79ad3328da3fb560018c3fd8c7ab91d080b690e",
+    "web/src/use-chat.ts": "649d8d4ceeb0fe5a42bb8551d1f830f3d6289c20189fb4adf073e92d30a37c90",
+    "web/src/components/SessionTreeWorkbench.tsx": "d9daaebe4a23611d075fd2938745cdf01807d4d4551ba89993d84852760b261f",
+    "web/src/i18n.tsx": "e8ec6d1d516aaccad10aded6f0412b1ac0cd54f8c523d606d33dc0a1f961e43a",
+    "web/src/styles.css": "80c6cdc7a48bd7cbaab8d41ab3a2d8539d8fd55c688407da197f6c8a0b8ed983",
+    "tests/omp-tree-test.mjs": "aa96fbd507e2416e2f3a7ff2fc9edf7464c10c9607ce906cb55555752a0ae1e4",
+    "tests/omp-tree-cancel-browser-test.mjs": "b01adc0635d18c752fbdce2e69d25bae6450c086a2841a26b8e5d3c81f398ce0",
+    ".github/workflows/ci.yml": "22a82779fbbc6fcbca2df04317e5a9436fdbab0599867c34f2cc32eb357afa0c"
+  },
+  "fullSmoke": "Historical 102/110; current 111-test manifest not rerun. Targeted results do not alter baseline.",
+  "remaining": [
+    "Complete tree display metadata",
+    "Native Task storage guard and remaining host regressions",
+    "Windows original-task and packaged cross-platform acceptance"
+  ],
+  "windowsVerified": false,
+  "desktopInstallerBuilt": false,
+  "published": false
+}

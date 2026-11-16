@@ -1,4 +1,4 @@
-// Local native Pi + real SSH transport; the SSH fixture has no Pi or model credentials.
+// Local native OMP + real SSH transport; the SSH fixture has no Pi or model credentials.
 import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
 import { createServer } from "node:http";
@@ -11,26 +11,48 @@ import { chromium } from "playwright-core";
 import { CHROME_PATH } from "./lib/chrome.mjs";
 import { portUp } from "./lib/port-utils.mjs";
 import { testEnv, scrubHostEnv } from "./lib/test-env.mjs";
+import { exerciseRestrictedRecovery } from "./lib/restricted-recovery-browser.mjs";
 
 scrubHostEnv();
 const port = 9232, modelPort = 9233;
 for (const portNumber of [port, modelPort]) assert.equal(await portUp(portNumber), false);
-const root = mkdtempSync(join(tmpdir(), "pi-node-agent-")), agentDir = join(root, "local-agent"), remoteDir = join(root, "ssh-node");
-mkdirSync(agentDir); mkdirSync(remoteDir);
+const root = mkdtempSync(join(tmpdir(), "pi-node-agent-")), agentDir = join(root, "data", "omp", "agent"), remoteDir = join(root, "ssh-node");
+mkdirSync(agentDir, { recursive: true }); mkdirSync(remoteDir);
 process.env.PI_CODING_AGENT_DIR = agentDir;
 const { NodeWorkbench } = await import("../dist/server/node-workbench.js");
 const { nodeCommand, runNodeCommand } = await import("../dist/server/node-command.js");
 const { NodeAgent } = await import("../dist/server/node-agent.js");
-writeFileSync(join(agentDir, "models.json"), JSON.stringify({ providers: { local: { api: "openai-completions", baseUrl: `http://127.0.0.1:${modelPort}/v1`, apiKey: "local-only-secret", models: [{ id: "test", name: "Local fixture", input: ["text"], contextWindow: 32000, maxTokens: 4096 }, { id: "other", name: "Other fixture", input: ["text"], contextWindow: 32000, maxTokens: 4096 }] } } }));
-writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ defaultProvider: "local", defaultModel: "test", defaultTools: ["bash", "read", "codemode", "tool_search"] }));
+writeFileSync(join(agentDir, "models.yml"), JSON.stringify({ providers: { local: { api: "openai-completions", baseUrl: `http://127.0.0.1:${modelPort}/v1`, apiKey: "local-only-secret", models: [{ id: "test", name: "Local fixture", input: ["text"], contextWindow: 32000, maxTokens: 4096 }, { id: "other", name: "Other fixture", input: ["text"], contextWindow: 32000, maxTokens: 4096 }] } } }));
+writeFileSync(join(agentDir, "config.yml"), JSON.stringify({ modelRoles: { default: "local/test" }, skills: { enabled: false }, retry: { enabled: false } }));
 mkdirSync(join(agentDir, "extensions"));
 writeFileSync(join(agentDir, "extensions", "must-not-load.ts"), 'throw new Error("local extensions must not load in node sessions");');
 writeFileSync(join(agentDir, "AGENTS.md"), "LOCAL_CONTEXT_MUST_NOT_LEAK");
 writeFileSync(join(agentDir, "APPEND_SYSTEM.md"), "LOCAL_APPEND_MUST_NOT_LEAK");
 let requests = 0, blockedStat = false;
+let recoveryMode = "normal";
+const nativeModels = JSON.parse(readFileSync(join(agentDir, "models.yml"), "utf8"));
+nativeModels.providers.recovery = { api: "anthropic-messages", baseUrl: `http://127.0.0.1:${modelPort}`, apiKey: "recovery-fixture", models: [{ id: "recovery", name: "Recovery fixture", contextWindow: 200000 }] };
+writeFileSync(join(agentDir, "models.yml"), JSON.stringify(nativeModels));
+writeFileSync(join(agentDir, "config.yml"), JSON.stringify({ modelRoles: { default: "local/test" }, skills: { enabled: false }, retry: { enabled: true, baseDelayMs: 5000, maxRetries: 2 }, compaction: { enabled: false, asyncEnabled: false, idleEnabled: false, keepRecentTokens: 16, reserveTokens: 128 }, cacheWarming: { enabled: false } }));
 const model = createServer(async (req, res) => {
 	let body = ""; for await (const chunk of req) body += chunk;
 	const payload = JSON.parse(body); requests++;
+	if (payload.model === "recovery") {
+		assert(req.headers['x-api-key'] === 'recovery-fixture' || req.headers.authorization === 'Bearer recovery-fixture', 'native provider authentication reaches the fixture');
+		res.writeHead(200, { 'content-type': 'text/event-stream' });
+		const emit = (type, fields) => res.write(`event: ${type}\ndata: ${JSON.stringify({ type, ...fields })}\n\n`);
+		emit('message_start', { message: { id: `recovery-${requests}`, type: 'message', role: 'assistant', model: 'recovery', content: [], usage: { input_tokens: 100, output_tokens: 0 } } });
+		if (recoveryMode === 'hang') return;
+		if (recoveryMode === 'retry') {
+			emit('content_block_start', { index: 0, content_block: { type: 'thinking', thinking: '' } });
+			emit('content_block_delta', { index: 0, delta: { type: 'thinking_delta', thinking: 'Fixture reasoning' } });
+			emit('content_block_stop', { index: 0 });
+			emit('error', { error: { type: 'overloaded_error', message: 'Overloaded' } }); res.end(); return;
+		}
+		emit('content_block_start', { index: 0, content_block: { type: 'text', text: '' } });
+		emit('content_block_delta', { index: 0, delta: { type: 'text_delta', text: 'Recovery fixture answer. Retain earlier context and wait for an explicit next request. No tools were called.' } });
+		emit('content_block_stop', { index: 0 }); emit('message_delta', { delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 500 } }); emit('message_stop', {}); res.end(); return;
+	}
 	assert.equal(req.headers.authorization, "Bearer local-only-secret");
 	assert.deepEqual(payload.tools.map(tool => tool.function.name).sort(), ["remote_command", "remote_read", "remote_write"]);
 	assert(!JSON.stringify(payload.messages).includes("LOCAL_CONTEXT_MUST_NOT_LEAK"));
@@ -134,20 +156,12 @@ try {
 	assert.equal(agent?.snapshot().phase, "ready", "SSH connection must make local Agent Chat ready without agent_start or remote Pi");
 	assert.equal(agent.snapshot().model.provider, "local");
 	assert.equal(requests, 0); assert.equal(commands.length, 0);
-	// Native prompt preflight must reject without clearing a draft, and stopping
-	// while auth is pending must not start a model request later.
-	const runtime = agent.session.modelRuntime;
-	const hasAuth = runtime.hasConfiguredAuth.bind(runtime), checkAuth = runtime.checkAuth.bind(runtime);
-	runtime.hasConfiguredAuth = () => false;
-	runtime.checkAuth = async () => undefined;
-	assert.equal((await call("agent_prompt", nodeId, { text: "no credentials" }, agent.id)).event, "failure");
-	let releaseAuth, authStarted = false;
-	runtime.checkAuth = () => { authStarted = true; return new Promise(resolve => { releaseAuth = resolve; }); };
-	const pendingAuth = call("agent_prompt", nodeId, { text: "cancel before model" }, agent.id);
-	await waitFor(() => authStarted);
-	assert.equal((await call("agent_abort", nodeId, {}, agent.id)).event, "result");
-	releaseAuth({}); assert.equal((await pendingAuth).event, "failure"); assert.equal(requests, 0);
-	runtime.hasConfiguredAuth = hasAuth; runtime.checkAuth = checkAuth;
+	// Product admission rejects an unavailable model before dispatching anything.
+	const selectedModel = agent.session.state.model;
+	agent.session.state.model = undefined;
+	assert.equal((await call("agent_prompt", nodeId, { text: "no model" }, agent.id)).event, "failure");
+	assert.equal(requests, 0);
+	agent.session.state.model = selectedModel;
 	const agentId = agent.id;
 	assert.equal((await call("agent_prompt", nodeId, { text: "wrong instance" }, "stale")).event, "failure");
 	service.attach("b", message => wire.push(message));
@@ -186,7 +200,7 @@ try {
 	assert(commands.every(command => !command.includes("pi --mode rpc")));
 	assert.equal((await call("agent_model", nodeId, { provider: "local", modelId: "other" }, agentId)).event, "result");
 	assert.equal(agent.snapshot().model.id, "other");
-	assert.equal(JSON.parse(readFileSync(join(agentDir, "settings.json"))).defaultModel, "test");
+	assert.equal(JSON.parse(readFileSync(join(agentDir, "config.yml"))).modelRoles.default, "local/test");
 	const second = await call("save", undefined, { name: "Second", host: "127.0.0.1", port, username: "tester", auth: "password", secret: "ssh-only-secret", defaultDir: "/srv/ops" });
 	const secondId = second.data.id;
 	assert.equal((await call("trust", secondId, { fingerprint })).event, "result");
@@ -199,7 +213,7 @@ try {
 	assert.equal((await call("agent_new", nodeId, {}, agentId)).event, "result");
 	assert.equal(agent.snapshot().messages.length, 0);
 	// #74: a reopened agent must stay in the new conversation until its first reply is written.
-	const reopened = new NodeAgent(agent.sessionDir, "/srv/ops", { command: async () => { throw new Error("unused"); }, read: async () => "", write: async () => {} }, () => {});
+	const reopened = new NodeAgent(agent.sessionDir, "/srv/ops", { command: async () => { throw new Error("unused"); }, read: async () => "", write: async () => {} }, () => {}, join(root, "data"));
 	await reopened.start();
 	assert.equal(reopened.snapshot().messages.length, 0);
 	await reopened.close();
@@ -244,9 +258,18 @@ try {
 		for (let i = 0; i < 100 && !await portUp(9234); i++) await new Promise(resolve => setTimeout(resolve, 100));
 		browser = await chromium.launch({ executablePath: CHROME_PATH || chromium.executablePath() });
 		const page = await browser.newPage({ viewport: { width: 1400, height: 950 } });
+		await page.addInitScript(() => {
+			const NativeSocket = window.WebSocket;
+			window.WebSocket = class extends NativeSocket {
+				constructor(...args) {
+					super(...args); window.recoveryFixtureSocket = this;
+					if (window.recoveryFixtureOffline) this.close();
+				}
+			};
+		});
 		const errors = []; page.on("pageerror", error => errors.push(error.message)); page.on("dialog", dialog => dialog.accept());
 		await page.goto("http://127.0.0.1:9234");
-		await page.locator(".setup-modal .modal-close").click();
+		await page.getByRole("tab", { name: "节点", exact: true }).waitFor();
 		await page.getByRole("tab", { name: "节点", exact: true }).click();
 		await page.locator(".node-item", { hasText: "Remote" }).locator("button").first().click();
 		const before = requests;
@@ -285,6 +308,8 @@ try {
 		await page.setViewportSize({ width: 390, height: 844 });
 		await page.locator(".node-connected").screenshot({ path: "tests/scratch/node-agent-mobile.png" });
 		assert(await input.isVisible()); assert.equal(await input.inputValue(), "draft for this node"); assert.deepEqual(errors, []);
+		await exerciseRestrictedRecovery({ page, dataDir: join(root, 'data'), setMode: value => { recoveryMode = value; }, requestCount: () => requests });
+		assert.deepEqual(errors, []);
 		console.log("PASS node browser: connect-to-chat without remote install/start, model/send, simultaneous panes, narrow layout");
 	}
 } finally {

@@ -1,4 +1,3 @@
-import type { AgentSession } from "@earendil-works/pi-coding-agent";
 import type { PromptAttachment } from "./protocol.js";
 
 type Parsed = { path: string; mode: "inline" | "lines" | "reference"; raw: string; preview: string };
@@ -72,15 +71,20 @@ export function parseUserAttachments(text: string): { text: string; attachments:
 const frozen = Symbol("resolved native attachment");
 type Resolved = PromptAttachment & { [frozen]?: string };
 export const frozenAttachmentText = (attachment: PromptAttachment) => (attachment as Resolved)[frozen];
-export function resolveNativeAttachments(session: AgentSession, attachments?: PromptAttachment[]): PromptAttachment[] | undefined {
+/** Minimal read-only history port shared by native transcript adapters. */
+interface AttachmentSession {
+	sessionManager: { getEntry(id: string): { type: string; message?: { role: string; customType?: string; content?: unknown } } | undefined };
+}
+export function resolveNativeAttachments(session: AttachmentSession, attachments?: PromptAttachment[]): PromptAttachment[] | undefined {
 	return attachments?.map((attachment): Resolved => {
 		if (!attachment.nativeRef || frozenAttachmentText(attachment) !== undefined) return attachment;
 		const { entryId, index } = attachment.nativeRef;
 		const entry = session.sessionManager.getEntry(entryId);
 		if (!Number.isSafeInteger(index) || index < 0 || entry?.type !== "message") throw new Error("Invalid attachment reference");
 		const message = entry.message;
+		if (!message) throw new Error("Invalid attachment source");
 		if (message.role !== "user" && !(message.role === "custom" && message.customType === "file")) throw new Error("Invalid attachment source");
-		const text = typeof message.content === "string" ? message.content : message.content.filter(b => b.type === "text").map(b => b.text).join("\n");
+		const text = typeof message.content === "string" ? message.content : Array.isArray(message.content) ? message.content.filter(b => b && b.type === "text" && typeof b.text === "string").map(b => b.text).join("\n") : "";
 		const block = parseUserAttachments(text).attachments[index];
 		if (!block) throw new Error("Attachment not found");
 		return { path: block.path, mode: block.mode, nativeRef: attachment.nativeRef, [frozen]: block.raw };

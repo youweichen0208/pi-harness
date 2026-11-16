@@ -1,0 +1,75 @@
+/** Native settings persistence/precedence without executing extension code. */
+import assert from 'node:assert/strict';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, realpathSync, statSync, readdirSync } from 'node:fs';
+import { join, basename } from 'node:path';
+import { homedir, tmpdir } from 'node:os';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { pathToFileURL } from 'node:url';
+import { randomUUID } from 'node:crypto';
+import { setTimeout as sleep } from 'node:timers/promises';
+import { testEnv } from './lib/test-env.mjs';
+import { loadOmpTestModule, ompTestRoot } from './lib/omp-runtime-location.mjs';
+const { OmpPackages, createOmpPackageRunner } = await loadOmpTestModule('packages.js');
+const root = realpathSync(mkdtempSync(join(tmpdir(), 'omp-pkg-settings-'))), native = realpathSync(mkdtempSync(join(homedir(), '.omp-harness-settings-')));
+const cwd = join(root, 'workspace'), source = join(root, 'source'), name = 'omp-settings-fixture';
+for (const dir of [cwd, join(cwd, '.git'), join(cwd, '.omp'), source, join(root, 'agent')]) mkdirSync(dir, { recursive: true });
+const env = { ...testEnv(), PI_CONFIG_DIR: basename(native), PI_CODING_AGENT_DIR: join(root, 'agent'), BUN_INSTALL_CACHE_DIR: join(root, 'cache'), SCHEMA_ENV: 'ENV_SECRET', PATH: '', Path: '' };
+for (const key of Object.keys(env)) if (key.startsWith('OMP_') || key === 'ELECTRON_RUN_AS_NODE') delete env[key];
+const service = new OmpPackages(root, createOmpPackageRunner(root, { env }));
+const owner = { cwd, clientId: 'settings-client', conversationId: 'settings-conversation' };
+const manifest = packageName => ({ name: packageName, version: '1.0.0', type: 'module', omp: { extensions: ['./entry.js'], settings: {
+	text: { type: 'string', default: 'hello' }, count: { type: 'number', min: 0, max: 8, default: 2 }, enabled: { type: 'boolean', default: true }, mode: { type: 'enum', values: ['fast', 'slow'], default: 'fast' }, token: { type: 'string', secret: true, default: 'DEFAULT_SECRET', env: 'SCHEMA_ENV' }, secretMode: { type: 'enum', secret: true, values: ['ENUM_SECRET'] },
+} } });
+const writePackage = (dir, packageName) => { mkdirSync(dir, { recursive: true }); writeFileSync(join(dir, 'package.json'), JSON.stringify(manifest(packageName))); writeFileSync(join(dir, 'entry.js'), "throw Error('Settings metadata must not execute factories');"); };
+const execute = async (operation, target, scope) => { const plan = await service.preview(cwd, operation, target, scope), job = service.start(owner, randomUUID(), plan); for (let i = 0; i < 600 && service.get(owner, job.id).phase === 'running'; i++) await sleep(50); assert.equal(service.get(owner, job.id).phase, 'success'); };
+const get = (settingsScope = 'user', target = name, installScope) => service.settings(cwd, target, installScope, settingsScope);
+const save = (view, patch, target = name, installScope) => service.settings(cwd, target, installScope, view.scope, patch, view.version);
+const field = (view, key) => view.fields.find(item => item.key === key);
+const set = value => ({ action: 'set', value });
+const nativeRead = async packageName => {
+	const loader = pathToFileURL(join(ompTestRoot, 'node_modules/@oh-my-pi/pi-coding-agent/src/extensibility/plugins/loader.ts')).href;
+	const script = `const {getPluginSettings}=await import(${JSON.stringify(loader)}); console.log(JSON.stringify(await getPluginSettings(${JSON.stringify(packageName)},process.cwd())));`;
+	const { stdout } = await promisify(execFile)(join(ompTestRoot, 'node_modules/bun/bin/bun.exe'), ['-e', script], { cwd, env, timeout: 30000 }); return JSON.parse(stdout.trim());
+};
+const clean = view => { for (const secret of ['DEFAULT_SECRET', 'USER_SECRET', 'PROJECT_SECRET', 'ENV_SECRET', 'ENUM_SECRET', 'UNKNOWN_SECRET']) assert(!JSON.stringify(view).includes(secret), 'secret never enters a settings response'); };
+try {
+	writePackage(source, name); await execute('link', source);
+	let view = await get(); clean(view); assert.equal(field(view, 'count').effective, 2); assert.equal(field(view, 'token').source, 'default'); assert.equal(field(view, 'token').value, undefined); assert.equal(field(view, 'secretMode').values, undefined);
+	const userFile = view.path, raw = JSON.parse(readFileSync(userFile, 'utf8')); raw.future = { token: 'UNKNOWN_SECRET' }; raw.settings = { [name]: { unknown: 'UNKNOWN_SECRET' }, other: { keep: false } }; writeFileSync(userFile, JSON.stringify(raw));
+	view = await get();
+	view = await save(view, { token: set('USER_SECRET'), count: set(0), enabled: set(false), text: set(''), mode: set('slow') }); clean(view);
+	assert.equal(field(view, 'count').value, 0); assert.equal(field(view, 'enabled').value, false); assert.equal(field(view, 'text').value, ''); assert.equal(field(view, 'token').configured, true);
+	assert.equal((await nativeRead(name)).token, 'USER_SECRET');
+	let config = JSON.parse(readFileSync(userFile, 'utf8')); assert.equal(config.future.token, 'UNKNOWN_SECRET'); assert.equal(config.settings.other.keep, false); assert.equal(config.settings[name].unknown, 'UNKNOWN_SECRET');
+	if (process.platform !== 'win32') assert.equal(statSync(userFile).mode & 0o777, 0o600);
+	const before = readFileSync(userFile, 'utf8');
+	for (const patch of [{ count: set(9) }, { count: set('2') }, { enabled: set('false') }, { mode: set('unknown') }, { unknown: set('replace') }, { text: set('would overwrite'), token: set({ password: 'bad' }) }]) await assert.rejects(save(view, patch));
+	assert.equal(readFileSync(userFile, 'utf8'), before, 'all fields validate before a single write');
+	const pair = await Promise.allSettled([save(view, { count: set(3) }), save(view, { count: set(4) })]); assert.equal(pair.filter(item => item.status === 'fulfilled').length, 1);
+	view = await get(); const stale = view; const changed = manifest(name); changed.omp.settings.count.max = 7; writeFileSync(join(source, 'package.json'), JSON.stringify(changed)); await assert.rejects(save(stale, { count: set(2) }), /conflict/);
+	view = await get('project'); const projectFile = view.path;
+	view = await save(view, { token: set('PROJECT_SECRET'), count: set(5) }); clean(view);
+	assert.equal((await nativeRead(name)).count, 5); assert.equal((await nativeRead(name)).token, 'PROJECT_SECRET');
+	const globalView = await get(); assert.equal(field(globalView, 'count').source, 'project'); assert.equal(field(globalView, 'count').effective, 5); assert.notEqual(field(globalView, 'count').value, 5);
+	const project = JSON.parse(readFileSync(projectFile, 'utf8')); project.features = { [name]: ['unrelated'] }; project.settings.other = { keep: 'UNKNOWN_SECRET' }; writeFileSync(projectFile, JSON.stringify(project));
+	await assert.rejects(save(view, { count: set(6) }), /conflict/);
+	view = await get('project'); view = await save(view, { token: { action: 'reset' }, count: { action: 'reset' } });
+	assert.equal((await nativeRead(name)).token, 'USER_SECRET'); assert.equal(field(view, 'token').source, 'user');
+	config = JSON.parse(readFileSync(projectFile, 'utf8')); assert.deepEqual(config.features[name], ['unrelated']); assert.equal(config.settings.other.keep, 'UNKNOWN_SECRET');
+	if (process.platform !== 'win32') assert.equal(statSync(projectFile).mode & 0o777, 0o600);
+	const originalProject = readFileSync(projectFile, 'utf8'); writeFileSync(projectFile, '[]'); await assert.rejects(get('project')); writeFileSync(projectFile, originalProject);
+	view = await get(); await save(view, { token: { action: 'reset' } }); assert.equal((await nativeRead(name)).token, undefined); assert.equal(field(await get(), 'token').source, 'default');
+	const validManifest = readFileSync(join(source, 'package.json'), 'utf8'), malformed = JSON.parse(validManifest); malformed.omp.settings.token.secret = 'true'; writeFileSync(join(source, 'package.json'), JSON.stringify(malformed)); await assert.rejects(get()); writeFileSync(join(source, 'package.json'), validManifest);
+	const market = join(root, 'market'), plugin = join(market, 'plugin'), marketName = 'omp-settings-market-fixture', id = 'fixture@settings-market';
+	writePackage(plugin, marketName); mkdirSync(join(market, '.claude-plugin'));
+	writeFileSync(join(market, '.claude-plugin/marketplace.json'), JSON.stringify({ name: 'settings-market', owner: { name: 'fixture' }, plugins: [{ name: 'fixture', version: '1.0.0', source: './plugin' }] }));
+	await execute('marketplace-add', market); await execute('plugin-install', id, 'user'); await execute('plugin-install', id, 'project');
+	view = await get('user', id, 'project'); assert.equal(view.path, userFile, 'settings scope does not follow installation scope');
+	await save(view, { count: set(6) }, id, 'project'); assert.equal((await nativeRead(marketName)).count, 6); assert.equal(field(await get('user', id, 'user'), 'count').value, 6);
+	view = await get('project', id, 'project'); await save(view, { count: set(7) }, id, 'project'); assert.equal((await nativeRead(marketName)).count, 7);
+	clean(await get('project', id, 'user')); clean(await service.list(cwd)); clean(service.jobs(owner));
+	const jobs = join(root, 'omp/package-jobs');
+	for (const file of readdirSync(jobs)) clean(readFileSync(join(jobs, file), 'utf8'));
+	console.log('PASS OMP package settings: native reads, four types, masked secrets, atomic validation, user/project precedence, reset, concurrent/manifest conflicts, Marketplace install-scope independence and no secret job records');
+} finally { await service.close(); rmSync(root, { recursive: true, force: true }); rmSync(native, { recursive: true, force: true }); }

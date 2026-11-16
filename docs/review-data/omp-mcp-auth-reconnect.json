@@ -1,0 +1,157 @@
+{
+  "status": "Post-grant obsolete MCP reconnect guarded and verified locally; native OAuth write-back CAS remains unresolved",
+  "platform": "darwin-arm64",
+  "omp": "18.20.0",
+  "bun": "1.4.4",
+  "node": "26.0.0",
+  "protocol": 77,
+  "changes": [
+    "After native OAuth completes, re-read the authoritative selected definition and its scope; compare it to the native flow outcome, normalizing undefined fields as native JSON persistence does.",
+    "Read project configuration policy through Settings.loadReadOnly with the same agent/cwd/config overlays, without mutating live settings. Re-run native MCP discovery with current project/browser/extension filters and native allow/deny rules.",
+    "For discovered definitions, also compare source metadata and effective options to the live manager entry; a manager fallback alone cannot prove a source still exists.",
+    "Changes or unreadable selection return configuration_changed instead of automatically reconnecting. Stop/dispose checks remain around asynchronous reads. The UI says credentials may already be saved and asks for explicit configuration review/reload.",
+    "Protocol 77 and bilingual copy; no SDK patch, copied OAuth client-selection logic, automatic task replay or credential rollback.",
+    "Added a smoke entry wrapping twelve actual native OAuth control/conflict cases; the same-server write-back failure remains a separate intentionally failing diagnostic."
+  ],
+  "verification": {
+    "build": {
+      "path": "/tmp/omp-auth-reconnect-build.log",
+      "exitCode": 0,
+      "sha256": "e8fe40c2cea3af05fd1d37242dff3b84729ad513994f5a90bef1a8fe6ec766f3"
+    },
+    "units": {
+      "path": "/tmp/omp-auth-reconnect-units.log",
+      "exitCode": 0,
+      "sha256": "5e20cec9e0f64f9a271ff3ef9db2b8c3c5cd0d41a4b1ea86f8f9d1f087e027b9",
+      "files": 173,
+      "passed": 1075,
+      "skipped": 1
+    },
+    "initialRelatedSmoke": {
+      "path": "/tmp/omp-auth-reconnect-related.log",
+      "exitCode": 0,
+      "sha256": "c52b327f48382838805aba6f58b275910500c13a8921bc3509acd51071180e33",
+      "passed": 5,
+      "total": 5,
+      "note": "Reconnect wrapper had ten modes in this run; final expanded twelve-mode wrapper is recorded separately.",
+      "names": [
+        "omp-mcp-test",
+        "omp-mcp-auth-test",
+        "omp-mcp-auth-reconnect-test",
+        "codemode-mcp-test",
+        "version-handshake-test"
+      ]
+    },
+    "finalReconnectRegression": {
+      "path": "/tmp/omp-auth-reconnect-regression-final.log",
+      "exitCode": 0,
+      "sha256": "9749fce0adbc7d8f077f8a615522ea6998c20b8e26eb722c0c4a55fa66fc9f17",
+      "cases": 12,
+      "modes": [
+        "control",
+        "peer",
+        "definition-only",
+        "url-change",
+        "disable",
+        "delete",
+        "shadow",
+        "global-deny",
+        "project-policy",
+        "definition-edit",
+        "discovered",
+        "discovered-edit"
+      ]
+    },
+    "browser": {
+      "path": "/tmp/omp-auth-reconnect-browser.log",
+      "exitCode": 0,
+      "sha256": "6c1351de7de29c4fe51ea009fce695bf9de8580f524699ca2a0746028f7369be",
+      "coverage": "Actual externally disabled server during authorization, no authenticated obsolete reconnect, distinct status, retained file, narrow display, explicit read/save/reload recovery, then normal login/logout, import and form regressions, ownership and stopped-worker isolation."
+    },
+    "checks": [
+      "Protocol 77 sync",
+      "131 production source/built engine boundary",
+      "314 isolated test scripts",
+      "git diff --check"
+    ],
+    "screenshot": {
+      "path": "tests/scratch/omp-mcp-auth-changed.png",
+      "sha256": "cf35422067bd1f1be464477ce4afc7afa3bd6c3cf71f9ae07747542b4c5cbeff"
+    },
+    "types": {
+      "path": "/tmp/omp-auth-reconnect-types.log",
+      "exitCode": 0,
+      "sha256": "afe164d6475ab09607d600e330c778c40041826259c553a753499c927e4fbe92"
+    }
+  },
+  "remainingRed": {
+    "path": "/tmp/omp-auth-reconnect-unresolved-final.log",
+    "exitCode": 1,
+    "sha256": "14485ee21b44ff33697e450c65f794f7d4f78941db9a72cf5d716bdea3570ed9",
+    "case": "Same-definition external edit is still overwritten inside native OAuth persistence before this reconnect guard. The grant remains complete and the red assertion remains red; this work does not fix write-back CAS."
+  },
+  "intermediateFixtureFailures": [
+    {
+      "case": "Claude-format discovery drops native oauth.callbackPort, so the fixture used the native default listener rather than the required isolated high port. Replaced that fixture with a native OMP extension package retaining callbackPort:0; the port assertion was not weakened.",
+      "logs": [
+        {
+          "path": "/tmp/omp-auth-reconnect-discovered.log",
+          "exitCode": 1,
+          "sha256": "39c3027b749becdb03101b75600509de2940e87fefea8169300e54775d1abc21"
+        },
+        {
+          "path": "/tmp/omp-auth-reconnect-discovered-edit.log",
+          "exitCode": 1,
+          "sha256": "39c3027b749becdb03101b75600509de2940e87fefea8169300e54775d1abc21"
+        }
+      ]
+    },
+    {
+      "case": "A bare configured JavaScript file did not establish the intended package MCP root. Added a real OMP package manifest and configured its directory; native discovery is asserted before login.",
+      "logs": [
+        {
+          "path": "/tmp/omp-auth-reconnect-discovered-native.log",
+          "exitCode": 1,
+          "sha256": "d1563043773f7c69e904528dde43264db3f7158a7b299b77919e9d6fa6cc0741"
+        },
+        {
+          "path": "/tmp/omp-auth-reconnect-discovered-edit-native.log",
+          "exitCode": 1,
+          "sha256": "d1563043773f7c69e904528dde43264db3f7158a7b299b77919e9d6fa6cc0741"
+        }
+      ]
+    }
+  ],
+  "source": {
+    "candidate": "/var/folders/41/07yyp3_12jddkkthmflqkbgw0000gn/T/omp-auth-reconnect-z3pbc4b7",
+    "filesCompared": 1338,
+    "fingerprintSha256": "0dbf8809d33e8a7f671f1af278e27ffcf1112612ef6c7b5b22577290acdc39cd",
+    "differences": [],
+    "docsExcluded": true
+  },
+  "limitations": [
+    "Native OAuth selected-definition CAS remains unresolved; tool-level auth challenge delivery is also still unresolved.",
+    "This is an authoritative check immediately before reconnect, not a transaction locking arbitrary external editors through OAuth/network work. A later concurrent edit still requires native reload semantics.",
+    "Credentials already persisted by the native grant remain stored. No rollback is promised or attempted.",
+    "Original Windows DeepSeek tasks, real accounts, packaged/current release, Task internal history protection and remaining diagnostics are not covered by these local fixtures.",
+    "Full v76 116-entry smoke was already running in a separate candidate before this v77 change. It is not full-suite evidence for this fix. Current smoke list is 117 entries."
+  ],
+  "operations": {
+    "rootDist": "Not overwritten",
+    "userProcessesPreserved": [
+      23786,
+      62015
+    ],
+    "candidateRemoved": true,
+    "thisTurnHandlesTerminal": true,
+    "earlierFullSmoke": {
+      "sessionId": 49873,
+      "log": "/tmp/omp-full-import.log",
+      "candidate": "/var/folders/41/07yyp3_12jddkkthmflqkbgw0000gn/T/omp-auth-conflict-mrxocud3",
+      "status": "complete: protocol 76, 116/116 passed, exit 0; see omp-smoke-import.json. Not full-suite evidence for this protocol 77 change.",
+      "exitCode": 0,
+      "candidateRemoved": true
+    },
+    "release": "No commit, push, publish or installed-app replacement"
+  }
+}

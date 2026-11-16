@@ -13,62 +13,19 @@
  * Usage: npm run build && node tests/delete-session-terminal-test.mjs
  */
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, mkdirSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import WebSocket from "ws";
-import { testEnv } from "./lib/test-env.mjs";
+import { startIsolatedHarness } from "./lib/isolated-server.mjs";
+import { createOmpHistory } from "./lib/omp-history-fixture.mjs";
 
-const PORT = 8968;
-const base = mkdtempSync(join(tmpdir(), "pi-web-delete-session-"));
-const workdir = join(base, "work");
-const dataDir = join(base, "data");
-const agentDir = join(base, "agent");
-mkdirSync(workdir, { recursive: true });
-mkdirSync(dataDir, { recursive: true });
-const sessionsDir = join(agentDir, "sessions", `--${workdir.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-")}--`);
-mkdirSync(sessionsDir, { recursive: true });
-
-const seed = (id, text) => {
-	const path = join(sessionsDir, `2026-10-19T00-00-0${id === "A" ? 0 : 1}-000Z_${id}.jsonl`);
-	writeFileSync(path, [
-		{ type: "session", version: 3, id, timestamp: "2026-10-19T00:00:00.000Z", cwd: workdir },
-		{ type: "message", id: `user-${id}`, parentId: null, timestamp: "2026-10-19T00:00:01.000Z", message: { role: "user", content: [{ type: "text", text }], timestamp: Date.now() } },
-	].map((row) => JSON.stringify(row)).join("\n") + "\n");
-	return path;
-};
-const sessionA = seed("A", "EXITED_TERMINAL_SESSION");
-const sessionB = seed("B", "LIVE_TERMINAL_SESSION");
-
-const repoRoot = realpathSync(new URL("../", import.meta.url));
-const server = spawn(process.execPath, ["dist/server/index.js"], {
-	cwd: repoRoot,
-	env: {
-		...testEnv(),
-		PORT: String(PORT),
-		PI_WEB_DATA_DIR: dataDir,
-		PI_WEB_CWD: workdir,
-		PI_CODING_AGENT_DIR: agentDir,
-	},
-	stdio: "ignore",
-	windowsHide: true,
-});
-
-const waitForPort = async (port, timeout = 20000) => {
-	const started = Date.now();
-	while (Date.now() - started < timeout) {
-		try {
-			const response = await fetch(`http://127.0.0.1:${port}/api/health`);
-			if (response.ok) return;
-		} catch {
-			/* starting */
-		}
-		await sleep(100);
-	}
-	throw new Error(`server did not start on ${port}`);
-};
+const base = mkdtempSync(join(tmpdir(), "omp-delete-session-"));
+const workdir = join(base, "work"), dataDir = join(base, "data"), agentDir = join(dataDir, "omp/agent");
+for (const path of [workdir, agentDir]) mkdirSync(path, { recursive: true });
+writeFileSync(join(agentDir, "config.yml"), JSON.stringify({ skills: { enabled: false }, cacheWarming: { enabled: false } }));
+let harness, sessionA, sessionB;
 
 class Client {
 	constructor(ws) {
@@ -88,7 +45,7 @@ class Client {
 		});
 	}
 	send(message) { this.ws.send(JSON.stringify(message)); }
-	async waitForType(type, predicate = () => true, timeout = 15000) {
+	async waitForType(type, predicate = () => true, timeout = 30000) {
 		const started = Date.now();
 		while (Date.now() - started < timeout) {
 			const index = this.received.findIndex((message) => message.type === type && predicate(message));
@@ -97,7 +54,7 @@ class Client {
 		}
 		throw new Error(`timeout waiting for ${type}`);
 	}
-	async waitForState(predicate, timeout = 15000) {
+	async waitForState(predicate, timeout = 30000) {
 		const started = Date.now();
 		while (Date.now() - started < timeout) {
 			if (this.state && predicate(this.state)) return this.state;
@@ -107,7 +64,7 @@ class Client {
 	}
 }
 
-let client;
+let client, otherClient;
 let passed = 0;
 const check = (name, condition) => {
 	assert.ok(condition, name);
@@ -116,8 +73,10 @@ const check = (name, condition) => {
 };
 
 try {
-	await waitForPort(PORT);
-	const ws = new WebSocket(`ws://127.0.0.1:${PORT}/ws`);
+	sessionA = (await createOmpHistory({ dataDir, cwd: workdir, messages: [{ role: "user", content: "EXITED_TERMINAL_SESSION", timestamp: Date.now() }] })).sessionFile;
+	sessionB = (await createOmpHistory({ dataDir, cwd: workdir, messages: [{ role: "user", content: "LIVE_TERMINAL_SESSION", timestamp: Date.now() }] })).sessionFile;
+	harness = await startIsolatedHarness({ ...(process.argv.includes("--source") ? { args: ["--import", "tsx", "server/index.ts"] } : {}), env: { PI_WEB_DATA_DIR: dataDir, PI_WEB_CWD: workdir } });
+	const ws = new WebSocket(`ws://127.0.0.1:${harness.port}/ws`);
 	await new Promise((resolve, reject) => {
 		ws.once("open", resolve);
 		ws.once("error", reject);
@@ -141,12 +100,16 @@ try {
 	// Switching away keeps the conversation warm because it owns a terminal, so
 	// the transcript is owned by a BACKGROUND conversation when we delete it.
 	client.send({ type: "new_chat" });
-	await client.waitForState((state) => state.sessionFile !== sessionA);
+	await client.waitForState((state) => state.sessionFile !== sessionA && !state.isStreaming);
+	const artifactsA = sessionA.slice(0, -6), backupA = `${sessionA}.fixture.bak`;
+	mkdirSync(artifactsA, { recursive: true }); writeFileSync(join(artifactsA, "tool-output.log"), "native artifact fixture");
+	writeFileSync(backupA, readFileSync(sessionA));
 	client.send({ type: "delete_session", path: sessionA });
-	await client.waitForType("sessions", () => true);
+	await client.waitForType("sessions", message => !message.sessions.some(session => session.path === sessionA));
 	const warning = client.received.find((message) => message.type === "notice" && message.level === "warning");
 	check("exited terminal no longer blocks deletion", !warning);
 	check("session A transcript deleted from disk", !existsSync(sessionA));
+	check("native artifacts and rewrite backups are removed", !existsSync(artifactsA) && !existsSync(backupA));
 
 	// -- session B: live terminal --------------------------------------------
 	client.send({ type: "switch_session", path: sessionB });
@@ -156,7 +119,7 @@ try {
 	const liveList = await client.waitForType("terminal_list", (message) => message.terminals.some((item) => item.id === terminalB && item.running));
 	const liveTitle = liveList.terminals.find((item) => item.id === terminalB).title;
 	client.send({ type: "new_chat" });
-	await client.waitForState((state) => state.sessionFile !== sessionB);
+	await client.waitForState((state) => state.sessionFile !== sessionB && !state.isStreaming);
 	client.send({ type: "delete_session", path: sessionB });
 	const liveWarning = await client.waitForType("notice", (message) => message.level === "warning");
 	check("live terminal refuses deletion", liveWarning.text.includes("运行中的终端"));
@@ -171,11 +134,29 @@ try {
 	check("active conversation is refused", activeWarning.text.includes("正在使用中"));
 	check("session B still on disk", existsSync(sessionB));
 
+	// A different live client owns this transcript; deleting it must not stop
+	// or invalidate that window, even when its model is currently idle.
+	const sessionC = (await createOmpHistory({ dataDir, cwd: workdir, messages: [{ role: "user", content: "OTHER_WINDOW_SESSION", timestamp: Date.now() }] })).sessionFile;
+	const otherSocket = new WebSocket(`ws://127.0.0.1:${harness.port}/ws`);
+	await new Promise((resolve, reject) => { otherSocket.once("open", resolve); otherSocket.once("error", reject); });
+	otherClient = new Client(otherSocket);
+	otherClient.send({ type: "hello", clientId: "delete-session-other-window" });
+	await otherClient.waitForType("ready");
+	await otherClient.waitForState(state => state.sessionFile === sessionC && !state.isStreaming);
+	client.send({ type: "delete_session", path: sessionC });
+	const ownedWarning = await client.waitForType("notice", message => message.level === "warning");
+	check("another window's idle history is protected", ownedWarning.text.includes("其他窗口") && existsSync(sessionC));
+	otherClient.received = otherClient.received.filter(message => message.type !== "snapshot");
+	otherClient.send({ type: "get_state" });
+	await otherClient.waitForType("snapshot", message => message.state.sessionFile === sessionC && !message.state.sessionPersistence?.failed);
+	check("other window remains readable", true);
+
 	console.log(`\n${passed} checks passed`);
 } catch (error) {
 	console.error(`✗ ${error.message}`);
 	process.exitCode = 1;
 } finally {
-	client?.ws.close();
-	server.kill("SIGTERM");
+	client?.ws.terminate(); otherClient?.ws.terminate();
+	await harness?.stop();
+	rmSync(base, { recursive: true, force: true });
 }
