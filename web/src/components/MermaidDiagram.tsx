@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useT } from "../i18n";
+import { MermaidZoom } from "./MermaidZoom";
 import { CopyButton } from "./copy-button";
 
 /** Lazily-loaded, memoized mermaid module — most chats never hit a mermaid
@@ -47,6 +48,7 @@ function renderDiagram(id: string, code: string) {
 export function MermaidDiagram({ code }: { code: string }) {
 	const t = useT();
 	const reactId = useId().replace(/[^a-zA-Z0-9]/g, "");
+	const [expanded, setExpanded] = useState(false);
 	const [svg, setSvg] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const containerRef = useRef<HTMLDivElement>(null);
@@ -110,9 +112,13 @@ export function MermaidDiagram({ code }: { code: string }) {
 			<div
 				ref={containerRef}
 				className="mermaid-svg"
+				role="button" tabIndex={0} aria-label={t("mermaidExpand")} title={t("mermaidExpand")}
+				onClick={event => { event.stopPropagation(); setExpanded(true); }}
+				onKeyDown={event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.stopPropagation(); setExpanded(true); } }}
 				// eslint-disable-next-line react/no-danger
 				dangerouslySetInnerHTML={{ __html: svg }}
 			/>
+			{expanded && <MermaidZoom svg={svg} onClose={() => setExpanded(false)} />}
 		</div>
 	);
 }

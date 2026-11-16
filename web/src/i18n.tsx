@@ -1506,6 +1506,9 @@ const zh = {
 	slashCopied: "已复制上一条助手回复",
 	slashCopyFailed: "复制失败，请手动复制",
 	slashCopyEmpty: "还没有可复制的助手回复",
+	mermaidExpand: "放大图表",
+	mermaidZoomIn: "放大",
+	mermaidZoomOut: "缩小",
 	mermaidRendering: "正在渲染图表…",
 	mermaidRenderFailed: "图表渲染失败，已显示原始代码",
 
@@ -4117,6 +4120,9 @@ const en: Record<keyof typeof zh, string> = {
 	slashCopied: "Copied the last assistant reply",
 	slashCopyFailed: "Copy failed — please copy manually",
 	slashCopyEmpty: "No assistant reply to copy yet",
+	mermaidExpand: "Enlarge diagram",
+	mermaidZoomIn: "Zoom in",
+	mermaidZoomOut: "Zoom out",
 	mermaidRendering: "Rendering diagram…",
 	mermaidRenderFailed: "Diagram failed to render — showing raw source",
 
