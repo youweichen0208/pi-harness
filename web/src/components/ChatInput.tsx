@@ -553,8 +553,17 @@ export const ChatInput = memo(function ChatInput({
 
 	const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
 		if (e.nativeEvent.isComposing) return;
-		// Let textarea insert a newline before the command picker handles Enter.
-		if (e.key === "Enter" && e.shiftKey) return;
+		if (e.key === "Enter" && e.ctrlKey) {
+			e.preventDefault();
+			const input = e.currentTarget;
+			const start = input.selectionStart;
+			const end = input.selectionEnd;
+			setText(value => value.slice(0, start) + "\n" + value.slice(end));
+			requestAnimationFrame(() => input.setSelectionRange(start + 1, start + 1));
+			return;
+		}
+		// Only Ctrl+Enter inserts a newline.
+		if (e.key === "Enter" && e.shiftKey) { e.preventDefault(); return; }
 		// Slash-command picker navigation.
 		if (completions && completions.length > 0) {
 			switch (e.key) {

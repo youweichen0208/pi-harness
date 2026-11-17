@@ -8676,7 +8676,7 @@ html.pi-desktop .topbar {
 	gap: 10px;
 	flex-wrap: nowrap;
 }
-html.pi-desktop .topbar { padding-left: 92px; }
+html.pi-desktop-darwin .topbar { padding-left: 92px; }
 html.pi-desktop .brand {
 	flex: 1 1 130px;
 	align-self: stretch;
@@ -8713,41 +8713,24 @@ html.pi-desktop .view-switch button { flex-shrink: 0; }
 html.pi-desktop .topbar-desktop { flex-shrink: 0; }
 html.pi-desktop .chip-model { max-width: 112px; overflow: hidden; text-overflow: ellipsis; }
 .desktop-window-controls { display: none; }
-/* macOS-style dots at the native traffic-light position (18,17: 12px circles with
-   an 8px gap) so the frameless Windows/Linux shell shares the macOS header
-   layout instead of reserving the right edge for its own buttons. */
 html.pi-desktop .desktop-window-controls {
 	display: flex;
-	position: fixed;
-	left: 18px;
-	top: 17px;
-	z-index: 70;
-	gap: 8px;
+	align-self: stretch;
+	flex: none;
 	-webkit-app-region: no-drag;
 	app-region: no-drag;
 }
 .desktop-window-controls button {
-	position: relative;
-	width: 12px;
-	height: 12px;
-	padding: 0;
+	width: 44px;
 	border: 0;
-	border-radius: 50%;
+	background: transparent;
+	color: var(--text-dim);
 	display: grid;
 	place-items: center;
 	cursor: pointer;
-	color: transparent;
 }
-/* Each target is 20px, the widest that keeps neighbours abutting without
-   overlapping (the dots are 20px apart). The painted circle stays 12px. */
-.desktop-window-controls button::before { content: ""; position: absolute; inset: -4px; border-radius: 50%; }
-.desktop-window-controls button > svg { width: 7px; height: 7px; stroke-width: 3.4; }
-.desktop-window-controls .desktop-window-close { background: var(--tl-close); }
-.desktop-window-controls .desktop-window-minimize { background: var(--tl-minimize); }
-.desktop-window-controls .desktop-window-maximize { background: var(--tl-maximize); }
-.desktop-window-controls button:hover,
-.desktop-window-controls button:focus-visible { color: var(--tl-glyph); }
-.desktop-window-controls button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.desktop-window-controls button:hover { background: var(--bg-elev2); color: var(--text); }
+.desktop-window-controls .desktop-window-close:hover { background: var(--red); color: var(--accent-fg); }
 
 @media (max-width: 900px) {
 	html.pi-desktop .topbar { padding-right: 0; }
@@ -9264,11 +9247,11 @@ img.brand-logo, img.empty-logo { background: transparent; object-fit: contain; }
 	.design-workspace .thinking-segments { max-width: 130px; }
 }
 html.pi-desktop .design-workspace .sidebar-brand { -webkit-app-region: drag; app-region: drag; }
-html.pi-desktop .design-workspace .sidebar-brand { padding-top: 42px; }
+html.pi-desktop-darwin .design-workspace .sidebar-brand { padding-top: 42px; }
 html.pi-desktop .design-workspace .header-location { -webkit-app-region: drag; app-region: drag; }
 html.pi-desktop .design-workspace .topbar { height: 52px; padding-left: 20px; }
 @media (max-width: 1200px) {
-	html.pi-desktop .design-workspace.document-open .topbar { padding-left: 92px; }
+	html.pi-desktop-darwin .design-workspace.document-open .topbar { padding-left: 92px; }
 }
 .design-workspace .panel-projects { max-height: none; border-bottom: 0; padding: 0; }
 .design-workspace .inputbox textarea { width: 100%; }
@@ -9305,6 +9288,12 @@ html.pi-desktop .design-workspace .topbar { height: 52px; padding-left: 20px; }
 @media (min-width: 1201px) {
 	.design-workspace .workspace-column:has(.view-pane:not(.hidden):not(.preview-open) .drawer-right:not(.files-collapsed)) > .statusbar .status-cwd,
 	.design-workspace .workspace-column:has(.view-pane:not(.hidden):not(.preview-open) .drawer-right:not(.files-collapsed)) > .statusbar .status-cwd-wrap { flex: 0 0 100%; max-width: 100%; margin-left: 0; }
+}
+html.pi-desktop-win32 .design-workspace .desktop-window-controls,
+html.pi-desktop-linux .design-workspace .desktop-window-controls { position: fixed; top: 0; right: 0; z-index: 70; height: 52px; }
+@media (min-width: 1201px) {
+	html.pi-desktop-win32 .design-workspace .panel-right .right-files-pane > .panel-title,
+	html.pi-desktop-linux .design-workspace .panel-right .right-files-pane > .panel-title { padding-right: 140px; }
 }
 /* Standalone reference: navigation, tree, structured tool output. */
 .design-workspace .view-switch button > svg { display: none; }
@@ -10148,12 +10137,20 @@ body { -webkit-font-smoothing: antialiased; }
 .task-step-detail .task-artifact-row { padding-inline: 0; }
 
 /* Reserve the fixed Windows/Linux caption controls in the toolbar layout. */
+html.pi-desktop-win32 .design-workspace .topbar,
+html.pi-desktop-linux .design-workspace .topbar { padding-right: 144px; }
 .design-workspace .topbar-actions { min-width: 0; flex-shrink: 1; }
 html.pi-desktop .design-workspace .topbar-actions > .topbar-more { flex: none; }
 html.pi-desktop .design-workspace .topbar-actions > .topbar-more .chip { white-space: nowrap; flex: none; }
 html.pi-desktop .design-workspace .topbar-actions > .topbar-more .chip > svg { flex: none; }
 .design-workspace .view-switch { min-width: 0; overflow-x: auto; flex-shrink: 1; }
 .design-workspace .topbar-actions > .changes-toggle { flex-shrink: 0; }
+/* A visible file column already reserves the entire right edge of the window. */
+@media (min-width: 1201px) {
+	html.pi-desktop-win32 .design-workspace .workspace-column:has(.view-pane:not(.hidden) .drawer-right:not(.files-collapsed)):not(:has(.preview-open:not(.hidden))) > .topbar,
+	html.pi-desktop-linux .design-workspace .workspace-column:has(.view-pane:not(.hidden) .drawer-right:not(.files-collapsed)):not(:has(.preview-open:not(.hidden))) > .topbar { padding-right: 144px; }
+}
+
 /* Running command reference: one command, one clock, a separate task stop. */
 .design-workspace .toolcall-bash.run { border-color: color-mix(in srgb, var(--progress-text) 40%, var(--border)); }
 .design-workspace .toolcall-bash > .bash-command-head { flex-wrap: nowrap; gap: 8px; padding: 7px 12px; }
@@ -10235,17 +10232,19 @@ html.pi-desktop .design-workspace .topbar-actions > .panel-toggle { position: re
 .design-workspace .qn-rail { right: 8px; width: 16px; opacity: 0; }
 .design-workspace .qn-rail:hover,
 .design-workspace .qn-rail:focus-within { opacity: 1; }
+html.pi-desktop-win32 .design-workspace .desktop-window-controls,
+html.pi-desktop-linux .design-workspace .desktop-window-controls { height: 44px; }
 @media (min-width: 1201px) {
 	.design-workspace .view-pane:not(.preview-open) > .drawer-right { margin-top: -44px; }
 }
 @media (min-width: 769px) {
-	html.pi-desktop .design-workspace .project-panel-toggle { position: fixed; left: 92px; top: 8px; z-index: 75; }
-	html.pi-desktop .design-workspace.left-collapsed .topbar { padding-left: 132px; }
-	html.pi-desktop .design-workspace:not(.left-collapsed) .topbar { padding-left: 20px; }
-	html.pi-desktop .design-workspace .topbar:not(:has(.project-panel-toggle)) { padding-left: 92px; }
+	html.pi-desktop-darwin .design-workspace .project-panel-toggle { position: fixed; left: 92px; top: 8px; z-index: 75; }
+	html.pi-desktop-darwin .design-workspace.left-collapsed .topbar { padding-left: 132px; }
+	html.pi-desktop-darwin .design-workspace:not(.left-collapsed) .topbar { padding-left: 20px; }
+	html.pi-desktop-darwin .design-workspace .topbar:not(:has(.project-panel-toggle)) { padding-left: 92px; }
 }
 @media (max-width: 768px) {
-	html.pi-desktop .design-workspace .topbar { padding-left: 92px; }
+	html.pi-desktop-darwin .design-workspace .topbar { padding-left: 92px; }
 	.design-workspace .view-switch button { padding-inline: 7px; }
 }
 @media (min-width: 769px) and (max-width: 900px) {
@@ -12038,6 +12037,10 @@ pre.wiki-mermaid-source-hidden > .fp-mermaid-preview { padding-bottom: 0; }
 .design-workspace .msg-assistant .msg-text:not(.process-narration) .md { font-size: 15px; line-height: 1.75; }
 .changes-current-branch { display: inline-flex; align-items: center; gap: 5px; max-width: 130px; padding: 3px 6px; border-radius: var(--r-sm); background: var(--bg-elev2); font: 12px var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .branch-change-count { flex: none; display: inline-grid; place-items: center; min-width: 15px; height: 15px; padding: 0 4px; border-radius: 50%; background: var(--yellow-bg); color: var(--yellow-fg); font: 600 10px var(--mono); font-variant-numeric: tabular-nums; }
+@media (min-width: 1200px) {
+	html.pi-desktop-win32 .changes-toolbar, html.pi-desktop-linux .changes-toolbar { padding-right: 140px; }
+	html.pi-desktop-win32 .design-workspace.changes-open .topbar, html.pi-desktop-linux .design-workspace.changes-open .topbar { padding-right: 16px; }
+}
 .conversation-title-button { display: flex; align-items: center; gap: 5px; min-width: 0; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
 .conversation-title-button strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .changes-toggle > svg { width: 13px; height: 13px; }
@@ -12176,6 +12179,15 @@ pre.wiki-mermaid-source-hidden > .fp-mermaid-preview { padding-bottom: 0; }
 .panel-right .right-files-pane > .panel-title > span:first-child { flex: none; white-space: nowrap; }
 .ext-row-main > button { flex: none; white-space: nowrap; }
 .ext-row-main { column-gap: 12px; }
+@media (min-width: 1101px) {
+	html.pi-desktop-win32 .design-workspace .panel-right .right-files-pane > .panel-title,
+	html.pi-desktop-linux .design-workspace .panel-right .right-files-pane > .panel-title { padding-left: 8px; padding-right: 140px; gap: 3px; }
+	html.pi-desktop-win32 .panel-right .right-files-pane > .panel-title .tree-menu-trigger,
+	html.pi-desktop-linux .panel-right .right-files-pane > .panel-title .tree-menu-trigger { width: 22px; min-width: 22px; padding: 2px; }
+	html.pi-desktop-win32 .panel-right .right-files-pane > .panel-title .tree-filter,
+	html.pi-desktop-linux .panel-right .right-files-pane > .panel-title .tree-filter { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
+
 /* Wiki shares the native model controls with the chat composer. */
 .wiki-model-controls { display: flex; align-items: center; gap: 8px; min-width: 0; margin: 8px 0 0; padding: 0; border: 0; }
 .wiki-model-controls:disabled { opacity: .5; }
@@ -13148,7 +13160,8 @@ pre.wiki-mermaid-source-hidden > .fp-mermaid-preview { padding-bottom: 0; }
 .wiki-window-header > .wiki-agent-toggle[aria-expanded="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
 .wiki-window-header > .wiki-window-close { width: 32px; padding: 0; border-color: transparent; background: transparent; }
 .wiki-window-header button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-html.pi-desktop .wiki-window-header { padding-left: 92px; }
+html.pi-desktop .design-workspace .wiki-window-header .desktop-window-controls { position: static; align-self: stretch; height: auto; min-width: 132px; }
+html.pi-desktop-darwin .wiki-window-header { padding-left: 92px; }
 html.pi-desktop .wiki-window-header,
 html.pi-desktop .wiki-window-mark,
 html.pi-desktop .wiki-window-header #wiki-modal-toolbar,
@@ -13247,6 +13260,7 @@ html.pi-desktop .wiki-window-header .desktop-window-controls { -webkit-app-regio
 @media (min-width: 1201px) {
 	.design-workspace:not(.changes-open) .workspace-column > .topbar { margin-right: 0; }
 	.design-workspace:not(.changes-open) .view-pane:not(.preview-open) > .drawer-right { margin-top: 0; border-left: 1px solid var(--border-soft); }
+	html:is(.pi-desktop-win32, .pi-desktop-linux) .design-workspace:not(.changes-open) .workspace-column > .topbar { padding-right: 144px; }
 }
 @media (max-width: 1100px) {
 	.design-workspace .usage-meter { width: 36px; }
@@ -13571,7 +13585,7 @@ html.pi-desktop .wiki-window-header .desktop-window-controls { -webkit-app-regio
 	background-position: center; container-type: inline-size;
 }
 .welcome-paper .welcome-motto {
-	margin: 0; font-family: "Source Serif 4", "Noto Serif SC", serif;
+	margin: 0; font-family: "Times New Roman", "Source Serif 4", Georgia, serif;
 	font-size: clamp(28px, 6.4cqw, 76px); font-weight: 400; font-style: italic;
 	line-height: 1.08; letter-spacing: -0.045em; text-align: center; color: var(--welcome-ink);
 }
@@ -13684,7 +13698,7 @@ html.pi-desktop .wiki-window-header .desktop-window-controls { -webkit-app-regio
 }
 /* In overlay navigation, reserve the fixed macOS window and project controls. */
 @media (min-width: 769px) and (max-width: 900px) {
-	html.pi-desktop .design-workspace.dual-navigation .topbar { padding-left: 132px; }
+	html.pi-desktop-darwin .design-workspace.dual-navigation .topbar { padding-left: 132px; }
 }
 
 /* ---- Yuque typography: measured from /yuque/ng1qth/about, 2026-10-20 ---- */
@@ -13856,7 +13870,7 @@ html.pi-desktop .wiki-window-header .desktop-window-controls { -webkit-app-regio
 	.drawer-left.open .compact-navigation.directory-collapsed .sidebar-footer span span { display: inline; }
 	.drawer-left.open .compact-navigation.directory-collapsed .navigation-search { display: flex; }
 }
-html.pi-desktop .compact-navigation .global-navigation { padding-top: 36px; }
+html.pi-desktop-darwin .compact-navigation .global-navigation { padding-top: 36px; }
 /* Include the navigation's top/side padding without moving the brand or entries. */
 html.pi-desktop .compact-navigation .compact-brand {
 	--desktop-brand-inset: 12px;
@@ -13868,7 +13882,7 @@ html.pi-desktop .compact-navigation .compact-brand {
 	app-region: drag;
 	user-select: none;
 }
-html.pi-desktop .compact-navigation .compact-brand { --desktop-brand-inset: 36px; }
+html.pi-desktop-darwin .compact-navigation .compact-brand { --desktop-brand-inset: 36px; }
 .compact-project-shortcut { display: none; border: 0; background: transparent; color: var(--text); height: 30px; margin-top: 12px; }
 .compact-project-shortcut svg { width: 14px; height: 14px; }
 .compact-navigation.directory-collapsed:not(:hover):not(:focus-within) .compact-project-shortcut { display: block; }

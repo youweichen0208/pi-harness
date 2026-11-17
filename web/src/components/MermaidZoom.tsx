@@ -9,8 +9,11 @@ export function MermaidZoom({ svg, onClose }: { svg: string; onClose: () => void
 	const dialog = useRef<HTMLDialogElement>(null);
 	const [scale, setScale] = useState(1);
 	const markup = useMemo(() => {
-		const doc = new DOMParser().parseFromString(svg, "image/svg+xml");
-		const root = doc.documentElement;
+		// Mermaid labels can contain HTML void tags such as <br>. Parse them
+		// exactly as the inline diagram does, rather than requiring XML syntax.
+		const doc = new DOMParser().parseFromString(svg, "text/html");
+		const root = doc.querySelector("svg");
+		if (!root) return "";
 		// Keep SVG CSS, markers and labels intact without duplicating inline IDs.
 		const nodes = [root, ...root.querySelectorAll("*")];
 		const ids = new Map(nodes.filter(node => node.id).map(node => [node.id, `zoom-${node.id}`]));

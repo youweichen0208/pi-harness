@@ -40,7 +40,7 @@ try {
 		});
 		await page.goto(`http://127.0.0.1:${server.port}`);
 		const input = page.locator(".inputbox textarea");
-		const prefix = locale === "zh" ? "Shift+Enter 换行，Enter 发送 · " : "Shift+Enter for newline, Enter to send · ";
+		const prefix = locale === "zh" ? "Ctrl+Enter 换行，Enter 发送 · " : "Ctrl+Enter for newline, Enter to send · ";
 		const placeholder = async expected => {
 			await page.waitForFunction(value => document.querySelector(".inputbox textarea")?.placeholder === value, expected);
 		};
@@ -60,19 +60,22 @@ try {
 			assert.equal(prompts.at(-1).queue, queue);
 		};
 		await input.fill("第一行");
-		await input.press("Shift+Enter");
+		await input.press("Control+Enter");
 		await input.press("x");
 		assert.equal(await input.inputValue(), "第一行\nx");
 		assert.equal(prompts.length, 0);
 		assert.equal(await input.evaluate(el => el.matches(":placeholder-shown")), false);
+		await input.press("Shift+Enter");
+		assert.equal(await input.inputValue(), "第一行\nx");
+		assert.equal(prompts.length, 0);
 		await send("第一行\n第二行", "Enter", false);
 		socket.send(JSON.stringify({ type: "slash_commands", commands: [{ name: "help", description: "Help", source: "builtin" }] }));
-		for (const key of ["Shift+Enter", "Enter", "Tab"]) {
+		for (const key of ["Control+Enter", "Enter", "Tab"]) {
 			await input.fill("/he");
 			await page.locator(".slash-item").first().waitFor();
 			const before = prompts.length;
 			await input.press(key);
-			assert.equal(await input.inputValue(), key === "Shift+Enter" ? "/he\n" : "/help ");
+			assert.equal(await input.inputValue(), key === "Control+Enter" ? "/he\n" : "/help ");
 			assert.equal(prompts.length, before);
 		}
 		for (const text of ["中文", "/he"]) {

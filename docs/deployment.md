@@ -219,3 +219,8 @@ Desktop 不额外内置 Git、npm 或独立 Node.js。npm 来源社区包使用�
 仓库根目录的 `vercel.json` 将 Vercel 构建固定为 `npm run build:web`，发布 `web/dist`。静态托管不需要编译 JDBC 桥接，因此不要求 JDK。完整的 `npm run build` 仍为 CLI、Docker 与桌面版构建服务端及 JDBC 桥接，必须具备 JDK 17+。
 
 Vercel 静态部署只提供前端资源，不运行本项目的常驻 WebSocket、PTY 或本机数据库服务；完整功能使用上述 CLI / Docker / 桌面部署。此配置不添加后端代理或改变 API 路由。
+
+
+### Windows 窗口控件恢复（2026-11-18）
+
+Windows／Linux 恢复右上角最小化、最大化／还原、关闭按钮及主窗口、Wiki、改动面板的右侧避让；macOS 保留原生红绿灯。此规则取代此前跨平台统一红绿灯的说明，字体仍共用原有令牌。

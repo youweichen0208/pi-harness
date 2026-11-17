@@ -111,27 +111,14 @@ try {
 		assert(glyphCoverage.fonts.some(font => font.isCustomFont && font.glyphCount > 0));
 		await page.evaluate(() => document.querySelector('#glyph-probe')?.remove());
 		if (process.platform !== 'darwin') {
-			// Frameless Windows/Linux shells draw the macOS traffic lights instead of
-			// their own right-edge buttons, so the header keeps no right-edge gutter.
 			const controls = await page.locator('.desktop-window-controls').boundingBox();
-			assert.equal(Math.round(controls.x), 18, 'traffic lights sit at the macOS position');
-			assert.equal(Math.round(controls.y), 17);
-			const dots = await page.locator('.desktop-window-controls button').evaluateAll(nodes => nodes.map(node => ({ width: node.getBoundingClientRect().width, background: getComputedStyle(node).backgroundColor })));
-			assert.deepEqual(dots.map(dot => Math.round(dot.width)), [12, 12, 12], JSON.stringify(dots));
-			assert.deepEqual(dots.map(dot => dot.background), ['rgb(255, 95, 87)', 'rgb(254, 188, 46)', 'rgb(40, 200, 64)'], JSON.stringify(dots));
-			assert.equal(await page.locator('.topbar').first().evaluate(el => getComputedStyle(el).paddingRight), '0px', 'no right-edge reservation');
-			// Nothing may sit under the lights: either the header pads past them or the
-			// sidebar brand starts below them. Both are pure CSS, so macOS alone would
-			// not catch a regression here.
-			const underLights = await page.evaluate(() => {
-				const box = { left: 18, top: 17, right: 70, bottom: 29 };
-				const nodes = [...document.querySelectorAll('.topbar > *, .sidebar-brand > *, .compact-brand > *, .wiki-window-header > *')]
-					.filter(el => !el.closest('.desktop-window-controls'));
-				return nodes.map(el => el.getBoundingClientRect()).filter(rect => rect.width && rect.height)
-					.filter(rect => rect.left < box.right && rect.right > box.left && rect.top < box.bottom && rect.bottom > box.top)
-					.map(rect => [Math.round(rect.left), Math.round(rect.top), Math.round(rect.width), Math.round(rect.height)]);
-			});
-			assert.deepEqual(underLights, [], `header content clears the traffic lights: ${JSON.stringify(underLights)}`);
+			const width = await page.evaluate(() => innerWidth);
+			assert.equal(Math.round(controls.x + controls.width), width, 'caption buttons align right');
+			assert.equal(Math.round(controls.y), 0);
+			const buttons = page.locator('.desktop-window-controls button');
+			assert.equal(await buttons.count(), 3);
+			assert(await buttons.last().evaluate(el => el.classList.contains('desktop-window-close')));
+			assert((await buttons.first().boundingBox()).width >= 40);
 		}
 		assert(await page.locator('[data-tree-node=".ruff_cache"] .file-name').evaluate(el => getComputedStyle(el).fontFamily === getComputedStyle(el.closest('[data-tree-node]')).fontFamily), 'tree labels use the reference UI font');
 		const metrics = await page.evaluate(() => ({ width: innerWidth, height: innerHeight, dpr: devicePixelRatio, platform: document.documentElement.dataset.platform, appearance: document.documentElement.dataset.appearance, bodySize: getComputedStyle(document.body).fontSize, fontSmoothing: getComputedStyle(document.body).webkitFontSmoothing, treeLabelWidth: (() => { const range = document.createRange(); range.selectNodeContents(document.querySelector('[data-tree-node=".ruff_cache"] .file-name')); return range.getBoundingClientRect().width; })() }));

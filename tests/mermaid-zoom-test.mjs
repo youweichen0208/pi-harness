@@ -14,7 +14,7 @@ const port = mindmap ? 9402 : 9401;
 assert.equal(await portUp(port), false);
 const base = mkdtempSync(join(tmpdir(), 'pi-toc-test-'));
 mkdirSync(join(base, 'agent'));
-const original = mindmap ? '# Diagram\n\n```mermaid\nmindmap\n  root((AgentRun))\n    核心定位\n```\n' : '# Diagram\n\n```mermaid\nflowchart LR\n  A[Start] --> B[Done]\n```\n';
+const original = mindmap ? '# Diagram\n\n```mermaid\nmindmap\n  root((AgentRun))\n    核心定位\n```\n' : '# Diagram\n\n```mermaid\nflowchart LR\n  A["Start<br>Next"] --> B[Done]\n```\n';
 writeFileSync(join(base, 'note.md'), original);
 writeFileSync(join(base, 'agent/models.json'), JSON.stringify({ providers: { fixture: { api: 'openai-completions', baseUrl: 'http://127.0.0.1:9', apiKey: 'unused', models: [{ id: 'unused', name: 'Unused', input: ['text'], contextWindow: 32000, maxTokens: 4096 }] } } }));
 writeFileSync(join(base, 'agent/settings.json'), JSON.stringify({ defaultProvider: 'fixture', defaultModel: 'unused' }));
