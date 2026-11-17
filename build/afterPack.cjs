@@ -30,6 +30,11 @@ module.exports = async function afterPack(context) {
 		throw new Error("Desktop must not bundle application extensions; load user Pi extensions instead");
 	}
 	const expectedSdk = manifest.dependencies?.["@earendil-works/pi-coding-agent"];
+	const skillRoot = path.join(packagedRoot, "assets/skills/design-first");
+	for (const reference of ["SKILL.md", ...["bug-fix", "feat"].map(name => `commands/${name}.md`), ...["investigation", "how", "why", "domain-modeling", "codebase-design", "focused-grilling", "teach", "verification", "resume-work", "reconcile-design", "small-changes"].map(name => `references/${name}.md`), ...["design", "tasks", "progress", "outcome", "design-change-proposal", "adr"].map(name => `templates/${name}.md`)]) {
+		const file = path.join(skillRoot, reference);
+		if (!fs.existsSync(file) || !fs.statSync(file).isFile() || !fs.statSync(file).size) throw new Error(`Packaged Design First resource is missing: ${reference}`);
+	}
 	const actualSdk = JSON.parse(fs.readFileSync(path.join(sdkRoot, "package.json"), "utf8")).version;
 	if (!/^\d+\.\d+\.\d+(?:-[\w.-]+)?$/.test(expectedSdk ?? "") || actualSdk !== expectedSdk) {
 		throw new Error(`Unexpected packaged Pi SDK version: expected ${expectedSdk}, got ${actualSdk}`);

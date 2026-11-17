@@ -1,4 +1,5 @@
 import { inheritedTaskDetail } from "./subagents/history.js";
+import { designFirstResources } from "./design-first-resources.js";
 import { bindCacheWarming, cacheWarmingView, setGlobalCacheWarming } from "./cache-warming.js";
 import { CodemodeHistory } from "./codemode-history.js";
 import { withOutputTokenFloor } from "./model-output-floor.js";
@@ -577,7 +578,7 @@ export class ClientSession {
 		cs.wikiClient = wiki;
 		const conversationId = cs.nextConversationId();
 		const terminals = cs.makeTerminalManager(conversationId, cwd);
-		const runtime = await createAgentSessionRuntime(cs.makeRuntimeFactory(), {
+		const runtime = await createAgentSessionRuntime(cs.makeRuntimeFactory(false, undefined, wiki), {
 			cwd,
 			agentDir,
 			// Ordinary clients resume the most recent session. Detached Wiki
@@ -611,7 +612,7 @@ export class ClientSession {
 	 * (the model choice is client-wide), so later conversations reuse the
 	 * instance created with the first one.
 	 */
-	private makeRuntimeFactory(refreshResources = false, state?: Pick<AgentSession, "model" | "thinkingLevel">): CreateAgentSessionRuntimeFactory {
+	private makeRuntimeFactory(refreshResources = false, state?: Pick<AgentSession, "model" | "thinkingLevel">, wiki = false): CreateAgentSessionRuntimeFactory {
 		return async ({ cwd, sessionManager }) => {
 			let subagentParent: AgentSession | undefined;
 			// 注册该工作区的扩展代码目录，使 /restart 与 reload 能刷新其模块缓存（issue #64）。
@@ -625,7 +626,7 @@ export class ClientSession {
 				agentDir: this.agentDir,
 				modelRuntime: this.sharedModelRuntime,
 				settingsManager: settings,
-				resourceLoaderOptions: { extensionFactories: nativeToolExtensions(() => databaseScope(this.clientId, cwd, sessionManager), () => subagentParent ? { session: subagentParent, agentDir: this.agentDir, workspaceId: getSubagentWorkspace(sessionManager) } : undefined, () => settings.getSettings().defaultTools) },
+				resourceLoaderOptions: { ...designFirstResources(wiki ? "wiki" : "normal", this.stateStore.dataDir), extensionFactories: nativeToolExtensions(() => databaseScope(this.clientId, cwd, sessionManager), () => subagentParent ? { session: subagentParent, agentDir: this.agentDir, workspaceId: getSubagentWorkspace(sessionManager) } : undefined, () => settings.getSettings().defaultTools) },
 			});
 			services.modelRuntime = withOutputTokenFloor(services.modelRuntime);
 			if (!this.sources) {
@@ -2059,7 +2060,7 @@ export class ClientSession {
 			await previous.dispose();
 			if (!current()) return;
 			await adopt(await createAgentSessionRuntime(
-				this.makeRuntimeFactory(),
+				this.makeRuntimeFactory(false, undefined, !!conv.wiki),
 				{
 					cwd: conv.cwd,
 					agentDir: this.agentDir,
@@ -2098,7 +2099,7 @@ export class ClientSession {
 			const previous = conv.runtime, model = conv.session.model, thinking = conv.session.thinkingLevel;
 			// 重建扩展工厂前刷新模块缓存，否则 jiti 命中 Node 的 ESM/require 缓存，拿到的还是旧扩展代码（issue #64）。
 			bumpExtensionModuleCache();
-			replacement = await createAgentSessionRuntime(this.makeRuntimeFactory(true, { model, thinkingLevel: thinking }), {
+			replacement = await createAgentSessionRuntime(this.makeRuntimeFactory(true, { model, thinkingLevel: thinking }, !!conv.wiki), {
 				cwd: conv.cwd, agentDir: this.agentDir,
 				sessionManager: broken && conv.session.sessionFile ? SessionManager.open(conv.session.sessionFile) : conv.session.sessionManager,
 			});
@@ -2242,7 +2243,7 @@ export class ClientSession {
 			const conversationId = this.nextConversationId();
 			const terminals = this.makeTerminalManager(conversationId, this.cwd);
 			const runtime = await createAgentSessionRuntime(
-				this.makeRuntimeFactory(),
+				this.makeRuntimeFactory(false, undefined, wiki),
 				{
 					cwd: this.cwd,
 					agentDir: this.agentDir,

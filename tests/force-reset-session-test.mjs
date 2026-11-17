@@ -5,7 +5,9 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { scrubHostEnv } from "./lib/test-env.mjs";
 
+scrubHostEnv();
 const root = mkdtempSync(join(tmpdir(), "pi-force-reset-"));
 const agent = join(root, "agent"), cwd = join(root, "work");
 mkdirSync(agent); mkdirSync(cwd);
@@ -84,6 +86,31 @@ try {
 	// Public Stop entry, with deterministic disposal scheduling. Shorten only
 	// the settle duration; retain the actual abort/rebuild/bind lifecycle.
 	ClientSession.HARD_ABORT_SETTLE_MS = 5;
+	// M1 resource admission must keep the conversation kind through the
+	// public Stop -> settle timeout -> dispose -> rebuild -> bind path.
+	// Only abort settlement is fault-injected; loaders and runtimes are real.
+	for (const wiki of [false, true]) {
+		const kind = wiki ? "wiki" : "normal";
+		const work = join(root, `skill-recovery-${kind}`); mkdirSync(work);
+		const victim = await ClientSession.create(`skill-recovery-${kind}`, work,
+			new ClientStateStore(join(root, `skill-${kind}.json`)),
+			new ThinkingDurationStore(join(root, `skill-${kind}-timing.json`)), wiki);
+		try {
+			const target = victim.conv; seed(target, `SKILL_RECOVERY_${kind}`);
+			const before = target.runtime, file = target.session.sessionFile;
+			const hasDesignSkill = () => target.runtime.services.resourceLoader.getSkills().skills.some(skill => skill.name === "design-first");
+			assert.equal(hasDesignSkill(), !wiki, `${kind} initial resource scope`);
+			target.session.abort = async () => {}; // Return without agent_settled.
+			await victim.abort();
+			assert.notEqual(target.runtime, before, "public Stop really rebuilt the runtime");
+			assert.equal(victim.conv, target, "conversation identity is retained");
+			assert.equal(!!target.wiki, wiki, "conversation kind is retained");
+			assert.equal(target.session.sessionFile, file, "persistent history stays in its original scope");
+			assert.match(text(target), new RegExp(`SKILL_RECOVERY_${kind}`));
+			assert.equal(hasDesignSkill(), !wiki, `${kind} forced recovery resource scope`);
+			assert.equal(target.rebuilding, false);
+		} finally { await victim.dispose(); }
+	}
 	for (const mode of ["delete", "dispose"]) {
 		const work = join(root, mode); mkdirSync(work);
 		const victim = await ClientSession.create(`reset-${mode}`, work, new ClientStateStore(join(root, `${mode}.json`)), new ThinkingDurationStore(join(root, `${mode}-thinking.json`)));

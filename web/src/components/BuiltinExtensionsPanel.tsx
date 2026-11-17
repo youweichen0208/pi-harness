@@ -6,6 +6,7 @@ import { getClientId } from "../use-chat";
 import type { BuiltinExtensionsRequest, BuiltinExtensionsState } from "../types";
 
 const labels = {
+	"pi-harness-design-first": ["builtinDesignFirst", "builtinDesignFirstHint"],
 	"pi-harness-database": ["dbTitle", "dbExtensionHint"],
 	"pi-harness-subagents": ["builtinSubagents", "builtinSubagentsHint"],
 	mcp: ["builtinMcp", "builtinMcpHint"],
@@ -13,11 +14,13 @@ const labels = {
 	"tool-search": ["builtinSearch", "builtinSearchHint"],
 } as const;
 
-const icons = { "pi-harness-database": FiDatabase, "pi-harness-subagents": FiUsers, mcp: FiServer, codemode: FiCode, "tool-search": FiSearch };
+const icons = { "pi-harness-design-first": FiList, "pi-harness-database": FiDatabase, "pi-harness-subagents": FiUsers, mcp: FiServer, codemode: FiCode, "tool-search": FiSearch };
 
-export function BuiltinExtensionsPanel({ cwd, conversationId, ready, canReload, reload, openNative }: {
+export function BuiltinExtensionsPanel({ cwd, conversationId, ready, canReload, reload, openNative, designOnly = false, prepareDesign }: {
 	cwd: string; conversationId: string; ready: boolean; canReload: boolean;
 	reload: () => void; openNative: () => void;
+	designOnly?: boolean;
+	prepareDesign?: () => void;
 }) {
 	const t = useT();
 	const [state, setState] = useState<BuiltinExtensionsState>();
@@ -55,30 +58,32 @@ export function BuiltinExtensionsPanel({ cwd, conversationId, ready, canReload, 
 		} catch (e) { if (!life.current?.signal.aborted && current === sequence.current) setError((e as Error).message); }
 		finally { working.current = false; if (!life.current?.signal.aborted) { setBusy(false); } }
 	}
+	const items = state?.items.filter(item => !designOnly || item.id === "pi-harness-design-first");
 	return <section className="builtin-extensions" aria-label={t("builtinTitle")}>
-		<h3 className="settings-group-title">{t("builtinTitle")} · {state?.items.length ?? "…"}<small>{t("builtinBundled")}</small></h3>
+		<h3 className="settings-group-title">{t("builtinTitle")} · {items?.length ?? "…"}<small>{t("builtinBundled")}</small></h3>
 		{error && <div role="alert" className="ext-error">{error} <button disabled={busy || !ready} onClick={() => { setError(""); void refresh(); }}>{t("extRefresh")}</button></div>}
 		{!state && <p>{t("loading")}</p>}
-		<div className="ext-list">{state?.items.map(item => {
+		<div className="ext-list">{items?.map(item => {
 			const [title, description] = labels[item.id];
 			const Icon = icons[item.id];
 			const status = item.status;
-			const documentItem = item.id === "pi-harness-database" || item.id === "pi-harness-subagents";
-			const version = item.settingsVersion ?? state.documentVersion;
+			const documentItem = item.id === "pi-harness-database" || item.id === "pi-harness-subagents" || item.id === "pi-harness-design-first";
+			const version = item.settingsVersion ?? state?.documentVersion;
 			return <article className="ext-row builtin-row" key={item.id} data-builtin-id={item.id}>
 				<span className="builtin-icon" aria-hidden="true"><Icon /></span><div className="builtin-row-content"><div className="builtin-row-head"><div><strong>{t(title)}</strong><p className="settings-description">{t(description)}</p></div>
 					<span className="builtin-status" data-status={status}>{t(({ loaded: "builtinLoaded", disabled: "builtinDisabled", pending: "builtinPending", unavailable: "builtinUnavailable", error: "builtinError" } as const)[status])}</span>
-					{documentItem ? <input className="ext-switch" type="checkbox" role="switch" aria-label={`${t("extEnable")} ${t(title)}`} checked={item.enabled ?? false} disabled={busy || !ready || !version || item.enabled === undefined} onChange={event => void change({ action: "builtin-toggle", conversationId, id: item.id as "pi-harness-database" | "pi-harness-subagents", enabled: event.target.checked, version: version! })} />
+					{documentItem ? <input className="ext-switch" type="checkbox" role="switch" aria-label={`${t("extEnable")} ${t(title)}`} checked={item.enabled ?? false} disabled={busy || !ready || !version || item.enabled === undefined} onChange={event => void change({ action: "builtin-toggle", conversationId, id: item.id as "pi-harness-design-first" | "pi-harness-database" | "pi-harness-subagents", enabled: event.target.checked, version: version! })} />
 						: <button onClick={openNative}>{t("builtinSettings")}</button>}
 				</div>
 				{item.error && <p className="ext-error">{item.error}</p>}
 				{item.reason && <p className="settings-description">{t(item.reason === "conflict" ? "builtinConflict" : item.reason === "filtered" ? "builtinFiltered" : "builtinMissing")}</p>}
 				{status === "pending" && <p className="settings-description">{t("builtinReloadHint")}</p>}
+				{item.id === "pi-harness-design-first" && prepareDesign && <button disabled={!ready || busy || !item.enabled || status !== "loaded"} onClick={prepareDesign}>{t("designFirstPrepare")}</button>}
 				<details><summary>{t("extDetails")}</summary>
-					{documentItem && <p>{t("builtinDocumentScope")}</p>}
+					{documentItem && item.id !== "pi-harness-design-first" && <p>{t("builtinDocumentScope")}</p>}
 					<p>{t("builtinTools")}: <code>{item.tools.join(", ") || "—"}</code></p>
 					{item.commands.length > 0 && <p>{t("builtinCommands")}: <code>{item.commands.map(command => `/${command}`).join(", ")}</code></p>}
-					{documentItem && <button disabled={busy || !ready || !canReload || !state.canReload} onClick={reload}>{t("extReload")}</button>}
+					{documentItem && <button disabled={busy || !ready || !canReload || !state?.canReload} onClick={reload}>{t("extReload")}</button>}
 				</details></div>
 			</article>;
 		})}</div>

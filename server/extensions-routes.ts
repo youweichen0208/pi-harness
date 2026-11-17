@@ -98,7 +98,7 @@ export function installExtensionsRoutes(app: Express, service: () => AgentServic
 					if (mutation) throw Error("Extension manager busy");
 					toggleBuiltinDocument(req.body.id, req.body.enabled, req.body.version);
 				}
-				res.json(builtinExtensionsState(cs.session, conversationId, cs.session.isIdle));
+				res.json(builtinExtensionsState(cs.session, conversationId, cs.session.isIdle, cs.activeIsWiki));
 				return;
 			}
 			if (action === "open-info" && req.body.id === "extensions:user") {

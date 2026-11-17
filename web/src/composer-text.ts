@@ -10,12 +10,32 @@ import { useEffect } from "react";
  */
 
 const EVENT = "pi-composer-append";
-const pending = new Map<string, string[]>();
+type ComposerInsertion = { text: string; placement: "append" | "skill" };
+const pending = new Map<string, ComposerInsertion[]>();
 
 /** Queue text to append to a conversation's composer. */
 export function appendComposerText(conversationId: string, text: string): void {
+	queueInsertion(conversationId, { text, placement: "append" });
+}
+
+/** Prepare an explicit skill invocation without sending or discarding a draft. */
+export function prepareComposerSkill(conversationId: string, name: string): void {
+	if (!/^[a-z0-9-]+$/.test(name)) throw Error("Invalid skill name");
+	queueInsertion(conversationId, { text: `/skill:${name}`, placement: "skill" });
+}
+
+export function insertComposerText(current: string, text: string, placement: ComposerInsertion["placement"]): string {
+	if (placement === "append") return current.trim() ? `${current}\n\n${text}` : text;
+	if (current === text || current.startsWith(`${text} `)) return current;
+	// SDK skill expansion separates the name at the first ASCII space.
+	// Preserve the existing whitespace/draft, adding only that separator.
+	if (current.startsWith(text) && /^\s/.test(current.slice(text.length))) return `${text} ${current.slice(text.length)}`;
+	return `${text} ${current}`;
+}
+
+function queueInsertion(conversationId: string, insertion: ComposerInsertion): void {
 	const queue = pending.get(conversationId) ?? [];
-	queue.push(text);
+	queue.push(insertion);
 	pending.set(conversationId, queue);
 	try {
 		window.dispatchEvent(new Event(EVENT));
@@ -24,14 +44,14 @@ export function appendComposerText(conversationId: string, text: string): void {
 	}
 }
 
-export function useComposerAppend(conversationId: string, enabled: boolean, append: (text: string) => void): void {
+export function useComposerAppend(conversationId: string, enabled: boolean, append: (text: string, placement: ComposerInsertion["placement"]) => void): void {
 	useEffect(() => {
 		if (!enabled) return;
 		const consume = () => {
 			const queue = pending.get(conversationId);
 			if (!queue?.length) return;
 			pending.delete(conversationId);
-			for (const text of queue) append(text);
+			for (const { text, placement } of queue) append(text, placement);
 		};
 		consume();
 		window.addEventListener(EVENT, consume);

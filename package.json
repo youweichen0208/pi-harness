@@ -19,6 +19,7 @@
     "web/public/",
     "deploy/",
     "extensions/",
+    "assets/skills/",
     "README.md",
     "LICENSE"
   ],

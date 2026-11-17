@@ -1,5 +1,9 @@
 # Extensions 原生包管理
 
+Design First 随应用提供 `assets/skills/design-first/`，普通会话默认发现 `/skill:design-first`，并通过原生 Prompt Templates 提供 `/bug-fix` 和 `/feat`。沿用当前模型及原生工具，确认属于 Skill 工作流约定。`<dataDir>/design-first.json` 的 enabled 缺省 true，显式 false 保留；开关在新会话或 reload 后生效。同名用户资源保留原生优先级，损坏配置仅移除内置资源并报告诊断。Wiki、节点、子代理和 Playground 不注入这些资源。使用与交付范围见 [Design First Skill](design-first-skill.md)。
+
+内置 Design First 卡片只列出当前实际归它所有的命令；用户 Extension 占用同名入口时从清单移除，主入口 `/skill:design-first` 被占用则显示冲突并禁用“在聊天中准备设计需求”。移除冲突并重载后恢复，执行顺序仍沿用原生规则。
+
 文档转 Markdown 与 OKF 知识蒸馏扩展均已移除，不再提供聊天工具、命令或设置条目；实现、Python 资源和打包支持也已删除。
 
 设置 › Extensions 对接 Pi 1.5.2 的 `DefaultPackageManager`、`SettingsManager` 和 `ProjectTrustStore`。安装、移除、更新与资源发现运行在独立 Node worker；浏览页面不执行扩展入口，缺失依赖采用 `resolve(() => "skip")`，不会因浏览自动安装。包变更在新会话生效，当前会话仅在用户点击重载时通过已有 `extensions_reload` 生效。宿主不向模型注册工具、注入消息或系统提示词。

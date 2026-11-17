@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { createRequire } from "node:module";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, cpSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 const afterPack = createRequire(import.meta.url)("../../build/afterPack.cjs");
@@ -10,6 +10,8 @@ test("desktop packaging follows the exact SDK pin and rejects mismatches or rang
 	try {
 		const app = join(out, "resources/app"), sdk = join(app, "node_modules/@earendil-works/pi-coding-agent");
 		mkdirSync(join(sdk, "docs"), { recursive: true });
+		const skillRoot = join(app, "assets/skills/design-first");
+		cpSync(new URL("../../assets/skills/design-first", import.meta.url), skillRoot, { recursive: true });
 		mkdirSync(join(sdk, "examples/extensions"), { recursive: true });
 		const references = ["README.md", "docs/extensions.md", "examples/extensions/README.md", "examples/extensions/hello.ts"];
 		for (const reference of references) writeFileSync(join(sdk, reference), "fixture reference");
@@ -24,6 +26,12 @@ test("desktop packaging follows the exact SDK pin and rejects mismatches or rang
 			rmSync(join(sdk, reference));
 			await expect(afterPack(context)).rejects.toThrow(`Packaged Pi reference is missing: ${reference}`);
 			writeFileSync(join(sdk, reference), "fixture reference");
+		}
+		for (const reference of readdirSync(skillRoot, { recursive: true }).filter(name => String(name).endsWith(".md"))) {
+			const file = join(skillRoot, String(reference)), body = readFileSync(file);
+			rmSync(file);
+			await expect(afterPack(context)).rejects.toThrow("Packaged Design First resource is missing");
+			writeFileSync(file, body);
 		}
 		mkdirSync(join(app, "extensions"));
 		writeFileSync(join(app, "extensions/webui.ts"), "export default () => {};");

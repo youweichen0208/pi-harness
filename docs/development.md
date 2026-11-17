@@ -148,3 +148,7 @@ docker rm -f pi-db-test-pg pi-db-test-mysql
 `npm run build:server` 同时运行 `build:jdbc`，需要 JDK 17+（JAVA_HOME 或 PATH）；桥接使用 Java 8 字节码，仅依赖标准库。首次直接运行 `dev:server` 前执行 `npm run build:jdbc`，`npm run dev` 自动准备桥接。单测中的 JDBC 测试同样需要 javac/jar。无 Java 的终端用户仍可使用原生 MySQL/PostgreSQL。
 
 本地验证：`npm run typecheck`、`npm run build`、`npm test`、`node tests/packaged-jdbc-test.mjs`、`node tests/database-jdbc-browser-test.mjs`。不需要真实数据库或模型服务；厂商驱动与目标 Windows 的兼容性单独验收。
+
+## Design First Skill 回归
+
+`npx vitest run tests/unit/design-first-resources.test.ts tests/unit/composer-skill.test.ts tests/unit/design-first-native-loop.test.ts tests/unit/packaged-sdk-version.test.ts` 验证原生资源、快捷命令、模型沿用、工具闭环及打包。脚本模型只证明接线；真实模型单样本证据见 [Skill 交付记录](design-first-skill.md)。构建后运行 `node tests/builtin-extensions-test.mjs`，加 `--browser` 可验证设置开关和草稿回填。

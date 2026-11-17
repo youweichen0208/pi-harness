@@ -7,7 +7,7 @@ import { appendChatReference, takeChatReference, type ChatReferenceRequest } fro
 import { queuedMessagePreview } from "../skill-block";
 import { TreeDraftRestore } from "./TreeDraftRestore";
 import { useExtensionEditor } from "../extension-editor";
-import { useComposerAppend, useComposerModelSettings } from "../composer-text";
+import { insertComposerText, useComposerAppend, useComposerModelSettings } from "../composer-text";
 import type { MutableRefObject, ReactNode } from "react";
 import type { CurrentFileContext, ReadCurrentFile, SaveCurrentFile } from "../current-file";
 import { mergeCurrentFile } from "../current-file";
@@ -190,7 +190,7 @@ export const ChatInput = memo(function ChatInput({
 	// A Run's output is appended, never substituted: handing a result to pi must
 	// not destroy a draft the user is halfway through writing.
 	useComposerModelSettings(activeConversationId, active && ready, onManageModels);
-	useComposerAppend(activeConversationId, active, useCallback((text: string) => setText(value => (value.trim() ? `${value}\n\n${text}` : text)), []));
+	useComposerAppend(activeConversationId, active, useCallback((text: string, placement: "append" | "skill") => setText(value => insertComposerText(value, text, placement)), []));
 	useEffect(() => {
 		const pending = pendingSubmit.current;
 		if (!pending || promptResult?.requestId !== pending.id) return;

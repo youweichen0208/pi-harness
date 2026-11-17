@@ -1,0 +1,127 @@
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { DefaultResourceLoader, SettingsManager } from "@earendil-works/pi-coding-agent";
+import { designFirstResources, designFirstSettings, designFirstSkillPath, toggleDesignFirst } from "../../server/design-first-resources.js";
+import { expandNativeTemplate } from "../../server/native-prompt-template.js";
+
+const roots: string[] = [];
+function temporary() {
+	const root = mkdtempSync(join(tmpdir(), "design-first-"));
+	roots.push(root);
+	return root;
+}
+afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
+
+describe("bundled Design First resources", () => {
+	it("preserves the native same-name winner and reports the collision", async () => {
+		const root = temporary(), userSkill = join(root, "skills/design-first/SKILL.md");
+		mkdirSync(join(root, "skills/design-first"), { recursive: true });
+		writeFileSync(userSkill, "---\nname: design-first\ndescription: User-owned workflow\n---\nUser instructions\n");
+		const loader = new DefaultResourceLoader({ cwd: root, agentDir: root,
+			settingsManager: SettingsManager.inMemory(), noExtensions: true,
+			noPromptTemplates: true, noThemes: true, noContextFiles: true,
+			...designFirstResources("normal", root, resolve(".")),
+		});
+		await loader.reload();
+		expect(loader.getSkills().skills.find(s => s.name === "design-first")?.filePath).toBe(userSkill);
+		expect(loader.getSkills().diagnostics.some(d => d.type === "collision")).toBe(true);
+		toggleDesignFirst(false, designFirstSettings(root).version, root);
+		await loader.reload();
+		expect(loader.getSkills().skills.find(s => s.name === "design-first")?.filePath).toBe(userSkill);
+	});
+	it("defaults on, persists explicit false and rejects stale settings writes", () => {
+		const root = temporary(), initial = designFirstSettings(root);
+		expect(initial.enabled).toBe(true);
+		toggleDesignFirst(false, initial.version, root);
+		expect(designFirstSettings(root).enabled).toBe(false);
+		expect(() => toggleDesignFirst(true, initial.version, root)).toThrow("changed");
+		toggleDesignFirst(true, designFirstSettings(root).version, root);
+		expect(designFirstSettings(root).enabled).toBe(true);
+	});
+
+	it("uses real SDK discovery and refreshes the shared setting on reload", async () => {
+		const root = temporary();
+		const loader = new DefaultResourceLoader({ cwd: root, agentDir: root,
+			settingsManager: SettingsManager.inMemory(), noExtensions: true, noSkills: true,
+			noPromptTemplates: true, noThemes: true, noContextFiles: true,
+			...designFirstResources("normal", root, resolve(".")),
+		});
+		await loader.reload();
+		expect(loader.getSkills().skills.map(s => s.name)).toEqual(["design-first"]);
+		expect(loader.getSkills().skills[0].filePath).toBe(designFirstSkillPath(resolve(".")));
+		expect(loader.getPrompts().prompts.map(prompt => prompt.name).sort()).toEqual(["bug-fix", "feat"]);
+		for (const prompt of loader.getPrompts().prompts) {
+			expect(prompt.content).toContain(JSON.stringify(designFirstSkillPath(resolve("."))));
+			expect(prompt.content).not.toContain("{{DESIGN_FIRST_SKILL_PATH}}");
+		}
+		toggleDesignFirst(false, designFirstSettings(root).version, root);
+		await loader.reload();
+		expect(loader.getSkills().skills).toEqual([]);
+		expect(loader.getPrompts().prompts).toEqual([]);
+		toggleDesignFirst(true, designFirstSettings(root).version, root);
+		await loader.reload();
+		expect(loader.getSkills().skills.map(s => s.name)).toEqual(["design-first"]);
+		expect(loader.getPrompts().prompts.map(prompt => prompt.name).sort()).toEqual(["bug-fix", "feat"]);
+		writeFileSync(join(root, "design-first.json"), "broken");
+		await loader.reload();
+		expect(loader.getSkills().skills).toEqual([]);
+		expect(loader.getPrompts().prompts).toEqual([]);
+		expect(loader.getSkills().diagnostics.some(d => d.message.includes("Design First unavailable"))).toBe(true);
+	});
+
+	it.each(["bug-fix", "feat"])("keeps the installed skill path literal when expanding %s arguments", async name => {
+		const root = temporary(), packageRoot = join(root, "pi-$1-$ARGUMENTS-$@ space");
+		mkdirSync(packageRoot);
+		writeFileSync(join(packageRoot, "package.json"), JSON.stringify({ name: "@youweichen/pi-harness" }));
+		cpSync(new URL("../../assets/skills/design-first", import.meta.url), join(packageRoot, "assets/skills/design-first"), { recursive: true });
+		const loader = new DefaultResourceLoader({ cwd: root, agentDir: root,
+			settingsManager: SettingsManager.inMemory(), noExtensions: true, noSkills: true,
+			noPromptTemplates: true, noThemes: true, noContextFiles: true,
+			...designFirstResources("normal", root, packageRoot),
+		});
+		await loader.reload();
+		const expanded = await expandNativeTemplate(`/${name} "add sorting" '$1 $ARGUMENTS'`, loader.getPrompts().prompts);
+		const encodedPath = expanded.match(/"(?:[^"\\]|\\.)*"/)?.[0];
+		expect(encodedPath).toBeDefined();
+		const skillPath: string = JSON.parse(encodedPath!);
+		expect(skillPath).toBe(join(packageRoot, "assets/skills/design-first/SKILL.md"));
+		expect(readFileSync(skillPath, "utf8")).toContain("# Design First");
+		expect(expanded).toContain("add sorting $1 $ARGUMENTS");
+	});
+
+	it.each(["bug-fix", "feat"])("preserves the user's %s prompt content and setting-independent availability", async name => {
+		const root = temporary(), userPrompt = join(root, "prompts", `${name}.md`);
+		const userContent = "User-owned instructions: {{DESIGN_FIRST_SKILL_PATH}} $ARGUMENTS";
+		mkdirSync(join(root, "prompts"), { recursive: true });
+		writeFileSync(userPrompt, `---\ndescription: User-owned shortcut\n---\n${userContent}\n`);
+		const loader = new DefaultResourceLoader({ cwd: root, agentDir: root,
+			settingsManager: SettingsManager.inMemory(), noExtensions: true, noSkills: true,
+			noThemes: true, noContextFiles: true,
+			...designFirstResources("normal", root, resolve(".")),
+		});
+		await loader.reload();
+		expect(loader.getPrompts().prompts.map(prompt => prompt.name).sort()).toEqual(["bug-fix", "feat"]);
+		const own = loader.getPrompts().prompts.find(prompt => prompt.name === name);
+		expect(own?.filePath).toBe(userPrompt);
+		expect(own?.content.trim()).toBe(userContent);
+		toggleDesignFirst(false, designFirstSettings(root).version, root);
+		await loader.reload();
+		expect(loader.getPrompts().prompts.map(prompt => prompt.name)).toEqual([name]);
+		expect(loader.getPrompts().prompts[0].filePath).toBe(userPrompt);
+		expect(loader.getPrompts().prompts[0].content.trim()).toBe(userContent);
+	});
+
+	it.each(["wiki", "node", "subagent", "playground"] as const)("does not inject into %s even when enabled", async kind => {
+		const root = temporary();
+		const loader = new DefaultResourceLoader({ cwd: root, agentDir: root,
+			settingsManager: SettingsManager.inMemory(), noExtensions: true, noSkills: true,
+			noPromptTemplates: true, noThemes: true, noContextFiles: true,
+			...designFirstResources(kind, root, resolve(".")),
+		});
+		await loader.reload();
+		expect(loader.getSkills().skills).toEqual([]);
+		expect(loader.getPrompts().prompts).toEqual([]);
+	});
+});
