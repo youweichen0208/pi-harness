@@ -13,6 +13,8 @@ export interface QuestionAnswerState {
 }
 
 let state: QuestionAnswerState = { active: null, answers: {}, custom: {} };
+// A refreshed snapshot re-registers the same reply after its effect cleanup.
+let lastExpansion: { key: string; id: string } | undefined;
 const picks = new Map<string, Record<string, number>>();
 const written = new Map<string, Record<string, string>>();
 const listeners = new Set<() => void>();
@@ -21,12 +23,17 @@ const emit = (next: QuestionAnswerState) => { state = next; for (const listener 
 /** Only the latest settled reply registers; the returned cleanup releases it. */
 export function registerQuestions(key: string, conversationId: string, questions: QuestionCard[]) {
 	if (!picks.has(key)) picks.set(key, recommendedAnswers(questions));
-	emit({ active: { key, conversationId, questions }, answers: picks.get(key)!, custom: written.get(key) ?? {}, expandedQuestionId: state.active?.key === key ? state.expandedQuestionId : questions[0]?.id });
+	if (lastExpansion?.key !== key || (lastExpansion.id && !questions.some(q => q.id === lastExpansion?.id))) {
+		lastExpansion = undefined;
+	}
+	emit({ active: { key, conversationId, questions }, answers: picks.get(key)!, custom: written.get(key) ?? {}, expandedQuestionId: lastExpansion?.id ?? questions[0]?.id });
 	return () => { if (state.active?.key === key) emit({ active: null, answers: {}, custom: {} }); };
 }
 
 export function expandQuestion(key: string, id: string) {
-	if (state.active?.key === key) emit({ ...state, expandedQuestionId: id });
+	if (state.active?.key !== key) return;
+	lastExpansion = { key, id };
+	emit({ ...state, expandedQuestionId: id });
 }
 
 export function choose(key: string, questionId: string, index: number) {

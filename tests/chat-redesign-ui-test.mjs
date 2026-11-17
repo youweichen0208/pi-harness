@@ -61,6 +61,14 @@ try {
 	assert.match(await page.locator('.question-note').innerText(), /保留原有数据/);
 	assert.equal(await page.locator('.question-heading-toggle[aria-expanded="true"]').count(), 1);
 	await page.locator('.question-card').nth(2).locator('.question-heading-toggle').click();
+	// A full snapshot can arrive between opening a card and choosing its answer.
+	// Change the user text so the assertion waits for React to apply the snapshot.
+	const refreshed = structuredClone(snapshot);
+	refreshed.state.rev += 1;
+	refreshed.state.messages[0].content[0].text = '请设计架构（已同步）';
+	socket.send(JSON.stringify(refreshed));
+	await page.getByText('请设计架构（已同步）', { exact: true }).first().waitFor();
+	assert.equal(await page.locator('.question-card').nth(2).locator('.question-heading-toggle').getAttribute('aria-expanded'), 'true', 'full snapshot keeps the open question');
 	await page.locator('.question-card').nth(2).getByRole('radio').nth(1).click();
 	await page.getByRole('button', {name:'全部采纳推荐',exact:true}).click();
 	assert.match(await page.locator('.question-answer-bar').innerText(), /3 \/ 3/);
