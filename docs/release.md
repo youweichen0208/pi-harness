@@ -1,5 +1,9 @@
 # 发布流程
 
+## 1.34.4：恢复 v1.34.1 的 Mac 桌面视觉基准
+
+恢复 Mac 正文字体和首页斜体，Playground 内置 Sarasa 中文字体。Windows／Linux 窗口控件恢复到右上角。聊天支持 Ctrl+Enter 换行，Mermaid 大图兼容 HTML 换行。新增内置 Design First 技能和 `/design` 命令。协议 v60。详见 `.github/release-notes/v1.34.4.md`。
+
 ## 1.34.3：Windows 与 macOS 字体、窗口外壳统一
 
 界面与聊天正文改用完全内置的字体链：UI SC 覆盖 GB2312 一二级汉字与符号区，新增 UI Symbols（单色符号、带重音拉丁、希腊／西里尔）与 PI Emoji（Noto Color Emoji）；移除按平台取字形的 Chinese Quote 与未打包的 Sarasa／Menlo 优先栈，终端与 Playground 共用同一顺序。Windows/Linux 采用 macOS 的灰度无 hinting 栅格化，并把无边框窗口换成左侧红绿灯（12px 圆点、20px 命中区、焦点显示字形），删除右侧 132／144px 预留。字体构建改为可复现（固定时间戳、排序子集输入），manifest 记录真实 cmap，UI Symbols 记录上游 URL 与 SHA-256 并随包附带四份 OFL 通知。渲染回归新增“任何界面字符都不得回退系统字体”断言。SDK / pi-ai 1.5.2、协议 v59 不变；同提交 CI 与三平台桌面验证通过后公开 GitHub Release，不发布 npm。说明见 `.github/release-notes/v1.34.3.md`。
