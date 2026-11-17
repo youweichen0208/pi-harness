@@ -8,9 +8,12 @@ const read = name => JSON.parse(readFileSync(join(root, name), 'utf8'));
 const macFile = files.find(name => name.endsWith('darwin-100-metrics.json'));
 assert(macFile, 'Missing native macOS reference');
 const mac = read(macFile);
-assert(mac.platform === 'darwin' && mac.surfaces && mac.typography && mac.ui && mac.electron, 'Invalid macOS reference');
-const windows = files.filter(name => /win32-(100|125|150)-metrics.json$/.test(name));
-assert.equal(windows.length, 3, 'Require Windows 100%, 125%, 150% results');
+assert(mac.platform === 'darwin' && mac.surfaces && mac.typography && mac.ui && mac.faces && mac.electron, 'Invalid macOS reference');
+const windows = [100, 125, 150].map(scale => {
+	const matches = files.filter(file => file.endsWith(`win32-${scale}-metrics.json`));
+	assert.equal(matches.length, 1, `Require one Windows ${scale}% result`);
+	return { file: matches[0], scale };
+});
 function compare(expected, actual, path) {
 	// Range rect height tracks OS glyph rasterization, not the CSS line box.
 	// Compare line count/width and the element's own height separately.
@@ -27,11 +30,15 @@ function compare(expected, actual, path) {
 		for (const key of Object.keys(expected)) compare(expected[key], actual[key], `${path}.${key}`);
 	} else assert.equal(actual, expected, path);
 }
-for (const file of windows) {
+for (const {file, scale} of windows) {
 	const win = read(file);
 	assert.equal(win.platform, 'win32');
+	assert.equal(mac.dpr, 1);
+	assert.equal(win.dpr, scale / 100);
+	const urls = metrics => [...new Set(metrics.fonts.map(font => font.url))].sort();
+	assert.deepEqual(urls(win), urls(mac), 'same bundled font resources');
 	assert.equal(win.electron, mac.electron, 'Compare the same Electron version');
-	for (const key of ['width', 'height', 'bodySize', 'typography', 'surfaces', 'ui']) compare(mac[key], win[key], `${file}.${key}`);
+	for (const key of ['width', 'height', 'bodySize', 'typography', 'surfaces', 'ui', 'faces']) compare(mac[key], win[key], `${file}.${key}`);
 	for (const key of ['renderedFonts', 'monoFonts']) {
 		const custom = fonts => [...new Set(fonts.filter(font => font.isCustomFont).map(font => font.familyName))].sort();
 		assert.deepEqual(custom(win[key]), custom(mac[key]), `${file}.${key}: actual bundled fonts`);

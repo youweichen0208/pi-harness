@@ -9291,10 +9291,6 @@ html.pi-desktop .design-workspace .topbar { height: 52px; padding-left: 20px; }
 }
 html.pi-desktop-win32 .design-workspace .desktop-window-controls,
 html.pi-desktop-linux .design-workspace .desktop-window-controls { position: fixed; top: 0; right: 0; z-index: 70; height: 52px; }
-@media (min-width: 1201px) {
-	html.pi-desktop-win32 .design-workspace .panel-right .right-files-pane > .panel-title,
-	html.pi-desktop-linux .design-workspace .panel-right .right-files-pane > .panel-title { padding-right: 140px; }
-}
 /* Standalone reference: navigation, tree, structured tool output. */
 .design-workspace .view-switch button > svg { display: none; }
 .design-workspace .view-switch button:not(.plugin-tab) > span { display: inline; }
@@ -10325,7 +10321,7 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { height: 44px;
 .wiki-sidebar { position: relative; width: 264px; flex: none; display: flex; flex-direction: column; background: var(--sidebar-bg); border-right: 1px solid var(--wiki-line); }
 .wiki-search-trigger { margin: 16px 12px 10px; display: flex; align-items: center; gap: 8px; padding: 9px 10px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-elev); color: var(--text-dim) !important; text-align: left; }
 .wiki-search-trigger span { flex: 1; }
-.wiki-search-trigger kbd { font: 10px "JetBrains Mono", monospace; }
+.wiki-search-trigger kbd { font: 10px var(--mono); }
 .wiki-tree-label { display: flex; justify-content: space-between; align-items: center; padding: 4px 16px; color: var(--text-dim); font-size: 11px; }
 .wiki-tree-label button { display: flex; align-items: center; gap: 4px; border: none; padding: 5px; background: transparent; color: var(--wiki-accent); }
 .wiki-tree { flex: 1; min-height: 0; overflow: auto; padding: 4px 8px; }
@@ -10390,7 +10386,7 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { height: 44px;
 .wiki-composer-controls input { accent-color: var(--wiki-accent); }
 .wiki-composer-controls > button:not(.wiki-send) { border: 0; padding: 0; color: var(--text-dim); background: transparent; font-size: 11px; }
 .wiki-composer-controls .wiki-send { display: flex; align-items: center; justify-content: center; margin-left: auto; width: 30px; height: 30px; flex: none; background: var(--wiki-accent); color: var(--accent-fg); border: 0; border-radius: var(--r-md); font-size: 16px; }
-.wiki-prompt-preview { max-height: 160px; overflow: auto; white-space: pre-wrap; font: 11px/1.6 "JetBrains Mono", monospace; color: var(--text-dim); margin-top: 8px; }
+.wiki-prompt-preview { max-height: 160px; overflow: auto; white-space: pre-wrap; font: 11px/1.6 var(--mono); color: var(--text-dim); margin-top: 8px; }
 .wiki-mentions { position: absolute; left: 10px; right: 10px; bottom: 100%; display: flex; flex-direction: column; padding: 6px; background: var(--bg-elev); border: 1px solid var(--wiki-line); box-shadow: 0 4px 24px color-mix(in srgb, var(--shadow-color) 6.67%, transparent); border-radius: var(--r-md); }
 .wiki-mentions button { text-align: left; border: 0; background: transparent; padding: 7px 9px; overflow: hidden; text-overflow: ellipsis; }
 .wiki-mentions button:hover { background: var(--wiki-soft); }
@@ -10436,7 +10432,7 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { height: 44px;
 .wiki-diff-label { display: flex; align-items: center; gap: 7px; padding: 6px 10px; font-size: 11px; font-weight: 600; color: var(--text-dim); border-bottom: 1px solid var(--border-soft); background: var(--bg-elev2); }
 .wiki-diff-label::before { content: ""; width: 6px; height: 6px; flex: none; border-radius: 50%; background: var(--red); }
 .wiki-diff-label.after::before { background: var(--green); }
-.wiki-file-change pre { margin: 0; padding: 9px 10px; white-space: pre-wrap; overflow-wrap: anywhere; font: 11px/1.55 "JetBrains Mono", monospace; max-height: 220px; overflow: auto; background: var(--bg); color: var(--text); }
+.wiki-file-change pre { margin: 0; padding: 9px 10px; white-space: pre-wrap; overflow-wrap: anywhere; font: 11px/1.55 var(--mono); max-height: 220px; overflow: auto; background: var(--bg); color: var(--text); }
 .wiki-skipped { margin: 0; padding: 10px 14px; border-top: 1px solid var(--border-soft); font-size: 11px; background: var(--yellow-bg); color: var(--yellow-fg); overflow-wrap: anywhere; }
 .wiki-changes :is(button, summary):focus-visible { outline: 2px solid var(--wiki-accent); outline-offset: 2px; }
 .wiki-selection-menu { position: fixed; display: flex; gap: 2px; background: var(--tooltip-bg); color: var(--accent-fg); padding: 4px; border-radius: var(--r-md); box-shadow: 0 4px 16px color-mix(in srgb, var(--shadow-color) 20%, transparent); z-index: 3000; }
@@ -10635,7 +10631,7 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { height: 44px;
 .extensions-panel .ext-primary { background: var(--ext-accent); color: var(--accent-fg); border-color: var(--ext-accent); }
 .extensions-panel .ext-primary:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 85%, var(--shadow-color)); color: var(--accent-fg); }
 .extensions-panel p { margin: 6px 0; line-height: 1.6; font-size: 12px; }
-.extensions-panel code, .extensions-panel pre, .ext-name strong, .ext-version, .ext-card-heading strong { font-family: "JetBrains Mono", monospace; }
+.extensions-panel code, .extensions-panel pre, .ext-name strong, .ext-version, .ext-card-heading strong { font-family: var(--mono); }
 .ext-header { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 4px 0 20px; }
 .ext-header h2 { font-size: 21px; font-weight: 600; letter-spacing: -.5px; margin: 0; }
 .ext-header p, .ext-muted, .ext-meta, .ext-check, .ext-auto { color: var(--ext-muted); }
@@ -10739,7 +10735,7 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { height: 44px;
 .ext-release-notes ul { padding-left: 15px; line-height: 1.8; }
 .ext-release-notes a { color: var(--ext-accent); }
 .ext-editor { width: 760px; }
-.ext-editor textarea { box-sizing: border-box; width: 100%; min-height: 330px; resize: vertical; border: 1px solid var(--ext-line); border-radius: var(--r-sm); padding: 14px; font: 12px/1.7 "JetBrains Mono", monospace; tab-size: 4; }
+.ext-editor textarea { box-sizing: border-box; width: 100%; min-height: 330px; resize: vertical; border: 1px solid var(--ext-line); border-radius: var(--r-sm); padding: 14px; font: 12px/1.7 var(--mono); tab-size: 4; }
 .ext-rail-badge { display: inline-block; padding: 1px 5px; border-radius: var(--r-sm); background: var(--accent-soft); color: var(--accent); font-size: 10px; margin-left: 8px; }
 .ext-new { color: var(--accent); background: var(--accent-soft); border-radius: var(--r-sm); padding: 1px 5px; font-size: 9px; }
 
@@ -10751,7 +10747,7 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { height: 44px;
 .system-prompt-panel button:focus-visible, .system-prompt-panel textarea:focus-visible, .system-prompt-panel select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .prompt-heading { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }
 .prompt-heading h2 { margin: 0; font-size: 19px; font-weight: 600; letter-spacing: -.35px; }
-.prompt-token { font: 11px/1.5 "JetBrains Mono", monospace; color: var(--text-dim); white-space: nowrap; }
+.prompt-token { font: 11px/1.5 var(--mono); color: var(--text-dim); white-space: nowrap; }
 .prompt-heading-actions { display: flex; align-items: center; gap: 10px; margin-left: auto; }
 .system-prompt-panel .prompt-link { color: var(--prompt-accent); background: transparent; border: 0; padding: 3px 4px; }
 .prompt-sections { border: 1px solid var(--prompt-line); border-radius: var(--r-md); overflow: hidden; background: var(--bg-elev); }
@@ -10765,22 +10761,22 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { height: 44px;
 .prompt-row-actions button { white-space: nowrap; }
 .system-prompt-panel .prompt-text-button { border: 0; padding: 0; background: none; text-align: left; justify-content: flex-start; line-height: 1.7; }
 .prompt-tool-list { display: flex; flex: 1; min-width: 0; gap: 6px; flex-wrap: wrap; }
-.prompt-tool-list code { font: 11px/1.6 "JetBrains Mono", monospace; background: var(--bg-elev2); border: 1px solid var(--border); color: var(--text-dim); border-radius: var(--r-sm); padding: 1px 6px; }
+.prompt-tool-list code { font: 11px/1.6 var(--mono); background: var(--bg-elev2); border: 1px solid var(--border); color: var(--text-dim); border-radius: var(--r-sm); padding: 1px 6px; }
 .prompt-tool-list .prompt-custom-tool { color: var(--yellow-fg); border-color: var(--yellow-bg); background: var(--yellow-bg); }
 .prompt-inactive .prompt-tool-list, .prompt-inactive .prompt-summary { opacity: .5; }
-.prompt-file-path { display: block; font: 11px/1.7 "JetBrains Mono", monospace; color: var(--text-dim); overflow-wrap: anywhere; }
+.prompt-file-path { display: block; font: 11px/1.7 var(--mono); color: var(--text-dim); overflow-wrap: anywhere; }
 .prompt-context-line { align-items: flex-start; }
 .prompt-context-files { flex: 1; min-width: 0; }
 .prompt-context-file { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .prompt-context-file + .prompt-context-file { margin-top: 13px; }
-.prompt-context-file > code { flex: 1; min-width: 0; overflow-wrap: anywhere; font: 11px/1.7 "JetBrains Mono", monospace; }
+.prompt-context-file > code { flex: 1; min-width: 0; overflow-wrap: anywhere; font: 11px/1.7 var(--mono); }
 .prompt-rules { list-style: none; padding: 0 20px 18px 129px; margin: 0; }
 .prompt-rules li { display: flex; align-items: flex-start; gap: 12px; padding: 8px 0; }
-.prompt-rules li code { font: 11px/1.8 "JetBrains Mono", monospace; overflow-wrap: anywhere; white-space: pre-wrap; min-width: 0; }
+.prompt-rules li code { font: 11px/1.8 var(--mono); overflow-wrap: anywhere; white-space: pre-wrap; min-width: 0; }
 .prompt-rule-origin { font-size: 10px; padding: 2px 5px; border-radius: var(--r-sm); white-space: nowrap; background: var(--bg-elev2); color: var(--text-dim); }
 .prompt-rule-tool { background: var(--yellow-bg); color: var(--yellow-fg); }
 .prompt-rule-extension { background: var(--accent-soft); color: var(--prompt-accent); }
-.prompt-section-text, .prompt-raw { font: 11px/1.8 "JetBrains Mono", monospace; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; color: var(--text-dim); }
+.prompt-section-text, .prompt-raw { font: 11px/1.8 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; color: var(--text-dim); }
 .prompt-section-text { padding: 0 20px 20px 129px; }
 .prompt-raw { border: 1px solid var(--prompt-line); border-radius: var(--r-md); background: var(--bg-elev2); padding: 20px; }
 .prompt-footnote, .prompt-muted { font-size: 11px; color: var(--text-faint); line-height: 1.8; }
@@ -10792,8 +10788,8 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { height: 44px;
 .prompt-editing { background: var(--bg-elev); }
 .prompt-editor { border-top: 1px solid var(--border); padding: 18px 20px; }
 .prompt-scope { display: flex; align-items: center; gap: 12px; color: var(--text-dim); font-size: 11px; margin-bottom: 10px; }
-.prompt-editor-path { display: block; overflow-wrap: anywhere; color: var(--text-dim); font: 11px/1.7 "JetBrains Mono", monospace; margin-bottom: 10px; }
-.prompt-editor textarea { box-sizing: border-box; width: 100%; min-height: 200px; resize: vertical; background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 14px; color: var(--text); font: 12px/1.8 "JetBrains Mono", monospace; tab-size: 4; }
+.prompt-editor-path { display: block; overflow-wrap: anywhere; color: var(--text-dim); font: 11px/1.7 var(--mono); margin-bottom: 10px; }
+.prompt-editor textarea { box-sizing: border-box; width: 100%; min-height: 200px; resize: vertical; background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 14px; color: var(--text); font: 12px/1.8 var(--mono); tab-size: 4; }
 .prompt-editor-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
 .prompt-editor-actions > span { margin-right: auto; font-size: 11px; color: var(--text-faint); }
 .system-prompt-panel .prompt-primary { background: var(--prompt-accent); border-color: var(--prompt-accent); color: var(--accent-fg); }
@@ -12179,14 +12175,6 @@ pre.wiki-mermaid-source-hidden > .fp-mermaid-preview { padding-bottom: 0; }
 .panel-right .right-files-pane > .panel-title > span:first-child { flex: none; white-space: nowrap; }
 .ext-row-main > button { flex: none; white-space: nowrap; }
 .ext-row-main { column-gap: 12px; }
-@media (min-width: 1101px) {
-	html.pi-desktop-win32 .design-workspace .panel-right .right-files-pane > .panel-title,
-	html.pi-desktop-linux .design-workspace .panel-right .right-files-pane > .panel-title { padding-left: 8px; padding-right: 140px; gap: 3px; }
-	html.pi-desktop-win32 .panel-right .right-files-pane > .panel-title .tree-menu-trigger,
-	html.pi-desktop-linux .panel-right .right-files-pane > .panel-title .tree-menu-trigger { width: 22px; min-width: 22px; padding: 2px; }
-	html.pi-desktop-win32 .panel-right .right-files-pane > .panel-title .tree-filter,
-	html.pi-desktop-linux .panel-right .right-files-pane > .panel-title .tree-filter { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-}
 
 /* Wiki shares the native model controls with the chat composer. */
 .wiki-model-controls { display: flex; align-items: center; gap: 8px; min-width: 0; margin: 8px 0 0; padding: 0; border: 0; }
@@ -13585,7 +13573,7 @@ html.pi-desktop .wiki-window-header .desktop-window-controls { -webkit-app-regio
 	background-position: center; container-type: inline-size;
 }
 .welcome-paper .welcome-motto {
-	margin: 0; font-family: "Times New Roman", "Source Serif 4", Georgia, serif;
+	margin: 0; font-family: "Source Serif 4", "Noto Serif SC", serif;
 	font-size: clamp(28px, 6.4cqw, 76px); font-weight: 400; font-style: italic;
 	line-height: 1.08; letter-spacing: -0.045em; text-align: center; color: var(--welcome-ink);
 }

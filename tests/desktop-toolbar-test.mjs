@@ -14,7 +14,8 @@ try {
 	for (let i = 0; i < 100; i++) { try { if ((await fetch(`http://127.0.0.1:${port}/api/health`)).ok) break; } catch {} await new Promise(r => setTimeout(r, 100)); }
 	browser = await chromium.launch({ executablePath: CHROME_PATH || chromium.executablePath() });
 	mkdirSync('tests/scratch', { recursive: true });
-	for (const platform of ['win32', 'darwin']) {
+	const macFileHeaders = new Map();
+	for (const platform of ['darwin', 'win32']) {
 		const page = await browser.newPage();
 		let socket, changeCount = 11;
 		await page.routeWebSocket('**/ws', route => {
@@ -76,7 +77,10 @@ try {
 				const controls = await page.locator('.desktop-window-controls').count() ? await page.locator('.desktop-window-controls').boundingBox() : null;
 				await page.locator('.topbar').screenshot({ path: `tests/scratch/toolbar-${platform}-${width}-${view}.png` });
 				assert(actions.x + actions.width <= width + 1, `${platform}/${width}/${view}: toolbar overflows the window`);
-				if (controls) assert(Math.round(controls.x) === 18, `${platform}/${width}/${view}: traffic lights stay in the left gutter`);
+				if (platform === 'win32') {
+					assert(controls && Math.round(controls.x + controls.width) === width, 'Windows caption buttons align right');
+					assert(actions.x + actions.width <= controls.x + 1, `${width}/${view}: toolbar clears caption buttons`);
+				}
 				const titleButton = await page.locator('.conversation-title-button').boundingBox();
 				assert(titleButton.x + titleButton.width <= actions.x + 1, `${platform}/${width}/${view}: conversation title overlaps tabs`);
 				const menu = page.locator('.topbar-actions .topbar-more .chip');
@@ -112,6 +116,22 @@ try {
 				const box = tab.getBoundingClientRect();
 				return box.width > 0 && box.x >= 0 && box.right <= innerWidth + 1;
 			});
+			await page.locator('.right-panel-tabs [role="tab"]').filter({ hasText: '文件' }).click();
+			const fileHeader = page.locator('.right-files-pane:visible > .panel-title');
+			const fileMenu = fileHeader.locator('.tree-controls .tree-menu-trigger');
+			await fileMenu.click();
+			await fileHeader.getByRole('switch').waitFor();
+			await fileMenu.click();
+			const geometry = await fileHeader.evaluate(el => {
+				const style = getComputedStyle(el);
+				return {
+					padding: style.padding,
+					gap: style.gap,
+					buttonWidths: [...el.querySelectorAll('.tree-menu-trigger')].map(button => button.getBoundingClientRect().width),
+				};
+			});
+			if (platform === 'darwin') macFileHeaders.set(width, geometry);
+			else assert.deepEqual(geometry, macFileHeaders.get(width), `file header matches macOS at ${width}px`);
 			await taskTab.click();
 			await page.locator('.task-progress:visible').waitFor();
 			assert.equal(await page.locator('.right-panel-tabs [aria-selected="true"]').textContent(), '任务');

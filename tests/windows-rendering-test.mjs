@@ -14,10 +14,11 @@ writeFileSync(join(cwd, 'README.md'), '# 本质：渲染验收\n\n同一份离�
 writeFileSync(join(agent, 'auth.json'), JSON.stringify({ fixture: { type: 'api_key', key: 'unused' } }));
 writeFileSync(join(agent, 'settings.json'), JSON.stringify({ defaultProvider: 'fixture', defaultModel: 'render-test' }));
 writeFileSync(join(agent, 'models.json'), JSON.stringify({ providers: { fixture: { api: 'openai-completions', baseUrl: 'http://127.0.0.1:1', apiKey: 'unused', models: [{ id: 'render-test', input: ['text'], contextWindow: 32000, maxTokens: 4096 }] } } }));
+const mixed = 'Render 中文 ✅';
 const timestamp = 1791547200000;
 const transcript = [
 	{ id: 'render-user', role: 'user', content: [{ type: 'text', text: '请说明这个项目的本质，并检查文档转换与知识整理。' }], timestamp },
-	{ id: 'render-assistant', role: 'assistant', model: 'render-test', content: [{ type: 'thinking', thinking: '先检查原始资料和已有知识，保留可追溯的来源。', durationMs: 2000 }, { type: 'text', text: '## 本质：职责分离\n\n文档转换保留文字、表格和代码；知识整理提取可信结论，并保留证据与适用条件。\n\n```python\ndef convert_document(source):\n    return source.read_text()\n```' }, ...[1, 2, 3].map(n => ({ type: 'toolCall', id: `render-bash-${n}`, name: 'bash', argumentsText: JSON.stringify({ command: `echo '检查 PDF、CHM 与源码资料的转换结果并核对来源 ${n}'` }) }))], timestamp: timestamp + 1000 },
+	{ id: 'render-assistant', role: 'assistant', model: 'render-test', content: [{ type: 'thinking', thinking: '先检查原始资料和已有知识，保留可追溯的来源。', durationMs: 2000 }, { type: 'text', text: '## 本质：职责分离\n\n文档转换保留文字、表格和代码；知识整理提取可信结论，并保留证据与适用条件。\n\n```python\ndef convert_document(source):\n    return source.read_text()  # 中文 ✅\n```' }, ...[1, 2, 3].map(n => ({ type: 'toolCall', id: `render-bash-${n}`, name: 'bash', argumentsText: JSON.stringify({ command: `echo '检查 PDF、CHM 与源码资料的转换结果并核对来源 ${n}'` }) }))], timestamp: timestamp + 1000 },
 	...[1, 2, 3].map(n => ({ id: `render-result-${n}`, role: 'toolResult', toolCallId: `render-bash-${n}`, toolName: 'bash', content: [{ type: 'text', text: '检查完成。\n' }], isError: false, timestamp: timestamp + 2000 + n })),
 	{ id: 'render-final', role: 'assistant', model: 'render-test', content: [{ type: 'text', text: '已检查转换结果。待验证结论保留草稿，人工复核后发布。' }], timestamp: timestamp + 4000 },
 ];
@@ -28,11 +29,21 @@ try {
 		let page;
 		for (let i = 0; i < 200; i++) { page = app.windows().find(p => p.url().startsWith('http://127.0.0.1:')); if (page) break; await sleep(100); }
 		assert(page, 'local app window starts'); page.setDefaultTimeout(15000);
-		let conversation = false;
+		let conversation = false, socketRoute, activeConversationId;
 		await page.routeWebSocket('**/ws*', socket => {
-			const upstream = socket.connectToServer(); socket.onMessage(message => upstream.send(message));
+			socketRoute = socket;
+			const upstream = socket.connectToServer();
+			socket.onMessage(wire => {
+				const message = JSON.parse(wire.toString());
+				if (message.terminalId !== 'render-terminal') { upstream.send(wire); return; }
+				if (message.type === 'terminal_replay') socket.send(JSON.stringify({
+					type: 'terminal_output', conversationId: activeConversationId,
+					terminalId: message.terminalId, reset: true, data: mixed,
+				}));
+			});
 			upstream.onMessage(wire => {
 				const message = JSON.parse(wire.toString());
+				if (message.type === 'conversations') activeConversationId = message.activeId;
 				if (message.type === 'snapshot' || message.type === 'snapshot_delta') { message.state.piConfigured = true; message.state.messages = conversation ? transcript : []; message.state.isStreaming = false; message.state.streamingMessage = null; if (message.type === 'snapshot_delta') { message.type = 'snapshot'; delete message.appended; delete message.baseRev; } }
 				socket.send(JSON.stringify(message));
 			});
@@ -61,12 +72,6 @@ try {
 		assert.equal(await page.evaluate(() => document.documentElement.dataset.platform), process.platform);
 		await page.evaluate(async () => { await Promise.all([400, 500, 600].map(weight => document.fonts.load(`${weight} 16px "UI SC"`, '本质检查'))); await document.fonts.load('400 12px "JetBrains Mono"', '.ruff_cache'); await document.fonts.ready; });
 		const prefix = `${process.platform}-${Math.round(scale * 100)}`;
-		await page.screenshot({ path: join(output, `${prefix}-empty.png`) });
-		assert(await page.locator('.welcome-motto').isVisible());
-		assert.equal(failures.length, 0, `font resources load successfully: ${JSON.stringify(fonts)}`);
-		assert.equal(new Set(fonts.filter(font => /ui-sc-/.test(font.url)).map(font => font.url)).size, 3);
-		assert(fonts.some(font => /jetbrains-mono/.test(font.url) && font.status === 200));
-		conversation = true; await page.reload(); await page.locator('.msg-text', { hasText: '职责分离' }).waitFor().catch(async error => { await page.screenshot({ path: join(output, `${prefix}-failure.png`) }); writeFileSync(join(output, `${prefix}-failure.txt`), await page.locator('body').innerText()); throw error; }); await page.evaluate(() => document.fonts.ready);
 		await cdp.send('DOM.enable'); await cdp.send('CSS.enable');
 		// React may replace a message node while file-tree data arrives. Resolve
 		// the current node for each sample; only retry detached-node races.
@@ -83,6 +88,43 @@ try {
 			}
 			assert.fail(`No stable rendered node for ${selector}`);
 		};
+		const faces = {};
+		const measureFonts = async (name, selector, expected) => {
+			const { fonts } = await platformFonts(selector);
+			const used = fonts.filter(font => font.glyphCount > 0);
+			assert(used.length && used.every(font => font.isCustomFont), `${name}: unexpected system fallback: ${JSON.stringify(used)}`);
+			for (const family of expected) assert(used.some(font => font.familyName === family), `${name}: expected ${family}: ${JSON.stringify(used)}`);
+			faces[name] = [...new Set(used.map(font => font.familyName))].sort();
+		};
+		await measureFonts('motto', '.welcome-motto > span:first-child', ['Source Serif 4']);
+		await measureFonts('mottoEmphasis', '.welcome-motto em', ['Source Serif 4']);
+		const ui = {};
+		const sampleControl = async (name, selector, size = false) => {
+			const el = page.locator(selector).first();
+			await el.waitFor();
+			ui[name] = await el.evaluate((node, size) => {
+				const style = getComputedStyle(node);
+				const keys = ['fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'lineHeight', 'letterSpacing', 'color', 'backgroundColor', 'borderRadius', 'padding'];
+				const result = Object.fromEntries(keys.map(key => {
+					const value = style[key];
+					return [key, /^-?[\d.]+px$/.test(value) ? parseFloat(value) : value];
+				}));
+				// Only intrinsically sized controls have comparable geometry across native shells.
+				if (size) {
+					const rect = node.getBoundingClientRect();
+					result.width = rect.width;
+					result.height = rect.height;
+				}
+				return result;
+			}, size);
+		};
+		await sampleControl('welcome', '.welcome-motto');
+		await page.screenshot({ path: join(output, `${prefix}-empty.png`) });
+		assert(await page.locator('.welcome-motto').isVisible());
+		assert.equal(failures.length, 0, `font resources load successfully: ${JSON.stringify(fonts)}`);
+		assert.equal(new Set(fonts.filter(font => /ui-sc-/.test(font.url)).map(font => font.url)).size, 3);
+		assert(fonts.some(font => /jetbrains-mono/.test(font.url) && font.status === 200));
+		conversation = true; await page.reload(); await page.locator('.msg-text', { hasText: '职责分离' }).waitFor().catch(async error => { await page.screenshot({ path: join(output, `${prefix}-failure.png`) }); writeFileSync(join(output, `${prefix}-failure.txt`), await page.locator('body').innerText()); throw error; }); await page.evaluate(() => document.fonts.ready);
 		const rendered = await platformFonts('.msg-text h2');
 		assert(rendered.fonts.some(font => font.familyName === 'UI SC' && font.isCustomFont && font.glyphCount > 0), JSON.stringify(rendered));
 		assert(await page.locator('.msg-text h2').evaluate(el => getComputedStyle(el).fontFamily.startsWith('"UI SC"')), 'prose prioritizes the bundled cross-platform UI font');
@@ -172,15 +214,22 @@ try {
 		assert(dragged.pixel[0] < hovered.pixel[0], `dragging darkens the thumb: ${JSON.stringify({ hovered, dragged })}`);
 
 
-		const ui = await page.evaluate(() => Object.fromEntries(['.inputbox textarea', '.file-name', '.msg-text h2', '.msg-text pre code'].map(selector => {
-			const el = document.querySelector(selector); if (!el) throw new Error(`Missing ${selector}`);
-			const cs = getComputedStyle(el);
-			return [selector, Object.fromEntries(['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color', 'backgroundColor', 'borderRadius', 'padding'].map(key => [key, cs[key]]))];
-		})));
 		const electronVersion = await app.evaluate(() => process.versions.electron);
 		const typography = {}, surfaces = {};
 		for (const appearance of ['light', 'dark']) {
-			await page.evaluate(appearance => { document.documentElement.dataset.appearance = appearance; }, appearance);
+			await page.evaluate(appearance => {
+				const theme = appearance === 'dark' ? 'graphite' : 'warm';
+				localStorage.setItem('pi-harness:theme', theme);
+				window.dispatchEvent(new StorageEvent('storage', { key: 'pi-harness:theme' }));
+			}, appearance);
+			await page.waitForFunction(theme => document.documentElement.dataset.theme === theme, appearance === 'dark' ? 'graphite' : 'warm');
+			await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+			for (const selector of ['.inputbox textarea', '[data-tree-node=".ruff_cache"] .file-name', '.msg-text h2', '.msg-text pre code', '.project-item.active']) {
+				await sampleControl(appearance + selector, selector);
+			}
+			await sampleControl(appearance + '/send', '.inputbox button.send', true);
+			await sampleControl(appearance + '/fileAction', '.right-files-pane .tree-menu-trigger', true);
+
 			typography[appearance] = await page.evaluate(async () => {
 				await document.fonts.ready;
 				const samples = [];
@@ -231,7 +280,57 @@ try {
 			await page.screenshot({ path: join(output, `${prefix}-${appearance}.png`) });
 		}
 
-		writeFileSync(join(output, `${prefix}-metrics.json`), JSON.stringify({ ...metrics, electron: electronVersion, ui, typography, surfaces, nativeWindow, fonts, renderedFonts: rendered.fonts, monoFonts: monoFonts.fonts, scrollbar: { resting, hovered, dragged } }, null, 2));
+		// Use real component nodes to verify the cascade and the glyph faces that actually painted.
+		await measureFonts('code', '.msg-text pre code', ['JetBrains Mono', 'UI SC', 'Noto Color Emoji']);
+		await page.locator('.topbar-more .chip').click();
+		await page.locator('.dd-menu').getByRole('button', { name: '所有设置', exact: true }).click();
+		await sampleControl('settingsTab', '.settings-tab.active', true);
+		await measureFonts('settingsTab', '.settings-tab.active .settings-tab-label', ['UI SC']);
+		await page.keyboard.press('Escape');
+		await page.locator('.settings-modal').waitFor({ state: 'hidden' });
+
+		// Replay deterministic mixed-language output into the actual xterm renderer.
+		assert(activeConversationId);
+		socketRoute.send(JSON.stringify({ type: 'terminal_list', conversationId: activeConversationId, terminals: [
+			{ id: 'render-terminal', title: 'Rendering', cwd, cols: 80, rows: 24, running: true, exitCode: null },
+		] }));
+		await page.getByRole('tab', { name: '终端', exact: true }).click();
+		const rows = page.locator('.term-xterm:not(.hidden) .xterm-rows > div');
+		const terminalRow = rows.filter({ hasText: 'Render' }).first();
+		await terminalRow.waitFor();
+		await terminalRow.evaluate(el => el.dataset.renderSample = 'terminal');
+		await page.evaluate(() => document.fonts.ready);
+		await measureFonts('terminal', '[data-render-sample="terminal"]', ['JetBrains Mono', 'UI SC', 'Noto Color Emoji']);
+		await sampleControl('terminal', '[data-render-sample="terminal"]');
+		await page.screenshot({ path: join(output, `${prefix}-terminal.png`) });
+
+		await page.getByRole('tab', { name: '对话', exact: true }).click();
+		await page.getByRole('button', { name: '小记', exact: true }).click();
+		await page.getByRole('button', { name: '新建小记', exact: true }).first().click();
+		const noteEditor = page.locator('.notes-editor .fp-rich-document');
+		await noteEditor.fill(mixed);
+		await page.evaluate(() => document.fonts.ready);
+		await measureFonts('notes', '.notes-editor .fp-rich-document', ['UI SC', 'Noto Color Emoji']);
+		await sampleControl('noteTitle', '.notes-editor .note-title');
+		await sampleControl('noteBody', '.notes-editor .fp-rich-document');
+		await noteEditor.blur();
+		await page.locator('.notes-editor [role=status]').filter({ hasText: '已保存' }).waitFor();
+		await page.screenshot({ path: join(output, `${prefix}-notes.png`) });
+
+		// Exercise the dedicated document reader with its actual typography selectors.
+		const wikiUrl = new URL(page.url());
+		wikiUrl.searchParams.set('wiki-window', '1');
+		wikiUrl.searchParams.set('cwd', cwd);
+		wikiUrl.searchParams.set('doc', 'README.md');
+		await page.goto(wikiUrl.href);
+		const paragraph = '.wiki-prose .fp-rich-document p';
+		await page.locator(paragraph).first().waitFor();
+		await page.evaluate(() => document.fonts.ready);
+		await measureFonts('wiki', paragraph, ['UI SC']);
+		await sampleControl('wiki', paragraph);
+		await page.screenshot({ path: join(output, `${prefix}-wiki.png`) });
+		assert.deepEqual(failures, [], 'all requested font resources loaded');
+		writeFileSync(join(output, `${prefix}-metrics.json`), JSON.stringify({ ...metrics, electron: electronVersion, faces, ui, typography, surfaces, nativeWindow, fonts, renderedFonts: rendered.fonts, monoFonts: monoFonts.fonts, scrollbar: { resting, hovered, dragged } }, null, 2));
 		await app.close(); app = undefined;
 		console.log(`PASS actual ${prefix} Electron: platform, fonts, SVG icons, labels, 1440x900 screenshots`);
 	}

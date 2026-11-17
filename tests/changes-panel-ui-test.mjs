@@ -149,15 +149,15 @@ try {
 	await page.locator('.changes-panel').waitFor({state:'detached'});
 	upstreamSocket.send(JSON.stringify({type:'switch_conversation',id:original}));
 	await page.locator('.changes-panel').waitFor();
-	// Window controls live in the left gutter, so the changes toolbar keeps the right edge.
+	// The changes toolbar shares the top row with Windows caption buttons.
 	await page.addInitScript(() => { window.electronAPI = { platform:'win32', windowAction(){}, onWindowState(){return ()=>{};} }; });
 	await page.reload(); await page.locator('.changes-panel').waitFor();
 	const controls = await page.locator('.desktop-window-controls').boundingBox();
-	assert.equal(Math.round(controls.x), 18, 'traffic lights sit at the macOS position');
-	const close = await page.locator('.changes-toolbar > button').last().boundingBox();
-	const viewport = page.viewportSize();
-	assert(close.x + close.width <= viewport.width + 1, 'changes close button stays inside the window');
-	assert(close.x >= controls.x + controls.width, 'changes close button clears the traffic lights');
+	assert.equal(Math.round(controls.x + controls.width), page.viewportSize().width);
+	const close = page.locator('.changes-toolbar > button').last();
+	const closeBox = await close.boundingBox();
+	assert(closeBox.x + closeBox.width <= controls.x, 'changes close button clears caption buttons');
+	await close.click({trial:true});
 	await page.screenshot({path:'/tmp/pi-changes-35a-windows.png'});
 	// Non-Git workspaces retain tool changes and hide Git scope controls.
 	forceNotRepo = true; await page.reload(); await page.locator('.changes-panel').waitFor();

@@ -102,7 +102,9 @@ try {
 	assert.equal(await drawer.evaluate(el=>getComputedStyle(el).backdropFilter),'none');
 	await drawer.locator('.fluid-drawer-close').click();
 	await page.waitForFunction(()=>document.querySelector('.drawer-left').inert);
-	await page.locator('.topbar-actions > .panel-toggle').click();
+	await toggle.click();
+	await page.locator('.topbar-more .chip').click();
+	await page.getByRole('button',{name:'文件列表',exact:true}).click();
 	const files=page.locator('.drawer-right.open');
 	await files.waitFor();
 	assert(await files.locator('.fluid-drawer-grip > span:first-child').isVisible());
@@ -123,8 +125,8 @@ try {
 		const controls=desktop.locator('.desktop-window-controls');
 		if(platform==='win32') {
 			const c=await controls.boundingBox(), a=await desktop.locator('.topbar-actions').boundingBox();
-			assert(Math.round(c.x)===18&&Math.round(c.y)===17,'traffic lights sit at the macOS position');
-			assert(a.x+a.width<=1100+1,'header uses the full width');
+			assert.equal(Math.round(c.x+c.width),1100,'Windows caption buttons align right');
+			assert(a.x+a.width<=c.x+1,'header clears caption buttons');
 		}
 		await desktop.screenshot({path:`tests/scratch/fluid-desktop-${platform}.png`});
 		await desktop.close();

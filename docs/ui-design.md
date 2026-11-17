@@ -832,7 +832,7 @@ SCM 更改列表（2026-11-12）：界面不再展示工作树清单；仓库工
 
 ## Desktop 跨平台视觉基准（2026-11-12）
 
-以 Mac Desktop 为主界面字体与风格基准，Windows 与 macOS 完全共用一套字体、令牌和窗口外壳：同一份内置 UI SC／UI Symbols／PI Emoji／JetBrains Mono，同一套 400／500／600 字重与 700 映射，不为 Windows 单独加粗或放大文字；插入菜单、Wiki 搜索／格式控件及设置面板统一走 `--sans`，不独立指定系统字体。窗口按钮也对齐 macOS：Windows／Linux 的无边框窗口在主窗口、Wiki 窗口和改动面板里都绘制同一组红绿灯圆点（12px 圆点、8px 间距、`left: 18px; top: 17px`、红 `--tl-close`／黄 `--tl-minimize`／绿 `--tl-maximize`，悬停显示 ×／−／＋），顶栏、Wiki 标题栏和改动工具栏因此只保留左侧 92px 避让，删除了旧的右侧 132／144px 预留与 Windows 自绘的右上角按钮。键盘快捷键文字仍按平台显示（`⌘ P` vs `Ctrl P`）：那是真实按键说明，写错会误导操作。
+以 Mac Desktop 为应用内容的视觉基准。两端共用 UI SC、UI Symbols、PI Emoji 和 JetBrains Mono，以及相同的字号、字重和行高。Wiki 改动、扩展编辑器和系统提示词中的等宽文本使用 `--mono`，中英文混排与 Emoji 按同一顺序选用包内字体。首页标语优先使用包内 Source Serif 4，由 Chromium 合成斜体。Windows 使用右上角窗口按钮，macOS 使用左侧原生红绿灯，快捷键提示按平台显示。文件栏标题位于窗口按钮下方时，两端使用相同的内边距与菜单尺寸。
 
 `tests/windows-rendering-test.mjs` 在真实 Electron 中输出字体、聊天与文件栏样式、文档／小记／设置的 CSS 场景测量和明暗截图。`verify-rendering.yml` 汇总同版本 Mac 与 Windows 100%／125%／150% 产物，由 `scripts/compare-desktop-rendering.mjs` 检查字体、换行数、文字宽度、颜色与控件盒尺寸；数值尺寸容差为 1 CSS px。`Range.getClientRects()` 的字形像素高度受系统字体栅格化影响，不作为 CSS 盒尺寸比较。内置字体覆盖范围内已无系统回退，因此 Emoji 与符号字形也应一致；仍不做逐像素比较的是屏幕缩放的亚像素差异与内置子集之外的文种。CSS 场景测量不替代各页面已有的交互回归。
 ### ChatGPT / Kimi 账号模型入口
