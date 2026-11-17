@@ -44,8 +44,8 @@ test("default skill uses the selected model and native tools for design, impleme
 			expect(cursor).toBe(steps.length);
 		};
 		await drive("/skill:design-first 修正加法并运行测试，先给我设计和任务。", [
-			() => call("write", { path: doc + "design.md", content: "# Requirement and design v1\nMake sum(2,3) return 5. Replace subtraction with addition. Acceptance: node --test --test-reporter=tap sum.test.cjs.\n" }),
-			() => call("write", { path: doc + "tasks.md", content: "- [ ] T1 Fix addition\n- [ ] T2 Run test and record actual result\n" }),
+			() => call("write", { path: doc + "design.md", content: "# Design v1\n| Requirement ID | Requested behavior | Scenario | Public seam / acceptance evidence |\n| R1 | Make sum(2,3) return 5 | Given 2 and 3, when sum is called, then return 5 | exports.sum; node --test --test-reporter=tap sum.test.cjs |\nSpec impact: no canonical spec exists; retain R1 in this design.\n" }),
+			() => call("write", { path: doc + "tasks.md", content: "# Tasks\n| Task ID | Requirement ID | Deliverable | Acceptance / verification |\n| T1 | R1 | Fix addition | sum(2,3) returns 5 |\n| T2 | R1 | Run test and record actual result | TAP and exit codes in outcome.md |\n" }),
 			() => call("write", { path: doc + "progress.md", content: "change_id: addition\nstage_hint: awaiting_confirmation\nnext_action: Confirm design v1 before editing source\n" }),
 			() => say("设计 v1 和任务已保存，等待确认。"),
 		]);
@@ -54,8 +54,10 @@ test("default skill uses the selected model and native tools for design, impleme
 			() => call("bash", { command: "node --test --test-reporter=tap sum.test.cjs" }),
 			() => call("edit", { path: "sum.cjs", oldText: "a - b", newText: "a + b" }),
 			() => call("bash", { command: "node --test --test-reporter=tap sum.test.cjs" }),
-			() => call("write", { path: doc + "outcome.md", content: `# Actual verification\nCommand: node --test --test-reporter=tap sum.test.cjs\nRecorded: ${new Date().toISOString()}\nEnvironment: ${process.version}, ${process.platform}\n\n${results.filter(result => result.includes('"toolName":"bash"')).join("\n\n")}\n` }),
-			() => call("write", { path: doc + "tasks.md", content: "- [x] T1 Fix addition\n- [x] T2 Run test; actual failure and pass saved in outcome.md\n" }),
+			() => call("read", { path: "sum.cjs" }),
+			() => call("read", { path: doc + "design.md" }),
+			() => call("write", { path: doc + "outcome.md", content: `# Acceptance coverage\n| Requirement ID | Implementation | Scenario / actual evidence | Status |\n| R1 | sum uses addition | Red then green TAP output below | verified |\n# Review\nCode quality: reviewed the actual a - b to a + b edit and current sum.cjs; no unrelated changes.\nDesign/spec: reread design v1 and matched R1 to the implementation; no canonical spec exists.\n# Actual verification\nCommand: node --test --test-reporter=tap sum.test.cjs\nRecorded: ${new Date().toISOString()}\nEnvironment: ${process.version}, ${process.platform}\n\n${results.filter(result => result.includes('"toolName":"bash"')).join("\n\n")}\n` }),
+			() => call("write", { path: doc + "tasks.md", content: "# Tasks\n| Task ID | Requirement ID | Deliverable | Acceptance / verification |\n| T1 | R1 | Fix addition | sum(2,3) returns 5 |\n| T2 | R1 | Run test and record actual result | Red and green evidence saved in outcome.md |\n" }),
 			() => call("write", { path: doc + "progress.md", content: "change_id: addition\nstage_hint: completed\nevidence: outcome.md\nnext_action: Recheck current code before reusing historical test results\n" }),
 			() => say("源码、测试和结果记录已完成。"),
 		]);
@@ -63,6 +65,9 @@ test("default skill uses the selected model and native tools for design, impleme
 		expect(outcome).toContain("not ok 1");
 		expect(outcome).toContain("# pass 1");
 		expect(outcome).toContain("exited with code 1");
+		expect(outcome).toContain("| R1 |");
+		expect(outcome).toContain("Code quality:");
+		expect(outcome).toContain("Design/spec:");
 		expect(await readFile(join(root, "sum.cjs"), "utf8")).toContain("a + b");
 		session.dispose();
 		session = await create();

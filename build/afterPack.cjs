@@ -31,9 +31,19 @@ module.exports = async function afterPack(context) {
 	}
 	const expectedSdk = manifest.dependencies?.["@earendil-works/pi-coding-agent"];
 	const skillRoot = path.join(packagedRoot, "assets/skills/design-first");
-	for (const reference of ["SKILL.md", ...["bug-fix", "feat"].map(name => `commands/${name}.md`), ...["investigation", "how", "why", "domain-modeling", "codebase-design", "focused-grilling", "teach", "verification", "resume-work", "reconcile-design", "small-changes"].map(name => `references/${name}.md`), ...["design", "tasks", "progress", "outcome", "design-change-proposal", "adr"].map(name => `templates/${name}.md`)]) {
-		const file = path.join(skillRoot, reference);
-		if (!fs.existsSync(file) || !fs.statSync(file).isFile() || !fs.statSync(file).size) throw new Error(`Packaged Design First resource is missing: ${reference}`);
+	const sourceSkillRoot = path.join(context.packager.projectDir, "assets/skills/design-first");
+	const resourceFiles = root => !fs.existsSync(root) ? [] : fs.readdirSync(root, { recursive: true })
+		.map(String).filter(reference => fs.statSync(path.join(root, reference)).isFile())
+		.map(reference => reference.split(path.sep).join("/")).sort();
+	const expectedResources = resourceFiles(sourceSkillRoot);
+	if (!expectedResources.length) throw new Error("Source Design First resources are missing");
+	const packagedResources = resourceFiles(skillRoot), expected = new Set(expectedResources), packaged = new Set(packagedResources);
+	for (const reference of expectedResources) {
+		if (!packaged.has(reference)) throw new Error(`Packaged Design First resource is missing: ${reference}`);
+		if (!fs.statSync(path.join(skillRoot, reference)).size) throw new Error(`Packaged Design First resource is empty: ${reference}`);
+	}
+	for (const reference of packagedResources) {
+		if (!expected.has(reference)) throw new Error(`Packaged Design First resource is unexpected: ${reference}`);
 	}
 	const actualSdk = JSON.parse(fs.readFileSync(path.join(sdkRoot, "package.json"), "utf8")).version;
 	if (!/^\d+\.\d+\.\d+(?:-[\w.-]+)?$/.test(expectedSdk ?? "") || actualSdk !== expectedSdk) {

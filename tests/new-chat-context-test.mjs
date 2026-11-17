@@ -14,6 +14,10 @@ import { createAgentSessionServices, createAgentSessionFromServices, SessionMana
 import { testEnv } from "./lib/test-env.mjs";
 
 const PROTOCOL_ONLY = process.argv.includes("--protocol-only");
+const waitForUsageReset = page => page.waitForFunction(() => {
+	const usage = document.querySelector(".usage-control");
+	return !usage || (["—", "0%"].includes(usage.querySelector(".usage-percent")?.textContent ?? "") && usage.querySelector(".usage-meter i")?.style.width === "0%");
+});
 const PORT = Number(process.argv.slice(2).find((arg) => /^\d+$/.test(arg)) || 8967);
 const MOCK_PORT = PORT + 1;
 if (PORT < 8900 || PORT >= 65535) throw new Error("Use isolated test ports >= 8900");
@@ -285,10 +289,7 @@ try {
 	if (page) {
 		for (const wire of held) downstream.send(wire);
 		// The current warming UI may retain an empty usage trigger; old occupancy must clear.
-		await page.waitForFunction(() => {
-			const usage = document.querySelector(".usage-control");
-			return !usage || (["—", "0%"].includes(usage.querySelector(".usage-percent")?.textContent ?? "") && usage.querySelector(".usage-meter i")?.style.width === "0%");
-		});
+		await waitForUsageReset(page);
 		if (await page.locator(".main").getByText("OLD_CONTEXT_SENTINEL", { exact: true }).isVisible()) throw new Error("/new retained old messages in UI");
 		// History identity/count is checked through sessions below. The current sidebar
 		// lists Workspace-scoped sessions, so an unassigned cwd has no session rows.
@@ -359,20 +360,14 @@ try {
 	await client.waitForState((state) => state.conversationId !== resumedId);
 	if (client.messages.length || client.state.stats.tokens.total !== 0) throw new Error("new_chat did not open an empty conversation");
 	if (page) {
-		await page.waitForFunction(() => {
-			const usage = document.querySelector(".usage-control");
-			return !usage || (["—", "0%"].includes(usage.querySelector(".usage-percent")?.textContent ?? "") && usage.querySelector(".usage-meter i")?.style.width === "0%");
-		});
+		await waitForUsageReset(page);
 		if (await page.locator(".main").getByText("OLD_CONTEXT_SENTINEL", { exact: true }).isVisible()) throw new Error("UI retained old messages while new_chat snapshot was delayed");
 		for (let i = 0; i < 20 && !resyncs; i++) await sleep(50);
 		if (!resyncs) throw new Error("Missing snapshot recovery request");
 		if (await page.locator(".usage-cache-short").count()) throw new Error("Input toolbar retained old cache usage");
 		hold = false;
 		for (const wire of held) downstream.send(wire);
-		await page.waitForFunction(() => {
-			const usage = document.querySelector(".usage-control");
-			return !usage || (["—", "0%"].includes(usage.querySelector(".usage-percent")?.textContent ?? "") && usage.querySelector(".usage-meter i")?.style.width === "0%");
-		});
+		await waitForUsageReset(page);
 	}
 	console.log("✓ new_chat opens a separate conversation without stale UI during delayed snapshots");
 	console.log("✓ native /new starts empty; old history remains restorable; next request contains no old context");

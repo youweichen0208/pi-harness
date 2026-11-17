@@ -15,6 +15,62 @@ function temporary() {
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
 
 describe("bundled Design First resources", () => {
+	it("links stable requirements to scenarios, tasks and outcome evidence", () => {
+		const root = join(designFirstSkillPath(resolve(".")), "..");
+		const design = readFileSync(join(root, "templates/design.md"), "utf8");
+		const tasks = readFileSync(join(root, "templates/tasks.md"), "utf8");
+		const outcome = readFileSync(join(root, "templates/outcome.md"), "utf8");
+		const smallChanges = readFileSync(join(root, "references/small-changes.md"), "utf8");
+		expect(design).toContain("Requirement ID");
+		expect(design).toContain("Scenario");
+		expect(design).toContain("## Domain model");
+		expect(tasks).toContain("| Task ID | Requirement ID |");
+		expect(outcome).toContain("Requirement ID");
+		expect(smallChanges).toContain("upgrades and downgrades");
+	});
+
+	it("keeps implementation, review and confirmation inside the approved design", () => {
+		const root = join(designFirstSkillPath(resolve(".")), "..");
+		const skill = readFileSync(join(root, "SKILL.md"), "utf8");
+		const verification = readFileSync(join(root, "references/verification.md"), "utf8");
+		expect(verification).toContain("red → minimal green");
+		expect(verification).toContain("## Code quality review");
+		expect(verification).toContain("## Design and spec review");
+		expect(skill).toContain("before editing business code");
+		expect(skill).toContain("not implementation authorization by itself");
+		for (const command of ["bug-fix", "feat"]) {
+			expect(readFileSync(join(root, `commands/${command}.md`), "utf8")).toContain("does not authorize implementation by itself");
+		}
+	});
+
+	it("adapts to existing OpenSpec conventions without installing or auto-archiving", () => {
+		const root = join(designFirstSkillPath(resolve(".")), "..");
+		const reconcile = readFileSync(join(root, "references/reconcile-design.md"), "utf8");
+		expect(reconcile).toContain("### Requirement:");
+		expect(reconcile).toContain("#### Scenario:");
+		expect(reconcile).toContain("Do not install OpenSpec");
+		expect(reconcile).toContain("not_run");
+		expect(reconcile).toContain("explicit archive request");
+	});
+
+	it("resolves every disclosed local Markdown link", () => {
+		const root = join(designFirstSkillPath(resolve(".")), "..");
+		const pending = [join(root, "SKILL.md")], seen = new Set<string>();
+		while (pending.length) {
+			const file = pending.pop()!;
+			if (seen.has(file)) continue;
+			seen.add(file);
+			const content = readFileSync(file, "utf8");
+			for (const match of content.matchAll(/\[[^]]*\]\(([^)]+)\)/g)) {
+				const reference = match[1].split("#")[0];
+				if (!reference || /^[a-z]+:/i.test(reference)) continue;
+				const target = resolve(file, "..", reference);
+				expect(() => readFileSync(target)).not.toThrow();
+				if (target.endsWith(".md")) pending.push(target);
+			}
+		}
+	});
+
 	it("preserves the native same-name winner and reports the collision", async () => {
 		const root = temporary(), userSkill = join(root, "skills/design-first/SKILL.md");
 		mkdirSync(join(root, "skills/design-first"), { recursive: true });

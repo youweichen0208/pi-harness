@@ -1,10 +1,16 @@
 # Outcome
 
 ## Acceptance coverage
-Map requirements to implementation and evidence. Distinguish implemented from verified.
+| Requirement ID | Implementation | Scenario / actual evidence | Status |
+| --- | --- | --- | --- |
+
+Distinguish implemented from verified; every requirement must be accounted for.
 
 ## Actual verification
 Record commands, times, inputs, environment, exit codes and limitations. Clearly label checks not run.
+
+## Review
+Record the code-quality findings and design/spec compliance findings separately, including the reviewed diff identity, resolutions and any unreviewed limitations.
 
 ## Deviations and remaining work
 Explain material differences, unresolved risks and the next action.

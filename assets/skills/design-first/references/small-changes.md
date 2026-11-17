@@ -1,6 +1,6 @@
 # Small features and bug fixes
 
-Use the shared confirmation, native-tool implementation and verification workflow. Keep Quick work in one change document with a short task list and evidence; split into the standard templates only when useful. A short user description does not prove the impact is small: widen to Standard/Deep when investigation reveals cross-module contracts, data migration or consequential compatibility changes.
+Use the shared confirmation, native-tool implementation and verification workflow. Keep Quick work in one change document with a short task list and evidence; split into the standard templates only when useful. A short user description does not prove the impact is small: widen to Standard/Deep when investigation reveals cross-module contracts, data migration or consequential compatibility changes. Record upgrades and downgrades in that document with the previous/next level, reason, evidence and time; a route change must not bypass review.
 
 ## Small feature
 
