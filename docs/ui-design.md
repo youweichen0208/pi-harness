@@ -832,9 +832,9 @@ SCM 更改列表（2026-11-12）：界面不再展示工作树清单；仓库工
 
 ## Desktop 跨平台视觉基准（2026-11-12）
 
-以 Mac Desktop 为应用内容的视觉基准。两端共用 UI SC、UI Symbols、PI Emoji 和 JetBrains Mono，以及相同的字号、字重和行高。Wiki 改动、扩展编辑器和系统提示词中的等宽文本使用 `--mono`，中英文混排与 Emoji 按同一顺序选用包内字体。首页标语优先使用包内 Source Serif 4，由 Chromium 合成斜体。Windows 使用右上角窗口按钮，macOS 使用左侧原生红绿灯，快捷键提示按平台显示。文件栏标题位于窗口按钮下方时，两端使用相同的内边距与菜单尺寸。
+以 v1.34.1 的 Mac Desktop 为应用内容的视觉基准。正文沿用该版本的 UI SC 字体文件和字重，Mac 上的引号、代码、终端与 Emoji 按该版本顺序回退。首页标语优先使用 Times New Roman 斜体。Playground 英文代码优先使用 JetBrains Mono，中文注释使用 Sarasa Mono SC 风格。Windows 使用同款正文字体、共用页面布局和右上角窗口按钮。验收按实际渲染的字形、字体来源、行宽及布局区分包内字体和系统字体。
 
-`tests/windows-rendering-test.mjs` 在真实 Electron 中输出字体、聊天与文件栏样式、文档／小记／设置的 CSS 场景测量和明暗截图。`verify-rendering.yml` 汇总同版本 Mac 与 Windows 100%／125%／150% 产物，由 `scripts/compare-desktop-rendering.mjs` 检查字体、换行数、文字宽度、颜色与控件盒尺寸；数值尺寸容差为 1 CSS px。`Range.getClientRects()` 的字形像素高度受系统字体栅格化影响，不作为 CSS 盒尺寸比较。内置字体覆盖范围内已无系统回退，因此 Emoji 与符号字形也应一致；仍不做逐像素比较的是屏幕缩放的亚像素差异与内置子集之外的文种。CSS 场景测量不替代各页面已有的交互回归。
+`tests/windows-rendering-test.mjs` 在真实 Electron 中输出字体、聊天与文件栏样式、文档／小记／设置的 CSS 场景测量和明暗截图。`verify-rendering.yml` 汇总同版本 Mac 与 Windows 100%／125%／150% 产物，由 `scripts/compare-desktop-rendering.mjs` 检查字体、换行数、文字宽度、颜色与控件盒尺寸；数值尺寸容差为 1 CSS px。`Range.getClientRects()` 的字形像素高度受系统字体栅格化影响，不作为 CSS 盒尺寸比较。系统 Emoji、补充字形及抗锯齿按平台显示。CSS 场景测量不替代各页面已有的交互回归。
 ### ChatGPT / Kimi 账号模型入口
 
 共用模型菜单保留 ChatGPT 与 Kimi 紧凑单行入口，不显示额外的「登录账号」文字；未登录时点击名称授权，已登录时点击名称管理账号。所有可用模型统一呈现；来源采用系统字体，底部使用简短的刷新与管理入口。账号状态来自原生 SDK 认证类型与不含敏感信息的凭据元数据，API Key 不标为账号登录。登录成功不切换模型、不发送聊天请求；目录不代表逐项验证订阅权限。已保存原生密钥时先确认替换，服务端再次检查；来源停用时提供管理入口。协议 v56 的 models 携带 accounts 状态摘要，login_provider 支持 confirmReplaceKey。

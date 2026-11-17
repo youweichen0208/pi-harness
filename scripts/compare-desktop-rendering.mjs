@@ -28,20 +28,32 @@ function compare(expected, actual, path) {
 	} else if (expected && typeof expected === 'object') {
 		assert(actual && typeof actual === 'object', path);
 		for (const key of Object.keys(expected)) compare(expected[key], actual[key], `${path}.${key}`);
+	} else if (/(?:\.fontFamily|\.family)$/.test(path)) {
+		// The per-OS fallback lists intentionally differ. Compare the first choice;
+		// the rendering test separately verifies native SF Mono vs Windows JetBrains Mono in xterm.
+		if (!path.endsWith('.ui.terminal.fontFamily')) assert.equal(actual.split(',')[0], expected.split(',')[0], path);
 	} else assert.equal(actual, expected, path);
 }
-for (const {file, scale} of windows) {
+function commonFonts(metrics) {
+	return [...new Set(metrics.fonts.map(font => font.url)
+		.filter(url => url.includes('/ui-sc-') || url.includes('/fonts/jetbrains-mono/')))].sort();
+}
+function sharedFace(metrics, sample, family) {
+	const face = metrics.faces[sample]?.find(font => font.familyName === family);
+	assert(face, `Missing ${family} in ${metrics.platform} ${sample}`);
+	return { family: face.familyName, bundled: face.isCustomFont };
+}
+for (const { file, scale } of windows) {
 	const win = read(file);
 	assert.equal(win.platform, 'win32');
 	assert.equal(mac.dpr, 1);
 	assert.equal(win.dpr, scale / 100);
-	const urls = metrics => [...new Set(metrics.fonts.map(font => font.url))].sort();
-	assert.deepEqual(urls(win), urls(mac), 'same bundled font resources');
+	assert.deepEqual(commonFonts(win), commonFonts(mac), 'same bundled UI SC and JetBrains Mono resources');
 	assert.equal(win.electron, mac.electron, 'Compare the same Electron version');
-	for (const key of ['width', 'height', 'bodySize', 'typography', 'surfaces', 'ui', 'faces']) compare(mac[key], win[key], `${file}.${key}`);
-	for (const key of ['renderedFonts', 'monoFonts']) {
-		const custom = fonts => [...new Set(fonts.filter(font => font.isCustomFont).map(font => font.familyName))].sort();
-		assert.deepEqual(custom(win[key]), custom(mac[key]), `${file}.${key}: actual bundled fonts`);
+	for (const key of ['width', 'height', 'bodySize', 'typography', 'surfaces', 'ui']) compare(mac[key], win[key], `${file}.${key}`);
+	for (const [sample, family] of Object.entries({ motto: 'Times New Roman', mottoEmphasis: 'Times New Roman', code: 'JetBrains Mono', notes: 'UI SC', wiki: 'UI SC', settingsTab: 'UI SC', playground: 'JetBrains Mono' })) {
+		assert.deepEqual(sharedFace(win, sample, family), sharedFace(mac, sample, family), `${file}.${sample}: actual primary face`);
 	}
+	assert.deepEqual(sharedFace(win, 'playground', 'PI Playground CJK'), sharedFace(mac, 'playground', 'PI Playground CJK'), 'same Sarasa Chinese glyphs in the editor');
 	console.log(`PASS ${file}: matches macOS typography and component styles`);
 }

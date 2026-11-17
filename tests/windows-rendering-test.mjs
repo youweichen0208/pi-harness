@@ -89,15 +89,24 @@ try {
 			assert.fail(`No stable rendered node for ${selector}`);
 		};
 		const faces = {};
+		const mac = process.platform === 'darwin';
+		const emoji = mac ? 'Apple Color Emoji' : 'Noto Color Emoji';
 		const measureFonts = async (name, selector, expected) => {
 			const { fonts } = await platformFonts(selector);
 			const used = fonts.filter(font => font.glyphCount > 0);
-			assert(used.length && used.every(font => font.isCustomFont), `${name}: unexpected system fallback: ${JSON.stringify(used)}`);
-			for (const family of expected) assert(used.some(font => font.familyName === family), `${name}: expected ${family}: ${JSON.stringify(used)}`);
-			faces[name] = [...new Set(used.map(font => font.familyName))].sort();
+			assert(used.length, `${name}: no text rendered`);
+			for (const alternatives of expected) {
+				const choices = [alternatives].flat();
+				assert(used.some(font => choices.includes(font.familyName)), `${name}: expected ${choices.join(' or ')}: ${JSON.stringify(used)}`);
+			}
+			faces[name] = used.map(({ familyName, postScriptName, isCustomFont }) => ({ familyName, postScriptName, isCustomFont }));
+			return used;
 		};
-		await measureFonts('motto', '.welcome-motto > span:first-child', ['Source Serif 4']);
-		await measureFonts('mottoEmphasis', '.welcome-motto em', ['Source Serif 4']);
+		for (const [name, selector] of [['motto', '.welcome-motto > span:first-child'], ['mottoEmphasis', '.welcome-motto em']]) {
+			const used = await measureFonts(name, selector, ['Times New Roman']);
+			assert(used.every(font => !font.isCustomFont && font.familyName === 'Times New Roman'), `${name}: use the native italic face from v1.34.1`);
+			assert.equal(await page.locator(selector).evaluate(el => getComputedStyle(el).fontStyle), 'italic');
+		}
 		const ui = {};
 		const sampleControl = async (name, selector, size = false) => {
 			const el = page.locator(selector).first();
@@ -132,13 +141,8 @@ try {
 		await page.locator('[data-tree-node=".ruff_cache"] .file-name').waitFor();
 		const monoFonts = await platformFonts('.msg-text pre code');
 		assert(monoFonts.fonts.some(font => font.familyName === 'JetBrains Mono' && font.isCustomFont), JSON.stringify(monoFonts));
-		// Every mark the UI writes must come from a bundled face: UI SC for text and
-		// CJK, UI Symbols for monochrome signs, PI Emoji for colour emoji. A glyph
-		// resolved by a system face is the one thing that still differs per OS.
+		// v1.34.1 uses native fallbacks on Mac. Windows bundles symbol/emoji faces.
 		await page.evaluate(async () => {
-			await document.fonts.load('400 16px "UI Symbols"', '✗↵⌄');
-			await document.fonts.load('400 16px "PI Emoji"', '✅');
-			await document.fonts.ready;
 			const probe = document.createElement('div');
 			probe.id = 'glyph-probe';
 			probe.style.cssText = 'position:fixed;left:0;top:0;font-family:var(--sans);font-size:24px;white-space:nowrap';
@@ -148,8 +152,8 @@ try {
 		// Chromium reports no faces for a node it has not painted yet.
 		await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 		const glyphCoverage = await platformFonts('#glyph-probe');
-		const systemGlyphs = glyphCoverage.fonts.filter(font => !font.isCustomFont && font.glyphCount > 0);
-		assert.deepEqual(systemGlyphs, [], `UI glyphs must not fall back to a system font: ${JSON.stringify(glyphCoverage.fonts)}`);
+		assert(glyphCoverage.fonts.some(font => font.familyName === emoji && font.glyphCount > 0), JSON.stringify(glyphCoverage.fonts));
+		if (!mac) assert(glyphCoverage.fonts.some(font => font.familyName === 'UI Symbols' && font.isCustomFont && font.glyphCount > 0), JSON.stringify(glyphCoverage.fonts));
 		assert(glyphCoverage.fonts.some(font => font.isCustomFont && font.glyphCount > 0));
 		await page.evaluate(() => document.querySelector('#glyph-probe')?.remove());
 		if (process.platform !== 'darwin') {
@@ -281,7 +285,9 @@ try {
 		}
 
 		// Use real component nodes to verify the cascade and the glyph faces that actually painted.
-		await measureFonts('code', '.msg-text pre code', ['JetBrains Mono', 'UI SC', 'Noto Color Emoji']);
+		await measureFonts('code', '.msg-text pre code', mac
+			? ['JetBrains Mono', emoji]
+			: ['JetBrains Mono', 'UI SC', emoji]);
 		await page.locator('.topbar-more .chip').click();
 		await page.locator('.dd-menu').getByRole('button', { name: '所有设置', exact: true }).click();
 		await sampleControl('settingsTab', '.settings-tab.active', true);
@@ -300,7 +306,9 @@ try {
 		await terminalRow.waitFor();
 		await terminalRow.evaluate(el => el.dataset.renderSample = 'terminal');
 		await page.evaluate(() => document.fonts.ready);
-		await measureFonts('terminal', '[data-render-sample="terminal"]', ['JetBrains Mono', 'UI SC', 'Noto Color Emoji']);
+		await measureFonts('terminal', '[data-render-sample="terminal"]', mac
+			? [['SF Mono', '.SF NS Mono', 'JetBrains Mono'], emoji]
+			: ['JetBrains Mono', 'UI SC', emoji]);
 		// xterm computes per-DPI glyph spacing and line boxes after fitting.
 		// Compare the font and active terminal palette independently of that adjustment.
 		ui.terminal = await terminalRow.evaluate(row => {
@@ -315,12 +323,25 @@ try {
 		const noteEditor = page.locator('.notes-editor .fp-rich-document');
 		await noteEditor.fill(mixed);
 		await page.evaluate(() => document.fonts.ready);
-		await measureFonts('notes', '.notes-editor .fp-rich-document', ['UI SC', 'Noto Color Emoji']);
+		await measureFonts('notes', '.notes-editor .fp-rich-document', ['UI SC', emoji]);
 		await sampleControl('noteTitle', '.notes-editor .note-title');
 		await sampleControl('noteBody', '.notes-editor .fp-rich-document');
 		await noteEditor.blur();
 		await page.locator('.notes-editor [role=status]').filter({ hasText: '已保存' }).waitFor();
 		await page.screenshot({ path: join(output, `${prefix}-notes.png`) });
+
+		await page.getByRole('button', { name: 'Playground', exact: true }).click();
+		const editor = page.locator('.scratch-editor-cm .cm-content');
+		await editor.fill(`print("${mixed}")\n# ${mixed}`);
+		const line = '.scratch-editor-cm .cm-line';
+		await page.locator(line).filter({ hasText: `# ${mixed}` }).waitFor();
+		await page.evaluate(() => document.fonts.ready);
+		const regular = await measureFonts('playground', line, ['JetBrains Mono', 'PI Playground CJK', emoji]);
+		const italic = await measureFonts('playgroundComment', line + ':nth-child(2)', ['JetBrains Mono', 'PI Playground CJK', emoji]);
+		const sarasaFace = fonts => fonts.find(font => font.familyName === 'PI Playground CJK' && font.isCustomFont)?.postScriptName;
+		assert(sarasaFace(regular) && sarasaFace(italic) && sarasaFace(regular) !== sarasaFace(italic), 'editor uses separate bundled regular and italic Sarasa glyphs');
+		await sampleControl('playground', line);
+		await page.screenshot({ path: join(output, `${prefix}-playground.png`) });
 
 		// Exercise the dedicated document reader with its actual typography selectors.
 		const wikiUrl = new URL(page.url());
@@ -335,7 +356,7 @@ try {
 		await sampleControl('wiki', paragraph);
 		await page.screenshot({ path: join(output, `${prefix}-wiki.png`) });
 		assert.deepEqual(failures, [], 'all requested font resources loaded');
-		writeFileSync(join(output, `${prefix}-metrics.json`), JSON.stringify({ ...metrics, electron: electronVersion, faces, ui, typography, surfaces, nativeWindow, fonts, renderedFonts: rendered.fonts, monoFonts: monoFonts.fonts, scrollbar: { resting, hovered, dragged } }, null, 2));
+		writeFileSync(join(output, `${prefix}-metrics.json`), JSON.stringify({ ...metrics, electron: electronVersion, faces, ui, typography, surfaces, nativeWindow, fonts, renderedFonts: rendered.fonts, glyphCoverage: glyphCoverage.fonts, monoFonts: monoFonts.fonts, scrollbar: { resting, hovered, dragged } }, null, 2));
 		await app.close(); app = undefined;
 		console.log(`PASS actual ${prefix} Electron: platform, fonts, SVG icons, labels, 1440x900 screenshots`);
 	}

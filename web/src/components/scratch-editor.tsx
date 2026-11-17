@@ -12,10 +12,6 @@ import { Decoration, EditorView, ViewPlugin, keymap, placeholder as cmPlaceholde
 import { basicSetup } from "codemirror";
 import { THEME_CHANGE_EVENT } from "../theme";
 
-/** The code surface's own font stack (Light 2026). JetBrains Mono is bundled and
- * UI SC covers CJK code comments, so both platforms shape identical text; the
- * generic monospace remains the last resort. */
-export const PLAYGROUND_FONT = '"JetBrains Mono", "UI SC", "UI Symbols", "PI Emoji", monospace';
 export const PLAYGROUND_TAB_SIZE = 4;
 
 /**
@@ -39,7 +35,7 @@ function buildEditorTheme(surface: HTMLElement): Extension {
 		"&": { backgroundColor: paper, color: ink },
 		// CodeMirror measures layout from these declarations; the stylesheet's
 		// .cm-scroller rule must agree or the caret drifts from the glyphs.
-		".cm-scroller": { fontFamily: PLAYGROUND_FONT, tabSize: String(PLAYGROUND_TAB_SIZE) },
+		".cm-scroller": { fontFamily: "var(--pg-font)", tabSize: String(PLAYGROUND_TAB_SIZE) },
 		".cm-content": { caretColor: ink, padding: "0" },
 		".cm-cursor, .cm-dropCursor": { borderLeftColor: ink },
 		"&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection": { backgroundColor: v("--pg-code-chip") },

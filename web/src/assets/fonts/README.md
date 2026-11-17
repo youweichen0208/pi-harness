@@ -1,8 +1,5 @@
 # UI SC / UI Symbols
 
-Two bundled faces replace the per-OS fallback that used to make the same text
-look different on macOS and Windows.
-
 ## UI SC
 
 Noto Sans SC, renamed UI SC after subsetting. Licensed under SIL OFL 1.1; see OFL.txt.
@@ -15,14 +12,9 @@ Rebuild with Python, fonttools 4.60.2, brotli 1.2.0 and zopfli 0.2.3.post1:
 python scripts/build-ui-fonts.py /path/to/NotoSansSC-VF.ttf /path/to/OFL.txt
 ```
 
-The builder instantiates real 400/500/600 weights and includes GB2312 level-one
-and level-two characters, Han characters from UI sources, Latin, GB2312
-punctuation, kana, the full-width forms, arrows, mathematical operators, box
-drawing, geometric shapes, dingbats and the currency/letterlike blocks. Noto Sans
-SC has no accented Greek, extended Latin or full Cyrillic, so those come from UI
-Symbols below. `manifest.json` records upstream and output hashes, weights and the
-character set the shipped files actually contain (clipped to the real cmap, so it
-never claims a codepoint the subsetter dropped).
+The shipped 400/500/600 files and character repertoire come from v1.34.1.
+`manifest.json` records their SHA-256 hashes and the fixed subsetting input.
+The macOS text styles preserve the fallback faces used by that release.
 
 ## UI Symbols
 

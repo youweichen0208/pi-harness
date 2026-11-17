@@ -66,10 +66,7 @@ export function TermXterm({
 			cols,
 			rows,
 			theme: buildTermTheme(container),
-			// Same bundled stack as --mono: terminal glyphs, CJK width and the emoji
-			// agent CLIs print all stay inside the package on both platforms.
-			fontFamily:
-				'"JetBrains Mono", "UI SC", "UI Symbols", "PI Emoji", ui-monospace, monospace',
+			fontFamily: getComputedStyle(container).getPropertyValue("--terminal-font").trim(),
 			fontSize: 14,
 			lineHeight: 1.2,
 			// xterm halves this target for ANSI dim text: 9 preserves a 4.5
