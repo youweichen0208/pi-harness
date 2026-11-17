@@ -190,7 +190,7 @@ export const ChatInput = memo(function ChatInput({
 	// A Run's output is appended, never substituted: handing a result to pi must
 	// not destroy a draft the user is halfway through writing.
 	useComposerModelSettings(activeConversationId, active && ready, onManageModels);
-	useComposerAppend(activeConversationId, active, useCallback((text: string, placement: "append" | "skill") => setText(value => insertComposerText(value, text, placement)), []));
+	useComposerAppend(activeConversationId, active, useCallback((text: string, placement: "append" | "command") => setText(value => insertComposerText(value, text, placement)), []));
 	useEffect(() => {
 		const pending = pendingSubmit.current;
 		if (!pending || promptResult?.requestId !== pending.id) return;

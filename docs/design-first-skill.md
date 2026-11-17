@@ -1,22 +1,22 @@
 # Design First Skill 最小交付
 
-这次交付是 pi-harness 内置的文档工作流。沿用当前普通会话的模型与原生工具，默认可用，不要求 ChangeStore、受管理执行或设计工作台。
+这次交付是 pi-harness 内置的文档工作流。沿用当前普通会话的模型与原生工具，默认可用，不要求 ChangeStore、受管理执行或设计工作台。面向使用的命令示例见 [Design First 使用指南](design-first-usage.md)。
 
 ## 使用
 
 - `/bug-fix <错误现象和预期行为>`：复现、诊断、保存修复方案与任务，确认后修复并执行回归检查。
 - `/feat <小功能>`：保存新增行为、兼容边界、验收和任务，确认后实现与测试。
-- `/skill:design-first <需求>`：完整设计流程；`/skill:design-first 恢复 <change-id>` 从文档和当前源码恢复。
+- `/design <需求>`：完整设计流程；`/design 恢复 <change-id>` 从文档和当前源码恢复。
 
-确认属于 Skill 约定，不是强制工具锁。创建和恢复共用“明确指定位置 → 项目约定（如 OpenSpec）→ `docs/changes/` 回退”的顺序。简单改动采用 Quick，可把设计、任务、进度和结果合在一份 `design.md`；Standard/Deep 使用独立文件。需求以稳定 Req ID 和可观察 Scenario 贯穿任务、实现与结果，分级升级或降级记录原因和证据。确认前先保存完整提案；`/feat`、`/bug-fix` 或 `/skill:design-first` 本身不构成实施授权，当前会话确认必须对应已保存并展示的 design/spec 版本，历史确认不作为新会话的执行授权。
+确认属于 Skill 约定，不是强制工具锁。创建和恢复共用“明确指定位置 → 项目约定（如 OpenSpec）→ `docs/changes/` 回退”的顺序。简单改动采用 Quick，可把设计、任务、进度和结果合在一份 `design.md`；Standard/Deep 使用独立文件。需求以稳定 Req ID 和可观察 Scenario 贯穿任务、实现与结果，分级升级或降级记录原因和证据。确认前先保存完整提案；`/feat`、`/bug-fix` 或 `/design` 本身不构成实施授权，当前会话确认必须对应已保存并展示的 design/spec 版本，历史确认不作为新会话的执行授权。
 
 实现前读取验证指引；有合适公共测试边界时按 vertical slice 执行 red → minimal green，没有时记录原因并验证真实 HTTP/CLI/浏览器等行为。完成后分别审查代码质量与设计/spec 符合度。项目已有 OpenSpec 约定时使用其 Requirement/Scenario delta 和校验方式；未安装或不能校验时记为 not_run/pending，不自动安装或归档。新增或补齐契约时更新 spec；修回已有准确契约则保留正文，在变更记录解释原因；有未决事项则记为 pending。测试记录真实命令、时间、环境、退出码及输入身份。源码发生变化后，旧通过结论只作为历史证据。
 
-开关在设置的 Skills 和内置扩展列表共用，变更后新建会话或 reload。已明确关闭的设置保留；同名用户 Skill/模板/扩展沿用原生优先级。Wiki、SSH 节点、子代理和 Playground 不加载此资源。
+开关在设置的 Skills 和内置扩展列表共用，变更后新建会话或 reload。已明确关闭的设置保留；同名用户 Skill/模板/扩展沿用原生优先级。Wiki、SSH 节点、子代理和 Playground 不加载此资源。用户扩展或模板占用 `/design` 时保留用户实现，内置卡片显示冲突并禁用准备动作。
 
 ## 实现边界
 
-- `assets/skills/design-first/`：1 个入口、11 份按需指引、6 份文档模板、2 份原生命令模板。
+- `assets/skills/design-first/`：1 个入口、11 份按需指引、6 份文档模板、3 份原生命令模板，共 21 个资源。
 - `server/design-first-resources.ts`：定位随包资源、开关和 reload、命令模板路径填充。
 - 复用既有原生命令目录、会话创建、设置和输入框，不增加模型、源码执行服务或后台任务。
 - 协议 60 只为新增内置资源标识协调两端缓存版本，无 Workflow 消息或数据库。
@@ -94,3 +94,9 @@
 协议单源、双端 typecheck、完整 build、测试环境及 diff 格式检查通过。最终全量为 201 个测试文件、1371 项通过、1 项跳过；内置扩展浏览器回归和完整新会话上下文回归通过；npm dry-run 包含 20 个非空 Skill 资源。afterPack 真实钩子单测覆盖新增资源缺失、空文件和意外文件。
 
 本轮未调用外部真实模型，未制作或替换桌面包，也未发布、安装或重启服务。这些结果证明文档契约、原生接线与当前工作树回归，不证明跨模型行为或完整 M1 Go。
+
+### `/design` 快捷入口复验
+
+2026-11-18，新增第三个原生 Prompt Template `/design`，完整流程和恢复均复用随包指导文件；最终只保留 `/design`，不注册原生 Skill 或旧命令别名。设置页与设计工作台的准备动作使用 `/design`，扩展或用户模板占用主入口时显示冲突并禁用准备动作。
+
+资源发现/路径/开关用例及真实服务清单均先失败后通过。四个定向测试文件 25 项通过；协议检查、双端 typecheck、完整 build、测试环境和 diff 格式检查通过；全量 201 个测试文件、1373 项通过、1 项跳过。`builtin-extensions-test.mjs --browser` 验证扩展/用户模板冲突、恢复、草稿保留和准备按钮；npm dry-run 包含 21 个非空资源及 `commands/design.md`。未调用外部真实模型或制作桌面包。

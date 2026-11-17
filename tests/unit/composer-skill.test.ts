@@ -7,19 +7,19 @@ import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-s
 import { insertComposerText } from "../../web/src/composer-text.js";
 import { designFirstResources } from "../../server/design-first-resources.js";
 
-const command = "/skill:design-first";
-test.each(["\t", "\n", "\r\n", "\u00a0"])("preparing a skill preserves %j and remains idempotent", whitespace => {
+const command = "/design";
+test.each(["\t", "\n", "\r\n", "\u00a0"])("preparing a command preserves %j and remains idempotent", whitespace => {
 	const draft = `${command}${whitespace}原始内容\n`;
-	const prepared = insertComposerText(draft, command, "skill");
+	const prepared = insertComposerText(draft, command, "command");
 	expect(prepared).toBe(`${command} ${whitespace}原始内容\n`);
-	expect(insertComposerText(prepared, command, "skill")).toBe(prepared);
+	expect(insertComposerText(prepared, command, "command")).toBe(prepared);
 });
 
 test("full command names, plain drafts and append retain their distinct behavior", () => {
-	expect(insertComposerText(command, command, "skill")).toBe(command);
-	expect(insertComposerText(`${command} existing`, command, "skill")).toBe(`${command} existing`);
-	expect(insertComposerText(`${command}-extra text`, command, "skill")).toBe(`${command} ${command}-extra text`);
-	expect(insertComposerText("keep draft", command, "skill")).toBe(`${command} keep draft`);
+	expect(insertComposerText(command, command, "command")).toBe(command);
+	expect(insertComposerText(`${command} existing`, command, "command")).toBe(`${command} existing`);
+	expect(insertComposerText(`${command}-extra text`, command, "command")).toBe(`${command} ${command}-extra text`);
+	expect(insertComposerText("keep draft", command, "command")).toBe(`${command} keep draft`);
 	expect(insertComposerText("keep\t\r\ndraft", "result", "append")).toBe("keep\t\r\ndraft\n\nresult");
 });
 
@@ -41,10 +41,10 @@ test("prepared whitespace commands actually expand through the native SDK prompt
 			stream.push({ type: "done", reason: "stop", message: { role: "assistant", api: "openai-completions", provider: "fixture", model: "test", timestamp: Date.now(), stopReason: "stop", content: [{ type: "text", text: "Fixture only" }], usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } } } });
 			return stream;
 		};
-		for (const whitespace of ["\t", "\n", "\r\n"]) await session.prompt(insertComposerText(`${command}${whitespace}原始内容`, command, "skill"));
+		for (const whitespace of ["\t", "\n", "\r\n"]) await session.prompt(insertComposerText(`${command}${whitespace}原始内容`, command, "command"));
 		expect(prompts).toHaveLength(3);
 		for (const prompt of prompts) {
-			expect(prompt).toContain('skill name=\\"design-first\\"');
+			expect(prompt).toContain("full Start or resume workflow");
 			expect(prompt).toContain("原始内容");
 		}
 		await session.prompt('/bug-fix "保留 $1 字面量的错误"');

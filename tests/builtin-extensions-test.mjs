@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import WebSocket from "ws";
 import { listenIsolated, startIsolatedHarness } from "./lib/isolated-server.mjs";
 
@@ -85,7 +85,7 @@ try {
 	}
 	const state = await request(a, "builtin-list"); assert.equal(state.items.length, 6);
 	assert.equal(item(state, "pi-harness-design-first").status, "loaded");
-	assert.deepEqual(item(state, "pi-harness-design-first").commands, ["skill:design-first", "bug-fix", "feat"]);
+	assert.deepEqual(item(state, "pi-harness-design-first").commands, ["design", "bug-fix", "feat"]);
 	await toggle(a, "pi-harness-design-first", false);
 	const disabledDesign = item(await request(b, "builtin-list"), "pi-harness-design-first");
 	assert.equal(disabledDesign.enabled, false); assert.equal(disabledDesign.status, "pending");
@@ -112,13 +112,14 @@ try {
 	a.send({ type: "get_commands" });
 	await wait(() => a.wire.some(message => message.type === "slash_commands"), "slash commands");
 	const commands = a.wire.findLast(message => message.type === "slash_commands").commands;
-	for (const name of ["bug-fix", "feat"]) assert(commands.some(command => command.name === name && command.source === "prompt"), `${name} in native command catalog`);
+	for (const name of ["design", "bug-fix", "feat"]) assert(commands.some(command => command.name === name && command.source === "prompt"), `${name} in native command catalog`);
+	assert(!commands.some(command => command.name === "skill:design-first"), "legacy skill command is removed");
 	assert(!commands.some(command => ["documents", "pdf-md", "okf"].includes(command.name)), "conversion and OKF commands removed");
-	const designCommands = ["skill:design-first", "bug-fix", "feat"];
+	const designCommands = ["design", "bug-fix", "feat"];
 	const conflictPath = join(agent, "extensions", "design-first-conflict.ts"), handledPath = join(root, "extension-commands.jsonl");
 	mkdirSync(join(agent, "extensions"), { recursive: true });
 	const callsBeforeConflict = calls;
-	for (const [index, shadowed] of [["feat"], designCommands].entries()) {
+	for (const [index, shadowed] of [["feat"], ["design"], designCommands].entries()) {
 		writeFileSync(conflictPath, `import { appendFileSync } from 'node:fs'; export default pi => {
 			for (const name of ${JSON.stringify(shadowed)}) pi.registerCommand(name, {
 				description: 'User fixture ' + name,
@@ -131,8 +132,9 @@ try {
 			message.commands.some(command => command.name === name && command.source === "extension"))), "native extension command precedence");
 		const conflict = item(await request(a, "builtin-list"), "pi-harness-design-first");
 		assert.deepEqual(conflict.commands, designCommands.filter(name => !shadowed.includes(name)), "built-in inventory excludes commands owned by user extensions");
-		assert.equal(conflict.status, shadowed.includes("skill:design-first") ? "unavailable" : "loaded");
-		assert.equal(conflict.reason, shadowed.includes("skill:design-first") ? "conflict" : undefined, "a shadowed main entry must disable the prepare-design action");
+		const primaryConflict = shadowed.includes("design");
+		assert.equal(conflict.status, primaryConflict ? "unavailable" : "loaded");
+		assert.equal(conflict.reason, primaryConflict ? "conflict" : undefined, "a shadowed main entry must disable the prepare-design action");
 		for (const name of shadowed) {
 			const requestId = `conflict-${index}-${name}`;
 			a.send({ type: "prompt", text: `/${name} fixture argument`, requestId });
@@ -146,11 +148,25 @@ try {
 	const restoreStart = a.wire.length;
 	a.send({ type: "extensions_reload" });
 	await wait(() => a.wire.slice(restoreStart).some(message => message.type === "slash_commands" && designCommands.every(name =>
-		message.commands.some(command => command.name === name && command.source === (name.startsWith("skill:") ? "skill" : "prompt")))), "bundled commands restored after removing user extension");
+		message.commands.some(command => command.name === name && command.source === "prompt"))), "bundled commands restored after removing user extension");
 	const restoredDesign = item(await request(a, "builtin-list"), "pi-harness-design-first");
 	assert.equal(restoredDesign.status, "loaded"); assert.equal(restoredDesign.reason, undefined);
 	assert.deepEqual(restoredDesign.commands, designCommands);
-	console.log("PASS native command precedence, accurate built-in inventory, main-entry conflict and reload restoration");
+	const userPrompt = join(agent, "prompts", "design.md");
+	mkdirSync(dirname(userPrompt), { recursive: true });
+	writeFileSync(userPrompt, "---\ndescription: User-owned design command\n---\nUser design instructions\n");
+	a.send({ type: "extensions_reload" });
+	await wait(async () => item(await request(a, "builtin-list"), "pi-harness-design-first").reason === "conflict", "user design prompt conflict");
+	const promptConflict = item(await request(a, "builtin-list"), "pi-harness-design-first");
+	assert.equal(promptConflict.status, "unavailable");
+	assert.deepEqual(promptConflict.commands, designCommands.filter(name => name !== "design"));
+	rmSync(userPrompt);
+	a.send({ type: "extensions_reload" });
+	await wait(async () => {
+		const design = item(await request(a, "builtin-list"), "pi-harness-design-first");
+		return design.status === "loaded" && design.commands.includes("design");
+	}, "bundled design prompt restored");
+	console.log("PASS native command precedence, accurate built-in inventory, extension/user-prompt conflicts and reload restoration");
 	await prompt(a, "Check removed conversion tool", 'text(["document_to_markdown", "okf_ingest"].some(name => name in tools));');
 	assert.match(JSON.stringify(a.state.messages.findLast(message => message.role === "toolResult")), /false/);
 	await prompt(a, "Check enabled tool", 'text(await tools.database_read({action:"list"}));');
@@ -215,11 +231,11 @@ try {
 		const beforePrepare = calls;
 		await design.getByRole("button", { name: "在聊天中准备设计需求", exact: true }).click();
 		await page.locator(".settings-modal").waitFor({ state: "hidden" });
-		assert.equal(await composer.inputValue(), "/skill:design-first 保留现有需求草稿");
+		assert.equal(await composer.inputValue(), "/design 保留现有需求草稿");
 		assert.equal(calls, beforePrepare, "preparing a design request must not call the model");
 		await openSettings();
 		await design.getByRole("button", { name: "在聊天中准备设计需求", exact: true }).click();
-		assert.equal(await composer.inputValue(), "/skill:design-first 保留现有需求草稿", "repeated preparation preserves the existing invocation");
+		assert.equal(await composer.inputValue(), "/design 保留现有需求草稿", "repeated preparation preserves the existing invocation");
 		await openSettings();
 		const subagents = panel.locator('[data-builtin-id="pi-harness-subagents"]');
 		await subagents.getByRole("switch").click(); await wait(() => JSON.parse(readFileSync(join(data, "subagents.json"), "utf8")).enabled === false, "subagents off");

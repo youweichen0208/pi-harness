@@ -63,19 +63,24 @@ export function builtinExtensionsState(session: AgentSession, conversationId: st
 	try {
 		const config = designFirstSettings(), path = designFirstSkillPath();
 		design.enabled = config.enabled; design.settingsVersion = config.version;
-		const skill = session.resourceLoader.getSkills().skills.find(skill => skill.name === "design-first");
-		const loaded = !!skill && resolve(skill.filePath) === resolve(path);
-		// Native extension commands run before prompt templates and skill expansion.
+		// Native extension commands run before prompt templates.
 		const extensionCommands = new Set(session.extensionRunner.getRegisteredCommands().map(command => command.invocationName));
-		if (loaded && !extensionCommands.has("skill:design-first")) design.commands = ["skill:design-first"];
-		for (const name of ["bug-fix", "feat"]) {
+		let primaryOwned = false, primaryConflict = extensionCommands.has("design");
+		for (const name of ["design", "bug-fix", "feat"]) {
 			const prompt = session.promptTemplates.find(prompt => prompt.name === name);
-			if (prompt && !extensionCommands.has(name) && resolve(prompt.filePath) === resolve(dirname(path), "commands", `${name}.md`)) design.commands.push(name);
+			if (!prompt) continue;
+			const owned = resolve(prompt.filePath) === resolve(dirname(path), "commands", `${name}.md`);
+			if (name === "design") {
+				primaryOwned = owned && !extensionCommands.has(name);
+				primaryConflict ||= !owned || extensionCommands.has(name);
+			}
+			if (owned && !extensionCommands.has(name)) design.commands.push(name);
 		}
 		if (wiki) { design.reason = "filtered"; }
 		else if (!existsSync(path)) { design.reason = "missing"; }
-		else if ((skill && !loaded) || extensionCommands.has("skill:design-first")) { design.reason = "conflict"; }
-		else design.status = config.enabled ? loaded ? "loaded" : "pending" : loaded ? "pending" : "disabled";
+		else if (primaryConflict) { design.reason = "conflict"; }
+		else if (config.enabled && !primaryOwned) { design.reason = "missing"; }
+		else design.status = config.enabled ? primaryOwned ? "loaded" : "pending" : primaryOwned ? "pending" : "disabled";
 	} catch (error) { design.status = "error"; design.error = String(error); }
 	items.push(design);
 	return { conversationId, items, documentVersion, canReload };

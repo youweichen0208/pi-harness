@@ -55,14 +55,15 @@ execFileSync(executable, ["--input-type=module", "--eval", `
 	try {
 		const loader = new DefaultResourceLoader({cwd:root,agentDir:root,settingsManager:SettingsManager.inMemory(),noExtensions:true,noSkills:true,noThemes:true,noContextFiles:true,noPromptTemplates:true,...designFirstResources('normal',root)});
 		await loader.reload();
-		assert.deepEqual(loader.getSkills().skills.map(s=>s.name), ['design-first']);
-		assert.deepEqual(loader.getPrompts().prompts.map(p=>p.name).sort(), ['bug-fix','feat']);
+		assert.deepEqual(loader.getSkills().skills, []);
+		assert.deepEqual(loader.getPrompts().prompts.map(p=>p.name).sort(), ['bug-fix','design','feat']);
 		for (const prompt of loader.getPrompts().prompts) {
 			assert(prompt.content.includes(JSON.stringify(join(process.cwd(),'assets/skills/design-first/SKILL.md'))));
 			assert(!prompt.content.includes('{{DESIGN_FIRST_SKILL_PATH}}'));
 			const expanded = await expandNativeTemplate('/' + prompt.name + ' packaged fixture request', loader.getPrompts().prompts);
 			assert(expanded.includes('packaged fixture request'));
-			assert(expanded.includes(prompt.name === 'feat' ? 'Small feature route' : 'Bug fix route'));
+			const route = prompt.name === 'design' ? 'full Start or resume workflow' : prompt.name === 'feat' ? 'Small feature route' : 'Bug fix route';
+			assert(expanded.includes(route));
 			assert(!expanded.includes('$ARGUMENTS'));
 		}
 		toggleDesignFirst(false,designFirstSettings(root).version,root);
@@ -71,8 +72,8 @@ execFileSync(executable, ["--input-type=module", "--eval", `
 		assert.deepEqual(loader.getPrompts().prompts, []);
 		toggleDesignFirst(true,designFirstSettings(root).version,root);
 		await loader.reload();
-		assert.deepEqual(loader.getSkills().skills.map(s=>s.name), ['design-first']);
-		assert.deepEqual(loader.getPrompts().prompts.map(p=>p.name).sort(), ['bug-fix','feat']);
+		assert.deepEqual(loader.getSkills().skills, []);
+		assert.deepEqual(loader.getPrompts().prompts.map(p=>p.name).sort(), ['bug-fix','design','feat']);
 	} finally {rmSync(root,{recursive:true,force:true});}
 `], {cwd:appRoot,env:{...testEnv({PI_WEB_PKG_ROOT:appRoot}),ELECTRON_RUN_AS_NODE:"1",NODE_PATH:"",NODE_OPTIONS:""},timeout:30000,stdio:"pipe"});
 console.log("PASS packaged Design First skill/shortcuts, installed paths, expansion and toggle reload");

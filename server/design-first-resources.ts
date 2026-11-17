@@ -42,15 +42,14 @@ export function designFirstSkillPath(root?: string): string {
 	throw Error("Cannot locate bundled Design First skill");
 }
 
-export function designFirstResources(kind: DesignFirstSessionKind, dataDir = documentDataDir(), root?: string): Pick<DefaultResourceLoaderOptions, "additionalSkillPaths" | "skillsOverride" | "additionalPromptTemplatePaths" | "promptsOverride"> {
+export function designFirstResources(kind: DesignFirstSessionKind, dataDir = documentDataDir(), root?: string): Pick<DefaultResourceLoaderOptions, "additionalPromptTemplatePaths" | "promptsOverride"> {
 	if (kind !== "normal") return {};
 	const path = resolve(designFirstSkillPath(root));
 	// SDK prompt expansion runs after this override; JSON escapes keep path dollars literal.
 	const encodedPath = JSON.stringify(path).replaceAll("$", "\\u0024");
-	const commandPaths = ["bug-fix", "feat"].map(name => join(dirname(path), "commands", `${name}.md`));
+	const commandPaths = ["design", "bug-fix", "feat"].map(name => join(dirname(path), "commands", `${name}.md`));
 	const isBundledCommand = (filePath: string) => commandPaths.includes(resolve(filePath));
 	return {
-		additionalSkillPaths: [path],
 		additionalPromptTemplatePaths: commandPaths,
 		promptsOverride(base) {
 			try {
@@ -65,17 +64,6 @@ export function designFirstResources(kind: DesignFirstSessionKind, dataDir = doc
 				return {
 					prompts: base.prompts.filter(prompt => !isBundledCommand(prompt.filePath)),
 					diagnostics: [...base.diagnostics, { type: "warning", message: `Design First shortcuts unavailable: ${error instanceof Error ? error.message : String(error)}`, path }],
-				};
-			}
-		},
-		skillsOverride(base) {
-			try {
-				if (designFirstSettings(dataDir).enabled) return base;
-				return { ...base, skills: base.skills.filter(skill => resolve(skill.filePath) !== resolve(path)) };
-			} catch (error) {
-				return {
-					skills: base.skills.filter(skill => resolve(skill.filePath) !== resolve(path)),
-					diagnostics: [...base.diagnostics, { type: "warning", message: `Design First unavailable: ${error instanceof Error ? error.message : String(error)}`, path }],
 				};
 			}
 		},

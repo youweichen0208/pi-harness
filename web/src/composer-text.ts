@@ -10,7 +10,7 @@ import { useEffect } from "react";
  */
 
 const EVENT = "pi-composer-append";
-type ComposerInsertion = { text: string; placement: "append" | "skill" };
+type ComposerInsertion = { text: string; placement: "append" | "command" };
 const pending = new Map<string, ComposerInsertion[]>();
 
 /** Queue text to append to a conversation's composer. */
@@ -18,16 +18,16 @@ export function appendComposerText(conversationId: string, text: string): void {
 	queueInsertion(conversationId, { text, placement: "append" });
 }
 
-/** Prepare an explicit skill invocation without sending or discarding a draft. */
-export function prepareComposerSkill(conversationId: string, name: string): void {
-	if (!/^[a-z0-9-]+$/.test(name)) throw Error("Invalid skill name");
-	queueInsertion(conversationId, { text: `/skill:${name}`, placement: "skill" });
+/** Prepare an explicit command invocation without sending or discarding a draft. */
+export function prepareComposerCommand(conversationId: string, name: string): void {
+	if (!/^[a-z0-9-]+$/.test(name)) throw Error("Invalid command name");
+	queueInsertion(conversationId, { text: `/${name}`, placement: "command" });
 }
 
 export function insertComposerText(current: string, text: string, placement: ComposerInsertion["placement"]): string {
 	if (placement === "append") return current.trim() ? `${current}\n\n${text}` : text;
 	if (current === text || current.startsWith(`${text} `)) return current;
-	// SDK skill expansion separates the name at the first ASCII space.
+	// SDK command expansion separates the name at the first ASCII space.
 	// Preserve the existing whitespace/draft, adding only that separator.
 	if (current.startsWith(text) && /^\s/.test(current.slice(text.length))) return `${text} ${current.slice(text.length)}`;
 	return `${text} ${current}`;

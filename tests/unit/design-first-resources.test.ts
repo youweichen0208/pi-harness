@@ -38,7 +38,7 @@ describe("bundled Design First resources", () => {
 		expect(verification).toContain("## Design and spec review");
 		expect(skill).toContain("before editing business code");
 		expect(skill).toContain("not implementation authorization by itself");
-		for (const command of ["bug-fix", "feat"]) {
+		for (const command of ["bug-fix", "design", "feat"]) {
 			expect(readFileSync(join(root, `commands/${command}.md`), "utf8")).toContain("does not authorize implementation by itself");
 		}
 	});
@@ -71,7 +71,7 @@ describe("bundled Design First resources", () => {
 		}
 	});
 
-	it("preserves the native same-name winner and reports the collision", async () => {
+	it("registers only prompt commands and leaves user skills untouched", async () => {
 		const root = temporary(), userSkill = join(root, "skills/design-first/SKILL.md");
 		mkdirSync(join(root, "skills/design-first"), { recursive: true });
 		writeFileSync(userSkill, "---\nname: design-first\ndescription: User-owned workflow\n---\nUser instructions\n");
@@ -82,10 +82,12 @@ describe("bundled Design First resources", () => {
 		});
 		await loader.reload();
 		expect(loader.getSkills().skills.find(s => s.name === "design-first")?.filePath).toBe(userSkill);
-		expect(loader.getSkills().diagnostics.some(d => d.type === "collision")).toBe(true);
+		expect(loader.getSkills().diagnostics.some(d => d.type === "collision")).toBe(false);
+		expect(loader.getPrompts().prompts.map(prompt => prompt.name).sort()).toEqual(["bug-fix", "design", "feat"]);
 		toggleDesignFirst(false, designFirstSettings(root).version, root);
 		await loader.reload();
 		expect(loader.getSkills().skills.find(s => s.name === "design-first")?.filePath).toBe(userSkill);
+		expect(loader.getPrompts().prompts).toEqual([]);
 	});
 	it("defaults on, persists explicit false and rejects stale settings writes", () => {
 		const root = temporary(), initial = designFirstSettings(root);
@@ -97,7 +99,7 @@ describe("bundled Design First resources", () => {
 		expect(designFirstSettings(root).enabled).toBe(true);
 	});
 
-	it("uses real SDK discovery and refreshes the shared setting on reload", async () => {
+	it("uses native prompt discovery and refreshes the shared setting on reload", async () => {
 		const root = temporary();
 		const loader = new DefaultResourceLoader({ cwd: root, agentDir: root,
 			settingsManager: SettingsManager.inMemory(), noExtensions: true, noSkills: true,
@@ -105,9 +107,8 @@ describe("bundled Design First resources", () => {
 			...designFirstResources("normal", root, resolve(".")),
 		});
 		await loader.reload();
-		expect(loader.getSkills().skills.map(s => s.name)).toEqual(["design-first"]);
-		expect(loader.getSkills().skills[0].filePath).toBe(designFirstSkillPath(resolve(".")));
-		expect(loader.getPrompts().prompts.map(prompt => prompt.name).sort()).toEqual(["bug-fix", "feat"]);
+		expect(loader.getSkills().skills).toEqual([]);
+		expect(loader.getPrompts().prompts.map(prompt => prompt.name).sort()).toEqual(["bug-fix", "design", "feat"]);
 		for (const prompt of loader.getPrompts().prompts) {
 			expect(prompt.content).toContain(JSON.stringify(designFirstSkillPath(resolve("."))));
 			expect(prompt.content).not.toContain("{{DESIGN_FIRST_SKILL_PATH}}");
@@ -118,16 +119,16 @@ describe("bundled Design First resources", () => {
 		expect(loader.getPrompts().prompts).toEqual([]);
 		toggleDesignFirst(true, designFirstSettings(root).version, root);
 		await loader.reload();
-		expect(loader.getSkills().skills.map(s => s.name)).toEqual(["design-first"]);
-		expect(loader.getPrompts().prompts.map(prompt => prompt.name).sort()).toEqual(["bug-fix", "feat"]);
+		expect(loader.getSkills().skills).toEqual([]);
+		expect(loader.getPrompts().prompts.map(prompt => prompt.name).sort()).toEqual(["bug-fix", "design", "feat"]);
 		writeFileSync(join(root, "design-first.json"), "broken");
 		await loader.reload();
 		expect(loader.getSkills().skills).toEqual([]);
 		expect(loader.getPrompts().prompts).toEqual([]);
-		expect(loader.getSkills().diagnostics.some(d => d.message.includes("Design First unavailable"))).toBe(true);
+		expect(loader.getPrompts().diagnostics.some(d => d.message.includes("Design First shortcuts unavailable"))).toBe(true);
 	});
 
-	it.each(["bug-fix", "feat"])("keeps the installed skill path literal when expanding %s arguments", async name => {
+	it.each(["bug-fix", "design", "feat"])("keeps the installed skill path literal when expanding %s arguments", async name => {
 		const root = temporary(), packageRoot = join(root, "pi-$1-$ARGUMENTS-$@ space");
 		mkdirSync(packageRoot);
 		writeFileSync(join(packageRoot, "package.json"), JSON.stringify({ name: "@youweichen/pi-harness" }));
@@ -147,7 +148,7 @@ describe("bundled Design First resources", () => {
 		expect(expanded).toContain("add sorting $1 $ARGUMENTS");
 	});
 
-	it.each(["bug-fix", "feat"])("preserves the user's %s prompt content and setting-independent availability", async name => {
+	it.each(["bug-fix", "design", "feat"])("preserves the user's %s prompt content and setting-independent availability", async name => {
 		const root = temporary(), userPrompt = join(root, "prompts", `${name}.md`);
 		const userContent = "User-owned instructions: {{DESIGN_FIRST_SKILL_PATH}} $ARGUMENTS";
 		mkdirSync(join(root, "prompts"), { recursive: true });
@@ -158,7 +159,7 @@ describe("bundled Design First resources", () => {
 			...designFirstResources("normal", root, resolve(".")),
 		});
 		await loader.reload();
-		expect(loader.getPrompts().prompts.map(prompt => prompt.name).sort()).toEqual(["bug-fix", "feat"]);
+		expect(loader.getPrompts().prompts.map(prompt => prompt.name).sort()).toEqual(["bug-fix", "design", "feat"]);
 		const own = loader.getPrompts().prompts.find(prompt => prompt.name === name);
 		expect(own?.filePath).toBe(userPrompt);
 		expect(own?.content.trim()).toBe(userContent);

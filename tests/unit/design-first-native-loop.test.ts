@@ -33,7 +33,7 @@ test("default skill uses the selected model and native tools for design, impleme
 				expect(currentModel.id).toBe("selected");
 				const last = context.messages.at(-1);
 				if (last?.role === "toolResult") results.push(JSON.stringify(last));
-				if (cursor === 0 && prompt.startsWith("/skill:")) expect(JSON.stringify(last)).toContain("Design First");
+				if (cursor === 0 && prompt.startsWith("/design")) expect(JSON.stringify(last)).toContain("Design First");
 				const content = steps[cursor++]();
 				const stopReason = content.some(block => block.type === "toolCall") ? "toolUse" : "stop";
 				const stream = new AssistantMessageEventStream();
@@ -43,7 +43,7 @@ test("default skill uses the selected model and native tools for design, impleme
 			await session!.prompt(prompt);
 			expect(cursor).toBe(steps.length);
 		};
-		await drive("/skill:design-first 修正加法并运行测试，先给我设计和任务。", [
+		await drive("/design 修正加法并运行测试，先给我设计和任务。", [
 			() => call("write", { path: doc + "design.md", content: "# Design v1\n| Requirement ID | Requested behavior | Scenario | Public seam / acceptance evidence |\n| R1 | Make sum(2,3) return 5 | Given 2 and 3, when sum is called, then return 5 | exports.sum; node --test --test-reporter=tap sum.test.cjs |\nSpec impact: no canonical spec exists; retain R1 in this design.\n" }),
 			() => call("write", { path: doc + "tasks.md", content: "# Tasks\n| Task ID | Requirement ID | Deliverable | Acceptance / verification |\n| T1 | R1 | Fix addition | sum(2,3) returns 5 |\n| T2 | R1 | Run test and record actual result | TAP and exit codes in outcome.md |\n" }),
 			() => call("write", { path: doc + "progress.md", content: "change_id: addition\nstage_hint: awaiting_confirmation\nnext_action: Confirm design v1 before editing source\n" }),
@@ -72,7 +72,7 @@ test("default skill uses the selected model and native tools for design, impleme
 		session.dispose();
 		session = await create();
 		expect(session.messages).toHaveLength(0);
-		await drive("/skill:design-first 恢复 addition，仅核实当前进展。", [
+		await drive("/design 恢复 addition，仅核实当前进展。", [
 			() => call("read", { path: doc + "progress.md" }),
 			() => call("read", { path: doc + "outcome.md" }),
 			() => call("read", { path: "sum.cjs" }),
