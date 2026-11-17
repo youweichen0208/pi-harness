@@ -17,7 +17,9 @@ function fixture() {
 	return { root, repo };
 }
 describe("SCM operations", () => {
-	it("switches locally, pushes and pulls using a local bare remote", async () => {
+	// The end-to-end case spawns over twenty real Git processes; this can exceed
+	// Vitest's default 5s on a Windows runner before the final checkout finishes.
+	it("switches locally, pushes and pulls using a local bare remote", { timeout: 30_000 }, async () => {
 		const { root, repo } = fixture(); const remote = join(root, "remote.git");
 		git(root, "init", "--bare", remote); git(repo, "remote", "add", "origin", remote); git(repo, "push", "-u", "origin", "main");
 		git(repo, "branch", "feature"); await scmOperation(repo, "switch", "feature"); expect(git(repo, "branch", "--show-current")).toBe("feature");

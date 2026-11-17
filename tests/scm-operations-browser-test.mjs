@@ -28,7 +28,12 @@ try {
 		await page.routeWebSocket('**/ws', route => {
 			const upstream = route.connectToServer();
 			route.onMessage(raw => { const msg = JSON.parse(String(raw)); if (msg.type === 'prompt') throw Error('No model calls'); if (msg.type === 'run_command') terminalCommands.push(msg); upstream.send(raw); });
-			upstream.onMessage(raw => { const msg = JSON.parse(String(raw)); if (msg.type === 'snapshot') msg.state.piConfigured = true; route.send(JSON.stringify(msg)); if (msg.type === "scm_data" && msg.kind === "status" && msg.reqId > 0) route.send(JSON.stringify({ ...msg, reqId: -999 })); });
+			upstream.onMessage(raw => {
+				const msg = JSON.parse(String(raw));
+				if (msg.type === 'snapshot' || msg.type === 'snapshot_delta') msg.state.piConfigured = true;
+				route.send(JSON.stringify(msg));
+				if (msg.type === 'scm_data' && msg.kind === 'status' && msg.reqId > 0) route.send(JSON.stringify({ ...msg, reqId: -999 }));
+			});
 		});
 		await page.goto(`http://127.0.0.1:${server.port}`); await page.locator('.view-switch button', { hasText: 'Git' }).click();
 		await page.locator('.scm-file').first().waitFor();
