@@ -111,9 +111,9 @@ try {
 				}));
 				// Only intrinsically sized controls have comparable geometry across native shells.
 				if (size) {
-					const rect = node.getBoundingClientRect();
-					result.width = rect.width;
-					result.height = rect.height;
+					// Layout dimensions exclude transient modal entrance transforms.
+					result.width = node.offsetWidth;
+					result.height = node.offsetHeight;
 				}
 				return result;
 			}, size);
@@ -301,7 +301,12 @@ try {
 		await terminalRow.evaluate(el => el.dataset.renderSample = 'terminal');
 		await page.evaluate(() => document.fonts.ready);
 		await measureFonts('terminal', '[data-render-sample="terminal"]', ['JetBrains Mono', 'UI SC', 'Noto Color Emoji']);
-		await sampleControl('terminal', '[data-render-sample="terminal"]');
+		// xterm computes per-DPI glyph spacing and line boxes after fitting.
+		// Compare the font and active terminal palette independently of that adjustment.
+		ui.terminal = await terminalRow.evaluate(row => {
+			const { fontFamily, fontSize, fontWeight, color } = getComputedStyle(row);
+			return { fontFamily, fontSize, fontWeight, color };
+		});
 		await page.screenshot({ path: join(output, `${prefix}-terminal.png`) });
 
 		await page.getByRole('tab', { name: '对话', exact: true }).click();
