@@ -14,7 +14,15 @@ const port = mindmap ? 9402 : 9401;
 assert.equal(await portUp(port), false);
 const base = mkdtempSync(join(tmpdir(), 'pi-toc-test-'));
 mkdirSync(join(base, 'agent'));
-const original = mindmap ? '# Diagram\n\n```mermaid\nmindmap\n  root((AgentRun))\n    核心定位\n```\n' : '# Diagram\n\n```mermaid\nflowchart LR\n  A["Start<br>Next"] --> B[Done]\n```\n';
+// Reconstruct the visible nodes and four edge labels from issue #178.
+const diagram = mindmap ? 'mindmap\n  root((AgentRun))\n    核心定位' : [
+	'flowchart LR',
+	'  A["Hermes Agent<br/>触发 + 执行诊断"] -->|"build_info(engine,<br/>region)"| B["Service"]',
+	'  B -->|version| A',
+	'  A -->|"repo.resolve /<br/>code.search /<br/>code.read"| C["Repository"]',
+	'  C -->|"commit_sha 证据"| A',
+].join('\n');
+const original = '# Diagram\n\n```mermaid\n' + diagram + '\n```\n';
 writeFileSync(join(base, 'note.md'), original);
 writeFileSync(join(base, 'agent/models.json'), JSON.stringify({ providers: { fixture: { api: 'openai-completions', baseUrl: 'http://127.0.0.1:9', apiKey: 'unused', models: [{ id: 'unused', name: 'Unused', input: ['text'], contextWindow: 32000, maxTokens: 4096 }] } } }));
 writeFileSync(join(base, 'agent/settings.json'), JSON.stringify({ defaultProvider: 'fixture', defaultModel: 'unused' }));
@@ -38,12 +46,41 @@ try {
 		const code = host.locator('pre > code.language-mermaid');
 		const toggle = host.locator('[data-mermaid-source]');
 		await toggle.waitFor();
-		await host.locator('.mermaid-svg svg').waitFor();
+		const inline = host.locator('.mermaid-svg svg');
+		await inline.waitFor();
+		const readLabels = async svg => svg.locator('foreignObject').evaluateAll(labels => labels.map(label => {
+			const br = [...label.querySelectorAll('br')];
+			return {
+				text: label.textContent.replace(/\s+/g, ''),
+				breaks: br.length,
+				height: label.getBoundingClientRect().height,
+			};
+		}));
+		const labels = await readLabels(inline);
+		if (!mindmap) {
+			for (const [text, breaks] of [['HermesAgent触发+执行诊断', 1], ['build_info(engine,region)', 1], ['version', 0], ['repo.resolve/code.search/code.read', 2], ['commit_sha证据', 0]]) {
+				assert(labels.some(label => label.text === text && label.breaks === breaks && label.height > 0), `expected visible label ${text}: ${JSON.stringify(labels)}`);
+			}
+		}
+
 		await host.locator('.mermaid-svg').click();
 		assert.equal(await page.locator('.mermaid-zoom-dialog[open]').count(), 1, 'clicking the diagram opens an enlarged view');
 		const zoom = page.locator('.mermaid-zoom-dialog[open]');
 		const image = zoom.locator('.mermaid-zoom-content > svg');
 		assert.equal(await image.isVisible(), true);
+		assert.deepEqual(await zoom.locator('parsererror').allTextContents(), [], 'the enlarged SVG must be free of XML errors');
+		if (!mindmap) {
+			const expanded = await readLabels(image);
+			assert(expanded.every(label => label.height > 0), 'all labels remain visible after expansion');
+			const content = entries => entries.map(({ text, breaks }) => ({ text, breaks }));
+			assert.deepEqual(content(expanded), content(labels), 'the enlarged chart preserves node and edge labels and every line break');
+			const arrows = await image.evaluate(svg => [...svg.querySelectorAll('path[marker-end]')].map(path => {
+				const ref = path.getAttribute('marker-end');
+				const id = /#([^)]*)\)/.exec(ref)?.[1];
+				return !!id && svg.getElementById(id)?.localName === 'marker';
+			}));
+			assert(arrows.length === 4 && arrows.every(Boolean), 'all four arrows reference markers inside the enlarged diagram');
+		}
 		await page.screenshot({ path: `/tmp/pi-mermaid-zoom-${mindmap ? 'mindmap' : 'flowchart'}.png` });
 		const width = (await image.boundingBox()).width;
 		await zoom.getByRole('button', { name: '放大', exact: true }).click();
