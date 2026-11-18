@@ -22,9 +22,9 @@ describe("read-only API discovery", () => {
 		expect(connection.input).toEqual(["text", "image"]);
 		expect(connection.unknownCapabilities).not.toContain("input");
 	});
-	it("recognizes DeepSeek V4.1 Flash through a Claude gateway alias", () => {
+	it.each(["vendor/unknown", "codeagent/maas-deepseek-v4.1-flash-baidu-codeagent[1m]"])("enables reasoning for undeclared model %s", model => {
 		const f = fixture();
-		f.put(".claude/settings.json", { model: "codeagent/maas-deepseek-v4.1-flash-baidu-codeagent[1m]", env: { ANTHROPIC_API_KEY: "fixture" } });
+		f.put(".claude/settings.json", { model, env: { ANTHROPIC_API_KEY: "fixture" } });
 		expect(discoverModels(f.options).connections[0]).toMatchObject({ reasoning: true, maxTokens: 4096 });
 	});
 	it("requires no Pi or CLI and does not invent models for absent sources", () => {
