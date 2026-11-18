@@ -53,16 +53,16 @@ try {
 	}
 	// Native models.json uses the same floor without modifying the source file.
 	const nativeRuntime = withOutputTokenFloor(await ModelRuntime.create({ authPath: join(agent, "auth.json"), modelsPath: join(agent, "models.json"), allowModelNetwork: false }));
-	assert.equal(nativeRuntime.getModel("fixture", "fixture").maxTokens, 128000);
+	assert.equal(nativeRuntime.getModel("fixture", "fixture").maxTokens, 4096);
 	({ session } = await createAgentSession({ cwd: root, agentDir: agent, modelRuntime: nativeRuntime, tools: [], sessionManager: SessionManager.inMemory(root) }));
 	await session.prompt("Write report with native model");
-	assert.equal(requests.at(-1).max_tokens, 128000);
-	assert.equal(session.messages.at(-1).stopReason, "stop");
+	assert.equal(requests.at(-1).max_tokens, 4096);
+	assert.equal(session.messages.at(-1).stopReason, "length");
 	await nativeRuntime.refresh({ allowNetwork: false });
 	await session.prompt("Write again after reload");
-	assert.equal(requests.at(-1).max_tokens, 128000);
+	assert.equal(requests.at(-1).max_tokens, 4096);
 	assert.equal(JSON.parse(readFileSync(join(agent, "models.json"), "utf8")).providers.fixture.models[0].maxTokens, 4096);
-	console.log("PASS native configured model: default 128000 on wire and after reload, source unchanged");
+	console.log("PASS native configured model: default 4096 on wire and after reload, source unchanged");
 	session.dispose(); session = undefined;
 	// Synced model override keeps identity/history while changing actual request budget.
 	const external = join(root, "external"); mkdirSync(external);
@@ -79,7 +79,7 @@ try {
 	await session.prompt("Write report with synced model");
 	assert.equal(requests.at(-1).max_tokens, 4096);
 	assert.equal(session.messages.at(-1).stopReason, "length");
-	delete env.PI_MAX_TOKENS_FLOOR; await sync.sync();
+	env.PI_MAX_TOKENS_FLOOR = "128000"; await sync.sync();
 	assert.equal(sync.configs()[0].models[0].maxTokens, 128000);
 	await session.setModel(runtime.getModel(provider, "fixture"));
 	await session.prompt("Finish the report after increasing the output budget");
@@ -93,9 +93,9 @@ try {
 	await sync.edit(provider, { ...localConfig, models: [{ ...localConfig.models[0], maxTokens: 180000 }] });
 	await session.setModel(runtime.getModel(provider, "fixture"));
 	await session.prompt("Write with an independent model");
-	assert.equal(requests.at(-1).max_tokens, 128000);
-	console.log("PASS independent model: default 128000 on wire");
-	console.log("PASS default synced floor: 4096 → 128000 on wire, preserved history, explicit maxTokens=1 unchanged");
+	assert.equal(requests.at(-1).max_tokens, 180000);
+	console.log("PASS independent model: declared 180000 on wire");
+	console.log("PASS explicit synced floor: 4096 → 128000 on wire, preserved history, explicit maxTokens=1 unchanged");
 } finally {
 	session?.dispose(); unbind?.(); mock.closeAllConnections(); await new Promise(resolve => mock.close(resolve));
 	rmSync(root, { recursive: true, force: true });

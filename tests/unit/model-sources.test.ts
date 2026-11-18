@@ -22,6 +22,11 @@ describe("read-only API discovery", () => {
 		expect(connection.input).toEqual(["text", "image"]);
 		expect(connection.unknownCapabilities).not.toContain("input");
 	});
+	it("recognizes DeepSeek V4.1 Flash through a Claude gateway alias", () => {
+		const f = fixture();
+		f.put(".claude/settings.json", { model: "codeagent/maas-deepseek-v4.1-flash-baidu-codeagent[1m]", env: { ANTHROPIC_API_KEY: "fixture" } });
+		expect(discoverModels(f.options).connections[0]).toMatchObject({ reasoning: true, maxTokens: 4096 });
+	});
 	it("requires no Pi or CLI and does not invent models for absent sources", () => {
 		const f = fixture(); expect(discoverModels(f.options).statuses.every(s => s.status === "missing")).toBe(true);
 		f.claude(); const r = discoverModels(f.options); expect(r.connections).toHaveLength(1); expect(r.connections[0].api).toBe("anthropic-messages");
@@ -177,7 +182,7 @@ describe("runtime synchronization", () => {
 		try {
 			const merged = sync.configs().find(c => c.models[0].id === "claude-example-1")!;
 			expect(merged.origin?.sources).toEqual(["claude", "opencode"]);
-			expect(runtime.getModel(merged.providerId, "claude-example-1")).toMatchObject({ contextWindow: 200000, maxTokens: 128000, reasoning: true, input: ["text", "image"] });
+			expect(runtime.getModel(merged.providerId, "claude-example-1")).toMatchObject({ contextWindow: 200000, maxTokens: 8192, reasoning: true, input: ["text", "image"] });
 			rmSync(join(f.home, ".claude/settings.json"));
 			open(false, "https://new.example/v1"); await sync.sync();
 			expect(runtime.getModel(merged.providerId, "claude-example-1")?.baseUrl).toBe("https://new.example/v1");
@@ -335,18 +340,18 @@ describe("runtime synchronization", () => {
 	});
 });
 
-it("applies the default output floor to synced and independent models", async () => {
+it("preserves declared output limits for synced and independent models", async () => {
 	const f = fixture(); f.claude();
 	const runtime = await ModelRuntime.create({ authPath: join(f.home, "pi/auth.json"), modelsPath: join(f.home, "pi/models.json"), allowModelNetwork: false });
 	const sync = new ModelSourceSync(join(f.home, "data"), join(f.home, "pi"), { home: f.home, env: {} });
 	const unbind = await sync.bind(runtime, () => false, () => {});
 	try {
 		const config = sync.configs()[0];
-		expect(config.models[0].maxTokens).toBe(32768);
-		expect(runtime.getModel(config.providerId, config.models[0].id)?.maxTokens).toBe(32768);
+		expect(config.models[0].maxTokens).toBe(4096);
+		expect(runtime.getModel(config.providerId, config.models[0].id)?.maxTokens).toBe(4096);
 		await sync.edit(config.providerId, { ...config, models: [{ ...config.models[0], maxTokens: 2048 }] });
-		expect(sync.configs()[0].models[0].maxTokens).toBe(32768);
-		expect(runtime.getModel(config.providerId, config.models[0].id)?.maxTokens).toBe(32768);
+		expect(sync.configs()[0].models[0].maxTokens).toBe(2048);
+		expect(runtime.getModel(config.providerId, config.models[0].id)?.maxTokens).toBe(2048);
 	} finally { unbind(); }
 });
 

@@ -7,8 +7,8 @@ export function outputTokenLimit(maxTokens: number, contextWindow: number, env: 
 		const floor = Number(env.PI_MAX_TOKENS_FLOOR);
 		return Number.isSafeInteger(floor) && floor > 0 ? Math.max(maxTokens, Math.min(floor, contextWindow)) : maxTokens;
 	}
-	const limit = Number(env.PI_MAX_TOKENS ?? 128000);
-	return Number.isSafeInteger(limit) && limit > 0 ? Math.min(limit, contextWindow) : maxTokens;
+	const limit = Number(env.PI_MAX_TOKENS);
+	return Number.isSafeInteger(limit) && limit > 0 ? Math.min(maxTokens, limit, contextWindow) : maxTokens;
 }
 
 const wrapped = new WeakSet<ModelRuntime>();
