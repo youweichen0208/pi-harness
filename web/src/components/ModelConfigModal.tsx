@@ -65,7 +65,6 @@ interface DraftModel {
 	compat?: UiModelCompat;
 	id: string;
 	name: string;
-	reasoning: boolean;
 	input: "text" | "text-image";
 	contextWindow: string;
 	maxTokens: string;
@@ -86,7 +85,6 @@ interface Draft {
 const emptyModel = (): DraftModel => ({
 	id: "",
 	name: "",
-	reasoning: false,
 	input: "text",
 	contextWindow: "",
 	maxTokens: "",
@@ -116,7 +114,6 @@ function toDraft(p: UiProviderConfig): Draft {
 			id: m.id,
 			compat: m.compat,
 			name: m.name ?? "",
-			reasoning: m.reasoning ?? false,
 			input: m.input?.includes("image") ? "text-image" : "text",
 			contextWindow: m.contextWindow ? String(m.contextWindow) : "",
 			maxTokens: m.maxTokens ? String(m.maxTokens) : "",
@@ -245,7 +242,6 @@ export function ModelConfigModal({
 					if (!next.maxTokens && f.maxTokens) next.maxTokens = String(f.maxTokens);
 					if (next.input === "text" && f.input?.includes("image"))
 						next.input = "text-image";
-					if (!next.reasoning && f.reasoning) next.reasoning = true;
 					return next;
 				});
 				const have = new Set(rows.map((m) => m.id.trim()).filter(Boolean));
@@ -254,7 +250,6 @@ export function ModelConfigModal({
 					.map((fm) => ({
 						id: fm.id,
 						name: fm.name ?? "",
-						reasoning: fm.reasoning ?? false,
 						input: fm.input?.includes("image") ? "text-image" : "text",
 						contextWindow: fm.contextWindow ? String(fm.contextWindow) : "",
 						maxTokens: fm.maxTokens ? String(fm.maxTokens) : "",
@@ -298,7 +293,7 @@ export function ModelConfigModal({
 				id: m.id.trim(),
 				compat: m.compat,
 				name: m.name.trim() || undefined,
-				reasoning: m.reasoning || undefined,
+				reasoning: true,
 				input: m.input === "text-image" ? ["text", "image"] : undefined,
 				contextWindow: m.contextWindow ? Number(m.contextWindow) : undefined,
 				maxTokens: m.maxTokens ? Number(m.maxTokens) : undefined,
@@ -627,16 +622,6 @@ export function ModelConfigModal({
 									<option value="text">{t("text")}</option>
 									<option value="text-image">{t("textImage")}</option>
 								</select>
-								<label className="check">
-									<input
-										type="checkbox"
-										checked={m.reasoning}
-										onChange={(e) =>
-											setModel(i, { reasoning: e.target.checked })
-										}
-									/>
-									<span>{t("reasoning")}</span>
-								</label>
 								<input
 									type="number"
 									value={m.contextWindow}

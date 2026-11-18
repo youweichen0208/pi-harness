@@ -7591,7 +7591,7 @@ span.msg-editor-hint svg {
 
 .model-row {
 	display: grid;
-	grid-template-columns: 1.4fr 1fr 110px auto 88px 88px 28px;
+	grid-template-columns: 1.4fr 1fr 110px 88px 88px 28px;
 	gap: 8px;
 	align-items: center;
 	margin-bottom: 8px;
@@ -7620,15 +7620,6 @@ span.msg-editor-hint svg {
 .model-row select:focus {
 	border-color: var(--accent);
 }
-.model-row .check {
-	display: flex;
-	align-items: center;
-	gap: 4px;
-	font-size: 12px;
-	color: var(--text-dim);
-	white-space: nowrap;
-}
-
 @media (max-width: 640px) {
 	.form-grid,
 	.model-row {

@@ -35,7 +35,7 @@ const mock = createServer(async (req, res) => {
 let session, unbind;
 try {
 	const port = await listenIsolated(mock);
-	writeFileSync(join(agent, "models.json"), JSON.stringify({ providers: { fixture: { api: "anthropic-messages", baseUrl: `http://127.0.0.1:${port}`, apiKey: "fixture", models: [{ id: "fixture", reasoning: true, input: ["text"], contextWindow: 200000, maxTokens: 4096 }] } } }));
+	writeFileSync(join(agent, "models.json"), JSON.stringify({ providers: { fixture: { api: "anthropic-messages", baseUrl: `http://127.0.0.1:${port}`, apiKey: "fixture", models: [{ id: "fixture", reasoning: false, input: ["text"], contextWindow: 200000, maxTokens: 4096 }] } } }));
 	writeFileSync(join(agent, "settings.json"), JSON.stringify({ defaultProvider: "fixture", defaultModel: "fixture", retry: { enabled: false }, compaction: { enabled: false } }));
 	for (signed of [false, true]) {
 		({ session } = await createAgentSession({ cwd: root, agentDir: agent, tools: [], sessionManager: SessionManager.inMemory(root) }));
@@ -55,7 +55,10 @@ try {
 	const nativeRuntime = withOutputTokenFloor(await ModelRuntime.create({ authPath: join(agent, "auth.json"), modelsPath: join(agent, "models.json"), allowModelNetwork: false }));
 	assert.equal(nativeRuntime.getModel("fixture", "fixture").maxTokens, 4096);
 	({ session } = await createAgentSession({ cwd: root, agentDir: agent, modelRuntime: nativeRuntime, tools: [], sessionManager: SessionManager.inMemory(root) }));
+	assert(session.getAvailableThinkingLevels().includes("medium"));
+	session.setThinkingLevel("medium");
 	await session.prompt("Write report with native model");
+	assert.equal(requests.at(-1).thinking?.type, "enabled");
 	assert.equal(requests.at(-1).max_tokens, 4096);
 	assert.equal(session.messages.at(-1).stopReason, "length");
 	await nativeRuntime.refresh({ allowNetwork: false });

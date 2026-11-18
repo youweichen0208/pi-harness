@@ -29,7 +29,7 @@ it("projects native and built-in catalogs without changing SDK registration, aut
 		expect(runtime.getRegisteredProviderIds()).toEqual(original.getRegisteredProviderIds());
 		expect(await runtime.getAuth("fixture")).toEqual(await original.getAuth("fixture"));
 		for (const list of [runtime.getModels(), runtime.getAllModels(), runtime.getAvailableSnapshot(), await runtime.getAvailable()]) {
-			expect(list.find(m => m.provider === "fixture" && m.id === "small")).toMatchObject({ maxTokens: 2048 });
+			expect(list.find(m => m.provider === "fixture" && m.id === "small")).toMatchObject({ maxTokens: 2048, reasoning: true });
 		}
 		const builtin = original.getModels().find(m => m.provider !== "fixture" && m.maxTokens < 128000 && m.contextWindow >= 128000);
 		expect(builtin).toBeDefined();

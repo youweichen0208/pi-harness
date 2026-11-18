@@ -248,20 +248,16 @@ async function run() {
 				.first();
 		const cwA = await rowFor("mock-a").locator('input[type="number"]').nth(0).inputValue();
 		const inA = await rowFor("mock-a").locator(":scope > select").inputValue();
-		const reA = await rowFor("mock-a").locator(".check input").isChecked();
 		check("mock-a contextWindow filled", cwA === "32768", `cw=${cwA}`);
 		check("mock-a marked as text-image", inA === "text-image", `input=${inA}`);
 
 		const cwB = await rowFor("mock-b").locator('input[type="number"]').nth(0).inputValue();
 		const inB = await rowFor("mock-b").locator(":scope > select").inputValue();
-		const reB = await rowFor("mock-b").locator(".check input").isChecked();
 		check("mock-b contextWindow filled", cwB === "128000", `cw=${cwB}`);
 		check("mock-b marked as text-image", inB === "text-image", `input=${inB}`);
-		check("mock-b reasoning checked", reB);
 
 		const inC = await rowFor("mock-c").locator(":scope > select").inputValue();
 		check("mock-c stays text (no metadata)", inC === "text", `input=${inC}`);
-		check("mock-a reasoning stays unchecked (no metadata)", !reA);
 
 		// Error path: invalid baseUrl → inline error message.
 		await inputs.nth(2).fill("ht!tp://nope");

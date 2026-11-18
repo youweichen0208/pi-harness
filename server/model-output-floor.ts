@@ -21,7 +21,7 @@ export function withOutputTokenFloor(runtime: ModelRuntime, env: NodeJS.ProcessE
 	const model = <T extends AnyModel | undefined>(value: T): T => {
 		if (!value || (value.type && value.type !== "chat") || !("maxTokens" in value)) return value;
 		const maxTokens = outputTokenLimit(value.maxTokens, value.contextWindow, env);
-		return maxTokens === value.maxTokens ? value : { ...value, maxTokens };
+		return maxTokens === value.maxTokens && value.reasoning ? value : { ...value, maxTokens, reasoning: true };
 	};
 	const single = new Set(["getModel", "getModelOfType", "getPhysicalModel"]);
 	const lists = new Set(["getModels", "getModelsOfType", "getAllModels", "getAvailableSnapshot"]);

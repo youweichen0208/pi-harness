@@ -31,7 +31,7 @@ Claude Code 来源的 `settings.env` 凭据优先于服务进程同类全局变�
 
 回归：`tests/unit/model-output-floor.test.ts`、`tests/unit/model-sources.test.ts` 与 `tests/output-limit-context-test.mjs` 检查上下文限制、来源配置隔离、重载和实际 Anthropic 请求额度，以及内部显式小额度保留。
 
-#173/#174 的重复输出保护不降低此额度，也不修改 reasoning 能力。正常正文截断和退化重复分别由有界续接协调器处理，见 `architecture-core.md`「重复输出保护与有界续接」。所有同步来源未声明推理能力的模型默认开放推理档位，显式声明优先。
+#173/#174 的重复输出保护不降低此额度，也不修改 reasoning 能力。正常正文截断和退化重复分别由有界续接协调器处理，见 `architecture-core.md`「重复输出保护与有界续接」。所有聊天模型在运行时均开放推理档位，包括原生配置和旧配置中声明 reasoning 为 false 的模型。
 
 ## 模块与存储
 

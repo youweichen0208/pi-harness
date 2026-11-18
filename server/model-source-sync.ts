@@ -223,7 +223,7 @@ export class ModelSourceSync {
 				const e = { ...entry, provider };
 				const c = e.connection;
 				b.runtime.registerProvider(e.provider, { name: `${c.name || c.id} · ${e.origin.sources.join(" / ")}`, baseUrl: c.baseUrl, api: c.api, headers: Object.fromEntries(Object.entries(c.headers).map(([key, value]) => [key, (value.startsWith("!") ? "$" : "") + value.split("$").join("$$")])), authHeader: c.authHeader,
-					models: [{ id: c.id, name: c.name || c.id, reasoning: c.reasoning, input: c.input, contextWindow: c.contextWindow, maxTokens: c.maxTokens, compat: { ...readModelCompat(c.providerCompat), ...readModelCompat(c.compat) }, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } }] });
+					models: [{ id: c.id, name: c.name || c.id, reasoning: true, input: c.input, contextWindow: c.contextWindow, maxTokens: c.maxTokens, compat: { ...readModelCompat(c.providerCompat), ...readModelCompat(c.compat) }, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } }] });
 				if (c.authentication === "bearer") {
 					// Header-owned Anthropic auth must not also send x-api-key. This native
 					// provider uses the public credential resolver and bypasses config strings.
@@ -283,7 +283,7 @@ export class ModelSourceSync {
 			if (!safe) continue;
 			let baseUrl: string; try { baseUrl = new URL(m.baseUrl).href; } catch { continue; }
 			const native: Connection = { source: "pi", slot: `${m.provider}/${m.id}`, id: m.id, api: m.api as Connection["api"], baseUrl, key, headers,
-				authHeader: p.authHeader === true, reasoning: m.reasoning, input: m.input, contextWindow: m.contextWindow, maxTokens: m.maxTokens };
+				authHeader: p.authHeader === true, reasoning: true, input: m.input, contextWindow: m.contextWindow, maxTokens: m.maxTokens };
 			for (const entry of this.entries) {
 				if (entry.origin.mode !== "synced") continue;
 				// Compare effective limits with the candidate native context before
@@ -361,7 +361,7 @@ export class ModelSourceSync {
 		return this.entries.map(({ provider, connection: c, origin }) => ({ providerId: provider, name: c.name || c.id, api: c.api,
 			// Query parameters may hold credentials. Editing an unchanged redacted URL preserves it.
 			baseUrl: c.baseUrl.split("?")[0], authHeader: c.authHeader, origin, compat: readModelCompat(c.providerCompat),
-			models: [{ id: c.id, name: c.name, reasoning: c.reasoning, input: c.input, contextWindow: c.contextWindow, maxTokens: c.maxTokens, compat: readModelCompat(c.compat) }] }));
+			models: [{ id: c.id, name: c.name, reasoning: true, input: c.input, contextWindow: c.contextWindow, maxTokens: c.maxTokens, compat: readModelCompat(c.compat) }] }));
 	}
 	owns(provider: string) { return /^sync-[a-f0-9]{24}$/.test(provider); }
 	async edit(provider: string, config?: UiProviderConfig) {
@@ -383,7 +383,7 @@ export class ModelSourceSync {
 			const headers = { ...c.headers };
 			if (!c.authHeader && headers.Authorization === `Bearer ${c.key}`) headers.Authorization = `Bearer ${key}`;
 			this.state.local[provider] = { ...c, compat, providerCompat, unknownCapabilities: [], headers, authHeader: config.authHeader ?? c.authHeader, id: m.id, name: config.name || m.name, api: config.api as Connection["api"], baseUrl, key,
-				reasoning: m.reasoning ?? false, input: m.input?.includes("image") ? ["text", "image"] : ["text"], contextWindow: m.contextWindow || c.contextWindow, maxTokens: m.maxTokens || c.maxTokens };
+				reasoning: true, input: m.input?.includes("image") ? ["text", "image"] : ["text"], contextWindow: m.contextWindow || c.contextWindow, maxTokens: m.maxTokens || c.maxTokens };
 		}
 		if (config) this.state.localAliases = { ...this.state.localAliases, ...Object.fromEntries(entry.aliases.filter(id => id !== provider).map(id => [id, provider])) };
 		if (!validState(this.state)) { this.state = previous; throw new Error("独立模型配置无效"); }

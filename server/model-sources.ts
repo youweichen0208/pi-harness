@@ -78,7 +78,7 @@ export function discoverModels(options: DiscoveryOptions = {}): { connections: C
 		const positive = (v: unknown, fallback: number) => typeof v === "number" && Number.isFinite(v) && v > 0 ? v : fallback;
 		connections.push({ source, slot, id: model, api, baseUrl: parsed.href, key: secret, headers: safeHeaders, authHeader, authentication: api === "anthropic-messages" && safeHeaders.Authorization === `Bearer ${secret}` ? "bearer" : "api-key",
 			unknownCapabilities: capabilityFields.filter(field => metadata[field] === undefined),
-			name: string(metadata.name) || undefined, reasoning: metadata.reasoning !== false,
+			name: string(metadata.name) || undefined, reasoning: true,
 			input: Array.isArray(metadata.input) && metadata.input.includes("image") ? ["text", "image"] : ["text"],
 			contextWindow: positive(metadata.contextWindow, 32768), maxTokens: positive(metadata.maxTokens, 4096) });
 	};
