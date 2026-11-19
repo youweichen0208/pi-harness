@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { useEffect, useState } from "react";
 import {
 	FiSidebar,
+	FiFolder,
 	FiChevronDown,
 	FiDatabase,
 	FiGitBranch,
@@ -28,6 +29,7 @@ import { useI18n, type Locale } from "../i18n";
 interface TopBarProps {
 	onOpenDatabase: () => void;
 	leftCollapsed?: boolean;
+	filesOpen?: boolean;
 	gitChangeCount: number;
 	chat: ChatState;
 	send: (msg: ClientMessage) => boolean;
@@ -67,6 +69,7 @@ interface TopBarProps {
 export function TopBar({
 	onOpenDatabase,
 	leftCollapsed = false,
+	filesOpen = false,
 	gitChangeCount,
 	chat,
 	send,
@@ -176,7 +179,7 @@ export function TopBar({
 				<span className="conn-label">{connLabel}</span>
 			</div>
 
-			{view !== "nodes" && <button type="button" className="project-panel-toggle" title={t(leftCollapsed ? "expandProjects" : "collapseProjects")} aria-label={t(leftCollapsed ? "expandProjects" : "collapseProjects")} aria-expanded={!leftCollapsed} onClick={() => onOpenPanel("left")}><FiSidebar /></button>}
+			{view !== "nodes" && view !== "terminal" && view !== "git" && <button type="button" className="project-panel-toggle" title={t(leftCollapsed ? "expandProjects" : "collapseProjects")} aria-label={t(leftCollapsed ? "expandProjects" : "collapseProjects")} aria-expanded={!leftCollapsed} onClick={() => onOpenPanel("left")}><FiSidebar /></button>}
 			<div className="header-location"><button type="button" className="conversation-title-button" title={t("treeTitle")} aria-label={`${t("currentConversation")} · ${t("treeTitle")}`} onClick={() => openSessionTree()}><strong>{t("currentConversation")}</strong><FiChevronDown className="conversation-title-chevron" aria-hidden="true" /></button></div>
 			<div className="topbar-actions">
 				<div className="panel-tab-bar">
@@ -193,6 +196,8 @@ export function TopBar({
 
 
 				</div>
+
+				{view === "chat" && <button type="button" className="workspace-files-toggle" aria-label={t("openFiles")} title={t("openFiles")} aria-expanded={filesOpen} onClick={() => onOpenPanel("right")}><FiFolder aria-hidden="true" /><span>{t("workspaceFiles")}</span></button>}
 
 				{/* Desktop toolbar — hidden on mobile (model controls move into the
 				    input row; sound/lang fold into "⋯" below). Update-check and

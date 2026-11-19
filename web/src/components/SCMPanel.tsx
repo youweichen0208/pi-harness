@@ -30,6 +30,8 @@ import { getClientId } from "../use-chat";
 import type { ScmOperationRequest, ScmOperationResult } from "../types";
 import { randomUuid } from "../uuid";
 import { useT } from "../i18n";
+import { parseUnifiedDiff } from "../changes";
+import { ChangeSummaryCard } from "./ChangeSummaryCard";
 
 /* ------------------------------------------------------------------ */
 /* data shapes                                                         */
@@ -412,14 +414,6 @@ export function ScmPanel({
 	/** Shell-quote one repo-relative path for the visible terminal. */
 	const quotePath = (path: string) => `'${path.replace(/'/g, `'\\''`)}`;
 
-	const handleStage = useCallback(
-		(f: ScmFile) => {
-			if (notRepo) return;
-			runGitCommand("git add", `git add -- ${quotePath(f.path)}`);
-		},
-		[notRepo, runGitCommand],
-	);
-
 	const handleUnstage = useCallback(
 		(f: ScmFile) => {
 			if (notRepo) return;
@@ -534,41 +528,14 @@ export function ScmPanel({
 	};
 
 	const renderDiff = (text: string) => {
-		const lines = text.split("\n");
-		return (
-			<pre className="scm-diff-pre">
-				{lines.map((ln, i) => {
-					let cls = "";
-					if (
-						ln.startsWith("diff --git") ||
-						ln.startsWith("index ") ||
-						ln.startsWith("new file") ||
-						ln.startsWith("deleted file") ||
-						ln.startsWith("old mode") ||
-						ln.startsWith("new mode") ||
-						ln.startsWith("similarity index") ||
-						ln.startsWith("rename ") ||
-						ln.startsWith("copy ") ||
-						ln.startsWith("Binary files") ||
-						ln.startsWith("---") ||
-						ln.startsWith("+++")
-					) {
-						cls = "hdr";
-					} else if (ln.startsWith("@@")) {
-						cls = "hunk";
-					} else if (ln.startsWith("+")) {
-						cls = "add";
-					} else if (ln.startsWith("-")) {
-						cls = "del";
-					}
-					return (
-						<div key={i} className={`scm-diff-line ${cls}`}>
-							{ln || " "}
-						</div>
-					);
-				})}
-			</pre>
-		);
+		const files = parseUnifiedDiff(text);
+		// Git show includes commit metadata before the first patch. Preserve it.
+		const patchStart = text.indexOf("diff --git ");
+		const metadata = patchStart < 0 ? text : text.slice(0, patchStart).trim();
+		return <div className="scm-split-diff">
+			{metadata && <pre className="scm-diff-pre">{metadata}</pre>}
+			{files.length > 0 && <ChangeSummaryCard key={text} files={files} inlineDiff />}
+		</div>;
 	};
 
 	return (
@@ -816,19 +783,6 @@ export function ScmPanel({
 											</span>
 										)}
 										<span className="scm-file-actions">
-											{(f.y !== " " || kind === "untracked") && (
-												<button
-													type="button"
-													className="scm-act"
-													title={t("scmStageTip", { path: f.path })}
-													onClick={(e) => {
-														e.stopPropagation();
-														handleStage(f);
-													}}
-												>
-													+
-												</button>
-											)}
 											{kind === "staged" || kind === "both" ? (
 												<button
 													type="button"

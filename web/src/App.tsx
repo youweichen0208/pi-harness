@@ -192,7 +192,8 @@ const EMPTY_MESSAGES: UiMessage[] = [];
 const PANEL_MIN = 180;
 const PANEL_MAX = 520;
 const PANEL_DEFAULT = 240;
-const MIN_WORKSPACE_CHAT_WIDTH = 640;
+// Keep the file tree docked on compact desktop windows (e.g. 960px).
+const MIN_WORKSPACE_CHAT_WIDTH = 360;
 type PanelSide = "left" | "right" | "editor";
 const panelWidthKey = (side: PanelSide) => `pi-harness:${side}-panel-width`;
 function readPanelWidth(side: PanelSide): number {
@@ -749,19 +750,12 @@ export function App() {
 		void syncPluginViews(enabledPlugins, chat.pluginsEpoch);
 	}, [enabledPlugins, chat.pluginsEpoch]);
 	// 左右面板可拖拽宽度（桌面端）：localStorage 持久化，双击手柄复位。
-	const [leftCollapsed, setLeftCollapsed] = useState(() => localStorage.getItem("pi-left-collapsed") === "true");
-	const terminalLeftRestore = useRef<boolean | null>(null);
-	const previousViewForLeft = useRef<ViewName>(view);
+	const [leftCollapsedPreference, setLeftCollapsed] = useState(false);
+	const navigationLocked = view === "terminal" || view === "git";
+	const leftCollapsed = navigationLocked || leftCollapsedPreference;
 	useLayoutEffect(() => {
-		const wasTerminal = previousViewForLeft.current === "terminal";
-		if (view === "terminal" && !wasTerminal) {
-			terminalLeftRestore.current = leftCollapsed;
-			setLeftCollapsed(true);
-		} else if (view !== "terminal" && wasTerminal && terminalLeftRestore.current !== null) {
-			setLeftCollapsed(terminalLeftRestore.current);
-			terminalLeftRestore.current = null;
-		}
-		previousViewForLeft.current = view;
+		setLeftCollapsed(view !== "chat");
+		setDrawer(null);
 	}, [view]);
 	const [changesOpen, setChangesOpen] = useState(false);
 	const changesLeftRestore = useRef<boolean | null>(null);
@@ -769,6 +763,12 @@ export function App() {
 		setChangesOpen(open);
 		if (open) setLeftCollapsed(previous => { changesLeftRestore.current = previous; return true; });
 		else if (changesLeftRestore.current !== null) { setLeftCollapsed(changesLeftRestore.current); changesLeftRestore.current = null; }
+	}, []);
+	const collapseNavigationForTab = useCallback(() => {
+		setLeftCollapsed(true);
+		setDrawer(null);
+		// Explicit top-bar navigation wins over temporary panel restoration.
+		changesLeftRestore.current = null;
 	}, []);
 	const changedFiles = useMemo(() => taskChanges(conversationState?.taskProgress, conversationState?.messages ?? [], conversationState?.cwd ?? ""), [conversationState?.taskProgress, conversationState?.messages, conversationState?.cwd]);
 	const [leftWidth, setLeftWidth] = useState(() => readPanelWidth("left"));
@@ -821,7 +821,11 @@ export function App() {
 		window.addEventListener("resize", onResize);
 		return () => window.removeEventListener("resize", onResize);
 	}, []);
-	const filesOverlayForChat = isNarrow || viewportWidth - (leftCollapsed ? 56 : leftWidth) - rightWidth <= MIN_WORKSPACE_CHAT_WIDTH;
+	// In a three-column chat, let navigation yield space before hiding files.
+	const compactChat = view === "chat" && !inlinePreview && !isNarrow;
+	const visibleLeftWidth = compactChat ? Math.min(leftWidth, Math.max(180, viewportWidth * 0.16)) : leftWidth;
+	const visibleRightWidth = compactChat ? Math.min(rightWidth, Math.max(220, viewportWidth * 0.21)) : rightWidth;
+	const filesOverlayForChat = isNarrow || viewportWidth - (leftCollapsed ? 56 : visibleLeftWidth) - visibleRightWidth <= MIN_WORKSPACE_CHAT_WIDTH;
 	const filesOverlay = !inlinePreview && filesOverlayForChat;
 	useEffect(() => {
 		setDrawer(current => current === "right" ? null : current);
@@ -1343,7 +1347,7 @@ export function App() {
 		// composer) call stopPropagation and keep priority.
 		<ChangesProvider conversationId={conversationState?.conversationId ?? ""} files={changedFiles} active={view === "chat"} onOpenChange={onChangesOpen}><PlaygroundProvider value={playgroundHost}><div
 			className={`app design-workspace dual-navigation ${notesOpen || scratchOpen ? "notes-open" : ""} ${view === "wiki" ? "wiki-mode" : ""} ${changesOpen && view === "chat" ? "changes-open" : ""} ${leftCollapsed ? "left-collapsed" : ""} ${inlinePreview && view === "chat" ? "document-open" : ""}`}
-			style={{ "--left-w": `${leftWidth}px`, "--right-w": `${rightWidth}px` } as CSSProperties}
+			style={{ "--left-w": `${visibleLeftWidth}px`, "--right-w": `${visibleRightWidth}px` } as CSSProperties}
 			onDragOver={(e) => {
 				if (notesOpen || scratchOpen) { e.preventDefault(); return; }
 				if (!Array.from(e.dataTransfer?.types ?? []).includes("Files")) return;
@@ -1377,12 +1381,12 @@ export function App() {
 					<span><UiIcon name="paperclip" /> {t("dropHereToAttach")}</span>
 				</div>
 			)}
-			{view !== "nodes" && view !== "wiki" && <FluidDrawer side="left" onOpen={() => setDrawer("left")} open={drawer === "left"} overlay={isNarrow} label={t("workspaceProjects")} onClose={() => setDrawer(null)}
+			{view !== "nodes" && view !== "wiki" && <FluidDrawer side="left" onOpen={() => { if (!navigationLocked) setDrawer("left"); }} open={!navigationLocked && drawer === "left"} overlay={isNarrow} label={t("workspaceProjects")} onClose={() => setDrawer(null)}
 				className={`panel-drawer drawer-left ${drawer === "left" ? "open" : ""}`}
 			>
 				<LeftPanel
 					directoryCollapsed={leftCollapsed}
-					onToggleDirectory={() => setLeftCollapsed(value => !value)}
+					onToggleDirectory={() => { if (!navigationLocked) setLeftCollapsed(value => !value); }}
 					notesOpen={notesOpen}
 					scratchOpen={scratchOpen}
 					notesList={<NotesList notes={notes} />}
@@ -1405,13 +1409,14 @@ export function App() {
 				/>
 			</FluidDrawer>}
 			{view !== "nodes" && view !== "wiki" && !isMobile && !leftCollapsed && (
-				<ResizeHandle side="left" width={leftWidth} onResize={resizeLeft} />
+				<ResizeHandle side="left" width={visibleLeftWidth} onResize={resizeLeft} />
 			)}
 
 			<div className="workspace-column">
 				{view !== "wiki" && <TopBar
-					onOpenDatabase={openDatabase}
+					onOpenDatabase={() => { collapseNavigationForTab(); openDatabase(); }}
 					leftCollapsed={leftCollapsed}
+					filesOpen={filesOverlay ? drawer === "right" : !filesCollapsed || inlinePreview}
 					gitChangeCount={workspaceScm.files.length}
 					chat={chat}
 					send={send}
@@ -1419,6 +1424,8 @@ export function App() {
 					view={view}
 					plugins={enabledPlugins}
 					onViewChange={(v: ViewName) => {
+						collapseNavigationForTab();
+						setLeftCollapsed(v !== "chat");
 						setNotesOpen(false);
 						setScratchOpen(false);
 						// The terminal panel stays mounted while hidden. Create the first
@@ -1433,6 +1440,7 @@ export function App() {
 						changeView();
 					}}
 					onOpenPanel={(side) => {
+						if (side === "left" && navigationLocked) return;
 						if (side === "left" && !isNarrow) {
 							setDrawer(null);
 							changesLeftRestore.current = null;
@@ -1475,7 +1483,7 @@ export function App() {
 				{scratchOpen && <PaneErrorBoundary name="Playground"><PlaygroundScratch /></PaneErrorBoundary>}
 				<div
 					className={`layout ${notesOpen || scratchOpen ? "notes-chat-hidden" : ""}`}
-					style={{ "--left-w": `${leftWidth}px`, "--right-w": `${rightWidth}px`, "--editor-share": editorShare } as CSSProperties}
+					style={{ "--left-w": `${visibleLeftWidth}px`, "--right-w": `${visibleRightWidth}px`, "--editor-share": editorShare } as CSSProperties}
 				>
 					{drawer && ((drawer === "left" && (isNarrow || !!previewFile)) || (drawer === "right" && filesOverlay)) && (
 						<div className="drawer-backdrop" onClick={() => setDrawer(null)} />
@@ -1556,7 +1564,7 @@ export function App() {
 						</ChatDock>
 						<ChangesPanel key={conversationState?.conversationId ?? ""} cwd={conversationState?.cwd ?? ""} data={chat.scmDiffData} send={send} ready={chat.ready && !switching} notRepo={!workspaceScm.loaded || workspaceScm.notRepo} branch={workspaceScm.branch} defaultBase={workspaceScm.base} branches={workspaceScm.branches} dirty={chat.scmDirty} />
 						{!isMobile && !filesOverlay && (!filesCollapsed || inlinePreview) && (
-							<ResizeHandle side={inlinePreview ? "editor" : "right"} width={inlinePreview ? 480 : rightWidth} onResize={inlinePreview ? resizeEditor : resizeRight} onReset={inlinePreview ? () => { setEditorShare(0.45); localStorage.setItem("pi-harness:editor-share", "0.45"); } : undefined} />
+							<ResizeHandle side={inlinePreview ? "editor" : "right"} width={inlinePreview ? 480 : visibleRightWidth} onResize={inlinePreview ? resizeEditor : resizeRight} onReset={inlinePreview ? () => { setEditorShare(0.45); localStorage.setItem("pi-harness:editor-share", "0.45"); } : undefined} />
 						)}
 						<FluidDrawer side="right" onOpen={() => setDrawer("right")} open={drawer === "right"} overlay={filesOverlay} label={t("workspaceFiles")} onClose={() => setDrawer(null)}
 							className={`panel-drawer drawer-right ${filesCollapsed && !inlinePreview ? "files-collapsed" : ""} ${drawer === "right" ? "open" : ""}`}

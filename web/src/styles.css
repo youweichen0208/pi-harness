@@ -9564,7 +9564,7 @@ body { -webkit-font-smoothing: antialiased; }
 .status-item.working .working-dots i { width: 3px; height: 3px; }
 @media (max-width: 600px) { .design-workspace .input-tools:has(.btn.stop) { flex-wrap: wrap; } .design-workspace .input-tools:has(.btn.stop) .input-tools-right { margin-left: auto; } }
 
-.design-workspace .main { --composer-gutter: 32px; --chat-max: clamp(760px, 76vw, 1800px); }
+.design-workspace .main { --composer-gutter: 32px; --chat-max: 1200px; }
 .design-workspace .inputbar { padding-inline: var(--composer-gutter); }
 .design-workspace .scroll-bottom { right: max(var(--composer-gutter), calc((100% - var(--chat-max)) / 2)); }
 .agent-working { width: calc(100% - 56px); max-width: calc(var(--chat-max) - 56px); margin: 12px auto 20px; }
@@ -16645,3 +16645,102 @@ span.rich-math { display: inline-block; }
 .mermaid-zoom-stage { flex: 1; min-height: 0; overflow: auto; padding: 16px; }
 .mermaid-zoom-content { min-width: 0; }
 .mermaid-zoom-content > svg { display: block; width: 100%; height: auto; max-width: none !important; }
+
+/* Issue 181: single-column annotated diff. */
+/* SCM uses the same paired diff as chat and the changes workspace. */
+.scm-split-diff { min-width: 0; }
+.scm-split-diff .change-summary { width: 100%; max-width: none; margin: 0; }
+.scm-split-diff .change-summary > header { display: none; }
+.scm-split-diff .change-ratio { display: none; }
+
+/* Issue 181 reference palette: white editor, soft changes, readable syntax. */
+:root {
+	--review-font: "JetBrains Mono", "Menlo", "Consolas", monospace;
+	--review-bg: #fefefe;
+	--review-header: #f9f9f9;
+	--review-border: #dedede;
+	--review-fg: #111111;
+	--review-muted: #666666;
+	--review-add: #eafaeb;
+	--review-del: #ffebe9;
+	--review-word-add: #d3f0d4;
+	--review-word-del: #ffc9c5;
+	--review-keyword: #800080;
+	--review-function: #003ca6;
+	--review-string: #009688;
+}
+:root[data-appearance="dark"] {
+	--review-bg: var(--bg-elev);
+	--review-header: var(--bg-elev2);
+	--review-border: var(--border);
+	--review-fg: var(--text);
+	--review-muted: var(--text-dim);
+	--review-add: #183d29;
+	--review-del: #482525;
+	--review-word-add: #245b39;
+	--review-word-del: #703332;
+	--review-keyword: #d6a4ec;
+	--review-function: #88b9ff;
+	--review-string: #8ecfbc;
+}
+:root .diff-unified {
+	--diff-add-bg: var(--review-add); --diff-del-bg: var(--review-del);
+	--diff-add-fg: var(--review-fg); --diff-del-fg: var(--review-fg);
+	--diff-word-add: var(--review-word-add); --diff-word-del: var(--review-word-del);
+	background: var(--review-bg); color: var(--review-fg);
+}
+:root .diff-unified .changes-line { font: 400 14px/1.6 var(--review-font); tab-size: 4; font-variant-ligatures: none; letter-spacing: 0; }
+:root .diff-unified .changes-line.context { background: var(--review-bg); }
+:root .diff-unified .changes-line code { color: var(--review-fg); }
+:root .diff-unified .changes-line-number { color: var(--review-muted); }
+:root .diff-unified .changes-line .hljs-keyword { color: var(--review-keyword); }
+:root .diff-unified .changes-line :is(.hljs-title, .hljs-attr, .hljs-built_in, .hljs-literal, .hljs-number) { color: var(--review-function); }
+:root .diff-unified .changes-line :is(.hljs-string, .hljs-regexp) { color: var(--review-string); }
+:root .diff-unified .changes-line :is(.hljs-comment, .hljs-quote) { color: var(--review-muted); }
+:root .change-summary-inline { border-color: var(--review-border); background: var(--review-bg); overflow: hidden; }
+:root .change-summary-inline > header { display: none; }
+:root .change-summary-inline .change-summary-file { background: var(--review-header); border-bottom: 1px solid var(--review-border); min-height: 38px; }
+:root .change-summary-inline .change-summary-name code { color: var(--review-fg); font: 600 14px var(--sans); }
+:root .change-summary-inline .change-ratio { display: none; }
+
+/* Reference screenshot: compact gutter and green line numbers, independent of UI accent. */
+:root { --review-add-marker: #08620c; --review-del-marker: #b42326; }
+:root[data-appearance="dark"] { --review-add-marker: #8bd59a; --review-del-marker: #f3a4a4; }
+:root .diff-unified .changes-line-number { flex: 0 0 max(36px, var(--diff-number-width, 3ch)); width: max(36px, var(--diff-number-width, 3ch)); font-weight: 400; white-space: nowrap; }
+:root .diff-unified .changes-line-sign { flex-basis: 14px; }
+:root .diff-unified .changes-line.add { border-left-color: var(--review-add-marker); }
+:root .diff-unified .changes-line.del { border-left-color: var(--review-del-marker); }
+:root .diff-unified .changes-line.add :is(.changes-line-number, .changes-line-sign) { color: var(--review-add-marker); }
+:root .diff-unified .changes-line.del :is(.changes-line-number, .changes-line-sign) { color: var(--review-del-marker); }
+
+/* The file header is a flush disclosure row, not a nested button card. */
+:root .design-workspace .change-summary-inline { padding: 0; }
+:root .design-workspace .change-summary-inline > .change-summary-file {
+	border: 0 !important;
+	border-bottom: 1px solid var(--review-border) !important;
+	border-radius: 0;
+	box-shadow: none;
+	margin: 0;
+	padding: 8px 12px;
+}
+
+/* Line numbers stay on the editor canvas; only their text indicates changes. */
+:root .diff-unified .changes-line-number { background: var(--review-bg); }
+
+/* File navigation remains discoverable when its panel becomes a drawer. */
+.design-workspace .workspace-files-toggle {
+	display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+	flex: 0 0 auto; min-height: 32px; padding: 0 10px;
+	border: 1px solid var(--border-soft); border-radius: var(--r-sm);
+	background: var(--bg); color: var(--text-dim); font: 13px var(--sans);
+	cursor: pointer; -webkit-app-region: no-drag;
+}
+.design-workspace .workspace-files-toggle[aria-expanded="true"] { background: var(--accent-soft); color: var(--accent); }
+.design-workspace .workspace-files-toggle:hover { background: var(--row-hover); }
+.design-workspace .workspace-files-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (pointer: coarse) { .design-workspace .workspace-files-toggle { min-height: 44px; min-width: 44px; } }
+
+/* Compact desktop chat: prioritize the reading column over outer gutters. */
+@media (min-width: 901px) and (max-width: 1440px) {
+	.design-workspace .main { --composer-gutter: 16px; }
+}
