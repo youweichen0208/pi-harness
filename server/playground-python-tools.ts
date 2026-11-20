@@ -43,7 +43,7 @@ export class PythonTools {
 function command(python: PythonCommand, args: string[], signal: AbortSignal): Promise<void> {
 	return new Promise((resolve, reject) => {
 		if (signal.aborted) { reject(new Error("Python tools installation cancelled")); return; }
-		const child = spawn(python.command, [...python.args, "-I", "-X", "utf8", "-u", ...args], { detached: true, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+		const child = spawn(python.command, [...python.args, "-I", "-B", "-X", "utf8", "-u", ...args], { detached: true, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
 		let output = "", bytes = 0, stopped = "";
 		const stop = (reason: string) => { stopped = reason; if (child.pid) killPidTree(child.pid); };
 		const abort = () => stop("Python tools installation cancelled");

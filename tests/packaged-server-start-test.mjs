@@ -86,7 +86,28 @@ const rgRelative = relative(appRoot, rgPath);
 assert(existsSync(rgPath) && !isAbsolute(rgRelative) && !rgRelative.startsWith(".."), "ripgrep binary must be shipped inside the app");
 assert.match(execFileSync(rgPath, ["--version"], { encoding: "utf8", timeout: 10000 }), /ripgrep/);
 console.log("PASS packaged ripgrep binary runs without a system installation");
-const { agentRuntimeEnvironment } = await import(pathToFileURL(join(appRoot, "electron/agent-runtime-env.mjs")).href);
+const { agentRuntimeEnvironment, desktopPythonEnvironment } = await import(pathToFileURL(join(appRoot, "electron/agent-runtime-env.mjs")).href);
+const runtime = desktopPythonEnvironment(resolve(appRoot, ".."), "");
+execFileSync(executable, ["--input-type=module", "--eval", `
+	import assert from 'node:assert/strict';
+	import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
+	import { tmpdir } from 'node:os';
+	import { join } from 'node:path';
+	import { notebookKernels } from './dist/server/notebook-kernel.js';
+	const dir = mkdtempSync(join(tmpdir(), 'pi bundled notebook '));
+	const kernels = notebookKernels(dir);
+	try {
+		const run = code => kernels.request('first', join(dir, 'example.md'), 'notebook-run', code);
+		await run('answer = 6 * 7');
+		assert.equal((await run('answer')).outputs[0].data['text/plain'], '42');
+		const result = await run('import sys; print(sys.executable)');
+		assert.equal(realpathSync(result.outputs[0].text.trim()), realpathSync(process.env.PI_WEB_PYTHON));
+	} finally {
+		await kernels.close();
+		rmSync(dir, { recursive: true, force: true });
+	}
+`], {cwd:appRoot,env:{...testEnv(),...runtime,ELECTRON_RUN_AS_NODE:"1"},timeout:90000,stdio:"inherit"});
+console.log("PASS fresh packaged Jupyter cells share the bundled interpreter");
 if (process.platform === "win32") {
 	const helper = readFileSync(join(appRoot, "node_modules/node-pty/lib/conpty_console_list_agent.js"), "utf8");
 	assert.match(helper, /pi-harness: the console may already be gone during ConPTY teardown/);
@@ -167,7 +188,7 @@ const child = fork(join(appRoot, "dist/server/index.js"), [], {
 		PI_CODING_AGENT_DIR: join(temp, "agent"),
 		PI_WEB_PKG_ROOT: appRoot,
 		PI_WEB_NO_BROWSER: "1",
-		// Python is supplied by the host, not bundled with the desktop app.
+		// An explicitly configured unavailable interpreter still reports an error.
 		PI_WEB_PYTHON: join(temp, "missing-python"),
 	},
 	stdio: ["ignore", "pipe", "pipe", "ipc"],

@@ -275,7 +275,8 @@ try {
 		const page = await browser.newPage({ viewport: { width: 1400, height: 950 } });
 		const errors = []; page.on("pageerror", error => errors.push(error.message)); page.on("dialog", dialog => dialog.accept());
 		await page.goto("http://127.0.0.1:9234");
-		await page.locator(".setup-modal .modal-close").click();
+		const closeSetup = page.locator(".setup-modal .modal-close");
+		await page.addLocatorHandler(closeSetup, () => closeSetup.click());
 		await page.getByRole("tab", { name: "节点", exact: true }).click();
 		await page.locator(".node-item", { hasText: "Remote" }).locator("button").first().click();
 		const before = requests;

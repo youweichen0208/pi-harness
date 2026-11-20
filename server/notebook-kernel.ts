@@ -13,7 +13,7 @@ const script = ["../assets/notebook/kernel.py", "../../assets/notebook/kernel.py
 	.map((p) => fileURLToPath(new URL(p, import.meta.url)))
 	.find(existsSync)!;
 function launch(command: string, target: string, file: string) {
-	const child = spawn(command, ["-I", "-u", script, target], {
+	const child = spawn(command, ["-I", "-B", "-u", script, target], {
 		cwd: dirname(file),
 		detached: true,
 		windowsHide: true,

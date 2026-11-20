@@ -91,7 +91,7 @@ export function WikiChatPanel({ resizeHandle, messages, live, streaming, toolSta
 					{message.errorMessage && <p role="alert" className="wiki-chat-error">{message.errorMessage}</p>}
 				</div>;
 			})}
-			{streaming && <ConversationWorkingStatus onStop={onStop} state={{ recovery, messages, streamingMessage: live, isStreaming: streaming, conversationId, model: model ?? null }} connected={connected} silenceNotified={silenceNotified} toolStatuses={toolStatuses} />}
+			{streaming && <ConversationWorkingStatus onStop={onStop} state={{ recovery, messages, streamingMessage: live, isStreaming: streaming, conversationId }} connected={connected} silenceNotified={silenceNotified} toolStatuses={toolStatuses} />}
 		</div>
 		{actionError && <p role="alert">{actionError}</p>}
 		<footer>{composer}</footer>

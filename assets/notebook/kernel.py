@@ -13,7 +13,7 @@ from jupyter_client import KernelManager
 
 km = KernelManager(kernel_name="python3")
 # Launch the selected interpreter even when the user's python3 kernelspec differs.
-km.kernel_spec.argv = [sys.executable, "-m", "ipykernel_launcher", "-f", "{connection_file}"]
+km.kernel_spec.argv = [sys.executable, "-B", "-m", "ipykernel_launcher", "-f", "{connection_file}"]
 km.start_kernel(independent=False, env={**os.environ, "PYTHONPATH": target, "MPLBACKEND": "module://matplotlib_inline.backend_inline"})
 client = km.client()
 client.start_channels()

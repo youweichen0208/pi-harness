@@ -263,6 +263,6 @@ WikiWorkbench 直接通过 `document-content` 检查已打开文件的内容版�
 
 知识库根目录和子目录的「新建」菜单提供 Markdown 和文件夹，Markdown 文件名默认补全 .md。在富文本正文空行输入 `/jupyter` 或选择「＋ → Jupyter 单元」插入 Python 单元，点 ▶ 或按 Shift+Enter 执行。每格右上角工具栏的「＋」在当前位置后插入一格，光标进入新格。连续且带有相同 `jupyter-group=<id>` 围栏标识的单元共用外框；在正文再次使用 `/jupyter` 会新开一组。单元工具栏提供复制、运行／停止和删除。每格的垃圾桶确认后删除当前单元，点击外框或左侧提示区可选中整组，按 Backspace 或 Delete 直接删除。普通无语言围栏只展示代码。已有 python、py 和 python3 围栏可逐块运行，同一文档共享内核，工作目录为文档所在文件夹。代码自动保存；结果仅在当前页面显示，编辑代码会标记已有结果，离开或刷新后清空。已有 nbformat 4 文件可从目录打开。支持在单元内编辑 Python、Markdown，查看已保存的输出，以及通过「问 pi」引用当前单元源码。聊天默认附上单元源码；勾选「仅向 pi 引用当前单元」可缩小范围。文件采用知识库版本检查和自动保存，读写上限为 32 MiB。
 
-运行使用服务所在机器的 Python，工作目录是 Notebook 所在文件夹，可以读取同目录 CSV。解释器及启用开关见 [Python 草稿](architecture-playground.md)。环境缺少 Jupyter 时点击「安装 Notebook 运行环境」；pandas 和 Matplotlib 等业务依赖需安装在所选解释器中。代码使用服务用户权限。每个窗口和文档拥有独立内核，重启内核清空变量，保留文件中的输出；离开文档、关闭服务或空闲十分钟会回收内核。逐格运行支持 Ctrl/Cmd+Enter，Shift+Enter 运行并选中下一格。运行全部遇错即停。
+桌面安装包内置 Python 和 Jupyter 内核，CLI 使用服务所在机器的 Python。工作目录是 Notebook 所在文件夹，可以读取同目录 CSV。解释器及启用开关见 [Python 草稿](architecture-playground.md)。使用自选解释器且缺少 Jupyter 时点击「安装 Notebook 运行环境」；pandas 和 Matplotlib 等业务依赖需安装在所选解释器中。代码使用服务用户权限。每个窗口和文档拥有独立内核，重启内核清空变量，保留文件中的输出；离开文档、关闭服务或空闲十分钟会回收内核。逐格运行支持 Ctrl/Cmd+Enter，Shift+Enter 运行并选中下一格。运行全部遇错即停。
 
 浏览器回归为 `node tests/wiki-notebook-test.mjs`。将 `PI_WEB_PYTHON` 指向装有 ipykernel、jupyter_client、pandas、matplotlib 和 nbformat 的测试环境可同时验证真实执行、跨单元变量、图表和标准文件格式。
