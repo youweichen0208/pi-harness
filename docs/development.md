@@ -119,7 +119,7 @@ Pi 1.0.4 起的专项（1.4.0 继续适用，文件名保留 `pi-104-`）：`pi-
 
 内置扩展回归：`builtin-extensions-test.mjs` 纳入零 token 冒烟，验证清单、数据库开关、重载及转换／OKF 入口缺失。原生上下文基线关闭 plan 内置工具。
 
-子代理回归：`subagents-test.mjs` 使用真实 SDK 和本地模拟模型验证 Workspace 跨仓库、知识库分工及父取消，纳入零 token 冒烟；设置页 `builtin-extensions-test.mjs --browser` 覆盖六个内置条目和独立子代理开关。原生上下文基线同时关闭 subagents。
+子代理回归：`subagents-test.mjs` 使用真实 SDK 和本地模拟模型验证 Workspace 跨仓库、知识库分工及父取消，纳入零 token 冒烟；设置页 `builtin-extensions-test.mjs --browser` 覆盖内置条目、浏览器管理入口和独立子代理开关。原生上下文基线同时关闭 subagents。
 
 进度和报告界面先 `npm run build`，再运行 `node tests/subagents-test.mjs --browser`：检查三个来源的真实 `tool_delta.subagents` 进度、工具结束动作清除、按来源展开报告和引用原文、键盘操作、原始 JSON 保留，以及中英文、深色、390px、200% 缩放等效视口和减少动态效果。`subagent-wire.test.ts` 覆盖服务端白名单与限额，`subagent-ui-presentation.test.ts` 覆盖运行参数／实时进度合并、最终报告和非法数据回退。截图写入 `tests/scratch/subagents-*.png`，须实际查看而非只验证文件存在。
 

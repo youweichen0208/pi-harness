@@ -24,11 +24,13 @@ import { WikiTableIcon, WikiQuoteIcon } from "./WikiIcons";
 import { WikiToolbar, WikiInsertPopover, type WikiInsertPopup } from "./WikiToolbar";
 import { TableSizePicker } from "./TableSizePicker";
 import { MermaidDiagram } from "./MermaidDiagram";
+import { randomUuid } from "../uuid";
+import { MarkdownKernel, type KernelBlock, type KernelOwner } from "./MarkdownKernel";
 import { createPortal } from "react-dom";
 import { WikiReadingDialog } from "./WikiReading";
 import { TEXT_HIGHLIGHT_COLORS } from "../remark-text-highlight";
 import { Fragment, memo, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { FiCalendar, FiBold, FiItalic, FiSquare, FiType, FiCode, FiList, FiCheckSquare, FiMinus, FiLink, FiImage, FiArrowUp, FiArrowDown, FiArrowLeft, FiArrowRight } from "react-icons/fi";
+import { FiCalendar, FiBold, FiItalic, FiSquare, FiType, FiCode, FiPlay, FiList, FiCheckSquare, FiMinus, FiLink, FiImage, FiArrowUp, FiArrowDown, FiArrowLeft, FiArrowRight } from "react-icons/fi";
 import { markdownImageUrl } from "../markdown-image";
 import { withToken } from "../auth-token";
 import { getClientId } from "../use-chat";
@@ -38,6 +40,20 @@ import { useT } from "../i18n";
 import { LuHeading2, LuHeading3, LuTableOfContents, LuPanelTop, LuInfo, LuLightbulb, LuTriangleAlert, LuChevronsUpDown, LuListOrdered } from "react-icons/lu";
 import { mountRichDocument, prepareRichDocument, readRichDocument, renderToc } from "../rich-markdown";
 import type { RichDocument, RichLabels } from "../rich-markdown";
+
+function jupyterGroup(code?: HTMLElement) {
+	return code?.dataset.fenceMeta?.split(/\s+/).find(token => /^jupyter-group=\S+$/.test(token));
+}
+
+/** Source blocks have wrappers after reload. New cells can be direct siblings. */
+function nextCellSibling(pre: HTMLElement) {
+	let node: Node = pre;
+	while (node.parentElement?.matches(".rich-block") && !node.nextSibling) node = node.parentElement;
+	let next = node.nextSibling;
+	while (next?.nodeType === Node.TEXT_NODE && !next.textContent?.trim()) next = next.nextSibling;
+	if (next instanceof HTMLElement && next.matches(".rich-block")) return next.firstChild;
+	return next;
+}
 
 /** The gutter cell as HTML, for templates that insert a table string. */
 function gutterHtml(): string {
@@ -114,9 +130,10 @@ export interface DocumentHost {
 	/** Resolve a code span to a document path; matched spans become links. */
 	resolveCode?: (value: string) => string | undefined;
 }
-export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, readOnly, onChange, file = { cwd: "", path: "" }, documentHost, host, compact = false }: {
+export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, readOnly, onChange, kernel, file = { cwd: "", path: "" }, documentHost, host, compact = false }: {
 	file?: { cwd: string; path: string };
 	host?: RichEditorHost;
+	kernel?: KernelOwner;
 	compact?: boolean;
 	documentHost?: DocumentHost;
 	value: string;
@@ -136,6 +153,13 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 	const cardRange = useRef<Range | null>(null);
 	const [insertPopup, setInsertPopup] = useState<WikiInsertPopup | null>(null);
 	const savedRange = useRef<Range | null>(null);
+	const frameSelection = useRef<HTMLElement[]>([]);
+	function clearFrameSelection() {
+		for (const code of frameSelection.current) code.parentElement?.removeAttribute("data-frame-selected");
+		frameSelection.current = [];
+	}
+	const [kernelBlocks, setKernelBlocks] = useState<KernelBlock[]>([]);
+	const blockTargets = useRef(new WeakMap<HTMLElement, KernelBlock>());
 	const [diagrams, setDiagrams] = useState<{ host: HTMLElement; code: string }[]>([]);
 	const openMermaidSource = useRef(new WeakSet<HTMLElement>());
 	const didFocus = useRef(false);
@@ -160,6 +184,27 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		const code = element?.closest<HTMLElement>("pre > code");
 		return code && root.current?.contains(code) && selection?.focusNode && code.contains(selection.focusNode) ? code : null;
 	};
+	// Native contenteditable deletion can merge adjacent cells and orphan a <pre>.
+	useEffect(() => {
+		const editor = root.current;
+		if (!editor || !kernel) return;
+		const protectCellBoundary = (event: InputEvent) => {
+			const backward = /^delete.*Backward$/.test(event.inputType);
+			if (!backward && !/^delete.*Forward$/.test(event.inputType)) return;
+			const selection = window.getSelection();
+			const code = selectedCode();
+			if (!code || !/\blanguage-(?:python|py|python3)\b/.test(code.className) || !selection?.isCollapsed || !selection.rangeCount) return;
+			const caret = selection.getRangeAt(0);
+			const remaining = document.createRange();
+			remaining.selectNodeContents(code);
+			if (backward) remaining.setEnd(caret.startContainer, caret.startOffset);
+			else remaining.setStart(caret.endContainer, caret.endOffset);
+			const fragment = remaining.cloneContents();
+			if (!fragment.textContent && !fragment.querySelector("br")) event.preventDefault();
+		};
+		editor.addEventListener("beforeinput", protectCellBoundary);
+		return () => editor.removeEventListener("beforeinput", protectCellBoundary);
+	}, [kernel]);
 	const [floating, setFloating] = useState<{ x: number; y: number } | null>(null);
 	// Format painter: `sampled` holds one capture and is applied on the next gesture;
 	// `sticky` keeps it armed after painting until Escape or a second toggle. Both live
@@ -372,7 +417,8 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 				const selected = !!range && range.compareBoundaryPoints(Range.START_TO_START, contents) <= 0 && range.compareBoundaryPoints(Range.END_TO_END, contents) >= 0;
 				table.toggleAttribute("data-table-selected", selected);
 			});
-			root.current?.querySelectorAll<HTMLElement>("pre > code").forEach(code => {
+			const blocks: KernelBlock[] = [];
+		root.current?.querySelectorAll<HTMLElement>("pre > code").forEach(code => {
 				const contents = document.createRange(); contents.selectNodeContents(code);
 				const selected = !!range && !!code.textContent && range.compareBoundaryPoints(Range.START_TO_START, contents) <= 0 && range.compareBoundaryPoints(Range.END_TO_END, contents) >= 0;
 				code.parentElement?.toggleAttribute("data-code-selected", selected);
@@ -443,8 +489,12 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		root.current?.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach((input) => { input.disabled = readOnly; });
 	}, [readOnly, value]);
 	useLayoutEffect(() => {
+		const blocks: KernelBlock[] = [];
 		root.current?.querySelectorAll<HTMLElement>("pre > code").forEach((code) => {
 			const pre = code.parentElement!;
+			const detected = code.className.match(/language-([^\s]+)/)?.[1] ?? "";
+			const language = detected === "plaintext" ? "" : detected;
+			const isKernelCell = !!kernel && /^(python|py|python3)$/i.test(language);
 			if (wiki) pre.classList.add("codeblock");
 			let chrome = pre.querySelector<HTMLElement>(".fp-code-language");
 			if (!chrome) {
@@ -469,16 +519,20 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 				gutter.textContent = Array.from({ length: lines }, (_, index) => String(index + 1)).join("\n");
 				const chrome = pre.querySelector<HTMLElement>(".fp-code-language")!;
 				let fold = chrome.querySelector<HTMLButtonElement>("[data-code-fold]");
-				if (!fold) { fold = document.createElement("button"); fold.type = "button"; fold.dataset.codeFold = ""; chrome.prepend(fold); }
-				const updateFold = () => { const closed = pre.hasAttribute("data-wiki-code-folded"); fold!.textContent = closed ? "▸" : "▾"; fold!.setAttribute("aria-expanded", String(!closed)); fold!.title = t(closed ? "wikiCodeExpand" : "wikiCodeCollapse"); fold!.setAttribute("aria-label", fold!.title); };
-				updateFold(); fold.onmousedown = event => event.preventDefault();
-				fold.onclick = () => { pre.toggleAttribute("data-wiki-code-folded"); fold!.focus({ preventScroll: true }); updateFold(); };
+				if (isKernelCell) {
+					fold?.remove();
+					pre.removeAttribute("data-wiki-code-folded");
+				} else {
+					if (!fold) { fold = document.createElement("button"); fold.type = "button"; fold.dataset.codeFold = ""; chrome.prepend(fold); }
+					const updateFold = () => { const closed = pre.hasAttribute("data-wiki-code-folded"); fold!.textContent = closed ? "▸" : "▾"; fold!.setAttribute("aria-expanded", String(!closed)); fold!.title = t(closed ? "wikiCodeExpand" : "wikiCodeCollapse"); fold!.setAttribute("aria-label", fold!.title); };
+					updateFold(); fold.onmousedown = event => event.preventDefault();
+					fold.onclick = () => { pre.toggleAttribute("data-wiki-code-folded"); fold!.focus({ preventScroll: true }); updateFold(); };
+				}
 				let width = chrome.querySelector<HTMLButtonElement>("[data-code-width]");
-				if (!width) { width = document.createElement("button"); width.type = "button"; width.dataset.codeWidth = ""; width.textContent = "↔"; chrome.append(width); }
-				if (wiki.width) {
-					width.hidden = false;
+				if (!isKernelCell && wiki.width) {
+					if (!width) { width = document.createElement("button"); width.type = "button"; width.dataset.codeWidth = ""; width.textContent = "↔"; chrome.append(width); }
 					width.title = t(wiki.width.focused ? "wikiStandardWidth" : "wikiWideWidth"); width.setAttribute("aria-label", width.title); width.onmousedown = event => event.preventDefault(); width.onclick = () => wiki.width?.onToggle();
-				} else width.hidden = true;
+				} else width?.remove();
 			} else {
 				pre.querySelector(".wiki-code-gutter")?.remove(); pre.querySelector("[data-code-fold]")?.remove(); pre.querySelector("[data-code-width]")?.remove(); pre.querySelector("[data-code-ask]")?.remove(); pre.removeAttribute("data-wiki-code-folded");
 			}
@@ -486,7 +540,7 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 			{
 				const askCode = wiki?.ask;
 				const languageChrome = pre.querySelector<HTMLElement>(".fp-code-language");
-				if (askCode && languageChrome) {
+				if (!isKernelCell && askCode && languageChrome) {
 					let askButton = languageChrome.querySelector<HTMLButtonElement>("[data-code-ask]");
 					if (!askButton) { askButton = document.createElement("button"); askButton.type = "button"; askButton.dataset.codeAsk = ""; languageChrome.append(askButton); }
 					askButton.textContent = t("wikiAskPi"); askButton.title = t("wikiAskPi"); askButton.setAttribute("aria-label", t("wikiAskPi"));
@@ -494,8 +548,6 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 					askButton.onclick = () => askCode(richCodeText(code));
 				} else languageChrome?.querySelector("[data-code-ask]")?.remove();
 			}
-			const detected = code.className.match(/language-([^\s]+)/)?.[1] ?? "";
-			const language = detected === "plaintext" ? "" : detected;
 			const canRun = !readOnly && !!host?.runCode && ["python", "py", "python3"].includes(language);
 			let runButton = chrome.querySelector<HTMLButtonElement>("button[data-code-run]");
 			if (canRun && !runButton) {
@@ -512,8 +564,70 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 				runButton.setAttribute("aria-label", t("playgroundRun"));
 				runButton.onclick = () => host!.runCode!(richCodeText(code));
 			}
+			if (isKernelCell) {
+				let block = blockTargets.current.get(code);
+				if (!block) {
+					const button = document.createElement("span");
+					chrome.append(button);
+					const output = document.createElement("div");
+					output.dataset.richUi = "";
+					output.contentEditable = "false";
+					output.className = "wiki-kernel-output";
+					const prompt = document.createElement("span");
+					prompt.className = "wiki-cell-prompt";
+					prompt.contentEditable = "false";
+					prompt.dataset.richUi = "";
+					pre.prepend(prompt);
+					pre.append(output);
+					block = { id: randomUuid(), code, prompt, button, output };
+					blockTargets.current.set(code, block);
+				}
+				// Native contenteditable edits can remove the empty light-DOM output host.
+				if (block.output.parentElement !== pre) pre.append(block.output);
+				let insert = pre.querySelector<HTMLButtonElement>(".wiki-cell-insert");
+				if (readOnly) insert?.remove();
+				else {
+					if (!insert) {
+						insert = document.createElement("button");
+						insert.type = "button";
+						insert.className = "wiki-cell-insert";
+						insert.dataset.richUi = "";
+						insert.contentEditable = "false";
+						insert.textContent = "＋";
+						chrome.insertBefore(insert, block.button);
+					}
+					insert.title = t("nbInsertHere");
+					insert.setAttribute("aria-label", insert.title);
+					insert.onmousedown = event => event.preventDefault();
+					insert.onclick = () => {
+						const token = jupyterGroup(code);
+						const group = token ?? "jupyter-group=" + randomUuid();
+						if (!token) code.dataset.fenceMeta = [code.dataset.fenceMeta, group].filter(Boolean).join(" ");
+						const next = document.createElement("pre");
+						const input = document.createElement("code");
+						input.className = "language-python";
+						input.dataset.fenceMeta = group;
+						input.append(document.createElement("br"));
+						next.append(input);
+						pre.after(next);
+						root.current?.focus();
+						window.getSelection()?.collapse(input, 0);
+						update();
+					};
+				}
+				pre.removeAttribute("data-group-next");
+				pre.removeAttribute("data-group-prev");
+				const previous = blocks.at(-1)?.code;
+				const group = jupyterGroup(code);
+				if (group && previous && jupyterGroup(previous) === group && nextCellSibling(previous.parentElement!) === pre) {
+					previous.parentElement!.setAttribute("data-group-next", "");
+					pre.setAttribute("data-group-prev", "");
+				}
+				blocks.push(block);
+			}
 			paintCode(code, true);
 		});
+		if (kernel) setKernelBlocks(blocks);
 	}, [value, readOnly, t, wiki?.width?.focused, wiki?.width, wiki?.ask, host?.runCode]);
 	useLayoutEffect(() => {
 		root.current?.querySelectorAll<HTMLImageElement>("img").forEach((img) => {
@@ -941,6 +1055,7 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 	const allItems = [
 		...(([1, 2, 3, 4, 5, 6]) as (1 | 2 | 3 | 4 | 5 | 6)[]).map(level => ({ label: "richHeading", keywords: `heading header title h${level} bt${level} biaoti${level} 标题${level}`, alias: `bt${level}`, action: "formatBlock", argument: `h${level}` } as const)),
 		{ label: "richParagraph", alias: "zw", keywords: "paragraph text zw zhengwen 正文", action: "formatBlock", argument: "p" },
+		...(kernel ? [{ label: "richPythonBlock", alias: "jupyter", keywords: "python py jupyter 运行 代码块", action: "insertHTML", argument: '<pre><code class="language-python" data-slash-insert><br></code></pre><p><br></p>' } as const] : []),
 		{ label: "richCodeBlock", alias: "dmk", keywords: "code fence dmk daimakuai 代码 代码块", action: "insertHTML", argument: "<pre><code data-slash-insert><br></code></pre><p><br></p>" },
 		{ label: "richHighlightBlock", alias: "glk", keywords: "highlight note callout glk gaoliangkuai ts tishi 高亮 提示", action: "insertHTML", argument: '<blockquote class="rich-highlight" data-rich-highlight="note"><p data-slash-insert><br></p></blockquote><p><br></p>' },
 		{ label: "richGreenBlock", alias: "tip", keywords: "green callout 绿色 高亮", action: "insertHTML", argument: '<blockquote data-rich-highlight="tip"><p data-slash-insert><br></p></blockquote><p><br></p>' },
@@ -963,9 +1078,9 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 	// Palette order: the six shapes people reach for most stay above the fold; H4–H6 live in the
 	// toolbar overflow menu instead of taking a row here (both entries insert the same blocks).
 	const paletteOrder = ["zw", "bt1", "bt2", "bt3", "lb", "bh", "rw", "link", "dmk"];
-	const wikiOrder = [...paletteOrder, "tp", "bg", "yy", "fgx", "date", "sl", "ml", "glk", "tip", "warning", "collapse", "card", "math"];
+	const wikiOrder = [...paletteOrder, "tp", "bg", "yy", "fgx", "date", "sl", "ml", "glk", "tip", "warning", "jupyter", "collapse", "card", "math"];
 	const items = wiki ? allItems.filter(item => wikiOrder.includes(item.alias)).sort((a, b) => wikiOrder.indexOf(a.alias) - wikiOrder.indexOf(b.alias)) : allItems.filter(item => !["date", "sl", "ml"].includes(item.alias));
-	const icons = { richMath: <FiCode />, richGreenBlock: wiki ? <LuLightbulb /> : <FiSquare />, richYellowBlock: wiki ? <LuTriangleAlert /> : <FiSquare />, richCollapse: wiki ? <LuChevronsUpDown /> : <FiSquare />, richLinkCard: wiki ? <LuPanelTop /> : <FiLink />, wikiAddLink: <FiLink />, wikiMentionDate: <FiCalendar />, richImage: <FiImage />, richWikiLink: <FiLink />, richHighlightBlock: wiki ? <LuInfo /> : <FiSquare />, richHeading: <FiType />, richParagraph: <FiType />, richCodeBlock: <FiCode />, richTable: <WikiTableIcon />, richList: <FiList />, richOrderedList: wiki ? <LuListOrdered /> : <FiList />, richTaskList: <FiCheckSquare />, richQuote: <WikiQuoteIcon />, richDivider: <FiMinus />, richTocInsert: <LuTableOfContents /> };
+	const icons = { richPythonBlock: <FiPlay />, richMath: <FiCode />, richGreenBlock: wiki ? <LuLightbulb /> : <FiSquare />, richYellowBlock: wiki ? <LuTriangleAlert /> : <FiSquare />, richCollapse: wiki ? <LuChevronsUpDown /> : <FiSquare />, richLinkCard: wiki ? <LuPanelTop /> : <FiLink />, wikiAddLink: <FiLink />, wikiMentionDate: <FiCalendar />, richImage: <FiImage />, richWikiLink: <FiLink />, richHighlightBlock: wiki ? <LuInfo /> : <FiSquare />, richHeading: <FiType />, richParagraph: <FiType />, richCodeBlock: <FiCode />, richTable: <WikiTableIcon />, richList: <FiList />, richOrderedList: wiki ? <LuListOrdered /> : <FiList />, richTaskList: <FiCheckSquare />, richQuote: <WikiQuoteIcon />, richDivider: <FiMinus />, richTocInsert: <LuTableOfContents /> };
 	const itemLabel = (item: typeof items[number]) => item.label === "richHeading" ? `${t(item.label)} ${"argument" in item ? item.argument.slice(1) : ""}` : t(item.label);
 	const isBlock = (item: typeof items[number]) => item.action === "insertHTML" || item.action === "toc";
 	const hints: Record<string, string> = { date: "@", zw: "", bt1: "#", bt2: "##", bt3: "###", lb: "-", bh: "1.", rw: "[]", yy: ">", dmk: "```", glk: ":::", bg: "3 × 3", fgx: "---", tp: "![]", sl: "[[", ml: "" };
@@ -1301,8 +1416,25 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		closeMenu(); update(); return true;
 	};
 
+	function deleteCodeBlocks(targets: HTMLElement[]) {
+		const editor = root.current;
+		if (!editor || readOnly || !targets.every(code => editor.contains(code))) return;
+		const codes = Array.from(editor.querySelectorAll<HTMLElement>("pre > code"));
+		const next = codes[codes.indexOf(targets.at(-1)!) + 1] ?? codes[codes.indexOf(targets[0]) - 1];
+		for (const code of targets) {
+			const pre = code.parentElement!;
+			const wrapper = pre.parentElement;
+			pre.remove();
+			if (wrapper?.matches(".rich-block") && !wrapper.children.length && !wrapper.textContent?.trim()) wrapper.remove();
+		}
+		update();
+		editor.focus();
+		window.getSelection()?.collapse(next ?? editor.querySelector("[data-rich-tail]") ?? editor, 0);
+	}
+
 	return <div className="fp-rich-editor" onScrollCapture={(event) => { if (!(event.target as HTMLElement).closest(".fp-slash-menu")) { if (menu) inspectSlash(false); } }}>
 		{wiki?.toolbar?.host && createPortal(<WikiToolbar readOnly={readOnly} focused={!!wiki.width?.focused} onWidth={wiki.width?.onToggle ?? (() => {})} items={items.map(item => ({ id: item.alias, label: item.label === "richHeading" ? `${t("richHeading")} ${"argument" in item ? item.argument.slice(1) : ""}` : itemLabel(item), hint: hints[item.alias] ?? "", help: t(help[item.alias] ?? item.label), icon: item.label === "richHeading" ? <span className="wiki-heading-icon">{`H${"argument" in item ? item.argument.slice(1) : ""}`}</span> : icons[item.label] }))} editor={root.current} commands={commands} painter={!!painter} painterDisabled={samplable === false} onPaint={sticky => format("paint", sticky ? "sticky" : undefined)} />, wiki.toolbar.host)}
+		{kernel && <MarkdownKernel {...file} {...kernel} blocks={kernelBlocks} disabled={readOnly} onDelete={blocks => deleteCodeBlocks(blocks.map(block => block.code))} />}
 		{diagrams.map(({ host, code }, index) => createPortal(<MermaidDiagram code={code} />, host, String(index)))}
 		{insertPopup && !readOnly && <WikiInsertPopover popup={insertPopup} onClose={() => { setInsertPopup(null); restoreInsert(); }}>
 			<TableSizePicker onInsert={(columns, rows) => insertToolbar("bg", { columns, rows })} />
@@ -1448,7 +1580,7 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 						const next = event.relatedTarget as HTMLElement | null;
 						if (next?.closest(".fp-table-menu")) event.stopPropagation();
 					}}
-					onBlur={() => { if (!inTableMenu.current) closeMenu(); }}
+					onBlur={() => { clearFrameSelection(); if (!inTableMenu.current) closeMenu(); }}
 					onMouseLeave={() => {
 						// Moving the pointer into the menu (or into its count field) leaves the
 						// editor root: that is still the same gesture, so the menu stays.
@@ -1466,6 +1598,16 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 					onCompositionEnd={() => { const code = selectedCode(); if (code) paintCode(code); update(); inspectSlash(); }}
 					onKeyUp={() => { const cell = selectedCell(); if (cell || window.getSelection()?.isCollapsed) setTableCell(cell); }}
 					onKeyDown={(event) => {
+						if (frameSelection.current.length) {
+							const targets = frameSelection.current;
+							clearFrameSelection();
+							if (event.key === "Backspace" || event.key === "Delete") {
+								event.preventDefault();
+								if (!readOnly && !event.nativeEvent.isComposing && targets.every(code => !blockTargets.current.get(code)?.button.querySelector('[aria-busy="true"]'))) deleteCodeBlocks(targets);
+								return;
+							}
+							if (event.key === "Escape") { event.preventDefault(); return; }
+						}
 						// The structure menu owns the keyboard while it is open: its count fields
 						// take digits, and nothing typed there may reach the document behind it.
 						const typingInMenu = (event.target as HTMLElement).closest?.(".fp-table-count");
@@ -1506,7 +1648,14 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 								}
 							}
 							const code = selectedCode();
-							if (code) { event.preventDefault(); command("insertLineBreak"); return; }
+							if (code) {
+								event.preventDefault();
+								const run = code.parentElement?.querySelector<HTMLButtonElement>("[data-code-run-kernel]");
+								if (run && (event.shiftKey || event.ctrlKey || event.metaKey) && !event.altKey) {
+									if (!event.repeat && !run.disabled && run.hasAttribute("aria-keyshortcuts")) run.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, shiftKey: event.shiftKey }));
+								} else command("insertLineBreak");
+								return;
+							}
 						}
 						if (event.key === "Tab" && !readOnly && !event.nativeEvent.isComposing) {
 							const cell = selectedCell();
@@ -1558,6 +1707,7 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 						}
 					}}
 					onMouseDown={(event) => {
+						clearFrameSelection();
 						pressedTarget.current = null;
 						pressedSelection.current = null;
 						if (event.button === 2) {
@@ -1624,10 +1774,31 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 						// so fall back to the cell the press started on instead of the press target.
 						const block = target.closest<HTMLElement>("pre, table") ?? holder?.closest<HTMLElement>("table") ?? null;
 						if (!block || !root.current?.contains(block)) return;
+						const index = kernelBlocks.findIndex(cell => cell.code.parentElement === block);
+						if (index >= 0 && !readOnly) {
+							if (target.closest("code, .wiki-kernel-output")) return;
+							let first = index, last = index;
+							while (first > 0 && kernelBlocks[first].code.parentElement?.hasAttribute("data-group-prev")) first--;
+							while (last + 1 < kernelBlocks.length && kernelBlocks[last].code.parentElement?.hasAttribute("data-group-next")) last++;
+							event.preventDefault();
+							root.current.focus({ preventScroll: true });
+							window.getSelection()?.removeAllRanges();
+							frameSelection.current = kernelBlocks.slice(first, last + 1).map(cell => cell.code);
+							for (const code of frameSelection.current) code.parentElement?.setAttribute("data-frame-selected", "");
+							closeMenu();
+							return;
+						}
 						const rect = block.getBoundingClientRect(), x = event.clientX, y = event.clientY;
 						// Code gutters and header padding are part of the selectable frame.
 						if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) return;
 						const codeRect = block.tagName === "PRE" ? block.querySelector("code")?.getBoundingClientRect() : null;
+						if (!readOnly && target.matches("code:empty") && block.matches("pre.codeblock")) {
+							event.preventDefault();
+							target.append(document.createElement("br"));
+							root.current.focus({ preventScroll: true });
+							window.getSelection()?.collapse(target, 0);
+							return;
+						}
 						const codeFrame = codeRect && (x < codeRect.left || x > codeRect.right || y < codeRect.top || y > codeRect.bottom);
 						// The whole-table frame is the outer 6px of the table, plus the row gutter.
 						// A header names a column instead, so the two never fight over one press.
@@ -1646,7 +1817,15 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 						root.current.focus({ preventScroll: true });
 						const range = block.ownerDocument.createRange();
 						if (block.tagName === "TABLE") { range.selectNode(block); setTableCell(block.querySelector<HTMLTableCellElement>("th, td")); }
-						else { const code = block.querySelector("code"); if (!code) return; range.selectNodeContents(code); }
+						else {
+							const code = block.querySelector("code");
+							if (!code) return;
+							range.selectNodeContents(code);
+							if (!readOnly && block.matches(".codeblock:not(.wiki-mermaid)")) {
+								frameSelection.current = [code];
+								block.setAttribute("data-frame-selected", "");
+							}
+						}
 						const selection = block.ownerDocument.getSelection(); selection?.removeAllRanges(); selection?.addRange(range);
 						closeMenu();
 					}}

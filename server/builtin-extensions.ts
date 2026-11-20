@@ -1,11 +1,12 @@
+import { desktopGrant, desktopSupported } from "./desktop-control.js";
 import { createHash } from "node:crypto";
 import type { AgentSession } from "@earendil-works/pi-coding-agent";
 import { nativeExtensionRegistry } from "./native-tools.js";
 import { getDocumentSettings, updateDocumentSettings } from "./document-extension-settings.js";
 import { subagentSettings, toggleSubagents } from "./subagents/settings.js";
 import { subagentDefaultActive } from "./subagents/extension.js";
-import { designFirstSettings, designFirstSkillPath, toggleDesignFirst } from "./design-first-resources.js";
-import { dirname, resolve } from "node:path";
+import { designFirstNames, designFirstSettings, designFirstSkillPath, toggleDesignFirst } from "./design-first-resources.js";
+import { resolve } from "node:path";
 import { existsSync } from "node:fs";
 import type { BuiltinExtensionId, BuiltinExtensionsState, BuiltinExtensionState } from "./protocol.js";
 
@@ -63,19 +64,15 @@ export function builtinExtensionsState(session: AgentSession, conversationId: st
 	try {
 		const config = designFirstSettings(), path = designFirstSkillPath();
 		design.enabled = config.enabled; design.settingsVersion = config.version;
-		// Native extension commands run before prompt templates.
-		const extensionCommands = new Set(session.extensionRunner.getRegisteredCommands().map(command => command.invocationName));
-		let primaryOwned = false, primaryConflict = extensionCommands.has("design");
-		for (const name of ["design", "bug-fix", "feat"]) {
-			const prompt = session.promptTemplates.find(prompt => prompt.name === name);
-			if (!prompt) continue;
-			const owned = resolve(prompt.filePath) === resolve(dirname(path), "commands", `${name}.md`);
-			if (name === "design") {
-				primaryOwned = owned && !extensionCommands.has(name);
-				primaryConflict ||= !owned || extensionCommands.has(name);
-			}
-			if (owned && !extensionCommands.has(name)) design.commands.push(name);
+		const skills = session.resourceLoader.getSkills().skills;
+		const shadowed = new Set([...session.extensionRunner.getRegisteredCommands().map(command => command.invocationName), ...session.promptTemplates.map(prompt => prompt.name)]);
+		for (const name of designFirstNames) {
+			const skill = skills.find(skill => skill.name === name);
+			const command = `skill:${name}`;
+			if (skill && resolve(skill.filePath) === designFirstSkillPath(undefined, name) && !shadowed.has(command)) design.commands.push(command);
 		}
+		const primaryOwned = design.commands.includes("skill:design-first");
+		const primaryConflict = !primaryOwned && (shadowed.has("skill:design-first") || skills.some(skill => skill.name === "design-first"));
 		if (wiki) { design.reason = "filtered"; }
 		else if (!existsSync(path)) { design.reason = "missing"; }
 		else if (primaryConflict) { design.reason = "conflict"; }
@@ -83,5 +80,10 @@ export function builtinExtensionsState(session: AgentSession, conversationId: st
 		else design.status = config.enabled ? primaryOwned ? "loaded" : "pending" : primaryOwned ? "pending" : "disabled";
 	} catch (error) { design.status = "error"; design.error = String(error); }
 	items.push(design);
+	if (!wiki && desktopSupported()) {
+		const grant = desktopGrant(session.sessionManager);
+		const enabled = !!grant.controller;
+		items.push({id: "desktop-control", enabled, status: enabled ? "loaded" : "disabled", settingsVersion: grant.version, commands: [], tools: ["desktop_window"]});
+	}
 	return { conversationId, items, documentVersion, canReload };
 }

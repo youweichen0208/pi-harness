@@ -3,8 +3,9 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 import WebSocket from "ws";
+import { PROTOCOL_VERSION } from "../dist/server/protocol-version.js";
 import { listenIsolated, startIsolatedHarness } from "./lib/isolated-server.mjs";
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), "pi-builtin-chat-"))), agent = join(root, "agent"), data = join(root, "data");
@@ -38,7 +39,7 @@ async function connect(id, wiki = false) {
 		if (message.type === "snapshot_delta" && client.state) client.state = { ...client.state, ...message.state, messages: [...client.state.messages, ...(message.appended ?? [])] };
 	}, 200));
 	await new Promise((resolve, reject) => { ws.once("open", resolve); ws.once("error", reject); });
-	client.send({ type: "hello", clientId: id, protocolVersion: 60, ...(wiki ? { wikiCwd: root } : {}) });
+	client.send({ type: "hello", clientId: id, protocolVersion: PROTOCOL_VERSION, ...(wiki ? { wikiCwd: root } : {}) });
 	await wait(() => client.state && !client.state.tree?.verifying, "initial snapshot");
 	return client;
 }
@@ -64,11 +65,19 @@ async function reload(client) {
 	await wait(async () => item(await request(client, "builtin-list"), "pi-harness-database").status === "loaded", "reload");
 }
 
+const supportsDesktop = ["darwin", "win32"].includes(process.platform);
+const inventoryCount = supportsDesktop ? 7 : 6;
+const fakeBin = join(root, "fake-bin"), npxCalls = join(root, "npx-calls");
+const pathKey = Object.keys(process.env).find(key => key.toLowerCase() === "path") ?? "PATH";
+mkdirSync(fakeBin);
+writeFileSync(join(fakeBin, process.platform === "win32" ? "npx.cmd" : "npx"), process.platform === "win32"
+	? `@echo off\r\n>>"${npxCalls}" echo called\r\nexit /b 1\r\n`
+	: `#!/bin/sh\nprintf 'called\\n' >> ${JSON.stringify(npxCalls)}\nexit 1\n`, { mode: 0o755 });
 try {
 	await listenIsolated(model);
 	writeFileSync(join(agent, "models.json"), JSON.stringify({ providers: { fixture: { api: "openai-completions", baseUrl: `http://127.0.0.1:${model.address().port}`, apiKey: "fixture", models: [{ id: "fixture", input: ["text"], contextWindow: 64000, maxTokens: 8000 }] } } }));
 	writeFileSync(join(agent, "settings.json"), JSON.stringify({ defaultProvider: "fixture", defaultModel: "fixture", defaultTools: ["+codemode", "+tool_search"], retry: { enabled: false }, compaction: { enabled: false } }));
-	harness = await startIsolatedHarness({ env: { PI_WEB_TOKEN: "", PI_WEB_CWD: root, PI_WEB_DATA_DIR: data, PI_CODING_AGENT_DIR: agent }, onOutput: value => { logs = (logs + value).slice(-16000); } });
+	harness = await startIsolatedHarness({ env: { PI_WEB_TOKEN: "", PI_WEB_CWD: root, PI_WEB_DATA_DIR: data, PI_CODING_AGENT_DIR: agent, [pathKey]: `${fakeBin}${delimiter}${process.env[pathKey] ?? ""}` }, onOutput: value => { logs = (logs + value).slice(-16000); } });
 	child = harness.child; port = harness.port;
 	const a = await connect("builtin-a"), b = await connect("builtin-b");
 	const wiki = await connect("builtin-wiki", true);
@@ -83,9 +92,20 @@ try {
 		const after = item(await request(wiki, "builtin-list"), "pi-harness-design-first");
 		assert.equal(after.reason, "filtered"); assert.deepEqual(after.commands, [], `Wiki ${command} must not inject Skill`);
 	}
-	const state = await request(a, "builtin-list"); assert.equal(state.items.length, 6);
+	const state = await request(a, "builtin-list"); assert.equal(state.items.length, inventoryCount);
+	if (supportsDesktop) {
+		assert.equal(item(state, "desktop-control").enabled, false);
+		await toggle(a, "desktop-control", true);
+		assert.equal(item(await request(a, "builtin-list"), "desktop-control").enabled, true);
+		assert.equal(item(await request(b, "builtin-list"), "desktop-control").enabled, false);
+		await prompt(a, "Check desktop tool grant", 'text(await tools.desktop_window({action:"view"}));');
+		assert.match(JSON.stringify(a.state.messages.findLast(message => message.role === "toolResult")), /Select a window id/);
+		await toggle(a, "desktop-control", false);
+		await prompt(a, "Check desktop tool revoke", 'text(await tools.desktop_window({action:"view"}));');
+		assert.match(JSON.stringify(a.state.messages.findLast(message => message.role === "toolResult")), /Enable desktop control/);
+	}
 	assert.equal(item(state, "pi-harness-design-first").status, "loaded");
-	assert.deepEqual(item(state, "pi-harness-design-first").commands, ["design", "bug-fix", "feat"]);
+	assert.deepEqual(item(state, "pi-harness-design-first").commands, ["skill:design-first", "skill:bug-fix", "skill:feat"]);
 	await toggle(a, "pi-harness-design-first", false);
 	const disabledDesign = item(await request(b, "builtin-list"), "pi-harness-design-first");
 	assert.equal(disabledDesign.enabled, false); assert.equal(disabledDesign.status, "pending");
@@ -112,14 +132,13 @@ try {
 	a.send({ type: "get_commands" });
 	await wait(() => a.wire.some(message => message.type === "slash_commands"), "slash commands");
 	const commands = a.wire.findLast(message => message.type === "slash_commands").commands;
-	for (const name of ["design", "bug-fix", "feat"]) assert(commands.some(command => command.name === name && command.source === "prompt"), `${name} in native command catalog`);
-	assert(!commands.some(command => command.name === "skill:design-first"), "legacy skill command is removed");
+	for (const name of ["skill:design-first", "skill:bug-fix", "skill:feat"]) assert(commands.some(command => command.name === name && command.source === "skill"), `${name} in native command catalog`);
 	assert(!commands.some(command => ["documents", "pdf-md", "okf"].includes(command.name)), "conversion and OKF commands removed");
-	const designCommands = ["design", "bug-fix", "feat"];
+	const designCommands = ["skill:design-first", "skill:bug-fix", "skill:feat"];
 	const conflictPath = join(agent, "extensions", "design-first-conflict.ts"), handledPath = join(root, "extension-commands.jsonl");
 	mkdirSync(join(agent, "extensions"), { recursive: true });
 	const callsBeforeConflict = calls;
-	for (const [index, shadowed] of [["feat"], ["design"], designCommands].entries()) {
+	for (const [index, shadowed] of [["skill:feat"], ["skill:design-first"], designCommands].entries()) {
 		writeFileSync(conflictPath, `import { appendFileSync } from 'node:fs'; export default pi => {
 			for (const name of ${JSON.stringify(shadowed)}) pi.registerCommand(name, {
 				description: 'User fixture ' + name,
@@ -132,7 +151,7 @@ try {
 			message.commands.some(command => command.name === name && command.source === "extension"))), "native extension command precedence");
 		const conflict = item(await request(a, "builtin-list"), "pi-harness-design-first");
 		assert.deepEqual(conflict.commands, designCommands.filter(name => !shadowed.includes(name)), "built-in inventory excludes commands owned by user extensions");
-		const primaryConflict = shadowed.includes("design");
+		const primaryConflict = shadowed.includes("skill:design-first");
 		assert.equal(conflict.status, primaryConflict ? "unavailable" : "loaded");
 		assert.equal(conflict.reason, primaryConflict ? "conflict" : undefined, "a shadowed main entry must disable the prepare-design action");
 		for (const name of shadowed) {
@@ -148,25 +167,25 @@ try {
 	const restoreStart = a.wire.length;
 	a.send({ type: "extensions_reload" });
 	await wait(() => a.wire.slice(restoreStart).some(message => message.type === "slash_commands" && designCommands.every(name =>
-		message.commands.some(command => command.name === name && command.source === "prompt"))), "bundled commands restored after removing user extension");
+		message.commands.some(command => command.name === name && command.source === "skill"))), "bundled commands restored after removing user extension");
 	const restoredDesign = item(await request(a, "builtin-list"), "pi-harness-design-first");
 	assert.equal(restoredDesign.status, "loaded"); assert.equal(restoredDesign.reason, undefined);
 	assert.deepEqual(restoredDesign.commands, designCommands);
-	const userPrompt = join(agent, "prompts", "design.md");
-	mkdirSync(dirname(userPrompt), { recursive: true });
-	writeFileSync(userPrompt, "---\ndescription: User-owned design command\n---\nUser design instructions\n");
+	const userSkill = join(agent, "skills", "design-first", "SKILL.md");
+	mkdirSync(dirname(userSkill), { recursive: true });
+	writeFileSync(userSkill, "---\nname: design-first\ndescription: User-owned design skill\n---\nUser design instructions\n");
 	a.send({ type: "extensions_reload" });
-	await wait(async () => item(await request(a, "builtin-list"), "pi-harness-design-first").reason === "conflict", "user design prompt conflict");
-	const promptConflict = item(await request(a, "builtin-list"), "pi-harness-design-first");
-	assert.equal(promptConflict.status, "unavailable");
-	assert.deepEqual(promptConflict.commands, designCommands.filter(name => name !== "design"));
-	rmSync(userPrompt);
+	await wait(async () => item(await request(a, "builtin-list"), "pi-harness-design-first").reason === "conflict", "user design skill conflict");
+	const skillConflict = item(await request(a, "builtin-list"), "pi-harness-design-first");
+	assert.equal(skillConflict.status, "unavailable");
+	assert.deepEqual(skillConflict.commands, designCommands.filter(name => name !== "skill:design-first"));
+	rmSync(userSkill);
 	a.send({ type: "extensions_reload" });
 	await wait(async () => {
 		const design = item(await request(a, "builtin-list"), "pi-harness-design-first");
-		return design.status === "loaded" && design.commands.includes("design");
-	}, "bundled design prompt restored");
-	console.log("PASS native command precedence, accurate built-in inventory, extension/user-prompt conflicts and reload restoration");
+		return design.status === "loaded" && design.commands.includes("skill:design-first");
+	}, "bundled design skill restored");
+	console.log("PASS native command precedence, accurate built-in inventory, extension/user-skill conflicts and reload restoration");
 	await prompt(a, "Check removed conversion tool", 'text(["document_to_markdown", "okf_ingest"].some(name => name in tools));');
 	assert.match(JSON.stringify(a.state.messages.findLast(message => message.role === "toolResult")), /false/);
 	await prompt(a, "Check enabled tool", 'text(await tools.database_read({action:"list"}));');
@@ -192,7 +211,7 @@ try {
 	const c = await connect("builtin-c"); assert.equal(item(await request(c, "builtin-list"), "pi-harness-database").status, "loaded");
 	const saved = readFileSync(join(data, "document-extensions.json"), "utf8");
 	writeFileSync(join(data, "document-extensions.json"), "broken-json");
-	const broken = await request(a, "builtin-list"); assert.equal(broken.items.length, 6); assert.equal(item(broken, "pi-harness-database").status, "error"); assert.equal(item(broken, "codemode").status, "loaded");
+	const broken = await request(a, "builtin-list"); assert.equal(broken.items.length, inventoryCount); assert.equal(item(broken, "pi-harness-database").status, "error"); assert.equal(item(broken, "codemode").status, "loaded");
 	writeFileSync(join(data, "document-extensions.json"), saved);
 	console.log("PASS built-in inventory, removed conversion/OKF, version conflicts, cross-client settings, disabled calls and new chat/reload");
 
@@ -214,7 +233,7 @@ try {
 		}
 		await openSettings();
 		const panel = page.locator(".builtin-extensions"), database = panel.locator('[data-builtin-id="pi-harness-database"]');
-		assert.equal(await panel.locator(".builtin-row").count(), 6);
+		assert.equal(await panel.locator(".builtin-row").count(), inventoryCount + 1);
 		const design = panel.locator('[data-builtin-id="pi-harness-design-first"]');
 		await design.getByRole("switch").click();
 		await wait(() => JSON.parse(readFileSync(join(data, "design-first.json"), "utf8")).enabled === false, "Design First off in Extensions");
@@ -231,11 +250,11 @@ try {
 		const beforePrepare = calls;
 		await design.getByRole("button", { name: "在聊天中准备设计需求", exact: true }).click();
 		await page.locator(".settings-modal").waitFor({ state: "hidden" });
-		assert.equal(await composer.inputValue(), "/design 保留现有需求草稿");
+		assert.equal(await composer.inputValue(), "/skill:design-first 保留现有需求草稿");
 		assert.equal(calls, beforePrepare, "preparing a design request must not call the model");
 		await openSettings();
 		await design.getByRole("button", { name: "在聊天中准备设计需求", exact: true }).click();
-		assert.equal(await composer.inputValue(), "/design 保留现有需求草稿", "repeated preparation preserves the existing invocation");
+		assert.equal(await composer.inputValue(), "/skill:design-first 保留现有需求草稿", "repeated preparation preserves the existing invocation");
 		await openSettings();
 		const subagents = panel.locator('[data-builtin-id="pi-harness-subagents"]');
 		await subagents.getByRole("switch").click(); await wait(() => JSON.parse(readFileSync(join(data, "subagents.json"), "utf8")).enabled === false, "subagents off");
@@ -248,11 +267,42 @@ try {
 		await panel.locator('[data-builtin-id="codemode"]').getByRole("button", { name: "查看设置", exact: true }).click();
 		await page.locator(".native-mcp-panel").waitFor();
 		await page.getByRole("button", { name: "Extensions", exact: true }).click();
+		await panel.getByRole("button", { name: "管理浏览器连接" }).click();
+		const install = page.getByRole("link", { name: "安装浏览器扩展" });
+		assert.match(await install.getAttribute("href"), /mmlmfjhmonkocbjadbfplnigmagldckm$/);
+		const toggleBrowser = page.getByRole("switch", { name: "控制你的浏览器" });
+		await wait(async () => await toggleBrowser.isEnabled(), "global browser preference loaded");
+		assert.equal(await toggleBrowser.isChecked(), false);
+		assert(!existsSync(npxCalls), "ordinary sessions must not start the browser MCP");
+		const browserConfig = () => JSON.parse(readFileSync(join(agent, "mcp.json"), "utf8")).mcpServers["playwright-extension"];
+		await toggleBrowser.click();
+		await wait(() => existsSync(join(agent, "mcp.json")) && browserConfig()?.enabled === true && existsSync(npxCalls), "explicitly enabled browser MCP saved and started");
+		await page.locator(".mcp-server-toggle").filter({ hasText: "playwright-extension" }).waitFor();
+		await toggleBrowser.click();
+		await wait(() => browserConfig()?.enabled === false, "disabled browser MCP saved");
+		await page.reload(); await openSettings();
+		await panel.getByRole("button", { name: "管理浏览器连接" }).click();
+		await wait(async () => await toggleBrowser.isEnabled(), "settings loaded");
+		assert.equal(await toggleBrowser.isChecked(), false);
+		await toggleBrowser.click();
+		await wait(() => browserConfig()?.enabled === true, "browser MCP re-enabled without removing its saved config");
+		const aliasDocument = JSON.parse(readFileSync(join(agent, "mcp.json"), "utf8"));
+		aliasDocument.mcpServers = { playwright_extension: { ...browserConfig(), enabled: false } };
+		writeFileSync(join(agent, "mcp.json"), JSON.stringify(aliasDocument));
+		await page.reload(); await openSettings();
+		await panel.getByRole("button", { name: "管理浏览器连接" }).click();
+		await wait(async () => await toggleBrowser.isEnabled(), "alias settings loaded");
+		assert.equal(await toggleBrowser.isChecked(), false, "the browser switch reflects an existing namespace alias");
+		await toggleBrowser.click();
+		await wait(() => JSON.parse(readFileSync(join(agent, "mcp.json"), "utf8")).mcpServers.playwright_extension?.enabled === true, "alias entry re-enabled");
+		const savedAlias = JSON.parse(readFileSync(join(agent, "mcp.json"), "utf8")).mcpServers;
+		assert(!Object.hasOwn(savedAlias, "playwright-extension"), "alias toggling must not create a conflicting canonical entry");
+		await page.getByRole("button", { name: "Extensions", exact: true }).click();
 		await page.route("**/api/extensions", async route => {
 			if (route.request().postDataJSON()?.action === "list") return route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "Package fixture unavailable" }) });
 			await route.continue();
 		});
-		await page.reload(); await openSettings(); assert.equal(await panel.locator(".builtin-row").count(), 6);
+		await page.reload(); await openSettings(); assert.equal(await panel.locator(".builtin-row").count(), inventoryCount + 1);
 		await page.getByText("Package fixture unavailable", { exact: false }).waitFor();
 		await page.unroute("**/api/extensions"); await page.reload(); await openSettings();
 		mkdirSync("tests/scratch", { recursive: true });
@@ -266,7 +316,7 @@ try {
 		assert.equal(await panel.getByText("Document to Markdown", { exact: true }).count(), 0);
 		await page.screenshot({ path: "tests/scratch/builtin-extensions-en.png", fullPage: true });
 		assert.deepEqual(errors, []); assert(!existsSync(join(data, "runtimes")));
-		console.log("PASS built-in browser: six entries, toggles, settings links, package failure isolation, Chinese/English and narrow layout");
+		console.log("PASS built-in browser: inventory, toggles, settings links, package failure isolation, Chinese/English and narrow layout");
 	}
 } finally {
 	release?.();

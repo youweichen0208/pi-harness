@@ -17,6 +17,12 @@
 - `NodeWorkbench` 按 `clientId:nodeId` 保存连接，终端按 `terminalId` 定位，所有可变请求要求与节点和会话身份匹配。断线时保留浏览器的已断开标签。浏览器 WebSocket 重连恢复同一连接上的 Agent 状态；SSH 断开会终止该连接的 Agent 和终端；重新连接自动准备新的隔离 Agent 实例。
 - SFTP 浏览、读取与 UTF-8 写入按远端账号权限执行；单次读写限制 512 KiB。工具结果与终端捕获输出限制 64 KiB。
 
+## SSH 排查收敛
+
+节点 Agent 在诊断工具调用中用 `diagnosticGoal` 标记正在验证的假设。连续 4 步验证同一假设、连续 2 次工具失败，或同一假设两次执行独立 grep 均无匹配时，下一次模型请求暂时移除节点工具，并要求答复当前结论及证据范围、一个能推翻结论的事实，以及最小缺失输入。下一条用户消息恢复节点工具。普通操作可省略诊断目标；只有连续失败的保护同样适用于这些操作。
+
+远端独立 grep 命令的退出码 1 表示本次没有匹配，权限错误、管道和其他命令的退出码不能据此判定。复合搜索和请求体等缺失输入由节点系统提示指导模型判断。缺少分析依赖时，说明缺口并优先使用已有工具或向用户索取材料。
+
 ## 协议与验证
 
 `node_request`/`node_event` 承载 `requestId`、`nodeId`、`terminalId`、`conversationId`；`server/protocol.ts` 为唯一 wire 类型源，前端在 `use-chat.ts` 转发节点事件给按需加载的工作台组件。`tests/node-workbench-test.mjs` 使用本地 mock SSH 服务覆盖主机信任、指纹变化、认证失败、终端命令、SFTP 及节点隔离。

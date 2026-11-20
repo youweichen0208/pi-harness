@@ -388,7 +388,8 @@ try {
 	await wiki.page.locator(".attach-chip.current-file", {hasText: "@README.md"}).waitFor();
 	const knowledgeRow = wiki.page.locator('.wiki-tree-main[title="knowledge"]').locator('..');
 	await knowledgeRow.hover();
-	await knowledgeRow.getByRole("button", {name: "新建文件夹 · knowledge"}).click();
+	await knowledgeRow.getByRole("button", {name: "新建 · knowledge"}).click();
+	await knowledgeRow.getByRole("button", {name: "文件夹", exact: true}).click();
 	const folderDraft = wiki.page.locator(".wiki-tree-create-row");
 	await folderDraft.waitFor();
 	assert.equal(await folderDraft.locator(".tree-icon-folder").count(), 1, "new folder is named in its tree row");
@@ -398,7 +399,8 @@ try {
 	await newFolderRow.waitFor();
 	assert.equal(realpathSync(join(cwd, "knowledge/inline-created")), join(cwd, "knowledge/inline-created"));
 	await newFolderRow.hover();
-	await newFolderRow.getByRole("button", {name: "新建文件 · inline-created"}).click();
+	await newFolderRow.getByRole("button", {name: "新建 · inline-created"}).hover();
+	await newFolderRow.getByRole("button", {name: /Markdown/}).click();
 	const fileDraft = wiki.page.locator(".wiki-tree-create-row");
 	await fileDraft.waitFor();
 	assert.equal(await fileDraft.locator(".tree-icon-document").count(), 1, "new file is named in its tree row");

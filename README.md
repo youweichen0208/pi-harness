@@ -200,14 +200,40 @@ pi-harness --port 9000 --cwd /path/to/project
 当前仓库开发版内置 Design First，普通会话默认可用，沿用输入框中选中的模型：
 
 ```text
-/bug-fix 描述错误现象和预期行为
-/feat 描述要增加的小功能
-/design 描述需要设计、实现和验证的需求
+/skill:bug-fix 描述错误现象和预期行为
+/skill:feat 描述要增加的小功能
+/skill:design-first 描述需要设计、实现和验证的需求
 ```
 
 AI 会先把方案、任务和验收条件保存到项目文档，等待你确认；确认后使用原有工具改代码、运行测试、记录结果。小改动可以合并为一份变更文档。完成时核对对应 spec：新增行为更新约定，修回既有正确约定则记录无需改文档的原因。完整示例见 [Design First 使用指南](docs/design-first-usage.md)。
 
-换会话可输入 `/design 恢复 <change-id>`，从文档和当前源码找回进度。确认属于 Skill 工作流约定，不是强制工具门禁。开关位于设置的 Skills／内置扩展列表，新会话或 `/reload` 后生效；已安装版本未必包含这些尚未发布的入口。
+换会话可输入 `/skill:design-first 恢复 <change-id>`，从文档和当前源码找回进度。确认属于 Skill 工作流约定，不是强制工具门禁。开关位于设置的 Skills／内置扩展列表，新会话或 `/reload` 后生效；已安装版本未必包含这些尚未发布的入口。
+
+### 让 pi 读取 Chrome 中已打开的页面
+
+**用 Playwright Extension 读取和操作网页**。普通聊天可在设置中显式启用浏览器连接；未启用时不会启动浏览器 MCP。首次使用时，在运行工作台服务的电脑上完成以下步骤：
+
+1. 用平时浏览目标网站的 Chrome 用户配置打开 [Playwright Extension 安装页](https://chromewebstore.google.com/detail/playwright-extension/mmlmfjhmonkocbjadbfplnigmagldckm)，点击「添加至 Chrome」并确认安装。
+2. 在同一个 Chrome 用户配置中打开目标网页。如果页面需要登录，先登录并打开你想让 pi 读取的内容。
+3. 在工作台「设置 → MCP 与 Codemode → 全局」打开「全局启用浏览器连接」。配置会保存，重启后继续生效。
+4. 在普通聊天中发送「请用浏览器读取我打开的页面，告诉我页面标题。」
+5. 切回 Chrome，在 Playwright Extension 连接页确认请求方是 **pi**，勾选目标标签页，点击 **Allow**。这个授权可让客户端访问浏览器中的登录会话，请只批准自己刚发起的请求。
+6. 回到工作台，核对 pi 返回的标题是否与目标标签页一致。
+
+如果工作台显示 `MCP request timed out after 60000ms`，请重新发起读取请求，并留意 Chrome 的连接页，在本次请求等待期间完成授权。需要停用时，在同一设置页关闭「全局启用浏览器连接」。
+
+**可选的只读扩展（macOS，本机 Chrome）**。运行 `pi-harness install-page-reader`（源码开发可用 `node bin/pi-harness.mjs install-page-reader`）。打开 `chrome://extensions`，启用开发者模式，选择「加载已解压的扩展程序」并选取命令输出的目录。新版工作台启动后，在已登录的目标网页点 **pi Page Reader → 允许读取此网站**。以后在普通聊天说「用页面读取器总结我已打开的 ChatGPT 对话」即可。存在多个匹配时，按标题选择。需要退出授权时，在同一网站再次点击扩展并选择撤销。
+
+页面读取器通过本机连接读取授权网站已打开标签页的标题、网址和已加载正文，正文最多返回 60,000 个字符。用于回答的内容会进入当前 pi 会话并发送给该会话的模型。请在自己控制的本地工作台启用。Google 登录的第三方网页应授权实际显示内容的网站。打开网页并核对标题和一条已知句子，即可验证登录后的内容是否可读。
+
+### 网页与桌面应用协作
+
+网页阅读、点击和导出沿用 Playwright Extension。在浏览器里导出报表后，可以让 pi 查看已经打开该报表的 Excel 窗口，例如“读取 Excel 中这份报表的 B2，告诉我结果”。桌面工具可按窗口标题选择窗口、查看截图、点击、输入文字和滚动。窗口截图会发送给当前会话的模型，输入操作会使用本机鼠标、键盘和窗口焦点。
+
+1. 在运行工作台的 macOS 或 Windows 电脑上准备 Python 3.9–3.13，然后运行 `pi-harness install-desktop-control`。源码开发使用 `node bin/pi-harness.mjs install-desktop-control`。Windows 需提供 `py -3`，macOS 需提供 `python3`。安装程序将依赖放在用户主目录的专用虚拟环境中。
+2. 使用新版服务的本机普通聊天，在「设置 → Extensions → 桌面控制」打开当前会话的开关。新会话默认关闭，关闭开关会中止执行中的桌面工具。桌面控制仅在服务绑定回环地址时可用。
+3. 在 macOS「系统设置 → 隐私与安全性」允许运行辅助程序的宿主录屏和使用辅助功能。Windows 需使用已登录且未锁定的交互桌面，目标窗口应与工作台处于同一权限级别。
+4. 在聊天中指定应用或窗口标题。pi 应先查看该窗口，再按截图定位操作并查看结果。如果 Playwright 连接失败，应先询问是否改用桌面。
 
 ### 文件预览与编辑
 

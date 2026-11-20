@@ -22,19 +22,31 @@ const { NodeWorkbench } = await import("../dist/server/node-workbench.js");
 const { nodeCommand, runNodeCommand } = await import("../dist/server/node-command.js");
 const { NodeAgent } = await import("../dist/server/node-agent.js");
 writeFileSync(join(agentDir, "models.json"), JSON.stringify({ providers: { local: { api: "openai-completions", baseUrl: `http://127.0.0.1:${modelPort}/v1`, apiKey: "local-only-secret", models: [{ id: "test", name: "Local fixture", input: ["text"], contextWindow: 32000, maxTokens: 4096 }, { id: "other", name: "Other fixture", input: ["text"], contextWindow: 32000, maxTokens: 4096 }] } } }));
-writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ defaultProvider: "local", defaultModel: "test", defaultTools: ["bash", "read", "codemode", "tool_search"] }));
+writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ defaultProvider: "local", defaultModel: "test", defaultTools: ["bash", "read", "codemode", "tool_search"], retry: { enabled: true, baseDelayMs: 10, maxAgentDelayMs: 20, provider: { maxRetries: 0 } } }));
 mkdirSync(join(agentDir, "extensions"));
 writeFileSync(join(agentDir, "extensions", "must-not-load.ts"), 'throw new Error("local extensions must not load in node sessions");');
 writeFileSync(join(agentDir, "AGENTS.md"), "LOCAL_CONTEXT_MUST_NOT_LEAK");
 writeFileSync(join(agentDir, "APPEND_SYSTEM.md"), "LOCAL_APPEND_MUST_NOT_LEAK");
-let requests = 0, blockedStat = false;
+let requests = 0, blockedStat = false, retryFailures = 1;
 const model = createServer(async (req, res) => {
 	let body = ""; for await (const chunk of req) body += chunk;
 	const payload = JSON.parse(body); requests++;
 	assert.equal(req.headers.authorization, "Bearer local-only-secret");
-	assert.deepEqual(payload.tools.map(tool => tool.function.name).sort(), ["remote_command", "remote_read", "remote_write"]);
+	const latestUser = payload.messages.findLastIndex(message => message.role === "user");
+	const scenario = JSON.stringify(payload.messages[latestUser]?.content).match(/checkpoint (errors|steps|misses|retry)/)?.[1];
+	const completed = payload.messages.slice(latestUser + 1).filter(message => message.role === "tool").length;
+	const threshold = scenario === "steps" ? 4 : scenario === "misses" ? 3 : 2;
+	const reached = !!scenario && completed >= threshold;
+	assert.deepEqual((payload.tools ?? []).map(tool => tool.function.name).sort(), reached ? [] : ["remote_command", "remote_read", "remote_write"], JSON.stringify({ request: requests, scenario, completed, roles: payload.messages.map(message => message.role) }));
+	if (reached) assert.match(JSON.stringify(payload.messages.at(-1).content), /SSH diagnosis checkpoint/);
 	assert(!JSON.stringify(payload.messages).includes("LOCAL_CONTEXT_MUST_NOT_LEAK"));
 	assert(!JSON.stringify(payload.messages).includes("LOCAL_APPEND_MUST_NOT_LEAK"));
+	if (scenario === "retry" && reached && retryFailures > 0) {
+		retryFailures--;
+		res.writeHead(529, { "content-type": "application/json" });
+		res.end(JSON.stringify({ error: { message: "fixture overload", type: "server_error" } }));
+		return;
+	}
 	res.writeHead(200, { "content-type": "text/event-stream" });
 	const send = (delta, reason = null) => res.write(`data: ${JSON.stringify({ id: "local", object: "chat.completion.chunk", model: payload.model, choices: [{ index: 0, delta, finish_reason: reason }] })}\n\n`);
 	const last = payload.messages.at(-1), text = JSON.stringify(last.content);
@@ -45,6 +57,11 @@ const model = createServer(async (req, res) => {
 	if (last.role === "user" && text.includes("remote read")) tool = { name: "remote_read", arguments: { path: "/srv/ops/proof.txt" } };
 	if (last.role === "user" && text.includes("blocked read")) tool = { name: "remote_read", arguments: { path: "/srv/ops/blocked" } };
 	if (last.role === "user" && text.includes("long command")) tool = { name: "remote_command", arguments: { command: "wait-until-aborted" } };
+	if (scenario && !reached) {
+		const diagnosticGoal = "request reached the service";
+		tool = scenario === "errors" || scenario === "retry" ? { name: "remote_read", arguments: { path: "/missing" } }
+			: { name: "remote_command", arguments: { diagnosticGoal, command: scenario === "steps" || completed === 1 ? "pwd" : `grep no-match /log${completed}` } };
+	}
 	if (tool) {
 		send({ tool_calls: [{ index: 0, id: `ssh-tool-${requests}`, type: "function", function: { name: tool.name, arguments: JSON.stringify(tool.arguments) } }] });
 		send({}, "tool_calls"); res.end("data: [DONE]\n\n"); return;
@@ -81,6 +98,7 @@ const ssh = new ssh2.Server({ hostKeys: [key] }, client => {
 				commands.push(input);
 				stream.write(`\r\n${input.match(/__PI_BEGIN_[a-f0-9]+__/)[0]}\r\n`);
 				if (input.includes("wait-until-aborted")) { waiting = true; return; }
+				if (input.includes("grep no-match")) { stream.write(`\r\n${end}:1\r\ntester$ ${marker}`); return; }
 				if (input.includes("create-proof")) {
 					child = spawn(process.execPath, ["-e", 'require("fs").writeFileSync("remote-command-proof.txt", "SSH process executed"); console.log("SSH process executed")'], { cwd: remoteDir, stdio: ["ignore", "pipe", "pipe"] });
 					children.add(child); child.stdout.pipe(stream, { end: false }); child.stderr.pipe(stream, { end: false });
@@ -164,6 +182,17 @@ try {
 		}
 		await waitFor(() => !agent.snapshot().running);
 	}
+	for (const scenario of ["steps", "misses", "errors"]) {
+		const before = requests;
+		assert.equal((await call("agent_prompt", nodeId, { text: `checkpoint ${scenario}` }, agentId)).event, "result");
+		await waitFor(() => !agent.snapshot().running);
+		assert.equal(requests - before, scenario === "steps" ? 5 : scenario === "misses" ? 4 : 3);
+	}
+	const beforeRetry = requests;
+	assert.equal((await call("agent_prompt", nodeId, { text: "checkpoint retry" }, agentId)).event, "result");
+	await waitFor(() => !agent.snapshot().running);
+	assert.equal(requests - beforeRetry, 4, "the checkpoint and its automatic retry must both have no SSH tools");
+	assert.equal(retryFailures, 0);
 	const beforeRead = wire.length;
 	assert.equal((await call("agent_prompt", nodeId, { text: "remote status" }, agentId)).event, "result");
 	await waitFor(() => !agent.snapshot().running);

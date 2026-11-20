@@ -9,9 +9,9 @@ import type { PythonCommand } from "./playground-python.js";
 
 export class PythonTools {
 	private installing = false;
-	constructor(private readonly dataDir: string) {}
+	constructor(private readonly dataDir: string, private readonly notebook = false) {}
 	private root(python: PythonCommand): string {
-		return join(this.dataDir, "python-tools", createHash("sha256").update(JSON.stringify(python)).digest("hex").slice(0, 24));
+		return join(this.dataDir, this.notebook ? "notebook-tools" : "python-tools", createHash("sha256").update(JSON.stringify(python)).digest("hex").slice(0, 24));
 	}
 	path(python: PythonCommand): string | undefined {
 		try {
@@ -27,8 +27,8 @@ export class PythonTools {
 		let committed = false;
 		try {
 			mkdirSync(target, { recursive: true });
-			await command(python, ["-m", "pip", "install", "--disable-pip-version-check", "--no-input", "--no-warn-script-location", "--target", target, "jedi", "black"], signal);
-			await command(python, ["-c", "import sys; sys.path.insert(0, sys.argv[1]); import jedi, black", target], signal);
+			await command(python, ["-m", "pip", "install", "--disable-pip-version-check", "--no-input", "--no-warn-script-location", "--target", target, ...(this.notebook ? ["jupyter_client", "ipykernel"] : ["jedi", "black"])], signal);
+			await command(python, ["-c", "import sys; sys.path.insert(0, sys.argv[1]); import " + (this.notebook ? "jupyter_client, ipykernel" : "jedi, black"), target], signal);
 			if (signal.aborted) throw new Error("Python tools installation cancelled");
 			// Keep previous generations available to analyses that are already running.
 			writeFileAtomic(join(root, "current"), name);

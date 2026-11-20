@@ -1,7 +1,8 @@
+import { browserAction, browserTarget } from "../browser-progress";
 import { OutputColor } from "./OutputColor";
 import { RunningIndicator } from "./RunningIndicator";
 import { SubagentTurnContext, SubagentTurnPanel } from "./SubagentTurnPanel";
-import { FiGitBranch } from "react-icons/fi";
+import { FiGitBranch, FiGlobe } from "react-icons/fi";
 import { copyText } from "../clipboard";
 import { UiIcon, type UiIconName } from "./UiIcon";
 import { ToolOutputDownload } from "./ToolOutputDownload";
@@ -345,9 +346,10 @@ function BashCommandHeader({ command, original, directory, running, elapsed, sta
 function RegularToolCallBlock({ block, view, onKillBash, wrap = true, rawSubagent = false }: ToolCallBlockProps) {
 	const nestedCalls = view.result?.nestedCalls ?? view.nestedCalls;
 	const t = useChatT();
+	const browser = browserAction(block.name, t);
 	const acpDelegate = block.name === "acp_delegate";
 	const quietSubagent = block.name === "subagent" || acpDelegate;
-	const [open, setOpen] = useState(acpDelegate || (quietSubagent && !rawSubagent && !view.result?.isError) ? false : wrap);
+	const [open, setOpen] = useState(browser || acpDelegate || (quietSubagent && !rawSubagent && !view.result?.isError) ? false : wrap);
 	const [copyError, setCopyError] = useState(false);
 	const [copied, setCopied] = useState(false);
 	const [lineWrap, setLineWrap] = useState(false);
@@ -376,7 +378,7 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true, rawSubagen
 	// A call whose message ended aborted/error and that never got a result
 	// was never executed — show that instead of a live "running" pill.
 	const abandoned = !!view.abandoned && !view.result && !view.status;
-	const running = !view.result && view.streaming && !view.status && !abandoned;
+	const running = !view.result && view.streaming && (!view.status || !!browser && view.status.running === true) && !abandoned;
 	useEffect(() => {
 		if (!running) return;
 		const start = Date.now();
@@ -411,6 +413,8 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true, rawSubagen
 	const output = view.result
 		? view.result.content.map((b) => (b.type === "text" ? b.text : "")).join("")
 		: (view.liveOutput ?? "");
+	const browserTimeout = !!browser && isError && /MCP request timed out after \d+ms/i.test(output);
+	const browserSubject = browser ? browserTarget(block.argumentsText, output) : "";
 	const resultImages = view.result?.content.flatMap(part => part.type === "image" && "dataUrl" in part && typeof part.dataUrl === "string" ? [part.dataUrl] : []) ?? [];
 	const imageReadNotice = block.name === "read" && resultImages.length > 0 && !isError && /^Read image file \[image\/[^\]\r\n]+\](?:\s*\[Image: original \d+x\d+, displayed at \d+x\d+\. Multiply coordinates by [\d.]+ to map to original image\.\])?$/.test(output.trim());
 	const nativeExitCode = (view.result?.details as { exitCode?: number } | undefined)?.exitCode ?? view.status?.exitCode;
@@ -573,8 +577,24 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true, rawSubagen
 	);
 
 	return (
-		<div className={`toolcall ${block.name === "read" ? "toolcall-read" : ""} ${generic ? "toolcall-generic" : ""} ${structured ? "toolcall-structured" : ""} ${statusClass} ${block.name === "bash" ? "toolcall-bash" : ""} ${bashRun ? "toolcall-steps" : ""} ${bashDiagnostics.length ? "toolcall-diagnostics" : ""} ${subagent ? "toolcall-subagents" : ""} ${quietSubagent ? "toolcall-subagent-quiet" : ""}`} onMouseEnter={() => notifyToolHover(block.id)} onMouseLeave={() => notifyToolHover(null)}>
-			{commandDisplay ? <BashCommandHeader command={commandDisplay.command} original={command!} directory={commandDisplay.directory ?? differentCommandDirectory(block.argumentsText, cwd)} running={isBashRunning} elapsed={elapsed} status={statusLabel} full={fullCommand} onFull={() => { setFullCommand((value) => !value); setOpen(true); }} onKill={onKillBash}>
+		<div data-tool-call-id={browser ? block.id : undefined} className={browser ? "change-card browser-progress" : `toolcall ${block.name === "read" ? "toolcall-read" : ""} ${generic ? "toolcall-generic" : ""} ${structured ? "toolcall-structured" : ""} ${statusClass} ${block.name === "bash" ? "toolcall-bash" : ""} ${bashRun ? "toolcall-steps" : ""} ${bashDiagnostics.length ? "toolcall-diagnostics" : ""} ${subagent ? "toolcall-subagents" : ""} ${quietSubagent ? "toolcall-subagent-quiet" : ""}`} onMouseEnter={() => notifyToolHover(block.id)} onMouseLeave={() => notifyToolHover(null)}>
+			{browser ? <>
+				<button type="button" className="tool-step-head" aria-expanded={open} onClick={() => setOpen(v => !v)}>
+					<FiGlobe className="browser-step-icon" aria-hidden="true" />
+					<strong>{browser}</strong>
+					{browserSubject && <span className="browser-progress-target" title={browserSubject}>{browserSubject}</span>}
+					<small className={`tool-step-state ${isError ? "failed" : ""}`}>
+						{running && <RunningIndicator />}
+						{browserTimeout ? t("browserResponseTimeout") : statusLabel}
+						{browserTimeout && duration && ` · ${duration}`}
+						{running && elapsed > 0 && ` · ${elapsed}s`}
+					</small>
+					<FiChevronRight className={open ? "open" : ""} aria-hidden="true" />
+				</button>
+				{running && !block.name.startsWith("page_reader_") && elapsed >= 8 && !output.trim() && <p className="browser-progress-update">{t("browserConnectHint")}</p>}
+				{open && browserTimeout && <p className="browser-progress-update"><strong>{t("browserResponseTimeout")}</strong> · {t("browserTimeoutHelp")}</p>}
+				{running && output.trim() && <div className="browser-progress-update">{output.trim().split("\n").filter(Boolean).at(-1)?.slice(0, 240)}</div>}
+			</> : commandDisplay ? <BashCommandHeader command={commandDisplay.command} original={command!} directory={commandDisplay.directory ?? differentCommandDirectory(block.argumentsText, cwd)} running={isBashRunning} elapsed={elapsed} status={statusLabel} full={fullCommand} onFull={() => { setFullCommand((value) => !value); setOpen(true); }} onKill={onKillBash}>
 				{bashRun && <span className="bash-view-switch"><button type="button" className={bashView === "steps" ? "active" : ""} onClick={() => setBashView("steps")}>{t("bashSteps")}</button><button type="button" className={bashView === "raw" ? "active" : ""} onClick={() => setBashView("raw")}>{t("bashRaw")}</button></span>}
 				<button type="button" className="toolcall-wrap" aria-pressed={lineWrap} onClick={() => setLineWrap((value) => !value)}>{t("toolWrap")}</button>
 				<button type="button" className="toolcall-expand" onClick={() => setExpanded((value) => !value)}>{t(expanded ? "collapseCode" : "expandCode")}</button>
@@ -659,7 +679,7 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true, rawSubagen
 			)}
 			{open && (
 				<div className={`toolcall-body ${expanded ? "expanded" : ""}`}>
-					{quietSubagent && <div className="subagent-tool-actions"><button type="button" onClick={copyArgs}><FiCopy />{t(copyError ? "copyFailed" : copied ? "copied" : "copyArgs")}</button><button type="button" onClick={() => setZoomed(true)}><FiMaximize2 />{t("zoomCode")}</button></div>}
+					{(quietSubagent || browser) && <div className="subagent-tool-actions"><button type="button" onClick={copyArgs}><FiCopy />{t(copyError ? "copyFailed" : copied ? "copied" : "copyArgs")}</button><button type="button" onClick={() => setZoomed(true)}><FiMaximize2 />{t("zoomCode")}</button></div>}
 					{bodyContent}
 				</div>
 			)}

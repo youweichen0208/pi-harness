@@ -16,6 +16,25 @@ function fixture() {
 	return { root, cwd, service };
 }
 describe("Wiki workspace", () => {
+	it("opens large notebooks, searches only sources, and protects external edits", async () => {
+		const { cwd, service } = fixture();
+		const path = "example.ipynb";
+		service.createFile(cwd, path);
+		const blank = await service.documentContent(cwd, path);
+		const book = JSON.parse(blank.text!);
+		book.cells[0].source = ["source-only-match"];
+		book.cells[0].outputs = [{ output_type: "stream", name: "stdout", text: "output-only-match" + "x".repeat(2200000) }];
+		service.write(cwd, path, JSON.stringify(book), blank.version);
+		const saved = await service.documentContent(cwd, path);
+		expect(saved.editable).toBe(true);
+		expect((await service.index(cwd)).texts.has(path)).toBe(false);
+		expect((await service.search(cwd, "source-only-match")).results[0].path).toBe(path);
+		expect((await service.search(cwd, "output-only-match")).results).toEqual([]);
+		writeFileSync(join(cwd,path), blank.text!);
+		expect(() => service.write(cwd,path,saved.text!,saved.version)).toThrow(WikiConflictError);
+		expect(() => service.write(cwd,path,"broken",blank.version)).toThrow();
+		expect(readFileSync(join(cwd,path),"utf8")).toBe(blank.text);
+	});
 	it("does not undo only the manifest of an ingestion while retaining its archived evidence", async () => {
 		const { cwd, service } = fixture();
 		const before = await service.begin(cwd);

@@ -6,21 +6,25 @@ import type { WorkspaceFileCreated } from "../types";
 
 /** Shared manual file creation for the workspace tree and Wiki. */
 export function CreateFileForm({ cwd, conversationId, initialPath = "", parentPath, kind = "file", inline = false, disabled, onCreated, onCancel }: {
-	cwd: string; conversationId: string; initialPath?: string; parentPath?: string; kind?: "file" | "directory"; inline?: boolean; disabled?: boolean;
+	cwd: string; conversationId: string; initialPath?: string; parentPath?: string; kind?: "file" | "directory" | "markdown"; inline?: boolean; disabled?: boolean;
 	onCreated: (path: string) => void; onCancel: () => void;
 }) {
 	const t = useT();
 	const [path, setPath] = useState(initialPath), [error, setError] = useState(""), [busy, setBusy] = useState(false);
 	const errorId = useId();
 	const nameOnly = parentPath !== undefined;
+	const suffix = kind === "markdown" ? ".md" : "";
+	const name = path.trim();
+	const hasSuffix = !!suffix && name.toLowerCase().endsWith(suffix);
+	const filename = hasSuffix ? name : name + suffix;
 	const invalidName = nameOnly && /[/\\]/.test(path);
-	const canCreate = nameOnly ? !!path.trim() && !invalidName : !!path.split("/").at(-1)?.trim();
+	const canCreate = nameOnly ? !!name && name.toLowerCase() !== suffix && !invalidName : !!path.split("/").at(-1)?.trim();
 	const request = useRef<AbortController | null>(null);
 	useEffect(() => () => { request.current?.abort(); }, []);
 	const label = t(kind === "directory" ? "newWorkspaceFolder" : "newWorkspaceFile");
 	const fieldLabel = t(kind === "directory" ? nameOnly ? "workspaceFolderName" : "workspaceFolderPath" : nameOnly ? "workspaceFileName" : "workspaceFilePath");
 	const placeholder = t(kind === "directory" ? nameOnly ? "workspaceFolderNamePlaceholder" : "workspaceFolderPlaceholder" : nameOnly ? "workspaceFileNamePlaceholder" : "workspaceFilePlaceholder");
-	const field = <input autoFocus value={path} aria-label={fieldLabel} aria-invalid={invalidName || !!error} aria-describedby={invalidName || error ? errorId : undefined} placeholder={placeholder} disabled={busy} onChange={event => { setPath(event.target.value); setError(""); }} onKeyDown={event => { if (event.key === "Enter" && event.nativeEvent.isComposing) event.preventDefault(); if (event.key === "Escape") { event.stopPropagation(); if (!busy) onCancel(); } }} />;
+	const field = <input autoFocus value={path} aria-label={suffix ? fieldLabel + " (" + suffix + ")" : fieldLabel} aria-invalid={invalidName || !!error} aria-describedby={invalidName || error ? errorId : undefined} placeholder={suffix ? fieldLabel : placeholder} disabled={busy} onChange={event => { setPath(event.target.value); setError(""); }} onKeyDown={event => { if (event.key === "Enter" && event.nativeEvent.isComposing) event.preventDefault(); if (event.key === "Escape") { event.stopPropagation(); if (!busy) onCancel(); } }} />;
 	const errorMessage = (invalidName || error) && <p id={errorId} role="alert">{invalidName ? t("workspaceNameNoSlash") : error}</p>;
 	const submit = async (event: FormEvent) => {
 		event.preventDefault();
@@ -28,7 +32,7 @@ export function CreateFileForm({ cwd, conversationId, initialPath = "", parentPa
 		const controller = new AbortController(); request.current = controller;
 		setBusy(true); setError("");
 		try {
-			const target = nameOnly ? [parentPath, path.trim()].filter(Boolean).join("/") : path;
+			const target = nameOnly ? [parentPath, filename].filter(Boolean).join("/") : path;
 			const result = await wikiRequest<WorkspaceFileCreated>(cwd, kind === "directory" ? "create-directory" : "create-file", { path: target, conversationId }, controller.signal);
 			if (!controller.signal.aborted) onCreated(result.path);
 		} catch (error) { if (!controller.signal.aborted) setError((error as Error).message); }
@@ -38,6 +42,7 @@ export function CreateFileForm({ cwd, conversationId, initialPath = "", parentPa
 		<span className="tree-caret" aria-hidden="true" />
 		{kind === "directory" ? <FiFolder className="tree-entry-icon tree-icon-folder" aria-hidden="true" /> : <FiFile className="tree-entry-icon tree-icon-document" aria-hidden="true" />}
 		{field}
+		{suffix && !hasSuffix && <span className="wiki-create-suffix" aria-hidden="true">{suffix}</span>}
 		{errorMessage && <div className="wiki-tree-create-error">{errorMessage}</div>}
 	</form>;
 	return <form className="create-file-form" aria-label={label} onSubmit={submit}>

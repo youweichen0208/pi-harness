@@ -7,6 +7,8 @@ import { wikiMetadata, wikiReferences, resolveWikiLink, wikiLinkIndex } from "./
 import { readWikiPdf } from "./wiki-pdf.js";
 import type { WikiEntry, WikiState, WikiDocument, WikiRevision, WikiChange, WikiSearchResult, WikiDirectory, WikiIndexStatus, WikiDocumentContent, WikiDocumentReferences } from "./protocol.js";
 
+import { emptyNotebook, notebookPath, notebookSource, readNotebook } from "./notebook.js";
+const fileLimit = (path: string) => notebookPath(path) ? 32 * 1024 * 1024 : MAX_FILE;
 const MAX_FILE = 2 * 1024 * 1024;
 const MAX_SNAPSHOT = 64 * 1024 * 1024;
 const IGNORED = new Set([".git", "node_modules", ".pi-web", ".DS_Store"]);
@@ -56,7 +58,7 @@ function isKnowledgeEvidence(cwd: string, path: string): boolean {
 	return parts.some((part, index) => part === "evidence" && skipTraversalDirectory(join(root, ...parts.slice(0, index)), part));
 }
 function kindOf(path: string, text: boolean): WikiEntry["kind"] {
-	if (/\.(md|markdown|txt)$/i.test(path)) return "document";
+	if (/\.(md|markdown|txt|ipynb)$/i.test(path)) return "document";
 	if (/\.pdf$/i.test(path)) return "pdf";
 	if (previewKind(path) === "image") return "image";
 	return text || previewKind(path) === "text" ? "code" : "other";
@@ -153,7 +155,10 @@ export class WikiService {
 					if (!info.isFile()) continue;
 					status.total++; counted = true; size = info.size;
 					let text: string | undefined, document: ParsedDocument | undefined;
-					if (info.size <= MAX_FILE && bytes + info.size <= MAX_SNAPSHOT) {
+					if (notebookPath(p) && info.size <= fileLimit(p)) {
+						// Read cell sources lazily when the library is searched.
+						status.indexed++;
+					} else if (info.size <= MAX_FILE && bytes + info.size <= MAX_SNAPSHOT) {
 						const data = await readFile(abs); bytes += data.length; status.indexed++;
 						if (!/\.pdf$/i.test(p) && previewKind(p) !== "image" && looksLikeText(data)) {
 							text = decodeText(data); texts.set(p, text);
@@ -215,19 +220,31 @@ export class WikiService {
 	async documentContent(cwd: string, path: string): Promise<WikiDocumentContent> {
 		const abs = wikiPath(cwd, path), info = statSync(abs), size = info.size;
 		if (!info.isFile()) throw new Error("Not a file");
-		const data = size <= MAX_FILE ? readFileSync(abs) : undefined;
+		if (notebookPath(path) && size > fileLimit(path)) throw new Error("Notebook exceeds 32 MiB");
+		const data = size <= fileLimit(path) ? readFileSync(abs) : undefined;
 		const text = data && !/\.pdf$/i.test(path) && previewKind(path) !== "image" && looksLikeText(data) ? decodeText(data) : undefined;
-		const metadata = wikiMetadata(text ?? "");
+		const metadata = wikiMetadata(notebookPath(path) ? "" : text ?? "");
 		return { entry: { path, name: basename(path), size, modified: info.mtimeMs, kind: kindOf(path, text !== undefined), tags: metadata.tags, title: metadata.title }, text, version: data ? hash(data) : "", editable: text !== undefined && Buffer.from(text).equals(data!) && !isKnowledgeEvidence(cwd, path) };
 	}
 	async search(cwd: string, query: string): Promise<{ results: WikiSearchResult[]; limited: boolean }> {
 		const index = await this.index(cwd), q = query.trim().toLocaleLowerCase().slice(0, 200);
 		if (!q) return { results: [], limited: index.limited };
-		const results: WikiSearchResult[] = []; let limited = index.limited, pdfs = 0;
+		const results: WikiSearchResult[] = []; let limited = index.limited, pdfs = 0, notebookBytes = 0;
 		for (const entry of index.entries) {
 			if (entry.kind === "directory") continue;
 			if (results.length >= 100) { limited = true; break; }
-			const body = index.texts.get(entry.path);
+			let body = index.texts.get(entry.path);
+			if (notebookPath(entry.path) && body === undefined) {
+				try {
+					const file = wikiPath(cwd, entry.path), size = (await stat(file)).size;
+					if (size > fileLimit(entry.path) || notebookBytes + size > MAX_SNAPSHOT) limited = true;
+					else {
+						notebookBytes += size;
+						body = notebookSource(await readFile(file, "utf8"));
+						index.texts.set(entry.path, body);
+					}
+				} catch { limited = true; }
+			}
 			const lines = body?.split(/\r?\n/) ?? [];
 			let matches = 0;
 			for (let line = 0; line < lines.length && matches < 3; line++) {
@@ -316,9 +333,10 @@ export class WikiService {
 		// Accept portable relative paths; parent directories must already exist.
 		const target = this.newPath(cwd, path);
 		// Exclusive creation also rejects existing files and symlinks without truncating them.
-		writeFileSync(target.absolute, "", { flag: "wx" });
+		const content = notebookPath(path) ? emptyNotebook() : "";
+		writeFileSync(target.absolute, content, { flag: "wx" });
 		path = target.path;
-		this.record(cwd, { files: new Map(), skipped: [] }, { files: new Map([[path, Buffer.alloc(0)]]), skipped: [] }, "user", path);
+		this.record(cwd, { files: new Map(), skipped: [] }, { files: new Map([[path, Buffer.from(content)]]), skipped: [] }, "user", path);
 		return { path };
 	}
 	createDirectory(cwd: string, path: string) {
@@ -354,8 +372,9 @@ export class WikiService {
 		if (isKnowledgeEvidence(cwd, path)) throw new Error("Knowledge evidence snapshots are read-only; edit the source and ingest a new version");
 		if (this.busy(cwd)) throw new Error("Wait for the current Wiki request to finish");
 		const abs = wikiPath(cwd, path), data = readFileSync(abs), next = Buffer.from(text);
-		if (data.length > MAX_FILE || next.length > MAX_FILE || !looksLikeText(data) || !Buffer.from(decodeText(data)).equals(data)) throw new Error("File is read-only");
+		if (data.length > fileLimit(path) || next.length > fileLimit(path) || !looksLikeText(data) || !Buffer.from(decodeText(data)).equals(data)) throw new Error("File is read-only");
 		if (hash(data) !== version) throw new WikiConflictError("File changed on disk; reload before saving");
+		if (notebookPath(path)) readNotebook(text);
 		writeFileSync(abs, next);
 		this.record(cwd, { files: new Map([[path, data]]), skipped: [] }, { files: new Map([[path, next]]), skipped: [] }, "user", path);
 	}

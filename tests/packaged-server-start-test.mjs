@@ -50,33 +50,24 @@ execFileSync(executable, ["--input-type=module", "--eval", `
 	import {join} from 'node:path';
 	import {DefaultResourceLoader, SettingsManager} from '@earendil-works/pi-coding-agent';
 	import {designFirstResources, designFirstSettings, toggleDesignFirst} from './dist/server/design-first-resources.js';
-	import {expandNativeTemplate} from './dist/server/native-prompt-template.js';
 	const root = mkdtempSync(join(tmpdir(), 'packaged-design-first-'));
 	try {
 		const loader = new DefaultResourceLoader({cwd:root,agentDir:root,settingsManager:SettingsManager.inMemory(),noExtensions:true,noSkills:true,noThemes:true,noContextFiles:true,noPromptTemplates:true,...designFirstResources('normal',root)});
 		await loader.reload();
-		assert.deepEqual(loader.getSkills().skills, []);
-		assert.deepEqual(loader.getPrompts().prompts.map(p=>p.name).sort(), ['bug-fix','design','feat']);
-		for (const prompt of loader.getPrompts().prompts) {
-			assert(prompt.content.includes(JSON.stringify(join(process.cwd(),'assets/skills/design-first/SKILL.md'))));
-			assert(!prompt.content.includes('{{DESIGN_FIRST_SKILL_PATH}}'));
-			const expanded = await expandNativeTemplate('/' + prompt.name + ' packaged fixture request', loader.getPrompts().prompts);
-			assert(expanded.includes('packaged fixture request'));
-			const route = prompt.name === 'design' ? 'full Start or resume workflow' : prompt.name === 'feat' ? 'Small feature route' : 'Bug fix route';
-			assert(expanded.includes(route));
-			assert(!expanded.includes('$ARGUMENTS'));
-		}
+		const names = () => loader.getSkills().skills.map(skill => skill.name).sort();
+		assert.deepEqual(names(), ['bug-fix','design-first','feat']);
+		assert.deepEqual(loader.getPrompts().prompts, []);
+		for (const skill of loader.getSkills().skills) assert.equal(skill.filePath, join(process.cwd(), 'assets/skills/design-first', skill.name === 'design-first' ? '' : skill.name, 'SKILL.md'));
 		toggleDesignFirst(false,designFirstSettings(root).version,root);
 		await loader.reload();
 		assert.deepEqual(loader.getSkills().skills, []);
 		assert.deepEqual(loader.getPrompts().prompts, []);
 		toggleDesignFirst(true,designFirstSettings(root).version,root);
 		await loader.reload();
-		assert.deepEqual(loader.getSkills().skills, []);
-		assert.deepEqual(loader.getPrompts().prompts.map(p=>p.name).sort(), ['bug-fix','design','feat']);
+		assert.deepEqual(names(), ['bug-fix','design-first','feat']);
 	} finally {rmSync(root,{recursive:true,force:true});}
 `], {cwd:appRoot,env:{...testEnv({PI_WEB_PKG_ROOT:appRoot}),ELECTRON_RUN_AS_NODE:"1",NODE_PATH:"",NODE_OPTIONS:""},timeout:30000,stdio:"pipe"});
-console.log("PASS packaged Design First skill/shortcuts, installed paths, expansion and toggle reload");
+console.log("PASS packaged Design First skills, installed paths and toggle reload");
 const playgroundMethods = pathToFileURL(join(appRoot, "dist/server/playground-methods.js")).href;
 execFileSync(executable, ["--input-type=module", "--eval", `
 	import assert from 'node:assert/strict';

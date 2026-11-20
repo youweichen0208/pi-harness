@@ -1,3 +1,5 @@
+import { visit } from "unist-util-visit";
+import type { Root as HtmlRoot } from "hast";
 import remarkMath from "remark-math";
 import { remarkRichMath, paintMath } from "./rich-math";
 import { cleanRichHtml, cleanStyle, controlledBlock, canonicalDisclosures } from "./rich-content";
@@ -24,6 +26,16 @@ import { COLUMN_TARGET_ATTRIBUTE as COLUMN_TARGET, ROW_TARGET_ATTRIBUTE as ROW_T
 
 const codeHighlightPlugins: PluggableList = [[rehypeHighlight, { languages: { ...common, ...extraCodeLanguages } }]];
 
+function preserveFenceMeta() {
+	return (tree: HtmlRoot) => {
+		visit(tree, "element", node => {
+			if (node.tagName === "code" && typeof node.data?.meta === "string") {
+				node.properties["data-fence-meta"] = node.data.meta;
+			}
+		});
+	};
+}
+
 interface SourceBlock {
 	raw: string;
 	prefix: string;
@@ -48,7 +60,7 @@ function codeFenceMarkdown(node: HTMLElement): string {
 	const detected = code?.className.match(/language-([^\s]+)/)?.[1] ?? "";
 	const lang = detected === "plaintext" ? "" : detected;
 	const fence = "`".repeat(Math.max(3, ...Array.from(text.matchAll(/`+/g), (m) => m[0].length + 1)));
-	return `\n\n${fence}${lang}\n${text.replace(/\n$/, "")}\n${fence}\n\n`;
+	return `\n\n${fence}${lang}${code?.dataset.fenceMeta ? " " + code.dataset.fenceMeta : ""}\n${text.replace(/\n$/, "")}\n${fence}\n\n`;
 }
 const converter = new TurndownService({
 	headingStyle: "atx", codeBlockStyle: "fenced", bulletListMarker: "-",
@@ -218,7 +230,7 @@ function disclosureMarkup(raw: string, wiki: boolean, definitions: string): stri
 	const summary = body.match(/^\s*<summary(?:\s[^>]*)?>([\s\S]*?)<\/summary>/i);
 	const rest = summary ? body.slice(summary[0].length) : body;
 	const title = summary ? summary[1] : "";
-	const rendered = renderToStaticMarkup(<ReactMarkdown remarkPlugins={[remarkGfm, remarkMath, remarkRichMath, remarkTextHighlight, controlledBlocks, controlledInline, preserveInlineHtml, remarkHighlightBlock]} rehypePlugins={wiki ? [] : codeHighlightPlugins}>{(wiki ? renderWikiLinks(rest) : rest) + "\n\n" + definitions}</ReactMarkdown>);
+	const rendered = renderToStaticMarkup(<ReactMarkdown remarkPlugins={[remarkGfm, remarkMath, remarkRichMath, remarkTextHighlight, controlledBlocks, controlledInline, preserveInlineHtml, remarkHighlightBlock]} rehypePlugins={wiki ? [preserveFenceMeta] : [preserveFenceMeta, ...codeHighlightPlugins]}>{(wiki ? renderWikiLinks(rest) : rest) + "\n\n" + definitions}</ReactMarkdown>);
 	// No attribute is written here: `bare` decides at save time whether the source keeps
 	// its hand-written `<details>` or the editor's own controlled format.
 	return `<details><summary>${title}</summary>${rendered}</details>`;
@@ -272,7 +284,7 @@ export function prepareRichDocument(source: string, wiki = false): RichDocument 
 		if (node.type === "heading" && node.depth === 1) firstHeading = false;
 		blocks.push({
 			raw, prefix: source.slice(end, start), protected: protectedBlock, hidden,
-			html: controlled ?? (protectedBlock ? "" : renderToStaticMarkup(<ReactMarkdown remarkPlugins={[remarkGfm, remarkMath, remarkRichMath, remarkTextHighlight, controlledBlocks, controlledInline, preserveInlineHtml, remarkHighlightBlock]} rehypePlugins={wiki ? [] : codeHighlightPlugins}>{(wiki ? renderWikiLinks(raw) : raw) + "\n\n" + definitions}</ReactMarkdown>)),
+			html: controlled ?? (protectedBlock ? "" : renderToStaticMarkup(<ReactMarkdown remarkPlugins={[remarkGfm, remarkMath, remarkRichMath, remarkTextHighlight, controlledBlocks, controlledInline, preserveInlineHtml, remarkHighlightBlock]} rehypePlugins={wiki ? [preserveFenceMeta] : [preserveFenceMeta, ...codeHighlightPlugins]}>{(wiki ? renderWikiLinks(raw) : raw) + "\n\n" + definitions}</ReactMarkdown>)),
 		});
 		end = stop;
 	}

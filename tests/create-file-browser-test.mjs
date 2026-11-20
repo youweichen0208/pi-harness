@@ -77,7 +77,8 @@ try {
 	await form.getByRole('button', { name: '创建', exact: true }).click();
 	await page.locator('.wiki-workbench .fp-rich-document[contenteditable="true"]').waitFor();
 	assert.equal(readFileSync(join(data, 'docs/created.md'), 'utf8'), '');
-	await page.locator('.wiki-sidebar').getByRole('button', { name: '新建文件', exact: true }).click();
+	await page.locator('.wiki-tree-actions .wiki-tree-new > button').hover();
+	await page.locator('.wiki-new-list').getByRole('button',{name:/Markdown/}).click();
 	await form.waitFor();
 	assert.equal(await form.locator('input').inputValue(), 'docs/');
 	await form.locator('input').fill('docs/second.md');

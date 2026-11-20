@@ -1,8 +1,8 @@
 # Extensions 原生包管理
 
-Design First 的 M1 指导资源随应用放在 `assets/skills/design-first/`，普通会话通过原生 Prompt Templates 提供 `/design`、`/bug-fix` 和 `/feat`，不注册原生 Skill 或旧命令别名。沿用当前模型及原生工具，确认属于工作流约定。`<dataDir>/design-first.json` 的 enabled 缺省 true，显式 false 保留；开关在新会话或 reload 后生效。同名用户资源保留原生优先级，损坏配置仅移除内置命令并报告诊断。Wiki、节点、子代理和 Playground 不注入这些资源。使用与交付范围见 [Design First Skill](design-first-skill.md)。
+Design First 的 M1 指导资源随应用放在 `assets/skills/design-first/`，普通会话通过原生 Skills 提供 `/skill:design-first`、`/skill:bug-fix` 和 `/skill:feat`。沿用当前模型及原生工具，确认属于工作流约定。`<dataDir>/design-first.json` 的 enabled 缺省 true，显式 false 保留；开关在新会话或 reload 后生效。同名用户资源保留原生优先级，损坏配置仅移除内置命令并报告诊断。Wiki、节点、子代理和 Playground 不注入这些资源。使用与交付范围见 [Design First Skill](design-first-skill.md)。
 
-内置 Design First 卡片只列出当前实际归它所有的命令；用户 Extension 或同名 Prompt Template 占用 `/design` 时从清单移除，显示冲突并禁用“在聊天中准备设计需求”。移除冲突并重载后恢复，执行顺序仍沿用原生规则。
+内置 Design First 卡片只列出当前实际归它所有的命令；同名用户 Skill 或优先级更高的命令占用 `/skill:design-first` 时从清单移除，显示冲突并禁用“在聊天中准备设计需求”。移除冲突并重载后恢复，执行顺序仍沿用原生规则。
 
 文档转 Markdown 与 OKF 知识蒸馏扩展均已移除，不再提供聊天工具、命令或设置条目；实现、Python 资源和打包支持也已删除。
 
@@ -22,13 +22,13 @@ Design First 的 M1 指导资源随应用放在 `assets/skills/design-first/`，
 
 ## 内置扩展清单
 
-已安装页按内置扩展、安装包、单文件分组。六个内置条目由 `nativeExtensionRegistry` 与会话资源共同投影；包页签数量只统计安装包。内置清单独立请求，即使包 worker 失败仍能展示；不提供包更新、卸载或源码编辑。Workspace 子代理默认开启，独立全局开关与只读分工规则见 [子代理架构](architecture-subagents.md)，工具可被用户同名扩展替换。
+已安装页按内置扩展、安装包、单文件分组。内置条目由 `nativeExtensionRegistry` 与会话资源共同投影，并按平台能力展示；包页签数量只统计安装包。内置清单独立请求，即使包 worker 失败仍能展示；不提供包更新、卸载或源码编辑。Workspace 子代理默认开启，独立全局开关与只读分工规则见 [子代理架构](architecture-subagents.md)，工具可被用户同名扩展替换。
 
 `/api/extensions` 的 `builtin-list`、`builtin-toggle` 都绑定活动 conversationId，并沿用 cwd/clientId、同源与 quiesce 校验。清单读取已有资源，不执行工厂、不加载包。工具来源必须匹配具名 inline/builtin 路径；第三方同名工具显示冲突。状态区分加载、关闭、待生效、不可用和配置/加载失败，MCP 的加载状态不代表服务器连接成功。查看设置跳转已有 MCP/Codemode 页。
 
 计划开关移入内置条目，继续使用现有计划协议和延迟生效规则。数据库开关复用 document-extensions.json（保存时清除已移除扩展的旧键），使用版本校验避免覆盖其他客户端的修改；关闭立即拒绝后续执行，开启后按会话实际工具状态提示重载或新建会话。内置页重载按钮仅在连接正常、空闲且会话可写时可用。页面打开时轮询轻量清单，切换会话和关闭页面取消请求，迟到结果不覆盖新状态。
 
-回归：`tests/builtin-extensions-test.mjs` 使用隔离 WebSocket 服务、真实 SDK 和本地模型夹具验证清单、关闭拒绝、跨客户端配置、版本冲突、新会话/重载；`--browser` 覆盖六个条目、开关、转换与 OKF 入口缺失、设置跳转、包列表失败、中英文与窄屏。它不证明外部模型的自主语义能力。
+回归：`tests/builtin-extensions-test.mjs` 使用隔离 WebSocket 服务、真实 SDK 和本地模型夹具验证清单、关闭拒绝、跨客户端配置、版本冲突、新会话/重载；`--browser` 覆盖内置条目、浏览器显式启停与命名空间别名、开关、转换与 OKF 入口缺失、设置跳转、包列表失败、中英文与窄屏。它不证明外部模型的自主语义能力。
 
 ## 请求与运行边界
 
@@ -94,3 +94,13 @@ Pi 1.5 的包安装失败会出现在原生资源加载器 warnings 中。会话
 管理页调用只读 `cli-status` 动作，检测服务主机的 Pi、Node.js、npm；探测固定 `--version` 参数，5 秒／16 KB 限制，过滤 PATH 中的相对目录和依赖 `.bin` 目录，避免将内置 SDK 当成外部 CLI。不缓存结果，打开页面或重新检测即刷新。缺失与无法运行分开显示，Node.js 至少 22.19 且 npm 可用才开放安装。
 
 用户点击后通过现有终端桥运行 `npm install -g --ignore-scripts @earendil-works/pi-coding-agent@latest`，安装独立 CLI，不改变内置 SDK 或社区包。当前对话已有同安装命令的运行中终端时只定位，不重启；终端结束后可重新运行。安装日志保持可见，返回管理页重新检测，不以输出文本或终端创建判定成功。权限／网络／PATH 提示不自动提权、不改系统 PATH、不捆绑或自动安装工具。HTTP 类型定义在 protocol.ts，不新增 WebSocket 消息。
+
+## 读取 Chrome 已打开的网页
+
+macOS 上绑定回环地址的工作台在普通聊天里注册延迟发现的 `page_reader_find` 和 `page_reader_read`。Chrome 扩展按网站申请可撤销的权限，用页面引用绑定标签页和列出时的网址。Native Messaging 主机只接受随包扩展 ID，通过当前系统用户私有目录的 Unix socket 与工具通信。标签页引用只在扩展进程内有效。正文由标签页中的固定脚本提取，超过 60,000 字符时标记截断。安装和验证步骤见 [Chrome 使用指南](../README.md#让-pi-读取-chrome-中已打开的页面)。
+
+## 控制你的浏览器
+
+普通聊天可在设置中显式启用 Playwright MCP；未配置时不注册或启动浏览器连接，已有 `mcp.json` 条目仍由原生 SDK 加载。首次使用前，在工作台服务所在电脑的 Chrome 中安装 Playwright 扩展。启用后，聊天首次调用浏览器工具时，在 Chrome 中批准连接并选择标签页，即可沿用现有登录状态。服务端需要 npx。
+
+设置 › MCP 与 Codemode › 全局中的「全局启用浏览器连接」开关可关闭或重新启用连接。已有同命名空间配置（连字符／下划线别名）沿用原条目；会产生命名空间冲突的保存提前拒绝。手动关闭会保存到全局 MCP 配置，重启后继续生效。

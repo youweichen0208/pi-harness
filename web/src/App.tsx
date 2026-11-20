@@ -1716,7 +1716,7 @@ export function App() {
 			{settingsOpen && (
 				<SettingsModal
 					initialTab={settingsInitialTab}
-					onPrepareDesign={() => { prepareComposerCommand(chat.activeConversationId, "design"); setView("chat"); setScratchOpen(false); setNotesOpen(false); setSettingsOpen(false); }}
+					onPrepareDesign={() => { prepareComposerCommand(chat.activeConversationId, "skill:design-first"); setView("chat"); setScratchOpen(false); setNotesOpen(false); setSettingsOpen(false); }}
 					onInstallPiCli={installPiCli}
 					chat={chat}
 					send={send}

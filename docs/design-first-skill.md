@@ -4,22 +4,22 @@
 
 ## 使用
 
-- `/bug-fix <错误现象和预期行为>`：复现、诊断、保存修复方案与任务，确认后修复并执行回归检查。
-- `/feat <小功能>`：保存新增行为、兼容边界、验收和任务，确认后实现与测试。
-- `/design <需求>`：完整设计流程；`/design 恢复 <change-id>` 从文档和当前源码恢复。
+- `/skill:bug-fix <错误现象和预期行为>`：复现、诊断、保存修复方案与任务，确认后修复并执行回归检查。
+- `/skill:feat <小功能>`：保存新增行为、兼容边界、验收和任务，确认后实现与测试。
+- `/skill:design-first <需求>`：完整设计流程；`/skill:design-first 恢复 <change-id>` 从文档和当前源码恢复。
 
-确认属于 Skill 约定，不是强制工具锁。创建和恢复共用“明确指定位置 → 项目约定（如 OpenSpec）→ `docs/changes/` 回退”的顺序。简单改动采用 Quick，可把设计、任务、进度和结果合在一份 `design.md`；Standard/Deep 使用独立文件。需求以稳定 Req ID 和可观察 Scenario 贯穿任务、实现与结果，分级升级或降级记录原因和证据。确认前先保存完整提案；`/feat`、`/bug-fix` 或 `/design` 本身不构成实施授权，当前会话确认必须对应已保存并展示的 design/spec 版本，历史确认不作为新会话的执行授权。
+确认属于 Skill 约定，不是强制工具锁。创建和恢复共用“明确指定位置 → 项目约定（如 OpenSpec）→ `docs/changes/` 回退”的顺序。简单改动采用 Quick，可把设计、任务、进度和结果合在一份 `design.md`；Standard/Deep 使用独立文件。需求以稳定 Req ID 和可观察 Scenario 贯穿任务、实现与结果，分级升级或降级记录原因和证据。确认前先保存完整提案；`/skill:feat`、`/skill:bug-fix` 或 `/skill:design-first` 本身不构成实施授权，当前会话确认必须对应已保存并展示的 design/spec 版本，历史确认不作为新会话的执行授权。
 
 实现前读取验证指引；有合适公共测试边界时按 vertical slice 执行 red → minimal green，没有时记录原因并验证真实 HTTP/CLI/浏览器等行为。完成后分别审查代码质量与设计/spec 符合度。项目已有 OpenSpec 约定时使用其 Requirement/Scenario delta 和校验方式；未安装或不能校验时记为 not_run/pending，不自动安装或归档。新增或补齐契约时更新 spec；修回已有准确契约则保留正文，在变更记录解释原因；有未决事项则记为 pending。测试记录真实命令、时间、环境、退出码及输入身份。源码发生变化后，旧通过结论只作为历史证据。
 
-开关在设置的 Skills 和内置扩展列表共用，变更后新建会话或 reload。已明确关闭的设置保留；同名用户 Skill/模板/扩展沿用原生优先级。Wiki、SSH 节点、子代理和 Playground 不加载此资源。用户扩展或模板占用 `/design` 时保留用户实现，内置卡片显示冲突并禁用准备动作。
+开关在设置的 Skills 和内置扩展列表共用，变更后新建会话或 reload。已明确关闭的设置保留；同名用户 Skill/模板/扩展沿用原生优先级。Wiki、SSH 节点、子代理和 Playground 不加载此资源。用户扩展或模板占用 `/skill:design-first` 时保留用户实现，内置卡片显示冲突并禁用准备动作。
 
 ## 实现边界
 
-- `assets/skills/design-first/`：1 个入口、11 份按需指引、6 份文档模板、3 份原生命令模板，共 21 个资源。
-- `server/design-first-resources.ts`：定位随包资源、开关和 reload、命令模板路径填充。
+- `assets/skills/design-first/`：3 个原生 Skill 入口、11 份按需指引和 6 份文档模板。
+- `server/design-first-resources.ts`：定位随包资源、开关和 reload、原生 Skill 加载。
 - 复用既有原生命令目录、会话创建、设置和输入框，不增加模型、源码执行服务或后台任务。
-- 协议 60 只为新增内置资源标识协调两端缓存版本，无 Workflow 消息或数据库。
+- 协议 61 只为新增内置资源标识协调两端缓存版本，无 Workflow 消息或数据库。
 
 ## 验收依据与限制
 
@@ -63,7 +63,7 @@
 
 2026-11-18，使用独立工作树依赖构建 macOS ARM64 目录包 `release/mac-arm64/pi.app`（Electron 41.10.7，内嵌 Node 24.18.0），ad-hoc 签名完成。包内全部 20 个 Skill 文件与源码哈希一致，加载器与本分支构建产物一致，包内无受管理执行引擎。
 
-- `packaged-server-start-test.mjs`：包内依赖、Skill/快捷入口、模板参数与实际包内路径、关闭/开启后的 reload、服务/WS 和已有原生扩展加载通过。
+- `packaged-server-start-test.mjs`：包内依赖、原生 Skills 与实际包内路径、关闭/开启后的 reload、服务/WS 和已有原生扩展加载通过。
 - `native-tools-desktop-test.mjs`：原生 MCP、Codemode worker、嵌套调用和 reload/resume 通过。
 - `provider-auth-test.mjs`：使用包内 Electron runtime 的本地 OAuth 夹具通过，没有真实登录或外部模型请求。
 

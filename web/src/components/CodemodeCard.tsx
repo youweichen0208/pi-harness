@@ -1,3 +1,6 @@
+import { FiCode, FiChevronRight } from "react-icons/fi";
+import { bashCommand } from "../bash-steps";
+import { browserAction } from "../browser-progress";
 import { codemodeRecords } from "../codemode-records";
 import { copyText } from "../clipboard";
 import { ToolOutputDownload } from "./ToolOutputDownload";
@@ -5,7 +8,7 @@ import { useContext, useEffect, useRef, useState } from "react";
 import type { UiToolCallBlock } from "../types";
 import { toolDuration, type ToolView } from "./ToolCallBlock";
 import { useChatT } from "../i18n";
-import { codemodeOptions, codemodeScript } from "../codemode-presentation";
+import { codemodeScript } from "../codemode-presentation";
 import { WorkspacePathContext } from "../workspace-context";
 import { withToken } from "../auth-token";
 import { getClientId } from "../use-chat";
@@ -14,7 +17,7 @@ import { Markdown } from "./Markdown";
 export function CodemodeCard({ block, view, wrap = true, readOnly = false }: { block: UiToolCallBlock; view: ToolView; wrap?: boolean; readOnly?: boolean }) {
 	const t = useChatT();
 	const cwd = useContext(WorkspacePathContext);
-	const [open, setOpen] = useState(wrap);
+	const [manualOpen, setOpen] = useState<boolean>();
 	const [tab, setTab] = useState<"calls" | "script" | "output">("calls");
 	const [all, setAll] = useState(false);
 	const [feedback, setFeedback] = useState("");
@@ -32,13 +35,12 @@ export function CodemodeCard({ block, view, wrap = true, readOnly = false }: { b
 	const running = !done && (view.runActive ?? view.streaming);
 	const ticking = running && view.streaming;
 	const failed = view.result?.isError ?? view.status?.isError;
+	const singleShell = done && !failed && count === 1 && calls[0]?.name === "bash" && calls[0].status === "ok";
+	const open = manualOpen ?? (wrap && !singleShell);
 	const status = failed ? "error" : done && !view.result && (!view.status || view.status.running) ? "cmUnfinished" : done ? "done" : running ? "running" : "toolQueued";
 	const output = view.result?.content.map(part => part.type === "text" ? part.text : "").join("\n") ?? view.liveOutput ?? "";
 	const script = codemodeScript(block.argumentsText);
-	const options = codemodeOptions(script);
 	const images = view.result?.content.flatMap(part => part.type === "image" && typeof part.dataUrl === "string" && /^data:image\/(png|jpeg|gif|webp);base64,/.test(part.dataUrl) ? [part.dataUrl] : []) ?? [];
-	const groups = new Map<string, number>();
-	for (const call of calls) groups.set(call.name, (groups.get(call.name) ?? 0) + 1);
 	const priced = calls.filter(call => call.cost !== undefined);
 	const cost = priced.reduce((sum, call) => sum + (call.cost ?? 0), 0);
 	const recorded = toolDuration(view);
@@ -69,19 +71,37 @@ export function CodemodeCard({ block, view, wrap = true, readOnly = false }: { b
 			}
 		} catch (error) { setFeedback((error as Error).message); } finally { setSaving(false); }
 	};
-	return <section className={`codemode-card ${failed ? "err" : running ? "run" : ""}`} data-tool-call-id={block.id}>
-		<button className="codemode-head" aria-expanded={open} onClick={() => setOpen(!open)}><span aria-hidden="true">{open ? "⌄" : "›"}</span><span className="codemode-mark">{`{ }`}</span><strong>codemode</strong><span className="codemode-state">{t(status)}</span>{duration && <small>{duration}</small>}{priced.length > 0 && <small>${cost.toFixed(4)}</small>}</button>
+	return <section className={`codemode-card ${singleShell ? "codemode-compact" : ""} ${failed ? "err" : running ? "run" : ""}`} data-tool-call-id={block.id}>
+		{singleShell ? <button type="button" className="tool-step-head" aria-expanded={open} onClick={() => setOpen(!open)}>
+			<FiCode aria-hidden="true" />
+			<strong>{block.name}</strong>
+			<small className="tool-step-state">{t(status)}{duration && ` · ${duration}`}</small>
+			{priced.length > 0 && <small className="tool-step-state">${cost.toFixed(4)}</small>}
+			<FiChevronRight className={open ? "open" : ""} aria-hidden="true" />
+		</button> : <button className="codemode-head" aria-expanded={open} onClick={() => setOpen(!open)}><span aria-hidden="true">{open ? "⌄" : "›"}</span><span className="codemode-mark">{`{ }`}</span><strong>codemode</strong><span className="codemode-state">{t(status)}</span>{duration && <small>{duration}</small>}{priced.length > 0 && <small>${cost.toFixed(4)}</small>}</button>}
 		{open && <>
-			<div className="codemode-summary">{[...groups].map(([name, n]) => <span key={name}><code>{name}</code> × {n}</span>)}{!calls.length && <span>{t(running ? "cmWaitingCalls" : "cmNoCalls")}</span>}</div>
 			<div className="codemode-tabs" role="tablist" aria-label="Codemode">{(["calls", "script", "output"] as const).map(value => <button key={value} id={`${block.id}-${value}`} role="tab" aria-selected={tab === value} aria-controls={`${block.id}-panel`} tabIndex={tab === value ? 0 : -1} onKeyDown={e => { if (e.key === "ArrowRight" || e.key === "ArrowLeft") { e.preventDefault(); const tabs = ["calls", "script", "output"] as const; const next = tabs[(tabs.indexOf(value) + (e.key === "ArrowRight" ? 1 : 2)) % 3]; setTab(next); document.getElementById(`${block.id}-${next}`)?.focus(); } }} onClick={() => setTab(value)}>{t(value === "calls" ? "cmCalls" : value === "script" ? "cmScript" : "output")}{value === "calls" && ` · ${count}`}</button>)}<span />{tab === "output" && view.result?.toolOutputUrl && <div className="codemode-download"><ToolOutputDownload url={view.result.toolOutputUrl} compact /></div>}{tab !== "calls" && <button className="codemode-copy" onClick={event => void copy(tab === "script" ? script : output, event.currentTarget.ownerDocument)}>{t("copy")}</button>}</div>
 			<div className="codemode-body" id={`${block.id}-panel`} role="tabpanel" aria-labelledby={`${block.id}-${tab}`}>
-				{tab === "calls" && <>{calls.length > 8 && <button className="codemode-expand" onClick={() => setAll(!all)}>{t(all ? "cmCollapseCalls" : "cmMoreCalls", { n: calls.length - 8 })}</button>}{(all ? calls : calls.slice(-8)).map(call => <details className={`codemode-call ${call.status}`} key={call.key}><summary><span className="codemode-call-dot" aria-label={t(call.status === "ok" ? "done" : call.status === "unfinished" ? "cmUnfinished" : call.status === "cancelled" ? "cmCancelled" : call.status === "running" ? done ? "cmUnfinished" : "running" : "error")}>{call.status === "ok" ? "✓" : call.status === "error" ? "×" : call.status === "unfinished" || call.status === "cancelled" || done && call.status === "running" ? "−" : "•"}</span><code>{call.name}</code><span className="codemode-args">{call.args}</span>{call.cost !== undefined && <small>${call.cost.toFixed(4)}</small>}{call.durationMs !== undefined && <small>{call.durationMs < 1000 ? `${Math.round(call.durationMs)}ms` : `${(call.durationMs / 1000).toFixed(1)}s`}</small>}</summary><pre>{call.args}</pre>{call.error && <pre className="err">{call.error}</pre>}</details>)}{count > calls.length && <p>{t("cmLimitedCalls", { n: count - calls.length })}</p>}{!calls.length && <p className="codemode-empty">{t("cmNoCalls")}</p>}</>}
+				{tab === "calls" && <>{calls.length > 8 && <button className="codemode-expand" onClick={() => setAll(!all)}>{t(all ? "cmCollapseCalls" : "cmMoreCalls", { n: calls.length - 8 })}</button>}{(all ? calls : calls.slice(-8)).map(call => {
+					const action = browserAction(call.name, t);
+					const preview = call.name === "bash" ? bashCommand(call.args) ?? call.args : call.args;
+					return <details className={`codemode-call ${call.status}`} key={call.key}>
+						<summary>
+							<span className="codemode-call-dot" aria-label={t(call.status === "ok" ? "done" : call.status === "unfinished" ? "cmUnfinished" : call.status === "cancelled" ? "cmCancelled" : call.status === "running" ? done ? "cmUnfinished" : "running" : "error")}>{call.status === "ok" ? "✓" : call.status === "error" ? "×" : call.status === "unfinished" || call.status === "cancelled" || done && call.status === "running" ? "−" : "•"}</span>
+							<code title={call.name}>{action ?? call.name}</code>
+							<span className="codemode-args">{action ? "" : preview}</span>
+							{call.cost !== undefined && <small>${call.cost.toFixed(4)}</small>}
+							{call.durationMs !== undefined && <small>{call.durationMs < 1000 ? `${Math.round(call.durationMs)}ms` : `${(call.durationMs / 1000).toFixed(1)}s`}</small>}
+						</summary>
+						<pre>{call.args}</pre>
+						{call.error && <pre className="err">{call.error}</pre>}
+					</details>;
+				})}{count > calls.length && <p>{t("cmLimitedCalls", { n: count - calls.length })}</p>}{!calls.length && <p className="codemode-empty">{t(running ? "cmWaitingCalls" : "cmNoCalls")}</p>}</>}
 				{tab === "script" && <><Markdown text={`\`\`\`\`javascript\n${script}\n\`\`\`\``} />{block.argumentsTruncated && <p>{t("cmTruncated")}</p>}</>}
 				{tab === "output" && <><pre>{output || t(running ? "cmWaitingOutput" : "cmNoOutput")}</pre>{view.result?.content.some(part => part.type === "text" && part.truncated) && <p>{t("cmTruncated")}</p>}{details?.fullOutputPath && <div className="codemode-full-output">{t("cmFullOutput")} <code>{details.fullOutputPath}</code><button onClick={event => void copy(details.fullOutputPath!, event.currentTarget.ownerDocument)}>{t("copy")}</button></div>}</>}
 			</div>
 			{failed && <p className="codemode-error-note">{t("cmFailureNote")}</p>}
 			{!readOnly && images.length > 0 && <div className="codemode-images">{images.map((url, index) => <figure key={index}><a href={url} target="_blank" rel="noreferrer"><img src={url} alt={t("toolResultImage")} loading="lazy" /></a><figcaption><button disabled={saving} onClick={() => void imageAction(url, false, index)}>{t("cmSaveImage")}</button><button disabled={saving} onClick={() => void imageAction(url, true, index)}>{t("cmAttachImage")}</button></figcaption></figure>)}</div>}
-			<footer className="codemode-footer"><span>max_output_tokens {options.max_output_tokens ?? 10000}</span>{options.timeout_ms !== undefined && <span>timeout {options.timeout_ms / 1000}s</span>}<span>QuickJS · 256 MB</span>{priced.length > 0 && <span>{t("cmModelCost")}: ${cost.toFixed(4)}</span>}</footer>
 			{feedback && <p className="codemode-feedback" role="status">{feedback}</p>}
 		</>}
 	</section>;
