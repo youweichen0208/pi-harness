@@ -16,6 +16,7 @@ import { toolTextIncidents } from "./tool-text";
 import { useToolRecovery } from "./use-tool-recovery";
 import { randomUuid } from "./uuid";
 import { SessionTreeWorkbench } from "./components/SessionTreeWorkbench";
+import { TraceWorkbench } from "./components/TraceWorkbench";
 import { RecoveryStatus } from "./components/RecoveryStatus";
 import { LinkedText } from "./components/LinkedText";
 import { WikiWorkbench } from "./components/WikiWorkbench";
@@ -1713,6 +1714,7 @@ export function App() {
 				/>
 			)}
 			<SessionTreeWorkbench state={conversationState} connected={chat.ready} send={send} />
+			<TraceWorkbench state={conversationState} connected={chat.ready} send={send} />
 			{settingsOpen && (
 				<SettingsModal
 					initialTab={settingsInitialTab}

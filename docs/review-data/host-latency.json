@@ -1,0 +1,991 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-21T11:25:06.098Z",
+  "environment": {
+    "node": "v22.22.2",
+    "platform": "darwin",
+    "arch": "arm64",
+    "cpu": "Apple M2 Pro",
+    "totalmem": 17179869184,
+    "cpus": 10,
+    "commit": "5297c6c7d1fb3f8b6dae8e0f93b8ba0f2b826fb7",
+    "gitDiffHead": "105 files changed, 566 insertions(+), 6259 deletions(-)",
+    "gitStatusCount": 123,
+    "package": "1.34.7",
+    "sdk": "1.5.2",
+    "protocolVersion": 61,
+    "rounds": 3,
+    "s6Fixture": "mixed@2000",
+    "s6ExpectedMessages": 8000
+  },
+  "fixtures": {
+    "small@100": {
+      "messages": 400
+    },
+    "small@500": {
+      "messages": 2000
+    },
+    "small@2000": {
+      "messages": 8000
+    },
+    "medium@100": {
+      "messages": 400
+    },
+    "medium@500": {
+      "messages": 2000
+    },
+    "large@100": {
+      "messages": 400
+    },
+    "nested@500": {
+      "messages": 2000
+    },
+    "mixed@2000": {
+      "messages": 8000
+    },
+    "change@50-mwqbkgb0": {
+      "messages": 200
+    },
+    "change@50-mwqblh2v": {
+      "messages": 200
+    },
+    "change@50-mwqbmhnv": {
+      "messages": 200
+    }
+  },
+  "s1": {
+    "bashTrue": {
+      "count": 20,
+      "p50": 1.8040215000000899,
+      "p95": 2.2331024000004187,
+      "max": 5.191125000000284,
+      "total": 39.74458599999798
+    },
+    "bashGitStatus": {
+      "count": 20,
+      "p50": 15.266374499999984,
+      "p95": 17.59390175000008,
+      "max": 20.72070800000074,
+      "total": 315.2742080000007
+    }
+  },
+  "s2": {
+    "count": 10,
+    "p50": 1.243,
+    "p95": 2.971,
+    "max": 4.015,
+    "total": 15.268
+  },
+  "s3": {
+    "small@100": {
+      "messages": 400,
+      "hitRate": 0.9,
+      "metadataBytesPerRound": 13322,
+      "metadataBytesPerMessage": 133.22,
+      "fingerprintMs": {
+        "count": 8000,
+        "p50": 0.001,
+        "p95": 0.003,
+        "max": 0.069,
+        "total": 10.178
+      },
+      "dupKeyMs": {
+        "count": 20,
+        "p50": 0.001,
+        "p95": 0.011,
+        "max": 0.199,
+        "total": 0.217
+      },
+      "hitMs": {
+        "count": 8000,
+        "p50": 0,
+        "p95": 0,
+        "max": 0.019,
+        "total": 2.378
+      },
+      "distinctKeys": 400
+    },
+    "small@500": {
+      "messages": 2000,
+      "hitRate": 0.9,
+      "metadataBytesPerRound": 67054,
+      "metadataBytesPerMessage": 134.108,
+      "fingerprintMs": {
+        "count": 40000,
+        "p50": 0.001,
+        "p95": 0.002,
+        "max": 2.567,
+        "total": 48.84
+      },
+      "dupKeyMs": {
+        "count": 20,
+        "p50": 0.001,
+        "p95": 0.013,
+        "max": 0.015,
+        "total": 0.046
+      },
+      "hitMs": {
+        "count": 40000,
+        "p50": 0,
+        "p95": 0,
+        "max": 0.011,
+        "total": 11.485
+      },
+      "distinctKeys": 2000
+    },
+    "small@2000": {
+      "messages": 8000,
+      "hitRate": 0.9,
+      "metadataBytesPerRound": 269554,
+      "metadataBytesPerMessage": 134.777,
+      "fingerprintMs": {
+        "count": 160000,
+        "p50": 0.001,
+        "p95": 0.002,
+        "max": 5.202,
+        "total": 199.543
+      },
+      "dupKeyMs": {
+        "count": 20,
+        "p50": 0.001,
+        "p95": 0.003,
+        "max": 0.014,
+        "total": 0.037
+      },
+      "hitMs": {
+        "count": 160000,
+        "p50": 0,
+        "p95": 0,
+        "max": 0.19,
+        "total": 51.342
+      },
+      "distinctKeys": 8000
+    },
+    "medium@100": {
+      "messages": 400,
+      "hitRate": 0.9,
+      "metadataBytesPerRound": 13322,
+      "metadataBytesPerMessage": 133.22,
+      "fingerprintMs": {
+        "count": 8000,
+        "p50": 0.001,
+        "p95": 0.003,
+        "max": 0.02,
+        "total": 9.398
+      },
+      "dupKeyMs": {
+        "count": 20,
+        "p50": 0.001,
+        "p95": 0.002,
+        "max": 0.019,
+        "total": 0.035
+      },
+      "hitMs": {
+        "count": 8000,
+        "p50": 0,
+        "p95": 0,
+        "max": 0.022,
+        "total": 2.272
+      },
+      "distinctKeys": 400
+    },
+    "medium@500": {
+      "messages": 2000,
+      "hitRate": 0.9,
+      "metadataBytesPerRound": 67054,
+      "metadataBytesPerMessage": 134.108,
+      "fingerprintMs": {
+        "count": 40000,
+        "p50": 0.001,
+        "p95": 0.002,
+        "max": 0.015,
+        "total": 44.833
+      },
+      "dupKeyMs": {
+        "count": 20,
+        "p50": 0.001,
+        "p95": 0.002,
+        "max": 0.014,
+        "total": 0.031
+      },
+      "hitMs": {
+        "count": 40000,
+        "p50": 0,
+        "p95": 0,
+        "max": 1.684,
+        "total": 12.738
+      },
+      "distinctKeys": 2000
+    },
+    "large@100": {
+      "messages": 400,
+      "hitRate": 0.9,
+      "metadataBytesPerRound": 13322,
+      "metadataBytesPerMessage": 133.22,
+      "fingerprintMs": {
+        "count": 8000,
+        "p50": 0.001,
+        "p95": 0.003,
+        "max": 0.02,
+        "total": 9.376
+      },
+      "dupKeyMs": {
+        "count": 20,
+        "p50": 0.001,
+        "p95": 0.002,
+        "max": 0.013,
+        "total": 0.031
+      },
+      "hitMs": {
+        "count": 8000,
+        "p50": 0,
+        "p95": 0,
+        "max": 0.014,
+        "total": 2.299
+      },
+      "distinctKeys": 400
+    },
+    "nested@500": {
+      "messages": 2000,
+      "hitRate": 0.9,
+      "metadataBytesPerRound": 1428054,
+      "metadataBytesPerMessage": 2856.108,
+      "fingerprintMs": {
+        "count": 40000,
+        "p50": 0.001,
+        "p95": 0.002,
+        "max": 1.704,
+        "total": 48.913
+      },
+      "dupKeyMs": {
+        "count": 20,
+        "p50": 0.001,
+        "p95": 0.003,
+        "max": 0.005,
+        "total": 0.025
+      },
+      "hitMs": {
+        "count": 40000,
+        "p50": 0,
+        "p95": 0,
+        "max": 0.019,
+        "total": 12.008
+      },
+      "distinctKeys": 2000
+    },
+    "mixed@2000": {
+      "messages": 8000,
+      "hitRate": 0.9,
+      "metadataBytesPerRound": 269554,
+      "metadataBytesPerMessage": 134.777,
+      "fingerprintMs": {
+        "count": 160000,
+        "p50": 0.001,
+        "p95": 0.002,
+        "max": 2.324,
+        "total": 184.769
+      },
+      "dupKeyMs": {
+        "count": 20,
+        "p50": 0.001,
+        "p95": 0.002,
+        "max": 0.015,
+        "total": 0.034
+      },
+      "hitMs": {
+        "count": 160000,
+        "p50": 0,
+        "p95": 0,
+        "max": 0.029,
+        "total": 45.497
+      },
+      "distinctKeys": 8000
+    }
+  },
+  "s4": {
+    "small@100": {
+      "estimateContextParts": {
+        "count": 20,
+        "p50": 0.065,
+        "p95": 0.175,
+        "max": 0.293,
+        "total": 1.562
+      },
+      "deriveTaskProgress": {
+        "count": 20,
+        "p50": 0.063,
+        "p95": 0.157,
+        "max": 0.239,
+        "total": 1.306
+      },
+      "codemodeSnapshot": {
+        "count": 20,
+        "p50": 0.001,
+        "p95": 0.059,
+        "max": 0.188,
+        "total": 0.27
+      }
+    },
+    "small@500": {
+      "estimateContextParts": {
+        "count": 20,
+        "p50": 0.147,
+        "p95": 0.167,
+        "max": 0.18,
+        "total": 2.987
+      },
+      "deriveTaskProgress": {
+        "count": 20,
+        "p50": 0.091,
+        "p95": 0.281,
+        "max": 0.287,
+        "total": 2.363
+      },
+      "codemodeSnapshot": {
+        "count": 20,
+        "p50": 0,
+        "p95": 0.008,
+        "max": 0.135,
+        "total": 0.145
+      }
+    },
+    "small@2000": {
+      "estimateContextParts": {
+        "count": 20,
+        "p50": 0.596,
+        "p95": 0.862,
+        "max": 1.315,
+        "total": 12.202
+      },
+      "deriveTaskProgress": {
+        "count": 20,
+        "p50": 0.35,
+        "p95": 1.33,
+        "max": 1.7,
+        "total": 9.791
+      },
+      "codemodeSnapshot": {
+        "count": 20,
+        "p50": 0.001,
+        "p95": 0.033,
+        "max": 0.551,
+        "total": 0.575
+      }
+    },
+    "medium@100": {
+      "estimateContextParts": {
+        "count": 20,
+        "p50": 0.028,
+        "p95": 0.108,
+        "max": 0.959,
+        "total": 1.587
+      },
+      "deriveTaskProgress": {
+        "count": 20,
+        "p50": 0.018,
+        "p95": 0.027,
+        "max": 0.052,
+        "total": 0.414
+      },
+      "codemodeSnapshot": {
+        "count": 20,
+        "p50": 0,
+        "p95": 0.006,
+        "max": 0.086,
+        "total": 0.097
+      }
+    },
+    "medium@500": {
+      "estimateContextParts": {
+        "count": 20,
+        "p50": 0.104,
+        "p95": 0.214,
+        "max": 0.428,
+        "total": 2.506
+      },
+      "deriveTaskProgress": {
+        "count": 20,
+        "p50": 0.085,
+        "p95": 0.17,
+        "max": 1.464,
+        "total": 3.097
+      },
+      "codemodeSnapshot": {
+        "count": 20,
+        "p50": 0,
+        "p95": 0.007,
+        "max": 0.101,
+        "total": 0.112
+      }
+    },
+    "large@100": {
+      "estimateContextParts": {
+        "count": 20,
+        "p50": 0.066,
+        "p95": 0.082,
+        "max": 0.137,
+        "total": 1.405
+      },
+      "deriveTaskProgress": {
+        "count": 20,
+        "p50": 0.024,
+        "p95": 0.032,
+        "max": 0.036,
+        "total": 0.473
+      },
+      "codemodeSnapshot": {
+        "count": 20,
+        "p50": 0,
+        "p95": 0.004,
+        "max": 0.06,
+        "total": 0.069
+      }
+    },
+    "nested@500": {
+      "estimateContextParts": {
+        "count": 20,
+        "p50": 0.162,
+        "p95": 0.175,
+        "max": 0.181,
+        "total": 3.29
+      },
+      "deriveTaskProgress": {
+        "count": 20,
+        "p50": 0.09,
+        "p95": 0.325,
+        "max": 0.986,
+        "total": 3.279
+      },
+      "codemodeSnapshot": {
+        "count": 20,
+        "p50": 0,
+        "p95": 0.007,
+        "max": 0.093,
+        "total": 0.105
+      }
+    },
+    "mixed@2000": {
+      "estimateContextParts": {
+        "count": 20,
+        "p50": 0.348,
+        "p95": 0.842,
+        "max": 1.201,
+        "total": 8.748
+      },
+      "deriveTaskProgress": {
+        "count": 20,
+        "p50": 0.335,
+        "p95": 0.414,
+        "max": 0.686,
+        "total": 7.154
+      },
+      "codemodeSnapshot": {
+        "count": 20,
+        "p50": 0.001,
+        "p95": 0.021,
+        "max": 0.367,
+        "total": 0.383
+      }
+    }
+  },
+  "s5": [
+    {
+      "chunkBytes": 8192,
+      "finalBytes": 1048600,
+      "updates": 129,
+      "update": {
+        "count": 129,
+        "p50": 0,
+        "p95": 0.003,
+        "max": 0.03,
+        "total": 0.122
+      },
+      "stripAnsi": {
+        "count": 129,
+        "p50": 1.193,
+        "p95": 2.19,
+        "max": 2.762,
+        "total": 152.157
+      },
+      "scanAmplification": 57.077,
+      "heapDeltaBytes": 6680800
+    },
+    {
+      "chunkBytes": 65536,
+      "finalBytes": 1048600,
+      "updates": 17,
+      "update": {
+        "count": 17,
+        "p50": 0,
+        "p95": 0.002,
+        "max": 0.002,
+        "total": 0.01
+      },
+      "stripAnsi": {
+        "count": 17,
+        "p50": 1.289,
+        "p95": 2.451,
+        "max": 3.101,
+        "total": 22.323
+      },
+      "scanAmplification": 8.278,
+      "heapDeltaBytes": -462760
+    }
+  ],
+  "s6": {
+    "load": {
+      "fixture": "mixed@2000",
+      "expected": 8000,
+      "observed": [
+        8000,
+        8000,
+        8000
+      ],
+      "ok": true
+    },
+    "status": "measured",
+    "s6a": {
+      "fullSnapshots": 66,
+      "roundTrip": {
+        "count": 3,
+        "p50": 620.275,
+        "p95": 636.47,
+        "max": 638.27,
+        "total": 1876.142
+      },
+      "roundTripP95": {
+        "count": 3,
+        "p50": 664.627,
+        "p95": 743.359,
+        "max": 752.108,
+        "total": 2067.06
+      },
+      "jsonParse": {
+        "p50": 65.6116039999979,
+        "p95": 157.43082319999957
+      },
+      "composition": [
+        {
+          "totalBytes": 51427111,
+          "messageCount": 8000,
+          "roles": {
+            "user": 2000,
+            "assistant": 4000,
+            "toolResult": 2000
+          },
+          "categories": {
+            "toolResultContent": 48729300,
+            "otherMessageContent": 1042224,
+            "details": 1334,
+            "nestedCalls": 0,
+            "messageRemainder": 1548780,
+            "lightState": 2095,
+            "envelope": 19,
+            "jsonKeysAndArraySyntax": 103359
+          },
+          "lightStateFields": {
+            "tree": 222,
+            "clientId": 14,
+            "cwd": 81,
+            "sessionId": 38,
+            "sessionFile": 108,
+            "conversationId": 4,
+            "cwdEvents": 2,
+            "rev": 1,
+            "streamingMessage": 4,
+            "codemode": 123,
+            "taskProgress": 471,
+            "isStreaming": 5,
+            "wiki": 5,
+            "recovery": 2,
+            "runSettings": 97,
+            "runRecovery": 4,
+            "model": 63,
+            "thinkingLevel": 8,
+            "availableThinkingLevels": 39,
+            "queue": 29,
+            "tools": 55,
+            "version": 1,
+            "piConfigured": 4,
+            "piAgentInstalled": 4,
+            "stats": 377
+          },
+          "toolResultContentRatio": 0.9475410742011154
+        },
+        {
+          "totalBytes": 51427111,
+          "messageCount": 8000,
+          "roles": {
+            "user": 2000,
+            "assistant": 4000,
+            "toolResult": 2000
+          },
+          "categories": {
+            "toolResultContent": 48729300,
+            "otherMessageContent": 1042224,
+            "details": 1334,
+            "nestedCalls": 0,
+            "messageRemainder": 1548780,
+            "lightState": 2095,
+            "envelope": 19,
+            "jsonKeysAndArraySyntax": 103359
+          },
+          "lightStateFields": {
+            "tree": 222,
+            "clientId": 14,
+            "cwd": 81,
+            "sessionId": 38,
+            "sessionFile": 108,
+            "conversationId": 4,
+            "cwdEvents": 2,
+            "rev": 1,
+            "streamingMessage": 4,
+            "codemode": 123,
+            "taskProgress": 471,
+            "isStreaming": 5,
+            "wiki": 5,
+            "recovery": 2,
+            "runSettings": 97,
+            "runRecovery": 4,
+            "model": 63,
+            "thinkingLevel": 8,
+            "availableThinkingLevels": 39,
+            "queue": 29,
+            "tools": 55,
+            "version": 1,
+            "piConfigured": 4,
+            "piAgentInstalled": 4,
+            "stats": 377
+          },
+          "toolResultContentRatio": 0.9475410742011154
+        },
+        {
+          "totalBytes": 51427111,
+          "messageCount": 8000,
+          "roles": {
+            "user": 2000,
+            "assistant": 4000,
+            "toolResult": 2000
+          },
+          "categories": {
+            "toolResultContent": 48729300,
+            "otherMessageContent": 1042224,
+            "details": 1334,
+            "nestedCalls": 0,
+            "messageRemainder": 1548780,
+            "lightState": 2095,
+            "envelope": 19,
+            "jsonKeysAndArraySyntax": 103359
+          },
+          "lightStateFields": {
+            "tree": 222,
+            "clientId": 14,
+            "cwd": 81,
+            "sessionId": 38,
+            "sessionFile": 108,
+            "conversationId": 4,
+            "cwdEvents": 2,
+            "rev": 1,
+            "streamingMessage": 4,
+            "codemode": 123,
+            "taskProgress": 471,
+            "isStreaming": 5,
+            "wiki": 5,
+            "recovery": 2,
+            "runSettings": 97,
+            "runRecovery": 4,
+            "model": 63,
+            "thinkingLevel": 8,
+            "availableThinkingLevels": 39,
+            "queue": 29,
+            "tools": 55,
+            "version": 1,
+            "piConfigured": 4,
+            "piAgentInstalled": 4,
+            "stats": 377
+          },
+          "toolResultContentRatio": 0.9475410742011154
+        }
+      ],
+      "scenario": "forced-full-resync",
+      "snapshot_build_full": {
+        "p50": 23.191083499999877,
+        "p95": 188.25821215000002,
+        "count": 66
+      },
+      "snapshot_build_delta": {
+        "p50": 15.723957999999925,
+        "p95": 29.50277080000004,
+        "count": 6
+      },
+      "snapshot_total": {
+        "p50": 23.191083499999877,
+        "p95": 180.04972044999988,
+        "count": 72,
+        "label": "mixed full+delta (legacy)"
+      },
+      "current_messages": {
+        "p50": 18.52697900000021,
+        "p95": 26.213860700000176
+      },
+      "light_state": {
+        "p50": 4.585895499999879,
+        "p95": 165.22744189999955
+      },
+      "serialize_cached": {
+        "mean": 0.0014773896319349178,
+        "max": 3.3992920000000595
+      },
+      "metadata_hash": {
+        "meanPerCall": 0.001616566090910298,
+        "maxPerCall": 1.026582999999846
+      },
+      "metadata_hash_snapshot": {
+        "p50": 2.906749499980833,
+        "p95": 5.10314709999993
+      },
+      "fingerprint": {
+        "meanPerCall": 0.0016249999999899956
+      },
+      "cache_lookup": {
+        "meanPerCall": 0.00039445845501702437
+      },
+      "light_rest": {
+        "mean": 1.4787610138889673,
+        "max": 10.659208000000035
+      },
+      "ws_serialize_cold": {
+        "p50": 125.90641599999981
+      },
+      "ws_serialize_hit": {
+        "p50": 0
+      },
+      "ws_byte_length": {
+        "p50": 43.48908300000039
+      },
+      "ws_send": {
+        "p50": 0
+      },
+      "wire": {
+        "snapshot": {
+          "count": 66,
+          "totalBytes": 3239913111,
+          "p50Bytes": 51427114,
+          "p95Bytes": 51427114,
+          "maxBytes": 51427114
+        },
+        "snapshot_delta": {
+          "count": 6,
+          "totalBytes": 11676,
+          "p50Bytes": 1946,
+          "p95Bytes": 2162,
+          "maxBytes": 2186
+        },
+        "conversations": {
+          "count": 12,
+          "totalBytes": 9087,
+          "p50Bytes": 839,
+          "p95Bytes": 839,
+          "maxBytes": 839
+        },
+        "extension_title": {
+          "count": 3,
+          "totalBytes": 177,
+          "p50Bytes": 59,
+          "p95Bytes": 59,
+          "maxBytes": 59
+        },
+        "node_event": {
+          "count": 3,
+          "totalBytes": 261,
+          "p50Bytes": 87,
+          "p95Bytes": 87,
+          "maxBytes": 87
+        },
+        "plugins": {
+          "count": 3,
+          "totalBytes": 123,
+          "p50Bytes": 41,
+          "p95Bytes": 41,
+          "maxBytes": 41
+        },
+        "ready": {
+          "count": 3,
+          "totalBytes": 264,
+          "p50Bytes": 88,
+          "p95Bytes": 88,
+          "maxBytes": 88
+        },
+        "settings_state": {
+          "count": 3,
+          "totalBytes": 16866,
+          "p50Bytes": 5622,
+          "p95Bytes": 5622,
+          "maxBytes": 5622
+        },
+        "slash_commands": {
+          "count": 6,
+          "totalBytes": 21462,
+          "p50Bytes": 3577,
+          "p95Bytes": 3577,
+          "maxBytes": 3577
+        },
+        "statuses": {
+          "count": 3,
+          "totalBytes": 165,
+          "p50Bytes": 55,
+          "p95Bytes": 55,
+          "maxBytes": 55
+        },
+        "terminal_list": {
+          "count": 6,
+          "totalBytes": 366,
+          "p50Bytes": 61,
+          "p95Bytes": 61,
+          "maxBytes": 61
+        },
+        "tree_changed": {
+          "count": 6,
+          "totalBytes": 747,
+          "p50Bytes": 124.5,
+          "p95Bytes": 125.85,
+          "maxBytes": 126
+        },
+        "widgets": {
+          "count": 3,
+          "totalBytes": 159,
+          "p50Bytes": 53,
+          "p95Bytes": 53,
+          "maxBytes": 53
+        }
+      },
+      "wire_other_total": 49677,
+      "counters": {
+        "ws_serialize_cache_miss": 123,
+        "ws_buffered_amount_total": 308761657,
+        "snapshot_wire_bytes": 3239974464,
+        "uncompressed_json_bytes": 3239974464,
+        "snapshot_kind:extension_title": 3,
+        "snapshot_sent:extension_title": 3,
+        "snapshot_kind:widgets": 3,
+        "snapshot_sent:widgets": 3,
+        "snapshot_kind:statuses": 3,
+        "snapshot_sent:statuses": 3,
+        "snapshot_kind:tree_changed": 6,
+        "snapshot_sent:tree_changed": 6,
+        "snapshot_kind:conversations": 12,
+        "snapshot_sent:conversations": 12,
+        "snapshot_kind:slash_commands": 6,
+        "snapshot_sent:slash_commands": 6,
+        "snapshot_kind:settings_state": 3,
+        "snapshot_sent:settings_state": 3,
+        "snapshot_kind:terminal_list": 6,
+        "snapshot_sent:terminal_list": 6,
+        "snapshot_kind:node_event": 3,
+        "snapshot_sent:node_event": 3,
+        "snapshot_kind:ready": 3,
+        "snapshot_sent:ready": 3,
+        "snapshot_generated:snapshot": 66,
+        "snapshot_kind:snapshot": 66,
+        "snapshot_sent:snapshot": 66,
+        "snapshot_kind:plugins": 3,
+        "snapshot_sent:plugins": 3,
+        "snapshot_generated:snapshot_delta": 6,
+        "snapshot_kind:snapshot_delta": 6,
+        "snapshot_sent:snapshot_delta": 6,
+        "cache_miss": 24000,
+        "metadata_chars": 26473590,
+        "metadata_bytes": 26473590,
+        "cache_hit": 504006
+      }
+    },
+    "s6b": {
+      "emptyDeltas": 60,
+      "nonEmptyDeltas": 0,
+      "deltaGenerated": 65,
+      "status": "measured"
+    },
+    "s6c": {
+      "writeToolResults": 3,
+      "model": "bench",
+      "requiredRoles": {
+        "user": 3,
+        "assistantToolCall": 3,
+        "toolResult": 3
+      },
+      "duplicateToolResults": 0,
+      "extraNewMessages": [
+        {
+          "role": "system",
+          "preview": ""
+        },
+        {
+          "role": "assistant",
+          "preview": "done"
+        },
+        {
+          "role": "system",
+          "preview": ""
+        },
+        {
+          "role": "assistant",
+          "preview": "done"
+        },
+        {
+          "role": "system",
+          "preview": ""
+        }
+      ],
+      "resultAppends": [
+        1,
+        1,
+        1
+      ],
+      "writeResultText": [
+        "Successfully wrote to note.txt"
+      ],
+      "notices": [],
+      "noticeKinds": {},
+      "deltaGenerated": 15,
+      "status": "measured"
+    },
+    "classification": {
+      "snapshot_generated": 72,
+      "snapshot_sent": 123,
+      "snapshot_dropped": 0
+    },
+    "overhead": {
+      "samplingOnRoundTripP50": 620.27,
+      "samplingOffRoundTripP50": 575.86,
+      "ratio": 1.077,
+      "pass": true
+    }
+  },
+  "decisions": [
+    {
+      "id": "key-once",
+      "decision": "run",
+      "trigger": "dupKeyMs(large).p50=0.001 current_messages.p50=18.52697900000021 cheap=false"
+    },
+    {
+      "id": "metadata-hash-miss-only",
+      "decision": "run",
+      "trigger": "metadata_hash_snapshot.p50=2.906749499980833 nested.metadataBytesPerRound=1428054 cheap=false"
+    },
+    {
+      "id": "delete-lastMessagesSig",
+      "decision": "run",
+      "trigger": "dead field, no reader — unconditional"
+    },
+    {
+      "id": "estimate-context-parts",
+      "decision": "skip",
+      "trigger": "light_rest.mean=1.4787610138889673 ms/call (stats + cacheWarming + codemode + taskProgress) cheap=false"
+    },
+    {
+      "id": "cache-warming-view",
+      "decision": "skip",
+      "trigger": "light_rest.mean=1.4787610138889673 cheap=false"
+    }
+  ]
+}

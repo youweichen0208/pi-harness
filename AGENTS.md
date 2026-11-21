@@ -70,6 +70,8 @@ pi-harness/
 │   ├── wiki-conversations.ts   # Wiki 对话生命周期：文档绑定、历史操作、占用与运行实例编排；见 docs/architecture-wiki.md
 │   ├── agent-service.ts        # 核心：ClientSession（每客户端一个会话组，可并行多个对话）+ AgentService
 │   ├── serialize.ts            # SDK 消息 → UiMessage 序列化
+│   ├── snapshot-timings.ts     # 默认 summary 的快照构建/WS 采样；detail 才逐报文扫描 bytes
+│   ├── execution-trace.ts / trace-store.ts # 默认开启的 Agent Execution Trace：有界归因、metadata JSONL 与崩溃恢复
 │   ├── text-sniff.ts           # 文件预览纯函数（previewKind/looksLikeText/decodeText/sniffImageMime/hexDump/countLines）
 │   ├── process-utils.ts        # 进程工具：killPidTree
 │   ├── client-state.ts         # ClientStateStore：<dataDir>/client-state.json 持久化
@@ -168,6 +170,7 @@ pi-harness/
 | `LeftPanel.tsx` | 240px 单栏导航与 56px 收起态：顶部 Workspace 搜索切换浮层、小记入口、项目及会话、分组管理和底部设置；布局见 `docs/ui-design.md` |
 | `RightPanel.tsx` / `TaskProgressPanel.tsx` | 可展开目录树、Git 改动标记、文件预览；当前任务进度由服务端 transcript 推断，右栏只展示执行阶段与 Codemode 记录（不显示请求标题、生命周期状态文字，也没有本轮文件分区），展开阶段按顺序列出全部命令与编辑；布局见 `docs/ui-design.md` |
 | `ChatInput.tsx` | 输入框 + 附件 chips（inline/reference/lines 三色）+ 当前文件 chip（镜像预览面板，发送取编辑器快照）；全窗口拖放目标；followUp 排队/steer 插队；斜杠命令选择器 |
+| `TraceWorkbench.tsx` | 顶栏 Trace 与 `/trace` 的 run 列表、模型／工具／宿主时间线和请求明细；`/export` 下载安全静态 HTML 或 metadata JSON；数据契约见 `docs/architecture-core.md` |
 | `Message.tsx` / `MessageList.tsx` / `WorkingStatus.tsx` | 消息渲染、流式等待标题与静默状态、tool 结果关联；编辑重问、惰性窗口化、问题导航；等待态切换与间距见 `docs/ui-design.md` |
 | `ToolCallBlock.tsx` / `BashGroup.tsx` / `EditWriteCard.tsx` / `ThinkingBlock.tsx` | 通用工具卡片、读取行式（与命令行同款单行，正文仅预览 `READ_PREVIEW_LINES` 行）、连续命令分组、编辑与写入的逐行 diff 卡片、思考块；修改命令合并/折叠/跳转时读取 `web/src/bash-groups.ts` 和 `docs/ui-design.md` 的 27a 规则；编辑卡片的数据整理在 `web/src/edit-write-presentation.ts`（内联 diff 预览上限 `EDIT_WRITE_PREVIEW_LINES` 与 `clampDiffPreview`），交互规则见 `docs/ui-design.md` |
 | `ChangesPanel.tsx` / `ChangeSummaryCard.tsx` | 35a 对话改动面板及每轮汇总；修改范围、定位、折叠、搜索或轮次统计前读取 `docs/chat-diff-design.md` 与 `docs/architecture-terminal.md`；本轮共用 `task-outputs.ts`，Git 范围走 `scm_diff`（协议 v41） |
@@ -211,6 +214,7 @@ pi SDK 和 pi-ai 精确锁定 1.5.2，使用原版 SDK，不应用本项目的 S
 | **插件** | `docs/architecture-plugins.md` | <dataDir>/plugins/<id>/ 目录（manifest.json + index.mjs + client/entry.mjs）；attach 时热重扫；MCP 工具桥 |
 | **SSH 节点** | `docs/architecture-nodes.md` | 修改 Xshell 7 全量同步、保存密码/主密码复用、本机认证覆盖、SSH config、执行确认或终端引用时阅读；本机隔离 Agent 与 ssh2 节点工具 |
 | **工具结束实时状态** | `docs/architecture-core.md` | tool_status 先于快照落盘，浏览器卡片立即从「执行中」→「已结束」 |
+| **Agent Execution Trace** | `docs/architecture-core.md` | 默认开启 metadata-only 有界采集与本地 JSONL；`/trace` 可视化，`/export` 导出；截断/归属失败必须降级为 unmeasured/ambiguous，不能写 0 |
 | **运行静默状态** | `docs/architecture-core.md` | 改模型无响应或长时间工具运行提示时，使用 conversationId 绑定的 agent_silence；恢复响应即清除，重试只适用于本轮未调用工具的纯文本请求 |
 | **当前任务进度** | `docs/architecture-core.md`、`docs/ui-design.md` | 从本轮工具调用推导执行阶段；内置 plan 已移除，不注入计划工具或提醒 |
 | **扩展 UI 桥** | `docs/architecture-core.md` | setWidget/setStatus/notify/select/confirm/input → 浏览器消息；dialog_response 回传 |
@@ -231,6 +235,7 @@ npm run build        # build:web (vite) + build:server (tsc)
 npm start            # 跑编译产物 dist/server/index.js（生产）
 npm test             # 设计令牌检查 + vitest 纯函数单测
 npm run test:smoke   # 零 token 协议冒烟聚合跑器
+npm run accept:trace  # Trace off/summary 正式对照：AB/BA、多轮、RSS/Heap/JSONL
 ```
 
 依赖安装前先运行 `npm run check:lockfile`，确保下载地址全部使用 HTTPS npm 官方源且与声明版本一致；安装验证流程见 `docs/development.md`。

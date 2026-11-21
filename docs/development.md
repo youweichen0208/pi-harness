@@ -15,6 +15,13 @@ npm start            # 跑编译产物 dist/server/index.js（生产）
 npm run check:design # 设计令牌检查（硬编码颜色与非令牌圆角报错）
 npm test             # 设计令牌检查 + vitest 纯函数单测（tests/unit/，毫秒级零 token）
 npm run test:smoke   # 零 token 协议冒烟聚合跑器（tests/run-smoke.mjs，自包含测试）
+npm run bench:host   # 零 token 宿主快照/工具输出基准（tests/host-latency-benchmark.mjs）
+npm run bench:task -- --mock  # 零 token 完整 Agent Execution Trace + 四类任务正确性自检
+npm run accept:trace          # 正式 Trace off/summary 对照：AB/BA、3 轮、5 场景、RSS/Heap/JSONL
+npm run bench:task -- --model=provider/model --rounds=1  # 显式模型的真实短任务测量（会产生供应商请求/费用）
+node tests/execution-trace-test.mjs  # 锁定 SDK hooks、延迟边界与完整工具往返契约
+node tests/trace-browser-test.mjs   # 真实浏览器/SDK：/trace、/export、离线 HTML 安全、重启与中断恢复
+npx vitest run tests/unit/trace-store-reliability.test.ts tests/unit/trace-export.test.ts
 npm run test:freeze  # 冻结/重连回归测试（Playwright，需要本机 chromium headless）
 ```
 
@@ -24,7 +31,7 @@ npm run test:freeze  # 冻结/重连回归测试（Playwright，需要本机 chr
 
 GitHub Actions ubuntu-latest（`.github/workflows/ci.yml`，push/PR → main 或 develop 触发）：`check:lockfile → npm ci → check:protocol → typecheck → build → npm test（设计检查 + vitest）→ test:smoke`。
 
-桌面字体另有 macOS/Windows Electron CI job：`windows-rendering-test.mjs` 在 Mac 100% 和 Windows 100%／125%／150% 缩放下生成浅深色截图与字体测量，`compare-rendering-metrics.mjs` 比较包内字体文件、字号、字重、颜色、换行及字宽（容差 1 CSS px）。这是开发构建回归，正式发布仍执行安装包回归；不声称系统栅格化或屏幕显示像素完全一致。
+桌面字体另有 macOS/Windows Electron CI job：`windows-rendering-test.mjs` 在 Mac 100% 和 Windows 100%／125%／150% 缩放下生成浅深色截图与字体测量，`compare-desktop-rendering.mjs` 比较共用代码字体，并以 Windows 100% 为该平台的字号、字重、颜色、换行及字宽基准（容差 1 CSS px）。这是开发构建回归，正式发布仍执行安装包回归；不声称系统栅格化或屏幕显示像素完全一致。
 
 SSH 节点另有 macOS/Windows CI job：两平台分别构建服务端并运行 `node-workbench-test.mjs` 的 mock SSH 测试。浏览器工作台交互可在 macOS 本地运行 `node tests/node-workbench-browser-test.mjs`（先 `npm run build`）。
 
@@ -63,7 +70,7 @@ SSH 节点另有 macOS/Windows CI job：两平台分别构建服务端并运行 
 
 每个 `*-test.mjs` 用独立端口（≥8900，避开 8787/5173/3300），并在启动 server 前先 `lsof -ti :PORT -sTCP:LISTEN` 确认空闲；若被占，改端口而非硬杀。
 
-随机端口测试不能先开探测 socket 再释放后启动服务，这会产生占用竞态。`tests/lib/isolated-server.mjs` 提供直接绑定高端口的 `listenIsolated` 和 `startIsolatedHarness`：仅占用冲突换端口重试，启动必须核对自身绑定日志与健康响应 PID，失败/超时只清理本次子进程。子代理和内置扩展测试已使用该入口；`isolated-server-test.mjs` 确定性覆盖被占端口、非占用错误和超时清理。
+随机端口测试不能先开探测 socket 再释放后启动服务，这会产生占用竞态。`tests/lib/isolated-server.mjs` 提供直接绑定高端口的 `listenIsolated` 和 `startIsolatedHarness`：仅占用冲突换端口重试，启动必须核对自身绑定日志与健康响应 PID，失败/超时只清理本次子进程。内置扩展测试已使用该入口；`isolated-server-test.mjs` 确定性覆盖被占端口、非占用错误和超时清理。
 
 ### 精确清理自己起的进程
 
@@ -119,9 +126,7 @@ Pi 1.0.4 起的专项（1.4.0 继续适用，文件名保留 `pi-104-`）：`pi-
 
 内置扩展回归：`builtin-extensions-test.mjs` 纳入零 token 冒烟，验证清单、数据库开关、重载及转换／OKF 入口缺失。原生上下文基线关闭 plan 内置工具。
 
-子代理回归：`subagents-test.mjs` 使用真实 SDK 和本地模拟模型验证 Workspace 跨仓库、知识库分工及父取消，纳入零 token 冒烟；设置页 `builtin-extensions-test.mjs --browser` 覆盖六个内置条目和独立子代理开关。原生上下文基线同时关闭 subagents。
 
-进度和报告界面先 `npm run build`，再运行 `node tests/subagents-test.mjs --browser`：检查三个来源的真实 `tool_delta.subagents` 进度、工具结束动作清除、按来源展开报告和引用原文、键盘操作、原始 JSON 保留，以及中英文、深色、390px、200% 缩放等效视口和减少动态效果。`subagent-wire.test.ts` 覆盖服务端白名单与限额，`subagent-ui-presentation.test.ts` 覆盖运行参数／实时进度合并、最终报告和非法数据回退。截图写入 `tests/scratch/subagents-*.png`，须实际查看而非只验证文件存在。
 
 
 ### 数据库工作台回归

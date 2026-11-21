@@ -1,0 +1,3358 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-11-21T11:34:33.989Z",
+  "mode": "real",
+  "model": "deepseek/deepseek-flash",
+  "rounds": 1,
+  "environment": {
+    "node": "v22.22.2",
+    "commit": "5297c6c7d1fb3f8b6dae8e0f93b8ba0f2b826fb7",
+    "gitDiffHead": " 105 files changed, 572 insertions(+), 6259 deletions(-)",
+    "sdk": "1.5.2"
+  },
+  "successfulSamples": 2,
+  "results": [
+    {
+      "task": "read",
+      "round": 1,
+      "model": "deepseek/deepseek-flash",
+      "executionComplete": true,
+      "taskCorrect": true,
+      "failures": [],
+      "toolListHash": "2dcc1c19858d123e1aabfb2f9fc489867e6beb039f02eedff27f7f60022d1767",
+      "toolSequence": [
+        "read"
+      ],
+      "timing": {
+        "task_e2e_wall_ms": 2063.179291,
+        "agent_active_wall_ms": 2062.165,
+        "queue_wait_ms": 1.0142909999999574,
+        "model_wall_union_ms": 1995.487916,
+        "tool_wall_union_ms": 8.92779100000007,
+        "host_wall_union_ms": 18.38562099999899,
+        "host_share": 0.00891130551775153,
+        "unclassified_wall_ms": 54.73304400000006
+      },
+      "coverage": {
+        "provider_requests_total": 2,
+        "provider_requests_matched": 2,
+        "provider_requests_ambiguous": 0,
+        "provider_requests_unmeasured": 0,
+        "trace_coverage": 1,
+        "scope": "identified_requests_only"
+      },
+      "trace": {
+        "schemaVersion": 1,
+        "sessionId": "01a1fde2-e411-77cc-a657-92a33ceb6c5c",
+        "runs": [
+          {
+            "runId": "01a1fde2-e411-77cc-a657-92a33ceb6c5c:run-1",
+            "sessionId": "01a1fde2-e411-77cc-a657-92a33ceb6c5c",
+            "conversationId": "c1",
+            "agentStartMs": 1156.284791,
+            "agentSettledMs": 3218.449791,
+            "aborted": false,
+            "status": "measured",
+            "requests": [
+              {
+                "requestId": "01a1fde2-e411-77cc-a657-92a33ceb6c5c:run-1:request-1",
+                "runId": "01a1fde2-e411-77cc-a657-92a33ceb6c5c:run-1",
+                "turnIndex": 0,
+                "status": "measured",
+                "reasons": [],
+                "hookStartMs": 1205.091125,
+                "responseAttempts": [
+                  {
+                    "atMs": 1466.098,
+                    "status": 200
+                  }
+                ],
+                "firstHeadersMs": 1466.098,
+                "normalizedStartMs": 1467.115291,
+                "provider": "deepseek",
+                "api": "openai-completions",
+                "model": "deepseek-flash",
+                "firstProviderEventMs": 1468.519791,
+                "firstVisibleDeltaMs": 1852.419208,
+                "messageEndMs": 2215.944333,
+                "metrics": {
+                  "provider_hook_to_headers_ms": {
+                    "value": 261.00687500000004,
+                    "status": "measured"
+                  },
+                  "headers_to_first_provider_event_ms": {
+                    "value": 2.4217909999999847,
+                    "status": "measured"
+                  },
+                  "first_event_to_first_visible_delta_ms": {
+                    "value": 383.8994170000001,
+                    "status": "measured"
+                  },
+                  "provider_hook_to_message_end_ms": {
+                    "value": 1010.853208,
+                    "status": "measured"
+                  },
+                  "tool_to_provider_gap_ms": {
+                    "value": null,
+                    "status": "not_triggered"
+                  }
+                }
+              },
+              {
+                "requestId": "01a1fde2-e411-77cc-a657-92a33ceb6c5c:run-1:request-2",
+                "runId": "01a1fde2-e411-77cc-a657-92a33ceb6c5c:run-1",
+                "turnIndex": 1,
+                "status": "measured",
+                "reasons": [],
+                "hookStartMs": 2231.34325,
+                "responseAttempts": [
+                  {
+                    "atMs": 2462.017708,
+                    "status": 200
+                  }
+                ],
+                "toolToProviderGapMs": 5.469708999999966,
+                "firstHeadersMs": 2462.017708,
+                "normalizedStartMs": 2462.533,
+                "provider": "deepseek",
+                "api": "openai-completions",
+                "model": "deepseek-flash",
+                "firstProviderEventMs": 2463.761125,
+                "firstVisibleDeltaMs": 3193.56075,
+                "messageEndMs": 3215.977958,
+                "metrics": {
+                  "provider_hook_to_headers_ms": {
+                    "value": 230.67445799999996,
+                    "status": "measured"
+                  },
+                  "headers_to_first_provider_event_ms": {
+                    "value": 1.7434170000001359,
+                    "status": "measured"
+                  },
+                  "first_event_to_first_visible_delta_ms": {
+                    "value": 729.7996250000001,
+                    "status": "measured"
+                  },
+                  "provider_hook_to_message_end_ms": {
+                    "value": 984.634708,
+                    "status": "measured"
+                  },
+                  "tool_to_provider_gap_ms": {
+                    "value": 5.469708999999966,
+                    "status": "measured"
+                  }
+                }
+              }
+            ],
+            "tools": [
+              {
+                "toolCallId": "call_00_ET_lIbRQkcTsgjbmwvCW3sO6210",
+                "runId": "01a1fde2-e411-77cc-a657-92a33ceb6c5c:run-1",
+                "turnIndex": 0,
+                "toolName": "read",
+                "startMs": 2216.94575,
+                "assistantToToolGapMs": 1.0014169999999467,
+                "status": "measured",
+                "endMs": 2225.873541,
+                "durationMs": 6,
+                "isError": false
+              }
+            ],
+            "hostSpans": [
+              {
+                "kind": "onEvent",
+                "startMs": 1156.335625,
+                "endMs": 1156.348041
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1156.410583,
+                "endMs": 1156.414625
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1156.430166,
+                "endMs": 1156.432666
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1156.484041,
+                "endMs": 1156.568583
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1156.6175,
+                "endMs": 1156.62025
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1156.876333,
+                "endMs": 1156.878041
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1156.878333,
+                "endMs": 1156.881625
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1156.711458,
+                "endMs": 1156.89025
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1218.930708,
+                "endMs": 1218.933416
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1218.934208,
+                "endMs": 1218.939083
+              },
+              {
+                "kind": "snapshot_build",
+                "startMs": 1218.876625,
+                "endMs": 1220.140625
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1220.144041,
+                "endMs": 1220.154666
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1220.155083,
+                "endMs": 1220.160625
+              },
+              {
+                "kind": "snapshot_build",
+                "startMs": 1282.071375,
+                "endMs": 1282.518916
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1282.52175,
+                "endMs": 1282.534333
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1282.534875,
+                "endMs": 1282.564708
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1467.242166,
+                "endMs": 1467.32575
+              },
+              {
+                "kind": "snapshot_build",
+                "startMs": 1527.61725,
+                "endMs": 1528.330208
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1528.337625,
+                "endMs": 1528.35125
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1528.35175,
+                "endMs": 1528.391125
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1853.603875,
+                "endMs": 1853.638833
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1853.641875,
+                "endMs": 1853.747083
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1852.504166,
+                "endMs": 1854.322791
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1855.160625,
+                "endMs": 1855.175541
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1855.176791,
+                "endMs": 1855.190166
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1854.876583,
+                "endMs": 1855.19775
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1862.087916,
+                "endMs": 1862.093333
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1862.0945,
+                "endMs": 1862.131208
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1861.912291,
+                "endMs": 1862.134416
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1862.5135,
+                "endMs": 1862.517583
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1862.518208,
+                "endMs": 1862.525708
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1862.388041,
+                "endMs": 1862.527
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1862.661375,
+                "endMs": 1862.66425
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1862.66475,
+                "endMs": 1862.673458
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1862.561291,
+                "endMs": 1862.682666
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1880.054791,
+                "endMs": 1880.058833
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1880.059708,
+                "endMs": 1880.088666
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1879.9315,
+                "endMs": 1880.090125
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1880.320083,
+                "endMs": 1880.323291
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1880.323833,
+                "endMs": 1880.3305
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1880.209625,
+                "endMs": 1880.331583
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1880.452666,
+                "endMs": 1880.4555
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1880.455958,
+                "endMs": 1880.4615
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1880.351291,
+                "endMs": 1880.462375
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1897.621541,
+                "endMs": 1897.634
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1897.635833,
+                "endMs": 1897.706041
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1897.284541,
+                "endMs": 1897.709416
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1898.035958,
+                "endMs": 1898.04025
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1898.041416,
+                "endMs": 1898.049666
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1897.894791,
+                "endMs": 1898.051041
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1898.431166,
+                "endMs": 1898.434541
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1898.435333,
+                "endMs": 1898.445291
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1898.324291,
+                "endMs": 1898.446458
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1899.296916,
+                "endMs": 1899.30625
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1899.306875,
+                "endMs": 1899.31875
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1899.211833,
+                "endMs": 1899.319833
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1899.555541,
+                "endMs": 1899.558708
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1899.559333,
+                "endMs": 1899.565416
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1899.47725,
+                "endMs": 1899.566416
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1899.654958,
+                "endMs": 1899.657583
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1899.658166,
+                "endMs": 1899.663
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1899.58475,
+                "endMs": 1899.663833
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1916.368791,
+                "endMs": 1916.3935
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1916.395583,
+                "endMs": 1916.511333
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1917.970333,
+                "endMs": 1917.980333
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1917.9815,
+                "endMs": 1917.996916
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1917.82125,
+                "endMs": 1917.998958
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1918.180458,
+                "endMs": 1918.183625
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1918.18425,
+                "endMs": 1918.190125
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1918.104583,
+                "endMs": 1918.19125
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1918.55975,
+                "endMs": 1918.563666
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1918.564416,
+                "endMs": 1918.571166
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1918.454375,
+                "endMs": 1918.572458
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1918.73425,
+                "endMs": 1918.737625
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1918.738333,
+                "endMs": 1918.744291
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1918.6565,
+                "endMs": 1918.745458
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1918.935791,
+                "endMs": 1918.939083
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1918.939708,
+                "endMs": 1918.945083
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1918.8595,
+                "endMs": 1918.946083
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1919.235916,
+                "endMs": 1919.238958
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1919.239625,
+                "endMs": 1919.244916
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1919.159833,
+                "endMs": 1919.246
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1924.744875,
+                "endMs": 1924.750791
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1924.752375,
+                "endMs": 1924.787166
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1924.587375,
+                "endMs": 1924.789291
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1924.970833,
+                "endMs": 1924.974625
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1924.97525,
+                "endMs": 1924.982083
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1924.862166,
+                "endMs": 1924.983166
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1925.2565,
+                "endMs": 1925.2595
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1925.260041,
+                "endMs": 1925.265833
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1925.059625,
+                "endMs": 1925.266791
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1925.429833,
+                "endMs": 1925.433
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1925.433458,
+                "endMs": 1925.438708
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1925.335833,
+                "endMs": 1925.439666
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1925.613333,
+                "endMs": 1925.616
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1925.616541,
+                "endMs": 1925.621833
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1925.513541,
+                "endMs": 1925.62275
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1925.732333,
+                "endMs": 1925.735
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1925.735375,
+                "endMs": 1925.74
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1925.64275,
+                "endMs": 1925.740791
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1942.803708,
+                "endMs": 1942.812458
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1942.814958,
+                "endMs": 1942.892
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1942.554416,
+                "endMs": 1942.894666
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1943.071666,
+                "endMs": 1943.074958
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1943.075708,
+                "endMs": 1943.083208
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1942.982791,
+                "endMs": 1943.084458
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1943.359208,
+                "endMs": 1943.363791
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1943.36475,
+                "endMs": 1943.373333
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1943.228458,
+                "endMs": 1943.374666
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1943.553083,
+                "endMs": 1943.556208
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1943.55675,
+                "endMs": 1943.562291
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1943.451375,
+                "endMs": 1943.565875
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1943.885416,
+                "endMs": 1943.888375
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1943.888958,
+                "endMs": 1943.894875
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1943.779541,
+                "endMs": 1943.895791
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1944.007083,
+                "endMs": 1944.009666
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1944.010083,
+                "endMs": 1944.015
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1943.915666,
+                "endMs": 1944.015791
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1958.12625,
+                "endMs": 1958.138583
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1958.139625,
+                "endMs": 1958.171583
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1957.926166,
+                "endMs": 1958.173625
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1958.350291,
+                "endMs": 1958.353625
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1958.354083,
+                "endMs": 1958.359666
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1958.259666,
+                "endMs": 1958.360416
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1958.574208,
+                "endMs": 1958.576583
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1958.577041,
+                "endMs": 1958.581458
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1958.407708,
+                "endMs": 1958.58225
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1958.697041,
+                "endMs": 1958.699125
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1958.6995,
+                "endMs": 1958.703375
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1958.625416,
+                "endMs": 1958.704
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1958.848083,
+                "endMs": 1958.850083
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1958.850416,
+                "endMs": 1958.854458
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1958.780166,
+                "endMs": 1958.855041
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1958.929375,
+                "endMs": 1958.931208
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1958.931541,
+                "endMs": 1958.935
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1958.86575,
+                "endMs": 1958.935541
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1982.886916,
+                "endMs": 1982.895625
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1982.89675,
+                "endMs": 1982.929083
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1982.719208,
+                "endMs": 1982.9305
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1983.041375,
+                "endMs": 1983.043583
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1983.043958,
+                "endMs": 1983.048791
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1982.97625,
+                "endMs": 1983.050083
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1983.147625,
+                "endMs": 1983.149416
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1983.149708,
+                "endMs": 1983.152875
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1983.086125,
+                "endMs": 1983.153416
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1983.240416,
+                "endMs": 1983.241916
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1983.242208,
+                "endMs": 1983.248208
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1983.186708,
+                "endMs": 1983.248708
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1983.34975,
+                "endMs": 1983.351333
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1983.351583,
+                "endMs": 1983.354541
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1983.295,
+                "endMs": 1983.355041
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1983.41375,
+                "endMs": 1983.415208
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1983.415458,
+                "endMs": 1983.418291
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1983.364208,
+                "endMs": 1983.41875
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1994.371625,
+                "endMs": 1994.373666
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1994.374125,
+                "endMs": 1994.395625
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1994.310125,
+                "endMs": 1994.396416
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1994.487333,
+                "endMs": 1994.488958
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1994.489291,
+                "endMs": 1994.49275
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1994.429166,
+                "endMs": 1994.493333
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1994.57825,
+                "endMs": 1994.579666
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1994.579958,
+                "endMs": 1994.582916
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1994.524541,
+                "endMs": 1994.583416
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1994.672208,
+                "endMs": 1994.67375
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1994.674,
+                "endMs": 1994.676958
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1994.617708,
+                "endMs": 1994.677416
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1994.747625,
+                "endMs": 1994.749041
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1994.749291,
+                "endMs": 1994.752041
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1994.697375,
+                "endMs": 1994.7525
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1994.883958,
+                "endMs": 1994.885708
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1994.886,
+                "endMs": 1994.889291
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 1994.827791,
+                "endMs": 1994.889833
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2045.702708,
+                "endMs": 2045.707125
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2045.70825,
+                "endMs": 2045.731666
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2045.594166,
+                "endMs": 2045.733125
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2045.862791,
+                "endMs": 2045.865458
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2045.866,
+                "endMs": 2045.871291
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2045.783708,
+                "endMs": 2045.872083
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2046.076,
+                "endMs": 2046.07825
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2046.078625,
+                "endMs": 2046.083083
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2046.002375,
+                "endMs": 2046.083791
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2046.168708,
+                "endMs": 2046.17075
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2046.171083,
+                "endMs": 2046.175041
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2046.096083,
+                "endMs": 2046.175708
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2046.630041,
+                "endMs": 2046.632708
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2046.633333,
+                "endMs": 2046.638916
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2046.543333,
+                "endMs": 2046.639833
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2107.833208,
+                "endMs": 2107.83725
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2107.838208,
+                "endMs": 2107.863875
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2107.694375,
+                "endMs": 2107.865541
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2108.029583,
+                "endMs": 2108.032291
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2108.032791,
+                "endMs": 2108.039083
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2107.93125,
+                "endMs": 2108.040083
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2108.141,
+                "endMs": 2108.143416
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2108.143916,
+                "endMs": 2108.148875
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2108.05575,
+                "endMs": 2108.149666
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2108.888458,
+                "endMs": 2108.891541
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2108.892166,
+                "endMs": 2108.898375
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2108.793916,
+                "endMs": 2108.899375
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2110.875291,
+                "endMs": 2110.878666
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2110.879416,
+                "endMs": 2110.906958
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2110.773416,
+                "endMs": 2110.908291
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2111.050541,
+                "endMs": 2111.05325
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2111.053791,
+                "endMs": 2111.060208
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2110.959833,
+                "endMs": 2111.061166
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2111.163333,
+                "endMs": 2111.165666
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2111.166125,
+                "endMs": 2111.171125
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2111.076916,
+                "endMs": 2111.171958
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2112.367458,
+                "endMs": 2112.370875
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2112.371708,
+                "endMs": 2112.391291
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2112.269458,
+                "endMs": 2112.392458
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2112.683291,
+                "endMs": 2112.686083
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2112.686791,
+                "endMs": 2112.692916
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2112.594916,
+                "endMs": 2112.693875
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2112.797083,
+                "endMs": 2112.799416
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2112.799875,
+                "endMs": 2112.804791
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2112.714416,
+                "endMs": 2112.805791
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2113.637791,
+                "endMs": 2113.641166
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2113.641958,
+                "endMs": 2113.662541
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2113.538625,
+                "endMs": 2113.663833
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2215.755416,
+                "endMs": 2215.775125
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2215.776333,
+                "endMs": 2215.8435
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2215.541333,
+                "endMs": 2215.846083
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2216.011875,
+                "endMs": 2216.259541
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2216.983666,
+                "endMs": 2217.069416
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2225.975125,
+                "endMs": 2225.982
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2225.984,
+                "endMs": 2226.01025
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2226.127958,
+                "endMs": 2226.130625
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2226.132,
+                "endMs": 2226.137
+              },
+              {
+                "kind": "snapshot_build",
+                "startMs": 2226.028666,
+                "endMs": 2227.851208
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2227.855833,
+                "endMs": 2227.886125
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2227.886625,
+                "endMs": 2227.896458
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2225.886833,
+                "endMs": 2227.897291
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2227.969375,
+                "endMs": 2227.985458
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2228.001583,
+                "endMs": 2228.009458
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2228.506583,
+                "endMs": 2228.509833
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2229.388,
+                "endMs": 2229.390583
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2462.590166,
+                "endMs": 2462.673583
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3193.347208,
+                "endMs": 3193.383833
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3193.3875,
+                "endMs": 3193.502
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3192.749458,
+                "endMs": 3193.506666
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3194.294833,
+                "endMs": 3194.303416
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3194.304666,
+                "endMs": 3194.316083
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3193.602333,
+                "endMs": 3194.317583
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3194.441,
+                "endMs": 3194.445458
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3194.44625,
+                "endMs": 3194.452458
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3194.399666,
+                "endMs": 3194.453583
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3194.545208,
+                "endMs": 3194.548833
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3194.549625,
+                "endMs": 3194.555166
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3194.499833,
+                "endMs": 3194.556166
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3194.659583,
+                "endMs": 3194.663125
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3194.663791,
+                "endMs": 3194.669125
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3194.616416,
+                "endMs": 3194.670166
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3194.979458,
+                "endMs": 3194.983708
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3194.98425,
+                "endMs": 3194.990333
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3194.724166,
+                "endMs": 3194.991458
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3195.117125,
+                "endMs": 3195.120708
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3195.121291,
+                "endMs": 3195.126541
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3195.081833,
+                "endMs": 3195.127583
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3195.177291,
+                "endMs": 3195.180708
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3195.181208,
+                "endMs": 3195.18625
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3195.144375,
+                "endMs": 3195.187166
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3215.303125,
+                "endMs": 3215.31975
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3215.32175,
+                "endMs": 3215.40375
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3215.174291,
+                "endMs": 3215.406541
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3215.576458,
+                "endMs": 3215.581208
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3215.582041,
+                "endMs": 3215.591875
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3215.536708,
+                "endMs": 3215.593208
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3215.902333,
+                "endMs": 3215.906791
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3215.907458,
+                "endMs": 3215.921208
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3215.861083,
+                "endMs": 3215.922333
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3216.3915,
+                "endMs": 3216.394666
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3216.395375,
+                "endMs": 3216.401583
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3215.997458,
+                "endMs": 3216.43025
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3217.186458,
+                "endMs": 3217.190208
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3217.53425,
+                "endMs": 3217.541
+              }
+            ],
+            "aggregates": {
+              "agent_active_wall_ms": {
+                "value": 2062.165,
+                "status": "measured"
+              },
+              "model_wall_union_ms": {
+                "value": 1995.487916,
+                "status": "measured"
+              },
+              "tool_wall_union_ms": {
+                "value": 8.92779100000007,
+                "status": "measured"
+              },
+              "host_wall_union_ms": {
+                "value": 18.38562099999899,
+                "status": "measured"
+              },
+              "host_inside_model_ms": {
+                "value": 15.283621999999923,
+                "status": "measured"
+              },
+              "host_inside_tool_ms": {
+                "value": 0.08574999999973443,
+                "status": "measured"
+              },
+              "host_outside_model_tool_ms": {
+                "value": 3.016248999999334,
+                "status": "measured"
+              },
+              "unclassified_wall_ms": {
+                "value": 54.73304400000006,
+                "status": "measured"
+              },
+              "host_process_cpu_time_ms": {
+                "value": null,
+                "status": "unmeasured",
+                "reason": "process_cpu_not_isolated"
+              }
+            }
+          }
+        ],
+        "hostRequests": [
+          {
+            "hostRequestId": "benchmark-host-request",
+            "sessionId": "01a1fde2-e411-77cc-a657-92a33ceb6c5c",
+            "conversationId": "c1",
+            "acceptedMs": 1155.2705,
+            "disposition": "started",
+            "mappingStatus": "measured",
+            "runId": "01a1fde2-e411-77cc-a657-92a33ceb6c5c:run-1",
+            "settledMs": 3218.449791,
+            "metrics": {
+              "task_e2e_wall_ms": {
+                "value": 2063.179291,
+                "status": "measured"
+              },
+              "agent_active_wall_ms": {
+                "value": 2062.165,
+                "status": "measured"
+              },
+              "queue_wait_ms": {
+                "value": 1.0142909999999574,
+                "status": "measured"
+              },
+              "unclassified_wall_ms": {
+                "value": 54.73304400000052,
+                "status": "measured"
+              }
+            }
+          }
+        ],
+        "coverage": {
+          "provider_requests_total": 2,
+          "provider_requests_matched": 2,
+          "provider_requests_ambiguous": 0,
+          "provider_requests_unmeasured": 0,
+          "trace_coverage": 1,
+          "scope": "identified_requests_only"
+        }
+      }
+    },
+    {
+      "task": "write",
+      "round": 1,
+      "model": "deepseek/deepseek-flash",
+      "executionComplete": true,
+      "taskCorrect": true,
+      "failures": [],
+      "toolListHash": "2dcc1c19858d123e1aabfb2f9fc489867e6beb039f02eedff27f7f60022d1767",
+      "toolSequence": [
+        "write"
+      ],
+      "timing": {
+        "task_e2e_wall_ms": 2989.794875,
+        "agent_active_wall_ms": 2988.7681660000003,
+        "queue_wait_ms": 1.0267089999999826,
+        "model_wall_union_ms": 2936.314625,
+        "tool_wall_union_ms": 5.575916000000234,
+        "host_wall_union_ms": 16.42032899999913,
+        "host_share": 0.0054921256094531,
+        "unclassified_wall_ms": 43.20983199999955
+      },
+      "coverage": {
+        "provider_requests_total": 2,
+        "provider_requests_matched": 2,
+        "provider_requests_ambiguous": 0,
+        "provider_requests_unmeasured": 0,
+        "trace_coverage": 1,
+        "scope": "identified_requests_only"
+      },
+      "trace": {
+        "schemaVersion": 1,
+        "sessionId": "01a1fde2-f00e-7191-9571-875a9d954217",
+        "runs": [
+          {
+            "runId": "01a1fde2-f00e-7191-9571-875a9d954217:run-1",
+            "sessionId": "01a1fde2-f00e-7191-9571-875a9d954217",
+            "conversationId": "c1",
+            "agentStartMs": 908.692334,
+            "agentSettledMs": 3897.4605,
+            "aborted": false,
+            "status": "measured",
+            "requests": [
+              {
+                "requestId": "01a1fde2-f00e-7191-9571-875a9d954217:run-1:request-1",
+                "runId": "01a1fde2-f00e-7191-9571-875a9d954217:run-1",
+                "turnIndex": 0,
+                "status": "measured",
+                "reasons": [],
+                "hookStartMs": 945.510292,
+                "responseAttempts": [
+                  {
+                    "atMs": 2520.641084,
+                    "status": 200
+                  }
+                ],
+                "firstHeadersMs": 2520.641084,
+                "normalizedStartMs": 2521.564167,
+                "provider": "deepseek",
+                "api": "openai-completions",
+                "model": "deepseek-flash",
+                "firstProviderEventMs": 2524.793792,
+                "firstVisibleDeltaMs": 2887.13775,
+                "messageEndMs": 3139.226584,
+                "metrics": {
+                  "provider_hook_to_headers_ms": {
+                    "value": 1575.130792,
+                    "status": "measured"
+                  },
+                  "headers_to_first_provider_event_ms": {
+                    "value": 4.152708000000075,
+                    "status": "measured"
+                  },
+                  "first_event_to_first_visible_delta_ms": {
+                    "value": 362.34395799999993,
+                    "status": "measured"
+                  },
+                  "provider_hook_to_message_end_ms": {
+                    "value": 2193.716292,
+                    "status": "measured"
+                  },
+                  "tool_to_provider_gap_ms": {
+                    "value": null,
+                    "status": "not_triggered"
+                  }
+                }
+              },
+              {
+                "requestId": "01a1fde2-f00e-7191-9571-875a9d954217:run-1:request-2",
+                "runId": "01a1fde2-f00e-7191-9571-875a9d954217:run-1",
+                "turnIndex": 1,
+                "status": "measured",
+                "reasons": [],
+                "hookStartMs": 3152.224542,
+                "responseAttempts": [
+                  {
+                    "atMs": 3277.224459,
+                    "status": 200
+                  }
+                ],
+                "toolToProviderGapMs": 6.4469169999997575,
+                "firstHeadersMs": 3277.224459,
+                "normalizedStartMs": 3277.777,
+                "provider": "deepseek",
+                "api": "openai-completions",
+                "model": "deepseek-flash",
+                "firstProviderEventMs": 3279.675625,
+                "firstVisibleDeltaMs": 3812.667459,
+                "messageEndMs": 3894.822875,
+                "metrics": {
+                  "provider_hook_to_headers_ms": {
+                    "value": 124.9999170000001,
+                    "status": "measured"
+                  },
+                  "headers_to_first_provider_event_ms": {
+                    "value": 2.45116599999983,
+                    "status": "measured"
+                  },
+                  "first_event_to_first_visible_delta_ms": {
+                    "value": 532.9918339999999,
+                    "status": "measured"
+                  },
+                  "provider_hook_to_message_end_ms": {
+                    "value": 742.5983329999999,
+                    "status": "measured"
+                  },
+                  "tool_to_provider_gap_ms": {
+                    "value": 6.4469169999997575,
+                    "status": "measured"
+                  }
+                }
+              }
+            ],
+            "tools": [
+              {
+                "toolCallId": "call_00_ET_s0Oj2dNHF0vJGPFRFVr97026",
+                "runId": "01a1fde2-f00e-7191-9571-875a9d954217:run-1",
+                "turnIndex": 0,
+                "toolName": "write",
+                "startMs": 3140.201709,
+                "assistantToToolGapMs": 0.9751249999999345,
+                "status": "measured",
+                "endMs": 3145.777625,
+                "durationMs": 2,
+                "isError": false
+              }
+            ],
+            "hostSpans": [
+              {
+                "kind": "onEvent",
+                "startMs": 908.732334,
+                "endMs": 908.743542
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 908.801292,
+                "endMs": 908.804959
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 908.819,
+                "endMs": 908.821209
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 908.874459,
+                "endMs": 908.958709
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 909.008959,
+                "endMs": 909.011417
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 909.258709,
+                "endMs": 909.260125
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 909.260459,
+                "endMs": 909.263459
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 909.098167,
+                "endMs": 909.271334
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 968.41425,
+                "endMs": 968.417292
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 968.417834,
+                "endMs": 968.432209
+              },
+              {
+                "kind": "snapshot_build",
+                "startMs": 968.344084,
+                "endMs": 969.64325
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 969.645667,
+                "endMs": 969.654709
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 969.654959,
+                "endMs": 969.659792
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 1681.555667,
+                "endMs": 1681.575875
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 1681.57725,
+                "endMs": 1681.687125
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2521.664459,
+                "endMs": 2521.732209
+              },
+              {
+                "kind": "snapshot_build",
+                "startMs": 2582.078917,
+                "endMs": 2582.75375
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2582.760917,
+                "endMs": 2582.774709
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2582.775417,
+                "endMs": 2582.814
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2887.715542,
+                "endMs": 2887.722375
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2887.723292,
+                "endMs": 2887.760584
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2887.171084,
+                "endMs": 2888.122917
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2888.547084,
+                "endMs": 2888.554167
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2888.554709,
+                "endMs": 2888.559875
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2888.433459,
+                "endMs": 2888.563792
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2901.149125,
+                "endMs": 2901.152084
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2901.152667,
+                "endMs": 2901.169625
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2901.047834,
+                "endMs": 2901.171167
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2901.401959,
+                "endMs": 2901.404292
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2901.404667,
+                "endMs": 2901.408834
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2901.327959,
+                "endMs": 2901.41025
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2901.492917,
+                "endMs": 2901.494709
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2901.495042,
+                "endMs": 2901.498292
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2901.426167,
+                "endMs": 2901.49975
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2915.468,
+                "endMs": 2915.4705
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2915.471042,
+                "endMs": 2915.488792
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2915.394667,
+                "endMs": 2915.489709
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2915.6345,
+                "endMs": 2915.636459
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2915.636792,
+                "endMs": 2915.640625
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2915.566667,
+                "endMs": 2915.64125
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2915.733542,
+                "endMs": 2915.735209
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2915.7355,
+                "endMs": 2915.738542
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2915.65575,
+                "endMs": 2915.739084
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2933.754042,
+                "endMs": 2933.758834
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2933.759834,
+                "endMs": 2933.786709
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2933.626084,
+                "endMs": 2933.788167
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2934.001417,
+                "endMs": 2934.004334
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2934.004834,
+                "endMs": 2934.010167
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2933.914125,
+                "endMs": 2934.010917
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2934.287584,
+                "endMs": 2934.289917
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2934.290292,
+                "endMs": 2934.294667
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2934.208459,
+                "endMs": 2934.295417
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2934.932709,
+                "endMs": 2934.937167
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2934.937584,
+                "endMs": 2934.941792
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2934.859417,
+                "endMs": 2934.9425
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2935.121334,
+                "endMs": 2935.1235
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2935.123875,
+                "endMs": 2935.133417
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2935.05525,
+                "endMs": 2935.134084
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2935.2125,
+                "endMs": 2935.214417
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2935.21475,
+                "endMs": 2935.218334
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2935.149542,
+                "endMs": 2935.218875
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2951.634834,
+                "endMs": 2951.637792
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2951.63875,
+                "endMs": 2951.656625
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2951.545292,
+                "endMs": 2951.657625
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2951.784417,
+                "endMs": 2951.7865
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2951.786875,
+                "endMs": 2951.791125
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2951.716542,
+                "endMs": 2951.791792
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2952.019542,
+                "endMs": 2952.021417
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2952.021792,
+                "endMs": 2952.025417
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2951.955292,
+                "endMs": 2952.026042
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2952.150625,
+                "endMs": 2952.152417
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2952.152792,
+                "endMs": 2952.156209
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2952.087084,
+                "endMs": 2952.156792
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2952.232084,
+                "endMs": 2952.233834
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2952.234167,
+                "endMs": 2952.237334
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2952.171375,
+                "endMs": 2952.237875
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2952.637584,
+                "endMs": 2952.639709
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2952.640209,
+                "endMs": 2952.644792
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2952.562084,
+                "endMs": 2952.6455
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2964.424417,
+                "endMs": 2964.429875
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2964.430375,
+                "endMs": 2964.446959
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2964.340625,
+                "endMs": 2964.447875
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2964.559042,
+                "endMs": 2964.560959
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2964.5615,
+                "endMs": 2964.565417
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2964.489334,
+                "endMs": 2964.565959
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2964.672459,
+                "endMs": 2964.674292
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2964.674625,
+                "endMs": 2964.678084
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2964.605417,
+                "endMs": 2964.678709
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2964.78425,
+                "endMs": 2964.786
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2964.786334,
+                "endMs": 2964.789584
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2964.723,
+                "endMs": 2964.790125
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2964.992625,
+                "endMs": 2964.994417
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2964.994792,
+                "endMs": 2964.998125
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2964.928459,
+                "endMs": 2964.998625
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2965.074417,
+                "endMs": 2965.076084
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2965.076375,
+                "endMs": 2965.079542
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2965.012459,
+                "endMs": 2965.085
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2980.655917,
+                "endMs": 2980.659625
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2980.660375,
+                "endMs": 2980.678209
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2980.55675,
+                "endMs": 2980.679167
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2980.807,
+                "endMs": 2980.809417
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2980.809917,
+                "endMs": 2980.814584
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2980.732459,
+                "endMs": 2980.81525
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2980.925875,
+                "endMs": 2980.927917
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2980.928292,
+                "endMs": 2980.932
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2980.857625,
+                "endMs": 2980.932625
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2981.062584,
+                "endMs": 2981.064625
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2981.065042,
+                "endMs": 2981.068709
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2980.996542,
+                "endMs": 2981.06925
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2981.147542,
+                "endMs": 2981.149417
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2981.14975,
+                "endMs": 2981.152959
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2981.079542,
+                "endMs": 2981.1535
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2981.332959,
+                "endMs": 2981.335125
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2981.335542,
+                "endMs": 2981.339542
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2981.265667,
+                "endMs": 2981.34025
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2996.617792,
+                "endMs": 2996.623875
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2996.624542,
+                "endMs": 2996.645375
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2996.516417,
+                "endMs": 2996.646667
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2996.783834,
+                "endMs": 2996.795167
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2996.795625,
+                "endMs": 2996.8005
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2996.698125,
+                "endMs": 2996.801292
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2997.049625,
+                "endMs": 2997.051834
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2997.052292,
+                "endMs": 2997.056334
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2996.847292,
+                "endMs": 2997.057042
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2997.185417,
+                "endMs": 2997.187584
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2997.188,
+                "endMs": 2997.192042
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2997.107459,
+                "endMs": 2997.192709
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2997.313917,
+                "endMs": 2997.316209
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2997.316625,
+                "endMs": 2997.320584
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2997.204584,
+                "endMs": 2997.321209
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 2999.676125,
+                "endMs": 2999.68175
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 2999.682375,
+                "endMs": 2999.69325
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 2999.574209,
+                "endMs": 2999.69425
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3018.158334,
+                "endMs": 3018.161
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3018.161667,
+                "endMs": 3018.1795
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3018.056709,
+                "endMs": 3018.1805
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3018.305625,
+                "endMs": 3018.30775
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3018.308167,
+                "endMs": 3018.312792
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3018.224959,
+                "endMs": 3018.313459
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3018.425417,
+                "endMs": 3018.427542
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3018.427959,
+                "endMs": 3018.431959
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3018.355167,
+                "endMs": 3018.43325
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3018.556292,
+                "endMs": 3018.558417
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3018.558792,
+                "endMs": 3018.562625
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3018.4735,
+                "endMs": 3018.56325
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3018.645125,
+                "endMs": 3018.647042
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3018.647375,
+                "endMs": 3018.651709
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3018.5745,
+                "endMs": 3018.652375
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3018.93575,
+                "endMs": 3018.938125
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3018.938709,
+                "endMs": 3018.943334
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3018.862459,
+                "endMs": 3018.944125
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3033.449625,
+                "endMs": 3033.452459
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3033.453042,
+                "endMs": 3033.473709
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3033.349542,
+                "endMs": 3033.474917
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3033.597042,
+                "endMs": 3033.599209
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3033.599625,
+                "endMs": 3033.60425
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3033.524792,
+                "endMs": 3033.605042
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3033.722,
+                "endMs": 3033.724167
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3033.724542,
+                "endMs": 3033.728459
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3033.652875,
+                "endMs": 3033.729125
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3033.807459,
+                "endMs": 3033.809375
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3033.809709,
+                "endMs": 3033.813417
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3033.740417,
+                "endMs": 3033.814042
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3034.007792,
+                "endMs": 3034.01
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3034.0105,
+                "endMs": 3034.014834
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3033.935959,
+                "endMs": 3034.015584
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3034.18,
+                "endMs": 3034.182125
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3034.182625,
+                "endMs": 3034.186875
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3034.109375,
+                "endMs": 3034.187584
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3042.075959,
+                "endMs": 3042.078625
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3042.079167,
+                "endMs": 3042.094917
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3041.999625,
+                "endMs": 3042.095834
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3042.201667,
+                "endMs": 3042.203584
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3042.203959,
+                "endMs": 3042.207959
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3042.136834,
+                "endMs": 3042.208542
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3042.374292,
+                "endMs": 3042.376125
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3042.376459,
+                "endMs": 3042.379959
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3042.313542,
+                "endMs": 3042.380584
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3042.454625,
+                "endMs": 3042.456334
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3042.456625,
+                "endMs": 3042.459875
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3042.397334,
+                "endMs": 3042.460417
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3057.174417,
+                "endMs": 3057.177
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3057.177584,
+                "endMs": 3057.196209
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3057.088625,
+                "endMs": 3057.197292
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3072.243375,
+                "endMs": 3072.246125
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3072.24675,
+                "endMs": 3072.274834
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3072.160334,
+                "endMs": 3072.275834
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3072.45475,
+                "endMs": 3072.457084
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3072.457542,
+                "endMs": 3072.462292
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3072.366542,
+                "endMs": 3072.463084
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3072.549167,
+                "endMs": 3072.551209
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3072.551584,
+                "endMs": 3072.559709
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3072.477917,
+                "endMs": 3072.560417
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3090.279792,
+                "endMs": 3090.28525
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3090.2865,
+                "endMs": 3090.312334
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3090.144084,
+                "endMs": 3090.314334
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3090.483042,
+                "endMs": 3090.486334
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3090.486875,
+                "endMs": 3090.493125
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3090.383,
+                "endMs": 3090.494
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3090.645917,
+                "endMs": 3090.648625
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3090.649125,
+                "endMs": 3090.654167
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3090.551875,
+                "endMs": 3090.655042
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3090.752459,
+                "endMs": 3090.755
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3090.755417,
+                "endMs": 3090.760292
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3090.669625,
+                "endMs": 3090.761084
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3090.993292,
+                "endMs": 3090.995667
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3090.996125,
+                "endMs": 3091.00075
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3090.917125,
+                "endMs": 3091.0015
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3091.092042,
+                "endMs": 3091.094125
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3091.0945,
+                "endMs": 3091.098417
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3091.015209,
+                "endMs": 3091.099042
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3104.355292,
+                "endMs": 3104.361125
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3104.361792,
+                "endMs": 3104.378584
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3104.279875,
+                "endMs": 3104.379709
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3104.480834,
+                "endMs": 3104.482709
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3104.483084,
+                "endMs": 3104.487084
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3104.418875,
+                "endMs": 3104.487709
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3104.587834,
+                "endMs": 3104.589584
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3104.589917,
+                "endMs": 3104.59325
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3104.526167,
+                "endMs": 3104.593792
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3104.827042,
+                "endMs": 3104.82925
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3104.829667,
+                "endMs": 3104.833709
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3104.746,
+                "endMs": 3104.834459
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3104.914834,
+                "endMs": 3104.91675
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3104.917125,
+                "endMs": 3104.92075
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3104.847834,
+                "endMs": 3104.921375
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3119.390292,
+                "endMs": 3119.39325
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3119.393917,
+                "endMs": 3119.415542
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3119.299417,
+                "endMs": 3119.417792
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3119.493042,
+                "endMs": 3119.494959
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3119.495292,
+                "endMs": 3119.4995
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3119.431084,
+                "endMs": 3119.500125
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3139.091375,
+                "endMs": 3139.097875
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3139.099209,
+                "endMs": 3139.139625
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3138.892375,
+                "endMs": 3139.141584
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3139.27625,
+                "endMs": 3139.517625
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3140.236792,
+                "endMs": 3140.312042
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3145.918125,
+                "endMs": 3145.926625
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3145.9285,
+                "endMs": 3145.963709
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3146.127667,
+                "endMs": 3146.1305
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3146.131,
+                "endMs": 3146.136417
+              },
+              {
+                "kind": "snapshot_build",
+                "startMs": 3145.984417,
+                "endMs": 3148.186042
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3148.192334,
+                "endMs": 3148.222959
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3148.223459,
+                "endMs": 3148.235
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3145.801084,
+                "endMs": 3148.235959
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3148.324375,
+                "endMs": 3148.343834
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3148.3605,
+                "endMs": 3148.370625
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3148.92075,
+                "endMs": 3148.924209
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3150.000959,
+                "endMs": 3150.003625
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3277.817792,
+                "endMs": 3277.910584
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3812.431334,
+                "endMs": 3812.460209
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3812.463667,
+                "endMs": 3812.611375
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3812.158875,
+                "endMs": 3812.62
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3813.5205,
+                "endMs": 3813.531042
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3813.532292,
+                "endMs": 3813.548375
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3812.703625,
+                "endMs": 3813.550625
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3826.618042,
+                "endMs": 3826.63275
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3826.634542,
+                "endMs": 3826.69375
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3826.489959,
+                "endMs": 3826.696334
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3826.811084,
+                "endMs": 3826.81825
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3826.818959,
+                "endMs": 3826.825875
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3826.772292,
+                "endMs": 3826.826875
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3826.962917,
+                "endMs": 3826.969375
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3826.970167,
+                "endMs": 3826.975375
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3826.90125,
+                "endMs": 3826.97625
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3827.401334,
+                "endMs": 3827.404917
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3827.405542,
+                "endMs": 3827.410625
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3827.051125,
+                "endMs": 3827.411584
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3827.460792,
+                "endMs": 3827.463417
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3827.463959,
+                "endMs": 3827.468834
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3827.432,
+                "endMs": 3827.469709
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3827.641,
+                "endMs": 3827.643917
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3827.6445,
+                "endMs": 3827.649667
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3827.608959,
+                "endMs": 3827.65325
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3892.7065,
+                "endMs": 3892.736292
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3892.739584,
+                "endMs": 3892.856167
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3892.456584,
+                "endMs": 3892.860375
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3893.056167,
+                "endMs": 3893.062792
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3893.063667,
+                "endMs": 3893.080709
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3893.004542,
+                "endMs": 3893.082125
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3893.14175,
+                "endMs": 3893.14575
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3893.146375,
+                "endMs": 3893.152709
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3893.10675,
+                "endMs": 3893.153792
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3894.738625,
+                "endMs": 3894.747625
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3894.749125,
+                "endMs": 3894.764625
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3894.671334,
+                "endMs": 3894.766625
+              },
+              {
+                "kind": "ws_serialize",
+                "startMs": 3895.456917,
+                "endMs": 3895.461625
+              },
+              {
+                "kind": "ws_send",
+                "startMs": 3895.462667,
+                "endMs": 3895.470167
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3894.84725,
+                "endMs": 3895.504417
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3896.097709,
+                "endMs": 3896.113
+              },
+              {
+                "kind": "onEvent",
+                "startMs": 3896.594125,
+                "endMs": 3896.600542
+              }
+            ],
+            "aggregates": {
+              "agent_active_wall_ms": {
+                "value": 2988.7681660000003,
+                "status": "measured"
+              },
+              "model_wall_union_ms": {
+                "value": 2936.314625,
+                "status": "measured"
+              },
+              "tool_wall_union_ms": {
+                "value": 5.575916000000234,
+                "status": "measured"
+              },
+              "host_wall_union_ms": {
+                "value": 16.42032899999913,
+                "status": "measured"
+              },
+              "host_inside_model_ms": {
+                "value": 12.67728599999964,
+                "status": "measured"
+              },
+              "host_inside_tool_ms": {
+                "value": 0.07524999999986903,
+                "status": "measured"
+              },
+              "host_outside_model_tool_ms": {
+                "value": 3.6677929999996195,
+                "status": "measured"
+              },
+              "unclassified_wall_ms": {
+                "value": 43.20983199999955,
+                "status": "measured"
+              },
+              "host_process_cpu_time_ms": {
+                "value": null,
+                "status": "unmeasured",
+                "reason": "process_cpu_not_isolated"
+              }
+            }
+          }
+        ],
+        "hostRequests": [
+          {
+            "hostRequestId": "benchmark-host-request",
+            "sessionId": "01a1fde2-f00e-7191-9571-875a9d954217",
+            "conversationId": "c1",
+            "acceptedMs": 907.665625,
+            "disposition": "started",
+            "mappingStatus": "measured",
+            "runId": "01a1fde2-f00e-7191-9571-875a9d954217:run-1",
+            "settledMs": 3897.4605,
+            "metrics": {
+              "task_e2e_wall_ms": {
+                "value": 2989.794875,
+                "status": "measured"
+              },
+              "agent_active_wall_ms": {
+                "value": 2988.7681660000003,
+                "status": "measured"
+              },
+              "queue_wait_ms": {
+                "value": 1.0267089999999826,
+                "status": "measured"
+              },
+              "unclassified_wall_ms": {
+                "value": 43.20983199999955,
+                "status": "measured"
+              }
+            }
+          }
+        ],
+        "coverage": {
+          "provider_requests_total": 2,
+          "provider_requests_matched": 2,
+          "provider_requests_ambiguous": 0,
+          "provider_requests_unmeasured": 0,
+          "trace_coverage": 1,
+          "scope": "identified_requests_only"
+        }
+      }
+    }
+  ],
+  "successfulTiming": {
+    "task_e2e_wall_ms": {
+      "count": 2,
+      "p50": 2063.179291,
+      "p95": 2063.179291,
+      "min": 2063.179291,
+      "max": 2989.794875
+    },
+    "model_wall_union_ms": {
+      "count": 2,
+      "p50": 1995.487916,
+      "p95": 1995.487916,
+      "min": 1995.487916,
+      "max": 2936.314625
+    },
+    "tool_wall_union_ms": {
+      "count": 2,
+      "p50": 5.575916000000234,
+      "p95": 5.575916000000234,
+      "min": 5.575916000000234,
+      "max": 8.92779100000007
+    },
+    "host_wall_union_ms": {
+      "count": 2,
+      "p50": 16.42032899999913,
+      "p95": 16.42032899999913,
+      "min": 16.42032899999913,
+      "max": 18.38562099999899
+    },
+    "unclassified_wall_ms": {
+      "count": 2,
+      "p50": 43.20983199999955,
+      "p95": 43.20983199999955,
+      "min": 43.20983199999955,
+      "max": 54.73304400000006
+    }
+  },
+  "allExecutionOutcomes": {
+    "executionComplete": 2,
+    "executionFailed": 0,
+    "taskIncorrect": 0,
+    "e2eIncludingFailures": {
+      "count": 2,
+      "p50": 2063.179291,
+      "p95": 2063.179291,
+      "min": 2063.179291,
+      "max": 2989.794875
+    }
+  }
+}

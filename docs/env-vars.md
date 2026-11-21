@@ -20,6 +20,10 @@
 | `PI_WEB_ALLOW_HOSTS` | 空 | 请求 Host 的 hostname 白名单（逗号分隔）。**未设置且绑定 loopback 时默认只放行 `localhost` / `127.0.0.1` / `[::1]`**，防 DNS rebinding；绑定 `0.0.0.0` 或走反代时需自行设置（否则只做 Origin/Host 同权威校验） |
 | `PI_WEB_TOKEN` | 空 | **可选共享口令鉴权**：设置后所有 HTTP/WS 请求必须携带（`Authorization: Bearer` / `X-PI-Token` 头、`?token=` 参数或 `pi_web_token` cookie 任一匹配；浏览器首次经 `?token=xxx` 进入后存 localStorage 并下发 HttpOnly cookie）；`/api/health` 保持开放供探针。前端 `web/src/auth-token.ts` 统一注入；口令变化（或换端口重启）时服务端会重发 cookie，不会被旧 cookie 挡住；比较用常量时间；`/api/health` 不再返回工作区路径。**桌面版每次启动自动生成随机口令**（`electron/server-auth.mjs`），无需配置；回归：`tests/token-auth-test.mjs`（端口 8975）、`tests/desktop-server-auth-test.mjs` |
 | `PI_WEB_PLAYGROUND` | 空 | 设为 `off`（或 `0`/`false`）时**硬关闭 Python 代码运行（Playground）并在设置页锁定为不可修改**，用于 Docker/共享部署；不设置时由 `<PI_WEB_DATA_DIR>/playground.json` 的 `enabled` 决定（首次检测到 Python 默认开启，保留已保存选择）。见 `docs/architecture-playground.md` |
+| `PI_SNAPSHOT_TIMINGS` | `summary` | 默认在真实 `ClientSession` 里有界采样快照管线 duration/count，不逐报文扫描字节。设为 `1`/`detail` 时额外统计每条 WS 消息的未压缩 JSON bytes 与分布；`off`/`0`/`false` 关闭。配合 `PI_SNAPSHOT_TIMINGS_OUT` 在 `SIGTERM`/`SIGINT` 时把按 clientId 分离的报告写成 JSON。见 [宿主快照与工具输出性能归因](pi-host-latency-review.md) |
+| `PI_SNAPSHOT_TIMINGS_OUT` | 空 | 采样报告的输出路径；未设置时不写文件 |
+| `PI_TASK_TIMINGS` | 开启 | 默认通过原生 SDK hooks 记录 Agent Execution Trace（hostRequest/run/request/tool 关联、wall time、gap、宿主快照与 WS span），并以 metadata-only JSONL 持久化到 `<PI_WEB_DATA_DIR>/traces/`；`off`/`0`/`false` 停止新采集。顶栏 Trace 或 `/trace` 查看，`/export` 导出含正文的静态 HTML，`/export json` 只导出非匿名 metadata。不记录提示词、工具参数、响应正文或凭据；见 `docs/architecture-core.md` |
+| `PI_TASK_TIMINGS_OUT` | 空 | 额外在优雅停机时输出完整内存 trace 的路径；未设置时不写此报告。无法唯一关联或 provider 缺少 hook 的指标写为 `ambiguous`/`unmeasured`，不写 0 |
 | `PI_WEB_CLIENT_IDLE_MINUTES` | `30` | 客户端（浏览器标签页）断开且无运行任务、终端、后台服务后，超过 N 分钟回收其会话（释放运行时与定时器；最近项目等状态已持久化，同一 clientId 回来会重建）；0 = 不回收。`client-state.json` 另外最多保留 200 个客户端条目 |
 
 ## Pi Codemode worker 数量

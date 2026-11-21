@@ -35,6 +35,8 @@ const NATIVE_NAMES = [
 	"reload",
 	"help",
 	"copy",
+	"trace",
+	"export",
 ];
 
 function connect() {

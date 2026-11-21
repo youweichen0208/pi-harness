@@ -55,6 +55,7 @@ const ALL = [
 	"changes-panel-ui-test",
 	"tool-text-continue-test",
 	"run-recovery-test",
+	"execution-trace-test",
 	"clear-provider-key-test",
 	"provider-catalog-test",
 	"component-updates-test",
