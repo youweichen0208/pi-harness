@@ -1,4 +1,4 @@
-/** Compare native OS metrics in CSS pixels; macOS is the reference. */
+/** Compare DPI consistency within Windows; only code faces remain shared with macOS. */
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -14,13 +14,14 @@ const windows = [100, 125, 150].map(scale => {
 	assert.equal(matches.length, 1, `Require one Windows ${scale}% result`);
 	return { file: matches[0], scale };
 });
+const windowsReference = read(windows[0].file);
 function compare(expected, actual, path) {
 	// Range rect height tracks OS glyph rasterization, not the CSS line box.
 	// Compare line count/width and the element's own height separately.
 	if (/\.lines\[\d+\]\.height$/.test(path)) return;
 	if (typeof expected === 'number') {
 		assert.equal(typeof actual, 'number', path);
-		assert(Math.abs(expected - actual) <= 1, `${path}: Mac ${expected}, Windows ${actual} (tolerance 1 CSS px)`);
+		assert(Math.abs(expected - actual) <= 1, `${path}: Windows 100% ${expected}, actual ${actual} (tolerance 1 CSS px)`);
 	} else if (Array.isArray(expected)) {
 		assert(Array.isArray(actual), path);
 		assert.equal(actual.length, expected.length, `${path}: line/item count`);
@@ -29,9 +30,7 @@ function compare(expected, actual, path) {
 		assert(actual && typeof actual === 'object', path);
 		for (const key of Object.keys(expected)) compare(expected[key], actual[key], `${path}.${key}`);
 	} else if (/(?:\.fontFamily|\.family)$/.test(path)) {
-		// The per-OS fallback lists intentionally differ. Compare the first choice;
-		// the rendering test separately verifies native SF Mono vs Windows JetBrains Mono in xterm.
-		if (!path.endsWith('.ui.terminal.fontFamily')) assert.equal(actual.split(',')[0], expected.split(',')[0], path);
+		assert.equal(actual, expected, path);
 	} else assert.equal(actual, expected, path);
 }
 function commonFonts(metrics) {
@@ -50,10 +49,11 @@ for (const { file, scale } of windows) {
 	assert.equal(win.dpr, scale / 100);
 	assert.deepEqual(commonFonts(win), commonFonts(mac), 'same bundled UI SC and JetBrains Mono resources');
 	assert.equal(win.electron, mac.electron, 'Compare the same Electron version');
-	for (const key of ['width', 'height', 'bodySize', 'typography', 'surfaces', 'ui']) compare(mac[key], win[key], `${file}.${key}`);
-	for (const [sample, family] of Object.entries({ motto: 'Times New Roman', mottoEmphasis: 'Times New Roman', code: 'JetBrains Mono', notes: 'UI SC', wiki: 'UI SC', settingsTab: 'UI SC', playground: 'JetBrains Mono' })) {
+	for (const key of ['width', 'height', 'bodySize', 'typography', 'surfaces', 'ui']) compare(windowsReference[key], win[key], `${file}.${key}`);
+	assert(win.typography.light.every(sample => sample.family.startsWith('"Segoe UI"')), 'Windows uses native UI typography');
+	for (const [sample, family] of Object.entries({ playground: 'JetBrains Mono' })) {
 		assert.deepEqual(sharedFace(win, sample, family), sharedFace(mac, sample, family), `${file}.${sample}: actual primary face`);
 	}
 	assert.deepEqual(sharedFace(win, 'playground', 'PI Playground CJK'), sharedFace(mac, 'playground', 'PI Playground CJK'), 'same Sarasa Chinese glyphs in the editor');
-	console.log(`PASS ${file}: matches macOS typography and component styles`);
+	console.log(`PASS ${file}: matches Windows 100% typography and shared code fonts`);
 }
