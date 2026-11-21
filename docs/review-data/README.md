@@ -17,10 +17,6 @@
 - `release-verification.json`：正式发布状态、三平台工作流结果、附件体积及 GitHub API 提供的摘要；未重新下载附件计算哈希。
 - `archive-manifest.json`：归档及其中 69 个原始文件的 SHA-256 校验清单。
 - `environments.json`：各测量模式的环境元数据，便于不解压直接核对。
-- `host-latency-baseline.json` / `host-latency.json`：宿主快照与工具输出基准（`npm run bench:host`，零 token）的旧口径/修正后结果，见 [宿主快照与工具输出性能归因](../pi-host-latency-review.md)。只含聚合时间、未压缩 JSON 体积、次数和单份快照字段拆解，不含会话正文；forced-full 压测字节不代表正常任务网络流量。
-- `agent-task-trace-mock.json`：本地 SSE 的四类完整任务自检（`npm run bench:task -- --mock`），验证 run/request/tool 关联、执行完成与任务正确性，不是真实模型性能数据。
-- `agent-task-latency*.json`：显式模型的真实短任务 Execution Trace 与耗时分布。主文件汇总 DeepSeek 四类成功任务，分文件保留各次运行，Anthropic failure 文件单独保留失败样本。只含模型/工具标识、时间、状态和环境元数据，不含提示词、工具参数或响应正文；mock 与真实结果不混算。
-- `trace-overhead-acceptance.json`：`npm run accept:trace` 的正式 off/summary 对照。相同本地 Mock 下 AB/BA 交错、多次重复纯文本、单 Bash、连续 20 工具、长历史和反复创建 session；记录端到端延迟、服务进程 RSS/Heap、post-GC 留存、JSONL append/压缩次数与文件体积。结果只有数值指标，不含 transcript；没有未约定的性能阈值。
 
 ## 原始采样
 

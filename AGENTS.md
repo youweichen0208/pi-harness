@@ -235,7 +235,6 @@ npm run build        # build:web (vite) + build:server (tsc)
 npm start            # 跑编译产物 dist/server/index.js（生产）
 npm test             # 设计令牌检查 + vitest 纯函数单测
 npm run test:smoke   # 零 token 协议冒烟聚合跑器
-npm run accept:trace  # Trace off/summary 正式对照：AB/BA、多轮、RSS/Heap/JSONL
 ```
 
 依赖安装前先运行 `npm run check:lockfile`，确保下载地址全部使用 HTTPS npm 官方源且与声明版本一致；安装验证流程见 `docs/development.md`。

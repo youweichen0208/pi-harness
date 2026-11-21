@@ -15,10 +15,6 @@ npm start            # 跑编译产物 dist/server/index.js（生产）
 npm run check:design # 设计令牌检查（硬编码颜色与非令牌圆角报错）
 npm test             # 设计令牌检查 + vitest 纯函数单测（tests/unit/，毫秒级零 token）
 npm run test:smoke   # 零 token 协议冒烟聚合跑器（tests/run-smoke.mjs，自包含测试）
-npm run bench:host   # 零 token 宿主快照/工具输出基准（tests/host-latency-benchmark.mjs）
-npm run bench:task -- --mock  # 零 token 完整 Agent Execution Trace + 四类任务正确性自检
-npm run accept:trace          # 正式 Trace off/summary 对照：AB/BA、3 轮、5 场景、RSS/Heap/JSONL
-npm run bench:task -- --model=provider/model --rounds=1  # 显式模型的真实短任务测量（会产生供应商请求/费用）
 node tests/execution-trace-test.mjs  # 锁定 SDK hooks、延迟边界与完整工具往返契约
 node tests/trace-browser-test.mjs   # 真实浏览器/SDK：/trace、/export、离线 HTML 安全、重启与中断恢复
 npx vitest run tests/unit/trace-store-reliability.test.ts tests/unit/trace-export.test.ts

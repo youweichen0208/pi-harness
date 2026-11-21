@@ -112,7 +112,7 @@ SDK `tool_execution_update.partialResult` 是累计输出快照，服务端发�
 
 协议 v62 的 `trace_get`/`trace_result` 只读当前 conversation 所属 session 的内存与持久化记录。顶栏 Trace 和 `/trace` 打开 `TraceWorkbench`：run 筛选、聚合指标、模型／工具／宿主时间线及调度 gap；运行中每 2 秒刷新。`/export` 和标题栏 HTML 按钮下载包含 transcript 与 Trace 的本地静态 HTML；所有不可信字段均转义，CSP 禁止脚本与外部资源。`/export json` 或 JSON 按钮只下载 trace metadata，明确标注非匿名；与 OMP 的 transcript/Timeline/Trace 导出相似，但本实现额外区分 onEvent、snapshot 与 WS 宿主归因，不提供公网分享。
 
-`PI_TASK_TIMINGS_OUT` 另外在优雅停机时输出按 client/session 分离的完整内存 JSON。快照管线 `SnapshotTimings` 默认 `summary`，只记录有界 duration/count；`PI_SNAPSHOT_TIMINGS=1/detail` 才逐报文执行 `Buffer.byteLength` 并统计 bytes。契约回归为 `tests/execution-trace-test.mjs`，浏览器与恢复回归为 `tests/trace-browser-test.mjs`（含下载 HTML 的离线浏览器安全验收）；真实文件系统故障、120-run 压缩和重开回归为 `tests/unit/trace-store-reliability.test.ts`，导出攻击矩阵为 `tests/unit/trace-export.test.ts`。四类任务与独立正确性断言见 `tests/agent-task-benchmark.mjs`。
+`PI_TASK_TIMINGS_OUT` 另外在优雅停机时输出按 client/session 分离的完整内存 JSON。快照管线 `SnapshotTimings` 默认 `summary`，只记录有界 duration/count；`PI_SNAPSHOT_TIMINGS=1/detail` 才逐报文执行 `Buffer.byteLength` 并统计 bytes。契约回归为 `tests/execution-trace-test.mjs`，浏览器与恢复回归为 `tests/trace-browser-test.mjs`（含下载 HTML 的离线浏览器安全验收）；真实文件系统故障、120-run 压缩和重开回归为 `tests/unit/trace-store-reliability.test.ts`，导出攻击矩阵为 `tests/unit/trace-export.test.ts`。
 
 ### 模型／工具静默状态（`agent_silence`）
 
