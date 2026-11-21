@@ -1,8 +1,8 @@
 import { playgroundChatEvent, playgroundChatConnection } from "./playground-chat-store";
 import { useT } from "./i18n";
-import { promptWorkspaceTarget, selectedProjectWorkspace } from "./project-workspaces";
 import { localRecoveryClock } from "./recovery-clock";
 import { emitTreeResponse, queueTreeDraft } from "./tree-events";
+import { emitTraceResponse } from "./trace-events";
 import { discardExtensionEditor, queueExtensionEditor } from "./extension-editor";
 import type { UiMessage } from "./types";
 import { mergeLiveToolOutput, type LiveToolOutput } from "./live-tool-output";
@@ -230,7 +230,7 @@ type Action =
 	| { type: "snapshot"; state: UiState }
 	| { type: "snapshot_delta"; msg: Extract<ServerMessage, { type: "snapshot_delta" }> }
 	| { type: "protocol_mismatch" }
-	| { type: "tool_delta"; toolCallId: string; toolName: string; delta: string; replace?: boolean; codemode?: UiMessage["codemode"]; subagents?: LiveToolOutput["subagents"] }
+	| { type: "tool_delta"; toolCallId: string; toolName: string; delta: string; replace?: boolean; codemode?: UiMessage["codemode"] }
 	| { type: "message_delta"; msg: MessageDeltaMsg }
 	| { type: "tool_status"; status: ToolStatus }
 	| { type: "notice"; notice: Notice }
@@ -525,7 +525,6 @@ function reducer(state: ChatState, action: Action): ChatState {
 				toolName: action.toolName,
 				text: capped,
 				codemode: action.codemode ?? prev?.codemode,
-				subagents: action.subagents ?? prev?.subagents,
 			});
 			return { ...state, liveOutputs };
 		}
@@ -818,9 +817,6 @@ export function useChat() {
 	const confirmedCwd = useRef("");
 	const snapshotReady = useRef(false);
 	const [hasSnapshot, setHasSnapshot] = useState(false);
-	useEffect(() => {
-		if (hasSnapshot && chat.status === "open") window.dispatchEvent(new CustomEvent("pi:subagent-ready"));
-	}, [hasSnapshot, chat.status]);
 	const acknowledged = useRef<string | null>(null);
 	const [switchError, setSwitchError] = useState<string | null>(null);
 	useEffect(() => {
@@ -925,8 +921,8 @@ export function useChat() {
 			if (msg.type === "prompt") {
 				const state = authoritative.current.state;
 				if (!state?.sessionId) return false;
-				const target = msg.target ?? { cwd: state.cwd, conversationId: state.conversationId, sessionId: state.sessionId, workspaceId: selectedProjectWorkspace() };
-				msg = { ...msg, target: promptWorkspaceTarget(target, authoritative.current.projectWorkspaces) };
+				const target = msg.target ?? { cwd: state.cwd, conversationId: state.conversationId, sessionId: state.sessionId };
+				msg = { ...msg, target };
 			}
 			ws.send(JSON.stringify(msg));
 			return true;
@@ -934,17 +930,6 @@ export function useChat() {
 		return false;
 	}, []);
 
-	useEffect(() => {
-		const request = (event: Event) => {
-			const detail = (event as CustomEvent<{ requestId: string; taskId: string; action: "detail" | "stop"; cursor?: number }>).detail;
-			const conversationId = authoritative.current.state?.conversationId;
-			if (!conversationId || !send({ type: "subagent_request", conversationId, ...detail })) {
-				window.dispatchEvent(new CustomEvent("pi:subagent-response", { detail: { ...detail, conversationId, error: "Connection unavailable" } }));
-			}
-		};
-		window.addEventListener("pi:subagent-request", request);
-		return () => window.removeEventListener("pi:subagent-request", request);
-	}, [send]);
 
 	useEffect(() => {
 		const request = (event: Event) => {
@@ -988,9 +973,6 @@ export function useChat() {
 			switch (msg.type) {
 				case "playground_chat_state": case "playground_chat_result": case "playground_chat_error":
 					playgroundChatEvent(msg); break;
-				case "subagent_response":
-					window.dispatchEvent(new CustomEvent("pi:subagent-response", { detail: msg }));
-					break;
 				case "node_event":
 					window.dispatchEvent(new CustomEvent("pi-node-event", { detail: msg }));
 					break;
@@ -1076,7 +1058,6 @@ export function useChat() {
 						delta: msg.delta,
 						replace: msg.replace,
 						codemode: msg.codemode,
-						subagents: msg.subagents,
 					});
 					break;
 				case "tool_status":

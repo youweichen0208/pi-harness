@@ -30,7 +30,6 @@ mkdirSync(workdir, { recursive: true });
 mkdirSync(dataDir, { recursive: true });
 // Compare the unextended native baseline; optional built-ins have separate SDK tests.
 writeFileSync(join(dataDir, "design-first.json"), JSON.stringify({ enabled: false }));
-writeFileSync(join(dataDir, "subagents.json"), JSON.stringify({ enabled: false }));
 mkdirSync(agentDir, { recursive: true });
 mkdirSync(join(agentDir, "extensions"));
 writeFileSync(join(agentDir, "extensions", "cancel-new.ts"), `import { existsSync } from "node:fs"; import { join } from "node:path";
@@ -303,7 +302,7 @@ try {
 	const chatRequests = requests.filter((request) => request.messages.some((message) => Array.isArray(message.content) && message.content.some((part) => part.text === "OLD_CONTEXT_SENTINEL" || part.text === "NEW_CONTEXT_SENTINEL")));
 	if (chatRequests.length !== 2) throw new Error("Expected two chat requests");
 	const tools = chatRequests[0].tools.map((tool) => tool.function.name);
-	if (tools.some(name => ["todo", "task_plan", "web_subagent", "submit_result"].includes(name) || name.startsWith("terminal_"))) throw new Error("Host agent tools leaked into native context");
+	if (tools.some(name => ["todo", "task_plan", "subagent", "web_subagent", "submit_result"].includes(name) || name.startsWith("terminal_"))) throw new Error("Host agent tools leaked into native context");
 	if (JSON.stringify(tools.sort()) !== JSON.stringify(nativeTools)) throw new Error("WebUI tool list differs from native SDK");
 	for (const request of chatRequests) {
 		const system = request.messages.find(message => message.role === "system" || message.role === "developer");

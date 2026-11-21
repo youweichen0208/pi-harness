@@ -33,7 +33,7 @@ export function ToolStructuredOutput({ output, url, truncated, error }: { output
 		</div>
 		<footer><button type="button" onClick={event => void copy(event.currentTarget.ownerDocument)}><FiCopy />{t(copyState === "failed" ? "copyFailed" : copyState === "copied" ? "copied" : "bashCopyOutput")}</button>
 			{url ? <ToolOutputDownload url={url} compact /> : !truncated && <button type="button" onClick={download}><FiDownload />{t("toolOutputDownload")}</button>}
-			<span>{formatted.json ? "JSON" : "Text"} · {t("toolLineCount", { n: lines.length })}{truncated ? ` · ${t("subagentTruncated")}` : ""}</span>
+			<span>{formatted.json ? "JSON" : "Text"} · {t("toolLineCount", { n: lines.length })}{truncated ? ` · ${t("toolOutputTruncated")}` : ""}</span>
 		</footer>
 	</section>;
 }

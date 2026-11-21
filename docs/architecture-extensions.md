@@ -1,6 +1,6 @@
 # Extensions 原生包管理
 
-Design First 的 M1 指导资源随应用放在 `assets/skills/design-first/`，普通会话通过原生 Prompt Templates 提供 `/design`、`/bug-fix` 和 `/feat`，不注册原生 Skill 或旧命令别名。沿用当前模型及原生工具，确认属于工作流约定。`<dataDir>/design-first.json` 的 enabled 缺省 true，显式 false 保留；开关在新会话或 reload 后生效。同名用户资源保留原生优先级，损坏配置仅移除内置命令并报告诊断。Wiki、节点、子代理和 Playground 不注入这些资源。使用与交付范围见 [Design First Skill](design-first-skill.md)。
+Design First 的 M1 指导资源随应用放在 `assets/skills/design-first/`，普通会话通过原生 Prompt Templates 提供 `/design`、`/bug-fix` 和 `/feat`，不注册原生 Skill 或旧命令别名。沿用当前模型及原生工具，确认属于工作流约定。`<dataDir>/design-first.json` 的 enabled 缺省 true，显式 false 保留；开关在新会话或 reload 后生效。同名用户资源保留原生优先级，损坏配置仅移除内置命令并报告诊断。Wiki、节点和 Playground 不注入这些资源。使用与交付范围见 [Design First Skill](design-first-skill.md)。
 
 内置 Design First 卡片只列出当前实际归它所有的命令；用户 Extension 或同名 Prompt Template 占用 `/design` 时从清单移除，显示冲突并禁用“在聊天中准备设计需求”。移除冲突并重载后恢复，执行顺序仍沿用原生规则。
 
@@ -22,7 +22,7 @@ Design First 的 M1 指导资源随应用放在 `assets/skills/design-first/`，
 
 ## 内置扩展清单
 
-已安装页按内置扩展、安装包、单文件分组。六个内置条目由 `nativeExtensionRegistry` 与会话资源共同投影；包页签数量只统计安装包。内置清单独立请求，即使包 worker 失败仍能展示；不提供包更新、卸载或源码编辑。Workspace 子代理默认开启，独立全局开关与只读分工规则见 [子代理架构](architecture-subagents.md)，工具可被用户同名扩展替换。
+已安装页按内置扩展、安装包、单文件分组。五个内置条目由 `nativeExtensionRegistry` 与会话资源共同投影；包页签数量只统计安装包。内置清单独立请求，即使包 worker 失败仍能展示；不提供包更新、卸载或源码编辑。
 
 `/api/extensions` 的 `builtin-list`、`builtin-toggle` 都绑定活动 conversationId，并沿用 cwd/clientId、同源与 quiesce 校验。清单读取已有资源，不执行工厂、不加载包。工具来源必须匹配具名 inline/builtin 路径；第三方同名工具显示冲突。状态区分加载、关闭、待生效、不可用和配置/加载失败，MCP 的加载状态不代表服务器连接成功。查看设置跳转已有 MCP/Codemode 页。
 

@@ -2,7 +2,6 @@
 
 ## 原生上下文边界
 
-Workspace 跨仓库与知识库分析通过内置 `subagent` 原生工具启动只读子会话，见 [子代理架构](architecture-subagents.md)。它由父模型显式调用、返回同一工具结果，不触发宿主自动续跑。发送目标可带 workspaceId，原生队列消费时绑定来源范围，不向用户消息插入范围说明或改变附件正文。
 
 会话由 pi 1.5.0 原版 SDK 创建。WebUI 只桥接用户输入、原生事件和界面交互；不覆盖原生 bash，不注入终端状态消息。原生配置文件、技能、用户扩展和官方 MCP/Codemode/tool_search 由 pi 加载。WebUI 设置支持显示偏好、界面插件可见性及原生配置管理；Extensions 管理用户明确选择的包；系统提示词页编辑用户选择的原生 SYSTEM/APPEND/上下文文件，空闲时原生 reload，下一次请求由 SDK 应用变化；来源、文件校验与运行中保存见 [系统提示词架构](architecture-system-prompt.md)。新会话、切换、恢复和重载共用同一个原生运行时工厂。历史 transcript 不会改写。
 
@@ -46,7 +45,6 @@ OpenAI 代理由 `server/openai-proxy.ts` 在服务启动时安装，默认关�
 
 SDK `tool_execution_update.partialResult` 是累计输出快照，服务端发送 `replace: true`，前端替换当前工具输出（包括空快照），避免重复拼接。`bash_execution_update` 才是真正的增量，保持追加。两条路径均保留浏览器输出长度上限。协议版本 22 要求旧前端刷新。
 
-协议 v47 起，`tool_delta` 可携带 `subagents` 结构化进度。服务端只从原生 `subagent` 工具提取白名单字段（sourceId、来源名、根目录、任务、阶段和当前 source 工具），最多 8 项并限制字符串长度，不透传扩展的任意 details 或完整子会话。`tool_execution_end` 清除当前工具动作，避免仍显示旧读取状态。普通文本增量省略该字段时保留已有进度，空数组则替换旧快照；生命周期及最终报告投影见 [子代理架构](architecture-subagents.md)。
 
 也带 `conversationId` + `seq`，与 message_delta 共享同一每对话单调序列（`conv.deltaSeq`）；前端按对话 Map 追踪 seq，仅活动对话缺口触发重同步（后台对话切回时 snapshot 收敛）。
 
@@ -56,7 +54,7 @@ SDK `tool_execution_update.partialResult` 是累计输出快照，服务端发�
 
 ## 全局缓存预热（Pi 1.5.2）
 
-`cache-warming.ts` 只调整原生全局 `cacheWarming` 的缺省读取：没有明确值时使用 `streaming`，显式 `off` / `streaming` / `idle` 保留；项目配置不能开启付费预热。界面通过 `set_cache_warming` 请求原生 SettingsManager 持久化，并串行同步普通、Wiki、后台及 SSH 的已加载会话；新创建与替换的会话也登记，dispose 时注销。子代理继续使用独立显式 `off`。原生 SDK 负责调度，宿主不增加预热模型请求。
+`cache-warming.ts` 只调整原生全局 `cacheWarming` 的缺省读取：没有明确值时使用 `streaming`，显式 `off` / `streaming` / `idle` 保留；项目配置不能开启付费预热。界面通过 `set_cache_warming` 请求原生 SettingsManager 持久化，并串行同步普通、Wiki、后台及 SSH 的已加载会话；新创建与替换的会话也登记，dispose 时注销。原生 SDK 负责调度，宿主不增加预热模型请求。
 
 快照 `runSettings.cacheWarming` 是全局模式，`stats.cacheWarming` 投影原生状态、原因、nextWarmAt 与本会话费用。费用只从原生 SessionManager 的 `usage/kind=cache_warm` 累计，范围与原生 `getSessionStats()` 一致，已包含在总费用中；不会写第二份账本或插入聊天记录。`entry_appended` 更新快照，但预热用量不能重置任务静默计时或伪造任务活动。输入框用量详情打开时，每 5 秒发送所属 conversationId 的 `get_cache_warming`；关闭、切会话或卸载即取消，隐藏页面不发送。
 
@@ -267,3 +265,8 @@ SDK started/queued 只证明当时接收，**不表示模型完成、transcript 
 模型来源自动同步（Pi / Claude Code / Codex / OpenCode）、内存凭据、独立副本和协议 51 见 [模型配置来源](architecture-model-sources.md)。
 
 `/new` 的成功回执可能晚于新原生 session 的快照。当前挂载的输入框发出该命令且回执确认 commandExecuted、请求原 sessionId 与运行中 conversationId 均匹配时，允许清除仍等于发送原文的命令草稿；后续新输入不清除。此例外不持久化，刷新恢复的旧回执仍遵守跨原生会话草稿保护。回归：`tests/new-session-draft-browser-test.mjs`（真实 `/new`、延迟回执、零模型调用）。
+
+
+## 移除 Workspace 调查扩展（协议 v61）
+
+内置 Workspace 调查扩展及专属进度、详情／停止消息已移除。历史会话文件不改写，原工具调用与结果由通用工具卡展示；第三方扩展的注册和 ACP 委派展示保留。升级后旧客户端按协议版本提示刷新。构建时清理已删除服务端源码的旧编译产物。

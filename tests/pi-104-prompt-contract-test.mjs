@@ -14,12 +14,10 @@ process.env.PI_WEB_DATA_DIR = root;
 mkdirSync(join(agentDir, 'skills/fixture'), { recursive: true });
 writeFileSync(join(agentDir, 'skills/fixture/SKILL.md'), '---\nname: fixture\ndescription: Native hidden-reader fixture\n---\nRead fixture instructions.');
 const scenarios = [
-	{ mode: 'on', defaultTools: ['+codemode'], subagent: true },
-	{ mode: 'only', defaultTools: ['+codemode'], subagent: true },
-	{ mode: 'on', defaultTools: ['+codemode'], subagent: true },
-	{ mode: 'only', defaultTools: ['+codemode', '-subagent'], subagent: false },
-	{ mode: 'only', defaultTools: ['codemode'], subagent: false, skills: false },
-	{ mode: 'only', defaultTools: ['+codemode'], enabled: false, subagent: false },
+	{ mode: 'on', defaultTools: ['+codemode'] },
+	{ mode: 'only', defaultTools: ['+codemode'] },
+	{ mode: 'on', defaultTools: ['+codemode'] },
+	{ mode: 'only', defaultTools: ['codemode'], skills: false },
 ];
 let session, scenario, failure, calls = 0;
 const server = createServer(async (req, res) => {
@@ -39,11 +37,10 @@ const server = createServer(async (req, res) => {
 		assert.equal(/^- bash:/m.test(tools), scenario.mode === 'on');
 		assert.equal(view.rules.some(rule => rule.text === 'Use bash for file operations like ls, rg, find'), scenario.mode === 'on');
 		const names = request.tools.map(t => t.function.name);
-		if (scenario.mode === 'only') assert.deepEqual(names.sort(), scenario.subagent ? ['codemode', 'subagent'] : ['codemode']);
+		if (scenario.mode === 'only') assert.deepEqual(names.sort(), ['codemode']);
 		else assert(names.includes('read'));
-		assert.equal(names.includes('subagent'), scenario.subagent, 'model-only tools follow activation settings in either Codemode mode');
-		assert.equal(/^- subagent:/m.test(tools), scenario.subagent, 'WebUI tool section matches model-only tool visibility');
-		assert.equal(session.getCallableToolNames().includes('subagent'), false, 'subagent must never be callable inside Codemode');
+		assert(!names.includes('subagent'), 'retired host extension is absent');
+		assert(!/^- subagent:/m.test(tools), 'retired tool is absent from the prompt');
 		calls++;
 	} catch (error) { failure = error; }
 	res.writeHead(200, { 'content-type': 'text/event-stream' });
@@ -54,10 +51,8 @@ try {
 	await new Promise(r => server.listen(0, '127.0.0.1', r)); assert(server.address().port >= 8900);
 	writeFileSync(join(agentDir, 'models.json'), JSON.stringify({ providers: { fixture: { api: 'openai-completions', baseUrl: `http://127.0.0.1:${server.address().port}`, apiKey: 'fixture', models: [{ id: 'fixture', input: ['text'], contextWindow: 32000, maxTokens: 100 }] } } }));
 	for (scenario of scenarios) {
-		if (scenario.enabled === undefined) rmSync(join(root, 'subagents.json'), { force: true });
-		else writeFileSync(join(root, 'subagents.json'), JSON.stringify({ enabled: scenario.enabled }));
 		const settingsManager = SettingsManager.inMemory({ defaultProvider: 'fixture', defaultModel: 'fixture', defaultTools: scenario.defaultTools, codemode: { mode: scenario.mode }, retry: { enabled: false } });
-		const resourceLoader = new DefaultResourceLoader({ cwd: root, agentDir, settingsManager, extensionFactories: nativeToolExtensions(undefined, undefined, () => settingsManager.getSettings().defaultTools) }); await resourceLoader.reload();
+		const resourceLoader = new DefaultResourceLoader({ cwd: root, agentDir, settingsManager, extensionFactories: nativeToolExtensions() }); await resourceLoader.reload();
 		({ session } = await createAgentSession({ cwd: root, agentDir, settingsManager, resourceLoader, sessionManager: SessionManager.inMemory(root) }));
 		await session.bindExtensions({ mode: 'rpc' });
 		try { await session.prompt('Check native visibility'); if (failure) throw failure; } finally { session.dispose(); session = undefined; }

@@ -38,7 +38,6 @@ const ALL = [
 	"project-new-chat-test",
 	"shared-workspaces-test",
 	"builtin-extensions-test",
-	"subagents-test",
 	"context-corpus-test",
 	"context-eval-test",
 	"context-session-test",

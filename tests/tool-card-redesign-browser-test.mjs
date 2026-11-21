@@ -9,6 +9,7 @@ try {
 	browser = await chromium.launch({executablePath:CHROME_PATH});
 	const page = await browser.newPage({viewport:{width:1440,height:1000}});
 	const output = JSON.stringify({workspace:{id:'fixture',name:'pi-harness'},sources:Array.from({length:8},(_,i)=>({id:`repo:${i}`,name:`Repository ${i}`}))});
+	// Retired host tools remain readable as generic cards in old transcripts.
 	const messages = [{id:'u',role:'user',timestamp:1,content:[{type:'text',text:'分析项目来源'}]},{id:'a',role:'assistant',timestamp:2,content:[{type:'toolCall',id:'sources',name:'subagent',argumentsText:'{"action":"sources"}'}]},{id:'r',role:'toolResult',toolCallId:'sources',toolName:'subagent',timestamp:3,durationMs:50,content:[{type:'text',text:output}]}];
 	let base;
 	await page.routeWebSocket(/\/ws(?:\?|$)/,route=>{const upstream=route.connectToServer();route.onMessage(w=>upstream.send(w));upstream.onMessage(w=>{const m=JSON.parse(String(w));if(m.type==='snapshot'||m.type==='snapshot_delta'){base={...base,...m.state};route.send(JSON.stringify({type:'snapshot',state:{...base,piConfigured:true,isStreaming:false,messages,streamingMessage:null,taskProgress:null}}));}else route.send(w);});});

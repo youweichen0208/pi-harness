@@ -170,7 +170,7 @@ describe("bundled Design First resources", () => {
 		expect(loader.getPrompts().prompts[0].content.trim()).toBe(userContent);
 	});
 
-	it.each(["wiki", "node", "subagent", "playground"] as const)("does not inject into %s even when enabled", async kind => {
+	it.each(["wiki", "node", "playground"] as const)("does not inject into %s even when enabled", async kind => {
 		const root = temporary();
 		const loader = new DefaultResourceLoader({ cwd: root, agentDir: root,
 			settingsManager: SettingsManager.inMemory(), noExtensions: true, noSkills: true,

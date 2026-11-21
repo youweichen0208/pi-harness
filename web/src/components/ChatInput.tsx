@@ -1,5 +1,4 @@
 import { copyText } from "../clipboard";
-import { selectedProjectWorkspace } from "../project-workspaces";
 import { getClientId } from "../use-chat";
 import type { WikiCoordinator } from "../wiki-coordinator";
 import { UiIcon } from "./UiIcon";
@@ -258,21 +257,6 @@ export const ChatInput = memo(function ChatInput({
 	 *  the whole viewport, so it must measure the chat column to match. */
 	const [helpWidth, setHelpWidth] = useState<number | undefined>(undefined);
 	const taRef = useRef<HTMLTextAreaElement>(null);
-	useEffect(() => {
-		const prepareRetry = (event: Event) => {
-			if (!active || !taRef.current?.getClientRects().length) return;
-			const value = (event as CustomEvent<{ text?: string }>).detail?.text;
-			if (typeof value !== "string" || !value.trim()) return;
-			setText(previous => previous ? `${previous}\n\n${value}` : value);
-			taRef.current.focus({ preventScroll: true });
-		};
-		window.addEventListener("pi-harness:prepare-subagent-retry", prepareRetry);
-		window.addEventListener("pi-harness:prepare-subagent-question", prepareRetry);
-		return () => {
-			window.removeEventListener("pi-harness:prepare-subagent-retry", prepareRetry);
-			window.removeEventListener("pi-harness:prepare-subagent-question", prepareRetry);
-		};
-	}, [active, activeConversationId]);
 	const consumedReferences = useRef(new Set<string>());
 	useEffect(() => {
 		const request = takeChatReference(referenceRequest, cwd, activeConversationId, consumedReferences.current);
@@ -487,7 +471,6 @@ export const ChatInput = memo(function ChatInput({
 		// which the server delivers as followUp instead — the prompt is sent
 		// only after the WHOLE run finishes ("AI 生成结束才发送").
 		const selectedProject = wikiProject;
-		const analysisWorkspaceId = selectedProjectWorkspace();
 		const selectedReferences = wikiReferences ? [...wikiReferences] : [];
 		const deliverPrompt = () => {
 			if (!mounted.current || (coordinator && !sendLease.current?.current())) return;
@@ -512,7 +495,7 @@ export const ChatInput = memo(function ChatInput({
 			if (!/^[\/!]/.test(trimmed)) {
 				if (selectedProject) promptText += "\n\n" + t("wikiProjectPrompt", { workspace: selectedProject.workspaceName, path: JSON.stringify(selectedProject.path) });
 			}
-			if (send({ type: "prompt", target: sessionId ? { cwd, conversationId: activeConversationId, sessionId, workspaceId: analysisWorkspaceId } : undefined, text: promptText, queue, requestId, attachments: outgoing })) {
+			if (send({ type: "prompt", target: sessionId ? { cwd, conversationId: activeConversationId, sessionId } : undefined, text: promptText, queue, requestId, attachments: outgoing })) {
 				pendingSubmit.current = { id: requestId, sessionId, conversation: activeConversationId, text, queued: streaming, newSessionCommand: /^\/new(?:\s|$)/.test(trimmed), attachments };
 				try { sessionStorage.setItem(pendingKey, JSON.stringify({ id: requestId, sessionId, conversation: activeConversationId, text, queued: streaming })); } catch { /* Live connection still tracks the receipt. */ }
 				setSubmissionEpoch(value => value + 1);

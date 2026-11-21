@@ -1,10 +1,9 @@
-import type { ServerMessage, UiCodemodeDetails, UiSubagentProgress } from "../../server/protocol.js";
+import type { ServerMessage, UiCodemodeDetails } from "../../server/protocol.js";
 
 export interface LiveToolOutput {
 	toolName: string;
 	text: string;
 	codemode?: UiCodemodeDetails;
-	subagents?: UiSubagentProgress[];
 }
 
 type OutputUpdate = Pick<Extract<ServerMessage, { type: "tool_delta" }>, "delta" | "replace">;

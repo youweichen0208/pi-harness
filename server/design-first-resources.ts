@@ -8,7 +8,7 @@ import { writeFileAtomic } from "./private-file.js";
 
 type DefaultResourceLoaderOptions = ConstructorParameters<typeof DefaultResourceLoader>[0];
 
-export type DesignFirstSessionKind = "normal" | "wiki" | "node" | "subagent" | "playground";
+export type DesignFirstSessionKind = "normal" | "wiki" | "node" | "playground";
 
 export function designFirstSettings(dataDir = documentDataDir()): { enabled: boolean; version: string } {
 	let enabled = true;

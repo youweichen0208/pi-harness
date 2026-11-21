@@ -1,7 +1,6 @@
 import { createDatabaseExtension } from "./database/extension.js";
 import { cacheWarmingSettings } from "./cache-warming.js";
 import type { BuiltinExtensionId } from "./protocol.js";
-import { createSubagentExtension, type SubagentHost } from "./subagents/extension.js";
 import { SettingsManager, createCodemodeExtension, createMcpExtension, createToolSearchExtension, type InlineExtension, type ExtensionFactory } from "@earendil-works/pi-coding-agent";
 
 const runOverrides = new WeakMap<SettingsManager, { compaction?: { enabled: boolean }; retry?: { enabled: boolean } }>();
@@ -25,7 +24,6 @@ export function conversationSettings(cwd: string, agentDir: string): SettingsMan
 
 /** Shared by resource loading and the built-in extension inventory. */
 export const nativeExtensionRegistry = [
-	{ name: "pi-harness-subagents", replaceable: true, factory: createSubagentExtension },
 	{ name: "pi-harness-database", replaceable: true, factory: createDatabaseExtension },
 	{ name: "codemode", builtin: true, replaceable: true, factory: createCodemodeExtension },
 	{ name: "tool-search", builtin: true, replaceable: true, factory: createToolSearchExtension },
@@ -33,8 +31,8 @@ export const nativeExtensionRegistry = [
 ] satisfies { name: BuiltinExtensionId; builtin?: boolean; replaceable: boolean; factory: () => ExtensionFactory }[];
 
 /** Same native extensions as the Pi CLI; activation follows the user's settings. */
-export function nativeToolExtensions(databaseScope?: () => string, subagentHost?: () => SubagentHost | undefined, subagentDefaultTools?: () => unknown): InlineExtension[] {
-	return nativeExtensionRegistry.map(extension => ({ ...extension, factory: extension.name === "pi-harness-database" ? createDatabaseExtension(databaseScope) : extension.name === "pi-harness-subagents" ? createSubagentExtension(subagentHost, subagentDefaultTools) : extension.factory() }));
+export function nativeToolExtensions(databaseScope?: () => string): InlineExtension[] {
+	return nativeExtensionRegistry.map(extension => ({ ...extension, factory: extension.name === "pi-harness-database" ? createDatabaseExtension(databaseScope) : extension.factory() }));
 }
 
 /** Stable settings aliases for the SDK's named inline extension paths. */

@@ -63,52 +63,6 @@ export interface UiCodemodeDetails {
 	fullOutputPath?: string;
 }
 
-export interface UiSubagentStep {
-	sourceId?: string;
-	id: string;
-	tool: "source_list" | "source_search" | "source_read" | "source_report";
-	target?: string;
-	status: "running" | "completed" | "failed" | "cancelled";
-	durationMs?: number;
-}
-
-export interface UiSubagentProgress {
-	taskIndex?: number;
-	taskId?: string;
-	title?: string;
-	sources?: { id: string; name: string; root: string; kind: "repository" | "knowledge" }[];
-	startedAt?: number;
-	durationMs?: number;
-	steps?: UiSubagentStep[];
-	sourceId: string;
-	source: string;
-	root: string;
-	task: string;
-	phase: "queued" | "running" | "stopping" | "completed" | "failed" | "cancelled";
-	tool?: "source_list" | "source_search" | "source_read" | "source_report";
-}
-
-export interface UiSubagentEvent {
-	seq: number;
-	type: "tool_start" | "tool_end" | "answer";
-	at: number;
-	toolCallId?: string;
-	tool?: string;
-	text: string;
-	isError?: boolean;
-	truncated?: boolean;
-}
-export interface UiSubagentTaskDetail {
-	task: UiSubagentProgress;
-	events: UiSubagentEvent[];
-	nextCursor?: number;
-	truncated: boolean;
-	/** Bounded final report, fetched only on demand. */
-	resultText?: string;
-}
-export type SubagentRequest = { type: "subagent_request"; requestId: string; conversationId: string; taskId: string; action: "detail" | "stop"; cursor?: number };
-export type SubagentResponse = { type: "subagent_response"; requestId: string; conversationId: string; taskId: string; detail?: UiSubagentTaskDetail; error?: string };
-
 export interface UiNestedToolCall {
 	id: string;
 	name: string;
@@ -173,8 +127,6 @@ export type TreeResponse =
 	| { type: "tree_navigate_result"; conversationId: string; reqId: string; status: "ok" | "cancelled" | "aborted" | "busy" | "error"; editorText?: string; restoredQueue?: { steering: string[]; followUp: string[]; images?: { data: string; mimeType: string }[] }; error?: string };
 
 export interface UiMessage {
-	/** Bounded persisted subagent execution metadata, independent of report text truncation. */
-	subagents?: UiSubagentProgress[];
 	origin?: "auto-reminder" | "auto-recovery";
 	autoRecovery?: { reason: "repetition" | "length"; attempt: number; limit: number };
 	toolText?: { incidentId: string; attempt: number };
@@ -290,7 +242,6 @@ export interface UiRunRecovery {
 }
 
 export interface UiState {
-	subagentTasks?: { toolCallId: string; tasks: UiSubagentProgress[] }[];
 	tree?: UiTreeState;
 	recovery?: UiRecovery;
 	runRecovery?: UiRunRecovery | null;
@@ -467,7 +418,6 @@ export type PromptResult = { type: "prompt_result"; requestId: string; ok: boole
 
 export type ClientMessage =
 	| PlaygroundChatRequest
-	| SubagentRequest
 	| { type: "recall_queue"; conversationId: string; requestId: string }
 	| { type: "queue_recall_ack"; conversationId: string; requestId: string }
 	| TreeRequest
@@ -479,7 +429,7 @@ export type ClientMessage =
 	| { type: "query_prompt_receipt"; requestId: string }
 	| {
 			type: "prompt";
-			target?: { cwd: string; conversationId: string; sessionId: string; workspaceId?: string };
+			target?: { cwd: string; conversationId: string; sessionId: string };
 			requestId?: string;
 			text: string;
 			/**
@@ -1079,7 +1029,6 @@ export interface UiSettingsState {
 }
 export type ServerMessage =
 	| PlaygroundChatEvent
-	| SubagentResponse
 	| { type: "queue_recalled"; conversationId: string; requestId: string; text: string; images: { data: string; mimeType: string }[] }
 	| TreeResponse
 	| { type: "native_mcp_result"; requestId: string; cwd: string; state?: NativeMcpConfigState; error?: string; pending?: boolean; tools?: string[]; toolInfo?: NativeMcpTool[]; servers?: NativeMcpServerStatus[]; statusText?: string; codemode?: NativeCodemodeSettings; log?: string }
@@ -1125,7 +1074,6 @@ export type ServerMessage =
 	| {
 			type: "tool_delta";
 			codemode?: UiCodemodeDetails;
-			subagents?: UiSubagentProgress[];
 			parentToolCallId?: string;
 			conversationId: string;
 			/** Per-conversation monotonic sequence, shared with message_delta —
@@ -1498,7 +1446,7 @@ export interface ExtensionPackage {
 }
 export interface ExtensionsState { packages: ExtensionPackage[]; version: string; trusted: boolean; checkedAt?: number; autoCheck?: boolean; updateResults?: ExtensionUpdateResult[]; }
 
-export type BuiltinExtensionId = "pi-harness-design-first" | "pi-harness-database" | "pi-harness-subagents" | "codemode" | "tool-search" | "mcp";
+export type BuiltinExtensionId = "pi-harness-design-first" | "pi-harness-database" | "codemode" | "tool-search" | "mcp";
 export interface BuiltinExtensionState {
 	id: BuiltinExtensionId;
 	settingsVersion?: string;
@@ -1517,7 +1465,7 @@ export interface BuiltinExtensionsState {
 }
 export type BuiltinExtensionsRequest =
 	| { action: "builtin-list"; conversationId: string }
-	| { action: "builtin-toggle"; conversationId: string; id: "pi-harness-design-first" | "pi-harness-database" | "pi-harness-subagents"; enabled: boolean; version: string };
+	| { action: "builtin-toggle"; conversationId: string; id: "pi-harness-design-first" | "pi-harness-database"; enabled: boolean; version: string };
 export interface ExtensionCatalogItem { name: string; description: string; descriptionZh?: string; version?: string; author?: string; downloads?: number; date?: number; types: string[]; image?: string; url: string; repository?: string; }
 export interface ExtensionCatalog { items: ExtensionCatalogItem[]; page: number; pages: number; total?: number; }
 export interface ExtensionPackageDetails { source: string; name: string; version?: string; description?: string; author?: string; repository?: string; license?: string; resources: Record<string, string[]>; canPin: boolean; }

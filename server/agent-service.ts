@@ -1,11 +1,8 @@
-import { inheritedTaskDetail } from "./subagents/history.js";
 import { designFirstResources } from "./design-first-resources.js";
 import { bindCacheWarming, cacheWarmingView, setGlobalCacheWarming } from "./cache-warming.js";
 import { CodemodeHistory } from "./codemode-history.js";
 import { withOutputTokenFloor } from "./model-output-floor.js";
 import { modelConfigurationChanged, modelSourcesFor, type ModelSourceSync } from "./model-source-sync.js";
-import { taskDetail, recoverTaskSummaries, taskSummaries } from "./subagents/tasks.js";
-import type { SubagentRequest } from "./protocol.js";
 import { WikiConversations } from "./wiki-conversations.js";
 import { promptReceiptsFor } from "./prompt-receipts.js";
 import type { PromptResult } from "./protocol.js";
@@ -14,7 +11,6 @@ import { WikiChatStore } from "./wiki-chat-store.js";
 import { isSelectableProvider } from "./provider-catalog.js";
 import { modelMatchesEndpoint } from "./model-endpoint-availability.js";
 import { databaseScope } from "./database/service.js";
-import { getSubagentWorkspace } from "./subagents/scope.js";
 import { reloadSession } from "./session-reload.js";
 import { bumpExtensionModuleCache, registerExtensionModuleScope } from "./extension-module-cache.js";
 import { resolveNativeAttachments } from "./user-attachments.js";
@@ -33,7 +29,6 @@ import { nativeToolDetails, toolExitCode } from "./serialize.js";
 import { flushPromptReload, getSystemPromptState, promptReloadStatus, promptUsesFile, queuePromptReload, writeSystemPromptFile } from "./system-prompt-files.js";
 import { parseNativeMcpStatus } from "./native-mcp-presentation.js";
 import { codemodeDetails } from "./codemode-presentation.js";
-import { subagentProgressDetails } from "./subagent-presentation.js";
 import { NativeMcpConfigService } from "./native-mcp-config.js";
 
 import type { ClientMessage } from "./protocol.js";
@@ -614,7 +609,6 @@ export class ClientSession {
 	 */
 	private makeRuntimeFactory(refreshResources = false, state?: Pick<AgentSession, "model" | "thinkingLevel">, wiki = false): CreateAgentSessionRuntimeFactory {
 		return async ({ cwd, sessionManager }) => {
-			let subagentParent: AgentSession | undefined;
 			// 注册该工作区的扩展代码目录，使 /restart 与 reload 能刷新其模块缓存（issue #64）。
 			registerExtensionModuleScope(join(this.agentDir, "extensions"));
 			registerExtensionModuleScope(join(this.agentDir, "npm"));
@@ -626,7 +620,7 @@ export class ClientSession {
 				agentDir: this.agentDir,
 				modelRuntime: this.sharedModelRuntime,
 				settingsManager: settings,
-				resourceLoaderOptions: { ...designFirstResources(wiki ? "wiki" : "normal", this.stateStore.dataDir), extensionFactories: nativeToolExtensions(() => databaseScope(this.clientId, cwd, sessionManager), () => subagentParent ? { session: subagentParent, agentDir: this.agentDir, workspaceId: getSubagentWorkspace(sessionManager) } : undefined, () => settings.getSettings().defaultTools) },
+				resourceLoaderOptions: { ...designFirstResources(wiki ? "wiki" : "normal", this.stateStore.dataDir), extensionFactories: nativeToolExtensions(() => databaseScope(this.clientId, cwd, sessionManager)) },
 			});
 			services.modelRuntime = withOutputTokenFloor(services.modelRuntime);
 			if (!this.sources) {
@@ -638,8 +632,6 @@ export class ClientSession {
 			// A second native reload invalidates the process-wide extension factory cache.
 			if (refreshResources) { await services.resourceLoader.reload(); refreshResources = false; }
 			const created = await createAgentSessionFromServices({ services, sessionManager, model: state?.model, thinkingLevel: state?.thinkingLevel });
-			subagentParent = created.session;
-			await recoverTaskSummaries(created.session.sessionManager.getSessionId());
 			return { ...created, services, diagnostics: services.diagnostics };
 		};
 	}
@@ -999,8 +991,7 @@ export class ClientSession {
 				const details = (event.partialResult as { details?: unknown })?.details;
 				const codemode = event.toolName === "codemode" ? codemodeDetails(details) : undefined;
 				if (codemode) (conv.codemodeHistory ??= new CodemodeHistory()).live.set(event.toolCallId, codemode);
-				const subagents = event.toolName === "subagent" ? subagentProgressDetails(details) : undefined;
-				if (update || codemode || subagents) {
+				if (update || codemode) {
 					this.emit({
 						type: "tool_delta",
 						parentToolCallId: event.parentToolCallId,
@@ -1011,7 +1002,6 @@ export class ClientSession {
 						delta: "",
 						...update,
 						codemode,
-						subagents,
 					});
 				}
 				break;
@@ -1281,9 +1271,18 @@ export class ClientSession {
 			// it here is what makes thinking + text stream into the browser at
 			// ~60ms granularity instead of appearing only when the turn finishes.
 			streamingMessage,
-			subagentTasks: taskSummaries(conv.session.sessionManager.getSessionId(), new Set(messages.flatMap(message => message.content.flatMap(block => block.type === "toolCall" && block.name === "subagent" ? [block.id as string] : []))), new Set(messages.flatMap(message => message.role === "toolResult" && message.toolCallId ? [message.toolCallId] : []))),
-			codemode: (conv.codemodeHistory ??= new CodemodeHistory()).snapshot(conv.session.sessionManager, (message, entryId) => this.serializeCached(message, entryId)),
-			taskProgress: deriveTaskProgress(conv.id, messages, streamingMessage, conv.session.isStreaming || !!conv.runRecovery?.pending, conv.lastTaskEndedAt),
+			codemode: (() => {
+				const tc = this.timings.enabled ? performance.now() : -1;
+				const value = (conv.codemodeHistory ??= new CodemodeHistory()).snapshot(conv.session.sessionManager, (message, entryId) => this.serializeCached(message, entryId));
+				if (tc >= 0) this.timings.add("light_rest", performance.now() - tc);
+				return value;
+			})(),
+			taskProgress: (() => {
+				const tp = this.timings.enabled ? performance.now() : -1;
+				const value = deriveTaskProgress(conv.id, messages, streamingMessage, conv.session.isStreaming || !!conv.runRecovery?.pending, conv.lastTaskEndedAt);
+				if (tp >= 0) this.timings.add("light_rest", performance.now() - tp);
+				return value;
+			})(),
 			isStreaming: this.session.isStreaming,
 			wiki: !!conv.wiki,
 			recovery: recoverySnapshot(conv.recovery),
@@ -1379,28 +1378,7 @@ export class ClientSession {
 		else if (compaction?.id === operationId) conv.session.abortCompaction();
 		else if (retry?.id === operationId) conv.session.abortRetry();
 	}
-	async subagentRequest(message: SubagentRequest): Promise<void> {
-		try {
-			const conv = this.convs.get(message.conversationId);
-			if (!conv) throw Error("Conversation is not available");
-			const session = conv.session;
-			const leaf = session.sessionManager.getLeafId();
-			const allowed = new Set(session.messages.flatMap(entry => entry.role === "assistant" ? entry.content.flatMap(block => block.type === "toolCall" && block.name === "subagent" ? [block.id] : []) : []));
-			if (message.action !== "detail" && message.action !== "stop") throw Error("Invalid subagent action");
-			let detail;
-			try { detail = await taskDetail(session.sessionManager.getSessionId(), message.taskId, allowed, message.cursor); }
-			catch (error) {
-				if (message.action !== "detail" || (error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-				detail = await inheritedTaskDetail(session.sessionManager, message.taskId, message.cursor);
-			}
-			const currentCalls = new Set(session.messages.flatMap(entry => entry.role === "assistant" ? entry.content.flatMap(block => block.type === "toolCall" && block.name === "subagent" ? [block.id] : []) : []));
-			if (session.sessionManager.getLeafId() !== leaf || this.convs.get(message.conversationId)?.session !== session || [...allowed].some(id => !currentCalls.has(id))) throw Error("Conversation changed");
-			if (message.action === "stop") detail = await taskDetail(session.sessionManager.getSessionId(), message.taskId, currentCalls, message.cursor, true);
-			this.emit({ type: "subagent_response", requestId: message.requestId, conversationId: message.conversationId, taskId: message.taskId, detail });
-		} catch (error) {
-			this.emit({ type: "subagent_response", requestId: message.requestId, conversationId: message.conversationId, taskId: message.taskId, error: String(error) });
-		}
-	}
+
 
 	async treeRequest(message: TreeRequest): Promise<void> {
 		if (this.openingHistory) { this.emit({ type: "tree_navigate_result", conversationId: message.conversationId, reqId: message.reqId, status: "busy" }); return; }
@@ -1722,8 +1700,8 @@ export class ClientSession {
 	}
 
 	/** All transports enter here; claim before attachment, extension or command effects. */
-	async prompt(text: string, attachments?: PromptAttachment[], queue = false, requestId?: string, onAccepted?: (ok: boolean) => void, target?: { cwd: string; conversationId: string; sessionId: string; workspaceId?: string }): Promise<void> {
-		if (requestId === undefined) { await this.deliverAcceptedPrompt(text, attachments, queue, undefined, onAccepted, undefined, target?.workspaceId); return; }
+	async prompt(text: string, attachments?: PromptAttachment[], queue = false, requestId?: string, onAccepted?: (ok: boolean) => void, target?: { cwd: string; conversationId: string; sessionId: string }): Promise<void> {
+		if (requestId === undefined) { await this.deliverAcceptedPrompt(text, attachments, queue, undefined, onAccepted, undefined); return; }
 		const store = promptReceiptsFor(this.stateStore.dataDir);
 		const emit = (result: PromptResult) => { this.emit(result); onAccepted?.(result.ok); };
 		try {
@@ -1733,7 +1711,7 @@ export class ClientSession {
 			if (this.switchingWorkspace || (target && (target.cwd !== this.cwd || target.conversationId !== this.conversationId || target.sessionId !== this.session.sessionId))) {
 				acknowledge({ type: "prompt_result", requestId, ok: false, receipt: "rejected" }); return;
 			}
-			await this.deliverAcceptedPrompt(text, attachments, queue, requestId, undefined, acknowledge, target?.workspaceId);
+			await this.deliverAcceptedPrompt(text, attachments, queue, requestId, undefined, acknowledge);
 		} catch (error) {
 			emit({ type: "prompt_result", requestId, ok: false, receipt: "unknown" });
 			this.emit({ type: "notice", level: "error", text: `发送回执不可用：${(error as Error).message}` });
@@ -1753,7 +1731,6 @@ export class ClientSession {
 		requestId?: string,
 		onAccepted?: (ok: boolean) => void,
 		onReceipt?: (result: PromptResult) => void,
-		workspaceId?: string,
 	): Promise<void> {
 		const conv = this.conv;
 		const receiptSessionId = conv.session.sessionId;
@@ -1837,7 +1814,7 @@ export class ClientSession {
 			if (!s.isStreaming) { conv.toolsExecutedSincePrompt = false; conv.lastTaskEndedAt = undefined; }
 			conv.toolTextContinues = 0;
 				sideEffectsStarted = true;
-			await deliverPrompt(s, text, asides, queue, acknowledge, workspaceId);
+			await deliverPrompt(s, text, asides, queue, acknowledge);
 		} catch (err) {
 			acknowledge(false);
 			this.emit({
@@ -1905,10 +1882,9 @@ export class ClientSession {
 		if (!user || user.role !== "user") return;
 		const original = typeof user.content === "string" ? user.content : user.content.every(b => b.type === "text") ? user.content.map(b => b.type === "text" ? b.text : "").join("\n") : undefined;
 		if (original !== text) return;
-		const workspaceId = getSubagentWorkspace(conv.session.sessionManager);
 		await this.abort();
 		if (this.conv !== conv || isRecovering(conv.recovery) || conv.toolsExecutedSincePrompt || conv.session.messages.findLast(m => m.role === "user")?.timestamp !== user.timestamp) return;
-		await this.prompt(text, undefined, false, undefined, undefined, { cwd: conv.cwd, conversationId: conv.id, sessionId: conv.session.sessionId, workspaceId });
+		await this.prompt(text, undefined, false, undefined, undefined, { cwd: conv.cwd, conversationId: conv.id, sessionId: conv.session.sessionId });
 	}
 
 	/**
@@ -1937,7 +1913,7 @@ export class ClientSession {
 		conv.toolRanSinceContinue = false;
 		try {
 			if (conv.session !== session || session.isStreaming || conv.rebuilding) return;
-			await deliverPrompt(session, TOOL_TEXT_CONTINUE_PROMPT, [], false, () => {}, getSubagentWorkspace(session.sessionManager));
+			await deliverPrompt(session, TOOL_TEXT_CONTINUE_PROMPT, [], false, () => {});
 		} catch (error) {
 			this.emit({ type: "notice", level: "error", conversationId: conv.id, text: `自动继续失败：${(error as Error).message}` });
 		}

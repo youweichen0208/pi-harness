@@ -83,7 +83,9 @@ try {
 		const after = item(await request(wiki, "builtin-list"), "pi-harness-design-first");
 		assert.equal(after.reason, "filtered"); assert.deepEqual(after.commands, [], `Wiki ${command} must not inject Skill`);
 	}
-	const state = await request(a, "builtin-list"); assert.equal(state.items.length, 6);
+	const state = await request(a, "builtin-list"); assert.equal(state.items.length, 5);
+	assert.equal(item(state, "pi-harness-subagents"), undefined);
+	assert.match((await request(a, "builtin-toggle", { id: "pi-harness-subagents", enabled: true, version: state.documentVersion }, 400)).error, /Invalid/);
 	assert.equal(item(state, "pi-harness-design-first").status, "loaded");
 	assert.deepEqual(item(state, "pi-harness-design-first").commands, ["design", "bug-fix", "feat"]);
 	await toggle(a, "pi-harness-design-first", false);
@@ -96,11 +98,6 @@ try {
 	await toggle(a, "pi-harness-design-first", true);
 	a.send({ type: "extensions_reload" });
 	await wait(async () => item(await request(a, "builtin-list"), "pi-harness-design-first").status === "loaded", "Design First enabled after reload");
-	assert.equal(item(state, "pi-harness-subagents").status, "loaded");
-	await toggle(a, "pi-harness-subagents", false);
-	assert.equal(item(await request(b, "builtin-list"), "pi-harness-subagents").status, "disabled");
-	assert.match((await request(a, "builtin-toggle", { id: "pi-harness-subagents", enabled: true, version: item(state, "pi-harness-subagents").settingsVersion }, 400)).error, /changed/);
-	await toggle(a, "pi-harness-subagents", true);
 	assert.equal(item(state, "pi-harness-pdf-markdown"), undefined);
 	assert.match((await request(a, "builtin-toggle", { id: "pi-harness-pdf-markdown", enabled: true, version: state.documentVersion }, 400)).error, /Invalid/);
 	assert.equal(item(state, "pi-harness-database").status, "loaded");
@@ -192,7 +189,7 @@ try {
 	const c = await connect("builtin-c"); assert.equal(item(await request(c, "builtin-list"), "pi-harness-database").status, "loaded");
 	const saved = readFileSync(join(data, "document-extensions.json"), "utf8");
 	writeFileSync(join(data, "document-extensions.json"), "broken-json");
-	const broken = await request(a, "builtin-list"); assert.equal(broken.items.length, 6); assert.equal(item(broken, "pi-harness-database").status, "error"); assert.equal(item(broken, "codemode").status, "loaded");
+	const broken = await request(a, "builtin-list"); assert.equal(broken.items.length, 5); assert.equal(item(broken, "pi-harness-database").status, "error"); assert.equal(item(broken, "codemode").status, "loaded");
 	writeFileSync(join(data, "document-extensions.json"), saved);
 	console.log("PASS built-in inventory, removed conversion/OKF, version conflicts, cross-client settings, disabled calls and new chat/reload");
 
@@ -214,7 +211,8 @@ try {
 		}
 		await openSettings();
 		const panel = page.locator(".builtin-extensions"), database = panel.locator('[data-builtin-id="pi-harness-database"]');
-		assert.equal(await panel.locator(".builtin-row").count(), 6);
+		assert.equal(await panel.locator(".builtin-row").count(), 5);
+		assert.equal(await panel.locator('[data-builtin-id="pi-harness-subagents"]').count(), 0);
 		const design = panel.locator('[data-builtin-id="pi-harness-design-first"]');
 		await design.getByRole("switch").click();
 		await wait(() => JSON.parse(readFileSync(join(data, "design-first.json"), "utf8")).enabled === false, "Design First off in Extensions");
@@ -237,9 +235,6 @@ try {
 		await design.getByRole("button", { name: "在聊天中准备设计需求", exact: true }).click();
 		assert.equal(await composer.inputValue(), "/design 保留现有需求草稿", "repeated preparation preserves the existing invocation");
 		await openSettings();
-		const subagents = panel.locator('[data-builtin-id="pi-harness-subagents"]');
-		await subagents.getByRole("switch").click(); await wait(() => JSON.parse(readFileSync(join(data, "subagents.json"), "utf8")).enabled === false, "subagents off");
-		await subagents.getByRole("switch").click(); await wait(() => JSON.parse(readFileSync(join(data, "subagents.json"), "utf8")).enabled === true, "subagents on");
 		await page.getByRole("tab", { name: "已安装 · 0", exact: true }).waitFor();
 		await database.getByRole("switch").click(); await wait(() => JSON.parse(readFileSync(join(data, "document-extensions.json"), "utf8")).databaseEnabled === false, "browser toggle off");
 		await database.getByRole("switch").click(); await wait(() => JSON.parse(readFileSync(join(data, "document-extensions.json"), "utf8")).databaseEnabled === true, "browser toggle on");
@@ -252,7 +247,7 @@ try {
 			if (route.request().postDataJSON()?.action === "list") return route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "Package fixture unavailable" }) });
 			await route.continue();
 		});
-		await page.reload(); await openSettings(); assert.equal(await panel.locator(".builtin-row").count(), 6);
+		await page.reload(); await openSettings(); assert.equal(await panel.locator(".builtin-row").count(), 5);
 		await page.getByText("Package fixture unavailable", { exact: false }).waitFor();
 		await page.unroute("**/api/extensions"); await page.reload(); await openSettings();
 		mkdirSync("tests/scratch", { recursive: true });
@@ -266,7 +261,7 @@ try {
 		assert.equal(await panel.getByText("Document to Markdown", { exact: true }).count(), 0);
 		await page.screenshot({ path: "tests/scratch/builtin-extensions-en.png", fullPage: true });
 		assert.deepEqual(errors, []); assert(!existsSync(join(data, "runtimes")));
-		console.log("PASS built-in browser: six entries, toggles, settings links, package failure isolation, Chinese/English and narrow layout");
+		console.log("PASS built-in browser: five entries, toggles, settings links, package failure isolation, Chinese/English and narrow layout");
 	}
 } finally {
 	release?.();
