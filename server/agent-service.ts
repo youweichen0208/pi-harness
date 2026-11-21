@@ -1271,18 +1271,8 @@ export class ClientSession {
 			// it here is what makes thinking + text stream into the browser at
 			// ~60ms granularity instead of appearing only when the turn finishes.
 			streamingMessage,
-			codemode: (() => {
-				const tc = this.timings.enabled ? performance.now() : -1;
-				const value = (conv.codemodeHistory ??= new CodemodeHistory()).snapshot(conv.session.sessionManager, (message, entryId) => this.serializeCached(message, entryId));
-				if (tc >= 0) this.timings.add("light_rest", performance.now() - tc);
-				return value;
-			})(),
-			taskProgress: (() => {
-				const tp = this.timings.enabled ? performance.now() : -1;
-				const value = deriveTaskProgress(conv.id, messages, streamingMessage, conv.session.isStreaming || !!conv.runRecovery?.pending, conv.lastTaskEndedAt);
-				if (tp >= 0) this.timings.add("light_rest", performance.now() - tp);
-				return value;
-			})(),
+			codemode: (conv.codemodeHistory ??= new CodemodeHistory()).snapshot(conv.session.sessionManager, (message, entryId) => this.serializeCached(message, entryId)),
+			taskProgress: deriveTaskProgress(conv.id, messages, streamingMessage, conv.session.isStreaming || !!conv.runRecovery?.pending, conv.lastTaskEndedAt),
 			isStreaming: this.session.isStreaming,
 			wiki: !!conv.wiki,
 			recovery: recoverySnapshot(conv.recovery),

@@ -2,7 +2,6 @@ import { playgroundChatEvent, playgroundChatConnection } from "./playground-chat
 import { useT } from "./i18n";
 import { localRecoveryClock } from "./recovery-clock";
 import { emitTreeResponse, queueTreeDraft } from "./tree-events";
-import { emitTraceResponse } from "./trace-events";
 import { discardExtensionEditor, queueExtensionEditor } from "./extension-editor";
 import type { UiMessage } from "./types";
 import { mergeLiveToolOutput, type LiveToolOutput } from "./live-tool-output";
