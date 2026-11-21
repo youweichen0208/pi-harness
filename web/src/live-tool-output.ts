@@ -2,6 +2,8 @@ import type { ServerMessage, UiCodemodeDetails } from "../../server/protocol.js"
 
 export interface LiveToolOutput {
 	toolName: string;
+	/** Browser receipt time; cleared on reconnect. Never inferred from rendered text. */
+	lastOutputAt?: number;
 	text: string;
 	codemode?: UiCodemodeDetails;
 }
@@ -27,4 +29,26 @@ export function latestOutputLine(text: string): string {
 		if (line) return line.length > MAX_LIVE_LINE ? `…${line.slice(-MAX_LIVE_LINE)}` : line;
 	}
 	return "";
+}
+
+/** Unknown receipt times stay unknown across reloads and reconnects. */
+export function outputSilenceSeconds(lastOutputAt: number | undefined, now: number): number | undefined {
+	if (lastOutputAt === undefined) return undefined;
+	const seconds = Math.max(0, Math.floor((now - lastOutputAt) / 1000));
+	return seconds >= 30 ? seconds : undefined;
+}
+
+export function observeToolOutput(previous: LiveToolOutput | undefined, update: OutputUpdate & { toolName: string; receivedAt?: number; codemode?: UiCodemodeDetails }): LiveToolOutput {
+	const text = mergeLiveToolOutput(previous?.text ?? "", update);
+	const newOutput = update.delta.length > 0 && (!update.replace || text !== previous?.text);
+	return {
+		toolName: update.toolName,
+		text,
+		lastOutputAt: newOutput ? update.receivedAt : previous?.lastOutputAt,
+		codemode: update.codemode ?? previous?.codemode,
+	};
+}
+
+export function forgetOutputTimes(outputs: Map<string, LiveToolOutput>): Map<string, LiveToolOutput> {
+	return new Map([...outputs].map(([id, output]) => [id, { ...output, lastOutputAt: undefined }]));
 }

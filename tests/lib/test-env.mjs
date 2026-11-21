@@ -32,17 +32,28 @@ function isolateModelSources(env) {
 }
 
 
+// A host model key can silently skip onboarding or enable real network calls in
+// supposedly offline tests. Fixtures opt back in through testEnv(overrides), or
+// set their own environment after scrubHostEnv(). Never mutate the parent env.
+function isolateModelCredentials(env) {
+	for (const key of Object.keys(env)) {
+		if (/_API_KEY$/.test(key) || /^(ANTHROPIC_|OPENAI_|AZURE_OPENAI_|AWS_|GOOGLE_CLOUD_|GCLOUD_)/.test(key) || ["HF_TOKEN", "COPILOT_GITHUB_TOKEN", "GOOGLE_APPLICATION_CREDENTIALS"].includes(key)) delete env[key];
+	}
+}
+
+
 /** 就地剥掉本进程 env 里的全部宿主 PI_*；此后 PI_* 命名空间归测试所有。 */
 export function scrubHostEnv() {
 	for (const key of Object.keys(process.env)) if (key.startsWith("PI_")) delete process.env[key];
 	isolateModelSources(process.env);
+	isolateModelCredentials(process.env);
 	scrubbed = true;
 }
 
 /** env 快照：未 scrub 时先剥宿主 PI_*；PKG_ROOT 钉到仓库根；overrides 最后套。 */
 export function testEnv(overrides = {}) {
 	const env = { ...process.env };
-	if (!scrubbed) isolateModelSources(env);
+	if (!scrubbed) { isolateModelSources(env); isolateModelCredentials(env); }
 	if (!scrubbed) for (const key of Object.keys(env)) if (key.startsWith("PI_")) delete env[key];
 	env.PI_WEB_PKG_ROOT = process.cwd();
 	return { ...env, ...overrides };

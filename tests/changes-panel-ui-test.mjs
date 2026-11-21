@@ -85,6 +85,8 @@ try {
 	await page.setViewportSize({ width: 1440, height: 1000 });
 	await page.locator('.change-summary:not(.change-summary-inline) .change-summary-file').click();
 	await page.locator('.changes-panel .changes-line.add .hljs-string', { hasText: 'new' }).first().waitFor();
+	assert.equal(await page.locator('.changes-panel .changes-line mark').count(), 0, 'issue #181 uses full-line syntax color without word-level marks');
+	assert.match(await page.locator('.changes-panel .changes-line.add code').first().textContent(), /const value5 = "new";/);
 	assert.equal(await page.locator('.change-summary:not(.change-summary-inline) .change-summary-file.selected').count(),1);
 	await page.locator('.app.left-collapsed').waitFor();
 	let box=await page.locator('.changes-panel').boundingBox(); assert.equal(box.x,656); assert.equal(box.width,784);
@@ -110,6 +112,8 @@ try {
 	assert(await page.locator('.inputbox textarea').evaluate(el => el === document.activeElement));
 	await page.getByRole('button',{name:'本轮',exact:true}).click();
 	await page.locator('.changes-panel .changes-line.add .hljs-string', { hasText: 'new' }).first().waitFor();
+	assert.equal(await page.locator('.changes-panel .changes-line mark').count(), 0, 'issue #181 uses full-line syntax color without word-level marks');
+	assert.match(await page.locator('.changes-panel .changes-line.add code').first().textContent(), /const value5 = "new";/);
 	await page.screenshot({path:'/tmp/pi-changes-35a-wide.png'});
 	await page.setViewportSize({width:1100,height:850});
 	box=await page.locator('.changes-panel').boundingBox(); assert.equal(box.width,720); assert.equal(box.x,380);

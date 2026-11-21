@@ -837,7 +837,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 							onMeasured={storeHeight}
 							lazyRef={attachEl}
 						>
-						<Message recovery={recovery} incident={incidentFor.get(m.id)}
+						<Message connected={connected} recovery={recovery} incident={incidentFor.get(m.id)}
 							key={m.id}
 							message={bashGroups.projected.get(m.id) ?? m}
 							toolMessageIds={bashGroups.sources}
@@ -885,7 +885,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 					);
 				})}
 				{state.streamingMessage && streamingHasContent && !bashGroups.owners.has(state.streamingMessage.id) && (
-					<Message recovery={recovery} incident={incidentFor.get(state.streamingMessage.id)}
+					<Message connected={connected} recovery={recovery} incident={incidentFor.get(state.streamingMessage.id)}
 						key={state.streamingMessage.id}
 						message={bashGroups.projected.get(state.streamingMessage.id) ?? state.streamingMessage}
 						continuation={!!predecessors.get(state.streamingMessage.id)}

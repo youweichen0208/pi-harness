@@ -11,7 +11,7 @@ import { useChatT, useI18n } from "../i18n";
 import { WorkspacePathContext } from "../workspace-context";
 import { bashCommand } from "../bash-steps";
 import { hasNumberedPipelineOutput, hasSearchSourceNumbers, commandPresentation, commandPreview, isLikelyErrorLine, compactCommandLabel, commandDuration, elapsedLabel } from "../bash-presentation";
-import { latestOutputLine } from "../live-tool-output";
+import { latestOutputLine, outputSilenceSeconds } from "../live-tool-output";
 import type { UiToolCallBlock } from "../types";
 import { toolDuration, type ToolView } from "./ToolCallBlock";
 import { ToolOutputDownload } from "./ToolOutputDownload";
@@ -122,8 +122,14 @@ function BashRow({ block, view, onKill, revealed, messageId, attempts, historica
 	const lines = output ? output.replace(/\r\n/g, "\n").replace(/\n$/, "").split("\n") : [];
 	// issue #106: a running command shows its elapsed time and latest output
 	// line right on the row, and tails (not heads) the output when expanded.
-	const liveSeconds = useLiveSeconds(state === "run");
-	const runningStats = liveSeconds > 0 ? `${t("processRunning")} ${elapsedLabel(liveSeconds)}` : t("processRunning");
+	const liveSeconds = useLiveSeconds(state === "run" && view.connected !== false);
+	const quietSeconds = outputSilenceSeconds(view.lastOutputAt, Date.now());
+	const feedback = state === "run"
+		? view.connected === false ? t("bashConnectionLost")
+			: quietSeconds !== undefined ? t("bashNoOutputFor", { time: elapsedLabel(quietSeconds) })
+				: view.lastOutputAt === undefined || !view.liveOutput ? t("waitingOutput") : ""
+		: !view.result && view.status && !view.status.running ? t("bashCommandFinished") : "";
+	const runningStats = view.connected === false ? t("bashConnectionLost") : liveSeconds > 0 ? `${t("processRunning")} ${elapsedLabel(liveSeconds)}` : t("processRunning");
 	const liveLine = state === "run" && !open ? latestOutputLine(view.liveOutput ?? "") : "";
 	const shownLines = all ? lines : state === "run" ? lines.slice(-6) : lines.slice(0, 6);
 	const lineOffset = !all && state === "run" ? lines.length - shownLines.length : 0;
@@ -140,11 +146,13 @@ function BashRow({ block, view, onKill, revealed, messageId, attempts, historica
 			<code className="bash-inline-command" title={command}>{commandPreview(command, cwd)}</code>
 			{attempts && <span className="bash-attempt-count">{t("commandAttempts", { n: attempts })}</span>}{reading.title !== compactCommandLabel(reading.command) && <code className="bash-command-secondary">{reading.command}</code>}
 			{commandLines.length > 1 && <span className="bash-extra-lines">{t("bashExtraLines", { n: commandLines.length - 1 })}</span>}
-			{liveLine && <span className="bash-live-line" title={liveLine}>{liveLine}</span>}
+			{!open && feedback && <span className="bash-live-line">{feedback}</span>}
+			{!feedback && liveLine && <span className="bash-live-line" title={liveLine}>{liveLine}</span>}
 			{compact ? <span className="bash-row-stats">{state === "run" ? runningStats : state === "empty" && view.abandoned ? t("toolNotExecuted") : state === "err" && exitCode !== undefined ? `exit ${exitCode}` : (toolDuration(view) ?? 0) >= 100 ? commandDuration(toolDuration(view)!) : t("toolLineCount", { n: lines.length })}</span> : <span className="bash-row-stats">{state === "run" ? runningStats : state === "empty" && view.abandoned ? t("toolNotExecuted") : exitCode !== undefined && state === "err" ? t("bashExitCode", { n: exitCode }) : t("toolLineCount", { n: lines.length })}{toolDuration(view) !== undefined && seconds(toolDuration(view)!) ? ` · ${seconds(toolDuration(view)!)}` : ""}</span>}
 			{open ? <FiChevronDown /> : <FiChevronRight />}
 		</button>
 		{open && <div className="bash-row-body">
+			{feedback && <div className="bash-output-feedback">{feedback}</div>}
 			{display.directory && <div className="bash-row-directory">{t("bashGroupCwd", { path: display.directory })}</div>}
 			<section className="bash-detail-command">
 				<header className="bash-detail-heading"><strong><FiTerminal aria-hidden="true" />{t("command")}</strong><div className="bash-detail-controls"><button type="button" onClick={event => void copy("command", event.currentTarget.ownerDocument)}><FiCopy aria-hidden="true" />{t(copyError === "command" ? "copyFailed" : copied === "command" ? "copied" : "bashCopyCommand")}</button>{rawCommandLines.length > 6 && <button type="button" aria-expanded={fullCommand} onClick={() => setFullCommand(value => !value)}>{t(fullCommand ? "collapseCode" : "bashExpandFullCommand")}</button>}</div></header>
@@ -157,7 +165,6 @@ function BashRow({ block, view, onKill, revealed, messageId, attempts, historica
 			{(formatted ? formattedOutputCanExpand(format) : lines.length > 6) && <button type="button" className="bash-group-more" aria-expanded={all} onClick={() => setAll(value => !value)}>{all ? t("collapseCode") : t("expandCode")}</button>}
 			<div className="bash-row-actions">
 				{truncated && view.result?.toolOutputUrl && <ToolOutputDownload url={view.result.toolOutputUrl} />}
-				<button type="button" title={t("bashOpenTerminalHint")} onClick={() => window.dispatchEvent(new CustomEvent("pi-harness:plugin-run-command", { detail: { title: compactCommandLabel(commandLines[0]), command } }))}>{t("bashOpenTerminal")}</button>
 				{state === "run" && onKill && <button type="button" onClick={onKill}>{t("stopBash")}</button>}
 			</div>
 			{history}

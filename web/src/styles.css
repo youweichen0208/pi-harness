@@ -16447,3 +16447,10 @@ html[data-platform="win32"] :is(.settings-tab-label, .input-tools .chip, .reply-
 	font: 12px/1.7 var(--mono);
 	white-space: nowrap;
 }
+
+/* Long command feedback: factual receipt state, without a live announcement timer. */
+.bash-output-feedback {
+	color: var(--text-dim);
+	font-size: 12px;
+	overflow-wrap: anywhere;
+}
