@@ -16225,3 +16225,10 @@ html[data-platform="win32"] :is(.inputbox, .node-agent-input, .node-agent-dialog
 html[data-platform="win32"] .node-agent-message > small { font-size: 12px; }
 html[data-platform="win32"] .node-agent-message pre { font-size: 14px; line-height: 1.6; }
 html[data-platform="win32"] :is(.settings-tab-label, .input-tools .chip, .reply-actions) { font-size: 14px; }
+
+/* Long command feedback: factual receipt state, without a live announcement timer. */
+.bash-output-feedback {
+	color: var(--text-dim);
+	font-size: 12px;
+	overflow-wrap: anywhere;
+}

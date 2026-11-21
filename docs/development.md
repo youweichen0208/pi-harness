@@ -80,6 +80,8 @@ spawn 后记录 `server.pid`，测试收尾（含异常 catch 路径）用 `proc
 
 自起 server 的测试不得直接展开 `process.env`：从 pi-harness/Electron 宿主里跑测试时，宿主自己的 `PI_*` 会泄进被测 server——`PI_WEB_PKG_ROOT` 让它伺服宿主自己的 web/dist（浏览器测的就成了另一个应用），`PI_WEB_WORKSPACES_FILE` / `PI_SESSION_FILE` 指向真实工作区与会话。统一用 `tests/lib/test-env.mjs`：展开式写 `env: { ...testEnv(), PORT, … }`；「先改 `process.env.PI_*` 再让子进程继承」的旧式测试在文件头 `scrubHostEnv()` 一次（此后 `PI_*` 命名空间归测试所有，`testEnv()` 不再剥）。`scripts/check-test-env.mjs`（CI 独立一步）强制这三条。
 
+模型环境也属于宿主配置：`testEnv()` 默认移除模型 API key、Anthropic/OpenAI 配置、Copilot/Hugging Face token 及 AWS/Vertex 认证入口，避免宿主凭据改变首次引导状态或触发外部模型请求。需要模拟这些配置时通过 `testEnv(overrides)` 显式传入；先调用 `scrubHostEnv()` 的脚本可在清理后设置自己的夹具环境。普通工具凭据（如 `GITHUB_TOKEN`）、代理、PATH 和 `ELECTRON_RUN_AS_NODE` 保留。回归见 `tests/test-env-test.mjs`。
+
 ### 自包含 vs 外部依赖
 
 能进 `tests/run-smoke.mjs` 清单的测试必须**自起 server + 自清理**；不进清单的分两类（原因写在 run-smoke.mjs 头部注释）：
@@ -153,3 +155,22 @@ docker rm -f pi-db-test-pg pi-db-test-mysql
 ## Design First Skill 回归
 
 `npx vitest run tests/unit/design-first-resources.test.ts tests/unit/composer-skill.test.ts tests/unit/design-first-native-loop.test.ts tests/unit/packaged-sdk-version.test.ts` 验证原生资源、快捷命令、模型沿用、工具闭环及打包。脚本模型只证明接线；真实模型单样本证据见 [Skill 交付记录](design-first-skill.md)。构建后运行 `node tests/builtin-extensions-test.mjs`，加 `--browser` 可验证设置开关和草稿回填。
+
+### 长时间运行的 smoke 测试
+
+`npm run test:smoke` 串行执行清单，每项输出 `[序号/总数] 名称`、结果与耗时；每 15 秒打印当前项的运行心跳。汇总分别统计通过、失败、超时、跳过和中断；序号表示执行位置，不表示此前测试全部通过。
+
+默认单项超时 180 秒，可用 `npm run test:smoke -- --timeout-ms 300000` 覆盖，也可追加测试名只跑指定项。超时清理该项进程树，记为失败并继续；Ctrl+C 或 SIGTERM 清理当前项并停止整个队列。保留真实失败退出码。
+
+同一真实工作目录的跑器通过本机 socket（Windows 使用 named pipe）互斥；第二次启动立即报告已有运行 PID 和目录，不重复执行。不同 worktree 不互斥，固定端口仍可能冲突。入口未覆盖直接运行单个测试脚本的情况。
+
+直接运行以保留实时日志；需要保存日志时，在 Bash/Zsh 使用：
+
+```bash
+set -o pipefail
+npm run test:smoke 2>&1 | tee /tmp/pi-smoke.log
+```
+
+不要将执行中的测试接到 `tail -4`：它等到输入结束才显示末尾行，且未启用 `pipefail` 时会掩盖 npm 的失败退出码。日志摘要应在运行结束后读取。
+
+跑器回归：`node --test tests/smoke-runner-test.mjs`；命令卡浏览器回归：`node tests/bash-feedback-browser-test.mjs`。

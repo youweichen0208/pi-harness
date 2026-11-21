@@ -126,6 +126,7 @@ interface MessageProps {
 	incident?: ToolTextIncident;
 	recovery?: ToolRecoveryActions;
 	toolsRunning?: boolean;
+	connected?: boolean;
 	bashActive?: boolean;
 	toolMessageIds?: ReadonlyMap<string, string>;
 	continuation?: boolean;
@@ -186,6 +187,7 @@ export const Message = memo(function Message({
 	incident,
 	recovery,
 	toolsRunning,
+	connected = true,
 	bashActive,
 	toolMessageIds,
 	continuation,
@@ -402,7 +404,7 @@ export const Message = memo(function Message({
 		// Tools in a message that ended aborted/error and never received a
 		// result were never executed (issue #66) — mark them for the cards.
 		const abandoned = message.role === "assistant" && (message.stopReason === "aborted" || message.stopReason === "error");
-		const viewFor = (item: UiToolCallBlock): ToolView => ({ result: toolResults.get(item.id), nestedCalls: liveNestedCalls(item.id, toolStatuses), liveOutput: liveOutputs.get(item.id)?.text, codemode: liveOutputs.get(item.id)?.codemode, status: toolStatuses.get(item.id), streaming, ...(abandoned ? { abandoned: true } : {}) });
+		const viewFor = (item: UiToolCallBlock): ToolView => ({ result: toolResults.get(item.id), nestedCalls: liveNestedCalls(item.id, toolStatuses), liveOutput: liveOutputs.get(item.id)?.text, lastOutputAt: liveOutputs.get(item.id)?.lastOutputAt, connected, codemode: liveOutputs.get(item.id)?.codemode, status: toolStatuses.get(item.id), streaming, ...(abandoned ? { abandoned: true } : {}) });
 		for (let i = 0; i < message.content.length; i++) {
 			const block = message.content[i];
 			if (skipText && block.type === "text") continue;
@@ -997,6 +999,7 @@ function Block({
 			nestedCalls: liveNestedCalls(toolCall.id, toolStatuses),
 			result,
 			liveOutput: live?.text,
+			lastOutputAt: live?.lastOutputAt,
 			codemode: live?.codemode,
 			streaming,
 			runActive,

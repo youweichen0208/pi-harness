@@ -12,12 +12,9 @@
  *
  * 用法：node tests/run-smoke.mjs [name1 name2 …]   # 无参 = 全量
  */
-import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { spawn } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { testEnv } from "./lib/test-env.mjs";
+import { acquireSmokeLock, parseSmokeArgs, runSmokeTest } from "./lib/smoke-runner.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -29,6 +26,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 const WIN32_KNOWN_ENV_FAIL = new Set(["terminal-smoke-test", "restart-handoff-test"]);
 
 const ALL = [
+	"test-env-test",
+	"smoke-runner-test",
 	"isolated-server-test",
 	"notes-test",
 	"playground-test",
@@ -148,39 +147,38 @@ const ALL = [
 //   - title-jsonl-test：已修复（原 lsof/URL.pathname 的 Windows 兼容问题），本地可跑；
 //   - 浏览器 E2E 见文件头注释（headless Chrome 路径写死本机）。
 
-const targets = process.argv.length > 2 ? process.argv.slice(2) : ALL;
-const results = [];
-
-for (const name of targets) {
-	if (process.platform === "win32" && WIN32_KNOWN_ENV_FAIL.has(name) && process.argv.length <= 2) {
-		results.push({ name, ok: true, skipped: true });
-		console.log(`\n⏭ ${name} — Windows 环境已知噪音（node-pty/libuv），跳过；ubuntu CI 正常跑`);
-		continue;
+async function main() {
+	const { targets, defaultSelection, timeoutMs } = parseSmokeArgs(process.argv.slice(2), ALL);
+	const release = await acquireSmokeLock(dirname(here));
+	const controller = new AbortController();
+	let interruptedCode = 0;
+	const interrupt = signal => { interruptedCode ||= signal === "SIGINT" ? 130 : 143; controller.abort(); };
+	const onInt = () => interrupt("SIGINT"), onTerm = () => interrupt("SIGTERM");
+	process.on("SIGINT", onInt); process.on("SIGTERM", onTerm);
+	const results = [];
+	try {
+		for (const [index, name] of targets.entries()) {
+			if (controller.signal.aborted) break;
+			const label = `[${index + 1}/${targets.length}] ${name}`;
+			if (process.platform === "win32" && WIN32_KNOWN_ENV_FAIL.has(name) && defaultSelection) {
+				results.push({ name, status: "skipped", durationMs: 0 });
+				console.log(`${label} skipped — Windows known environment issue`);
+				continue;
+			}
+			console.log(`\n▶ ${label}`);
+			const result = await runSmokeTest({ file: join(here, `${name}.mjs`), cwd: dirname(here), timeoutMs, signal: controller.signal, label });
+			results.push({ name, ...result });
+			console.log(`${label} ${result.status} · ${(result.durationMs / 1000).toFixed(1)}s`);
+		}
+		console.log("\n===== 冒烟汇总 =====");
+		for (const result of results) console.log(`${result.status === "passed" ? "✓" : result.status === "skipped" ? "⏭" : "✗"} ${result.name} — ${result.status} · ${(result.durationMs / 1000).toFixed(1)}s`);
+		const count = status => results.filter(result => result.status === status).length;
+		console.log(`\n${count("passed")} passed, ${count("failed")} failed, ${count("timeout")} timed out, ${count("skipped")} skipped, ${count("interrupted")} interrupted; ${results.length}/${targets.length} processed`);
+		return interruptedCode || (results.some(result => !["passed", "skipped"].includes(result.status)) ? 1 : 0);
+	} finally {
+		process.removeListener("SIGINT", onInt); process.removeListener("SIGTERM", onTerm);
+		await release();
 	}
-	const file = join(here, `${name}.mjs`);
-	const isolated = mkdtempSync(join(tmpdir(), "pi-smoke-"));
-	const agentDir = join(isolated, "agent"), dataDir = join(isolated, "data");
-	mkdirSync(agentDir); mkdirSync(dataDir);
-	process.stdout.write(`\n▶ ${name}\n`);
-	const ok = await new Promise((resolveRun) => {
-		const child = spawn(process.execPath, [file], {
-			// 测试脚本内相对路径（如 dist/server/index.js）以仓库根为基准
-			cwd: dirname(here),
-			stdio: "inherit",
-			env: { ...testEnv(), PI_CODING_AGENT_DIR: agentDir, PI_WEB_DATA_DIR: dataDir },
-		});
-		child.on("exit", (code) => resolveRun(code === 0));
-		child.on("error", () => resolveRun(false));
-	});
-	rmSync(isolated, { recursive: true, force: true });
-	results.push({ name, ok });
 }
-
-console.log("\n===== 冒烟汇总 =====");
-let failures = 0;
-for (const r of results) {
-	console.log(`${r.skipped ? "⏭" : r.ok ? "✓" : "✗"} ${r.name}${r.skipped ? "（跳过）" : ""}`);
-	if (!r.ok) failures++;
-}
-console.log(`\n${results.length - failures}/${results.length} 通过`);
-process.exit(failures ? 1 : 0);
+try { process.exitCode = await main(); }
+catch (error) { console.error(error.message); process.exitCode = 1; }

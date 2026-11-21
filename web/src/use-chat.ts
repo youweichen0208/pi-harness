@@ -5,7 +5,7 @@ import { emitTreeResponse, queueTreeDraft } from "./tree-events";
 import { emitTraceResponse } from "./trace-events";
 import { discardExtensionEditor, queueExtensionEditor } from "./extension-editor";
 import type { UiMessage } from "./types";
-import { mergeLiveToolOutput, type LiveToolOutput } from "./live-tool-output";
+import { observeToolOutput, forgetOutputTimes, type LiveToolOutput } from "./live-tool-output";
 import { useCallback, useEffect, useReducer, useRef, useState, useMemo } from "react";
 import { ProjectCache } from "./project-cache";
 import { desktopAPI } from "./desktop";
@@ -230,7 +230,7 @@ type Action =
 	| { type: "snapshot"; state: UiState }
 	| { type: "snapshot_delta"; msg: Extract<ServerMessage, { type: "snapshot_delta" }> }
 	| { type: "protocol_mismatch" }
-	| { type: "tool_delta"; toolCallId: string; toolName: string; delta: string; replace?: boolean; codemode?: UiMessage["codemode"] }
+	| { type: "tool_delta"; receivedAt?: number; conversationId?: string; toolCallId: string; toolName: string; delta: string; replace?: boolean; codemode?: UiMessage["codemode"] }
 	| { type: "message_delta"; msg: MessageDeltaMsg }
 	| { type: "tool_status"; status: ToolStatus }
 	| { type: "notice"; notice: Notice }
@@ -446,6 +446,7 @@ function reducer(state: ChatState, action: Action): ChatState {
 			return {
 				...state,
 				status: action.status,
+				liveOutputs: action.status === "open" ? state.liveOutputs : forgetOutputTimes(state.liveOutputs),
 				pendingDialogs: action.status === "closed" ? [] : state.pendingDialogs,
 				extensionUi: action.status === "closed" ? {} : state.extensionUi,
 				// A new socket is not ready until its hello/ready round-trip completes.
@@ -478,7 +479,7 @@ function reducer(state: ChatState, action: Action): ChatState {
 				...(state.state?.cwd !== action.state.cwd ? { sessions: [], files: null, conversationFilesChecked: null, fileContent: null, scmData: null, scmPanelResults: {}, scmDiffData: null } : {}),
 				activeConversationId: action.state.conversationId,
 				agentSilence: action.state.isStreaming ? state.agentSilenceByConversation[action.state.conversationId] ?? null : null,
-				liveOutputs: pruneLiveOutputs(state.liveOutputs, action.state),
+				liveOutputs: pruneLiveOutputs(state.state?.conversationId === action.state.conversationId ? state.liveOutputs : forgetOutputTimes(state.liveOutputs), action.state),
 				toolStatuses: pruneToolStatuses(state.toolStatuses, action.state),
 				// A full resync always reflects reality as of now — whatever we
 				// were optimistically echoing is either already in here or gone
@@ -508,7 +509,7 @@ function reducer(state: ChatState, action: Action): ChatState {
 				state: merged,
 				agentSilence: merged.isStreaming ? state.agentSilenceByConversation[merged.conversationId] ?? null : null,
 				activeConversationId: merged.conversationId,
-				liveOutputs: pruneLiveOutputs(state.liveOutputs, merged),
+				liveOutputs: pruneLiveOutputs(state.state?.conversationId === merged.conversationId ? state.liveOutputs : forgetOutputTimes(state.liveOutputs), merged),
 				toolStatuses: pruneToolStatuses(state.toolStatuses, merged),
 				// Only clear once real messages actually landed — a delta that
 				// merely updates existing fields (e.g. isStreaming flipping)
@@ -518,14 +519,10 @@ function reducer(state: ChatState, action: Action): ChatState {
 			};
 		}
 		case "tool_delta": {
+			if (action.conversationId && action.conversationId !== state.state?.conversationId) return state;
 			const prev = state.liveOutputs.get(action.toolCallId);
-			const capped = mergeLiveToolOutput(prev?.text ?? "", action);
 			const liveOutputs = new Map(state.liveOutputs);
-			liveOutputs.set(action.toolCallId, {
-				toolName: action.toolName,
-				text: capped,
-				codemode: action.codemode ?? prev?.codemode,
-			});
+			liveOutputs.set(action.toolCallId, observeToolOutput(prev, action));
 			return { ...state, liveOutputs };
 		}
 		case "message_delta": {
@@ -1053,6 +1050,8 @@ export function useChat() {
 					noteDeltaSeq(msg.conversationId, msg.seq);
 					dispatch({
 						type: "tool_delta",
+						receivedAt: Date.now(),
+						conversationId: msg.conversationId,
 						toolCallId: msg.toolCallId,
 						toolName: msg.toolName,
 						delta: msg.delta,

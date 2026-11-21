@@ -466,8 +466,9 @@ const zh = {
 	bashRemainingLines: "展开其余 {n} 行",
 	bashCopyCommand: "复制命令",
 	bashCopyOutput: "复制输出",
-	bashOpenTerminal: "在终端中打开",
-	bashOpenTerminalHint: "在可见终端重新运行完整命令",
+	bashNoOutputFor: "已有 {time} 未收到新输出",
+	bashConnectionLost: "连接已断开，等待重连",
+	bashCommandFinished: "命令已结束",
 	bashCommandCount: "{n} 条命令",
 
 	editBusy: "编辑重问暂不可用，请等待当前回复、压缩或切换完成。",
@@ -3003,8 +3004,9 @@ const en: Record<keyof typeof zh, string> = {
 	bashRemainingLines: "Show remaining {n} lines",
 	bashCopyCommand: "Copy command",
 	bashCopyOutput: "Copy output",
-	bashOpenTerminal: "Open in terminal",
-	bashOpenTerminalHint: "Run the full command again in a visible terminal",
+	bashNoOutputFor: "No new output for {time}",
+	bashConnectionLost: "Disconnected · waiting to reconnect",
+	bashCommandFinished: "Command finished",
 	bashCommandCount: "{n} commands",
 
 	editBusy: "Wait for the current response, compaction or branch switch before editing.",
@@ -5176,6 +5178,7 @@ export function useT(): Translate {
 /** Chat execution labels stay English; message content and other UI copy keep the selected locale. */
 const chatStatusKeys = new Set<keyof typeof en>([
 	"thinkingLive", "thinkingFor", "thinkingDone", "thinkingNow", "thinkingUnrecorded",
+	"bashNoOutputFor", "bashConnectionLost", "bashCommandFinished",
 	"processThought", "processThoughtUnmeasured", "processRunning", "processFailed", "processAllPassed",
 	"done", "running", "error", "cancelled", "executionCompleted", "toolQueued", "toolNotExecuted", "toolDoneWaitingModel", "waitingOutput",
 	"bashRunning", "bashPartial", "bashFailed", "working", "todoPending", "taskCancelled",
