@@ -90,6 +90,10 @@ export class SessionTreeController {
 		}
 		return { revision, leafId: sm.getLeafId(), ...this.counts, filterMode: this.session.settingsManager.getTreeFilterMode(), skipSummaryPrompt: this.session.settingsManager.getBranchSummarySkipPrompt(), externallyModified: this.external, verifying: this.validator?.blocking ?? false, busy: this.operation || this.session.isCompacting };
 	}
+	/** True when decorate() would add anything for this entry (see below). */
+	hasDecoration(entryId: string): boolean {
+		return this.metadata.has(entryId);
+	}
 	decorate(message: UiMessage, entryId?: string): UiMessage {
 		if (!entryId) return message;
 		const metadata = this.metadata.get(entryId) ?? { entryId };

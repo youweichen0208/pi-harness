@@ -23,6 +23,7 @@ import type {  } from "./plugins.js";
 export interface SlashHost {
 	isModelVisible?: (provider: string) => boolean;
 	treeCommand?: (name: string, args: string, context: { conversationId: string; requestId: string }) => Promise<void>;
+	traceCommand?: (context: { conversationId: string; requestId: string }, format?: "html" | "json") => void;
 	emit: (msg: ServerMessage) => void;
 	/** 当前工作目录（/cwd 无参数时回显）。 */
 	cwd: () => string;
@@ -56,6 +57,8 @@ export const NATIVE_COMMANDS: {
 	argumentHintEn?: string;
 }[] = [
 	{ name: "tree", description: "查看会话树与切换分支", descriptionEn: "Browse the session tree and switch branches" },
+	{ name: "trace", description: "查看当前会话执行时间线", descriptionEn: "Inspect the current session execution trace" },
+	{ name: "export", description: "导出当前会话与 Trace；可用 json 仅导出 metadata", descriptionEn: "Export this session and trace; use json for metadata only", argumentHint: "[html|json]", argumentHintEn: "[html|json]" },
 	{ name: "clone", description: "复制当前分支为新会话", descriptionEn: "Clone this branch into a new session" },
 	{ name: "fork", description: "选择用户消息派生新会话", descriptionEn: "Choose a user message to fork" },
 	{ name: "name", description: "重命名当前会话", descriptionEn: "Rename this session", argumentHint: "<名称>", argumentHintEn: "<name>" },
@@ -143,6 +146,12 @@ export class SlashCommandsService {
 	 *  name is not a native command (the prompt falls through to the SDK). */
 	async exec(name: string, args: string, context: { conversationId: string; requestId: string }): Promise<boolean> {
 		switch (name) {
+			case "trace":
+				this.host.traceCommand?.(context);
+				return true;
+			case "export":
+				this.host.traceCommand?.(context, args.toLowerCase() === "json" ? "json" : "html");
+				return true;
 			case "tree": case "clone": case "fork": case "name":
 				await this.host.treeCommand?.(name, args, context);
 				return true;

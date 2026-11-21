@@ -2,6 +2,7 @@ import { playgroundChatEvent, playgroundChatConnection } from "./playground-chat
 import { useT } from "./i18n";
 import { localRecoveryClock } from "./recovery-clock";
 import { emitTreeResponse, queueTreeDraft } from "./tree-events";
+import { emitTraceResponse } from "./trace-events";
 import { discardExtensionEditor, queueExtensionEditor } from "./extension-editor";
 import type { UiMessage } from "./types";
 import { mergeLiveToolOutput, type LiveToolOutput } from "./live-tool-output";
@@ -1232,6 +1233,9 @@ export function useChat() {
 					break;
 				case "extension_ui_reset":
 					discardExtensionEditor(msg.conversationId);
+					break;
+				case "trace_result":
+					emitTraceResponse(msg);
 					break;
 				case "tree": case "tree_changed": case "tree_open": case "tree_content_result": case "tree_preview_result": case "tree_navigate_result":
 					if (msg.type === "tree_navigate_result") {
