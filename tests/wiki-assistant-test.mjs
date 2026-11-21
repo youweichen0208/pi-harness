@@ -69,7 +69,12 @@ try{
  await choose();await input.fill('Analyze the project with this document');assert.equal(await input.inputValue(),'Analyze the project with this document');await input.press('Enter');
  await page.waitForFunction(()=>document.querySelector('.wiki-assistant .messages')?.textContent.includes('Local answer with evidence.'));
  assert(!JSON.stringify(requests.at(-1)).includes('Python 示例默认应是可独立运行的完整代码块'));
- assert(JSON.stringify(requests.at(-1)).includes('knowledge'));assert(JSON.stringify(requests.at(-1)).includes('note.md'));
+ // Scope is expressed by the reference chip; the prompt carries the document snapshot.
+ // Assert them separately — tool descriptions also contain "knowledge", so the whole request body over-matches.
+ const selectedUserMessage=JSON.stringify(requests.at(-1).messages.filter(message=>message.role==='user'));
+ const selectedChips=await page.locator('.wiki-reference-chips').filter({hasText:'knowledge'}).count();
+ assert(selectedChips===1,'the selected knowledge-library source stays visible as a reference chip');
+ assert(selectedUserMessage.includes('note.md'),'the active document snapshot reaches the wiki prompt');
  await input.fill('Saved draft');
  await page.locator('.wiki-tree-row[title="other.md"]').click();
  await page.waitForFunction(()=>JSON.parse(sessionStorage.getItem('pi-wiki-view'))?.path==='other.md');

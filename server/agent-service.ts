@@ -1369,7 +1369,6 @@ export class ClientSession {
 		else if (retry?.id === operationId) conv.session.abortRetry();
 	}
 
-
 	async treeRequest(message: TreeRequest): Promise<void> {
 		if (this.openingHistory) { this.emit({ type: "tree_navigate_result", conversationId: message.conversationId, reqId: message.reqId, status: "busy" }); return; }
 		const conv = this.convs.get(message.conversationId);
