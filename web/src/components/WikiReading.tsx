@@ -6,13 +6,13 @@ import type { WikiIndexStatus } from "../types";
 import { wikiIndexIssueGroups } from "../wiki-index-summary";
 import { useI18n, useT } from "../i18n";
 
-export function WikiReadingDialog({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+export function WikiReadingDialog({ title, onClose, children, hideClose }: { hideClose?: boolean; title: string; onClose: () => void; children: ReactNode }) {
 	const t = useT(), dialog = useDialogFocus<HTMLElement>();
 	return createPortal(<div className="wiki-modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
 		<section ref={dialog} className="wiki-reading-dialog" role="dialog" aria-modal="true" aria-label={title} onKeyDown={e => {
 			if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onClose(); }
 		}}>
-			<header><h2>{title}</h2><button aria-label={t("close")} onClick={onClose}><FiX /></button></header>
+			<header><h2>{title}</h2>{!hideClose && <button aria-label={t("close")} onClick={onClose}><FiX /></button>}</header>
 			{children}
 		</section>
 	</div>, document.querySelector(".wiki-document-dialog") ?? document.body);

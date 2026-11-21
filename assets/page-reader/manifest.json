@@ -1,0 +1,21 @@
+{
+	"manifest_version": 3,
+	"name": "pi Page Reader",
+	"version": "1.0.0",
+	"key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA11X8wLMijD9f08boR7g5fSo6ge6zTHApOwA2EWii4FOGMBEzBmypzsLHFGYfLLL3lBn4nIRflzvWMRBJ1U4AyEQXWZd/pmxwnb9GoUZV7gf6Q36Z6Gq3JodMUGlgYdJ4WC2euncHLBGf47L+LBdAEY6XEiicwLW4fDwzzDuBWnKlUiKpe/79GfegdT5l9puqDPOC/DzLGMzqkBB8hP5T40N9vzztLCO5o6xb3SrhIkftwY9l3WF18LfN/yiMG6iV4ZQfqgU6xdPOhSzGhSrN/81JTX8KV9RYKm0F4EUcITcurRyLlLAS4+nBjbsrAmkJw+kUab00e7hCfv3/uZJ5rwIDAQAB",
+	"permissions": [
+		"activeTab",
+		"scripting",
+		"nativeMessaging"
+	],
+	"optional_host_permissions": [
+		"https://*/*",
+		"http://*/*"
+	],
+	"background": {
+		"service_worker": "reader.js"
+	},
+	"action": {
+		"default_popup": "popup.html"
+	}
+}

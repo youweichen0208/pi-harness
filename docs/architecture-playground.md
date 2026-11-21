@@ -14,7 +14,7 @@
 
 验证：`node tests/playground-chat-test.mjs --browser` 使用本地模拟模型检查隔离、冻结、建议、去重、历史/重启、停止及浏览器应用/撤销；相关单测覆盖 UTF-8 输出边界及保存冲突。`node --import tsx tests/playground-model-admission-test.mjs` 覆盖无模型时 hello 的误报回归及外部来源目录同步，不调用真实模型。
 
-Playground 使用宿主 Python 3.9+ 运行聊天、小记中的 `python` / `py` / `python3` 代码块、右栏 `.py` 文件缓冲区以及左栏草稿。首次检测到可用解释器默认开启，保留已保存开关；`PI_WEB_PLAYGROUND=off` 硬关闭且锁定设置。运行结果默认不进入模型上下文、不持久化；Playground 问 pi 仅在显式发送时冻结结果到专属对话；显式「把结果发给 pi」仅追加到输入框。
+Playground 使用 Python 3.9+ 运行聊天、小记中的 `python` / `py` / `python3` 代码块、右栏 `.py` 文件缓冲区以及左栏草稿。首次检测到可用解释器默认开启，保留已保存开关；`PI_WEB_PLAYGROUND=off` 硬关闭且锁定设置。运行结果默认不进入模型上下文、不持久化；Playground 问 pi 仅在显式发送时冻结结果到专属对话；显式「把结果发给 pi」仅追加到输入框。
 
 ## 运行环境
 
@@ -22,7 +22,7 @@ Playground 使用宿主 Python 3.9+ 运行聊天、小记中的 `python` / `py` 
 
 代码块运行失败后「请 pi 修复」将原始源码、退出码、超时/截断标记与最多 64 KiB 的输出摘要追加到当前输入草稿。保留原草稿，不自动发送、不再次执行、不自动改文件。回归：`node tests/playground-repair-test.mjs` 使用真实 Python NameError 和本地模拟模型验证回填及调用次数。
 
-- 不捆绑解释器。`PI_WEB_PYTHON` 指定解释器可执行文件路径（不是 shell 命令）；未指定时按 `VIRTUAL_ENV`、PATH 的 `python3` / `python`、Windows `py -3` 顺序探测。显式路径失败不偷偷回退。探测验证版本与实际 `sys.executable`，缓存 60 秒，支持重新检测。
+- 桌面安装包默认使用随包分发的 Python 和 Jupyter 内核。CLI 和开发模式使用宿主环境。`PI_WEB_PYTHON` 指定解释器可执行文件路径（不是 shell 命令）；未指定时按 `VIRTUAL_ENV`、PATH 的 `python3` / `python`、Windows `py -3` 顺序探测。显式路径失败不偷偷回退。探测验证版本与实际 `sys.executable`，缓存 60 秒，支持重新检测。
 - 执行与语言辅助共用选中的解释器。推荐虚拟环境；第三方库在该环境中安装，Playground 不隐式安装依赖；用户可通过按钮安装可选编辑工具。运行使用 `-I -X utf8 -u`，忽略 `PYTHONPATH` 和用户 site-packages，虚拟环境自身的包仍可用。规则依据 [Python 命令行文档](https://docs.python.org/3/using/cmdline.html)。
 - **不是沙箱**。临时目录不自动加入项目路径，但代码仍有服务用户的文件、网络和进程权限，不能宣称无法访问工作区。
 - 超时、输出预算、并发限制沿用原配置。移除 Java 专属 `maxHeapMb`；旧配置中的该字段读取时忽略，API 不再接受它。Python 内存没有跨平台硬限制。

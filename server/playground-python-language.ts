@@ -11,7 +11,7 @@ export async function analyzePython(python: PythonCommand, code: string, offset:
 	const directory = mkdtempSync(join(tmpdir(), "pi-python-analysis-"));
 	try {
 		return await new Promise((resolve, reject) => {
-			const child = spawn(python.command, [...python.args, "-I", "-X", "utf8", "-u", "-c", PYTHON_ANALYSIS], { cwd: directory, detached: true, windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
+			const child = spawn(python.command, [...python.args, "-I", "-B", "-X", "utf8", "-u", "-c", PYTHON_ANALYSIS], { cwd: directory, detached: true, windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
 			let out = "", error = "", bytes = 0, stopped = false;
 			const stop = () => { stopped = true; if (child.pid) killPidTree(child.pid); };
 			const timer = setTimeout(stop, 20000);

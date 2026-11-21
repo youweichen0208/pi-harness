@@ -20,6 +20,7 @@ export interface RequestHeaders {
 }
 
 const LOOPBACK_BIND_HOSTS = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
+export const isLoopbackBind = (host: string) => LOOPBACK_BIND_HOSTS.has(host.toLowerCase());
 /** URL#hostname spelling of the loopback names a local browser can use. */
 const LOOPBACK_HOSTNAMES = ["localhost", "127.0.0.1", "[::1]"];
 
@@ -42,7 +43,7 @@ export function parseAuthority(a: string): { hostname: string; port: string } {
  */
 export function effectiveAllowHosts(bindHost: string, allowHosts: string[]): string[] {
 	if (allowHosts.length > 0) return allowHosts;
-	return LOOPBACK_BIND_HOSTS.has(bindHost.toLowerCase()) ? LOOPBACK_HOSTNAMES : [];
+	return isLoopbackBind(bindHost) ? LOOPBACK_HOSTNAMES : [];
 }
 
 export function createOriginPolicy(options: OriginPolicyOptions): (headers: RequestHeaders) => boolean {

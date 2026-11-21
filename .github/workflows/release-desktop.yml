@@ -102,6 +102,9 @@ jobs:
           node tests/model-config-preservation-test.mjs
           node tests/model-sources-test.mjs
 
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.11.16"
       - name: Build Electron (macOS)
         run: npx electron-builder build --mac --arm64 --publish never
 
@@ -213,6 +216,9 @@ jobs:
       - name: Verify desktop toolbar layout on Windows
         run: node tests/desktop-toolbar-test.mjs
 
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.11.16"
       - name: Build Electron (Windows)
         run: npx electron-builder build --win --x64 --publish never
 
@@ -339,6 +345,9 @@ jobs:
           node tests/model-config-preservation-test.mjs
           node tests/model-sources-test.mjs
 
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.11.16"
       - name: Build Electron (Linux)
         run: npx electron-builder build --linux --x64 --publish never
 

@@ -61,6 +61,7 @@ function invocation(words: Word[], wrapped = false): boolean {
 	const executable = words[0].value.replace(/^\/(?:usr\/)?s?bin\//, "");
 	if (words[0].glob || !/^[a-z][a-z0-9_-]*$/.test(executable)) return false;
 	const args = words.slice(1).map(word => word.value);
+	if (["lsmod", "users", "groups", "who"].includes(executable) && args.length === 0) return true;
 	if (READ_ONLY.has(executable)) return true;
 	// Multipurpose tools need literal arguments: a glob could introduce write flags.
 	if (words.some(word => word.glob)) return false;

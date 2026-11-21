@@ -50,33 +50,24 @@ execFileSync(executable, ["--input-type=module", "--eval", `
 	import {join} from 'node:path';
 	import {DefaultResourceLoader, SettingsManager} from '@earendil-works/pi-coding-agent';
 	import {designFirstResources, designFirstSettings, toggleDesignFirst} from './dist/server/design-first-resources.js';
-	import {expandNativeTemplate} from './dist/server/native-prompt-template.js';
 	const root = mkdtempSync(join(tmpdir(), 'packaged-design-first-'));
 	try {
 		const loader = new DefaultResourceLoader({cwd:root,agentDir:root,settingsManager:SettingsManager.inMemory(),noExtensions:true,noSkills:true,noThemes:true,noContextFiles:true,noPromptTemplates:true,...designFirstResources('normal',root)});
 		await loader.reload();
-		assert.deepEqual(loader.getSkills().skills, []);
-		assert.deepEqual(loader.getPrompts().prompts.map(p=>p.name).sort(), ['bug-fix','design','feat']);
-		for (const prompt of loader.getPrompts().prompts) {
-			assert(prompt.content.includes(JSON.stringify(join(process.cwd(),'assets/skills/design-first/SKILL.md'))));
-			assert(!prompt.content.includes('{{DESIGN_FIRST_SKILL_PATH}}'));
-			const expanded = await expandNativeTemplate('/' + prompt.name + ' packaged fixture request', loader.getPrompts().prompts);
-			assert(expanded.includes('packaged fixture request'));
-			const route = prompt.name === 'design' ? 'full Start or resume workflow' : prompt.name === 'feat' ? 'Small feature route' : 'Bug fix route';
-			assert(expanded.includes(route));
-			assert(!expanded.includes('$ARGUMENTS'));
-		}
+		const names = () => loader.getSkills().skills.map(skill => skill.name).sort();
+		assert.deepEqual(names(), ['bug-fix','design-first','feat']);
+		assert.deepEqual(loader.getPrompts().prompts, []);
+		for (const skill of loader.getSkills().skills) assert.equal(skill.filePath, join(process.cwd(), 'assets/skills/design-first', skill.name === 'design-first' ? '' : skill.name, 'SKILL.md'));
 		toggleDesignFirst(false,designFirstSettings(root).version,root);
 		await loader.reload();
 		assert.deepEqual(loader.getSkills().skills, []);
 		assert.deepEqual(loader.getPrompts().prompts, []);
 		toggleDesignFirst(true,designFirstSettings(root).version,root);
 		await loader.reload();
-		assert.deepEqual(loader.getSkills().skills, []);
-		assert.deepEqual(loader.getPrompts().prompts.map(p=>p.name).sort(), ['bug-fix','design','feat']);
+		assert.deepEqual(names(), ['bug-fix','design-first','feat']);
 	} finally {rmSync(root,{recursive:true,force:true});}
 `], {cwd:appRoot,env:{...testEnv({PI_WEB_PKG_ROOT:appRoot}),ELECTRON_RUN_AS_NODE:"1",NODE_PATH:"",NODE_OPTIONS:""},timeout:30000,stdio:"pipe"});
-console.log("PASS packaged Design First skill/shortcuts, installed paths, expansion and toggle reload");
+console.log("PASS packaged Design First skills, installed paths and toggle reload");
 const playgroundMethods = pathToFileURL(join(appRoot, "dist/server/playground-methods.js")).href;
 execFileSync(executable, ["--input-type=module", "--eval", `
 	import assert from 'node:assert/strict';
@@ -95,7 +86,28 @@ const rgRelative = relative(appRoot, rgPath);
 assert(existsSync(rgPath) && !isAbsolute(rgRelative) && !rgRelative.startsWith(".."), "ripgrep binary must be shipped inside the app");
 assert.match(execFileSync(rgPath, ["--version"], { encoding: "utf8", timeout: 10000 }), /ripgrep/);
 console.log("PASS packaged ripgrep binary runs without a system installation");
-const { agentRuntimeEnvironment } = await import(pathToFileURL(join(appRoot, "electron/agent-runtime-env.mjs")).href);
+const { agentRuntimeEnvironment, desktopPythonEnvironment } = await import(pathToFileURL(join(appRoot, "electron/agent-runtime-env.mjs")).href);
+const runtime = desktopPythonEnvironment(resolve(appRoot, ".."), "");
+execFileSync(executable, ["--input-type=module", "--eval", `
+	import assert from 'node:assert/strict';
+	import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
+	import { tmpdir } from 'node:os';
+	import { join } from 'node:path';
+	import { notebookKernels } from './dist/server/notebook-kernel.js';
+	const dir = mkdtempSync(join(tmpdir(), 'pi bundled notebook '));
+	const kernels = notebookKernels(dir);
+	try {
+		const run = code => kernels.request('first', join(dir, 'example.md'), 'notebook-run', code);
+		await run('answer = 6 * 7');
+		assert.equal((await run('answer')).outputs[0].data['text/plain'], '42');
+		const result = await run('import sys; print(sys.executable)');
+		assert.equal(realpathSync(result.outputs[0].text.trim()), realpathSync(process.env.PI_WEB_PYTHON));
+	} finally {
+		await kernels.close();
+		rmSync(dir, { recursive: true, force: true });
+	}
+`], {cwd:appRoot,env:{...testEnv(),...runtime,ELECTRON_RUN_AS_NODE:"1"},timeout:90000,stdio:"inherit"});
+console.log("PASS fresh packaged Jupyter cells share the bundled interpreter");
 if (process.platform === "win32") {
 	const helper = readFileSync(join(appRoot, "node_modules/node-pty/lib/conpty_console_list_agent.js"), "utf8");
 	assert.match(helper, /pi-harness: the console may already be gone during ConPTY teardown/);
@@ -176,7 +188,7 @@ const child = fork(join(appRoot, "dist/server/index.js"), [], {
 		PI_CODING_AGENT_DIR: join(temp, "agent"),
 		PI_WEB_PKG_ROOT: appRoot,
 		PI_WEB_NO_BROWSER: "1",
-		// Python is supplied by the host, not bundled with the desktop app.
+		// An explicitly configured unavailable interpreter still reports an error.
 		PI_WEB_PYTHON: join(temp, "missing-python"),
 	},
 	stdio: ["ignore", "pipe", "pipe", "ipc"],

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { DefaultResourceLoader } from "@earendil-works/pi-coding-agent";
+import { loadSkills, type DefaultResourceLoader } from "@earendil-works/pi-coding-agent";
 import { documentDataDir } from "./document-extension-settings.js";
 import { writeFileAtomic } from "./private-file.js";
 
@@ -29,42 +29,33 @@ export function toggleDesignFirst(enabled: boolean, version: string, dataDir = d
 	writeFileAtomic(join(dataDir, "design-first.json"), JSON.stringify({ enabled }, null, "\t") + "\n");
 }
 
-export function designFirstSkillPath(root?: string): string {
+export const designFirstNames = ["design-first", "bug-fix", "feat"] as const;
+
+export function designFirstSkillPath(root?: string, name: typeof designFirstNames[number] = "design-first"): string {
 	const here = dirname(fileURLToPath(import.meta.url));
 	const candidates = root ? [root] : [process.env.PI_WEB_PKG_ROOT, resolve(here, ".."), resolve(here, "../..")];
 	for (const candidate of candidates) {
 		if (!candidate) continue;
 		try {
 			const pkg = JSON.parse(readFileSync(join(candidate, "package.json"), "utf8"));
-			if (pkg.name === "@youweichen/pi-harness") return join(candidate, "assets/skills/design-first/SKILL.md");
+			if (pkg.name === "@youweichen/pi-harness") return join(candidate, "assets/skills/design-first", name === "design-first" ? "" : name, "SKILL.md");
 		} catch { /* Try the source/compiled package root. */ }
 	}
 	throw Error("Cannot locate bundled Design First skill");
 }
 
-export function designFirstResources(kind: DesignFirstSessionKind, dataDir = documentDataDir(), root?: string): Pick<DefaultResourceLoaderOptions, "additionalPromptTemplatePaths" | "promptsOverride"> {
+export function designFirstResources(kind: DesignFirstSessionKind, dataDir = documentDataDir(), root?: string): Pick<DefaultResourceLoaderOptions, "skillsOverride"> {
 	if (kind !== "normal") return {};
-	const path = resolve(designFirstSkillPath(root));
-	// SDK prompt expansion runs after this override; JSON escapes keep path dollars literal.
-	const encodedPath = JSON.stringify(path).replaceAll("$", "\\u0024");
-	const commandPaths = ["design", "bug-fix", "feat"].map(name => join(dirname(path), "commands", `${name}.md`));
-	const isBundledCommand = (filePath: string) => commandPaths.includes(resolve(filePath));
 	return {
-		additionalPromptTemplatePaths: commandPaths,
-		promptsOverride(base) {
+		skillsOverride(base) {
 			try {
-				const enabled = designFirstSettings(dataDir).enabled;
-				return {
-					...base,
-					prompts: base.prompts.filter(prompt => enabled || !isBundledCommand(prompt.filePath)).map(prompt => isBundledCommand(prompt.filePath)
-						? { ...prompt, content: prompt.content.replaceAll("{{DESIGN_FIRST_SKILL_PATH}}", () => encodedPath) }
-						: prompt),
-				};
+				if (!designFirstSettings(dataDir).enabled) return base;
+				const skillPaths = designFirstNames.filter(name => !base.skills.some(skill => skill.name === name))
+					.map(name => designFirstSkillPath(root, name));
+				const bundled = loadSkills({ cwd: dataDir, agentDir: dataDir, skillPaths, includeDefaults: false });
+				return { skills: [...base.skills, ...bundled.skills], diagnostics: [...base.diagnostics, ...bundled.diagnostics] };
 			} catch (error) {
-				return {
-					prompts: base.prompts.filter(prompt => !isBundledCommand(prompt.filePath)),
-					diagnostics: [...base.diagnostics, { type: "warning", message: `Design First shortcuts unavailable: ${error instanceof Error ? error.message : String(error)}`, path }],
-				};
+				return { ...base, diagnostics: [...base.diagnostics, { type: "warning", message: `Design First skills unavailable: ${String(error)}` }] };
 			}
 		},
 	};

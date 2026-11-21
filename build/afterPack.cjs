@@ -19,11 +19,7 @@ const { execFileSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
 
-module.exports = async function afterPack(context) {
-	const product = context.packager.appInfo.productFilename;
-	const packagedRoot = context.electronPlatformName === "darwin"
-		? path.join(context.appOutDir, `${product}.app`, "Contents/Resources/app")
-		: path.join(context.appOutDir, "resources/app");
+function verifyPackagedResources(packagedRoot, projectDir) {
 	const sdkRoot = path.join(packagedRoot, "node_modules/@earendil-works/pi-coding-agent");
 	const manifest = JSON.parse(fs.readFileSync(path.join(packagedRoot, "package.json"), "utf8"));
 	if (fs.existsSync(path.join(packagedRoot, "extensions")) || manifest.pi?.extensions?.length) {
@@ -31,7 +27,7 @@ module.exports = async function afterPack(context) {
 	}
 	const expectedSdk = manifest.dependencies?.["@earendil-works/pi-coding-agent"];
 	const skillRoot = path.join(packagedRoot, "assets/skills/design-first");
-	const sourceSkillRoot = path.join(context.packager.projectDir, "assets/skills/design-first");
+	const sourceSkillRoot = path.join(projectDir, "assets/skills/design-first");
 	const resourceFiles = root => !fs.existsSync(root) ? [] : fs.readdirSync(root, { recursive: true })
 		.map(String).filter(reference => fs.statSync(path.join(root, reference)).isFile())
 		.map(reference => reference.split(path.sep).join("/")).sort();
@@ -54,6 +50,15 @@ module.exports = async function afterPack(context) {
 		const file = path.join(sdkRoot, reference);
 		if (!fs.existsSync(file) || !fs.statSync(file).isFile() || !fs.statSync(file).size) throw new Error(`Packaged Pi reference is missing: ${reference}`);
 	}
+}
+
+module.exports = async function afterPack(context) {
+	const product = context.packager.appInfo.productFilename;
+	const packagedRoot = context.electronPlatformName === "darwin"
+		? path.join(context.appOutDir, `${product}.app`, "Contents/Resources/app")
+		: path.join(context.appOutDir, "resources/app");
+	verifyPackagedResources(packagedRoot, context.packager.projectDir);
+	require("./bundle-python.cjs")(path.dirname(packagedRoot), context.electronPlatformName, context.arch);
 	if (context.electronPlatformName !== "darwin") return;
 
 	const appName = context.packager.appInfo.productFilename;
@@ -70,3 +75,5 @@ module.exports = async function afterPack(context) {
 	});
 	console.log("[afterPack] ad-hoc 签名完成");
 };
+
+module.exports.verifyPackagedResources = verifyPackagedResources;

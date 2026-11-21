@@ -13,7 +13,7 @@ export class KnowledgeLibrary {
 		} catch { return null; }
 	}
 	private document(cwd: string, path: unknown): string | null {
-		if (typeof path !== "string" || !/\.(md|markdown)$/i.test(path)) return null;
+		if (typeof path !== "string" || !/\.(md|markdown|ipynb)$/i.test(path)) return null;
 		try {
 			const file = realpathSync(resolve(cwd, path));
 			const rel = relative(cwd, file);

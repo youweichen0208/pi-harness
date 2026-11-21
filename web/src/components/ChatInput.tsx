@@ -485,7 +485,11 @@ export const ChatInput = memo(function ChatInput({
 					return;
 				}
 				if (new TextEncoder().encode(snapshot.editorSnapshot.text).length > 512 * 1024) {
-					onNotice("error", t("currentFileTooLarge"));
+					onNotice("error", t(/\.ipynb$/i.test(autoFile.path) ? "nbLarge" : "currentFileTooLarge"));
+					return;
+				}
+				if (wikiReferences !== undefined && /\.ipynb$/i.test(autoFile.path) && !snapshot.editorSnapshot.text.trim()) {
+					onNotice("error", t("nbNoCells"));
 					return;
 				}
 				outgoing = mergeCurrentFile(outgoing, snapshot);
@@ -518,7 +522,7 @@ export const ChatInput = memo(function ChatInput({
 			const preview = contextReader.current?.(autoFile.id);
 			// 尺寸预检放在落盘之前：发不出去的快照不值得写盘。
 			if (preview?.editorSnapshot && new TextEncoder().encode(preview.editorSnapshot.text).length > 512 * 1024) {
-				onNotice("error", t("currentFileTooLarge"));
+				onNotice("error", t(/\.ipynb$/i.test(autoFile.path) ? "nbLarge" : "currentFileTooLarge"));
 				return;
 			}
 			if (preview?.editorSnapshot?.dirty && wikiReferences === undefined) {

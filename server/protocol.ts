@@ -1419,6 +1419,16 @@ export interface WikiChatSummary { id: string; title: string; updated: number; r
 export interface WikiProjectReference { workspaceId: string; workspaceName: string; path: string; name: string }
 export interface WikiChatContext { sessionId: string; references: string[] }
 export interface WorkspaceFileCreated { path: string }
+export type NotebookText = string | string[];
+export interface NotebookCellOutput {
+	output_type: string;
+	name?: string;
+	text?: NotebookText;
+	traceback?: string[];
+	data?: Record<string, NotebookText>;
+}
+export interface NotebookRunResult { outputs: NotebookCellOutput[]; execution_count: number }
+export type NotebookRunEvent = { output: NotebookCellOutput } | { result: NotebookRunResult } | { error: string };
 export interface WikiEntry {
 	path: string;
 	name: string;
@@ -1505,7 +1515,7 @@ export interface ExtensionPackage {
 }
 export interface ExtensionsState { packages: ExtensionPackage[]; version: string; trusted: boolean; checkedAt?: number; autoCheck?: boolean; updateResults?: ExtensionUpdateResult[]; }
 
-export type BuiltinExtensionId = "pi-harness-design-first" | "pi-harness-database" | "codemode" | "tool-search" | "mcp";
+export type BuiltinExtensionId = "desktop-control" | "pi-harness-design-first" | "pi-harness-database" | "codemode" | "tool-search" | "mcp";
 export interface BuiltinExtensionState {
 	id: BuiltinExtensionId;
 	settingsVersion?: string;
@@ -1524,7 +1534,7 @@ export interface BuiltinExtensionsState {
 }
 export type BuiltinExtensionsRequest =
 	| { action: "builtin-list"; conversationId: string }
-	| { action: "builtin-toggle"; conversationId: string; id: "pi-harness-design-first" | "pi-harness-database"; enabled: boolean; version: string };
+	| { action: "builtin-toggle"; conversationId: string; id: "desktop-control" | "pi-harness-design-first" | "pi-harness-database"; enabled: boolean; version: string };
 export interface ExtensionCatalogItem { name: string; description: string; descriptionZh?: string; version?: string; author?: string; downloads?: number; date?: number; types: string[]; image?: string; url: string; repository?: string; }
 export interface ExtensionCatalog { items: ExtensionCatalogItem[]; page: number; pages: number; total?: number; }
 export interface ExtensionPackageDetails { source: string; name: string; version?: string; description?: string; author?: string; repository?: string; license?: string; resources: Record<string, string[]>; canPin: boolean; }

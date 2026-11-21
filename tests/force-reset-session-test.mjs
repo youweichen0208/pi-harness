@@ -98,8 +98,8 @@ try {
 		try {
 			const target = victim.conv; seed(target, `SKILL_RECOVERY_${kind}`);
 			const before = target.runtime, file = target.session.sessionFile;
-			const hasDesignCommand = () => target.runtime.services.resourceLoader.getPrompts().prompts.some(prompt => prompt.name === "design");
-			assert.equal(hasDesignCommand(), !wiki, `${kind} initial resource scope`);
+			const hasDesignSkill = () => target.runtime.services.resourceLoader.getSkills().skills.some(skill => skill.name === "design-first");
+			assert.equal(hasDesignSkill(), !wiki, `${kind} initial resource scope`);
 			target.session.abort = async () => {}; // Return without agent_settled.
 			await victim.abort();
 			assert.notEqual(target.runtime, before, "public Stop really rebuilt the runtime");
@@ -107,7 +107,7 @@ try {
 			assert.equal(!!target.wiki, wiki, "conversation kind is retained");
 			assert.equal(target.session.sessionFile, file, "persistent history stays in its original scope");
 			assert.match(text(target), new RegExp(`SKILL_RECOVERY_${kind}`));
-			assert.equal(hasDesignCommand(), !wiki, `${kind} forced recovery resource scope`);
+			assert.equal(hasDesignSkill(), !wiki, `${kind} forced recovery resource scope`);
 			assert.equal(target.rebuilding, false);
 		} finally { await victim.dispose(); }
 	}

@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { FiDatabase, FiList, FiServer, FiCode, FiSearch } from "react-icons/fi";
+import { FiMonitor, FiGlobe, FiDatabase, FiList, FiServer, FiCode, FiSearch } from "react-icons/fi";
 import { useT } from "../i18n";
 import { withToken } from "../auth-token";
 import { getClientId } from "../use-chat";
 import type { BuiltinExtensionsRequest, BuiltinExtensionsState } from "../types";
 
 const labels = {
+	"desktop-control": ["desktopControl", "desktopControlHint"],
 	"pi-harness-design-first": ["builtinDesignFirst", "builtinDesignFirstHint"],
 	"pi-harness-database": ["dbTitle", "dbExtensionHint"],
 	mcp: ["builtinMcp", "builtinMcpHint"],
@@ -13,7 +14,7 @@ const labels = {
 	"tool-search": ["builtinSearch", "builtinSearchHint"],
 } as const;
 
-const icons = { "pi-harness-design-first": FiList, "pi-harness-database": FiDatabase, mcp: FiServer, codemode: FiCode, "tool-search": FiSearch };
+const icons = { "desktop-control": FiMonitor, "pi-harness-design-first": FiList, "pi-harness-database": FiDatabase, mcp: FiServer, codemode: FiCode, "tool-search": FiSearch };
 
 export function BuiltinExtensionsPanel({ cwd, conversationId, ready, canReload, reload, openNative, designOnly = false, prepareDesign }: {
 	cwd: string; conversationId: string; ready: boolean; canReload: boolean;
@@ -59,19 +60,26 @@ export function BuiltinExtensionsPanel({ cwd, conversationId, ready, canReload, 
 	}
 	const items = state?.items.filter(item => !designOnly || item.id === "pi-harness-design-first");
 	return <section className="builtin-extensions" aria-label={t("builtinTitle")}>
-		<h3 className="settings-group-title">{t("builtinTitle")} · {items?.length ?? "…"}<small>{t("builtinBundled")}</small></h3>
+		<h3 className="settings-group-title">{t("builtinTitle")} · {items ? items.length + (designOnly ? 0 : 1) : "…"}<small>{t("builtinBundled")}</small></h3>
 		{error && <div role="alert" className="ext-error">{error} <button disabled={busy || !ready} onClick={() => { setError(""); void refresh(); }}>{t("extRefresh")}</button></div>}
 		{!state && <p>{t("loading")}</p>}
-		<div className="ext-list">{items?.map(item => {
+		<div className="ext-list">{!designOnly && <article className="ext-row builtin-row">
+				<span className="builtin-icon" aria-hidden="true"><FiGlobe /></span>
+				<div className="builtin-row-content"><div className="builtin-row-head">
+					<div><strong>{t("browserControl")}</strong><p className="settings-description">{t("browserControlHint")}</p></div>
+					<button onClick={openNative}>{t("browserSetup")}</button>
+				</div></div>
+			</article>}
+			{items?.map(item => {
 			const [title, description] = labels[item.id];
 			const Icon = icons[item.id];
 			const status = item.status;
-			const toggleableItem = item.id === "pi-harness-database" || item.id === "pi-harness-design-first";
+			const toggleableItem = item.id === "desktop-control" || item.id === "pi-harness-database" || item.id === "pi-harness-design-first";
 			const version = item.settingsVersion ?? state?.documentVersion;
 			return <article className="ext-row builtin-row" key={item.id} data-builtin-id={item.id}>
 				<span className="builtin-icon" aria-hidden="true"><Icon /></span><div className="builtin-row-content"><div className="builtin-row-head"><div><strong>{t(title)}</strong><p className="settings-description">{t(description)}</p></div>
 					<span className="builtin-status" data-status={status}>{t(({ loaded: "builtinLoaded", disabled: "builtinDisabled", pending: "builtinPending", unavailable: "builtinUnavailable", error: "builtinError" } as const)[status])}</span>
-					{toggleableItem ? <input className="ext-switch" type="checkbox" role="switch" aria-label={`${t("extEnable")} ${t(title)}`} checked={item.enabled ?? false} disabled={busy || !ready || !version || item.enabled === undefined} onChange={event => void change({ action: "builtin-toggle", conversationId, id: item.id as "pi-harness-design-first" | "pi-harness-database", enabled: event.target.checked, version: version! })} />
+					{toggleableItem ? <input className="ext-switch" type="checkbox" role="switch" aria-label={`${t("extEnable")} ${t(title)}`} checked={item.enabled ?? false} disabled={busy || !ready || !version || item.enabled === undefined} onChange={event => void change({ action: "builtin-toggle", conversationId, id: item.id as "desktop-control" | "pi-harness-design-first" | "pi-harness-database", enabled: event.target.checked, version: version! })} />
 						: <button onClick={openNative}>{t("builtinSettings")}</button>}
 				</div>
 				{item.error && <p className="ext-error">{item.error}</p>}
@@ -79,10 +87,10 @@ export function BuiltinExtensionsPanel({ cwd, conversationId, ready, canReload, 
 				{status === "pending" && <p className="settings-description">{t("builtinReloadHint")}</p>}
 				{item.id === "pi-harness-design-first" && prepareDesign && <button disabled={!ready || busy || !item.enabled || status !== "loaded"} onClick={prepareDesign}>{t("designFirstPrepare")}</button>}
 				<details><summary>{t("extDetails")}</summary>
-					{toggleableItem && item.id !== "pi-harness-design-first" && <p>{t("builtinDocumentScope")}</p>}
+					{toggleableItem && item.id !== "desktop-control" && item.id !== "pi-harness-design-first" && <p>{t("builtinDocumentScope")}</p>}
 					<p>{t("builtinTools")}: <code>{item.tools.join(", ") || "—"}</code></p>
 					{item.commands.length > 0 && <p>{t("builtinCommands")}: <code>{item.commands.map(command => `/${command}`).join(", ")}</code></p>}
-					{toggleableItem && <button disabled={busy || !ready || !canReload || !state?.canReload} onClick={reload}>{t("extReload")}</button>}
+					{toggleableItem && item.id !== "desktop-control" && <button disabled={busy || !ready || !canReload || !state?.canReload} onClick={reload}>{t("extReload")}</button>}
 				</details></div>
 			</article>;
 		})}</div>

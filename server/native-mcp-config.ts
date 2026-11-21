@@ -1,3 +1,5 @@
+import { browserMcpName, browserMcpConfig } from "./browser-mcp.js";
+import { mcpNamespaceKey } from "./mcp-namespace.js";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { createHash } from "node:crypto";
@@ -42,13 +44,25 @@ export class NativeMcpConfigService {
 		document.mcpServers ??= {};
 		if (!document.mcpServers || Array.isArray(document.mcpServers) || typeof document.mcpServers !== "object") throw new Error("mcpServers must be an object");
 		if (document.autoEnableCodemode !== undefined && typeof document.autoEnableCodemode !== "boolean") throw new Error("autoEnableCodemode must be a boolean");
+		const namespaces = new Map<string, string>();
+		if (scope === "project") {
+			const globals = parseMcpDocument(read(this.path(cwd, "global"))).mcpServers ?? {};
+			for (const name of Object.keys(globals)) namespaces.set(mcpNamespaceKey(name), name);
+		}
+		for (const name of Object.keys(document.mcpServers)) {
+			const namespace = mcpNamespaceKey(name), existing = namespaces.get(namespace);
+			if (existing !== undefined && existing !== name) throw new Error(`MCP server namespace conflict: "${existing}" and "${name}"`);
+			namespaces.set(namespace, name);
+		}
 		for (const [name, config] of Object.entries(document.mcpServers)) {
 			let candidate = config;
 			if (scope === "project" && config && typeof config === "object" && !Array.isArray(config) && !["command", "url", "type"].some(key => Object.hasOwn(config, key))) {
 				if (Object.keys(config).some(key => !["enabled", "exposure", "toolExposure"].includes(key))) throw new Error("Project overrides only allow enabled, exposure, and toolExposure");
 				const base = parseMcpDocument(read(this.path(cwd, "global"))).mcpServers?.[name];
-				if (!base) throw new Error(`No global MCP server to override: ${name}`);
-				candidate = { ...base, ...config };
+				if (!base && name !== browserMcpName) throw new Error(`No global MCP server to override: ${name}`);
+				candidate = { ...(base ?? browserMcpConfig), ...config };
+				// Pi merges partial project overrides only with file-backed global entries.
+				if (!base) document.mcpServers[name] = candidate;
 			}
 			const result = validateMcpServerConfig(name, candidate); if (typeof result === "string") throw new Error(result);
 			if (scope === "project" && config.auth) throw new Error("Provider authentication is allowed only in global MCP configuration");

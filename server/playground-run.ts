@@ -158,7 +158,7 @@ export async function runPython(options: RunPythonOptions): Promise<RunSummary> 
 		const file = join(directory, "scratch.py");
 		writeFileSync(file, options.code);
 		const register = (child: ChildProcess) => { current = child; if (shouldStop()) stop(); };
-		const execute = (mode: string, extra: string[] = []) => spawnPhase(options.python.command, [...options.python.args, "-I", "-X", "utf8", "-u", "-c", PYTHON_RUNNER, file, mode, ...extra], { cwd: directory, forward, shouldStop, register });
+		const execute = (mode: string, extra: string[] = []) => spawnPhase(options.python.command, [...options.python.args, "-I", "-B", "-X", "utf8", "-u", "-c", PYTHON_RUNNER, file, mode, ...extra], { cwd: directory, forward, shouldStop, register });
 		const compiled = shouldStop() ? null : await execute("check");
 		if (!shouldStop()) {
 			if (compiled !== 0) { compileError = true; exitCode = compiled; }

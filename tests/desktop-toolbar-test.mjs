@@ -40,7 +40,7 @@ try {
 		for (const width of [800, 1000, 900, 1500]) {
 			await page.setViewportSize({ width, height: 850 });
 			await page.goto(`http://127.0.0.1:${port}`);
-			await page.locator('.topbar-actions .topbar-more').waitFor();
+			await page.locator('.workspace-files-toggle').waitFor();
 			await page.locator('.tab-change-count', { hasText: String(changeCount) }).waitFor();
 			await page.keyboard.press('Escape');
 			await page.locator('.view-switch button.active').waitFor();
@@ -48,7 +48,7 @@ try {
 			assert.equal(await page.locator('.topbar').evaluate(el => getComputedStyle(el).getPropertyValue('-webkit-app-region')), 'drag', 'restored desktop windows retain a continuous titlebar drag region');
 			assert.equal(await page.locator('.conversation-title-button').evaluate(el => getComputedStyle(el).getPropertyValue('-webkit-app-region')), 'no-drag', 'session selector remains clickable');
 			assert.equal(await page.locator('.topbar-actions').evaluate(el => getComputedStyle(el).getPropertyValue('-webkit-app-region')), 'drag', 'toolbar gaps remain draggable');
-			assert.equal(await page.locator('.topbar-actions .topbar-more .chip').evaluate(el => getComputedStyle(el).getPropertyValue('-webkit-app-region')), 'no-drag', 'titlebar settings stays clickable');
+			assert.equal(await page.locator('.workspace-files-toggle').evaluate(el => getComputedStyle(el).getPropertyValue('-webkit-app-region')), 'no-drag', 'titlebar file toggle stays clickable');
 			assert.equal(await page.locator('.status-messages').count(), 0);
 			assert.equal(await page.evaluate(() => getComputedStyle(document.body).fontSize), '14px');
 			assert.equal(await page.locator('.topbar-actions > .icon-btn').count(), 0);
@@ -83,17 +83,15 @@ try {
 				}
 				const titleButton = await page.locator('.conversation-title-button').boundingBox();
 				assert(titleButton.x + titleButton.width <= actions.x + 1, `${platform}/${width}/${view}: conversation title overlaps tabs`);
-				const menu = page.locator('.topbar-actions .topbar-more .chip');
+				const files = page.locator('.workspace-files-toggle');
 				if (view === 'nodes') {
 					assert(await page.getByRole('tab', { name: '节点', exact: true }).isVisible(), 'secondary navigation stays available in nodes');
 					continue;
 				}
-				const box = await menu.boundingBox();
-				const hit = await menu.evaluate(el => { const b = el.getBoundingClientRect(); return el.contains(document.elementFromPoint(b.x + b.width / 2, b.y + b.height / 2)); });
-				assert(hit && box.width >= 60, `${platform}/${width}/${view}: settings is clipped or covered`);
-				await menu.click();
-				await page.locator('.topbar-actions .dd-menu').waitFor();
-				await page.keyboard.press('Escape');
+				const box = await files.boundingBox();
+				const hit = await files.evaluate(el => { const b = el.getBoundingClientRect(); return el.contains(document.elementFromPoint(b.x + b.width / 2, b.y + b.height / 2)); });
+				assert(hit && box.width >= 32, `${platform}/${width}/${view}: file toggle is clipped or covered`);
+
 			}
 			await page.getByRole('tab', { name: '对话', exact: true }).click();
 			await page.locator('.view-switch button.active').waitFor();
@@ -107,8 +105,7 @@ try {
 			};
 			await page.waitForTimeout(400);
 			if (!(await taskTabOnScreen())) {
-				await page.locator('.topbar-more .chip').click();
-				await page.locator('.workspace-settings-menu .dd-item').filter({ hasText: '文件列表' }).click();
+				await page.locator('.workspace-files-toggle').click();
 			}
 			await page.waitForFunction(() => {
 				const tab = [...document.querySelectorAll('.right-panel-tabs [role="tab"]')].find(el => el.textContent.includes('任务'));
@@ -137,15 +134,13 @@ try {
 			assert.equal(await page.locator('.right-panel-tabs [aria-selected="true"]').textContent(), '任务');
 			assert.equal(await page.locator('.tree-filter, .tree-modified-count').count(), 0);
 			if (width === 1500) {
-				await page.locator('.topbar-more .chip').click();
-				await page.locator('.workspace-settings-menu .dd-item').filter({ hasText: '文件列表' }).click();
+				await page.locator('.workspace-files-toggle').click();
 				changeCount++;
 				socket.send(JSON.stringify({ type: 'scm_changed' }));
 			await page.locator('.tab-change-count', { hasText: String(changeCount) }).waitFor();
 			await page.keyboard.press('Escape');
 			await page.locator('.view-switch button.active').waitFor();
-				await page.locator('.topbar-more .chip').click();
-				await page.locator('.workspace-settings-menu .dd-item').filter({ hasText: '文件列表' }).click();
+				await page.locator('.workspace-files-toggle').click();
 				await page.locator('.panel-right').waitFor({ state: 'visible' });
 				assert.equal(await page.locator('.tree-filter, .tree-modified-count').count(), 0);
 				await page.locator('.project-panel-toggle').click();

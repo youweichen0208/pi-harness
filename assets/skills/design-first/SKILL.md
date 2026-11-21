@@ -1,6 +1,6 @@
 ---
 name: design-first
-description: Design features or bug fixes for human confirmation, implement with the current Pi session's tools, verify and reconcile project specs, or resume unfinished work from documents and code evidence.
+description: Prepare a design proposal for a cross-module change or significant trade-off, or resume a saved design from its documents and current source. After confirmation, implement, verify and reconcile project specs.
 ---
 
 # Design First
