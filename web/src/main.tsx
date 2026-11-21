@@ -11,7 +11,7 @@ import { desktopAPI } from "./desktop";
 
 document.documentElement.dataset.platform = desktopAPI?.platform ?? (/Windows/i.test(navigator.userAgent) ? "win32" : /Mac/i.test(navigator.userAgent) ? "darwin" : "linux");
 
-// Share typography while keeping each platform's native caption layout.
+// Platform attributes select native typography and caption layout.
 if (desktopAPI) document.documentElement.classList.add("pi-desktop", `pi-desktop-${desktopAPI.platform}`);
 
 // 吸收地址栏 ?token=（PI_WEB_TOKEN 鉴权入口）并持久化，须在首次请求前执行
