@@ -90,6 +90,9 @@ try {
 		};
 		const faces = {};
 		const mac = process.platform === 'darwin';
+		const windows = process.platform === 'win32';
+		const proseFamilies = windows ? ['Microsoft YaHei UI', 'Microsoft YaHei', 'UI SC'] : mac ? ['PingFang SC'] : ['UI SC'];
+		const macLatin = ['.SF NS', 'SF Pro', 'SF Pro Text', 'SF Pro Display'];
 		const emoji = mac ? 'Apple Color Emoji' : 'Noto Color Emoji';
 		const measureFonts = async (name, selector, expected) => {
 			const { fonts } = await platformFonts(selector);
@@ -103,8 +106,8 @@ try {
 			return used;
 		};
 		for (const [name, selector] of [['motto', '.welcome-motto > span:first-child'], ['mottoEmphasis', '.welcome-motto em']]) {
-			const used = await measureFonts(name, selector, ['Times New Roman']);
-			assert(used.every(font => !font.isCustomFont && font.familyName === 'Times New Roman'), `${name}: use the native italic face from v1.34.1`);
+			const used = await measureFonts(name, selector, [mac ? macLatin : ['Times New Roman']]);
+			assert(used.every(font => !font.isCustomFont && (mac ? macLatin.includes(font.familyName) : font.familyName === 'Times New Roman')), `${name}: use the platform's native welcome font`);
 			assert.equal(await page.locator(selector).evaluate(el => getComputedStyle(el).fontStyle), 'italic');
 		}
 		const ui = {};
@@ -135,12 +138,16 @@ try {
 		assert(fonts.some(font => /jetbrains-mono/.test(font.url) && font.status === 200));
 		conversation = true; await page.reload(); await page.locator('.msg-text', { hasText: '职责分离' }).waitFor().catch(async error => { await page.screenshot({ path: join(output, `${prefix}-failure.png`) }); writeFileSync(join(output, `${prefix}-failure.txt`), await page.locator('body').innerText()); throw error; }); await page.evaluate(() => document.fonts.ready);
 		const rendered = await platformFonts('.msg-text h2');
-		assert(rendered.fonts.some(font => font.familyName === 'UI SC' && font.isCustomFont && font.glyphCount > 0), JSON.stringify(rendered));
-		assert(await page.locator('.msg-text h2').evaluate(el => getComputedStyle(el).fontFamily.startsWith('"UI SC"')), 'prose prioritizes the bundled cross-platform UI font');
+		assert(rendered.fonts.some(font => proseFamilies.includes(font.familyName) && font.glyphCount > 0), JSON.stringify(rendered));
+		assert(await page.locator('.msg-text h2').evaluate((el, family) => getComputedStyle(el).fontFamily.startsWith(family), windows ? '"Segoe UI"' : mac ? '-apple-system' : '"UI SC"'), 'prose uses the platform font stack');
+		if (windows) {
+			const prose = page.locator('.msg-assistant .msg-text:not(.process-narration) .md').last();
+			assert.deepEqual(await prose.evaluate(el => { const s = getComputedStyle(el); return [s.fontSize, s.lineHeight, s.letterSpacing]; }), ['16px', '28px', 'normal']);
+		}
 		await page.locator('.tree-hidden-summary').click();
 		await page.locator('[data-tree-node=".ruff_cache"] .file-name').waitFor();
 		const monoFonts = await platformFonts('.msg-text pre code');
-		assert(monoFonts.fonts.some(font => font.familyName === 'JetBrains Mono' && font.isCustomFont), JSON.stringify(monoFonts));
+		assert(monoFonts.fonts.some(font => mac ? macLatin.includes(font.familyName) && !font.isCustomFont : font.familyName === 'JetBrains Mono' && font.isCustomFont), JSON.stringify(monoFonts));
 		// v1.34.1 uses native fallbacks on Mac. Windows bundles symbol/emoji faces.
 		await page.evaluate(async () => {
 			const probe = document.createElement('div');
@@ -153,8 +160,8 @@ try {
 		await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 		const glyphCoverage = await platformFonts('#glyph-probe');
 		assert(glyphCoverage.fonts.some(font => font.familyName === emoji && font.glyphCount > 0), JSON.stringify(glyphCoverage.fonts));
-		if (!mac) assert(glyphCoverage.fonts.some(font => font.familyName === 'UI Symbols' && font.isCustomFont && font.glyphCount > 0), JSON.stringify(glyphCoverage.fonts));
-		assert(glyphCoverage.fonts.some(font => font.isCustomFont && font.glyphCount > 0));
+		if (!mac && !windows) assert(glyphCoverage.fonts.some(font => font.familyName === 'UI Symbols' && font.isCustomFont && font.glyphCount > 0), JSON.stringify(glyphCoverage.fonts));
+		if (!mac) assert(glyphCoverage.fonts.some(font => font.isCustomFont && font.glyphCount > 0));
 		await page.evaluate(() => document.querySelector('#glyph-probe')?.remove());
 		if (process.platform !== 'darwin') {
 			const controls = await page.locator('.desktop-window-controls').boundingBox();
@@ -286,12 +293,12 @@ try {
 
 		// Use real component nodes to verify the cascade and the glyph faces that actually painted.
 		await measureFonts('code', '.msg-text pre code', mac
-			? ['JetBrains Mono', emoji]
+			? [macLatin, 'PingFang SC', emoji]
 			: ['JetBrains Mono', 'UI SC', emoji]);
 		await page.locator('.topbar-more .chip').click();
 		await page.locator('.dd-menu').getByRole('button', { name: '所有设置', exact: true }).click();
 		await sampleControl('settingsTab', '.settings-tab.active', true);
-		await measureFonts('settingsTab', '.settings-tab.active .settings-tab-label', ['UI SC']);
+		await measureFonts('settingsTab', '.settings-tab.active .settings-tab-label', [proseFamilies]);
 		await page.keyboard.press('Escape');
 		await page.locator('.settings-modal').waitFor({ state: 'hidden' });
 
@@ -307,7 +314,7 @@ try {
 		await terminalRow.evaluate(el => el.dataset.renderSample = 'terminal');
 		await page.evaluate(() => document.fonts.ready);
 		await measureFonts('terminal', '[data-render-sample="terminal"]', mac
-			? [['SF Mono', '.SF NS Mono', 'JetBrains Mono'], emoji]
+			? [macLatin, 'PingFang SC', emoji]
 			: ['JetBrains Mono', 'UI SC', emoji]);
 		// xterm computes per-DPI glyph spacing and line boxes after fitting.
 		// Compare the font and active terminal palette independently of that adjustment.
@@ -323,7 +330,9 @@ try {
 		const noteEditor = page.locator('.notes-editor .fp-rich-document');
 		await noteEditor.fill(mixed);
 		await page.evaluate(() => document.fonts.ready);
-		await measureFonts('notes', '.notes-editor .fp-rich-document', ['UI SC', emoji]);
+		const noteFaces = await measureFonts('notes', '.notes-editor .fp-rich-document', [proseFamilies, emoji]);
+		if (mac) assert(noteFaces.some(font => macLatin.includes(font.familyName) && !font.isCustomFont), 'English text uses native SF Pro');
+		if (windows) assert(noteFaces.some(font => font.familyName === 'Segoe UI' && !font.isCustomFont), 'English text uses native Segoe UI');
 		await sampleControl('noteTitle', '.notes-editor .note-title');
 		await sampleControl('noteBody', '.notes-editor .fp-rich-document');
 		await noteEditor.blur();
@@ -352,7 +361,7 @@ try {
 		const paragraph = '.wiki-prose .fp-rich-document p';
 		await page.locator(paragraph).first().waitFor();
 		await page.evaluate(() => document.fonts.ready);
-		await measureFonts('wiki', paragraph, ['UI SC']);
+		await measureFonts('wiki', paragraph, [proseFamilies]);
 		await sampleControl('wiki', paragraph);
 		await page.screenshot({ path: join(output, `${prefix}-wiki.png`) });
 		assert.deepEqual(failures, [], 'all requested font resources loaded');

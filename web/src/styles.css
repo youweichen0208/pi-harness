@@ -8338,18 +8338,26 @@ span.msg-editor-hint svg {
 	}
 }
 
-/* Keep the original macOS faces for code, punctuation and native emoji. */
+/* macOS native bilingual typography; code exceptions are scoped below. */
 html[data-platform="darwin"] {
-	--mono: "JetBrains Mono", "Cascadia Mono", "SF Mono", "SFMono-Regular", Menlo, Consolas, monospace;
-	--sans: "UI SC", "Chinese Quote", -apple-system, system-ui, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
-	--document-font: "UI SC", "Chinese Quote", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
-	--document-title-font: "UI SC", "Chinese Quote", "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif, "Apple Color Emoji";
-	--terminal-font: "SF Mono", "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
-	--ssh-terminal-font: "JetBrains Mono", Consolas, monospace;
-	--settings-mono: "JetBrains Mono", monospace;
-	--hex-font: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-	--task-file-font: "JetBrains Mono", "SFMono-Regular", Consolas, "Microsoft YaHei UI", "Microsoft YaHei", monospace;
+	--sans: -apple-system, BlinkMacSystemFont, "PingFang SC", "Apple Color Emoji", sans-serif;
+	--document-font: var(--sans);
+	--document-title-font: var(--sans);
+	--mono: var(--sans);
+	--terminal-font: var(--sans);
+	--ssh-terminal-font: var(--sans);
+	--settings-mono: var(--sans);
+	--hex-font: var(--sans);
+	--task-file-font: var(--sans);
+	--review-font: var(--sans);
 }
+/* Keep the existing code faces in Playground, Wiki and their detached assistants.
+   UI/document text still inherits the native --sans stack. */
+html[data-platform="darwin"] :is(.scratch-page, .wiki-window-shell, .wiki-workbench, .wiki-document-dialog, .wiki-assistant-container) {
+	--mono: "JetBrains Mono", "Cascadia Mono", "SF Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+	--review-font: "JetBrains Mono", "Menlo", "Consolas", monospace;
+}
+html[data-platform="darwin"] .welcome-paper .welcome-motto { font-family: var(--sans); }
 
 /* Electron window shell. Browser styles above remain the default. */
 html.pi-desktop .topbar {
@@ -9696,8 +9704,6 @@ body { -webkit-font-smoothing: antialiased; }
 .design-workspace .usage-cache-short { display: inline; }
 @container composer (max-width: 530px) {
 	.input-tools .usage-cache-short { display: none; }
-}
-@container composer (max-width: 530px) {
 }
 @container composer (max-width: 400px) {
 	.input-tools .input-tools-left > .dropdown:first-of-type > .chip > svg:first-child { display: block; flex: none; }
@@ -16322,3 +16328,42 @@ span.rich-math { display: inline-block; }
 	font: 12px/1.7 var(--mono);
 	white-space: nowrap;
 }
+/* ---- Windows reading scale (issue #183): native bilingual UI, ChatGPT-like rhythm. ---- */
+html[data-platform="win32"] {
+	--sans: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "UI SC", "UI Symbols", "PI Emoji", sans-serif;
+	--document-font: var(--sans);
+	--document-title-font: var(--sans);
+	--terminal-line-height: 1.4;
+	--ssh-terminal-size: 14;
+	--ssh-terminal-line-height: 1.4;
+}
+html[data-platform="win32"] body { color: var(--heading); }
+html[data-platform="win32"] .design-workspace :is(.msg-assistant, .msg-user) .msg-text .md,
+html[data-platform="win32"] .node-agent-message,
+html[data-platform="win32"] .node-agent-message .md {
+	font-family: var(--sans);
+	font-size: 16px;
+	line-height: 1.75;
+	font-weight: 400;
+	letter-spacing: normal;
+	color: var(--heading);
+}
+html[data-platform="win32"] .design-workspace .msg-assistant .msg-text.process-narration .md {
+	font-size: 14px;
+	line-height: 1.7;
+	color: var(--text);
+}
+html[data-platform="win32"] .design-workspace .msg-text .md :is(h1, h2, h3, h4, h5, h6) {
+	font-weight: 600;
+	letter-spacing: normal;
+}
+html[data-platform="win32"] :is(.inputbox, .node-agent-input, .node-agent-dialog) textarea {
+	font-family: var(--sans);
+	font-size: 16px;
+	line-height: 1.5;
+	letter-spacing: normal;
+	color: var(--heading);
+}
+html[data-platform="win32"] .node-agent-message > small { font-size: 12px; }
+html[data-platform="win32"] .node-agent-message pre { font-size: 14px; line-height: 1.6; }
+html[data-platform="win32"] :is(.settings-tab-label, .input-tools .chip, .reply-actions) { font-size: 14px; }

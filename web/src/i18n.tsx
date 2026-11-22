@@ -1650,8 +1650,6 @@ const zh = {
 
 	taskTodoUpdate: "任务清单更新",
 
-
-
 	executionCompleted: "已完成",
 
 	planExpandDetails: "展开详情",
@@ -4221,8 +4219,6 @@ const en: Record<keyof typeof zh, string> = {
 	componentInstall: "Update extension",
 
 	taskTodoUpdate: "Task list update",
-
-
 
 	executionCompleted: "Completed",
 
