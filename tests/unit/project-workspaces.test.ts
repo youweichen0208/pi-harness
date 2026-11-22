@@ -1,9 +1,9 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { ProjectWorkspaceStore } from "../../server/project-workspaces.js";
-import { workspaceProjects } from "../../web/src/project-workspaces.js";
+import { workspaceProjects, selectedProjectWorkspace, selectProjectWorkspace } from "../../web/src/project-workspaces.js";
 
 const roots: string[] = [];
 function fixture() {
@@ -104,5 +104,23 @@ describe("persistent project workspaces", () => {
 		const revision = store.read().revision;
 		store.importFrom(legacyFile);
 		expect(store.read().revision).toBe(revision);
+	});
+});
+
+
+describe("window-local Workspace selection", () => {
+	it("ignores another tab's preference writes until this window selects a group", () => {
+		const storage = new Map<string, string>();
+		vi.stubGlobal("localStorage", {
+			getItem: (key: string) => storage.get(key) ?? null,
+			setItem: (key: string, value: string) => storage.set(key, value),
+		});
+		try {
+			selectProjectWorkspace("business");
+			storage.set("pi-harness:project-workspace", "other");
+			expect(selectedProjectWorkspace()).toBe("business");
+			selectProjectWorkspace("other");
+			expect(selectedProjectWorkspace()).toBe("other");
+		} finally { selectProjectWorkspace(""); vi.unstubAllGlobals(); }
 	});
 });

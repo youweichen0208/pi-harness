@@ -66,7 +66,7 @@ async function reload(client) {
 }
 
 const supportsDesktop = ["darwin", "win32"].includes(process.platform);
-const inventoryCount = supportsDesktop ? 7 : 6;
+const inventoryCount = supportsDesktop ? 6 : 5;
 const fakeBin = join(root, "fake-bin"), npxCalls = join(root, "npx-calls");
 const pathKey = Object.keys(process.env).find(key => key.toLowerCase() === "path") ?? "PATH";
 mkdirSync(fakeBin);
@@ -93,6 +93,8 @@ try {
 		assert.equal(after.reason, "filtered"); assert.deepEqual(after.commands, [], `Wiki ${command} must not inject Skill`);
 	}
 	const state = await request(a, "builtin-list"); assert.equal(state.items.length, inventoryCount);
+	assert.equal(item(state, "pi-harness-subagents"), undefined);
+	assert.match((await request(a, "builtin-toggle", { id: "pi-harness-subagents", enabled: true, version: state.documentVersion }, 400)).error, /Invalid/);
 	if (supportsDesktop) {
 		assert.equal(item(state, "desktop-control").enabled, false);
 		await toggle(a, "desktop-control", true);
@@ -116,11 +118,6 @@ try {
 	await toggle(a, "pi-harness-design-first", true);
 	a.send({ type: "extensions_reload" });
 	await wait(async () => item(await request(a, "builtin-list"), "pi-harness-design-first").status === "loaded", "Design First enabled after reload");
-	assert.equal(item(state, "pi-harness-subagents").status, "loaded");
-	await toggle(a, "pi-harness-subagents", false);
-	assert.equal(item(await request(b, "builtin-list"), "pi-harness-subagents").status, "disabled");
-	assert.match((await request(a, "builtin-toggle", { id: "pi-harness-subagents", enabled: true, version: item(state, "pi-harness-subagents").settingsVersion }, 400)).error, /changed/);
-	await toggle(a, "pi-harness-subagents", true);
 	assert.equal(item(state, "pi-harness-pdf-markdown"), undefined);
 	assert.match((await request(a, "builtin-toggle", { id: "pi-harness-pdf-markdown", enabled: true, version: state.documentVersion }, 400)).error, /Invalid/);
 	assert.equal(item(state, "pi-harness-database").status, "loaded");
@@ -234,6 +231,7 @@ try {
 		await openSettings();
 		const panel = page.locator(".builtin-extensions"), database = panel.locator('[data-builtin-id="pi-harness-database"]');
 		assert.equal(await panel.locator(".builtin-row").count(), inventoryCount + 1);
+		assert.equal(await panel.locator('[data-builtin-id="pi-harness-subagents"]').count(), 0);
 		const design = panel.locator('[data-builtin-id="pi-harness-design-first"]');
 		await design.getByRole("switch").click();
 		await wait(() => JSON.parse(readFileSync(join(data, "design-first.json"), "utf8")).enabled === false, "Design First off in Extensions");
@@ -256,9 +254,6 @@ try {
 		await design.getByRole("button", { name: "在聊天中准备设计需求", exact: true }).click();
 		assert.equal(await composer.inputValue(), "/skill:design-first 保留现有需求草稿", "repeated preparation preserves the existing invocation");
 		await openSettings();
-		const subagents = panel.locator('[data-builtin-id="pi-harness-subagents"]');
-		await subagents.getByRole("switch").click(); await wait(() => JSON.parse(readFileSync(join(data, "subagents.json"), "utf8")).enabled === false, "subagents off");
-		await subagents.getByRole("switch").click(); await wait(() => JSON.parse(readFileSync(join(data, "subagents.json"), "utf8")).enabled === true, "subagents on");
 		await page.getByRole("tab", { name: "已安装 · 0", exact: true }).waitFor();
 		await database.getByRole("switch").click(); await wait(() => JSON.parse(readFileSync(join(data, "document-extensions.json"), "utf8")).databaseEnabled === false, "browser toggle off");
 		await database.getByRole("switch").click(); await wait(() => JSON.parse(readFileSync(join(data, "document-extensions.json"), "utf8")).databaseEnabled === true, "browser toggle on");

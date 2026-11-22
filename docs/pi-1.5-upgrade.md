@@ -6,7 +6,7 @@
 
 | 能力 | 实现与边界 |
 | --- | --- |
-| 缓存预热 | 模型菜单全局三态：off / streaming / idle。未配置时由宿主 getter 保持 streaming，不在启动时写配置；尊重原有显式值，项目配置不能开启全局预热。已打开普通/Wiki/SSH 会话同步，调查子代理保持 off。费用详情按需每 5 秒读取原生状态，原生 usage 只计费一次，不插入聊天或重置任务看门狗。见 [核心架构](architecture-core.md) |
+| 缓存预热 | 模型菜单全局三态：off / streaming / idle。未配置时由宿主 getter 保持 streaming，不在启动时写配置；尊重原有显式值，项目配置不能开启全局预热。已打开普通/Wiki/SSH 会话同步。费用详情按需每 5 秒读取原生状态，原生 usage 只计费一次，不插入聊天或重置任务看门狗。见 [核心架构](architecture-core.md) |
 | Anthropic message threads | 由原生提供官方端点默认策略、增量续接及历史/系统提示/工具变化后的完整上下文回退。模型配置兼容选项可显式覆盖，不改写已有配置 |
 | OpenAI 兼容项 | 服务商及模型提供 `promptCacheKeyMode`、`requiresNonNullAssistantContent`、`requiresToolsWithToolHistory`，并提供 `supportsMessageThreads`；缺省继承、布尔三态，白名单投影，未知字段与凭据保留。见 [模型来源](architecture-model-sources.md) |
 | 扩展更新摘要 | 按实际版本或 Git HEAD 展示更新/无变化/跳过/警告/失败，保留原生结果与诊断；部分失败保留已完成项，日志默认收起。见 [扩展架构](architecture-extensions.md) |
@@ -16,7 +16,7 @@
 | 原生工具修复 | 获得流式有界 read、UTF-8/取消处理、grep 上下文/glob、edit 混合换行保留、图片队列、MCP 连接清理、运行中重载保护等原版修复 |
 | Schema | 1.5.2 恢复 `Type.BigInt()` / `Type.Undefined()` 校验与转换；BigInt 仍不可直接序列化为 JSON，工具返回和 wire 数据必须可序列化。`Type.Void()`、Refine/codecs/自定义 Format 不能据此视为支持 |
 
-CLI 的 `pi auth login/logout`、Radius MCP、TUI 快捷键/终端图表及示例扩展不另造 Web 对应界面；保留现有官方登录与 MCP 配置入口。上游 plan/subagent 示例不会替换宿主 Workspace 子代理，也不会恢复已移除的 plan 扩展。
+CLI 的 `pi auth login/logout`、Radius MCP、TUI 快捷键/终端图表及示例扩展不另造 Web 对应界面；保留现有官方登录与 MCP 配置入口。不自动安装上游示例扩展，也不会恢复已移除的 plan 扩展。
 
 1.5.2 初次接入使用协议 v53；v54 已移除宿主的失效目录历史恢复入口。`protocol.ts` 保持唯一类型源。两个提示词私有入口继续精确保护 1.5.2，并校验原生输出与分段全文一致；MCP 校验使用 SDK 兼容入口，不直接复制其实现。原生 JSONL 保持不变；缓存费用不另建账本。
 
@@ -74,7 +74,7 @@ CLI 的 `pi auth login/logout`、Radius MCP、TUI 快捷键/终端图表及示�
 所有运行测试使用临时配置、数据和本地模拟服务，未调用付费模型，未停止用户实例。
 
 - `check:lockfile`、`check:protocol`（v50）、`check:testenv`、`typecheck`、`build`：通过。
-- 零 token 冒烟：原清单 91/91 通过；新增 schema／扩展诊断脚本另跑 2/2 通过，共 93 项。覆盖原生提示词、Codemode 排队/取消、子代理报告、会话恢复、MCP 配置/脱敏、代理 CONNECT/OAuth/WebSocket、发送回执和终端。
+- 零 token 冒烟：原清单 91/91 通过；新增 schema／扩展诊断脚本另跑 2/2 通过，共 93 项。覆盖原生提示词、Codemode 排队/取消、会话恢复、MCP 配置/脱敏、代理 CONNECT/OAuth/WebSocket、发送回执和终端。
 - `npm test`：155 个测试文件通过；1006 项通过、1 项跳过。包含模板投递、提示词一致性及新增 MCP 注册策略保留测试。
 - `pi-150-sdk-test.mjs`：TypeBox 和纯 JSON Schema 的必填缺失、类型、枚举、长度、可选/null、数字字符串和单值数组；通过真实 runToolCall 证明非法参数不执行；大规模 Unicode/转义分片参数和有界 WebUI 投影通过。
 - `extension-diagnostics-test.mjs`：注入原生包解析安装失败及真实扩展加载失败，验证首次 attach 和 reload 通知；没有访问 registry。以上两个脚本已加入默认冒烟清单。

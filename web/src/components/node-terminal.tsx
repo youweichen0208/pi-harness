@@ -18,7 +18,7 @@ export function RemoteTerminal({ nodeId, tab, active, send, initialOutput }: { n
 	useEffect(() => {
 		if (!ref.current) return;
 		const style = getComputedStyle(ref.current);
-		const term = new Terminal({ theme: { ...buildTermTheme(), background: style.getPropertyValue("--node-terminal-bg").trim(), foreground: style.getPropertyValue("--node-terminal-fg").trim() }, fontFamily: style.getPropertyValue("--ssh-terminal-font").trim(), fontSize: 13, scrollback: 8000, allowProposedApi: true });
+		const term = new Terminal({ theme: { ...buildTermTheme(), background: style.getPropertyValue("--node-terminal-bg").trim(), foreground: style.getPropertyValue("--node-terminal-fg").trim() }, fontFamily: style.getPropertyValue("--ssh-terminal-font").trim(), fontSize: Number.parseFloat(style.getPropertyValue("--ssh-terminal-size")) || 13, lineHeight: Number.parseFloat(style.getPropertyValue("--ssh-terminal-line-height")) || 1, scrollback: 8000, allowProposedApi: true });
 		const updateTheme = () => { term.options.theme = { ...buildTermTheme(), background: style.getPropertyValue("--node-terminal-bg").trim(), foreground: style.getPropertyValue("--node-terminal-fg").trim() }; };
 		window.addEventListener(THEME_CHANGE_EVENT, updateTheme);
 		const fit = new FitAddon(); term.loadAddon(fit); term.open(ref.current);

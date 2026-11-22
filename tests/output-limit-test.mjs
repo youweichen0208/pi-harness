@@ -12,7 +12,7 @@ const root = mkdtempSync(join(tmpdir(), "pi-output-limit-"));
 const agent = join(root, "agent"), data = join(root, "data"), cwd = join(root, "work");
 for (const dir of [agent, data, cwd]) mkdirSync(dir);
 writeFileSync(join(cwd, "note.txt"), "Fixture input");
-for (const name of ["plan-settings", "subagents"]) writeFileSync(join(data, `${name}.json`), JSON.stringify({ enabled: false }));
+for (const name of ["plan-settings"]) writeFileSync(join(data, `${name}.json`), JSON.stringify({ enabled: false }));
 let requests = 0, mode = "thinking", toolReturned = false;
 const mock = createServer(async (req, res) => {
 	let body = "";

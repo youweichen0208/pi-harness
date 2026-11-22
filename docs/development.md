@@ -117,11 +117,9 @@ SDK / pi-ai 当前精确锁定 1.5.2。升级前必须验证内部 prompt-templa
 Pi 1.0.4 起的专项（1.4.0 继续适用，文件名保留 `pi-104-`）：`pi-104-prompt-contract-test.mjs` 核对 Codemode on/only 的模型请求、getter、隐藏规则和技能；`pi-104-upstream-fixes-test.mjs` 验证初始化中的 MCP 关闭、Codemode 内建对象修改后结算及 read 图片，均进入零 token 冒烟。资源基准与已知问题复现另见 [原生能力与资源审查](pi-native-resource-review.md)，不在 CI 中运行长时间性能场景。
 
 
-内置扩展回归：`builtin-extensions-test.mjs` 纳入零 token 冒烟，验证清单、数据库开关、重载及转换／OKF 入口缺失。原生上下文基线关闭 plan 内置工具。
+内置扩展回归：`builtin-extensions-test.mjs` 纳入零 token 冒烟，验证按平台能力生成的清单、数据库与桌面控制开关、浏览器管理入口、重载，以及子代理和转换／OKF 入口缺失。原生上下文基线关闭 plan 内置工具。`--browser` 额外覆盖设置界面、中英文与窄屏布局。
 
-子代理回归：`subagents-test.mjs` 使用真实 SDK 和本地模拟模型验证 Workspace 跨仓库、知识库分工及父取消，纳入零 token 冒烟；设置页 `builtin-extensions-test.mjs --browser` 覆盖内置条目、浏览器管理入口和独立子代理开关。原生上下文基线同时关闭 subagents。
-
-进度和报告界面先 `npm run build`，再运行 `node tests/subagents-test.mjs --browser`：检查三个来源的真实 `tool_delta.subagents` 进度、工具结束动作清除、按来源展开报告和引用原文、键盘操作、原始 JSON 保留，以及中英文、深色、390px、200% 缩放等效视口和减少动态效果。`subagent-wire.test.ts` 覆盖服务端白名单与限额，`subagent-ui-presentation.test.ts` 覆盖运行参数／实时进度合并、最终报告和非法数据回退。截图写入 `tests/scratch/subagents-*.png`，须实际查看而非只验证文件存在。
+历史 subagent 工具调用只做向后兼容：已移除的内置 Workspace 调查扩展不再注册工具、设置或协议类型，旧会话里的 `subagent` 卡片退化为通用工具卡；`acp_delegate` 的 ACP 分身处理保留。
 
 
 ### 数据库工作台回归

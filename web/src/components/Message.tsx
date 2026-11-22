@@ -998,7 +998,6 @@ function Block({
 			result,
 			liveOutput: live?.text,
 			codemode: live?.codemode,
-			subagents: live?.subagents,
 			streaming,
 			runActive,
 			...(abandoned ? { abandoned: true } : {}),

@@ -25,6 +25,7 @@ Desktop.ini
 .pi/
 .pi-web/
 .pi-web-desktop/
+# Legacy private state remains excluded after extension removal.
 .pi-subagents/
 
 # Local configuration and editor data

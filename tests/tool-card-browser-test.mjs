@@ -88,7 +88,7 @@ try {
 		const messages = [{ id: callId, role: "assistant", timestamp: 3, content: [{ type: "toolCall", id: callId, name: "acp_delegate", argumentsText: '{"task":"Inspect the project"}' }] }];
 		if (state !== "running") messages.push({ id: `${callId}-result`, role: "toolResult", toolCallId: callId, toolName: "acp_delegate", content: [{ type: "text", text: state === "failed" ? "Delegate failed" : "Delegate completed" }], isError: state === "failed", timestamp: 4 });
 		socket.send(JSON.stringify({ type: "snapshot", state: { ...baseState, messages, isStreaming: state === "running" } }));
-		const delegate = page.locator(`.toolcall-subagent-quiet.${state === 'failed' ? 'err' : state === 'running' ? 'run' : 'ok'}`);
+		const delegate = page.locator(`.toolcall-delegate-quiet.${state === 'failed' ? 'err' : state === 'running' ? 'run' : 'ok'}`);
 		await delegate.waitFor();
 		assert.equal(await delegate.locator('.toolcall-body').count(), 0, `${state} defaults to collapsed`);
 		assert.equal(await delegate.evaluate(el => getComputedStyle(el).borderTopWidth), '0px');

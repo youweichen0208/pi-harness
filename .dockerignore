@@ -6,6 +6,7 @@ release/
 .git/
 .pi/
 .pi-web/
+# Legacy private state remains excluded after extension removal.
 .pi-subagents/
 Claude outputs/
 .env

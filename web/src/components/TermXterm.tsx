@@ -68,7 +68,7 @@ export function TermXterm({
 			theme: buildTermTheme(container),
 			fontFamily: getComputedStyle(container).getPropertyValue("--terminal-font").trim(),
 			fontSize: 14,
-			lineHeight: 1.2,
+			lineHeight: Number.parseFloat(getComputedStyle(container).getPropertyValue("--terminal-line-height")) || 1.2,
 			// xterm halves this target for ANSI dim text: 9 preserves a 4.5
 			// minimum for muted CLI descriptions on both light and dark surfaces.
 			minimumContrastRatio: 9,
