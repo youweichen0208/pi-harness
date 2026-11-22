@@ -7,6 +7,7 @@ import { createHash } from "node:crypto";
  * defined in protocol.ts. Keeps payloads bounded (tool outputs and text blocks
  * are truncated with a marker) so snapshots stay cheap to stream.
  */
+import { stripAnsi } from "./ansi.js";
 import type { AgentSession } from "@earendil-works/pi-coding-agent";
 import type { UiContentBlock, UiMessage } from "./protocol.js";
 
@@ -172,9 +173,11 @@ export function serializeMessage(
 			};
 
 		case "toolResult": {
-			const raw = m.content
+			// Display layer: strip escapes BEFORE truncating so escape sequences
+			// never consume the cap. The raw message stays untouched (downloads).
+			const raw = stripAnsi(m.content
 				.map((c) => (c.type === "text" ? c.text : ""))
-				.join("\n");
+				.join("\n"));
 			const { text, truncated } = truncate(raw, TOOL_OUTPUT_CAP);
 			let nestedComplete = m.nestedCalls?.complete === true && m.nestedCalls.calls.length <= 256;
 			const nestedCalls = m.nestedCalls?.calls.slice(0, 256).map(call => {

@@ -241,6 +241,63 @@ export interface UiRunRecovery {
 	detail?: "exhausted" | "unsafe" | "thinking-only" | "cancelled" | "failed";
 }
 
+export interface UiTraceMetric {
+	value: number | null;
+	status: "measured" | "unmeasured" | "ambiguous" | "not_triggered" | "failed" | "disabled";
+	reason?: string;
+}
+export interface UiTraceRequest {
+	requestId: string;
+	turnIndex?: number;
+	status: string;
+	provider?: string;
+	api?: string;
+	model?: string;
+	hookStartMs?: number;
+	messageEndMs?: number;
+	toolToProviderGapMs?: number;
+	metrics: Record<string, UiTraceMetric>;
+}
+export interface UiTraceTool {
+	toolCallId: string;
+	parentToolCallId?: string;
+	toolName: string;
+	startMs: number;
+	endMs?: number;
+	durationMs?: number;
+	assistantToToolGapMs?: number;
+	isError?: boolean;
+	status: string;
+}
+export interface UiTraceRun {
+	runId: string;
+	sessionId: string;
+	conversationId?: string;
+	startedAt?: string;
+	agentStartMs: number;
+	agentSettledMs?: number;
+	status: string;
+	aborted?: boolean;
+	interrupted?: boolean;
+	requests: UiTraceRequest[];
+	tools: UiTraceTool[];
+	hostSpans: { kind: string; startMs: number; endMs: number }[];
+	hostSpanOverflow?: { count: number; totalMs: number; maxMs: number };
+	requestsTruncated?: boolean;
+	toolsTruncated?: boolean;
+	aggregates: Record<string, UiTraceMetric>;
+}
+export interface UiTraceSnapshot {
+	schemaVersion: number;
+	sessionId: string;
+	runs: UiTraceRun[];
+	hostRequests: { hostRequestId: string; conversationId: string; runId?: string; mappingStatus: string; metrics: Record<string, UiTraceMetric> }[];
+	coverage: { provider_requests_total: number; provider_requests_matched: number; trace_coverage: number | null; scope: string };
+	persistence: { state: "ready" | "degraded"; error?: string; appendAttempts?: number; appendedRecords?: number; compactions?: number; prunedFiles?: number };
+	privacy: { containsMessageContent: false; anonymous: false; notice: string };
+}
+export type TraceResult = { type: "trace_result"; reqId: string; conversationId: string; open?: boolean; export?: "html" | "json"; trace?: UiTraceSnapshot; error?: string };
+
 export interface UiState {
 	tree?: UiTreeState;
 	recovery?: UiRecovery;
@@ -418,6 +475,7 @@ export type PromptResult = { type: "prompt_result"; requestId: string; ok: boole
 
 export type ClientMessage =
 	| PlaygroundChatRequest
+	| { type: "trace_get"; reqId: string; conversationId: string; open?: boolean; export?: "html" | "json" }
 	| { type: "recall_queue"; conversationId: string; requestId: string }
 	| { type: "queue_recall_ack"; conversationId: string; requestId: string }
 	| TreeRequest
@@ -1029,6 +1087,7 @@ export interface UiSettingsState {
 }
 export type ServerMessage =
 	| PlaygroundChatEvent
+	| TraceResult
 	| { type: "queue_recalled"; conversationId: string; requestId: string; text: string; images: { data: string; mimeType: string }[] }
 	| TreeResponse
 	| { type: "native_mcp_result"; requestId: string; cwd: string; state?: NativeMcpConfigState; error?: string; pending?: boolean; tools?: string[]; toolInfo?: NativeMcpTool[]; servers?: NativeMcpServerStatus[]; statusText?: string; codemode?: NativeCodemodeSettings; log?: string }

@@ -102,6 +102,18 @@ SDK `tool_execution_update.partialResult` 是累计输出快照，服务端发�
 
 服务端 `onEvent` 监听 `tool_execution_start/end`（AI 调工具路径，注意区别于 `bash_execution_update`——那是 `!cmd`/终端直接执行路径专属）。`tool_execution_end` 触发时立即推 `tool_status`（toolCallId/toolName/isError/exitCode/durationMs），**先于** toolResult 快照落盘——浏览器 tool 卡片随即从「执行中」切到「已结束 · 等模型 · 耗时」，一眼区分「命令还在跑」vs「命令完了在等模型响应」。退出码统一优先读取 `structuredContent.exit_code`（含 0），其次是旧 `details.exitCode`，仅旧错误结果回退文本正则；`tool_execution_start` 时刻记在 `conv.toolStartTimes`（按对话隔离）算真实执行耗时。前端状态回落到权威 toolResult；`toolStatuses` 在结果落盘后清除，仅为 27a 命令卡保留当前 transcript 中 bash 的实测耗时，切换会话或工具移出 transcript 时清除。历史无计时记录时显示未知，不估算执行用时。
 
+### Agent Execution Trace（默认开启）
+
+`server/execution-trace.ts` 默认通过原生 inline extension 的 `before_provider_request`、`after_provider_response`、`provider_stream_event` 与 SDK 生命周期事件记录执行 trace；`PI_TASK_TIMINGS=off/0/false` 停止新采集。Trace 不进入模型上下文，不保存提示词、工具参数、header 值或响应正文，但 session/run/request/tool/model 标识和时间仍属于非匿名 metadata。宿主 prompt accepted 使用独立 hostRequestId，SDK agent_start 使用随机 runId；provider request、assistant timestamp、toolCallId/parentToolCallId 分层关联。response 只在同 session 唯一活动请求下归属，stream 另校验 provider/api/model；SDK 1.5.2 的 message 事件对象身份不稳定，使用经契约测试验证的 assistant timestamp 回退。并发、乱序或缺 hook 写 `ambiguous`/`unmeasured`，不猜测归属。
+
+所有耗时使用单调 wall clock；model/tool/host 采用分层区间并集，不把并行工具或嵌套宿主处理重复累加，也不把 wall time 称 CPU。`task_e2e`、`agent_active`、`queue_wait` 分开，模型与工具之间的空档只称 gap。trace 同时报告已识别请求覆盖率；完全不可见的内部请求不在分母中。每个 session 最多保留 50 个内存 run，registry 最多 32 个 session；每 run 最多 2048 个 host span、512 个 request、1024 个 tool 和 32 个 response attempt；run 外的 request/tool 分别最多保留 512/256 条，宿主请求最多 256 条。任何截断都会把受影响的精确聚合降级为 `null + unmeasured`，同时保留 observed lower bound，不能显示成 0。
+
+`server/trace-store.ts` 将 run_start、provider_request、tool_end、run_settled 以 JSONL 写入 `<dataDir>/traces/`，文件名是 sessionId 的 SHA-256 前缀，权限为私有目录/文件，不提供任意路径读取。重启后未闭合 run 显示 `interrupted`；合法末尾截断可恢复，中间损坏转为 quarantine，原文件不删除。完整旧 run（包括历史 interrupted）原子压缩，活跃 run 不压缩；2MiB 是单文件压缩触发阈值而非严格字节保证，全局超过 64MiB 时优先删除最旧的非当前 session 文件。写盘失败只降级 trace 并发送一次 warning，不进入 Agent/SDK 事件链。`persistence` 中的 appendAttempts/appendedRecords/compactions/prunedFiles 是纯数值计数器，供容量与开销验收使用，不包含正文。
+
+协议 v62 的 `trace_get`/`trace_result` 只读当前 conversation 所属 session 的内存与持久化记录。顶栏 Trace 和 `/trace` 打开 `TraceWorkbench`：run 筛选、聚合指标、模型／工具／宿主时间线及调度 gap；运行中每 2 秒刷新。`/export` 和标题栏 HTML 按钮下载包含 transcript 与 Trace 的本地静态 HTML；所有不可信字段均转义，CSP 禁止脚本与外部资源。`/export json` 或 JSON 按钮只下载 trace metadata，明确标注非匿名；与 OMP 的 transcript/Timeline/Trace 导出相似，但本实现额外区分 onEvent、snapshot 与 WS 宿主归因，不提供公网分享。
+
+`PI_TASK_TIMINGS_OUT` 另外在优雅停机时输出按 client/session 分离的完整内存 JSON。快照管线 `SnapshotTimings` 默认 `summary`，只记录有界 duration/count；`PI_SNAPSHOT_TIMINGS=1/detail` 才逐报文执行 `Buffer.byteLength` 并统计 bytes。契约回归为 `tests/execution-trace-test.mjs`，浏览器与恢复回归为 `tests/trace-browser-test.mjs`（含下载 HTML 的离线浏览器安全验收）；真实文件系统故障、120-run 压缩和重开回归为 `tests/unit/trace-store-reliability.test.ts`，导出攻击矩阵为 `tests/unit/trace-export.test.ts`。
+
 ### 模型／工具静默状态（`agent_silence`）
 
 服务端在运行中连续 3 分钟没有 SDK 事件时，按 `conversationId` 推送 `agent_silence`，并根据正在执行的工具区分模型等待和工具运行。任意后续 SDK 事件会发送 `active` 清除状态；重连时重放仍有效的静默状态。浏览器忽略工具静默事件，只为模型静默在输入框上方显示状态行，同步输入框和底栏，并持续更新时间。浏览器只为纯文本、无工具调用的模型静默轮次提供用户点击的手动重试；宿主不自动重发。前后端排除原生压缩和重试阶段，服务端核对当前用户轮次及工具记录，中断后再次检查归属才发送。WebSocket 心跳只表示浏览器与本机服务连接正常，不代表模型接口已响应。

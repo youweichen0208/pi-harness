@@ -1,4 +1,5 @@
 import { openSessionTree } from "../tree-events";
+import { openTrace } from "../trace-events";
 import { createPortal } from "react-dom";
 import { useEffect, useState } from "react";
 import {
@@ -15,6 +16,7 @@ import {
 	FiPlus,
 	FiSettings,
 	FiTerminal,
+	FiActivity,
 } from "react-icons/fi";
 import { desktopAPI } from "../desktop";
 import type { ChatState } from "../use-chat";
@@ -189,6 +191,7 @@ export function TopBar({
 						["terminal", t("terminal"), <FiTerminal />],
 						["git", t("scmTab"), <FiGitBranch />],
 					] as const).map(([id, label, icon]) => <button key={String(id)} type="button" role="tab" aria-label={String(label)} title={id === "git" && notGitRepo ? t("notGitRepoShort") : String(label)} aria-selected={view === id} aria-disabled={id === "git" && notGitRepo} className={view === id ? "active" : ""} onClick={() => { if (id !== "git" || !notGitRepo) onViewChange(id as TopBarProps["view"]); }}>{icon}<span>{label}</span>{id === "git" && !notGitRepo && gitChangeCount > 0 && <em className="tab-change-count">{gitChangeCount}</em>}</button>)}
+					<button type="button" aria-label={t("traceTitle")} title={t("traceTitle")} onClick={openTrace}><FiActivity /><span>Trace</span></button>
 					<button type="button" aria-label={t("dbTitle")} title={t("dbTitle")} onClick={onOpenDatabase}><FiDatabase /><span>{t("dbTitle")}</span></button>
 					<button type="button" role="tab" aria-label={t("nodes")} title={t("nodes")} aria-selected={view === "nodes"} className={view === "nodes" ? "active" : ""} onClick={() => onViewChange("nodes")}><FiShare2 /><span>{t("nodes")}</span></button>
 					{plugins.map(p => <button type="button" role="tab" key={p.id} aria-selected={view === `plugin:${p.id}`} className={view === `plugin:${p.id}` ? "active" : ""} title={p.error ? `${p.name}: ${p.error}` : p.description} onClick={() => onViewChange(`plugin:${p.id}`)}><span>{p.icon}</span><span>{p.name}{p.error ? " ⚠" : ""}</span></button>)}

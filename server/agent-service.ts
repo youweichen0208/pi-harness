@@ -137,6 +137,7 @@ import type {
 		UiSettingsState,
 
 		UiState,
+		UiTraceSnapshot,
 } from "./protocol.js";
 import {
 	serializeMessage,
@@ -145,6 +146,9 @@ import {
 	type AgentMessage,
 } from "./serialize.js";
 import { deriveTaskProgress } from "./task-progress.js";
+import { SnapshotTimings, type TimingsReport } from "./snapshot-timings.js";
+import { createExecutionTraceExtension, ExecutionTraceRegistry } from "./execution-trace.js";
+import { stripAnsi } from "./ansi.js";
 
 
 import {
@@ -224,6 +228,10 @@ type SummarizationAuth = {
 
 export class ClientSession {
 	readonly clientId: string;
+	/** Bounded snapshot sampler; per-message byte scans require detail mode. */
+	readonly timings = new SnapshotTimings();
+	readonly executionTraces: ExecutionTraceRegistry;
+	private promptTraceSeq = 0;
 	private static liveClients = new Map<string, ClientSession>();
 
 	/** Set by AgentService.attach: reflects the SERVICE-wide quiesce flag
@@ -525,6 +533,7 @@ export class ClientSession {
 		this.agentDir = agentDir;
 		this.piConfig = new PiConfigProbe(agentDir);
 		this.stateStore = stateStore;
+		this.executionTraces = new ExecutionTraceRegistry(join(stateStore.dataDir, "traces"), error => this.emitNotice("warning", `Trace 持久化已降级为内存模式：${error}`));
 		this.thinkingDurationStore = thinkingDurationStore;
 		this.settingsSvc = new SettingsService({
 			clientId,
@@ -618,7 +627,9 @@ export class ClientSession {
 			registerExtensionModuleScope(join(cwd, ".pi", "extensions"));
 			registerExtensionModuleScope(join(cwd, ".pi", "npm"));
 			const settings = conversationSettings(cwd, this.agentDir);
+			const executionTrace = this.executionTraces.forSession(sessionManager.getSessionId());
 			const extensionFactories = nativeToolExtensions(() => databaseScope(this.clientId, cwd, sessionManager));
+			if (executionTrace) extensionFactories.push({ name: "pi-harness-execution-trace", replaceable: false, factory: createExecutionTraceExtension(executionTrace) });
 			if (!wiki) {
 				if (process.platform === "darwin" && isLoopbackBind(process.env.PI_WEB_HOST ?? "127.0.0.1")) {
 					extensionFactories.push({ name: "pi-page-reader", factory: pageReader });
@@ -693,7 +704,6 @@ export class ClientSession {
 			userSeqByTs: new Map(),
 			userSeqByKey: new Map(),
 			uiMessageCache: new Map(),
-			lastMessagesSig: "",
 			lastMessagesArray: [],
 			queueSteering: [],
 			queueFollowUp: [],
@@ -884,7 +894,10 @@ export class ClientSession {
 			toolText: () => this.continueAfterToolText(conv),
 		});
 		const unsubscribe = conv.session.subscribe((event) => {
-			if (conv.session === session && conv.runtime === runtime) this.onEvent(conv, event);
+			if (conv.session !== session || conv.runtime !== runtime) return;
+			const traceStart = this.executionTraces.enabled ? performance.now() : 0;
+			try { this.onEvent(conv, event); }
+			finally { if (traceStart) this.executionTraces.measureHost(session.sessionId, "onEvent", traceStart); }
 		});
 		conv.unsubscribe = unsubscribe;
 		this.scheduleSnapshot();
@@ -928,6 +941,7 @@ export class ClientSession {
 	/** Cancel every watchdog of a conversation (removeConversation / dispose). */
 
 	private onEvent(conv: Conversation, event: AgentSessionEvent): void {
+		if (event.type === "compaction_start" || event.type === "compaction_end") this.executionTraces.forSession(conv.session.sessionId)?.observe(event, conv.id);
 		const contextTokens = event.type === "compaction_start" ? conv.session.getContextUsage()?.tokens ?? undefined : event.type === "compaction_end" && event.result ? conv.session.messages.reduce((total, message) => total + estimateTokens(message), 0) : undefined;
 		conv.recovery = recoveryEvent(conv.recovery, event, Date.now(), contextTokens);
 		conv.runRecovery?.observe(event);
@@ -1003,6 +1017,9 @@ export class ClientSession {
 			}
 			case "tool_execution_update": {
 				const update = toolOutputUpdate(event.partialResult);
+				// Same display-layer strip as serializeMessage so the running card
+				// and the persisted card show identical text (escape codes removed).
+				if (update) update.delta = stripAnsi(update.delta);
 				const details = (event.partialResult as { details?: unknown })?.details;
 				const codemode = event.toolName === "codemode" ? codemodeDetails(details) : undefined;
 				if (codemode) (conv.codemodeHistory ??= new CodemodeHistory()).live.set(event.toolCallId, codemode);
@@ -1122,21 +1139,36 @@ export class ClientSession {
 		// pushSessions no-ops unless the client opted in via list_sessions.
 	}
 
+	/** toolResult.content array → revision stamp, so swapping the array object
+	 *  invalidates the entry without hashing the (up to 1.6 MB) output text.
+	 *  `nestedCalls`/`details` edits are caught by the metadata hash below;
+	 *  in-place edits INSIDE the content blocks are not (content is append-only
+	 *  per tests/unit/toolresult-immutability.test.ts). */
 	private toolContentIds = new WeakMap<object, number>();
 	private toolContentSeq = 0;
-	/** Serialize a persisted message with a STABLE id + cached object reference. */
-	private serializeCached(m: AgentMessage, entryId?: string, occurrence = 0): UiMessage | null {
+	private metadataHashSnapshotMs = 0;
+	private collectingMetadataHash = false;
+	/** Serialize a persisted message with a STABLE id + cached object reference.
+	 *
+	 *  `contentKey` lets currentMessages() pass the key it already computed for
+	 *  this message: the identity is exactly the same string, but a big session
+	 *  re-walks every message twice per snapshot otherwise. */
+	private serializeCached(m: AgentMessage, entryId?: string, occurrence = 0, contentKey?: string): UiMessage | null {
 		const conv = this.conv;
+		const timings = this.timings;
+		const t0 = timings.enabled ? performance.now() : -1;
 		// toolResult messages are keyed by toolCallId; everything else by
 		// role+timestamp. A single prompt can emit several same-role messages
 		// within the SAME millisecond (multiple attachment asides), so the
 		// timestamp alone collides in the cache and only the first one renders
 		// — append a full-content fingerprint to keep them distinct while
 		// staying stable across snapshots (content never changes once persisted).
-		const contentKey =
+		const tf = timings.enabled && contentKey === undefined ? performance.now() : -1;
+		contentKey ??=
 			m.role === "toolResult"
 				? `t:${m.toolCallId}`
 				: `${m.role}:${m.timestamp}:${contentFingerprint(m)}`;
+		if (tf >= 0) timings.add("fingerprint", performance.now() - tf);
 		const key = entryId ? `entry:${entryId}:${contentKey}` : occurrence ? `${contentKey}:occurrence:${occurrence}` : contentKey;
 		let n = conv.msgIds.get(key);
 		if (n === undefined) {
@@ -1145,16 +1177,37 @@ export class ClientSession {
 		}
 		// Persisted content is immutable; inspect mutable projected metadata without
 		// rebuilding or hashing the potentially very large output on every snapshot.
+		// The metadata hash is the contract for in-place edits of `details` /
+		// `nestedCalls` (tests/recovery-service-test.mjs): dropping it made those
+		// edits invisible, which the review rejected in favour of correctness.
 		let toolRevision = "";
 		if (m.role === "toolResult") {
+			const tm = timings.enabled ? performance.now() : -1;
 			let contentId = this.toolContentIds.get(m.content);
 			if (contentId === undefined) { contentId = ++this.toolContentSeq; this.toolContentIds.set(m.content, contentId); }
 			const metadata = serializeMessage({ ...m, content: [] }, n);
-			toolRevision = `:${contentId}:${createHash("sha256").update(JSON.stringify(metadata)).digest("hex")}`;
+			// Sampling reuses the JSON produced for the hash: no second stringify.
+			const json = JSON.stringify(metadata);
+			const digest = createHash("sha256").update(json).digest("hex");
+			toolRevision = `:${contentId}:${digest}`;
+			if (tm >= 0) {
+				const elapsed = performance.now() - tm;
+				timings.add("metadata_hash", elapsed);
+				if (this.collectingMetadataHash) this.metadataHashSnapshotMs += elapsed;
+				if (timings.detailed) {
+					timings.count("metadata_chars", json.length);
+					timings.count("metadata_bytes", Buffer.byteLength(json, "utf8"));
+				}
+			}
 		}
 		const cacheKey = `${key}#${n}${toolRevision}`;
+		const tl = timings.enabled ? performance.now() : -1;
 		const cached = conv.uiMessageCache.get(cacheKey);
-		if (cached) return cached;
+		if (tl >= 0) {
+			timings.add("cache_lookup", performance.now() - tl);
+			timings.count(cached ? "cache_hit" : "cache_miss");
+		}
+		if (cached) { if (t0 >= 0) timings.add("serialize_cached", performance.now() - t0); return cached; }
 		// User-message id suffix is a 1-based count of user messages sharing
 		// this timestamp (that's what resolveUserMessageEntryId() expects). n is
 		// a global per-conversation counter across ALL roles, so it can't be
@@ -1193,6 +1246,7 @@ export class ClientSession {
 				conv.uiMessageCache.delete(oldest);
 			}
 		}
+		if (t0 >= 0) this.timings.add("serialize_cached", performance.now() - t0);
 		return msg;
 	}
 
@@ -1200,6 +1254,9 @@ export class ClientSession {
 	 *  Element objects are reference-stable (serializeCached cache), which is
 	 *  what lets emitSnapshotNow detect append-only growth via identity walk. */
 	private currentMessages(): UiMessage[] {
+		const t0 = this.timings.enabled ? performance.now() : -1;
+		this.metadataHashSnapshotMs = 0;
+		this.collectingMetadataHash = t0 >= 0;
 		const conv = this.conv;
 		const tree = conv.tree?.refresh();
 		const messageKey = (m: AgentMessage) => m.role === "toolResult" ? `t:${m.toolCallId}` : `${m.role}:${m.timestamp}:${contentFingerprint(m)}`;
@@ -1216,19 +1273,27 @@ export class ClientSession {
 			.map((m) => {
 				const key = messageKey(m), index = occurrences.get(key) ?? 0; occurrences.set(key, index + 1);
 				const entryId = conv.treeEntryIds?.get(key)?.[index];
-				const value = this.serializeCached(m, entryId, index);
-				return value ? conv.tree?.decorate(value, entryId) ?? value : null;
+				const value = this.serializeCached(m, entryId, index, key);
+				// decorate() JSON-stringifies the tree metadata and re-reads the
+				// upstream entry on every call; with no metadata for an entry it
+				// could only return `{...message, entryId}`, which nothing reads.
+				const tree = conv.tree;
+				if (!value || !entryId || !tree?.hasDecoration(entryId)) return value ?? null;
+				return tree.decorate(value, entryId);
 			})
 			.filter((m): m is NonNullable<typeof m> => m !== null));
 		const rawMessages = withSessionErrors(conv.session.sessionManager, projectedMessages, (message, entryId) => this.serializeCached(message, entryId));
 		// Reuse the previous array when nothing changed: the element objects are
 		// cached (reference-stable) anyway, and a stable array reference lets the
 		// frontend memoize derived maps instead of rebuilding them every 60ms.
-		const sig = rawMessages.map((m) => m.id).join("\u0001");
 		const messages =
 			conv.lastMessagesArray.length === rawMessages.length && rawMessages.every((m, i) => m === conv.lastMessagesArray[i]) ? conv.lastMessagesArray : rawMessages;
-		conv.lastMessagesSig = sig;
 		conv.lastMessagesArray = messages;
+		if (t0 >= 0) {
+			this.collectingMetadataHash = false;
+			this.timings.add("metadata_hash_snapshot", this.metadataHashSnapshotMs);
+			this.timings.add("current_messages", performance.now() - t0);
+		}
 		return messages;
 	}
 
@@ -1237,6 +1302,7 @@ export class ClientSession {
 		rev: number,
 		messages: UiMessage[],
 	): Omit<UiState, "messages" | "rev"> & { rev: number } {
+		const t0 = this.timings.enabled ? performance.now() : -1;
 		const conv = this.conv;
 		const state = conv.session.agent.state;
 		const model = state.model;
@@ -1251,6 +1317,7 @@ export class ClientSession {
 			contextParts: null,
 		};
 		try {
+			const ts = this.timings.enabled ? performance.now() : -1;
 			const s = this.session.getSessionStats();
 			stats = {
 				totalMessages: s.totalMessages,
@@ -1266,10 +1333,16 @@ export class ClientSession {
 					: stats.contextUsage,
 				contextParts: estimateContextParts(this.session.messages, this.session.systemPrompt, s.contextUsage?.tokens ?? null),
 			};
+			if (ts >= 0) {
+				// Named as the remainder of light_state minus the two children the
+				// report subtracts; a separate per-block name would silently fall
+				// off the SnapshotTimings name cap.
+				this.timings.add("light_rest", performance.now() - ts);
+			}
 		} catch {
 			// stats are best-effort
 		}
-		return {
+		const result = {
 			tree: conv.tree?.refresh(),
 			clientId: this.clientId,
 			cwd: this.cwd,
@@ -1286,8 +1359,18 @@ export class ClientSession {
 			// it here is what makes thinking + text stream into the browser at
 			// ~60ms granularity instead of appearing only when the turn finishes.
 			streamingMessage,
-			codemode: (conv.codemodeHistory ??= new CodemodeHistory()).snapshot(conv.session.sessionManager, (message, entryId) => this.serializeCached(message, entryId)),
-			taskProgress: deriveTaskProgress(conv.id, messages, streamingMessage, conv.session.isStreaming || !!conv.runRecovery?.pending, conv.lastTaskEndedAt),
+			codemode: (() => {
+				const tc = this.timings.enabled ? performance.now() : -1;
+				const value = (conv.codemodeHistory ??= new CodemodeHistory()).snapshot(conv.session.sessionManager, (message, entryId) => this.serializeCached(message, entryId));
+				if (tc >= 0) this.timings.add("light_rest", performance.now() - tc);
+				return value;
+			})(),
+			taskProgress: (() => {
+				const tp = this.timings.enabled ? performance.now() : -1;
+				const value = deriveTaskProgress(conv.id, messages, streamingMessage, conv.session.isStreaming || !!conv.runRecovery?.pending, conv.lastTaskEndedAt);
+				if (tp >= 0) this.timings.add("light_rest", performance.now() - tp);
+				return value;
+			})(),
 			isStreaming: this.session.isStreaming,
 			wiki: !!conv.wiki,
 			recovery: recoverySnapshot(conv.recovery),
@@ -1319,6 +1402,11 @@ export class ClientSession {
 			piAgentInstalled: isPiCliInstalled(),
 			stats,
 		};
+		if (t0 >= 0) {
+			this.timings.add("light_state", performance.now() - t0);
+			return result;
+		}
+		return result;
 	}
 
 	/** Emit one snapshot update — incremental when possible, full otherwise.
@@ -1333,6 +1421,8 @@ export class ClientSession {
 	 *  "nothing but stats/version changed" checkpoint. */
 	private emitSnapshotNow(forceFull = false): void {
 		if (this.disposed) return;
+		const tsnap = this.timings.enabled ? performance.now() : -1;
+		const traceStart = this.executionTraces.enabled ? performance.now() : 0;
 		const cur = this.currentMessages();
 		const prev = this.emittedMessages;
 		let incremental =
@@ -1349,28 +1439,40 @@ export class ClientSession {
 			}
 		}
 		const rev = ++this.snapRev;
+		let msg: ServerMessage;
 		if (incremental && prev) {
 			const baseRev = this.emittedRev;
 			this.emittedMessages = cur;
 			this.emittedConvId = this.activeId;
 			this.emittedRev = rev;
-			this.emit({
+			msg = {
 				type: "snapshot_delta",
 				conversationId: this.activeId,
 				rev,
 				baseRev,
 				appended: cur.slice(prev.length),
 				state: this.buildLightState(rev, cur),
-			});
+			};
 		} else {
 			this.emittedMessages = cur;
 			this.emittedConvId = this.activeId;
 			this.emittedRev = rev;
-			this.emit({
+			msg = {
 				type: "snapshot",
 				state: { ...this.buildLightState(rev, cur), messages: cur },
-			});
+			};
 		}
+		if (tsnap >= 0) {
+			const elapsed = performance.now() - tsnap;
+			const kind = msg.type;
+			// Build-only inclusive span: currentMessages, append detection,
+			// buildLightState and message assembly. WS work is measured separately.
+			this.timings.add("snapshot_total", elapsed);
+			this.timings.add(`snapshot_total:${kind}`, elapsed);
+			this.timings.count(`snapshot_generated:${kind}`);
+		}
+		if (traceStart) this.executionTraces.measureHost(this.session.sessionId, "snapshot_build", traceStart);
+		this.emit(msg);
 	}
 
 	/** Resolve a browser-bridged dialog (select/confirm/input) for this session. */
@@ -1382,6 +1484,20 @@ export class ClientSession {
 		else if (summary?.id === operationId) { if (summary.source === "branchSummary") conv.session.abortBranchSummary(); else conv.session.abortCompaction(); }
 		else if (compaction?.id === operationId) conv.session.abortCompaction();
 		else if (retry?.id === operationId) conv.session.abortRetry();
+	}
+
+	traceRequest(message: Extract<ClientMessage, { type: "trace_get" }>): void {
+		const conv = this.convs.get(message.conversationId);
+		if (!conv) {
+			this.emit({ type: "trace_result", reqId: message.reqId, conversationId: message.conversationId, open: message.open, export: message.export, error: "对话不可用" });
+			return;
+		}
+		try {
+			const trace = this.executionTraces.reportSession(conv.session.sessionId, conv.id) as unknown as UiTraceSnapshot;
+			this.emit({ type: "trace_result", reqId: message.reqId, conversationId: conv.id, open: message.open, export: message.export, trace });
+		} catch (error) {
+			this.emit({ type: "trace_result", reqId: message.reqId, conversationId: conv.id, open: message.open, export: message.export, error: error instanceof Error ? error.message : String(error) });
+		}
 	}
 
 	async treeRequest(message: TreeRequest): Promise<void> {
@@ -1546,6 +1662,7 @@ export class ClientSession {
 		getSession: () => this.session,
 		startNewSession: () => this.startNewSession(),
 		restartSession: (conversationId) => this.restartSession(conversationId),
+		traceCommand: (context, format) => this.traceRequest({ type: "trace_get", reqId: `command-${context.requestId}`, conversationId: context.conversationId, open: true, ...(format ? { export: format } : {}) }),
 		treeCommand: async (name, args, context) => {
 				const conv = this.conv;
 				if (conv.id !== context.conversationId) return;
@@ -1818,7 +1935,11 @@ export class ClientSession {
 			if (!s.isStreaming) { conv.toolsExecutedSincePrompt = false; conv.lastTaskEndedAt = undefined; }
 			conv.toolTextContinues = 0;
 				sideEffectsStarted = true;
-			await deliverPrompt(s, text, asides, queue, acknowledge);
+			await deliverPrompt(s, text, asides, queue, acknowledge, disposition => {
+				if (!this.executionTraces.enabled) return;
+				const hostRequestId = requestId ?? `${receiptSessionId}:host-${++this.promptTraceSeq}`;
+				this.executionTraces.promptAccepted(receiptSessionId, conv.id, hostRequestId, disposition);
+			});
 		} catch (err) {
 			acknowledge(false);
 			this.emit({
@@ -2092,7 +2213,7 @@ export class ClientSession {
 			conv.tree?.dispose(); conv.tree = undefined;
 			conv.runtime = replacement; replacement = undefined;
 			conv.recovery = {}; conv.treeProjectionRevision = undefined;
-			conv.uiMessageCache.clear(); conv.lastMessagesSig = "";
+			conv.uiMessageCache.clear();
 			await this.bindSession(conv);
 			await this.pushSlashCommands();
 			this.pushSettings(); this.emitConversations(); this.flushSnapshot(true);
@@ -3446,6 +3567,27 @@ export class AgentService {
 
 	get(clientId: string): ClientSession | undefined {
 		return this.clients.get(clientId);
+	}
+
+	/** Per-client timing reports (PI_SNAPSHOT_TIMINGS); empty when nothing sampled.
+	 *  Deliberately NOT merged across clients: percentiles of two workloads mixed
+	 *  together answer no question, and a benchmark run has exactly one client. */
+	snapshotTimings(): { clients: Record<string, TimingsReport> } {
+		const clients: Record<string, TimingsReport> = {};
+		for (const [clientId, cs] of this.clients) {
+			const report = cs.timings.report();
+			if (Object.keys(report.marks).length || Object.keys(report.counters).length) clients[clientId] = report;
+		}
+		return { clients };
+	}
+
+	executionTraces(): { clients: Record<string, Record<string, unknown>> } {
+		const clients: Record<string, Record<string, unknown>> = {};
+		for (const [clientId, cs] of this.clients) {
+			const report = cs.executionTraces.report();
+			if (report) clients[clientId] = report;
+		}
+		return { clients };
 	}
 
 	async disposeAll(): Promise<void> {

@@ -15,6 +15,9 @@ npm start            # 跑编译产物 dist/server/index.js（生产）
 npm run check:design # 设计令牌检查（硬编码颜色与非令牌圆角报错）
 npm test             # 设计令牌检查 + vitest 纯函数单测（tests/unit/，毫秒级零 token）
 npm run test:smoke   # 零 token 协议冒烟聚合跑器（tests/run-smoke.mjs，自包含测试）
+node tests/execution-trace-test.mjs  # 锁定 SDK hooks、延迟边界与完整工具往返契约
+node tests/trace-browser-test.mjs   # 真实浏览器/SDK：/trace、/export、离线 HTML 安全、重启与中断恢复
+npx vitest run tests/unit/trace-store-reliability.test.ts tests/unit/trace-export.test.ts
 npm run test:freeze  # 冻结/重连回归测试（Playwright，需要本机 chromium headless）
 ```
 
@@ -24,7 +27,7 @@ npm run test:freeze  # 冻结/重连回归测试（Playwright，需要本机 chr
 
 GitHub Actions ubuntu-latest（`.github/workflows/ci.yml`，push/PR → main 或 develop 触发）：`check:lockfile → npm ci → check:protocol → typecheck → build → npm test（设计检查 + vitest）→ test:smoke`。
 
-桌面字体另有 macOS/Windows Electron CI job：`windows-rendering-test.mjs` 在 Mac 100% 和 Windows 100%／125%／150% 缩放下生成浅深色截图与字体测量，`compare-rendering-metrics.mjs` 比较包内字体文件、字号、字重、颜色、换行及字宽（容差 1 CSS px）。这是开发构建回归，正式发布仍执行安装包回归；不声称系统栅格化或屏幕显示像素完全一致。
+桌面字体另有 macOS/Windows Electron CI job：`windows-rendering-test.mjs` 在 Mac 100% 和 Windows 100%／125%／150% 缩放下生成浅深色截图与字体测量，`compare-desktop-rendering.mjs` 比较共用代码字体，并以 Windows 100% 为该平台的字号、字重、颜色、换行及字宽基准（容差 1 CSS px）。这是开发构建回归，正式发布仍执行安装包回归；不声称系统栅格化或屏幕显示像素完全一致。
 
 SSH 节点另有 macOS/Windows CI job：两平台分别构建服务端并运行 `node-workbench-test.mjs` 的 mock SSH 测试。浏览器工作台交互可在 macOS 本地运行 `node tests/node-workbench-browser-test.mjs`（先 `npm run build`）。
 
@@ -63,7 +66,7 @@ SSH 节点另有 macOS/Windows CI job：两平台分别构建服务端并运行 
 
 每个 `*-test.mjs` 用独立端口（≥8900，避开 8787/5173/3300），并在启动 server 前先 `lsof -ti :PORT -sTCP:LISTEN` 确认空闲；若被占，改端口而非硬杀。
 
-随机端口测试不能先开探测 socket 再释放后启动服务，这会产生占用竞态。`tests/lib/isolated-server.mjs` 提供直接绑定高端口的 `listenIsolated` 和 `startIsolatedHarness`：仅占用冲突换端口重试，启动必须核对自身绑定日志与健康响应 PID，失败/超时只清理本次子进程。子代理和内置扩展测试已使用该入口；`isolated-server-test.mjs` 确定性覆盖被占端口、非占用错误和超时清理。
+随机端口测试不能先开探测 socket 再释放后启动服务，这会产生占用竞态。`tests/lib/isolated-server.mjs` 提供直接绑定高端口的 `listenIsolated` 和 `startIsolatedHarness`：仅占用冲突换端口重试，启动必须核对自身绑定日志与健康响应 PID，失败/超时只清理本次子进程。内置扩展测试已使用该入口；`isolated-server-test.mjs` 确定性覆盖被占端口、非占用错误和超时清理。
 
 ### 精确清理自己起的进程
 
@@ -76,6 +79,8 @@ spawn 后记录 `server.pid`，测试收尾（含异常 catch 路径）用 `proc
 ### 宿主环境隔离
 
 自起 server 的测试不得直接展开 `process.env`：从 pi-harness/Electron 宿主里跑测试时，宿主自己的 `PI_*` 会泄进被测 server——`PI_WEB_PKG_ROOT` 让它伺服宿主自己的 web/dist（浏览器测的就成了另一个应用），`PI_WEB_WORKSPACES_FILE` / `PI_SESSION_FILE` 指向真实工作区与会话。统一用 `tests/lib/test-env.mjs`：展开式写 `env: { ...testEnv(), PORT, … }`；「先改 `process.env.PI_*` 再让子进程继承」的旧式测试在文件头 `scrubHostEnv()` 一次（此后 `PI_*` 命名空间归测试所有，`testEnv()` 不再剥）。`scripts/check-test-env.mjs`（CI 独立一步）强制这三条。
+
+模型环境也属于宿主配置：`testEnv()` 默认移除模型 API key、Anthropic/OpenAI 配置、Copilot/Hugging Face token 及 AWS/Vertex 认证入口，避免宿主凭据改变首次引导状态或触发外部模型请求。需要模拟这些配置时通过 `testEnv(overrides)` 显式传入；先调用 `scrubHostEnv()` 的脚本可在清理后设置自己的夹具环境。普通工具凭据（如 `GITHUB_TOKEN`）、代理、PATH 和 `ELECTRON_RUN_AS_NODE` 保留。回归见 `tests/test-env-test.mjs`。
 
 ### 自包含 vs 外部依赖
 
@@ -150,3 +155,22 @@ docker rm -f pi-db-test-pg pi-db-test-mysql
 ## Design First Skill 回归
 
 `npx vitest run tests/unit/design-first-resources.test.ts tests/unit/composer-skill.test.ts tests/unit/design-first-native-loop.test.ts tests/unit/packaged-sdk-version.test.ts` 验证原生资源、快捷命令、模型沿用、工具闭环及打包。脚本模型只证明接线；真实模型单样本证据见 [Skill 交付记录](design-first-skill.md)。构建后运行 `node tests/builtin-extensions-test.mjs`，加 `--browser` 可验证设置开关和草稿回填。
+
+### 长时间运行的 smoke 测试
+
+`npm run test:smoke` 串行执行清单，每项输出 `[序号/总数] 名称`、结果与耗时；每 15 秒打印当前项的运行心跳。汇总分别统计通过、失败、超时、跳过和中断；序号表示执行位置，不表示此前测试全部通过。
+
+默认单项超时 180 秒，可用 `npm run test:smoke -- --timeout-ms 300000` 覆盖，也可追加测试名只跑指定项。超时清理该项进程树，记为失败并继续；Ctrl+C 或 SIGTERM 清理当前项并停止整个队列。保留真实失败退出码。
+
+同一真实工作目录的跑器通过本机 socket（Windows 使用 named pipe）互斥；第二次启动立即报告已有运行 PID 和目录，不重复执行。不同 worktree 不互斥，固定端口仍可能冲突。入口未覆盖直接运行单个测试脚本的情况。
+
+直接运行以保留实时日志；需要保存日志时，在 Bash/Zsh 使用：
+
+```bash
+set -o pipefail
+npm run test:smoke 2>&1 | tee /tmp/pi-smoke.log
+```
+
+不要将执行中的测试接到 `tail -4`：它等到输入结束才显示末尾行，且未启用 `pipefail` 时会掩盖 npm 的失败退出码。日志摘要应在运行结束后读取。
+
+跑器回归：`node --test tests/smoke-runner-test.mjs`；命令卡浏览器回归：`node tests/bash-feedback-browser-test.mjs`。

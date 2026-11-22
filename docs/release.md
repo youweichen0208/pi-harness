@@ -1,5 +1,9 @@
 # 发布流程
 
+## 1.35.3：执行 Trace、命令反馈与测试可靠性
+
+整合最新 develop 的 notebooks、内置 Python 内核与本地控制工具，加入持久化执行 Trace 和安全导出、原生平台字体恢复，移除内置 Workspace 子代理。长命令显示静默／断线／结束状态，移除会重新执行命令的终端入口。冒烟跑器增加进度、互斥和超时清理，隔离宿主模型凭据并修复过时／竞态浏览器断言。SDK / pi-ai 保持 1.5.2，协议 v63；同提交 CI 和三平台桌面打包回归通过后公开 GitHub Release，不发布 npm。
+
 ## 1.34.4：恢复 v1.34.1 的 Mac 桌面视觉基准
 
 恢复 Mac 正文字体和首页斜体，Playground 内置 Sarasa 中文字体。Windows／Linux 窗口控件恢复到右上角。聊天支持 Ctrl+Enter 换行，Mermaid 大图兼容 HTML 换行。新增内置 Design First 技能和 `/design` 命令。协议 v60。详见 `.github/release-notes/v1.34.4.md`。

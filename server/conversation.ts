@@ -100,7 +100,6 @@ export interface Conversation {
 	/** The seq assigned to each user message, so a cache miss never renumbers it. */
 	userSeqByKey: Map<string, number>;
 	uiMessageCache: Map<string, UiMessage>;
-	lastMessagesSig: string;
 	lastMessagesArray: UiMessage[];
 	/** Actual queued prompt TEXTS (steer = 插队, followUp = 排队) — the UI
 	 *  renders them as pending bubbles in the real message list. */

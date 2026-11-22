@@ -18,7 +18,7 @@ const knowledge=join(base,'knowledge');mkdirSync(knowledge);writeFileSync(join(k
 mkdirSync(join(base,'data'));writeFileSync(join(base,'data','project-workspaces.json'),JSON.stringify({revision:1,workspaces:[{id:'research',name:'Research',paths:[knowledge]}]}));
 for(const [name,text] of [['note.md','# First document\n\nOriginal passage.\n'],['other.md','# Second document\n\nOther evidence.\n'],['third.txt','Third source.\n']]) writeFileSync(join(cwd,name),text);
 const requests=[];
-const mock=createServer(async(req,res)=>{let body='';for await(const part of req)body+=part;requests.push(JSON.parse(body));res.writeHead(200,{'content-type':'text/event-stream'});for(const [delta,finish_reason]of [[{role:'assistant',content:'Local answer with evidence.'},null],[{},'stop']])res.write(`data: ${JSON.stringify({id:'fixture',object:'chat.completion.chunk',choices:[{index:0,delta,finish_reason}]})}\n\n`);res.end('data: [DONE]\n\n');});
+const mock=createServer(async(req,res)=>{let body='';for await(const part of req)body+=part;requests.push(JSON.parse(body));res.writeHead(200,{'content-type':'text/event-stream'});for(const [delta,finish_reason]of [[{role:'assistant',content:`Local answer with evidence. [request ${requests.length}]`},null],[{},'stop']])res.write(`data: ${JSON.stringify({id:'fixture',object:'chat.completion.chunk',choices:[{index:0,delta,finish_reason}]})}\n\n`);res.end('data: [DONE]\n\n');});
 await new Promise(resolve=>mock.listen(port+1,'127.0.0.1',resolve));
 writeFileSync(join(agent,'models.json'),JSON.stringify({providers:{fixture:{api:'openai-completions',baseUrl:`http://127.0.0.1:${port+1}`,apiKey:'unused',models:[{id:'fixture',name:'Local model',input:['text'],contextWindow:32000,maxTokens:4096}]}}}));
 writeFileSync(join(agent,'settings.json'),JSON.stringify({defaultProvider:'fixture',defaultModel:'fixture'}));
@@ -46,11 +46,19 @@ try{
  await page.getByRole('button',{name:'固定到右侧',exact:true}).click();await page.locator('.wiki-assistant.is-docked').waitFor();assert.equal(await input.inputValue(),'Keep this draft');
  await page.getByRole('button',{name:'切换为浮动面板',exact:true}).click();assert.equal(await input.inputValue(),'Keep this draft');
 
+ const sendQuestion=async(text,viaButton=false)=>{
+  const before=requests.length;
+  await input.fill(text);
+  if(viaButton)await page.locator('.wiki-assistant .composer-action.send').click();else await input.press('Enter');
+  for(let i=0;i<240&&requests.length===before;i++)await new Promise(resolve=>setTimeout(resolve,50));
+  assert.equal(requests.length,before+1,'one new model request per question');
+  const answer=`Local answer with evidence. [request ${before+1}]`;
+  await page.waitForFunction(answer=>document.querySelector('.wiki-assistant .messages')?.textContent.includes(answer),answer);
+ };
  const original=(await api('chat-context')).body.sessionId;
  const choose=async()=>{
   if(!await page.locator('.wiki-assistant-context').count()) {
-   const draft=await input.inputValue();await input.fill('Summarize this document');await input.press('Enter');
-   await page.waitForFunction(()=>document.querySelector('.wiki-assistant .messages')?.textContent.includes('Local answer with evidence.'));
+   const draft=await input.inputValue();await sendQuestion('Summarize this document');
    await input.fill(draft);
   }
   await page.locator('.wiki-assistant-context').click();await page.locator('.wiki-project-list .wiki-sheet-row').filter({hasText:'knowledge'}).click();await page.locator('.wiki-assistant-sheet').waitFor({state:'detached'});};
@@ -66,8 +74,7 @@ try{
  await page.waitForFunction(()=>document.querySelector('.wiki-assistant textarea')?.value==='Keep this draft');
  assert.equal((await api('chat-context')).body.sessionId,original,'blank document chat restored');
  assert.equal(await page.locator('.wiki-reference-chips').count(),0,'returning does not restore project');
- await choose();await input.fill('Analyze the project with this document');assert.equal(await input.inputValue(),'Analyze the project with this document');await input.press('Enter');
- await page.waitForFunction(()=>document.querySelector('.wiki-assistant .messages')?.textContent.includes('Local answer with evidence.'));
+ await choose();await sendQuestion('Analyze the project with this document');
  assert(!JSON.stringify(requests.at(-1)).includes('Python 示例默认应是可独立运行的完整代码块'));
  // Scope is expressed by the reference chip; the prompt carries the document snapshot.
  // Assert them separately — tool descriptions also contain "knowledge", so the whole request body over-matches.
@@ -78,8 +85,7 @@ try{
  await input.fill('Saved draft');
  await page.locator('.wiki-tree-row[title="other.md"]').click();
  await page.waitForFunction(()=>JSON.parse(sessionStorage.getItem('pi-wiki-view'))?.path==='other.md');
- await input.fill('Only this document');await page.locator('.wiki-assistant .composer-action.send').click();
- await page.waitForFunction(()=>document.querySelector('.wiki-assistant .messages')?.textContent.includes('Local answer with evidence.'));
+ await sendQuestion('Only this document',true);
  const secondMessages=JSON.stringify(requests.at(-1).messages),previousProject=JSON.stringify(knowledge).slice(1,-1);
  assert(!secondMessages.includes(previousProject),'previous project path must not enter another document chat');
  assert(!secondMessages.includes('Reference evidence'),'previous project content must not enter another document chat');

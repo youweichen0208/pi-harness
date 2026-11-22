@@ -28,7 +28,7 @@ import { installOpenAIProxyRoutes } from "./openai-proxy-routes.js";
  *   all share one conversation list per project.
  *   PI_CODING_AGENT_DIR  pi config dir (auth/models/skills) — passed to the SDK
  */
-import { existsSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { stat } from "node:fs/promises";
 import { createServer, type IncomingMessage } from "node:http";
 import { createConnection } from "node:net";
@@ -626,6 +626,8 @@ wss.on("connection", (ws) => {
 			// 真正的慢客户端：丢弃是安全的，但不能「丢完就没了」——安排一次延迟
 			// 重发，等缓冲排空后快照最终必达（否则若此后再无事件，客户端将永久
 			// 停留在旧快照）。重发仍走 flushSnapshot：缓冲未排空则再次顺延。
+			const dropped = clientId ? service.get(clientId)?.timings : undefined;
+			if (dropped?.enabled) dropped.count(`snapshot_dropped:${msg.type}`);
 			if (!snapshotRetryTimer) {
 				snapshotRetryTimer = setTimeout(() => {
 					snapshotRetryTimer = null;
@@ -634,9 +636,42 @@ wss.on("connection", (ws) => {
 			}
 			return;
 		}
+		// Send-side sampling. Cold = this socket actually stringified; hit =
+		// another tab already did (multi-tab share). Byte scans are detail-only.
+		const attached = clientId ? service.get(clientId) : undefined;
+		const timings = attached?.timings;
+		const traceSerializeStart = attached?.executionTraces.enabled ? performance.now() : 0;
+		const sampled = timings?.enabled ? timings : undefined;
+		const detailed = timings?.detailed ? timings : undefined;
+		const bufferedBefore = sampled ? ws.bufferedAmount : 0;
+		const ts = sampled ? performance.now() : 0;
+		const cold = sampled ? !serializedCache.has(msg) : false;
 		const wire = serializeShared(msg);
+		if (sampled && ts) {
+			sampled.add(cold ? "ws_serialize_cold" : "ws_serialize_hit", performance.now() - ts);
+			sampled.count(cold ? "ws_serialize_cache_miss" : "ws_serialize_cache_hit");
+			sampled.count("ws_buffered_amount_total", bufferedBefore);
+			sampled.count(`snapshot_kind:${msg.type}`);
+		}
+		if (attached && traceSerializeStart) attached.executionTraces.measureHost(attached.session.sessionId, "ws_serialize", traceSerializeStart);
+		const tb = detailed ? performance.now() : 0;
+		const wireBytes = detailed ? Buffer.byteLength(wire, "utf8") : 0;
+		if (detailed && tb) {
+			detailed.add("ws_byte_length", performance.now() - tb);
+			// Uncompressed JSON bytes offered to ws, not compressed network traffic.
+			detailed.count("snapshot_wire_bytes", wireBytes);
+			detailed.count("uncompressed_json_bytes", wireBytes);
+			detailed.addBytes(msg.type, wireBytes);
+		}
 		if (msg.type === "snapshot") lastSnapshotBytes = wire.length * 2;
+		const tsend = sampled ? performance.now() : 0;
+		const traceSendStart = attached?.executionTraces.enabled ? performance.now() : 0;
 		ws.send(wire);
+		if (attached && traceSendStart) attached.executionTraces.measureHost(attached.session.sessionId, "ws_send", traceSendStart);
+		if (sampled && tsend) {
+			sampled.add("ws_send", performance.now() - tsend);
+			sampled.count(`snapshot_sent:${msg.type}`);
+		}
 	};
 
 	// Plugins broadcast to every open socket; unregister on close below. The
@@ -693,6 +728,8 @@ wss.on("connection", (ws) => {
 			case "prompt":
 				void cs.prompt(msg.text, msg.attachments, msg.queue, msg.requestId, undefined, msg.target);
 				break;
+			case "trace_get":
+				cs.traceRequest(msg);
 				break;
 			case "abort":
 				void cs.abort();
@@ -1122,6 +1159,26 @@ async function shutdown(): Promise<void> {
 	await nodeWorkbench.dispose();
 	pluginMgr.dispose();
 
+	// Optional timing dump (PI_SNAPSHOT_TIMINGS_OUT): written here because
+	// process.on("exit") cannot await the async teardown and disposeAll() would
+	// have dropped the client sessions this data belongs to.
+	const timingsOut = process.env.PI_SNAPSHOT_TIMINGS_OUT;
+	if (timingsOut) {
+		try {
+			writeFileSync(timingsOut, JSON.stringify(service.snapshotTimings()));
+		} catch (err) {
+			console.error("[server] failed to write snapshot timings:", err instanceof Error ? err.message : err);
+		}
+	}
+
+	const taskTimingsOut = process.env.PI_TASK_TIMINGS_OUT;
+	if (taskTimingsOut) {
+		try {
+			writeFileSync(taskTimingsOut, JSON.stringify(service.executionTraces()));
+		} catch (err) {
+			console.error("[server] failed to write execution traces:", err instanceof Error ? err.message : err);
+		}
+	}
 
 	await service.disposeAll();
 	wss.close();

@@ -38,6 +38,8 @@ export interface ToolView {
 	result?: UiMessage;
 	/** Live output accumulated from tool_delta while running. */
 	liveOutput?: string;
+	lastOutputAt?: number;
+	connected?: boolean;
 	/** True when the session is streaming (tool may still be running). */
 	streaming: boolean;
 	/** Authoritative run lifecycle, independent of browser connectivity. */
