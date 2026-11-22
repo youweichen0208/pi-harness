@@ -20,7 +20,7 @@ export function appendComposerText(conversationId: string, text: string): void {
 
 /** Prepare an explicit command invocation without sending or discarding a draft. */
 export function prepareComposerCommand(conversationId: string, name: string): void {
-	if (!/^[a-z0-9-]+$/.test(name)) throw Error("Invalid command name");
+	if (!/^(?:skill:)?[a-z0-9-]+$/.test(name)) throw Error("Invalid command name");
 	queueInsertion(conversationId, { text: `/${name}`, placement: "command" });
 }
 

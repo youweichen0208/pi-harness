@@ -27,7 +27,7 @@ function WaitingIndicator({ stage, onStop }: { stage: WaitStage; onStop?: () => 
 
 /** Shared presentation; native retry, compaction and silence notices take precedence. */
 export function ConversationWorkingStatus({ state, connected, silenceNotified, toolStatuses, onStop }: {
-	state: Pick<UiState, "messages" | "streamingMessage" | "isStreaming" | "conversationId" | "model" | "recovery" | "runRecovery"> & Partial<Pick<UiState, "queue">>;
+	state: Pick<UiState, "messages" | "streamingMessage" | "isStreaming" | "conversationId" | "recovery" | "runRecovery"> & Partial<Pick<UiState, "queue">>;
 	connected: boolean; silenceNotified: boolean; toolStatuses: ReadonlyMap<string, ToolStatus>; onStop?: () => void;
 }) {
 	const t = useChatT();

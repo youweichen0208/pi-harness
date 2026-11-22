@@ -1,12 +1,16 @@
 import type { Express, Request } from "express";
 import type { AgentService } from "./agent-service.js";
-import type { ProjectWorkspaceCatalog } from "./protocol.js";
+import type { NotebookRunEvent, NotebookRunResult, ProjectWorkspaceCatalog } from "./protocol.js";
 import { WikiService, WikiConflictError, wikiPath } from "./wiki-service.js";
+import { notebookKernels } from "./notebook-kernel.js";
+import { dirname } from "node:path";
 import { statSync } from "node:fs";
 import { extname, basename } from "node:path";
 
 /** Wiki uses the same authenticated client and original SDK session as chat. */
 export function installWikiRoutes(app: Express, service: () => AgentService, dataDir: string, originAllowed: (req: Request) => boolean, projects: () => ProjectWorkspaceCatalog) {
+	const seen = new Set<string>();
+	const notebooks = notebookKernels(dirname(dataDir));
 	const wiki = new WikiService(dataDir);
 	app.post("/api/wiki", async (req, res) => {
 		res.setHeader("Cache-Control", "no-store");
@@ -28,6 +32,25 @@ export function installWikiRoutes(app: Express, service: () => AgentService, dat
 					res.json({ workspaceId: group.id, workspaceName: group.name, path, name: basename(path) }); return;
 				}
 				res.json(await service().wikiConversations.execute(clientId, cwd, req.body)); return;
+			}
+			if (action.startsWith("notebook-")) {
+				if (typeof path !== "string" || !/\.(?:ipynb|md|markdown)$/i.test(path)) throw new Error("Invalid notebook");
+				const file = wikiPath(cwd, path);
+				if (action !== "notebook-close" && (!cs.activeIsWiki || cs.conversationId !== conversationId || !statSync(file).isFile() || service().quiesceInfo().quiesced)) throw new Error("Notebook unavailable");
+				if (typeof req.body.kernelId !== "string" || req.body.kernelId.length > 128) throw new Error("Invalid kernel identifier");
+				const key = JSON.stringify([clientId, conversationId, file, req.body.kernelId]);
+				if (action === "notebook-run") {
+					if (cs.wikiChats.settings(cwd, session.sessionManager.getSessionId()).documentPath !== path) throw new Error("Active notebook changed");
+					if (typeof requestId !== "string" || requestId.length > 128 || seen.has(requestId)) throw new Error("Invalid or repeated execution");
+					seen.add(requestId);
+					if (seen.size > 4096) seen.delete(seen.values().next().value!);
+					res.type("application/x-ndjson");
+					const emit = (message: NotebookRunEvent) => { if (!res.destroyed) res.write(JSON.stringify(message) + "\n"); };
+					try { const result = await notebooks.request(key, file, action, req.body.code, output => emit({output})); emit({result: result as NotebookRunResult}); }
+					catch (e) { emit({error: (e as Error).message}); }
+					res.end();
+				} else res.json(await notebooks.request(key, file, action, req.body.code));
+				return;
 			}
 			switch (action) {
 				case "open-info": { if (typeof path !== "string") throw new Error("Invalid path"); const absolute = wikiPath(cwd, path); if (!statSync(absolute).isFile()) throw new Error("Not a file"); result = { absolute }; break; }
@@ -96,4 +119,5 @@ export function installWikiRoutes(app: Express, service: () => AgentService, dat
 			} else res.sendStatus(400);
 		} catch { res.sendStatus(404); }
 	});
+	return () => notebooks.close();
 }

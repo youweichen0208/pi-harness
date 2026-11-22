@@ -7,7 +7,7 @@ import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-s
 import { insertComposerText } from "../../web/src/composer-text.js";
 import { designFirstResources } from "../../server/design-first-resources.js";
 
-const command = "/design";
+const command = "/skill:design-first";
 test.each(["\t", "\n", "\r\n", "\u00a0"])("preparing a command preserves %j and remains idempotent", whitespace => {
 	const draft = `${command}${whitespace}原始内容\n`;
 	const prepared = insertComposerText(draft, command, "command");
@@ -23,7 +23,7 @@ test("full command names, plain drafts and append retain their distinct behavior
 	expect(insertComposerText("keep\t\r\ndraft", "result", "append")).toBe("keep\t\r\ndraft\n\nresult");
 });
 
-test("prepared whitespace commands actually expand through the native SDK prompt path", async () => {
+test("prepared whitespace commands actually expand through the native SDK skill path", async () => {
 	const root = await mkdtemp(join(tmpdir(), "composer-skill-"));
 	let session: Awaited<ReturnType<typeof createAgentSession>>["session"] | undefined;
 	try {
@@ -44,20 +44,15 @@ test("prepared whitespace commands actually expand through the native SDK prompt
 		for (const whitespace of ["\t", "\n", "\r\n"]) await session.prompt(insertComposerText(`${command}${whitespace}原始内容`, command, "command"));
 		expect(prompts).toHaveLength(3);
 		for (const prompt of prompts) {
-			expect(prompt).toContain("full Start or resume workflow");
+			expect(prompt).toContain("## Start or resume");
 			expect(prompt).toContain("原始内容");
 		}
-		await session.prompt('/bug-fix "保留 $1 字面量的错误"');
-		await session.prompt('/feat "新增名称筛选"');
+		await session.prompt('/skill:bug-fix "保留 $1 字面量的错误"');
+		await session.prompt('/skill:feat "新增名称筛选"');
 		expect(prompts).toHaveLength(5);
 		expect(prompts[3]).toContain("Bug fix route");
 		expect(prompts[3]).toContain("保留 $1 字面量的错误");
 		expect(prompts[4]).toContain("Small feature route");
 		expect(prompts[4]).toContain("新增名称筛选");
-		for (const prompt of prompts.slice(3)) {
-			const userText = JSON.parse(prompt).content[0].text;
-			expect(userText).toContain(JSON.stringify(resolve("assets/skills/design-first/SKILL.md")));
-			expect(userText).not.toContain("{{DESIGN_FIRST_SKILL_PATH}}");
-		}
 	} finally { session?.dispose(); await rm(root, { recursive: true, force: true }); }
 });

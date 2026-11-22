@@ -36,3 +36,9 @@ it("does not mistake echo titles or filenames for tests and builds", () => {
 	}
 	expect(conversationWait([user, {...tool, content: [{type: "toolCall", id: "t", name: "bash", argumentsText: '{"command":"npm run build"}'}]}], empty)?.label).toBe("waitBuild");
 });
+
+it("uses the chat waiting stages for SSH commands and file reads", () => {
+	const command = {...tool, content: [{type: "toolCall", id: "t", name: "remote_command", argumentsText: '{"command":"npm test"}'}]};
+	expect(conversationWait([user, command], empty)?.label).toBe("waitTests");
+	expect(conversationWait([user, {...result, toolName: "remote_read"}], empty)?.label).toBe("waitFile");
+});

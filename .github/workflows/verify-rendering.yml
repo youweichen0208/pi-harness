@@ -44,6 +44,9 @@ jobs:
       - run: npm run build
       - name: Native npm removal worker
         run: node tests/extensions-worker-test.mjs
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.11.16"
       - name: Package actual desktop application
         run: npx electron-builder --${{ matrix.target }} --dir --publish never
       - name: Packaged native npm removal worker

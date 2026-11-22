@@ -1,3 +1,4 @@
+import { toggleDesktop } from "./desktop-control.js";
 import { piCliStatus } from "./pi-cli-status.js";
 import { extensionToolFailure } from "./extension-tools.js";
 import { nativeSkills } from "./skills-service.js";
@@ -96,7 +97,10 @@ export function installExtensionsRoutes(app: Express, service: () => AgentServic
 				if (!valid()) throw Error("Conversation changed; refresh and retry");
 				if (action === "builtin-toggle") {
 					if (mutation) throw Error("Extension manager busy");
-					toggleBuiltinDocument(req.body.id, req.body.enabled, req.body.version);
+					if (req.body.id === "desktop-control") {
+							if (cs.activeIsWiki) throw Error("Desktop control requires ordinary chat");
+							toggleDesktop(cs.session.sessionManager, req.body.enabled, req.body.version);
+						} else toggleBuiltinDocument(req.body.id, req.body.enabled, req.body.version);
 				}
 				res.json(builtinExtensionsState(cs.session, conversationId, cs.session.isIdle, cs.activeIsWiki));
 				return;

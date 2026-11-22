@@ -3,6 +3,7 @@ import { bindCacheWarming, cacheWarmingSettings, cacheWarmingView } from "./cach
 import { modelConfigurationChanged, modelSourcesFor, type ModelSourceSync } from "./model-source-sync.js";
 import { isSelectableProvider } from "./provider-catalog.js";
 /** Local native Pi session whose only tools operate on one captured SSH connection. */
+import { nodeDiagnosisGuard, nodeDiagnosisInstructions } from "./node-diagnosis.js";
 import { NodeCommandApprovals } from "./node-command-policy.js";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -50,13 +51,14 @@ export class NodeAgent {
 	}
 	private tools(): ToolDefinition[] {
 		const signalFor = (signal?: AbortSignal) => signal ? AbortSignal.any([signal, this.lifetime.signal]) : this.lifetime.signal;
-		const commandParams = Type.Object({ command: Type.String({ minLength: 1, maxLength: 100000 }), timeout: Type.Optional(Type.Number({ minimum: 1, maximum: 600, description: "Timeout in seconds (default 120)" })) });
-		const readParams = Type.Object({ path: Type.String() });
-		const writeParams = Type.Object({ path: Type.String(), text: Type.String() });
+		const diagnosticGoal = Type.Optional(Type.String({ minLength: 1, maxLength: 200, description: "During diagnosis, the stable hypothesis being tested." }));
+		const commandParams = Type.Object({ diagnosticGoal, command: Type.String({ minLength: 1, maxLength: 100000 }), timeout: Type.Optional(Type.Number({ minimum: 1, maximum: 600, description: "Timeout in seconds (default 120)" })) });
+		const readParams = Type.Object({ diagnosticGoal, path: Type.String() });
+		const writeParams = Type.Object({ diagnosticGoal, path: Type.String(), text: Type.String() });
 		const command: ToolDefinition<typeof commandParams> = {
 			name: "remote_command", label: "SSH command",
 			description: `Execute a shell command on this SSH node. Each command starts in ${JSON.stringify(this.state.cwd)}; use cd explicitly within a command to change directories. Commands run visibly in the shared interactive terminal; manual input is locked until completion. Read-only Linux queries run without confirmation. Deletions, writes, state changes and unclassified commands require confirmation for each operation. Output is limited to 64 KiB.`,
-			parameters: commandParams,
+			parameters: commandParams, executionMode: "sequential",
 			execute: async (_id, p, signal) => {
 				const cancel = signalFor(signal);
 				await this.approvals.request(p.command, cancel);
@@ -65,11 +67,11 @@ export class NodeAgent {
 			},
 		};
 		const read: ToolDefinition<typeof readParams> = {
-			name: "remote_read", label: "SSH read", description: "Read a UTF-8 file on this SSH node via SFTP (up to 512 KiB). Path must be absolute.", parameters: readParams,
+			name: "remote_read", label: "SSH read", description: "Read a UTF-8 file on this SSH node via SFTP (up to 512 KiB). Path must be absolute.", parameters: readParams, executionMode: "sequential",
 			execute: async (_id, p, signal) => ({ content: [{ type: "text", text: await this.operations.read(p.path, signalFor(signal)) }], details: undefined }),
 		};
 		const write: ToolDefinition<typeof writeParams> = {
-			name: "remote_write", label: "SSH write", description: "Write a UTF-8 file on this SSH node via SFTP (up to 512 KiB). Path must be absolute. Existing content is replaced.", parameters: writeParams,
+			name: "remote_write", label: "SSH write", description: "Write a UTF-8 file on this SSH node via SFTP (up to 512 KiB). Path must be absolute. Existing content is replaced.", parameters: writeParams, executionMode: "sequential",
 			execute: async (_id, p, signal) => { await this.approvals.request(`Write ${p.path}\n${p.text}`, signalFor(signal), true); await this.operations.write(p.path, p.text, signalFor(signal)); return { content: [{ type: "text", text: "文件已写入节点" }], details: undefined }; },
 		};
 		return [command, read, write];
@@ -91,7 +93,8 @@ export class NodeAgent {
 		const agentDir = process.env.PI_CODING_AGENT_DIR ?? getAgentDir();
 		const settings = cacheWarmingSettings(SettingsManager.create(this.sessionDir, agentDir));
 		const loader = new DefaultResourceLoader({ cwd: this.sessionDir, agentDir, settingsManager: settings, noExtensions: true, noSkills: true, noPromptTemplates: true, noContextFiles: true,
-			systemPrompt: `You are the assistant for one connected SSH node. All provided tools operate only on that node. Remote working directory: ${JSON.stringify(this.state.cwd)}. Use remote_command, remote_read and remote_write for node tasks. Commands run with the SSH user's permissions. You have no local filesystem or local shell tools. Run read-only Linux queries directly using the provided tools. Every deletion, write or state-changing operation requires the tool approval dialog; never treat a previous approval as authorization for another operation. Prefer simple read-only commands over shell scripts for diagnostics. Never assume a previous command's cd persists.`, appendSystemPrompt: [] });
+			extensionFactories: [{ name: "ssh-diagnosis", factory: nodeDiagnosisGuard }],
+			systemPrompt: `You are the assistant for one connected SSH node. All provided tools operate only on that node. Remote working directory: ${JSON.stringify(this.state.cwd)}. Use remote_command, remote_read and remote_write for node tasks. Commands run with the SSH user's permissions. You have no local filesystem or local shell tools. Run read-only Linux queries directly using the provided tools. Every deletion, write or state-changing operation requires the tool approval dialog; never treat a previous approval as authorization for another operation. Prefer simple read-only commands over shell scripts for diagnostics. Never assume a previous command's cd persists.\n\n${nodeDiagnosisInstructions}`, appendSystemPrompt: [] });
 		await loader.reload();
 		const modelRuntime = this.session?.modelRuntime ?? withOutputTokenFloor(await ModelRuntime.create({ authPath: join(agentDir, "auth.json"), modelsPath: join(agentDir, "models.json") }));
 		this.modelRuntimes.add(modelRuntime);

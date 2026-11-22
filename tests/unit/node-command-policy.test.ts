@@ -50,6 +50,7 @@ describe("node command approval boundary", () => {
 });
 
 const reads = [
+	"lsmod", "users", "groups", "who",
 	"  pwd\n\nls -la\n", "pwd &&\nls -la",
 	"systemctl status nginx", "systemctl --no-pager show nginx -p ActiveState", "systemctl list-units --type=service --failed",
 	"journalctl -u nginx -n 100 --no-pager", "journalctl -b", "journalctl -xe", "journalctl --since '1 hour ago'",

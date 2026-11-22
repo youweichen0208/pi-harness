@@ -59,11 +59,12 @@ try {
 		return { gap: article.left - sidebar.right, width: article.width };
 	});
 	check("#124 wiki document stays close to tree", wiki.gap <= 64, wiki);
-	const create = page.locator('.wiki-sidebar').getByRole('button', { name: '新建文件', exact: true });
-	check("#123 visible labeled file creation", (await create.innerText()).includes("新建文件"), await create.innerText());
-	await create.click();
-	await page.locator('.create-file-form input').fill('new-note.md');
-	await page.locator('.create-file-form button[type=submit]').click();
+	const create = page.locator('.wiki-tree-actions .wiki-tree-new');
+	check("#123 visible labeled file creation", (await create.innerText()).includes("新建"), await create.innerText());
+	await create.hover();
+	await create.getByRole("button",{name:/Markdown/}).click();
+	await page.locator('.wiki-tree-create-form input').fill('new-note.md');
+	await page.locator('.wiki-tree-create-form input').press('Enter');
 	await page.waitForFunction(() => new URL(location.href).searchParams.get("doc") === "new-note.md");
 	assert.equal(readFileSync(join(base, 'new-note.md'), 'utf8'), '');
 	await page.reload();

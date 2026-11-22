@@ -67,6 +67,28 @@ try {
 		socket.send(JSON.stringify({ type: 'snapshot', state: baseState }));
 		await page.waitForFunction(() => document.querySelector('.codemode-body')?.textContent.includes('mcp__echo__add'));
 		assert.equal(await page.locator('.codemode-call').count(), 1);
+		const browserTool = 'mcp__playwright_extension__browser_snapshot';
+		const browserMessages = [undefined, 60000].flatMap((durationMs, index) => {
+			const id = `browser-timeout-${index}`;
+			return [
+				{ id, role: 'assistant', timestamp: 3 + index, content: [{ type: 'toolCall', id, name: browserTool, argumentsText: '{}' }] },
+				serializeMessage({ role: 'toolResult', toolCallId: id, toolName: browserTool, isError: true, ...(durationMs === undefined ? {} : { durationMs }), timestamp: 5 + index, content: [{ type: 'text', text: 'MCP request timed out after 60000ms' }] }, index),
+			];
+		});
+		socket.send(JSON.stringify({ type: 'snapshot', state: { ...baseState, isStreaming: false, messages: browserMessages } }));
+		for (const id of ['browser-timeout-0', 'browser-timeout-1']) {
+			const card = page.locator(`[data-tool-call-id="${id}"]`);
+			await card.waitFor();
+			const header = card.locator('.tool-step-head');
+			assert.match(await header.textContent(), language === 'zh' ? /响应超时/ : /Timed out/);
+			assert.match(await header.locator('.tool-step-state').getAttribute('class'), /failed/);
+		}
+		assert((await page.locator('[data-tool-call-id="browser-timeout-1"] .tool-step-state').textContent()).includes('·'));
+		assert(!(await page.locator('[data-tool-call-id="browser-timeout-0"] .tool-step-state').textContent()).includes('·'));
+		await page.locator('[data-tool-call-id="browser-timeout-0"] .tool-step-head').click();
+		const timeoutHelp = page.locator('[data-tool-call-id="browser-timeout-0"] .browser-progress-update');
+		await timeoutHelp.waitFor();
+		assert.match(await timeoutHelp.textContent(), language === 'zh' ? /检查 Chrome/ : /Check the Playwright/);
 		await page.evaluate(() => {
 			window.deviceActions = [];
 			window.open = url => { window.deviceActions.push(['open', url]); return null; };

@@ -68,7 +68,8 @@ export function WikiWindowShell({ documentPath, loading = false, chatOpen, chatW
 	const documentName = documentPath.split("/").at(-1) || t("wikiChooseDocuments");
 	const detached = !!desktopAPI && !docked && chatOpen;
 	const float = !docked && (!narrow || !!desktopAPI);
-	const outline = <aside className={`wiki-agent-chat wiki-outline-aside ${!mobileOutlineOpen ? "wiki-outline-resting" : ""}`} hidden={chatOpen && (docked || narrow)} aria-label={t("richToc")}>
+	const showOutline = !/\.ipynb$/i.test(documentPath);
+	const outline = showOutline && <aside className={`wiki-agent-chat wiki-outline-aside ${!mobileOutlineOpen ? "wiki-outline-resting" : ""}`} hidden={chatOpen && (docked || narrow)} aria-label={t("richToc")}>
 				<header className="wiki-agent-header"><strong>{t("richToc")}</strong><button className="wiki-outline-close" aria-label={t("close")} onClick={() => setMobileOutlineOpen(false)}><FiX /></button></header>
 				<div id="wiki-panel-outline" className="wiki-outline-panel"><WikiOutline key={documentPath} scope={scope} onNavigate={() => setMobileOutlineOpen(false)} /></div>
 			</aside>;
@@ -76,14 +77,14 @@ export function WikiWindowShell({ documentPath, loading = false, chatOpen, chatW
 		<header className="wiki-window-header wiki-view-header">
 			<span className="wiki-window-mark" aria-hidden="true"><FiBookOpen /></span>
 			<div id="wiki-modal-toolbar">{loading && <span className="wiki-breadcrumb">{documentName}</span>}</div>
-			<button className="wiki-agent-toggle" aria-label={t("richToc")} title={t("richToc")} aria-pressed={!(chatOpen && docked)} disabled={loading} onClick={() => { if (docked || narrow) onChatOpen(false); setMobileOutlineOpen(open => !open); }}><LuTableOfContents /></button>
+			{showOutline && <button className="wiki-agent-toggle" aria-label={t("richToc")} title={t("richToc")} aria-pressed={!(chatOpen && docked)} disabled={loading} onClick={() => { if (docked || narrow) onChatOpen(false); setMobileOutlineOpen(open => !open); }}><LuTableOfContents /></button>}
 			<button className="wiki-agent-toggle wiki-ask-toggle" aria-label={t("wikiAskPi")} title={t("wikiAskPi")} aria-expanded={chatOpen} disabled={loading} onClick={() => { onChatOpen(!chatOpen); setMobileOutlineOpen(false); }}><FiMessageSquare /><span>{t("wikiAskPi")}</span></button>
 			{!desktopAPI && <button className="wiki-window-close" aria-label={t("wikiExitMode")} title={t("wikiExitMode")} onClick={onClose}><FiX /></button>}
 			<DesktopWindowControls />
 		</header>
 		<div ref={body} className="wiki-modal-body wiki-window-body" style={{ "--wiki-chat-width": `${chatWidth}px` } as CSSProperties}>
 			<WikiReadingOutline.Provider value={narrow || (chatOpen && docked) ? null : outline}>{children}</WikiReadingOutline.Provider>
-			{mobileOutlineOpen && <button className="wiki-agent-scrim" aria-label={t("close")} onClick={() => setMobileOutlineOpen(false)} />}
+			{showOutline && mobileOutlineOpen && <button className="wiki-agent-scrim" aria-label={t("close")} onClick={() => setMobileOutlineOpen(false)} />}
 			{narrow && outline}
 
 			<WikiAssistantWindow detached={detached} onClose={closeChat}><aside ref={panel} className={`wiki-agent-chat wiki-assistant ${float ? "is-floating" : "is-docked"} ${empty ? "is-empty" : ""}`} hidden={!chatOpen} aria-label={t("wikiAskPi")} onKeyDown={event => {

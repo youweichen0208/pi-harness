@@ -119,6 +119,7 @@ if (process.platform === "win32") {
 ensureMacosShellPath();
 
 const app = express();
+app.use("/api/wiki", express.json({ limit: "68mb" }));
 app.use(express.json({ limit: "10mb" }));
 app.use(securityHeaders);
 
@@ -179,7 +180,7 @@ installExtensionsRoutes(app, () => service, originAllowed);
 installDatabaseRoutes(app, () => service, originAllowed);
 installSystemPromptRoutes(app, () => service, originAllowed);
 installKnowledgeLibraryRoutes(app, DATA_DIR, originAllowed);
-installWikiRoutes(app, () => service, join(DATA_DIR, "wiki"), originAllowed, () => projectWorkspaces.read());
+const closeNotebooks = installWikiRoutes(app, () => service, join(DATA_DIR, "wiki"), originAllowed, () => projectWorkspaces.read());
 
 app.get("/api/health", (_req, res) => {
 	res.json({ ok: true, piVersion: VERSION, pid: process.pid });
@@ -1115,6 +1116,7 @@ async function shutdown(): Promise<void> {
 	console.log("\nshutting down…");
 	clearInterval(heartbeatTimer);
 	stopControl();
+	await closeNotebooks();
 	await playgroundChat.close();
 	await stopPlayground();
 	await nodeWorkbench.dispose();

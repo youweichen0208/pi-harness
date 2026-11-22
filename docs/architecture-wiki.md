@@ -1,10 +1,10 @@
 ## 知识库入口（ADR-0006）
 
-左侧「知识库」打开独立 Wiki 窗口。一个本地文件夹就是整个知识库，子目录用于分类；配置独立于 Workspace。首次选择目录，后续恢复上次打开的 Markdown；空目录可直接打开，目录失效时重新选择。窗口内「更换知识库文件夹」沿用保存与中断保护，更换成功后保存配置，保留原目录的文件和聊天历史。
+左侧「知识库」打开独立 Wiki 窗口。一个本地文件夹就是整个知识库，子目录用于分类；配置独立于 Workspace。首次选择目录，后续恢复上次打开的 Markdown 或 Notebook；空目录可直接打开，目录失效时重新选择。窗口内「更换知识库文件夹」沿用保存与中断保护，更换成功后保存配置，保留原目录的文件和聊天历史。
 
 手动创建文件夹使用 `create-directory` Wiki 路由，与 `create-file` 共用工作区、对话、运行状态及路径边界检查。只创建已有父目录下的单级文件夹，不覆盖同名路径；文件夹行可直接预填路径创建子文件或子文件夹。
 
-`server/knowledge-library.ts` 将配置与最近文档原子写入 `<dataDir>/knowledge-library.json`。`POST /api/knowledge-library` 提供 read/configure/remember，沿用鉴权与同源检查；目录规范化为真实路径，最近文档须位于目录内且为 Markdown，旧窗口不能覆盖新目录的记录。新入口同步打开带 `knowledge-library=1` 的 Wiki 窗口，在窗口内读取配置，避免异步弹窗拦截。旧 Wiki URL 继续兼容；知识库窗口不会切换主聊天项目。
+`server/knowledge-library.ts` 将配置与最近文档原子写入 `<dataDir>/knowledge-library.json`。`POST /api/knowledge-library` 提供 read/configure/remember，沿用鉴权与同源检查；目录规范化为真实路径，最近文档须位于目录内且为 Markdown 或 Notebook，旧窗口不能覆盖新目录的记录。新入口同步打开带 `knowledge-library=1` 的 Wiki 窗口，在窗口内读取配置，避免异步弹窗拦截。旧 Wiki URL 继续兼容；知识库窗口不会切换主聊天项目。
 
 普通模式的文件树、聊天链接、工具卡片和本轮文件入口打开 Markdown 时，使用单文件弹窗与主聊天，详见 `architecture-attachments.md`。Wiki 内部链接仍在 Wiki 内导航。回归：`tests/knowledge-library-browser-test.mjs` 与 `tests/unit/knowledge-library.test.ts`。
 
@@ -57,7 +57,7 @@ Wiki 使用独立顶层窗口（ADR-0003）：浏览器命名弹窗 `pi-wiki`，
 
 ## 多文档引用与历史面板
 
-`WikiAssistantSheet` 使用原生 modal dialog 保证焦点约束，关闭后恢复触发控件焦点。文档选择支持标题／路径过滤、按本地日历日的今天及滚动七／三十天修改时间过滤、文件夹分页浏览；范围为当前工作区 `.md/.markdown/.txt`，最多 100 个额外引用。时间来自 mtime，文案为“修改”而不是“我编辑”。索引受限时提示并提供文件夹继续查找。选择在点击确定后应用，取消不修改；文件夹只用于浏览，不隐式全选。
+`WikiAssistantSheet` 使用原生 modal dialog 保证焦点约束，关闭后恢复触发控件焦点。文档选择支持标题／路径过滤、按本地日历日的今天及滚动七／三十天修改时间过滤、文件夹分页浏览；范围为当前工作区 `.md/.markdown/.txt/.ipynb`，最多 100 个额外引用。时间来自 mtime，文案为“修改”而不是“我编辑”。索引受限时提示并提供文件夹继续查找。选择在点击确定后应用，取消不修改；文件夹只用于浏览，不隐式全选。
 
 当前文件 chip 继续镜像正文，手动额外引用独立保存，切文档保留、发送后保留；相同文件只发送一次，当前编辑器快照优先。旧版额外文档使用现有 reference 模式按需读取，既不自动注入所有全文，也不改变 Agent 工具权限。服务端校验路径及真实路径边界、存在性和文件类型；缺失引用阻止发送并保留输入，可移除后重试。发送冻结选择列表，预检仅验证文件、不覆盖期间改变的持久选择；排空正文保存后再次校验文档 token、工作区及会话；切换对话期间不发送旧草稿。
 
@@ -258,3 +258,11 @@ WikiWorkbench 直接通过 `document-content` 检查已打开文件的内容版�
 富文本 Markdown 支持 `$...$` 行内公式及独占行的 `$$` 公式块（remark-math + 本地 KaTeX）。插入菜单或 `/math` 打开公式编辑框，可选择独立公式；点击公式或键盘聚焦后 Enter 可修改源码。源码视图可直接编写公式，切回正文后渲染。普通单文件 Markdown 同样支持；代码围栏中的美元符号保持原文。
 
 `rich-math.ts` 生成不可直接编辑的公式节点，保存时从节点携带的原始 Markdown 恢复 TeX，避免将 KaTeX 排版 HTML 写入文件。非法或超限公式显示源码，不阻塞文档保存。渲染禁用可信命令，限制展开次数与尺寸，字体本地打包，无外部公式服务。
+
+## Jupyter Notebook
+
+知识库根目录和子目录的「新建」菜单提供 Markdown 和文件夹，Markdown 文件名默认补全 .md。在富文本正文空行输入 `/jupyter` 或选择「＋ → Jupyter 单元」插入 Python 单元，点 ▶ 或按 Shift+Enter 执行。每格右上角工具栏的「＋」在当前位置后插入一格，光标进入新格。连续且带有相同 `jupyter-group=<id>` 围栏标识的单元共用外框；在正文再次使用 `/jupyter` 会新开一组。单元工具栏提供复制、运行／停止和删除。每格的垃圾桶确认后删除当前单元，点击外框或左侧提示区可选中整组，按 Backspace 或 Delete 直接删除。普通无语言围栏只展示代码。已有 python、py 和 python3 围栏可逐块运行，同一文档共享内核，工作目录为文档所在文件夹。代码自动保存；结果仅在当前页面显示，编辑代码会标记已有结果，离开或刷新后清空。已有 nbformat 4 文件可从目录打开。支持在单元内编辑 Python、Markdown，查看已保存的输出，以及通过「问 pi」引用当前单元源码。聊天默认附上单元源码；勾选「仅向 pi 引用当前单元」可缩小范围。文件采用知识库版本检查和自动保存，读写上限为 32 MiB。
+
+桌面安装包内置 Python 和 Jupyter 内核，CLI 使用服务所在机器的 Python。工作目录是 Notebook 所在文件夹，可以读取同目录 CSV。解释器及启用开关见 [Python 草稿](architecture-playground.md)。使用自选解释器且缺少 Jupyter 时点击「安装 Notebook 运行环境」；pandas 和 Matplotlib 等业务依赖需安装在所选解释器中。代码使用服务用户权限。每个窗口和文档拥有独立内核，重启内核清空变量，保留文件中的输出；离开文档、关闭服务或空闲十分钟会回收内核。逐格运行支持 Ctrl/Cmd+Enter，Shift+Enter 运行并选中下一格。运行全部遇错即停。
+
+浏览器回归为 `node tests/wiki-notebook-test.mjs`。将 `PI_WEB_PYTHON` 指向装有 ipykernel、jupyter_client、pandas、matplotlib 和 nbformat 的测试环境可同时验证真实执行、跨单元变量、图表和标准文件格式。

@@ -91,7 +91,7 @@ export function WikiToolbar({ readOnly, focused, onWidth, items, commands, edito
 	});
 	const overflow = [...groups.slice(count).flat(), ...overflowHeadings, a("superscript", <Icon.LuSuperscript />), a("subscript", <Icon.LuSubscript />), a("plainBlock", <Icon.LuType />)];
 	return <div ref={bar} className="wiki-insert-toolbar wiki-unified-toolbar" role="toolbar" aria-label={t("richFormatToolbar")}>
-		<div className="wiki-toolbar-insert">{button(choices("richInsertMenu", <Icon.LuPlus />, ["tp","bg","dmk","glk","tip","warning","collapse","card","sl","date","ml"].map(insert)), 0)}</div>
+		<div className="wiki-toolbar-insert">{button(choices("richInsertMenu", <Icon.LuPlus />, ["tp","bg","dmk",...(items.some(item => item.id === "jupyter") ? ["jupyter"] : []),"glk","tip","warning","collapse","card","sl","date","ml"].map(insert)), 0)}</div>
 		{groups.slice(0,count).map((group,i) => <div className="wiki-tool-group" key={i}>{group.map(button)}</div>)}
 		{button(choices("richMore", <Icon.LuEllipsis />, overflow), -1)}
 		<button type="button" className="wiki-width-toggle" title={t(focused ? "wikiStandardWidth" : "wikiWideWidth")} aria-label={t(focused ? "wikiStandardWidth" : "wikiWideWidth")} aria-pressed={focused} onMouseDown={e => e.preventDefault()} onClick={onWidth}><Icon.LuMoveHorizontal /></button>

@@ -27,6 +27,9 @@ import { Readable } from "node:stream";
 import { openToolOutput, toolOutputManifest, toolOutputId } from "./tool-output.js";
 import { nativeToolDetails, toolExitCode } from "./serialize.js";
 import { flushPromptReload, getSystemPromptState, promptReloadStatus, promptUsesFile, queuePromptReload, writeSystemPromptFile } from "./system-prompt-files.js";
+import { isLoopbackBind } from "./origin-policy.js";
+import { desktopControl, desktopSupported } from "./desktop-control.js";
+import { pageReader } from "./page-reader.js";
 import { parseNativeMcpStatus } from "./native-mcp-presentation.js";
 import { codemodeDetails } from "./codemode-presentation.js";
 import { NativeMcpConfigService } from "./native-mcp-config.js";
@@ -615,12 +618,24 @@ export class ClientSession {
 			registerExtensionModuleScope(join(cwd, ".pi", "extensions"));
 			registerExtensionModuleScope(join(cwd, ".pi", "npm"));
 			const settings = conversationSettings(cwd, this.agentDir);
+			const extensionFactories = nativeToolExtensions(() => databaseScope(this.clientId, cwd, sessionManager));
+			if (!wiki) {
+				if (process.platform === "darwin" && isLoopbackBind(process.env.PI_WEB_HOST ?? "127.0.0.1")) {
+					extensionFactories.push({ name: "pi-page-reader", factory: pageReader });
+				}
+				extensionFactories.push({
+					name: "pi-harness-desktop",
+					factory: pi => {
+						if (desktopSupported()) desktopControl(sessionManager)(pi);
+					},
+				});
+			}
 			const services = await createAgentSessionServices({
 				cwd,
 				agentDir: this.agentDir,
 				modelRuntime: this.sharedModelRuntime,
 				settingsManager: settings,
-				resourceLoaderOptions: { ...designFirstResources(wiki ? "wiki" : "normal", this.stateStore.dataDir), extensionFactories: nativeToolExtensions(() => databaseScope(this.clientId, cwd, sessionManager)) },
+				resourceLoaderOptions: { ...designFirstResources(wiki ? "wiki" : "normal", this.stateStore.dataDir), extensionFactories },
 			});
 			services.modelRuntime = withOutputTokenFloor(services.modelRuntime);
 			if (!this.sources) {

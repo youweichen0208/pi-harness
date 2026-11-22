@@ -13,7 +13,7 @@ export function conversationWait(messages: readonly UiMessage[], completed: Read
 	if (running) {
 		let command = "";
 		try { command = JSON.parse(running.argumentsText ?? "{}").command ?? ""; } catch { /* Partial arguments. */ }
-		if (running.name !== "bash" || typeof command !== "string") return null;
+		if ((running.name !== "bash" && running.name !== "remote_command") || typeof command !== "string") return null;
 		// Match executable positions, not test/build words inside echo or filenames.
 		const segments = splitCommandChain(command);
 		const test = segments.some(s => /^(?:(?:npm|pnpm|yarn|bun) (?:run )?test(?:[:\s]|$)|(?:npx )?(?:vitest|pytest|jest)(?:\s|$)|python\d? -m pytest(?:\s|$))/.test(s));
@@ -22,10 +22,10 @@ export function conversationWait(messages: readonly UiMessage[], completed: Read
 	}
 	for (let i = turn.length - 1; i >= 0; i--) {
 		const message = turn[i];
-		if (message.role === "toolResult") return { key: message.toolCallId ?? message.id, label: message.toolName === "read" ? "waitFile" : "waitResults", delay: 300 };
+		if (message.role === "toolResult") return { key: message.toolCallId ?? message.id, label: (message.toolName === "read" || message.toolName === "remote_read") ? "waitFile" : "waitResults", delay: 300 };
 		if (message.role !== "assistant") continue;
 		for (const block of [...message.content].reverse()) {
-			if (block.type === "toolCall" && typeof block.id === "string") return completed.has(block.id) ? { key: block.id, label: block.name === "read" ? "waitFile" : "waitResults", delay: 300 } : null;
+			if (block.type === "toolCall" && typeof block.id === "string") return completed.has(block.id) ? { key: block.id, label: (block.name === "read" || block.name === "remote_read") ? "waitFile" : "waitResults", delay: 300 } : null;
 			if (block.type === "text" && ((typeof block.text === "string" && block.text.trim()) || block.truncated)) return { key: message.id, label: "waitWorking", delay: 300 };
 			if (block.type === "thinking") {
 				if (typeof block.thinking === "string" && block.thinking.trim()) return null;

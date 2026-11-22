@@ -33,7 +33,7 @@ import { existsSync, mkdirSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { desktopClientId } from "./client-identity.mjs";
-import { agentRuntimeEnvironment } from "./agent-runtime-env.mjs";
+import { agentRuntimeEnvironment, desktopPythonEnvironment } from "./agent-runtime-env.mjs";
 import { bearerHeaders, desktopServerToken, desktopWindowUrl } from "./server-auth.mjs";
 // electron-updater 是 CJS 包，Node ESM 下不能直接 named import，
 // 得走默认导出再解构（Node 的 CJS→ESM 互操作不会自动分析 named exports）。
@@ -125,6 +125,7 @@ async function startServer(reusePort) {
 	serverProcess = fork(serverPath, [], {
 		env: {
 			...agentRuntimeEnvironment(getPkgRoot(), dataDir),
+			...(app.isPackaged ? desktopPythonEnvironment(process.resourcesPath) : {}),
 			PORT: String(serverPort),
 			PI_WEB_HOST: "127.0.0.1",
 			PI_WEB_TOKEN: serverToken,

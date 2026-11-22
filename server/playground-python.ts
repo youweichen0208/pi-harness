@@ -16,7 +16,7 @@ export async function probePython(env: PythonEnv = process.env): Promise<Playgro
 	let reason = "Python 3.9+ was not found. Install Python or set PI_WEB_PYTHON to its executable.";
 	for (const candidate of pythonCandidates(env)) {
 		const result = await new Promise<PlaygroundPythonStatus | undefined>(resolve => {
-			execFile(candidate.command, [...candidate.args, "-I", "-X", "utf8", "-c", "import sys,json; print(json.dumps([list(sys.version_info[:3]),sys.executable]))"], { env: { ...env }, timeout: 5000, maxBuffer: 16384, windowsHide: true }, (error, stdout) => {
+			execFile(candidate.command, [...candidate.args, "-I", "-B", "-X", "utf8", "-c", "import sys,json; print(json.dumps([list(sys.version_info[:3]),sys.executable]))"], { env: { ...env }, timeout: 5000, maxBuffer: 16384, windowsHide: true }, (error, stdout) => {
 				if (error) { reason = error.message.slice(0, 500); resolve(undefined); return; }
 				try {
 					const [version, path] = JSON.parse(stdout) as [number[], string];

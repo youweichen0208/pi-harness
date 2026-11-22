@@ -50,7 +50,7 @@ export function WikiAssistantSheet({ kind, cwd, conversationId, documentPath, cu
 		const cutoff = days === 1 ? now.getTime() : Date.now() - days * 86400000;
 		return (folder === null ? entries : directory?.entries ?? []).filter(entry => {
 			if (entry.kind === "directory") return folder !== null;
-			return /\.(md|markdown|txt)$/i.test(entry.path) && (!days || entry.modified >= cutoff) && `${entry.title ?? ""} ${entry.path}`.toLowerCase().includes(query.toLowerCase());
+			return /\.(md|markdown|txt|ipynb)$/i.test(entry.path) && (!days || entry.modified >= cutoff) && `${entry.title ?? ""} ${entry.path}`.toLowerCase().includes(query.toLowerCase());
 		});
 	}, [entries, directory, folder, query, days]);
 	const run = async (work: () => Promise<void>) => { setBusy(true); setError(""); try { await work(); } catch (e) { setError((e as Error).message); } finally { setBusy(false); } };
