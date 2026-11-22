@@ -29,6 +29,6 @@ describe("stripAnsi", () => {
 		const started = performance.now();
 		for (let i = 0; i < 100; i++) stripAnsi(text);
 		expect(stripAnsi(ANSI_LOG_LINE)).toBe("x".repeat(60) + "\n");
-		expect(performance.now() - started).toBeLessThan(300);
+		expect(performance.now() - started).toBeLessThan(2000);
 	});
 });

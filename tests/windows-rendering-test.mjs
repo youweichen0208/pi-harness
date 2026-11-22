@@ -93,6 +93,7 @@ try {
 		const windows = process.platform === 'win32';
 		const proseFamilies = windows ? ['Microsoft YaHei UI', 'Microsoft YaHei', 'UI SC'] : mac ? ['PingFang SC'] : ['UI SC'];
 		const macLatin = ['.SF NS', 'SF Pro', 'SF Pro Text', 'SF Pro Display'];
+		const matchesFont = (font, family) => font.familyName === family || (family === 'PingFang SC' && (['蘋方-簡', '蘋方-繁'].includes(font.familyName) || font.postScriptName?.startsWith('PingFangSC-')));
 		const emoji = mac ? 'Apple Color Emoji' : 'Noto Color Emoji';
 		const measureFonts = async (name, selector, expected) => {
 			const { fonts } = await platformFonts(selector);
@@ -100,7 +101,7 @@ try {
 			assert(used.length, `${name}: no text rendered`);
 			for (const alternatives of expected) {
 				const choices = [alternatives].flat();
-				assert(used.some(font => choices.includes(font.familyName)), `${name}: expected ${choices.join(' or ')}: ${JSON.stringify(used)}`);
+				assert(used.some(font => choices.some(choice => matchesFont(font, choice))), `${name}: expected ${choices.join(' or ')}: ${JSON.stringify(used)}`);
 			}
 			faces[name] = used.map(({ familyName, postScriptName, isCustomFont }) => ({ familyName, postScriptName, isCustomFont }));
 			return used;
@@ -138,7 +139,7 @@ try {
 		assert(fonts.some(font => /jetbrains-mono/.test(font.url) && font.status === 200));
 		conversation = true; await page.reload(); await page.locator('.msg-text', { hasText: '职责分离' }).waitFor().catch(async error => { await page.screenshot({ path: join(output, `${prefix}-failure.png`) }); writeFileSync(join(output, `${prefix}-failure.txt`), await page.locator('body').innerText()); throw error; }); await page.evaluate(() => document.fonts.ready);
 		const rendered = await platformFonts('.msg-text h2');
-		assert(rendered.fonts.some(font => proseFamilies.includes(font.familyName) && font.glyphCount > 0), JSON.stringify(rendered));
+		assert(rendered.fonts.some(font => proseFamilies.some(family => matchesFont(font, family)) && font.glyphCount > 0), JSON.stringify(rendered));
 		assert(await page.locator('.msg-text h2').evaluate((el, family) => getComputedStyle(el).fontFamily.startsWith(family), windows ? '"Segoe UI"' : mac ? '-apple-system' : '"UI SC"'), 'prose uses the platform font stack');
 		if (windows) {
 			const prose = page.locator('.msg-assistant .msg-text:not(.process-narration) .md').last();
