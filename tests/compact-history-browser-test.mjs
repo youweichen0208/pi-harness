@@ -55,7 +55,7 @@ try {
 	await row.focus();
 	await page.keyboard.press('Enter');
 	await page.locator('.msg[data-msg-id="old-1"]').waitFor();
-	assert.equal(await page.locator('.msg[data-msg-id="old-1"] .thinking-toggle').count(), 1);
+	assert.equal(await page.locator('.msg[data-msg-id="old-1"] .thinking-toggle').count(), 0);
 	await page.locator('.msg[data-msg-id="old-1"] .msg-collapse-btn').click();
 	await row.waitFor();
 	mkdirSync('tests/scratch', {recursive:true});

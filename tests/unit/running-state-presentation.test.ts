@@ -24,12 +24,10 @@ it("command previews expose the executable while preserving complex shell setup"
 	expect(commandPreview('export A="one; two"; grep -rn readiness services', cwd)).toBe("grep -rn readiness services");
 	for (const command of ['export A=$(fetch) && pytest', 'cd "$TARGET" && pytest', 'echo "export A=x && pytest"']) expect(commandPreview(command, cwd)).toBe(command);
 	expect(commandPreview("export MODE=test", cwd)).toBe("export MODE=test");
-});
-it("command previews expose the executable while preserving complex shell setup", () => {
-	const cwd = "/Users/example/project";
-	expect(commandPreview('cd /Users/example/project && export PATH="/opt/bin:$PATH" && export MODE=test && pytest -q --require-postgres', cwd)).toBe("pytest -q --require-postgres");
-	expect(commandPreview('MODE=test pytest -q', cwd)).toBe("pytest -q");
-	expect(commandPreview('export A="one; two"; grep -rn readiness services', cwd)).toBe("grep -rn readiness services");
-	for (const command of ['export A=$(fetch) && pytest', 'cd "$TARGET" && pytest', 'echo "export A=x && pytest"']) expect(commandPreview(command, cwd)).toBe(command);
-	expect(commandPreview("export MODE=test", cwd)).toBe("export MODE=test");
+	// GPT-style rows end-truncate (CSS ellipsis): the preview keeps the whole first
+	// line instead of folding paths or splicing «head…tail» in the middle.
+	const long = `cd ${cwd} && cat server/security-headers.ts; echo "=== token-auth ===" && cat server/token-auth.ts`;
+	expect(commandPreview(long, cwd)).toBe('cat server/security-headers.ts; echo "=== token-auth ===" && cat server/token-auth.ts');
+	expect(commandPreview(long, cwd)).not.toContain("…");
+	expect(commandPreview("cat /Users/example/project/src/app/config.json 2>/dev/null", cwd)).toBe("cat ~/project/src/app/config.json");
 });

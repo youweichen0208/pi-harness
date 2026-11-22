@@ -1,17 +1,13 @@
-import { RunningIndicator } from "./RunningIndicator";
 import { useEffect, useRef, useState } from "react";
-import { FiChevronDown, FiChevronRight } from "react-icons/fi";
+import { FiChevronRight } from "react-icons/fi";
 import { useChatT } from "../i18n";
-import { elapsedLabel } from "../bash-presentation";
+import { readableThinkingSummary } from "../thinking-summary";
 
 interface ThinkingBlockProps {
 	thinking: string;
-	durationMs?: number;
 	/** True while the assistant is still streaming this thinking block. */
 	streaming?: boolean;
-	/** 设置面板「完整显示思考」开关：true（开）→ 思考始终完整展开并自动换行
-	 *  （流式推理过程也实时可见）；false（关）→ 折叠成一行摘要，流式中一行
-	 *  实时显示最新文本。 */
+	/** 设置面板「完整显示思考」开关：展开可读思考，或只显示计时与一行摘要。 */
 	wrap?: boolean;
 }
 
@@ -29,31 +25,24 @@ function useLiveSeconds(active: boolean) {
 	return seconds;
 }
 
-export function ThinkingBlock({ thinking, durationMs, streaming, wrap = true }: ThinkingBlockProps) {
+export function ThinkingBlock({ thinking, streaming, wrap = true }: ThinkingBlockProps) {
 	const t = useChatT();
-	// null = 未手动点过 → 跟随开关：wrap=true（开）→ 完整展开；wrap=false（关）→ 折叠。
-	// 流式与结束后行为一致——不再出现「流式折叠、结束后又自动展开」的跳动。
 	const [open, setOpen] = useState<boolean | null>(null);
 	const expanded = open ?? wrap;
 	const seconds = useLiveSeconds(!!streaming);
+	const summary = readableThinkingSummary(thinking);
 
-	if (streaming) {
-		if (!thinking.trim()) return null;
-		// 3a: one row — running dot, "思考中 N 秒" and the latest line, ellipsized.
-		return <div className={`thinking live${expanded ? " open" : ""}`}>
-			<button type="button" className="thinking-toggle" aria-expanded={expanded} onClick={() => setOpen(!expanded)}>
-				<RunningIndicator />
-				<span className="thinking-label">{t("thinkingLive", { d: elapsedLabel(seconds) })}</span>
-				{!expanded && <span className="thinking-live-label">{thinking.trim().split("\n").at(-1)}</span>}
-			</button>
-			{expanded && <div className="thinking-body">{thinking}</div>}
-		</div>;
-	}
-	return <div className={`thinking ${expanded ? "open" : ""}`}>
-		<button type="button" className="thinking-toggle" aria-expanded={expanded} onClick={() => setOpen(!expanded)}>
-			{expanded ? <FiChevronDown /> : <FiChevronRight />}
-			<span className="thinking-label" title={durationMs === undefined ? t("thinkingUnrecorded") : undefined}>{durationMs !== undefined ? t("thinkingFor", { d: elapsedLabel(Math.max(1, durationMs / 1000)) }) : t("thinkingDone")}</span>
-		</button>
-		{expanded && <div className="thinking-body">{thinking}</div>}
+	if (!streaming || !thinking.trim()) return null;
+	const label = seconds < 60 ? t("thinkingLiveSeconds", { n: seconds }) : seconds < 3600 ? t("thinkingLiveMinutes", { m: Math.floor(seconds / 60), s: String(seconds % 60).padStart(2, "0") }) : t("thinkingLiveHours", { h: Math.floor(seconds / 3600), m: Math.floor((seconds % 3600) / 60) });
+	const status = <span className="thinking-status">
+		<span className="thinking-label streaming-color">{label}</span>
+		{summary && <FiChevronRight className="thinking-chevron" aria-hidden="true" />}
+	</span>;
+	return <div className={`thinking live${expanded && summary ? " open" : ""}`}>
+		{summary ? <button type="button" className="thinking-toggle" aria-expanded={expanded} onClick={() => setOpen(!expanded)}>
+			{status}
+			{!expanded && <span className="thinking-summary">{summary}</span>}
+		</button> : status}
+		{summary && expanded && <div className="thinking-body">{thinking}</div>}
 	</div>;
 }

@@ -84,9 +84,10 @@ try {
 	assert(await page.locator('[data-tool-call-id="attempt-1"]').evaluate(el=>el.classList.contains('empty')));
 	for (const id of ['attempt-2','read-3']) socket.send(JSON.stringify({type:'tool_status',conversationId:snapshot.state.conversationId,toolCallId:id,toolName:'bash',isError:false,running:false,durationMs:50}));
 	assert(!(await page.locator('.bash-row-stats').allTextContents()).some(text=>text.includes('0.0s') || text.includes('<0.1s')));
-	await page.locator('.trailing-working .waiting-indicator', { hasText: 'Reading command results' }).waitFor();
-	const spacing = await page.evaluate(() => { const card = document.querySelector('.process-group').getBoundingClientRect(); const status = document.querySelector('.trailing-working .waiting-indicator').getBoundingClientRect(); return { gap: status.top - card.bottom, offset: status.left - card.left }; });
-	assert(spacing.gap >= 0 && spacing.gap < 18 && Math.abs(spacing.offset) <= 2, JSON.stringify(spacing));
+	// Codex-style (remove-wait-status-live-running): tool results no longer narrate a
+	// "reading results" phase — the live row owns running state, so the trailing
+	// indicator is absent in this tool gap.
+	assert.equal(await page.locator('.trailing-working .waiting-indicator').count(), 0);
 	await page.screenshot({path:'/tmp/pi-reading-hierarchy.png'});
 	await page.setViewportSize({width:390,height:900}); await page.waitForTimeout(300);
 	assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
@@ -117,7 +118,7 @@ try {
 	await page.clock.runFor(299);
 	assert.equal(await page.locator('.waiting-indicator').count(),0);
 	await page.clock.runFor(1);
-	await page.locator('.waiting-label',{hasText:'Understanding your question'}).waitFor();
+	await page.locator('.waiting-label',{hasText:'Thinking'}).waitFor();
 	assert.equal(await page.locator('.waiting-brand i').count(),3);
 	assert.equal(await page.locator('.waiting-duration').count(),0);
 	await page.clock.runFor(3700);

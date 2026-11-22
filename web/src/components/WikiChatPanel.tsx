@@ -69,7 +69,7 @@ export function WikiChatPanel({ resizeHandle, messages, live, streaming, toolSta
 				const original = message.content.filter(b => b.type === "text").map(b => "text" in b ? b.text : "").join("\n");
 				return <div key={message.id} className={`wiki-chat-message ${message.role}`}>
 					{message.content.map((block, index) => {
-						if (block.type === "thinking") { const thinking = block as UiThinkingBlock; return <ThinkingBlock key={index} thinking={thinking.thinking} durationMs={thinking.durationMs} streaming={streaming && message.id === live?.id && index === message.content.length - 1} wrap={thinkingWrap} />; }
+						if (block.type === "thinking") { const thinking = block as UiThinkingBlock; return <ThinkingBlock key={index} thinking={thinking.thinking} streaming={streaming && message.id === live?.id && index === message.content.length - 1} wrap={thinkingWrap} />; }
 						if (block.type === "toolCall") return renderTool(block as UiToolCallBlock);
 						if (block.type === "image" && typeof block.dataUrl === "string") return <img key={index} src={block.dataUrl} alt={t("attachment")} />;
 						if (block.type !== "text" || typeof block.text !== "string" || !block.text.trim()) return null;

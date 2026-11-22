@@ -165,7 +165,7 @@ interface MessageProps {
 	qnIndex?: number;
 	qnActive?: boolean;
 	onJump?: (messageId: string) => void;
-	/** 思考文本是否换行（设置面板开关；false = 不换行横向滚动）。 */
+	/** 是否展开可读思考（设置面板开关；false = 计时下显示一行摘要）。 */
 	thinkingWrap?: boolean;
 	/** 工具调用是否默认展开（设置面板开关；false = 默认折叠）。 */
 	toolsWrap?: boolean;
@@ -940,7 +940,7 @@ function Block({
 	abandoned?: boolean;
 	isLast: boolean;
 	onKillBash?: () => void;
-	/** 思考文本是否换行（false = 不换行横向滚动）。 */
+	/** 是否展开可读思考（false = 计时下显示一行摘要）。 */
 	thinkingWrap?: boolean;
 	/** 工具调用是否默认展开（false = 默认折叠）。 */
 	toolsWrap?: boolean;
@@ -984,7 +984,6 @@ function Block({
 		return (
 			<ThinkingBlock
 				thinking={thinking.thinking}
-				durationMs={thinking.durationMs}
 				streaming={streaming && isLast}
 				wrap={thinkingWrap}
 			/>

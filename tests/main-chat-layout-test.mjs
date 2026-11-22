@@ -102,6 +102,31 @@ try {
 		}
 		await page.setViewportSize({ width: 1440, height: 900 });
 		await page.waitForTimeout(150);
+		const chatGeometry = () => page.evaluate(() => {
+			const main = document.querySelector('.view-pane:not(.hidden) > .main').getBoundingClientRect();
+			const message = document.querySelector('.view-pane:not(.hidden) .msg-assistant').getBoundingClientRect();
+			const input = document.querySelector('.view-pane:not(.hidden) .inputbox').getBoundingClientRect();
+			return {
+				main: { x: main.x, width: main.width },
+				message: { x: message.x, width: message.width },
+				input: { x: input.x, width: input.width },
+			};
+		});
+		const initialChat = await chatGeometry();
+		assert(initialChat.message.width <= 840);
+		assert.equal(Math.round(initialChat.message.width), Math.round(initialChat.input.width));
+		for (const width of [1920, 2560]) {
+			await page.setViewportSize({ width, height: 900 });
+			await page.waitForTimeout(150);
+			const geometry = await chatGeometry();
+			assert.equal(Math.round(geometry.message.width), 840, `chat stops growing at ${width}px`);
+			assert.equal(Math.round(geometry.input.width), 840, `composer stops growing at ${width}px`);
+			for (const content of [geometry.message, geometry.input]) {
+				assert(Math.abs(content.x - geometry.main.x - (geometry.main.width - content.width) / 2) <= 1, `content stays centered at ${width}px`);
+			}
+		}
+		await page.setViewportSize({ width: 1440, height: 900 });
+		await page.waitForTimeout(150);
 		await page.getByRole('tab', { name: '终端', exact: true }).click();
 		await page.getByRole('tab', { name: '对话', exact: true }).click();
 		assert.equal(await input.inputValue(), '保留这份草稿');

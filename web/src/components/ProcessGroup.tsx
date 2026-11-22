@@ -1,6 +1,5 @@
-import { RunningIndicator } from "./RunningIndicator";
 import { useEffect, useState, type ReactNode } from "react";
-import { FiChevronRight } from "react-icons/fi";
+import { FiChevronRight, FiTerminal } from "react-icons/fi";
 import { useChatT } from "../i18n";
 import { processGroupState, type ProcessStats } from "../process-stats";
 export { emptyProcessStats, type ProcessStats } from "../process-stats";
@@ -23,12 +22,14 @@ export function ProcessGroup({ stats, children }: { stats: ProcessStats; childre
 		window.addEventListener("pi:reveal-tool", reveal);
 		return () => window.removeEventListener("pi:reveal-tool", reveal);
 	}, [ids]);
+	// Codex-style command header: every command group shows the plain label without
+	// a count (bash-group-codex-style); reads/searches/thought keep their suffixes.
 	const parts = [
-		stats.commands && t(stats.commands === 1 ? "processRanCommand" : "processRanCommands", { n: stats.commands }),
+		stats.commands && t("processRanCommandsPlain"),
 		stats.reads && t(stats.reads === 1 ? "processReadFile" : "processReadFiles", { n: stats.reads }),
 		stats.searches && t(stats.searches === 1 ? "processSearch" : "processSearches", { n: stats.searches }),
 	].filter(Boolean) as string[];
-	const thought = stats.thinking > 0 && (stats.thoughtMs >= 1000 ? t("processThought", { d: elapsedLabel(stats.thoughtMs / 1000) }) : t("processThoughtUnmeasured"));
+	const thought = stats.running && stats.thinking > 0 && (stats.thoughtMs >= 1000 ? t("processThought", { d: elapsedLabel(stats.thoughtMs / 1000) }) : t("processThoughtUnmeasured"));
 	const state = processGroupState(stats);
 	const passed = state === "ok";
 	// 29a: a finished list drops its head and border entirely — the steps read as
@@ -37,16 +38,17 @@ export function ProcessGroup({ stats, children }: { stats: ProcessStats; childre
 	const headless = !single && passed && !open;
 	return <section className={`process-group ${state}${open ? " open" : ""}${single ? " single-command" : ""}${headless ? " headless" : ""}`}>
 		{!single && !headless && <button type="button" className="process-group-head" aria-expanded={open} onClick={() => setManual(!open)}>
+			<span className="process-group-icon" aria-hidden="true"><FiTerminal /></span>
+			<span className={`process-group-summary${stats.running ? " streaming-color" : ""}`}><span>{parts.join(" · ")}</span></span>
+			{thought && <><span className="process-group-dot" aria-hidden="true">·</span><span className={`process-group-thought${stats.running ? " streaming-color" : ""}`}>{thought}</span></>}
 			<FiChevronRight className="process-group-chevron" aria-hidden="true" />
-			<span className="process-group-summary"><span>{parts.join(" · ")}</span></span>
-			{thought && <><span className="process-group-dot" aria-hidden="true">·</span><span className="process-group-thought">{thought}</span></>}
-			{/* 29a: no "N failed" / "Completed" badge on the right — the ✗ rows and their
-			   exit code already say it. Only a running turn shows its breathing dot. */}
-			{stats.running && <span className="process-group-status">
-				<RunningIndicator />{t("processRunning")}
-			</span>}
+			{/* The neutral flowing line carries running state; no green header light. */}
+			{stats.running && <span className="process-group-status streaming-color">{t("processRunning")}</span>}
 		</button>}
-		{headless && <button type="button" className="process-group-summary-line" aria-expanded={false} onClick={() => setManual(true)}>{parts.join(" · ")}{thought && <> · {thought}</>}</button>}
+		{headless && <button type="button" className="process-group-summary-line" aria-expanded={false} onClick={() => setManual(true)}>
+			<span className="process-group-icon" aria-hidden="true"><FiTerminal /></span>
+			<span className="process-group-summary-text">{parts.join(" · ")}</span>
+		</button>}
 		<div className="process-list process-group-rows" hidden={!open}>{children}</div>
 	</section>;
 }

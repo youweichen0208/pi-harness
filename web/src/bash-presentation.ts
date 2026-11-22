@@ -88,7 +88,10 @@ export function commandPreview(command: string, cwd: string): string {
 		const rest = preview.slice(inline[0].length).trimStart();
 		if (rest && !/^[;&|<>]/.test(rest)) preview = rest;
 	}
-	return compactCommandLabel(preview);
+	// GPT-style rows end-truncate: keep the whole first line and let CSS ellipsis
+	// clip it. No mid-string «head…tail» and no «…/leaf» path folding here — the
+	// leaf is only worth rescuing on short labels (commandReading, task steps).
+	return commandSummaryLine(preview);
 }
 
 export function gitStatusLine(line: string): { status: string; path: string; kind: "added" | "modified" | "deleted" | "untracked" | "conflict" } | null {

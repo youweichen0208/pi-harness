@@ -62,15 +62,7 @@ try {
 		return pane.right-rail.right;
 	});
 	assert(marker>=0 && marker<15,`question rail is ${marker}px from scrollbar edge`);
-	const thinking=await page.locator('.thinking-toggle').evaluateAll(nodes=>nodes.slice(0,2).map(node=>{
-		const icon=node.querySelector('svg').getBoundingClientRect();
-		const label=node.querySelector('.thinking-label').getBoundingClientRect();
-		return {iconCenter:icon.y+icon.height/2,labelCenter:label.y+label.height/2,labelX:label.x};
-	}));
-	assert.equal(thinking.length,2);
-	assert(Math.abs(thinking[0].iconCenter-thinking[0].labelCenter)<2);
-	assert(Math.abs(thinking[1].iconCenter-thinking[1].labelCenter)<2);
-	assert(Math.abs(thinking[0].labelX-thinking[1].labelX)<1);
+	assert.equal(await page.locator('.thinking:not(.live)').count(),0,'settled thought summaries stay hidden');
 	assert.equal(await page.locator('.composer-hint').count(),0);
 	await page.locator('.inputbox textarea').focus();
 	await page.waitForTimeout(250);

@@ -34,15 +34,15 @@ try {
 		const single=page.locator('[data-tool-call-id="single"].bash-row');
 		await single.waitFor();
 		// 29a: borderless rows show the command without the old `$ ` prefix span.
-		assert.equal((await single.locator('.bash-inline-command').innerText()).trim(),'pytest -q --require-postgres');
+		assert.equal((await single.locator('.bash-row-subtitle').innerText()).trim(),'pytest -q --require-postgres');
 		assert.equal(await page.locator('.time-gap').count(),1);
 		assert.equal(await page.locator('.msg-time:visible, .reply-actions time:visible').count(),0);
 		assert.equal(await page.getByText(prose,{exact:true}).count(),1);
 		assert.equal(await page.locator('.process-group-phase').count(),0);
 		await single.locator('.bash-row-head').click();
-		assert.equal(await single.locator('.bash-full-command').textContent(),command);
-		// 展开后头部那份被截断的摘要必须消失，否则同一条命令出现两遍（一遍省略号）。
-		assert.equal(await single.locator('.bash-row-head .bash-inline-command').isVisible(), false);
+		assert.match(await single.locator('.bash-request-code').textContent(),/pytest -q --require-postgres/);
+		// 展开后完整命令与输出合并在 Shell 卡；行头副标题保留作扫读摘要。
+		assert.equal(await single.locator('.bash-shell-card').isVisible(), true);
 		await single.locator('.bash-row-head').click();
 		const toggle=page.locator('.plan-progress-toggle');
 		assert.equal(await toggle.getAttribute('aria-expanded'),'false');

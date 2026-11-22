@@ -64,17 +64,27 @@ try {
 	await card.waitFor();
 	assert(await card.locator('.bash-syntax [class^=hljs]').count() > 0);
 	assert.equal(await card.locator('.bash-numbered-line').first().locator('code').textContent(), ' web/src/styles.css | 208 +++++---');
-	assert(await card.locator('.bash-color-add').count() > 0);
-	assert(await card.locator('.bash-color-delete').count() > 0);
+	assert.equal(await card.locator('.bash-color-add,.bash-color-delete').count(), 0, 'raw output does not add syntax coloring');
 	assert.equal(await card.locator('.bash-output-count,.bash-numbered-line > span,.bash-color-path').count(), 0);
 	assert.equal(await card.locator('.bash-numbered-line.error').count(), 1);
-	assert.equal((await card.locator('.bash-full-command').textContent()).split('\n').length, 6);
-	await card.locator('.bash-detail-heading button[aria-expanded]').click();
-	assert.equal(await card.locator('.bash-full-command').textContent(), command);
-	await card.locator('.bash-detail-heading button[aria-expanded]').click();
-	assert.equal((await card.locator('.bash-full-command').textContent()).split('\n').length, 6);
+	// One Shell card contains the full command and output; the command preview
+	// and output expansion remain available without separate Request/Response heads.
+	assert.match(await card.locator('.bash-shell-card .bash-detail-heading').innerText(), /Shell/);
+	assert.equal(await card.locator('.bash-request-card').count(), 0);
+	assert.match(await card.locator('.bash-shell-status').innerText(), /成功/);
+	const shellCommandStyle = await card.locator('.bash-request-code').evaluate(el => { const s = getComputedStyle(el); return { family: s.fontFamily, size: s.fontSize, weight: s.fontWeight, height: s.lineHeight, zoom: s.zoom }; });
+	const shellOutputStyle = await card.locator('.bash-numbered-output').evaluate(el => { const s = getComputedStyle(el); return { family: s.fontFamily, size: s.fontSize, weight: s.fontWeight, height: s.lineHeight, zoom: s.zoom, border: s.borderTopWidth, radius: s.borderTopLeftRadius }; });
+	assert.match(shellCommandStyle.family, /SFMono-Regular/);
+	assert.match(shellOutputStyle.family, /SFMono-Regular/);
+	for (const style of [shellCommandStyle, shellOutputStyle]) { assert.equal(style.size, '13px'); assert.equal(style.weight, '400'); assert.equal(style.height, '20px'); assert.equal(style.zoom, '1'); }
+	assert.equal(shellOutputStyle.border, '0px');
+	assert.equal(shellOutputStyle.radius, '0px');
+	assert.equal(await card.locator('.bash-shell-card').evaluate(el => getComputedStyle(el).backgroundColor), 'rgba(0, 0, 0, 0)');
+	assert.equal(await card.locator('.bash-shell-card').evaluate(el => getComputedStyle(el).borderTopColor), 'rgb(222, 222, 222)');
+	assert.match(await card.locator('.bash-request-code').textContent(), /python3 - <<'PY'/);
+	assert.match(await card.locator('.bash-request-code').textContent(), /print\(11\)/);
 	assert.equal(await card.locator('.bash-numbered-line').count(), 6);
-	await card.locator(':scope > .bash-group-more').click();
+	await card.locator('.bash-response-card .bash-group-more').click();
 	assert.equal(await card.locator('.bash-numbered-line').count(), 20);
 	for (const theme of ['light', 'dark']) for (const width of [1440, 375]) {
 		await page.setViewportSize({width, height:1000});
@@ -89,12 +99,12 @@ try {
 	assert(await card.locator('.bash-numbered-output').evaluate(el => el.scrollWidth > el.clientWidth));
 	await wrap.click();
 	await page.evaluate(() => window.dispatchEvent(new CustomEvent('pi:reveal-tool',{detail:{toolCallId:'bash1',search:true}})));
-	await page.waitForFunction(expected => document.querySelector('.bash-full-command')?.textContent === expected, command);
-	assert.equal(await card.locator('.bash-full-command').textContent(), command);
+	await page.waitForFunction(() => !!document.querySelector('.bash-request-code'));
+	assert.match(await card.locator('.bash-request-code').textContent(), /print\(11\)/);
 	for (const [cmd, text, kind] of [
 		['rg -n "目录" docs/a.md', '3:正文 **强调**\n7:第二条', 'search'],
 		["python3 - <<'PY'\nprint('css ok')\nPY\nrg -n x src/a.ts", 'css ok\n299:const x = 1;', 'mixed'],
-		['cat src/a.ts', 'const value = "hello";', 'code'],
+		['cat src/a.ts', 'import { randomUUID } from "node:crypto";', 'code'],
 		['cat README.md', '# Heading\n\nReadable **document**', 'markdown'],
 		['curl localhost', '{"id":9007199254740993,"items":[1,2,3]}', 'json'],
 	]) {
@@ -102,41 +112,39 @@ try {
 		messages[1].content[0].argumentsText = JSON.stringify({ command: cmd });
 		messages[2].content[0].text = text;
 		socket.send(JSON.stringify({type:'snapshot',state:{...baseState,messages}}));
-		const formatted = card.locator('.bash-formatted-output');
-		await formatted.waitFor();
-		if (kind === 'search') assert.equal(await formatted.locator('.bash-search-result').count(), 2);
-		if (kind === 'mixed') { assert.equal(await formatted.locator('.bash-mixed-log pre').textContent(), 'css ok\n'); assert.equal(await formatted.locator('.bash-search-result').count(), 1); }
-		if (kind === 'markdown') assert.equal(await formatted.locator('h1').textContent(), 'Heading');
+		await page.waitForFunction(({ command, output }) => document.querySelector('.bash-request-code')?.textContent === command && [...document.querySelectorAll('.bash-numbered-line code')].map(el => el.textContent).join('\n') === output, { command: cmd, output: text });
+		assert.equal(await card.locator('.bash-formatted-output').count(), 0, 'Shell never uses Markdown/code rich rendering');
+		assert.equal((await card.locator('.bash-numbered-line code').allTextContents()).join('\n'), text, 'raw output preserves every source character');
+		assert.equal(await card.locator('.bash-response-card h1').count(), 0);
 		assert.equal(await card.getByRole('button', {name:'原始输出', exact:true}).count(), 0);
-		assert.equal(await formatted.locator('.bash-source-number').count(), 0);
-		await card.screenshot({path:`/tmp/pi-formatted-${kind}.png`});
+		await card.screenshot({path:`/tmp/pi-raw-${kind}.png`});
 		assert(await card.evaluate(el => el.scrollWidth <= el.clientWidth + 1));
 	}
 	const mixedMessages = structuredClone(running);
 	mixedMessages[1].content[0].argumentsText = JSON.stringify({command:'echo log; rg -n x src/a.ts'});
 	mixedMessages[2].content[0].text = 'log one\nlog two\nlog three\nlog four\n' + [1,2,3,4].map(n => `${n}:const x${n} = ${n};`).join('\n');
 	socket.send(JSON.stringify({type:'snapshot',state:{...baseState,messages:mixedMessages}}));
-	await page.waitForFunction(() => document.querySelector('.bash-mixed-log')?.textContent.includes('log four'));
-	const toggle = card.locator(':scope > .bash-group-more');
-	const expandedText = await card.locator('.bash-formatted-output').textContent();
+	await page.waitForFunction(() => document.querySelector('.bash-numbered-output')?.textContent.includes('log four'));
+	const toggle = card.locator('.bash-response-card .bash-group-more');
+	if (await toggle.getAttribute('aria-expanded') === 'true') await toggle.click();
+	const collapsedText = await card.locator('.bash-numbered-output').textContent();
 	await toggle.click();
-	const collapsedText = await card.locator('.bash-formatted-output').textContent();
-	assert.notEqual(collapsedText, expandedText, 'collapse must change mixed output content');
-	assert.equal(await card.locator('.bash-search-result').count(), 3);
-	assert.equal(await card.locator('.bash-search-file > .bash-search-location').count(), 1);
-	assert.equal(await toggle.getAttribute('aria-expanded'), 'false');
-	await toggle.click();
-	assert.equal(await card.locator('.bash-formatted-output').textContent(), expandedText);
-	assert.equal(await card.locator('.bash-search-result').count(), 4);
+	const expandedText = await card.locator('.bash-numbered-output').textContent();
+	assert.notEqual(collapsedText, expandedText, 'expansion reveals all raw output');
+	assert.equal(await card.locator('.bash-numbered-line').count(), 8);
 	assert.equal(await toggle.getAttribute('aria-expanded'), 'true');
+	await toggle.click();
+	assert.equal(await card.locator('.bash-numbered-output').textContent(), collapsedText);
+	assert.equal(await card.locator('.bash-numbered-line').count(), 6);
+	assert.equal(await toggle.getAttribute('aria-expanded'), 'false');
 	await card.screenshot({path:'/tmp/pi-compact-matches.png'});
 	const pipelineMessages = structuredClone(running);
 	pipelineMessages[1].content[0].argumentsText = JSON.stringify({command:'npm test 2>&1 | rg -n "Test Files|Tests" | head -3'});
 	pipelineMessages[2].content[0].text = '3:> node --test\n25:> check:design\n33: Test Files 182 passed (182)';
 	socket.send(JSON.stringify({type:'snapshot',state:{...baseState,messages:pipelineMessages}}));
 	await card.locator('.bash-numbered-output').waitFor();
-	assert.deepEqual(await card.locator('.bash-numbered-line code').allTextContents(), ['> node --test', '> check:design', 'Test Files 182 passed (182)']);
-	assert.equal(await card.locator('.bash-color-add').textContent(), 'passed');
+	assert.deepEqual(await card.locator('.bash-numbered-line code').allTextContents(), ['3:> node --test', '25:> check:design', '33: Test Files 182 passed (182)']);
+	assert.equal(await card.locator('.bash-color-add').count(), 0, 'raw pipeline output keeps its source numbers and neutral text');
 	// #167: successive model/tool cycles form one disclosure, not a wall of summaries.
 	const cycles = [running[0], ...Array.from({length:13}, (_, i) => {
 		const calls = [0,1].map(n => ({type:'toolCall', id:`cycle-${i}-${n}`, name:'bash', argumentsText:JSON.stringify({command:`echo cycle-${i}-${n}`})}));
@@ -146,7 +154,9 @@ try {
 	await page.locator('.process-group-summary-line').first().waitFor();
 	assert.equal(await page.locator('.process-group').count(), 1, '13 command/thinking cycles share one group');
 	const summary = page.locator('.process-group-summary-line');
-	assert.match(await summary.textContent(), /26/);
+	// Codex-style header drops the command count (bash-group-codex-style); the #167
+	// merge is verified by the single group above and the 26 expanded rows below.
+	assert.match(await summary.textContent(), /运行了命令|Ran commands/);
 	assert.equal(await page.locator('.bash-row:visible').count(), 0);
 	for (const theme of ['light','dark']) for (const width of [1440,375]) {
 		await page.setViewportSize({width,height:1000});

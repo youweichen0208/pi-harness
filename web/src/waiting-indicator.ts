@@ -1,40 +1,38 @@
 import type { UiMessage } from "../../server/protocol.js";
-import { splitCommandChain } from "./bash-steps.js";
 import { activeTool } from "./agent-activity.js";
 
-export type WaitLabel = "waitWorking" | "waitUnderstanding" | "waitResults" | "waitFile" | "waitThinking" | "waitTests" | "waitBuild" | "waitSteer";
+export type WaitLabel = "waitThinking";
 export interface WaitStage { key: string; label: WaitLabel; delay: number }
 
-/** Presentation only: text does not settle a run; the caller gates this on native lifecycle. */
-export function conversationWait(messages: readonly UiMessage[], completed: ReadonlyMap<string, unknown>, steeredUserId?: string): WaitStage | null {
+/** Codex-style running feedback (remove-wait-status-live-running): a running tool is
+ * represented by its own live streaming row (latest output + timer), so the
+ * trailing waiting indicator no longer narrates tool phases ("reading command results",
+ * "reading files", "waiting for tests/build"). It only fills silent non-tool gaps — just
+ * sent, empty thinking, or after visible text while the turn still runs — with one minimal
+ * "Thinking" stage. Presentation only: text does not settle a run; the caller gates on the
+ * native lifecycle. */
+export function conversationWait(messages: readonly UiMessage[], completed: ReadonlyMap<string, unknown>): WaitStage | null {
 	const userIndex = messages.findLastIndex(m => m.role === "user" && m.origin !== "auto-reminder" && m.origin !== "auto-recovery");
 	const turn = messages.slice(userIndex + 1);
-	const running = activeTool(messages, completed);
-	if (running) {
-		let command = "";
-		try { command = JSON.parse(running.argumentsText ?? "{}").command ?? ""; } catch { /* Partial arguments. */ }
-		if ((running.name !== "bash" && running.name !== "remote_command") || typeof command !== "string") return null;
-		// Match executable positions, not test/build words inside echo or filenames.
-		const segments = splitCommandChain(command);
-		const test = segments.some(s => /^(?:(?:npm|pnpm|yarn|bun) (?:run )?test(?:[:\s]|$)|(?:npx )?(?:vitest|pytest|jest)(?:\s|$)|python\d? -m pytest(?:\s|$))/.test(s));
-		const build = segments.some(s => /^(?:(?:npm|pnpm|yarn|bun) (?:run )?build(?:[:\s]|$)|(?:npx )?(?:tsc|vite build|make|cargo build)(?:\s|$))/.test(s));
-		return test || build ? { key: running.id, label: test ? "waitTests" : "waitBuild", delay: 4000 } : null;
-	}
+	// A running tool owns the running state through its live row.
+	if (activeTool(messages, completed)) return null;
+	const thinking = (key: string): WaitStage => ({ key, label: "waitThinking", delay: 300 });
 	for (let i = turn.length - 1; i >= 0; i--) {
 		const message = turn[i];
-		if (message.role === "toolResult") return { key: message.toolCallId ?? message.id, label: (message.toolName === "read" || message.toolName === "remote_read") ? "waitFile" : "waitResults", delay: 300 };
+		// Tool results / completed calls: the live row already ran; no phase label.
+		if (message.role === "toolResult") return null;
 		if (message.role !== "assistant") continue;
 		for (const block of [...message.content].reverse()) {
-			if (block.type === "toolCall" && typeof block.id === "string") return completed.has(block.id) ? { key: block.id, label: (block.name === "read" || block.name === "remote_read") ? "waitFile" : "waitResults", delay: 300 } : null;
-			if (block.type === "text" && ((typeof block.text === "string" && block.text.trim()) || block.truncated)) return { key: message.id, label: "waitWorking", delay: 300 };
+			if (block.type === "toolCall" && typeof block.id === "string") return null;
+			if (block.type === "text" && ((typeof block.text === "string" && block.text.trim()) || block.truncated)) return thinking(message.id);
 			if (block.type === "thinking") {
 				if (typeof block.thinking === "string" && block.thinking.trim()) return null;
-				if (message.content.some(b => b.type === "text" && (typeof b.text === "string" && b.text.trim() || b.truncated))) return { key: message.id, label: "waitWorking", delay: 300 };
+				if (message.content.some(b => b.type === "text" && (typeof b.text === "string" && b.text.trim() || b.truncated))) return thinking(message.id);
 				if (message.content.some(b => b.type === "thinking" && typeof b.thinking === "string" && b.thinking.trim())) return null;
-				return { key: message.id, label: "waitThinking", delay: 300 };
+				return thinking(message.id);
 			}
 		}
 	}
 	const user = messages[userIndex];
-	return user ? { key: user.id, label: user.id === steeredUserId ? "waitSteer" : "waitUnderstanding", delay: 300 } : null;
+	return user ? thinking(user.id) : null;
 }

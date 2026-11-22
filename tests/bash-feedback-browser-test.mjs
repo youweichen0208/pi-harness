@@ -36,7 +36,7 @@ try {
 	await page.locator(".bash-output-feedback").waitFor();
 	assert.equal(await page.locator(".bash-group").count(), 1);
 	assert.equal(await page.getByRole("button", { name: /在终端|terminal/i }).count(), 0);
-	assert.equal(await page.locator(".bash-detail-command button").count() > 0, true);
+	assert.equal(await page.locator(".bash-detail-card button").count() > 0, true);
 	for (const theme of ["light", "dark"]) {
 		await page.evaluate(theme => document.documentElement.dataset.appearance = theme, theme);
 		for (const width of [1280, 390]) {
@@ -52,6 +52,7 @@ try {
 	await page.evaluate(() => window.renderCommand({lastOutputAt:undefined}, 'remounted'));
 	await page.getByText('Waiting for output…', {exact:true}).first().waitFor();
 	await page.evaluate(() => window.renderCommand({status:{running:false,isError:false,exitCode:0}}));
+	if (!await page.locator('.bash-row-body').isVisible()) await page.locator('.bash-row-head').click();
 	await page.getByText('Command finished', {exact:true}).first().waitFor();
 	await page.evaluate(() => window.renderCommand({result:{id:'result',role:'toolResult',isError:true,content:[{type:'text',text:'failed'}],details:{exitCode:7}}}));
 	await page.locator('.bash-row.err').waitFor();

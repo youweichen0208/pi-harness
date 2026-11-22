@@ -40,13 +40,13 @@ try {
 	};
 	await page.goto(`http://127.0.0.1:${harness.port}`);
 	const working = page.locator(".trailing-working .waiting-indicator");
-	await working.filter({ hasText: "Working" }).waitFor();
+	await working.filter({ hasText: "Thinking" }).waitFor();
 	assert.equal(await working.locator(".waiting-brand i").count(), 3);
 	// A persisted paragraph and an actively streaming paragraph both retain the cue.
 	emit({ messages: [user], streamingMessage: answer });
-	await working.filter({ hasText: "Working" }).waitFor();
+	await working.filter({ hasText: "Thinking" }).waitFor();
 	emit({ streamingMessage: { ...answer, content: [{ type: "text", text: "Now updating the domain model." }] } });
-	await working.filter({ hasText: "Working" }).waitFor();
+	await working.filter({ hasText: "Thinking" }).waitFor();
 	mkdirSync("tests/scratch", { recursive: true });
 	await page.screenshot({ path: "tests/scratch/working-after-text.png" });
 	await page.setViewportSize({ width: 390, height: 844 });
@@ -62,7 +62,7 @@ try {
 	emit({ conversationId: "other", isStreaming: false, messages: [user, answer], streamingMessage: null });
 	await working.waitFor({ state: "detached" });
 	assert.deepEqual(errors, []);
-	console.log("PASS running persisted/streaming text keeps Working; settle, thinking and conversation switch clear it");
+	console.log("PASS running persisted/streaming text keeps Thinking; settle, thinking and conversation switch clear it");
 } finally {
 	await browser?.close(); await harness?.stop(); rmSync(root, { recursive: true, force: true });
 }

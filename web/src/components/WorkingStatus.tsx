@@ -3,7 +3,6 @@ import type { UiState, ToolStatus } from "../types";
 import { useEffect, useRef, useState } from "react";
 import { useChatT } from "../i18n";
 import { conversationWait, type WaitStage } from "../waiting-indicator";
-import { skillAwarePreview } from "../skill-block";
 
 function WaitingIndicator({ stage, onStop }: { stage: WaitStage; onStop?: () => void }) {
 	const t = useChatT();
@@ -31,22 +30,9 @@ export function ConversationWorkingStatus({ state, connected, silenceNotified, t
 	connected: boolean; silenceNotified: boolean; toolStatuses: ReadonlyMap<string, ToolStatus>; onStop?: () => void;
 }) {
 	const t = useChatT();
-	const lastUser = state.messages.findLast(m => m.role === "user" && m.origin !== "auto-reminder" && m.origin !== "auto-recovery");
-	const previous = useRef({ conversation: state.conversationId, user: lastUser?.id, steering: [] as string[] });
-	const [steeredUser, setSteeredUser] = useState<string>();
-	useEffect(() => {
-		const old = previous.current;
-		if (old.conversation !== state.conversationId || !state.isStreaming) setSteeredUser(undefined);
-		else if (lastUser && old.user !== lastUser.id) {
-			const text = skillAwarePreview(lastUser.questionText ?? lastUser.content.filter(b => b.type === "text").map(b => b.type === "text" ? b.text : "").join("\n"));
-			const preview = text.length > 2000 ? text.slice(0, 2000) + "…" : text;
-			setSteeredUser(old.steering.some(value => skillAwarePreview(value) === preview) ? lastUser.id : undefined);
-		}
-		previous.current = { conversation: state.conversationId, user: lastUser?.id, steering: state.queue?.steering ?? [] };
-	}, [state.conversationId, state.isStreaming, state.queue, lastUser]);
 	const completed = new Map([...toolStatuses].filter(([, s]) => !s.running && (!s.conversationId || s.conversationId === state.conversationId)));
 	const messages = state.streamingMessage ? [...state.messages.filter(m => m.id !== state.streamingMessage?.id), { ...state.streamingMessage, role: "assistant" }] : state.messages;
-	const stage = conversationWait(messages, completed, steeredUser);
+	const stage = conversationWait(messages, completed);
 	if (!state.isStreaming || silenceNotified || state.runRecovery && state.runRecovery.phase !== "stopped" || state.recovery && [state.recovery.compaction, state.recovery.retry, state.recovery.summary, state.recovery.branch].some(Boolean)) return null;
 	if (!connected) return <div className="agent-working disconnected" role="status">{t("workDisconnected")}</div>;
 	return stage && <WaitingIndicator key={`${state.conversationId}:${stage.key}:${stage.label}`} stage={stage} onStop={onStop} />;
