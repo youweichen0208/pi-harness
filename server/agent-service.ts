@@ -941,7 +941,7 @@ export class ClientSession {
 	/** Cancel every watchdog of a conversation (removeConversation / dispose). */
 
 	private onEvent(conv: Conversation, event: AgentSessionEvent): void {
-		if (event.type === "compaction_start" || event.type === "compaction_end") this.executionTraces.forSession(conv.session.sessionId)?.observe(event, conv.id);
+		if (event.type === "agent_start" || event.type === "compaction_start" || event.type === "compaction_end") this.executionTraces.forSession(conv.session.sessionId)?.observe(event, conv.id);
 		const contextTokens = event.type === "compaction_start" ? conv.session.getContextUsage()?.tokens ?? undefined : event.type === "compaction_end" && event.result ? conv.session.messages.reduce((total, message) => total + estimateTokens(message), 0) : undefined;
 		conv.recovery = recoveryEvent(conv.recovery, event, Date.now(), contextTokens);
 		conv.runRecovery?.observe(event);

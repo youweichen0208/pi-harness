@@ -67,6 +67,7 @@ describe("ExecutionTraceSession", () => {
 	it("marks overlapping provider requests ambiguous instead of guessing", () => {
 		let clock = 0;
 		const trace = new ExecutionTraceSession("session", () => clock);
+		trace.promptAccepted("conversation", "host-1", "started");
 		emit(trace, "agent_start");
 		clock = 1; trace.beforeProviderRequest();
 		clock = 2; trace.beforeProviderRequest();
@@ -75,6 +76,10 @@ describe("ExecutionTraceSession", () => {
 		const report = trace.report() as any;
 		expect(report.coverage).toMatchObject({ provider_requests_total: 2, provider_requests_matched: 0, provider_requests_ambiguous: 2, trace_coverage: 0 });
 		expect(report.runs[0].requests.every((request: any) => request.reasons.includes("overlapping_provider_requests"))).toBe(true);
+		expect(report.runs[0].aggregates.model_wall_union_ms).toMatchObject({ value: null, status: "ambiguous", reason: "provider_requests_ambiguous" });
+		expect(report.runs[0].aggregates.model_observed_lower_bound_ms).toMatchObject({ value: 0, status: "measured" });
+		expect(report.runs[0].aggregates.unclassified_wall_ms).toMatchObject({ value: null, status: "ambiguous", reason: "provider_requests_ambiguous" });
+		expect(report.hostRequests[0].metrics.unclassified_wall_ms).toMatchObject({ value: null, status: "ambiguous", reason: "provider_requests_ambiguous" });
 	});
 
 	it("keeps normalized assistant spans unmeasured when the provider hook is absent", () => {
@@ -88,6 +93,8 @@ describe("ExecutionTraceSession", () => {
 		expect(report.coverage).toMatchObject({ provider_requests_unmeasured: 1 });
 		expect(report.runs[0].requests[0]).toMatchObject({ normalizedStartMs: 10, messageEndMs: 20, status: "unmeasured" });
 		expect(report.runs[0].requests[0].metrics.provider_hook_to_message_end_ms).toMatchObject({ value: null, status: "unmeasured" });
+		expect(report.runs[0].aggregates.model_wall_union_ms).toMatchObject({ value: null, status: "unmeasured", reason: "provider_requests_unmeasured" });
+		expect(report.runs[0].aggregates.unclassified_wall_ms).toMatchObject({ value: null, status: "unmeasured", reason: "provider_requests_unmeasured" });
 	});
 
 	it("uses the stable assistant timestamp when SDK event object identities differ", () => {
@@ -173,6 +180,18 @@ describe("ExecutionTraceRegistry", () => {
 			if (previous === undefined) delete process.env.PI_TASK_TIMINGS;
 			else process.env.PI_TASK_TIMINGS = previous;
 		}
+	});
+
+	it("keeps queued runs visible in their conversation without inventing a host mapping", () => {
+		const registry = new ExecutionTraceRegistry();
+		const trace = registry.forSession("session")!;
+		trace.promptAccepted("conversation", "host-queued", "queued");
+		emit(trace, "agent_start");
+		emit(trace, "agent_settled", { aborted: false });
+		const report = registry.reportSession("session", "conversation") as any;
+		expect(report.runs).toHaveLength(1);
+		expect(report.runs[0]).toMatchObject({ conversationId: "conversation", status: "measured" });
+		expect(report.hostRequests[0]).toMatchObject({ mappingStatus: "ambiguous", reason: "queued_prompt_run_mapping_not_verified" });
 	});
 });
 

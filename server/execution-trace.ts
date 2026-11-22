@@ -108,6 +108,15 @@ interface HostSpanOverflow {
 const metric = (value: number | null, status: TraceStatus, reason?: string): TraceMetric => ({ value, status, ...(reason ? { reason } : {}) });
 const finiteDuration = (end: number | undefined, start: number | undefined): number | null => end !== undefined && start !== undefined && end >= start ? end - start : null;
 
+type TraceIssue = { status: "ambiguous" | "unmeasured"; reason: string };
+
+function providerRequestIssue(requests: ProviderRequestTrace[], truncated: boolean): TraceIssue | undefined {
+	if (truncated) return { status: "unmeasured", reason: "requests_truncated" };
+	if (requests.some(request => request.status === "ambiguous")) return { status: "ambiguous", reason: "provider_requests_ambiguous" };
+	if (requests.some(request => request.status !== "measured" || request.hookStartMs === undefined || request.messageEndMs === undefined)) return { status: "unmeasured", reason: "provider_requests_unmeasured" };
+	return undefined;
+}
+
 export function unionIntervals(intervals: Interval[]): Interval[] {
 	const sorted = intervals
 		.filter(interval => Number.isFinite(interval.startMs) && Number.isFinite(interval.endMs) && interval.endMs > interval.startMs)
@@ -538,10 +547,13 @@ export class ExecutionTraceSession {
 		}) : [];
 		const combined = unionIntervals([...modelIntervals, ...toolIntervals, ...hostIntervals]);
 		const hostExact = !!root && !run.hostSpanOverflow;
-		const modelExact = !!root && !run.requestsTruncated;
+		const modelIssue = providerRequestIssue(requests, run.requestsTruncated);
+		const modelExact = !!root && !modelIssue;
 		const toolExact = !!root && !run.toolsTruncated;
 		const allExact = hostExact && modelExact && toolExact;
-		const truncationReason = run.hostSpanOverflow ? "host_spans_truncated" : run.requestsTruncated ? "requests_truncated" : run.toolsTruncated ? "tools_truncated" : undefined;
+		const aggregateIssue: TraceIssue | undefined = run.hostSpanOverflow
+			? { status: "unmeasured", reason: "host_spans_truncated" }
+			: modelIssue ?? (run.toolsTruncated ? { status: "unmeasured", reason: "tools_truncated" } : undefined);
 		return {
 			...this.runMetadata(run),
 			agentSettledMs: run.agentSettledMs,
@@ -555,16 +567,16 @@ export class ExecutionTraceSession {
 			toolsTruncated: run.toolsTruncated,
 			aggregates: {
 				agent_active_wall_ms: metric(finiteDuration(run.agentSettledMs, run.agentStartMs), root ? "measured" : "unmeasured"),
-				model_wall_union_ms: modelExact ? metric(intervalDuration(modelIntervals), "measured") : metric(null, "unmeasured", run.requestsTruncated ? "requests_truncated" : "run_open"),
+				model_wall_union_ms: modelExact ? metric(intervalDuration(modelIntervals), "measured") : metric(null, modelIssue?.status ?? "unmeasured", modelIssue?.reason ?? "run_open"),
 				model_observed_lower_bound_ms: metric(intervalDuration(modelIntervals), root ? "measured" : "unmeasured"),
 				tool_wall_union_ms: toolExact ? metric(intervalDuration(toolIntervals), "measured") : metric(null, "unmeasured", run.toolsTruncated ? "tools_truncated" : "run_open"),
 				tool_observed_lower_bound_ms: metric(intervalDuration(toolIntervals), root ? "measured" : "unmeasured"),
 				host_wall_union_ms: hostExact ? metric(intervalDuration(hostIntervals), "measured") : metric(null, "unmeasured", run.hostSpanOverflow ? "host_spans_truncated" : "run_open"),
 				host_observed_lower_bound_ms: metric(intervalDuration(hostIntervals), root ? "measured" : "unmeasured"),
-				host_inside_model_ms: allExact ? metric(intersectDuration(hostIntervals, modelIntervals), "measured") : metric(null, "unmeasured", truncationReason ?? "run_open"),
-				host_inside_tool_ms: allExact ? metric(intersectDuration(hostIntervals, toolIntervals), "measured") : metric(null, "unmeasured", truncationReason ?? "run_open"),
-				host_outside_model_tool_ms: allExact ? metric(intervalDuration(hostIntervals) - intersectDuration(hostIntervals, [...modelIntervals, ...toolIntervals]), "measured") : metric(null, "unmeasured", truncationReason ?? "run_open"),
-				unclassified_wall_ms: allExact && root ? metric(Math.max(0, root.endMs - root.startMs - intervalDuration(combined)), "measured") : metric(null, "unmeasured", truncationReason ?? "run_open"),
+				host_inside_model_ms: allExact ? metric(intersectDuration(hostIntervals, modelIntervals), "measured") : metric(null, aggregateIssue?.status ?? "unmeasured", aggregateIssue?.reason ?? "run_open"),
+				host_inside_tool_ms: allExact ? metric(intersectDuration(hostIntervals, toolIntervals), "measured") : metric(null, aggregateIssue?.status ?? "unmeasured", aggregateIssue?.reason ?? "run_open"),
+				host_outside_model_tool_ms: allExact ? metric(intervalDuration(hostIntervals) - intersectDuration(hostIntervals, [...modelIntervals, ...toolIntervals]), "measured") : metric(null, aggregateIssue?.status ?? "unmeasured", aggregateIssue?.reason ?? "run_open"),
+				unclassified_wall_ms: allExact && root ? metric(Math.max(0, root.endMs - root.startMs - intervalDuration(combined)), "measured") : metric(null, aggregateIssue?.status ?? "unmeasured", aggregateIssue?.reason ?? "run_open"),
 				host_process_cpu_time_ms: metric(null, "unmeasured", "process_cpu_not_isolated"),
 			},
 		};
@@ -590,8 +602,9 @@ export class ExecutionTraceSession {
 		const end = request.settledMs;
 		const root = end !== undefined ? { startMs: request.acceptedMs, endMs: end } : null;
 		let unclassified: TraceMetric = metric(null, request.mappingStatus === "ambiguous" ? "ambiguous" : "unmeasured");
-		if (root && run && request.mappingStatus === "measured" && !run.hostSpanOverflow && !run.requestsTruncated && !run.toolsTruncated) {
+		if (root && run && request.mappingStatus === "measured" && !run.hostSpanOverflow && !run.toolsTruncated) {
 			const requests = run.requestIds.map(id => this.requests.get(id)).filter((value): value is ProviderRequestTrace => !!value);
+			const modelIssue = providerRequestIssue(requests, run.requestsTruncated);
 			const tools = run.toolCallIds.map(id => this.tools.get(id)).filter((value): value is ToolExecutionTrace => !!value);
 			const intervals: Interval[] = [];
 			if (run.agentStartMs > request.acceptedMs) intervals.push({ startMs: request.acceptedMs, endMs: Math.min(run.agentStartMs, root.endMs) });
@@ -607,7 +620,7 @@ export class ExecutionTraceSession {
 				const clipped = clipInterval(span, root);
 				if (clipped) intervals.push(clipped);
 			}
-			unclassified = metric(Math.max(0, root.endMs - root.startMs - intervalDuration(intervals)), "measured");
+			unclassified = modelIssue ? metric(null, modelIssue.status, modelIssue.reason) : metric(Math.max(0, root.endMs - root.startMs - intervalDuration(intervals)), "measured");
 		}
 		return {
 			...request,
@@ -694,7 +707,6 @@ export function createExecutionTraceExtension(trace: ExecutionTraceSession): Ext
 		pi.on("after_provider_response", event => { trace.afterProviderResponse(event.status); });
 		pi.on("provider_stream_event", event => { trace.providerStreamEvent(event.provider, event.api, event.model); });
 		const observe = (event: unknown) => trace.observe(event as AgentSessionEvent);
-		pi.on("agent_start", observe);
 		pi.on("turn_start", observe);
 		pi.on("message_start", observe);
 		pi.on("message_update", observe);
