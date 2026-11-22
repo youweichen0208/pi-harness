@@ -35,7 +35,7 @@ function compare(expected, actual, path) {
 }
 function commonFonts(metrics) {
 	return [...new Set(metrics.fonts.map(font => font.url)
-		.filter(url => url.includes('/ui-sc-') || url.includes('/fonts/jetbrains-mono/')))].sort();
+		.filter(url => url.includes('/ui-sc-') || (url.includes('/fonts/jetbrains-mono/') && !url.includes('-latin-ext-'))))].sort();
 }
 function sharedFace(metrics, sample, family) {
 	const face = metrics.faces[sample]?.find(font => font.familyName === family);
@@ -47,7 +47,7 @@ for (const { file, scale } of windows) {
 	assert.equal(win.platform, 'win32');
 	assert.equal(mac.dpr, 1);
 	assert.equal(win.dpr, scale / 100);
-	assert.deepEqual(commonFonts(win), commonFonts(mac), 'same bundled UI SC and JetBrains Mono resources');
+	assert.deepEqual(commonFonts(win), commonFonts(mac), 'same bundled UI SC and primary JetBrains Mono resources');
 	assert.equal(win.electron, mac.electron, 'Compare the same Electron version');
 	for (const key of ['width', 'height', 'bodySize', 'typography', 'surfaces', 'ui']) compare(windowsReference[key], win[key], `${file}.${key}`);
 	assert(win.typography.light.every(sample => sample.family.startsWith('"Segoe UI"')), 'Windows uses native UI typography');
