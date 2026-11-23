@@ -259,6 +259,7 @@ try {
 					probe.textContent = text; document.body.append(probe);
 					const range = document.createRange(); range.selectNodeContents(probe);
 					const style = getComputedStyle(probe);
+					await document.fonts.load(`${weight} ${style.fontSize} ${style.fontFamily}`, text);
 					samples.push({ text, weight, family: style.fontFamily, size: style.fontSize, color: style.color, lines: [...range.getClientRects()].map(rect => ({ width: rect.width, height: rect.height })) });
 					probe.remove();
 				}
