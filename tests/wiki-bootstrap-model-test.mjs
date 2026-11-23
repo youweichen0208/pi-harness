@@ -76,16 +76,16 @@ try {
 	// #114: while the SDK is starting, never render ordinary chat.
 	{
 		const page = await browser.newPage();
-		let releaseHello;
+		const helloGate = Promise.withResolvers();
 		await page.routeWebSocket("**/ws", route => {
 			const upstream = route.connectToServer();
-			route.onMessage(wire => { if (JSON.parse(String(wire)).type === "hello") releaseHello = () => upstream.send(wire); else upstream.send(wire); });
+			route.onMessage(wire => { if (JSON.parse(String(wire)).type === "hello") void helloGate.promise.then(() => upstream.send(wire)); else upstream.send(wire); });
 			upstream.onMessage(wire => route.send(wire));
 		});
 		await page.goto(`http://127.0.0.1:${port}/?${new URLSearchParams({ "wiki-window": "1", cwd, doc: "README.md", client: "slow-start" })}`);
 		await page.locator(".wiki-window-shell").waitFor({ timeout: 1500 });
 		assert.equal(await page.locator(".topbar").count(), 0);
-		releaseHello();
+		helloGate.resolve();
 		await page.locator(".wiki-prose .fp-rich-document").waitFor();
 		await page.close();
 	}

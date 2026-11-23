@@ -29,6 +29,8 @@ const agentDir = join(base, "agent");
 mkdirSync(workdir, { recursive: true });
 mkdirSync(dataDir, { recursive: true });
 // Compare the unextended native baseline; optional built-ins have separate SDK tests.
+// Compare the native Bash loadout after opting out of the harness extension.
+writeFileSync(join(dataDir, "document-extensions.json"), JSON.stringify({ backgroundEnabled: false }));
 writeFileSync(join(dataDir, "design-first.json"), JSON.stringify({ enabled: false }));
 mkdirSync(agentDir, { recursive: true });
 mkdirSync(join(agentDir, "extensions"));
