@@ -77,6 +77,9 @@ async function verifyBackgroundCommands(a, b) {
 	await wait(() => a.state.backgroundCommands?.some(t => t.state === "background") && !a.state.isStreaming && a.state.messages.some(m => m.role === "toolResult" && m.toolName === "read" && JSON.stringify(m.content).includes("independent read succeeded")), "same agent reads during silent background test");
 	const running = a.state.backgroundCommands.find(t => t.state === "background");
 	assert.equal(running.output, "");
+	const report = name => JSON.parse(a.state.messages.findLast(m => m.role === "toolResult" && m.toolName === name).content[0].text);
+	assert.equal(report("bash").willNotify, true);
+	assert.match(report("bash").note, /do not poll/i);
 	const recoveryDir = join(root, "recovery");
 	mkdirSync(recoveryDir);
 	// Resume a copy of the on-disk session as it existed before process exit.
@@ -93,10 +96,26 @@ async function verifyBackgroundCommands(a, b) {
 	assert.equal(commandViews(recovered).find(t => t.id === running.id)?.state, "interrupted");
 	await handlers.get("session_shutdown")();
 	assert.equal(running.detachedAt - running.startedAt >= 29900, true);
+	const beforeFollowup = calls;
+	scriptedCalls.push({ name: "bash_task", args: { action: "read", id: running.id, cursor: 0 } });
+	a.send({ type: "prompt", text: "How is the search progressing?", requestId: "background-progress" });
+	await wait(() => calls === beforeFollowup + 2 && !a.state.isStreaming && a.state.messages.some(m => m.role === "toolResult" && m.toolName === "bash_task"), "follow-up reads silent command");
+	const progress = report("bash_task");
+	assert.equal(progress.unchanged, true);
+	assert.equal(progress.lastOutputAtMs, null);
+	assert(progress.elapsedMs >= 29900 && progress.willNotify);
 	writeFileSync(join(root, "finish"), "");
-	await wait(() => calls >= start + 4 && !a.state.isStreaming && a.state.backgroundCommands.some(t => t.id === running.id && t.exitCode === 0), "idle completion");
+	await wait(() => a.state.backgroundCommands.some(t => t.id === running.id && t.exitCode === 0), "command completed after follow-up");
+	await wait(() => calls >= beforeFollowup + 3 && !a.state.isStreaming, "automatic completion after another user message");
 	assert.equal(readFileSync(join(root, "starts"), "utf8"), "1");
-	assert.equal(calls, start + 4);
+	assert.equal(calls, start + 6);
+	const entries = readFileSync(a.state.sessionFile, "utf8").trim().split("\n").map(line => JSON.parse(line));
+	const delivered = entries.filter(e => e.type === "custom_message" && e.customType === "background-results")
+		.flatMap(e => JSON.parse(e.content)).filter(t => t.id === running.id);
+	assert.equal(delivered.length, 1);
+	assert.equal(delivered[0].originatingUserEntryId, entries.find(e => e.type === "message" && e.message.role === "user").id);
+	assert.match(delivered[0].output, /finished/);
+	assert(delivered[0].lastOutputAtMs >= running.startedAt);
 	assert.equal(b.state.backgroundCommands?.length ?? 0, 0);
 	a.send({ type: "trace_get", reqId: "background-trace", conversationId: a.state.conversationId });
 	await wait(() => a.wire.some(m => m.type === "trace_result" && m.reqId === "background-trace"), "background trace");
@@ -122,6 +141,14 @@ async function verifyBackgroundCommands(a, b) {
 	scriptedCalls.push({ name: "bash", args: { command: longCommand, background: true, timeout: 1 } });
 	a.send({ type: "prompt", text: "Timeout in background", requestId: "background-timeout" });
 	await wait(() => a.state.backgroundCommands.some(t => t.state === "failed" && /timed out/.test(t.error)) && !a.state.isStreaming && calls === beforeStop + 3, "explicit background timeout");
+	const stopStart = calls;
+	const stopId = `bg-${stopStart + 1}`;
+	scriptedCalls.push({ name: "bash", args: { command: longCommand, background: true, timeout: 15 } },
+		{ name: "bash_task", args: { action: "stop", id: stopId } });
+	a.send({ type: "prompt", text: "Cancel the background task", requestId: "tool-stop" });
+	await wait(() => calls === stopStart + 3 && !a.state.isStreaming && a.state.messages.some(m => m.role === "toolResult" && m.toolCallId === `bg-${stopStart + 2}`), "stop tool response");
+	assert.equal(report("bash_task").state, "stopped");
+	assert.equal(report("bash_task").willNotify, false);
 	for (const consume of [false, true]) {
 		const before = calls;
 		const gate = `finish-${consume}`;

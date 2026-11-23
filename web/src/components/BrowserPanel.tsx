@@ -10,13 +10,13 @@ export function BrowserPanel({ owner, close }: { owner: string; close: () => voi
 	const [state, setState] = useState<BrowserState>({ tabs: [] });
 	const [address, setAddress] = useState("");
 	const [expanded, expand] = useState(false);
-	const [error, setError] = useState("");
+	const [commandFailed, setCommandFailed] = useState(false);
 	const tab = state.tabs.find(tab => tab.id === state.active);
 	const blank = !tab?.url || tab.url === "about:blank";
 	const browser = desktopAPI!.browser!;
 	function command(action: string, value?: unknown) {
-		setError("");
-		void browser(action, value).then(setState, e => setError(String(e.message)));
+		setCommandFailed(false);
+		void browser(action, value).then(setState, () => setCommandFailed(true));
 	}
 	useLayoutEffect(() => {
 		const unsubscribe = desktopAPI!.onBrowser!(setState);
@@ -141,11 +141,15 @@ export function BrowserPanel({ owner, close }: { owner: string; close: () => voi
 						command("answer", { id: state.confirmation!.id, accept })}>{t(accept ? "confirm" : "cancel")}</button>)}</div>
 				</div>}
 			</div>
-			{error && <div role="alert">{error}</div>}
+			{commandFailed && <div role="alert">{t("browserCommandFailed")}</div>}
+			{tab?.failure && <div className="browser-load-error" role="alert">
+				<span>{t(tab.failure.code === "UNSUPPORTED_URL" ? "browserAddressBlocked" : "browserLoadFailed")} {tab.failure.url} ({tab.failure.code})</span>
+				{tab.failure.canRetry && <button onClick={() => command("retry", tab.id)}>{t("retry")}</button>}
+			</div>}
 			<div ref={viewport} className="embedded-viewport">
 				{blank && (
 					<section className="browser-start" key={tab?.id}>
-						<h2 aria-label="pi-harness"><img src="./brand-mark.svg" alt="" width="48" height="48" /><BrandWordmark /></h2>
+						<h2 aria-label="pi-harness"><BrandWordmark /></h2>
 						<form className="browser-start-search" role="search" onSubmit={event => {
 							event.preventDefault();
 							navigate(String(new FormData(event.currentTarget).get("query") ?? ""));

@@ -375,6 +375,12 @@
 	--term-bright-cyan: #22d3ee;
 	--term-bright-white: #ffffff;
 	--sans: Inter, "Source Han Sans SC", "UI SC", "UI Symbols", "PI Emoji", system-ui, sans-serif;
+	--brand-coral: #f58276;
+	--brand-blue: #2286c4;
+	--brand-gold: #fdb344;
+	--wordmark-coral: #fd7364;
+	--wordmark-blue: #057ac2;
+	--wordmark-gold: #fdb13e;
 	--brand-font: var(--sans);
 	--mono: "JetBrains Mono", "Source Han Sans SC", "UI SC", "UI Symbols", "PI Emoji", monospace;
 	--command-font: var(--sans);
@@ -13600,11 +13606,11 @@ html.pi-desktop .wiki-window-header .desktop-window-controls { -webkit-app-regio
 .compact-workspace-switcher { position: relative; flex: none; margin-bottom: 12px; }
 .compact-workspace-trigger { display: flex; align-items: center; gap: 10px; width: 100%; height: 34px; padding: 4px 8px; border: 0; background: transparent; color: var(--text); font: inherit; cursor: pointer; }
 .compact-brand { display: flex; align-items: center; gap: 1px; height: 40px; padding: 4px 8px; margin-bottom: 8px; flex: none; }
-.compact-brand img { width: 26px; height: 26px; flex: none; }
-.compact-brand > span { font-size: 17px; font-weight: 600; color: var(--text); white-space: nowrap; }
-.compact-navigation.directory-collapsed:not(:hover):not(:focus-within) .compact-brand > span { display: none; }
+.brand-wordmark { width: auto; height: 16px; aspect-ratio: 1384 / 205; color: var(--text); vertical-align: middle; overflow: hidden; }
+.compact-brand .brand-wordmark { height: 19px; }
+.compact-navigation.directory-collapsed:not(:hover):not(:focus-within) .compact-brand .brand-wordmark { width: 20px; }
 @media (max-width: 900px) {
-	.drawer-left.open .compact-navigation.directory-collapsed .compact-brand > span { display: inline; }
+	.drawer-left.open .compact-navigation.directory-collapsed .compact-brand .brand-wordmark { width: auto; }
 }
 .compact-workspace-trigger > span { flex: 1; min-width: 0; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .compact-workspace-trigger > svg { width: 14px; height: 14px; color: var(--text-faint); }
@@ -16602,6 +16608,8 @@ html[data-platform="win32"] :is(.settings-tab-label, .input-tools .chip, .reply-
 @media (prefers-reduced-motion: reduce) { :root .design-workspace .bash-shell-card .bash-detail-controls { transition: none; } }
 
 /* Desktop embedded browser */
+.browser-load-error { display: flex; align-items: center; gap: 8px; padding: 6px 8px; overflow-wrap: anywhere; background: var(--bg-elev2); color: var(--text); }
+.browser-load-error button { flex: none; }
 .embedded-controls { position: relative; }
 .embedded-controls:has(.browser-confirmation) > .embedded-toolbar { visibility: hidden; }
 .browser-confirmation { position: absolute; inset: 0; z-index: 1; overflow: auto; box-sizing: border-box; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-content: center; gap: 2px 8px; padding: 4px 8px; background: var(--bg); }
@@ -16695,7 +16703,9 @@ html[data-platform="win32"] :is(.settings-tab-label, .input-tools .chip, .reply-
 .wf-detail select { max-width: 100%; }
 .wf-jump { margin-inline-start: 6px; border: 0; color: var(--accent); background: transparent; }
 
-.compact-brand > span, .brand-name, .browser-start h2,
+.browser-start h2 .brand-wordmark { height: 1em; }
+
+
 .design-workspace .msg-assistant > .msg-meta .msg-role,
 .design-workspace .msg-collapsed-role.role-assistant,
 .node-agent-message.assistant .node-agent-author,
@@ -16703,15 +16713,4 @@ html[data-platform="win32"] :is(.settings-tab-label, .input-tools .chip, .reply-
 	font-family: var(--brand-font);
 	font-weight: 600;
 	font-style: normal;
-}
-
-
-.brand-logo + .brand-name { margin-inline-start: -7px; }
-.brand-connector {
-	display: inline-block;
-	font-size: .83em;
-	font-weight: 400;
-	color: color-mix(in srgb, currentColor 72%, transparent);
-	vertical-align: .045em;
-	margin-inline-end: -.035em;
 }

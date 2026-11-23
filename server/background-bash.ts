@@ -35,6 +35,20 @@ export function stopRequestCommands(session: SessionManager) {
 	const request = currentRequest(session);
 	for (const task of registry.get(session)?.values() ?? []) if (task.request === request) task.stop();
 }
+const backgroundNote = "Running in the background. Completion will be delivered automatically on this conversation branch. Continue other work; do not poll. Silence alone does not indicate a hung command.";
+function taskReport(task: Task, cursor?: number) {
+	const v = task.view;
+	const willNotify = v.state === "background" && !task.suppressDelivery;
+	return {
+		...v,
+		output: v.output.slice(Math.max(0, (cursor ?? 0) - v.cursor + v.output.length)),
+		elapsedMs: Math.max(0, (v.endedAt ?? Date.now()) - v.startedAt),
+		lastOutputAtMs: v.lastOutputAtMs ?? null,
+		...(cursor === undefined ? {} : { unchanged: cursor === v.cursor }),
+		willNotify,
+		...(willNotify ? { note: backgroundNote } : {}),
+	};
+}
 const reply = (value: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(value) }], details: undefined });
 
 export function backgroundBash(session: SessionManager, settings: SettingsManager, changed: () => void, trace: (view: BackgroundCommand) => void): ExtensionFactory {
@@ -67,11 +81,13 @@ export function backgroundBash(session: SessionManager, settings: SettingsManage
 		});
 		const takeResults = () => {
 			if (![...tasks.values()].some(t => t.pending)) return;
-			const branch = session.getBranch();
-			const request = currentRequest(session);
-			const ready = [...tasks.values()].filter(t => t.pending && t.request === request && branch.some(entry => entry.id === t.marker));
-			for (const task of tasks.values()) task.pending = false;
-			if (ready.length) return { type: "custom_message" as const, customType: "background-results", content: JSON.stringify(ready.map(t => t.view)), details: {}, display: false };
+			const branch = new Set(session.getBranch().map(entry => entry.id));
+			const ready = [...tasks.values()].filter(task => task.pending && task.marker && branch.has(task.marker));
+			if (!ready.length) return;
+			for (const task of ready) task.pending = false;
+			return { type: "custom_message" as const, customType: "background-results", content: JSON.stringify(ready.map(task => ({
+				...task.view, originatingUserEntryId: task.request,
+			}))), details: {}, display: false };
 		};
 		const deliver = (event: { outcome: string }, ctx: { hasPendingMessages(): boolean }) => {
 			if (event.outcome === "aborted" || ctx.hasPendingMessages()) return;
@@ -99,7 +115,7 @@ export function backgroundBash(session: SessionManager, settings: SettingsManage
 			...native,
 			// Inherit the native Bash loadout, including configurations that omit Bash.
 			defaultActive: false,
-			parameters: Type.Object({ ...native.parameters.properties, background: Type.Optional(Type.Boolean({ description: "Return a task ID immediately" })) }),
+			parameters: Type.Object({ ...native.parameters.properties, background: Type.Optional(Type.Boolean({ description: "Run in the background and return a task ID immediately. Completion is delivered automatically; do not poll." })) }),
 			async execute(id, args, signal, update, ctx) {
 				if (id.includes("/")) return native.execute(id, args, signal, update, ctx);
 				const controller = new AbortController();
@@ -130,6 +146,7 @@ export function backgroundBash(session: SessionManager, settings: SettingsManage
 				const ops = createLocalBashOperations(options);
 				const tool = createBashToolDefinition(ctx.cwd, { ...options, operations: {
 					exec: (cmd, cwd, opts) => ops.exec(cmd, cwd, { ...opts, onData(chunk) {
+						if (chunk.length) view.lastOutputAtMs = Date.now();
 						const text = decoder.write(chunk);
 						view.output = (view.output + text).slice(-51200);
 						view.cursor += text.length;
@@ -139,14 +156,16 @@ export function backgroundBash(session: SessionManager, settings: SettingsManage
 				const finish = (failed: boolean, error?: string) => {
 					clearTimeout(timer);
 					signal?.removeEventListener("abort", abort);
-					if (view.state === "foreground") tasks.delete(id);
+					const detached = view.state === "background";
+					view.endedAt = Date.now();
+					view.state = controller.signal.aborted ? "stopped" : failed ? "failed" : "done";
+					if (!detached) tasks.delete(id);
 					else {
-						view.endedAt = Date.now();
-						view.state = controller.signal.aborted ? "stopped" : failed ? "failed" : "done";
 						if (error && !closed) view.error = error.slice(-1024);
 						trace(view);
-						if (session.getBranch().some(entry => entry.id === task.marker)) session.appendCustomEntry(recordType, { ...view });
-						task.pending = !closed && !controller.signal.aborted && !task.suppressDelivery;
+						const onBranch = session.getBranch().some(entry => entry.id === task.marker);
+						if (onBranch) session.appendCustomEntry(recordType, { ...view });
+						task.pending = onBranch && !closed && !controller.signal.aborted && !task.suppressDelivery;
 						if (task.pending) scheduleIdleDelivery(ctx);
 					}
 					if (!closed) changed();
@@ -164,20 +183,23 @@ export function backgroundBash(session: SessionManager, settings: SettingsManage
 				}, error => { finish(true, String(error)); throw error; });
 				task.finished = execution.then(() => undefined, () => undefined);
 				if (args.background) task.detach();
-				return Promise.race([execution, detached.then(() => reply({ ...view, elapsedMs: Date.now() - view.startedAt }))]);
+				return Promise.race([execution, detached.then(() => reply(taskReport(task)))]);
 			},
 		});
 		pi.registerTool({
-			name: "bash_task", label: "Background commands", description: "List, read or stop background bash commands. Pass the last cursor for incremental output.",
+			name: "bash_task", label: "Background commands", description: "Background commands report completion automatically. Do not poll. Read only when intermediate output is needed; pass the previous cursor for changes. Stop only when cancellation is intended.",
 			parameters: Type.Object({ action: Type.Union([Type.Literal("list"), Type.Literal("read"), Type.Literal("stop")]), id: Type.Optional(Type.String()), cursor: Type.Optional(Type.Integer({minimum: 0})) }),
 			async execute(_id, args) {
 				if (args.action === "list") return reply([...tasks.values()].map(({view}) => ({ id: view.id, state: view.state })));
 				const task = tasks.get(args.id ?? "");
 				if (!task) throw Error("Unknown command");
-				if (args.action === "stop") task.stop();
-				task.pending = false;
-				const v = task.view;
-				return reply({ ...v, output: v.output.slice(Math.max(0, (args.cursor ?? 0) - v.cursor + v.output.length)) });
+				if (args.action === "stop") {
+					task.stop();
+					await task.finished;
+				}
+				// An explicit read of the completed result already delivers it to the model.
+				if (task.view.endedAt !== undefined) task.pending = false;
+				return reply(taskReport(task, args.cursor));
 			},
 		});
 	};

@@ -306,6 +306,7 @@ export interface UiTraceSnapshot {
 export type TraceResult = { type: "trace_result"; reqId: string; conversationId: string; open?: boolean; export?: "html" | "json"; trace?: UiTraceSnapshot; error?: string };
 
 export interface BackgroundCommand {
+	lastOutputAtMs?: number;
 	id: string;
 	state: "foreground" | "background" | "stopped" | "failed" | "done" | "interrupted";
 	startedAt: number;

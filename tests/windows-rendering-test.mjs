@@ -110,14 +110,9 @@ try {
 			assert(used.every(font => font.isCustomFont && font.postScriptName === 'Inter-SemiBold'), `${name}: use the bundled Inter face`);
 			assert.equal(await page.locator(selector).evaluate(el => [getComputedStyle(el).fontStyle, getComputedStyle(el).fontWeight].join(' ')), 'normal 600');
 		}
-		const brand = page.locator('.compact-brand > span');
-		const brandName = await brand.textContent();
-		assert.equal(brandName, "-harness");
-		assert.equal(await brand.evaluate(el => [getComputedStyle(el).fontStyle, getComputedStyle(el).fontWeight].join(" ")), "normal 600");
-		await brand.evaluate(el => el.textContent += ' 品牌');
-		await page.evaluate(() => document.fonts.ready);
-		await measureFonts('brand', '.compact-brand > span', [['Inter', 'Inter SemiBold'], 'Source Han Sans SC']);
-		await brand.evaluate((el, value) => el.textContent = value, brandName);
+		const brand = page.locator('.compact-brand').getByRole('img', { name: 'pi-harness', exact: true });
+		const brandBox = await brand.boundingBox();
+		assert(brandBox && Math.abs(brandBox.width / brandBox.height - 1384 / 205) < 0.1, 'full sidebar wordmark keeps its proportions');
 		const ui = {};
 		const sampleControl = async (name, selector, size = false) => {
 			const el = page.locator(selector).first();

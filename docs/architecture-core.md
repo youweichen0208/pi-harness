@@ -110,6 +110,8 @@ SDK `tool_execution_update.partialResult` 是累计输出快照，服务端发�
 
 `server/trace-store.ts` 将 run_start、provider_request、tool_end、run_settled 以 JSONL 写入 `<dataDir>/traces/`，文件名是 sessionId 的 SHA-256 前缀，权限为私有目录/文件，不提供任意路径读取。重启后未闭合 run 显示 `interrupted`；合法末尾截断可恢复，中间损坏转为 quarantine，原文件不删除。完整旧 run（包括历史 interrupted）原子压缩，活跃 run 不压缩；2MiB 是单文件压缩触发阈值而非严格字节保证，全局超过 64MiB 时优先删除最旧的非当前 session 文件。写盘失败只降级 trace 并发送一次 warning，不进入 Agent/SDK 事件链。`persistence` 中的 appendAttempts/appendedRecords/compactions/prunedFiles 是纯数值计数器，供容量与开销验收使用，不包含正文。
 
+内置浏览器发现快照已失效时，工具结束记录使用 `status: "stale_snapshot"`、`isError: false`，保留本次耗时。模型需重新读取页面或截图。缺少必填参数和真正的执行异常仍按 SDK 错误处理。
+
 协议 v62 的 `trace_get`/`trace_result` 只读当前 conversation 所属 session 的内存与持久化记录。顶栏 Trace 和 `/trace` 打开 `TraceWorkbench`：run 筛选、聚合指标、模型／工具／宿主时间线及调度 gap；运行中每 2 秒刷新。`/export` 和标题栏 HTML 按钮下载包含 transcript 与 Trace 的本地静态 HTML；所有不可信字段均转义，CSP 禁止脚本与外部资源。`/export json` 或 JSON 按钮只下载 trace metadata，明确标注非匿名；与 OMP 的 transcript/Timeline/Trace 导出相似，但本实现额外区分 onEvent、snapshot 与 WS 宿主归因，不提供公网分享。
 
 `PI_TASK_TIMINGS_OUT` 另外在优雅停机时输出按 client/session 分离的完整内存 JSON。快照管线 `SnapshotTimings` 默认 `summary`，只记录有界 duration/count；`PI_SNAPSHOT_TIMINGS=1/detail` 才逐报文执行 `Buffer.byteLength` 并统计 bytes。契约回归为 `tests/execution-trace-test.mjs`，浏览器与恢复回归为 `tests/trace-browser-test.mjs`（含下载 HTML 的离线浏览器安全验收）；真实文件系统故障、120-run 压缩和重开回归为 `tests/unit/trace-store-reliability.test.ts`，导出攻击矩阵为 `tests/unit/trace-export.test.ts`。

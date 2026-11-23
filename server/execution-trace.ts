@@ -44,7 +44,7 @@ export interface ToolExecutionTrace {
 	durationMs?: number;
 	assistantToToolGapMs?: number;
 	isError?: boolean;
-	status: "open" | "measured" | "failed";
+	status: "open" | "measured" | "failed" | "stale_snapshot";
 }
 
 export interface HostSpan {
@@ -346,6 +346,7 @@ export class ExecutionTraceSession {
 				tool.durationMs = event.durationMs;
 				tool.isError = event.isError;
 				tool.status = event.isError ? "failed" : "measured";
+				if (!event.isError && tool.toolName === "embedded_browser" && event.result?.details?.browserStatus === "stale_snapshot") tool.status = "stale_snapshot";
 				const run = this.currentRun;
 				if (run) run.lastToolEndMs = Math.max(run.lastToolEndMs ?? at, at);
 				const owner = tool.runId ? this.runs.find(candidate => candidate.runId === tool.runId) : undefined;

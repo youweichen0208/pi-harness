@@ -406,7 +406,7 @@ export const LeftPanel = memo(function LeftPanel({
 	return (
 		<aside className={`panel panel-left workspace-navigation compact-navigation ${directoryCollapsed ? "directory-collapsed" : ""}`}>
 			<div className="global-navigation">
-				<div className="compact-brand"><img src="/icon/1a-mark.svg" alt="pi" /><BrandWordmark /></div>
+				<div className="compact-brand"><BrandWordmark /></div>
 				<div className="compact-workspace-switcher" ref={switcherRef} onKeyDown={event => {
 					if (event.key === "Escape") { setWorkspaceOpen(false); switcherButton.current?.focus(); }
 					if (workspaceOpen && (event.key === "ArrowDown" || event.key === "ArrowUp")) {

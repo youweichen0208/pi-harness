@@ -16,7 +16,14 @@ export interface BrowserState {
 	confirmation?: { id: string; site: string; target: string; purpose?: string };
 	active?: number;
 	owner?: string;
-	tabs: { id: number; title: string; url: string; back: boolean; forward: boolean }[];
+	tabs: {
+		id: number;
+		title: string;
+		url: string;
+		failure?: { ok: false; code: string; url: string; canRetry: boolean };
+		back: boolean;
+		forward: boolean;
+	}[];
 }
 export interface DesktopAPI {
 	browser?: (action: string, value?: unknown) => Promise<BrowserState>;

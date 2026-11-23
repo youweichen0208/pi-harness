@@ -175,11 +175,10 @@ export function TopBar({
 				>
 					<FiMenu />
 				</button>
-				<img className="brand-logo" src="/icon/1a-mark.svg" alt="pi" />
 				<BrandWordmark className="brand-name" />
 				{desktopAPI && (
 					<span className="desktop-window-title" title={chat.state?.cwd ?? ""}>
-						pi-harness <span className="desktop-title-separator">/</span> {projectName || t("desktopWorkspace")}
+						<BrandWordmark /> <span className="desktop-title-separator">/</span> {projectName || t("desktopWorkspace")}
 					</span>
 				)}
 				<span className={`conn-dot ${connClass}`} title={connLabel} />

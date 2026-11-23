@@ -1,7 +1,7 @@
 // Exercise the real Electron window, server IPC and SDK with a local model and login site.
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -44,11 +44,24 @@ const model = createServer(async (req, res) => {
 		);
 	res.end("data: [DONE]\n\n");
 });
+let slowRequestCount = 0, blockedDestination;
+async function waitForSlowRequest(count) {
+	for (let i = 0; i < 100 && slowRequestCount < count; i++) await sleep(100);
+	assert.ok(slowRequestCount >= count, "guest started the pending navigation");
+}
+let failNavigation = true;
 const site = createServer((req, res) => {
 	res.setHeader("content-type", "text/html");
+	if (req.url === "/slow") { slowRequestCount++; return; }
+	if (req.url === "/retry") {
+		if (failNavigation) { res.destroy(); return; }
+		return res.end("<title>Recovered</title>");
+	}
+	if (req.url === "/blocked") { res.writeHead(302, { location: blockedDestination }); res.end(); return; }
+	if (req.url === "/redirect") { res.writeHead(302, { location: "/landing" }); res.end(); return; }
 	if (req.url === "/visual") return res.end(`<title>Visual</title><style>* {caret-color:transparent}canvas {position:absolute;left:45px;top:40px;width:45px;height:40px;background:green}</style>
 		<canvas onclick="document.title='Canvas clicked'"></canvas><form onsubmit="event.preventDefault(); document.title='Sent '+(++window.count)"><input autofocus></form>
-		<script>window.count=0</script><details><summary>Details</summary><a href="/page2">Next</a></details>`);
+		<a href="/icon"><img alt="Account options"></a><a href="/settings?token=private" style="display:block;height:1px"></a><button></button><script>window.count=0</script><details><summary>Details</summary><a href="/page2">Next</a></details>`);
 	if (req.url === "/page2") return res.end("<title>Second page</title>Second page result");
 	if (req.url === "/login") {
 		res.writeHead(303, { location: "/", "set-cookie": "auth=yes; HttpOnly; Max-Age=3600; SameSite=Lax" });
@@ -101,7 +114,7 @@ async function go() {
 	const home = page.locator(".browser-start-search input");
 	const field = await home.isVisible() ? home : page.locator(".embedded-toolbar input");
 	if (field === home) {
-		assert.equal(await page.getByRole("heading", { name: "pi-harness", exact: true }).innerText(), "-harness");
+		assert(await page.getByRole("heading", { name: "pi-harness", exact: true }).getByRole("img", { name: "pi-harness" }).isVisible());
 		await home.focus();
 		const ring = el => [getComputedStyle(el).outlineStyle, getComputedStyle(el.parentElement).outlineStyle];
 		assert.deepEqual(await home.evaluate(ring), ["none", "solid"]);
@@ -150,6 +163,32 @@ try {
 	await go();
 	const guestTitle = title => page.locator(".embedded-tabs button").filter({ hasText: title }).waitFor();
 	await guestTitle("Login");
+	const siteOrigin = "http://127.0.0.1:" + site.address().port;
+	const address = page.locator(".embedded-toolbar input");
+	async function enterUrl(path) {
+		await address.fill(siteOrigin + path);
+		await address.press("Enter");
+	}
+	const firstSlow = slowRequestCount + 1;
+	await enterUrl("/slow#/login?RelayState=fixture");
+	await waitForSlowRequest(firstSlow);
+	await enterUrl("/redirect");
+	await page.waitForFunction(() => document.querySelector(".embedded-toolbar input").value.endsWith("/landing"));
+	assert.equal(await page.locator(".embedded-browser [role=alert]").count(), 0, "replacement navigation must not display an IPC error");
+	await enterUrl("/retry#/login?RelayState=fixture");
+	const navigationAlert = page.locator(".embedded-browser [role=alert]");
+	await navigationAlert.waitFor();
+	assert.doesNotMatch(await navigationAlert.innerText(), /IPC|invoking remote method|RelayState/i);
+	failNavigation = false;
+	await navigationAlert.getByRole("button", { name: /重试|retry/i }).click();
+	await guestTitle("Recovered");
+	assert.equal(await address.inputValue(), siteOrigin + "/retry#/login?RelayState=fixture");
+	blockedDestination = new URL("/blocked-by-policy?RelayState=fixture", page.url()).href;
+	await enterUrl("/blocked");
+	await navigationAlert.filter({ hasText: "UNSUPPORTED_URL" }).waitFor();
+	assert.equal(await navigationAlert.getByRole("button").count(), 0);
+	await enterUrl("/");
+	await guestTitle("Login");
 	await app.evaluate(async ({ webContents }) => {
 		const w = webContents.getAllWebContents().find(c => c.getTitle() === "Login");
 		await w.executeJavaScript("document.querySelector('a').click()");
@@ -189,10 +228,26 @@ try {
 		directRead = args;
 		return tool();
 	}
+	assert.match(await direct({action:"find", query:"DistantResult"}), /DistantResult/);
+	assert.match(await direct({action:"clickAt", x:10, y:10}), /snapshot: missing|missing snapshot/i);
+	assert.match(await direct({action:"find", query:"  "}), /Provide text to find/);
 	const getToken = result => result.match(/[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}/i)[0];
 	const tabs = JSON.parse(JSON.parse(await direct({action:"tabs"})));
 	const visualUrl = "http://127.0.0.1:" + site.address().port + "/visual";
-	await direct({action:"openTab", snapshot:tabs.snapshot, url:visualUrl});
+	const nextSlow = slowRequestCount + 1;
+	const opening = direct({action:"openTab", snapshot:tabs.snapshot, url:siteOrigin + "/slow#/sso?RelayState=fixture"});
+	await waitForSlowRequest(nextSlow);
+	await enterUrl("/visual");
+	assert.match(await opening, /interrupted/);
+	await guestTitle("Visual");
+	failNavigation = true;
+	const failed = await direct({action:"navigate", snapshot:getToken(await direct({action:"read"})), url:siteOrigin + "/retry#/login?RelayState=fixture"});
+	assert.match(failed, /ERR_EMPTY_RESPONSE/);
+	assert.doesNotMatch(failed, /invoking remote method|RelayState/i);
+	failNavigation = false;
+	await navigationAlert.getByRole("button").click();
+	await guestTitle("Recovered");
+	assert.match(await direct({action:"navigate", snapshot:getToken(await direct({action:"read"})), url:visualUrl}), /Navigated/);
 	await guestTitle("Visual");
 	await app.evaluate(({ webContents }) => webContents.getAllWebContents().find(w => w.getTitle() === "Visual").setZoomFactor(1.25));
 	const view = JSON.parse(JSON.parse(await direct({action:"view"})));
@@ -211,8 +266,13 @@ try {
 	assert.match(await press, /Done/);
 	await guestTitle("Sent 1");
 	const overview = JSON.parse(JSON.parse(await direct({action:"read"})));
-	const expand = overview.elements.find(el => el.label === "Details");
-	assert.match(await direct({action:"click", element:expand.id, snapshot:overview.snapshot}), /Done/);
+	assert(overview.elements.some(el => el.label === "Account options"));
+	assert(overview.elements.some(el => el.label === new URL("/settings", visualUrl).href));
+	assert.match(overview.hint, /view/);
+	assert.match(await direct({action:"fill", snapshot:overview.snapshot, element:overview.elements.find(el => el.role === "button").id, text:"test"}), /Unsupported field/);
+	const refreshed = JSON.parse(JSON.parse(await direct({action:"read"})));
+	const expand = refreshed.elements.find(el => el.label === "Details");
+	assert.match(await direct({action:"click", element:expand.id, snapshot:refreshed.snapshot}), /Done/);
 	const expanded = JSON.parse(JSON.parse(await direct({action:"read"})));
 	assert.match(await direct({action:"click", element:expanded.elements.find(el => el.label === "Next").id, snapshot:expanded.snapshot}), /Done/);
 	assert.match(await direct({action:"read"}), /Second page result/);
@@ -269,6 +329,13 @@ try {
 		if (!popup || !(await popup.executeJavaScript("!!window.opener && !window.electronAPI && !window.require")))
 			throw Error("Popup opener or isolation lost");
 	});
+	const traceDir = join(root, "data", "traces");
+	const browserCalls = readdirSync(traceDir).filter(name => name.endsWith(".jsonl")).flatMap(name =>
+		readFileSync(join(traceDir, name), "utf8").trim().split("\n").map(line => JSON.parse(line))
+			.filter(row => row.type === "tool_end" && row.payload.tool.toolName === "embedded_browser")
+			.map(row => row.payload.tool));
+	assert(browserCalls.some(call => call.status === "stale_snapshot" && call.isError === false));
+	assert(browserCalls.some(call => call.status === "failed" && call.isError === true));
 	console.log("PASS embedded browser login, find, tabs, screenshot input, confirmation, stale snapshot, revocation and persistent session");
 } catch (err) {
 	console.error(

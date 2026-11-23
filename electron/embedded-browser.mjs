@@ -1,18 +1,33 @@
 import { WebContentsView, ipcMain, nativeImage } from "electron";
+import { trackBrowserNavigation } from "./browser-navigation.mjs";
 import { randomUUID } from "node:crypto";
 
+function staleSnapshot(message) {
+	return Object.assign(new Error(message), { name: "StaleBrowserSnapshot" });
+}
+
 // Runs in an isolated world. The caller supplies data, never executable source.
-function pageAction(action, args, token) {
+function pageAction(action, args, token, staleSnapshot) {
 	const visible = el => el.checkVisibility() && el.getClientRects().length;
 	if (action === "find") {
 		const body = document.body.innerText;
 		const matches = [];
-		const query = args.text?.trim();
-		if (!query) throw Error("Provide text to find.");
+		const query = args.query;
 		const haystack = body.toLowerCase(), needle = query.toLowerCase();
 		for (let i = haystack.indexOf(needle); i >= 0 && matches.length < 20; i = haystack.indexOf(needle, i + needle.length))
 			matches.push(body.slice(Math.max(0, i - 120), i + needle.length + 120));
 		return { matches };
+	}
+	function labelFor(el) {
+		const ids = (el.getAttribute("aria-labelledby") || "").trim().split(/\s+/);
+		const referenced = ids.map(id => id && el.ownerDocument.getElementById(id)?.textContent).filter(Boolean).join(" ");
+		const buttonValue = el.matches("input[type=button],input[type=submit]") ? el.value : "";
+		const labels = [referenced, el.getAttribute("aria-label"), el.labels?.[0]?.innerText, el.innerText,
+			el.alt, el.querySelector("img[alt]")?.alt, el.querySelector("svg title")?.textContent,
+			el.placeholder, el.title, buttonValue, el.textContent];
+		const label = labels.find(value => typeof value === "string" && value.trim());
+		if (label) return label.trim().slice(0, 200);
+		return el.matches("a[href]") && /^https?:$/.test(el.protocol) ? (el.origin + el.pathname).slice(0, 200) : "";
 	}
 	if (action === "read") {
 		const visibleElements = Array.from(document.querySelectorAll("a[href],summary,button,input,select,textarea,[contenteditable=true],[role=button]"))
@@ -29,6 +44,7 @@ function pageAction(action, args, token) {
 		}
 		globalThis.piBrowserElements = elements;
 		globalThis.piBrowserSnapshot = token;
+		const items = elements.map((el, index) => ({ id: index + 1, role: el.getAttribute("role") || el.tagName.toLowerCase(), label: labelFor(el) }));
 		return {
 			title: document.title,
 			url: location.origin + location.pathname,
@@ -37,24 +53,19 @@ function pageAction(action, args, token) {
 			textTruncated: text.length > 24000,
 			elementsTruncated: visibleElements.length > elements.length,
 			text: text.slice(0, 24000),
-			elements: elements.map((el, index) => ({
-				id: index + 1,
-				role: el.getAttribute("role") || el.tagName.toLowerCase(),
-				label: (el.getAttribute("aria-label") || el.labels?.[0]?.innerText || el.innerText || el.placeholder || el.title || "").slice(
-					0,
-					200,
-				),
-			})),
+			elements: items,
+			...(items.some(item => !item.label) ? { hint: "For unnamed controls use view, then clickAt with the snapshot from view." } : {}),
 		};
 	}
 	function describe(el) {
 		if (!el) return { label: "?", confirm: true };
-		if (!el.isConnected || !visible(el)) throw Error("Element changed. Read again.");
+		if (!el.isConnected || !visible(el)) throw staleSnapshot("Element changed. Read again.");
 		const buttonValue = el.matches("input[type=button],input[type=submit]") ? el.value : "";
-		const label = (el.innerText || el.getAttribute("aria-label") || buttonValue || el.getAttribute("placeholder") || el.title || el.tagName).trim().slice(0, 160);
+		const actionLabel = (el.innerText || el.getAttribute("aria-label") || buttonValue || el.getAttribute("placeholder") || el.title || el.tagName).trim().slice(0, 160);
+		const label = labelFor(el) || actionLabel;
 		const navigation = el.matches("a[href]") && /^https?:$/.test(el.protocol) && !el.matches("[download],[onclick],[role=button]") && el.getAttribute("href") !== "#";
-		const browse = /^(search|next|previous|more|expand|搜索|查询|下一页|上一页|展开|加载更多)$/i.test(label);
-		const consequential = /submit|send|delete|remove|purchase|order now|confirm|save|提交|发送|删除|购买|下单|确认|保存/i.test(label + " " + (el.getAttribute("href") || ""));
+		const browse = /^(search|next|previous|more|expand|搜索|查询|下一页|上一页|展开|加载更多)$/i.test(actionLabel);
+		const consequential = /submit|send|delete|remove|purchase|order now|confirm|save|提交|发送|删除|购买|下单|确认|保存/i.test([actionLabel, label, el.getAttribute("href")].join(" "));
 		const input = el.matches("textarea,input[type=text],input[type=search],input:not([type]),[contenteditable=true]");
 		return { label, href: el.href, confirm: consequential || (!input && !navigation && !browse && !el.matches("summary,[aria-expanded]")) };
 	}
@@ -82,7 +93,7 @@ function pageAction(action, args, token) {
 		globalThis.piBrowserPoint = { element, fields: controlState(element), description: JSON.stringify(description) };
 		return description;
 	}
-	if (args.snapshot !== globalThis.piBrowserSnapshot) throw Error("Page changed. Read again.");
+	if (args.snapshot !== globalThis.piBrowserSnapshot) throw staleSnapshot("Page changed. Read again.");
 	if (action === "inspect") {
 		const el = globalThis.piBrowserElements?.[args.element - 1];
 		globalThis.piBrowserFields = controlState(el);
@@ -94,9 +105,9 @@ function pageAction(action, args, token) {
 		return true;
 	}
 	const el = globalThis.piBrowserElements?.[args.element - 1];
-	if (!el?.isConnected || !visible(el) || el.matches(":disabled")) throw Error("Element changed. Read the page again.");
+	if (!el?.isConnected || !visible(el) || el.matches(":disabled")) throw staleSnapshot("Element changed. Read the page again.");
 	if (action === "click") {
-		if (globalThis.piBrowserFields !== controlState(el) || JSON.stringify(describe(el)) !== JSON.stringify(args.expected)) throw Error("Element changed. Read again.");
+		if (globalThis.piBrowserFields !== controlState(el) || JSON.stringify(describe(el)) !== JSON.stringify(args.expected)) throw staleSnapshot("Element changed. Read again.");
 		el.click();
 		return true;
 	}
@@ -126,6 +137,7 @@ function pageAction(action, args, token) {
 
 export function installEmbeddedBrowser(getWindow, getOrigin, getClient) {
 	const tabs = new Map();
+	const navigation = new WeakMap();
 	let active, shown, bounds, owner, snapshot, attached, visual, confirmation;
 	const requests = new Map();
 	const current = () => tabs.get(active)?.webContents;
@@ -142,6 +154,7 @@ export function installEmbeddedBrowser(getWindow, getOrigin, getClient) {
 			id,
 			title: view.webContents.getTitle(),
 			url: view.webContents.getURL(),
+			failure: navigation.get(view.webContents)?.failure,
 			back: view.webContents.navigationHistory.canGoBack(),
 			forward: view.webContents.navigationHistory.canGoForward(),
 		})),
@@ -200,20 +213,17 @@ export function installEmbeddedBrowser(getWindow, getOrigin, getClient) {
 			});
 		});
 		tabs.set(wc.id, view);
-		wc.on("will-navigate", (event, target) => {
-			try {
-				url(target);
-			} catch {
+		const nav = trackBrowserNavigation(wc, url, publish);
+		navigation.set(wc, nav);
+		function guardNavigation(event) {
+			try { url(event.url); }
+			catch {
 				event.preventDefault();
+				if (event.isMainFrame) nav.block(event.url);
 			}
-		});
-		wc.on("will-redirect", (event, target) => {
-			try {
-				url(target);
-			} catch {
-				event.preventDefault();
-			}
-		});
+		}
+		wc.on("will-navigate", guardNavigation);
+		wc.on("will-redirect", guardNavigation);
 		wc.setWindowOpenHandler(({ url: target }) => {
 			if (!shown || current() !== wc) return { action: "deny" };
 			if (target && target !== "about:blank") {
@@ -319,7 +329,10 @@ export function installEmbeddedBrowser(getWindow, getOrigin, getClient) {
 					break;
 				}
 				case "go":
-					await wc.loadURL(url(value));
+					await navigation.get(wc).go(value);
+					break;
+				case "retry":
+					if (value === active) await navigation.get(wc).retry();
 					break;
 				case "back":
 					wc.navigationHistory.goBack();
@@ -338,7 +351,8 @@ export function installEmbeddedBrowser(getWindow, getOrigin, getClient) {
 		const wc = current();
 		if (!shown || !bounds || !owner || owner !== msg.owner || msg.client !== getClient() || !getWindow()?.isVisible() || !wc)
 			throw Error("Browser control is inactive. Ask the user to open the Browser panel in this conversation, then retry.");
-		const a = msg.args;
+		const a = msg.args.action === "find" ? { ...msg.args, query: (msg.args.query ?? msg.args.text)?.trim() } : msg.args;
+		if (a.action === "find" && !a.query) throw Error("Provide text to find using query (or text).");
 		if (["fill", "type"].includes(a.action) && typeof a.text !== "string") throw Error("Missing input text.");
 		if (a.action === "key" && !["Enter", "Tab", "Escape", "ArrowDown", "ArrowUp"].includes(a.key)) throw Error("Unsupported key.");
 		if (wc.isLoadingMainFrame()) throw Error("Page is loading. Read again.");
@@ -346,19 +360,26 @@ export function installEmbeddedBrowser(getWindow, getOrigin, getClient) {
 		if (!blank) url(wc.getURL());
 		const signal = requests.get(msg.id).signal;
 		const observe = ["read", "view", "find", "tabs"].includes(a.action);
-		if (!observe && (!snapshot || a.snapshot !== snapshot)) throw Error("Page changed. Read the active tab again.");
+		if (!observe && !a.snapshot?.trim()) throw Error("Missing snapshot. Pass the exact snapshot returned by the latest read or view.");
+		if (!observe && a.snapshot !== snapshot) throw staleSnapshot("Page changed. Read the active tab again. For screenshot input, use view again and pass its snapshot.");
 		const token = observe ? randomUUID() : snapshot;
 		if (observe) {
 			invalidate();
 			snapshot = token;
 		}
 		const check = () => {
-			if (signal.aborted || snapshot !== token || current() !== wc || owner !== msg.owner || !shown || !bounds || !getWindow()?.isVisible())
-				throw Error("Page changed or request cancelled. Read again.");
+			if (signal.aborted || owner !== msg.owner || !shown || !bounds || !getWindow()?.isVisible()) throw Error("Browser control cancelled or inactive.");
+			if (snapshot !== token || current() !== wc) throw staleSnapshot("Page changed. Read or view the active tab again.");
 		};
-		const run = (action, data = a) => wc.executeJavaScriptInIsolatedWorld(1001, [{
-			code: "(" + pageAction.toString() + ")(" + JSON.stringify(action) + "," + JSON.stringify(data) + "," + JSON.stringify(token) + ")",
-		}]);
+		async function run(action, data = a) {
+			const args = [action, data, token].map(value => JSON.stringify(value)).join(",");
+			const response = await wc.executeJavaScriptInIsolatedWorld(1001, [{
+				code: `(() => { try { return { value: (${pageAction.toString()})(${args},${staleSnapshot.toString()}) }; }
+					catch (error) { return { error: String(error.message || error), stale: error.name === "StaleBrowserSnapshot" }; } })()`,
+			}]);
+			if (response.error) throw response.stale ? staleSnapshot(response.error) : Error(response.error);
+			return response.value;
+		}
 		async function approve(target) {
 			check();
 			const accepted = await new Promise(resolve => {
@@ -397,14 +418,19 @@ export function installEmbeddedBrowser(getWindow, getOrigin, getClient) {
 		}
 		if (a.purpose && ["fill", "navigate", "openTab"].includes(a.action)) await approve(a.url || a.action);
 		if (a.action === "openTab") {
-			const destination = a.url && url(a.url);
+			let destination;
+			try { destination = a.url && url(a.url); }
+			catch { return { ok: false, code: "UNSUPPORTED_URL", url: "", canRetry: false }; }
 			const tab = add();
-			if (destination) await tab.loadURL(destination);
+			if (destination) {
+				const result = await navigation.get(tab).go(destination, signal);
+				if (!result.ok) return result;
+			}
 			return "Tab opened";
 		}
 		if (a.action === "navigate") {
-			await wc.loadURL(url(a.url));
-			return "Navigated";
+			const result = await navigation.get(wc).go(a.url, signal);
+			return result.ok ? "Navigated" : result;
 		}
 		if (blank && a.action === "read") return { snapshot: token, text: "New tab", elements: [] };
 		if (blank) throw Error("Navigate to a web page first.");
@@ -414,13 +440,14 @@ export function installEmbeddedBrowser(getWindow, getOrigin, getClient) {
 			const focus = await run("rememberFocus");
 			const frame = await capture();
 			check();
-			if (bounds.width !== viewport.width || bounds.height !== viewport.height || wc.getZoomFactor() !== zoom) throw Error("Viewport changed. View again.");
+			if (bounds.width !== viewport.width || bounds.height !== viewport.height || wc.getZoomFactor() !== zoom) throw staleSnapshot("Viewport changed. View again.");
 			visual = { ...frame.getSize(), frame, focus, zoom };
 			return { snapshot: token, ...frame.getSize(), image: frame.toJPEG(80).toString("base64") };
 		}
 		if (["clickAt", "scrollAt", "type", "key"].includes(a.action)) {
 			const shot = visual;
-			if (!shot || shot.zoom !== wc.getZoomFactor()) throw Error("View the current page first.");
+			if (!shot) throw Error("Pass the snapshot returned by view for screenshot input.");
+			if (shot.zoom !== wc.getZoomFactor()) throw staleSnapshot("Page zoom changed. View again.");
 			const pointer = a.action === "clickAt" || a.action === "scrollAt";
 			if (pointer && !(Number.isInteger(a.x) && a.x >= 0 && a.x < shot.width && Number.isInteger(a.y) && a.y >= 0 && a.y < shot.height))
 				throw Error("Coordinates outside screenshot.");
@@ -435,10 +462,10 @@ export function installEmbeddedBrowser(getWindow, getOrigin, getClient) {
 				const x = Math.max(0, a.x - 24), y = Math.max(0, a.y - 24);
 				const region = { x, y, width: Math.min(49, shot.width - x), height: Math.min(49, shot.height - y) };
 				if (!frame.crop(region).toBitmap().equals(shot.frame.crop(region).toBitmap()) ||
-					(target && !await run("checkPoint", location))) throw Error("Screenshot target changed. View again.");
-			} else if (!await run("checkFocus")) throw Error("Focused field changed. View again.");
+					(target && !await run("checkPoint", location))) throw staleSnapshot("Screenshot target changed. View again.");
+			} else if (!await run("checkFocus")) throw staleSnapshot("Focused field changed. View again.");
 			check();
-			if (shot.zoom !== wc.getZoomFactor()) throw Error("Page zoom changed. View again.");
+			if (shot.zoom !== wc.getZoomFactor()) throw staleSnapshot("Page zoom changed. View again.");
 			const point = pointer ? { x: Math.floor(a.x * bounds.width / shot.width), y: Math.floor(a.y * bounds.height / shot.height) } : undefined;
 			invalidate();
 			wc.focus();
@@ -489,7 +516,9 @@ export function installEmbeddedBrowser(getWindow, getOrigin, getClient) {
 				requests.set(msg.id, new AbortController());
 				execute(msg).then(
 					result => reply({ result }),
-					err => reply({ error: err.message }),
+					err => err.name === "StaleBrowserSnapshot"
+						? reply({ result: { status: "stale_snapshot", message: err.message } })
+						: reply({ error: err.message }),
 				).finally(() => requests.delete(msg.id));
 			});
 		},

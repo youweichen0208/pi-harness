@@ -61,6 +61,9 @@ const zh = {
 	browserForward: "前进",
 	browserBack: "后退",
 	browserReload: "刷新",
+	browserLoadFailed: "无法加载网页。",
+	browserAddressBlocked: "浏览器不允许打开此地址。",
+	browserCommandFailed: "浏览器操作未完成，请重试。",
 	browserExpand: "展开或还原",
 	browserFeishu: "飞书",
 
@@ -2712,6 +2715,9 @@ const en: Record<keyof typeof zh, string> = {
 	browserForward: "Forward",
 	browserBack: "Back",
 	browserReload: "Reload",
+	browserLoadFailed: "Could not load the page.",
+	browserAddressBlocked: "This address is blocked.",
+	browserCommandFailed: "Browser action could not be completed. Try again.",
 	browserExpand: "Expand or restore",
 	browserFeishu: "Feishu",
 
