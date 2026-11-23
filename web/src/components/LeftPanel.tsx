@@ -1,3 +1,4 @@
+import { BrandWordmark } from "./BrandWordmark";
 import { memo, useEffect, useRef, useState, type ReactNode } from "react";
 import {
 	FiSearch,
@@ -405,7 +406,7 @@ export const LeftPanel = memo(function LeftPanel({
 	return (
 		<aside className={`panel panel-left workspace-navigation compact-navigation ${directoryCollapsed ? "directory-collapsed" : ""}`}>
 			<div className="global-navigation">
-				<div className="compact-brand"><img src="/icon/1a-mark.svg" alt="" /><span>pi-harness</span></div>
+				<div className="compact-brand"><img src="/icon/1a-mark.svg" alt="pi" /><BrandWordmark /></div>
 				<div className="compact-workspace-switcher" ref={switcherRef} onKeyDown={event => {
 					if (event.key === "Escape") { setWorkspaceOpen(false); switcherButton.current?.focus(); }
 					if (workspaceOpen && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
@@ -433,7 +434,7 @@ export const LeftPanel = memo(function LeftPanel({
 						<button className="workspace-picker-create" disabled={workspaceBusy} onClick={() => { setWorkspaceName(""); setWorkspaceForm("create"); setWorkspaceOpen(false); }}><FiPlus />{t("workspaceNew")}</button>
 					</div>}
 				</div>
-				{!notesOpen && selectedGroup && <label className="navigation-search"><FiSearch aria-hidden="true" /><input className="workspace-project-search" type="search" aria-label={t("workspaceSearch")} placeholder={t("workspaceSearch")} value={workspaceQuery} onChange={event => setWorkspaceQuery(event.target.value)} /></label>}
+				{!notesOpen && selectedGroup && <label className="navigation-search"><FiSearch aria-hidden="true" /><input className="workspace-project-search" type="search" aria-label={t("workspaceSearch")} placeholder={t("workspaceSearchShort")} title={t("workspaceSearch")} value={workspaceQuery} onChange={event => setWorkspaceQuery(event.target.value)} /></label>}
 				<nav className="global-entries">
 					<div className="global-chat-entry"><button title={t("notesChat")} className={!notesOpen && !scratchOpen ? "active" : ""} onClick={() => onNavigate("chat")}><FiMessageSquare /><span>{t("notesChat")}</span></button><button type="button" className="global-new-chat" title={t("newChat")} aria-label={t("newChat")} disabled={!ready} onClick={onNewChat}><FiPlus /></button></div>
 					<button title={t("knowledgeLibrary")} onClick={() => onNavigate("knowledge")}><FiBookOpen /><span>{t("knowledgeLibrary")}</span></button>

@@ -1,6 +1,15 @@
 import type { useT } from "./i18n";
 
 const actions = {
+	find: "browserFind",
+	tabs: "browserTabs",
+	openTab: "browserOpenTab",
+	selectTab: "browserSelectTab",
+	view: "browserView",
+	clickAt: "browserActionClick",
+	scrollAt: "browserActionScroll",
+	type: "browserActionFillForm",
+	key: "browserKey",
 	read: "browserActionSnapshot",
 	navigate: "browserActionNavigate",
 	click: "browserActionClick",

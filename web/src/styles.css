@@ -375,7 +375,7 @@
 	--term-bright-cyan: #22d3ee;
 	--term-bright-white: #ffffff;
 	--sans: Inter, "Source Han Sans SC", "UI SC", "UI Symbols", "PI Emoji", system-ui, sans-serif;
-	--brand-font: "Libre Baskerville", "Source Han Serif SC", "Noto Serif SC", Georgia, serif;
+	--brand-font: var(--sans);
 	--mono: "JetBrains Mono", "Source Han Sans SC", "UI SC", "UI Symbols", "PI Emoji", monospace;
 	--command-font: var(--sans);
 	--shell-font: var(--mono);
@@ -11260,7 +11260,7 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { height: 44px;
 	content: ""; width: 18px; height: 18px; background: url("/icon/1a-mark.svg") center / contain no-repeat; border-radius: var(--r-sm);
 }
 .wiki-chat-brand { width: 18px; height: 18px; background: transparent; border-radius: var(--r-sm); }
-.brand-logo { width: 18px; height: 18px; border-radius: var(--r-sm); background: transparent; }
+.brand-logo { width: 19.5px; height: 19.5px; border-radius: var(--r-sm); background: transparent; }
 .wiki-tree-row.selected { box-shadow: none; }
 .wiki-tree-label button { color: var(--text-faint); }
 .wiki-tree-label button:hover { color: var(--accent); }
@@ -13386,8 +13386,8 @@ html.pi-desktop .wiki-window-header .desktop-window-controls { -webkit-app-regio
 	background-position: center; container-type: inline-size;
 }
 .welcome-paper .welcome-motto {
-	margin: 0; font-family: "Times New Roman", "Source Serif 4", Georgia, serif;
-	font-size: clamp(28px, 6.4cqw, 76px); font-weight: 400; font-style: italic;
+	margin: 0; font-family: var(--brand-font);
+	font-size: clamp(28px, 6.4cqw, 76px); font-weight: 600; font-style: normal;
 	line-height: 1.08; letter-spacing: -0.045em; text-align: center; color: var(--welcome-ink);
 }
 .welcome-motto > span { display: block; }
@@ -13599,8 +13599,8 @@ html.pi-desktop .wiki-window-header .desktop-window-controls { -webkit-app-regio
 .compact-navigation .global-navigation { position: relative; width: var(--left-w, 240px); height: 100%; padding: 12px 8px 8px; background: var(--sidebar-bg); border-right: 1px solid var(--border-soft); font-size: 13px; }
 .compact-workspace-switcher { position: relative; flex: none; margin-bottom: 12px; }
 .compact-workspace-trigger { display: flex; align-items: center; gap: 10px; width: 100%; height: 34px; padding: 4px 8px; border: 0; background: transparent; color: var(--text); font: inherit; cursor: pointer; }
-.compact-brand { display: flex; align-items: center; gap: 10px; height: 40px; padding: 4px 8px; margin-bottom: 8px; flex: none; }
-.compact-brand img { width: 24px; height: 24px; flex: none; }
+.compact-brand { display: flex; align-items: center; gap: 1px; height: 40px; padding: 4px 8px; margin-bottom: 8px; flex: none; }
+.compact-brand img { width: 26px; height: 26px; flex: none; }
 .compact-brand > span { font-size: 17px; font-weight: 600; color: var(--text); white-space: nowrap; }
 .compact-navigation.directory-collapsed:not(:hover):not(:focus-within) .compact-brand > span { display: none; }
 @media (max-width: 900px) {
@@ -13673,10 +13673,13 @@ html.pi-desktop .wiki-window-header .desktop-window-controls { -webkit-app-regio
 	.drawer-left.open .compact-navigation.directory-collapsed .sidebar-footer span span { display: inline; }
 	.drawer-left.open .compact-navigation.directory-collapsed .navigation-search { display: flex; }
 }
-html.pi-desktop-darwin .compact-navigation .global-navigation { padding-top: 36px; }
+html.pi-desktop .compact-navigation .global-navigation { --desktop-brand-inset: 12px; }
+html.pi-desktop-darwin .compact-navigation .global-navigation {
+	--desktop-brand-inset: 44px;
+	padding-top: var(--desktop-brand-inset);
+}
 /* Include the navigation's top/side padding without moving the brand or entries. */
 html.pi-desktop .compact-navigation .compact-brand {
-	--desktop-brand-inset: 12px;
 	height: calc(34px + var(--desktop-brand-inset));
 	margin-top: calc(-1 * var(--desktop-brand-inset));
 	margin-inline: -8px;
@@ -13685,7 +13688,10 @@ html.pi-desktop .compact-navigation .compact-brand {
 	app-region: drag;
 	user-select: none;
 }
-html.pi-desktop-darwin .compact-navigation .compact-brand { --desktop-brand-inset: 36px; }
+html.pi-desktop-darwin .compact-navigation .compact-brand {
+	padding-top: calc(8px + var(--desktop-brand-inset));
+	padding-bottom: 0;
+}
 .compact-project-shortcut { display: none; border: 0; background: transparent; color: var(--text); height: 30px; margin-top: 12px; }
 .compact-project-shortcut svg { width: 14px; height: 14px; }
 .compact-navigation.directory-collapsed:not(:hover):not(:focus-within) .compact-project-shortcut { display: block; }
@@ -13773,7 +13779,7 @@ html.pi-desktop-darwin .compact-navigation .compact-brand { --desktop-brand-inse
 .design-workspace .view-pane:not(.wiki-view) .main .msg-assistant .msg-text .md p { margin-block: 12px; }
 .design-workspace .view-pane:not(.wiki-view) .main .msg-text .md :is(ul, ol) { padding-left: 24px; }
 .design-workspace .view-pane:not(.wiki-view) .main .msg-text .md li { margin-block: 4px; }
-.design-workspace .view-pane:not(.wiki-view) .main .msg-text .md :not(pre) > code { font-size: .9em; padding: 1px 4px; border-radius: var(--r-sm); background: var(--bg-elev2); line-height: inherit; vertical-align: baseline; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+.design-workspace .view-pane:not(.wiki-view) .main .msg-text .md :not(pre) > code { font-size: 14px; padding: 1px 4px; border-radius: var(--r-sm); background: var(--bg-elev2); line-height: inherit; vertical-align: baseline; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
 .design-workspace .system-event { font-size: 12px; }
 .design-workspace .system-event::before, .design-workspace .system-event::after { display: none; }
 .design-workspace .topbar-actions { flex: none; gap: 4px; }
@@ -16040,6 +16046,34 @@ span.rich-math { display: inline-block; }
 .design-workspace .compact-navigation .session-item { min-height: 38px; font-size: 14px; line-height: 22px; }
 .design-workspace .compact-navigation .session-title { font-size: 14px; }
 .design-workspace .compact-navigation .session-time { font-size: 12px; }
+/* Hidden project actions give their space back to the name. Touch keeps both actions visible. */
+@media (hover: hover) {
+	.design-workspace .compact-navigation .lp-row:not(:focus-within):not(:has(> .lp-menu-zone:is(:hover, .is-open))) > .project-item:not(:hover) { padding-right: 8px; }
+}
+:root .design-workspace .compact-navigation .project-item.active:not(:hover):not(:focus-visible) { background: transparent; }
+.compact-navigation .workspace-directory { container-type: inline-size; container-name: project-directory; }
+.design-workspace .compact-navigation .panel-sessions { margin-inline-start: 4px; padding-inline-start: 2px; }
+.design-workspace .compact-navigation .session-item { column-gap: 6px; }
+.compact-navigation .session-dot { margin-inline: 0; }
+.compact-navigation .navigation-search { border-radius: var(--r-md); }
+.compact-navigation .navigation-search:focus-within { border-color: var(--accent); }
+
+@container project-directory (max-width: 210px) {
+	.design-workspace .compact-navigation .session-item {
+		display: grid;
+		grid-template-columns: 5px minmax(0, 1fr) auto;
+		grid-template-areas: "dot title title" ". time source";
+		align-items: start;
+		row-gap: 2px;
+		padding: 6px 8px;
+	}
+	.compact-navigation .session-dot { grid-area: dot; margin-top: 7px; }
+	.compact-navigation .session-info { grid-area: title; }
+	.compact-navigation .session-src { grid-area: source; }
+	.design-workspace .compact-navigation .session-time { grid-area: time; margin: 0; text-align: start; line-height: 15px; font-size: 11px; }
+	.compact-navigation .lp-row > .session-item + .lp-menu-zone { top: 2px; transform: none; }
+	.compact-navigation .lp-row:is(:focus-within, :has(> .session-item:hover, > .lp-menu-zone:is(:hover, .is-open))) > .session-item .session-info { padding-inline-end: 24px; }
+}
 .compact-navigation .sidebar-footer button { min-height: 36px; font-size: 14px; }
 .compact-navigation .workspace-picker .workspace-list-row > button { min-height: 36px; font-size: 14px; }
 
@@ -16057,7 +16091,13 @@ span.rich-math { display: inline-block; }
 .design-workspace .panel-right .file-item > .file-name,
 .design-workspace .panel-right .file-dir-main { font-size: 14px; }
 .design-workspace .msg-assistant .msg-text:not(.process-narration) .md,
-.design-workspace .msg-user .msg-text .md { font-size: 16px; line-height: 1.7; }
+.design-workspace .msg-user .msg-text .md,
+.node-agent-message > .md {
+	font-family: var(--sans);
+	font-size: 16px;
+	font-weight: 400;
+	line-height: 1.75;
+}
 .design-workspace .msg-assistant .msg-text:not(.process-narration) .md > :is(p, ul, ol, blockquote) { max-width: 88ch; }
 .design-workspace .inputbox textarea { font-size: 16px; line-height: 1.6; }
 .design-workspace .input-tools .chip { font-size: 13px; }
@@ -16452,7 +16492,7 @@ html[data-platform="win32"] .design-workspace .msg-assistant .msg-text.process-n
 	line-height: 1.7;
 	color: var(--text);
 }
-html[data-platform="win32"] .design-workspace .msg-text .md :is(h1, h2, h3, h4, h5, h6) {
+html[data-platform="win32"] .design-workspace .msg-text .md :is(h2, h3, h4, h5, h6) {
 	font-weight: 600;
 	letter-spacing: normal;
 }
@@ -16466,6 +16506,18 @@ html[data-platform="win32"] :is(.inputbox, .node-agent-input, .node-agent-dialog
 html[data-platform="win32"] .node-agent-message > small { font-size: 12px; }
 html[data-platform="win32"] .node-agent-message pre { font-size: 14px; line-height: 1.6; }
 html[data-platform="win32"] :is(.settings-tab-label, .input-tools .chip, .reply-actions) { font-size: 14px; }
+
+.design-workspace :is(.msg-assistant, .msg-user) .msg-text:not(.process-narration) .md h1,
+.node-agent-message > .md h1 {
+	font-size: 24px;
+	font-weight: 700;
+	line-height: 1.4;
+}
+.design-workspace :is(.msg-assistant, .msg-user) .msg-text:not(.process-narration) .md :is(pre, code),
+.node-agent-message > .md :is(pre, code) {
+	font-family: var(--mono);
+	font-size: 14px;
+}
 
 /* Long command feedback: factual receipt state, without a live announcement timer. */
 .bash-output-feedback {
@@ -16550,6 +16602,11 @@ html[data-platform="win32"] :is(.settings-tab-label, .input-tools .chip, .reply-
 @media (prefers-reduced-motion: reduce) { :root .design-workspace .bash-shell-card .bash-detail-controls { transition: none; } }
 
 /* Desktop embedded browser */
+.embedded-controls { position: relative; }
+.embedded-controls:has(.browser-confirmation) > .embedded-toolbar { visibility: hidden; }
+.browser-confirmation { position: absolute; inset: 0; z-index: 1; overflow: auto; box-sizing: border-box; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-content: center; gap: 2px 8px; padding: 4px 8px; background: var(--bg); }
+.browser-confirmation span { grid-column: 1; overflow: auto; white-space: nowrap; }
+.browser-confirmation div { grid-column: 2; grid-row: 1 / span 3; align-self: center; display: flex; gap: 4px; }
 .embedded-browser { width: clamp(320px, 38vw, 720px); flex: none; min-height: 0; display: flex; flex-direction: column; border-left: 1px solid var(--border); background: var(--bg); color: var(--text); }
 .embedded-browser.expanded { position: absolute; inset: 0 0 0 auto; z-index: 5; width: 85%; }
 .embedded-toolbar { display: flex; align-items: center; gap: 4px; padding: 6px 8px; border-bottom: 1px solid var(--border); }
@@ -16564,18 +16621,18 @@ html[data-platform="win32"] :is(.settings-tab-label, .input-tools .chip, .reply-
 .embedded-tabs button:first-child { max-width: 150px; white-space: nowrap; overflow: hidden; }
 .embedded-viewport { flex: 1; min-height: 0; overflow: auto; }
 .embedded-viewport:has(.browser-start) { display: flex; flex-direction: column; padding: 24px 18px; }
-.browser-start { width: min(100%, 560px); margin: auto; padding-bottom: min(12vh, 96px); }
-.browser-start h2 { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 0 0 28px; font-size: clamp(28px, 3vw, 40px); font-weight: 650; letter-spacing: -.035em; }
-.browser-start-search { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 4px 0 18px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--r-switch); box-shadow: 0 2px 8px var(--shadow-soft); }
+.browser-start { width: min(100%, 560px); margin: auto; padding-bottom: min(15vh, 116px); }
+.browser-start h2 { display: flex; align-items: center; justify-content: center; gap: 1px; margin: 0 0 18px; font-size: clamp(28px, 3vw, 40px); font-weight: 650; letter-spacing: -.035em; }
+.browser-start-search { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 4px 0 14px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--r-lg); }
 .browser-start-search:has(input:focus) { outline: 2px solid var(--accent); outline-offset: -1px; box-shadow: none; }
 .browser-start .browser-start-search input:focus { outline: none; box-shadow: none; }
 .browser-start-search > svg { flex: none; color: var(--text-dim); }
 .browser-start-search input { flex: 1; width: 0; min-width: 0; font: inherit; font-size: 15px; color: inherit; background: transparent; border: 0; outline: none; }
 .browser-start-search button, .browser-shortcuts button { display: grid; place-items: center; border: 0; background: transparent; color: inherit; cursor: pointer; }
-.browser-start-search button { width: 44px; height: 44px; border-radius: var(--r-switch); }
-.browser-shortcuts { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 20px; }
-.browser-shortcuts button { gap: 8px; width: 70px; padding: 10px 4px; border-radius: var(--r-lg); font: inherit; font-size: 12px; }
-.browser-shortcuts button span { display: grid; place-items: center; width: 40px; height: 40px; border-radius: var(--r-switch); background: var(--bg-elev2); font-size: 20px; }
+.browser-start-search button { width: 40px; height: 40px; color: var(--text-dim); border-radius: var(--r-md); }
+.browser-shortcuts { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; margin-top: 10px; }
+.browser-shortcuts button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 36px; padding: 4px 10px; border-radius: var(--r-lg); font: inherit; font-size: 12px; }
+.browser-shortcuts button span { display: grid; place-items: center; color: var(--text-dim); font-size: 16px; }
 .browser-start button:hover { background: var(--row-active); }
 .browser-start button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
@@ -16638,4 +16695,23 @@ html[data-platform="win32"] :is(.settings-tab-label, .input-tools .chip, .reply-
 .wf-detail select { max-width: 100%; }
 .wf-jump { margin-inline-start: 6px; border: 0; color: var(--accent); background: transparent; }
 
-.compact-brand, .brand-name, .browser-start h2 { font-family: var(--brand-font); }
+.compact-brand > span, .brand-name, .browser-start h2,
+.design-workspace .msg-assistant > .msg-meta .msg-role,
+.design-workspace .msg-collapsed-role.role-assistant,
+.node-agent-message.assistant .node-agent-author,
+.node-agent-welcome strong {
+	font-family: var(--brand-font);
+	font-weight: 600;
+	font-style: normal;
+}
+
+
+.brand-logo + .brand-name { margin-inline-start: -7px; }
+.brand-connector {
+	display: inline-block;
+	font-size: .83em;
+	font-weight: 400;
+	color: color-mix(in srgb, currentColor 72%, transparent);
+	vertical-align: .045em;
+	margin-inline-end: -.035em;
+}

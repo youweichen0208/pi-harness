@@ -40,9 +40,9 @@ function commonFonts(metrics) {
 		.filter(url => url.includes('/ui-sc-') || (url.includes('/fonts/jetbrains-mono/') && !url.includes('-latin-ext-'))))].sort();
 }
 function sharedFace(metrics, sample, family) {
-	const face = metrics.faces[sample]?.find(font => font.familyName === family);
+	const face = metrics.faces[sample]?.find(font => font.familyName === family || font.postScriptName === family);
 	assert(face, `Missing ${family} in ${metrics.platform} ${sample}`);
-	return { family: face.familyName, bundled: face.isCustomFont };
+	return { family, bundled: face.isCustomFont };
 }
 for (const { file, scale } of windows) {
 	const win = read(file);
@@ -53,7 +53,7 @@ for (const { file, scale } of windows) {
 	assert.equal(win.electron, mac.electron, 'Compare the same Electron version');
 	for (const key of ['width', 'height', 'bodySize', 'typography', 'surfaces', 'ui']) compare(windowsReference[key], win[key], `${file}.${key}`);
 	assert(win.typography.light.every(sample => sample.family.startsWith('Inter')), 'Windows uses the shared UI typography');
-	for (const [sample, family] of Object.entries({ playground: 'JetBrains Mono', notes: 'Inter', brand: 'Libre Baskerville' })) {
+	for (const [sample, family] of Object.entries({ playground: 'JetBrains Mono', notes: 'Inter', brand: 'Inter-SemiBold' })) {
 		assert.deepEqual(sharedFace(win, sample, family), sharedFace(mac, sample, family), `${file}.${sample}: actual primary face`);
 	}
 	assert.deepEqual(sharedFace(win, 'playground', 'Source Han Sans SC'), sharedFace(mac, 'playground', 'Source Han Sans SC'), 'same Source Han Sans SC glyphs in the editor');

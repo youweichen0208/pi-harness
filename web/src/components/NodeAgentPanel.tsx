@@ -55,7 +55,7 @@ export function NodeAgentPanel({ nodeId, defaultDir, connected, agent, request, 
 		&& lastReply.content.some(block => block.type === "thinking")
 		&& !lastReply.content.some(block => block.type === "toolCall" || block.type === "image" || "text" in block && typeof block.text === "string" && block.text.trim());
 	const showMessage = (message: UiMessage) => <article key={message.id} className={`node-agent-message ${message.role}`}><small className="node-agent-author">{message.role === "user" ? t("nodeAgentYou") : <><img src="./brand-mark.svg" alt="" />pi</>}</small>{message.errorMessage && <p role="alert" className="node-agent-error">{message.errorMessage}</p>}{message.content.map((block, index) => {
-		if (block.type === "text" && "text" in block && typeof block.text === "string") return <RemoteMarkdown key={index} text={block.text} />;
+		if (block.type === "text" && "text" in block && typeof block.text === "string") return <div className="md" key={index}><RemoteMarkdown text={block.text} /></div>;
 		if (block.type === "thinking" && "thinking" in block && typeof block.thinking === "string") return <details key={index} className="node-agent-thinking"><summary>{t("nodeAgentThinking")}</summary><pre>{block.thinking}</pre></details>;
 		if (block.type === "toolCall" && "id" in block && "name" in block) {
 			const result = results.get(String(block.id)), status = agent?.tools.find(tool => tool.id === block.id);

@@ -29,7 +29,7 @@ const model = createServer(async (req, res) => {
 						index: 0,
 						id: "call-" + Date.now(),
 						type: "function",
-						function: direct ? { name: "embedded_browser", arguments: JSON.stringify({ action: "read" }) } : { name: "codemode", arguments: JSON.stringify({ code: script }) },
+						function: direct ? { name: "embedded_browser", arguments: JSON.stringify(direct === true ? { action: "read" } : direct) } : { name: "codemode", arguments: JSON.stringify({ code: script }) },
 					},
 				],
 			}
@@ -46,19 +46,23 @@ const model = createServer(async (req, res) => {
 });
 const site = createServer((req, res) => {
 	res.setHeader("content-type", "text/html");
+	if (req.url === "/visual") return res.end(`<title>Visual</title><style>* {caret-color:transparent}canvas {position:absolute;left:45px;top:40px;width:45px;height:40px;background:green}</style>
+		<canvas onclick="document.title='Canvas clicked'"></canvas><form onsubmit="event.preventDefault(); document.title='Sent '+(++window.count)"><input autofocus></form>
+		<script>window.count=0</script><details><summary>Details</summary><a href="/page2">Next</a></details>`);
+	if (req.url === "/page2") return res.end("<title>Second page</title>Second page result");
 	if (req.url === "/login") {
 		res.writeHead(303, { location: "/", "set-cookie": "auth=yes; HttpOnly; Max-Age=3600; SameSite=Lax" });
 		return res.end();
 	}
 	res.end(
 		req.headers.cookie?.includes("auth=yes")
-			? '<title>Account</title><p>Private project 314</p><input aria-label="Name"><button onclick="document.title=document.querySelector(\'input\').value">Save</button>'
+			? '<title>Account</title><p>Private project 314</p><input aria-label="Name"><button onclick="document.title=document.querySelector(\'input\').value">Save</button><p>' + "long ".repeat(5100) + 'DistantResult</p>'
 			: '<title>Login</title><a href="/login">Sign in</a>',
 	);
 });
 async function launch() {
 	app = await _electron.launch({
-		args: [".", "--user-data-dir=" + join(root, "profile")],
+		args: [".", "--force-device-scale-factor=2", "--user-data-dir=" + join(root, "profile")],
 		env: { ...process.env, PI_WEB_DATA_DIR: join(root, "data"), PI_CODING_AGENT_DIR: agent, PI_WEB_CWD: root },
 	});
 	await app.firstWindow();
@@ -97,6 +101,7 @@ async function go() {
 	const home = page.locator(".browser-start-search input");
 	const field = await home.isVisible() ? home : page.locator(".embedded-toolbar input");
 	if (field === home) {
+		assert.equal(await page.getByRole("heading", { name: "pi-harness", exact: true }).innerText(), "-harness");
 		await home.focus();
 		const ring = el => [getComputedStyle(el).outlineStyle, getComputedStyle(el.parentElement).outlineStyle];
 		assert.deepEqual(await home.evaluate(ring), ["none", "solid"]);
@@ -130,7 +135,7 @@ try {
 					api: "openai-completions",
 					baseUrl: "http://127.0.0.1:" + model.address().port,
 					apiKey: "fixture",
-					models: [{ id: "fixture", input: ["text"], contextWindow: 64000, maxTokens: 8000 }],
+					models: [{ id: "fixture", input: ["text", "image"], contextWindow: 64000, maxTokens: 8000 }],
 				},
 			},
 		}),
@@ -168,11 +173,59 @@ try {
 		/Done/,
 	);
 	const fresh = (await tool(read)).match(/[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}/i)[0];
-	assert.match(
-		await tool("text(await tools.embedded_browser(" + JSON.stringify({ action: "click", snapshot: fresh, element: 2 }) + "));"),
-		/Done/,
-	);
+	const clickSave = snapshot => tool("text(await tools.embedded_browser(" + JSON.stringify({ action: "click", snapshot, element: 2 }) + "));");
+	const cancelled = clickSave(fresh);
+	const confirmation = page.locator(".browser-confirmation");
+	await confirmation.getByRole("button").first().click();
+	assert.match(await cancelled, /cancelled/);
+	await guestTitle("Account");
+	const nextToken = (await tool(read)).match(/[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}/i)[0];
+	const accepted = clickSave(nextToken);
+	await confirmation.getByRole("button").last().click();
+	assert.match(await accepted, /Done/);
+	assert.match(await tool('text(await tools.embedded_browser({action:"find",text:"DistantResult"}))'), /DistantResult/);
 	await guestTitle("Saved314");
+	async function direct(args) {
+		directRead = args;
+		return tool();
+	}
+	const getToken = result => result.match(/[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}/i)[0];
+	const tabs = JSON.parse(JSON.parse(await direct({action:"tabs"})));
+	const visualUrl = "http://127.0.0.1:" + site.address().port + "/visual";
+	await direct({action:"openTab", snapshot:tabs.snapshot, url:visualUrl});
+	await guestTitle("Visual");
+	await app.evaluate(({ webContents }) => webContents.getAllWebContents().find(w => w.getTitle() === "Visual").setZoomFactor(1.25));
+	const view = JSON.parse(JSON.parse(await direct({action:"view"})));
+	const pixels = await app.evaluate(({ webContents }) => webContents.getAllWebContents().find(w => w.getTitle() === "Visual").executeJavaScript("({w:innerWidth,h:innerHeight})"));
+	const hit = direct({action:"clickAt", snapshot:view.snapshot, x:Math.round(65*view.width/pixels.w), y:Math.round(55*view.height/pixels.h), purpose:"Select the green canvas"});
+	await confirmation.getByRole("button").last().click();
+	assert.match(await hit, /Done/);
+	await guestTitle("Canvas clicked");
+	await app.evaluate(({ webContents }) => webContents.getAllWebContents().find(w => w.getTitle() === "Canvas clicked").executeJavaScript("document.querySelector('input').focus()"));
+	const inputSnapshot = getToken(await direct({action:"view"}));
+	assert.match(await direct({action:"type", text:"example", snapshot:inputSnapshot}), /Done/);
+	assert.equal(await app.evaluate(({ webContents }) => webContents.getAllWebContents().find(w => w.getTitle() === "Canvas clicked").executeJavaScript("document.querySelector('input').value")), "example");
+	assert.match(await direct({action:"type", text:"outdated", snapshot:inputSnapshot}), /Read the active tab again/);
+	const press = direct({action:"key", key:"Enter", snapshot:getToken(await direct({action:"view"}))});
+	await confirmation.getByRole("button").last().click();
+	assert.match(await press, /Done/);
+	await guestTitle("Sent 1");
+	const overview = JSON.parse(JSON.parse(await direct({action:"read"})));
+	const expand = overview.elements.find(el => el.label === "Details");
+	assert.match(await direct({action:"click", element:expand.id, snapshot:overview.snapshot}), /Done/);
+	const expanded = JSON.parse(JSON.parse(await direct({action:"read"})));
+	assert.match(await direct({action:"click", element:expanded.elements.find(el => el.label === "Next").id, snapshot:expanded.snapshot}), /Done/);
+	assert.match(await direct({action:"read"}), /Second page result/);
+	await direct({action:"selectTab", tab:tabs.active, snapshot:getToken(await direct({action:"tabs"}))});
+	await guestTitle("Saved314");
+	const scrollSnapshot = JSON.parse(JSON.parse(await direct({action:"view"})));
+	assert.match(await direct({action:"scrollAt", x:40, y:170, direction:"down", snapshot:scrollSnapshot.snapshot}), /Done/);
+	assert.ok(await app.evaluate(({ webContents }) => webContents.getAllWebContents().find(w => w.getTitle() === "Saved314").executeJavaScript("scrollY > 0")));
+	const beforeResize = getToken(await direct({action:"view"}));
+	await page.locator(".embedded-toolbar > button").nth(1).click();
+	await page.locator(".embedded-browser.expanded").waitFor();
+	await page.locator(".embedded-toolbar > button").nth(1).click();
+	assert.match(await direct({action:"clickAt", x:10, y:10, snapshot:beforeResize}), /Read the active tab again/);
 	const priorTab = (await tool(read)).match(/[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}/i)[0];
 	await page.locator(".embedded-toolbar > button").first().click();
 	await page.locator(".embedded-viewport section").waitFor();
@@ -216,7 +269,7 @@ try {
 		if (!popup || !(await popup.executeJavaScript("!!window.opener && !window.electronAPI && !window.require")))
 			throw Error("Popup opener or isolation lost");
 	});
-	console.log("PASS embedded browser login, SDK read/fill/click, stale tab, revocation and persistent session");
+	console.log("PASS embedded browser login, find, tabs, screenshot input, confirmation, stale snapshot, revocation and persistent session");
 } catch (err) {
 	console.error(
 		page?.url(),

@@ -20,7 +20,7 @@ const transcript = [
 	{ id: 'render-user', role: 'user', content: [{ type: 'text', text: '请说明这个项目的本质，并检查文档转换与知识整理。' }], timestamp },
 	{ id: 'render-assistant', role: 'assistant', model: 'render-test', content: [{ type: 'thinking', thinking: '先检查原始资料和已有知识，保留可追溯的来源。', durationMs: 2000 }, { type: 'text', text: '## 本质：职责分离\n\n文档转换保留文字、表格和代码；知识整理提取可信结论，并保留证据与适用条件。\n\n```python\ndef convert_document(source):\n    return source.read_text()  # 中文 ✅\n```' }, ...[1, 2, 3].map(n => ({ type: 'toolCall', id: `render-bash-${n}`, name: 'bash', argumentsText: JSON.stringify({ command: `echo '检查 PDF、CHM 与源码资料的转换结果并核对来源 ${n}'` }) }))], timestamp: timestamp + 1000 },
 	...[1, 2, 3].map(n => ({ id: `render-result-${n}`, role: 'toolResult', toolCallId: `render-bash-${n}`, toolName: 'bash', content: [{ type: 'text', text: '检查完成。\n' }], isError: false, timestamp: timestamp + 2000 + n })),
-	{ id: 'render-final', role: 'assistant', model: 'render-test', content: [{ type: 'text', text: '已检查转换结果。待验证结论保留草稿，人工复核后发布。' }], timestamp: timestamp + 4000 },
+	{ id: 'render-final', role: 'assistant', model: 'render-test', content: [{ type: 'text', text: '# 检查结果 Summary\n\n已检查 `convert_document` 的转换结果。待验证结论保留草稿，人工复核后发布。' }], timestamp: timestamp + 4000 },
 ];
 let app;
 try {
@@ -106,15 +106,17 @@ try {
 			return used;
 		};
 		for (const [name, selector] of [['motto', '.welcome-motto > span:first-child'], ['mottoEmphasis', '.welcome-motto em']]) {
-			const used = await measureFonts(name, selector, ['Times New Roman']);
-			assert(used.every(font => !font.isCustomFont && font.familyName === 'Times New Roman'), `${name}: use the platform's native welcome font`);
-			assert.equal(await page.locator(selector).evaluate(el => getComputedStyle(el).fontStyle), 'italic');
+			const used = await measureFonts(name, selector, [['Inter', 'Inter SemiBold']]);
+			assert(used.every(font => font.isCustomFont && font.postScriptName === 'Inter-SemiBold'), `${name}: use the bundled Inter face`);
+			assert.equal(await page.locator(selector).evaluate(el => [getComputedStyle(el).fontStyle, getComputedStyle(el).fontWeight].join(' ')), 'normal 600');
 		}
 		const brand = page.locator('.compact-brand > span');
 		const brandName = await brand.textContent();
+		assert.equal(brandName, "-harness");
+		assert.equal(await brand.evaluate(el => [getComputedStyle(el).fontStyle, getComputedStyle(el).fontWeight].join(" ")), "normal 600");
 		await brand.evaluate(el => el.textContent += ' 品牌');
 		await page.evaluate(() => document.fonts.ready);
-		await measureFonts('brand', '.compact-brand > span', ['Libre Baskerville', 'Source Han Serif SC']);
+		await measureFonts('brand', '.compact-brand > span', [['Inter', 'Inter SemiBold'], 'Source Han Sans SC']);
 		await brand.evaluate((el, value) => el.textContent = value, brandName);
 		const ui = {};
 		const sampleControl = async (name, selector, size = false) => {
@@ -143,6 +145,21 @@ try {
 		assert.equal(new Set(fonts.filter(font => /ui-sc-/.test(font.url)).map(font => font.url)).size, 3);
 		assert(fonts.some(font => /jetbrains-mono/.test(font.url) && font.status === 200));
 		conversation = true; await page.reload(); await page.locator('.msg-text', { hasText: '职责分离' }).waitFor().catch(async error => { await page.screenshot({ path: join(output, `${prefix}-failure.png`) }); writeFileSync(join(output, `${prefix}-failure.txt`), await page.locator('body').innerText()); throw error; }); await page.evaluate(() => document.fonts.ready);
+		for (const [selector, size, weight, height] of [
+			['.msg-text .md p', '16px', '400', '28px'],
+			['.msg-text h1', '24px', '700', '33.6px'],
+		]) {
+			const actual = await page.locator(selector).last().evaluate(el => {
+				const { fontSize, fontWeight, lineHeight } = getComputedStyle(el);
+				return [fontSize, fontWeight, lineHeight];
+			});
+			assert.deepEqual(actual, [size, weight, height], selector);
+		}
+		for (const selector of ['.msg-text p code', '.msg-text pre', '.msg-text pre code']) {
+			const style = await page.locator(selector).first().evaluate(el => [getComputedStyle(el).fontSize, getComputedStyle(el).fontFamily]);
+			assert.equal(style[0], '14px', selector);
+			assert.match(style[1], /JetBrains Mono.*Source Han Sans SC/, selector);
+		}
 		const rendered = await platformFonts('.msg-text h2');
 		assert(rendered.fonts.some(font => proseFamilies.some(family => matchesFont(font, family)) && font.glyphCount > 0), JSON.stringify(rendered));
 		assert(await page.locator('.msg-text h2').evaluate((el, family) => getComputedStyle(el).fontFamily.startsWith(family), 'Inter'), 'prose uses the platform font stack');

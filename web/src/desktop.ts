@@ -13,6 +13,7 @@ export interface DesktopWindowState {
 }
 
 export interface BrowserState {
+	confirmation?: { id: string; site: string; target: string; purpose?: string };
 	active?: number;
 	owner?: string;
 	tabs: { id: number; title: string; url: string; back: boolean; forward: boolean }[];
