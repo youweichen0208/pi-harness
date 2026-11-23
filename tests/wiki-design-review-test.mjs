@@ -59,9 +59,9 @@ try {
 	assert.equal(await toolbar.getByRole('button', {name:'插入元素', exact:true}).evaluate(el=>el===document.activeElement), true);
 	assert.equal(await page.locator('.wiki-toolbar-menu').count(), 0);
 	const titleFont = await page.locator('.wiki-document-heading h1').evaluate(el => getComputedStyle(el).fontFamily);
-	assert(titleFont.includes('Roboto'), titleFont);
+	assert(titleFont.startsWith('Inter, "Source Han Sans SC"'), titleFont);
 	const bodyFont = await editor.evaluate(el => getComputedStyle(el).fontFamily);
-	assert(bodyFont.startsWith('"UI SC", "Chinese Quote"'), bodyFont);
+	assert.equal(bodyFont, titleFont);
 	assert(!bodyFont.includes('Roboto') && !bodyFont.includes('-apple-system'), bodyFont);
 	assert.equal(await editor.evaluate(el => getComputedStyle(el).fontSize), '15px');
 	assert.equal(await editor.evaluate(el => getComputedStyle(el).lineHeight), '26.1px');

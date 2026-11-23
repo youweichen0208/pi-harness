@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { UiTraceRun } from "../../server/protocol.js";
-import { formatTraceMs, traceMetric, traceRunsFilter, traceTimeline } from "../../web/src/trace-presentation.js";
+import { formatTraceMs, traceMetric, traceRunsFilter, traceShare, mergeHostIntervals } from "../../web/src/trace-presentation.js";
 
 function run(overrides: Partial<UiTraceRun> = {}): UiTraceRun {
 	return {
@@ -25,24 +25,13 @@ describe("trace presentation", () => {
 		expect(traceRunsFilter([run(), target], "missing")).toEqual([]);
 	});
 
-	it("merges overlapping host spans and keeps every visible span inside the timeline", () => {
-		const value = run({
-			requests: [{ requestId: "request-1", model: "model", status: "measured", hookStartMs: 100, messageEndMs: 500, metrics: {} }],
-			tools: [{ toolCallId: "tool-1", toolName: "bash", status: "measured", startMs: 600, endMs: 800 }],
-			hostSpans: [{ kind: "onEvent", startMs: 110, endMs: 130 }, { kind: "snapshot_build", startMs: 120, endMs: 160 }, { kind: "ws_send", startMs: 1080, endMs: 1200 }],
-		});
-		const timeline = traceTimeline(value);
-		expect(timeline.filter(item => item.kind === "host")).toHaveLength(2);
-		for (const item of timeline) {
-			expect(item.left).toBeGreaterThanOrEqual(0);
-			expect(item.width).toBeGreaterThan(0);
-			expect(item.left + item.width).toBeLessThanOrEqual(100);
-		}
+	it("clips and merges overlapping spans within one host category", () => {
+		expect(mergeHostIntervals([{start:0,end:20},{start:9,end:24},{start:30,end:40}], 4, 38))
+			.toEqual([{start:4,end:24},{start:30,end:38}]);
 	});
-
-	it("uses observed span ends while a run is still open", () => {
-		const [item] = traceTimeline(run({ agentSettledMs: undefined, status: "open", tools: [{ toolCallId: "tool-1", toolName: "read", status: "measured", startMs: 300, endMs: 500 }] }));
-		expect(item.left).toBe(50);
-		expect(item.width).toBe(50);
+	it("computes shares from raw measurements and omits missing percentages", () => {
+		const sample = run({aggregates: {agent_active_wall_ms:{status:"measured",value:4770},model_wall_union_ms:{status:"measured",value:4700}}});
+		expect(traceShare(sample, "model_wall_union_ms")).toBe("98.5%");
+		expect(traceShare(sample, "host_wall_union_ms")).toBe("");
 	});
 });

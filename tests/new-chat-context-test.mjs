@@ -101,8 +101,6 @@ writeFileSync(
 );
 
 writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ defaultTools: ["+codemode", "+tool_search"] }));
-// Compare the baseline prompt with optional browser tools explicitly switched off.
-writeFileSync(join(agentDir, "mcp.json"), JSON.stringify({ mcpServers: { "playwright-extension": { command: "npx", enabled: false } } }));
 // Independent native SDK reference, with the same official extensions as Pi CLI.
 const nativeServices = await createAgentSessionServices({ cwd: workdir, agentDir, resourceLoaderOptions: { extensionFactories: [
  { name: "codemode", builtin: true, factory: createCodemodeExtension() },

@@ -80,6 +80,16 @@ try {
 	assert.equal(await page.locator(".trace-span-tool").count(), 1);
 	assert(await page.locator(".trace-span-host").count() > 0);
 	assert.match(await page.locator(".trace-aggregate-grid").innerText(), /总运行时间/);
+	const modelRow = page.locator(".wf-row").filter({ has: page.locator(".trace-span-model") }).first();
+	await modelRow.focus();
+	await page.keyboard.press("Enter");
+	assert.equal(await modelRow.getAttribute("aria-pressed"), "true");
+	await page.locator(".wf-controls").getByRole("button", {name: "放大到工具"}).click();
+	assert.match(await page.locator(".wf-detail").innerText(), /bash|read|write/);
+	await page.getByRole("button", {name:"适应全程"}).click();
+	await page.locator(".wf summary").first().click();
+	await page.locator(".wf details[open] button").first().click();
+	assert.match(await page.locator(".wf-detail").innerText(), /onEvent|snapshot_build|ws_send|ws_serialize/);
 	const htmlEvent = page.waitForEvent("download");
 	await page.getByRole("button", { name: "导出会话与 Trace HTML", exact: true }).click();
 	const htmlDownload = await htmlEvent;
@@ -111,6 +121,32 @@ try {
 	assert.equal(metadata.privacy.containsMessageContent, false);
 	assert.equal(metadata.privacy.anonymous, false);
 	assert(!JSON.stringify(metadata).includes("TRACE_DONE"));
+	// Replay deterministic collector timestamps through the normal trace response listener.
+	const base = metadata.runs[0];
+	const requests = [[0, 1400], [1450, 4750]].map(([start, end], i) => ({
+		requestId: "sample-" + i, model: "deepseek-v4.1-flash", turnIndex: i, status: "measured",
+		hookStartMs: start, firstHeadersMs: start + 100, firstProviderEventMs: start + 200,
+		firstVisibleDeltaMs: start + 201, messageEndMs: end, metrics: {},
+	}));
+	const sample = { ...base, runId: "sample", agentStartMs: 0, agentSettledMs: 4770, status: "measured", requests,
+		tools: [{ toolCallId: "tool", toolName: "bash", startMs: 1405, endMs: 1413.9, status: "measured" }],
+		hostSpans: [], aggregates: Object.fromEntries(Object.entries({ agent_active_wall_ms:4770, model_wall_union_ms:4700,
+			tool_wall_union_ms:8.9, host_wall_union_ms:0, unclassified_wall_ms:61.1 }).map(([k,value])=>[k,{status:"measured",value}])) };
+	const replay = run => page.evaluate(({metadata,run,conversationId}) => window.dispatchEvent(new CustomEvent("pi-trace-response", {
+		detail:{open:true,conversationId,trace:{...metadata,runs:[run]}}
+	})), {metadata,run,conversationId:base.conversationId});
+	await replay(sample);
+	await page.locator(".wf-note").filter({hasText:"98.5%"}).waitFor();
+	assert.match(await page.locator(".wf-detail h3").innerText(), /Turn 1/);
+	await page.setViewportSize({width:390,height:844});
+	await page.locator(".wf-controls button").nth(1).click();
+	assert.match(await page.locator(".wf-detail").innerText(), /8.90ms/);
+	await replay({...sample, requests:requests.map(r=>({...r,firstHeadersMs:undefined})),
+		tools:Array.from({length:20},(_,i)=>({...sample.tools[0],toolCallId:String(i)}))});
+	await page.locator(".wf-note").filter({hasText:"观测不完整"}).waitFor();
+	assert.equal(await page.locator(".trace-span-tool").count(),20);
+	await page.setViewportSize({width:1440,height:960});
+
 	await page.getByRole("button", { name: "关闭", exact: true }).click();
 	await send(page, "/trace");
 	await page.locator(".trace-workbench").waitFor();

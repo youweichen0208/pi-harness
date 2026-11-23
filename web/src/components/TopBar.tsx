@@ -29,6 +29,8 @@ import type { SoundKind, SoundSettings } from "../sounds";
 import { useI18n, type Locale } from "../i18n";
 
 interface TopBarProps {
+	onBrowser?: () => void;
+	browserOpen?: boolean;
 	onOpenDatabase: () => void;
 	leftCollapsed?: boolean;
 	filesOpen?: boolean;
@@ -69,6 +71,8 @@ interface TopBarProps {
 }
 
 export function TopBar({
+	onBrowser,
+	browserOpen = false,
 	onOpenDatabase,
 	leftCollapsed = false,
 	filesOpen = false,
@@ -194,14 +198,11 @@ export function TopBar({
 					<button type="button" aria-label={t("traceTitle")} title={t("traceTitle")} onClick={openTrace}><FiActivity /><span>Trace</span></button>
 					<button type="button" aria-label={t("dbTitle")} title={t("dbTitle")} onClick={onOpenDatabase}><FiDatabase /><span>{t("dbTitle")}</span></button>
 					<button type="button" role="tab" aria-label={t("nodes")} title={t("nodes")} aria-selected={view === "nodes"} className={view === "nodes" ? "active" : ""} onClick={() => onViewChange("nodes")}><FiShare2 /><span>{t("nodes")}</span></button>
+					{onBrowser && view === "chat" && <button type="button" aria-label={t("embeddedBrowser")} title={t("embeddedBrowser")} aria-expanded={browserOpen} onClick={onBrowser}><FiGlobe aria-hidden="true" /><span>{t("embeddedBrowser")}</span></button>}
+					{view === "chat" && <button type="button" className="workspace-files-toggle" aria-label={t("openFiles")} title={t("openFiles")} aria-expanded={filesOpen} onClick={() => onOpenPanel("right")}><FiFolder aria-hidden="true" /><span>{t("workspaceFiles")}</span></button>}
 					{plugins.map(p => <button type="button" role="tab" key={p.id} aria-selected={view === `plugin:${p.id}`} className={view === `plugin:${p.id}` ? "active" : ""} title={p.error ? `${p.name}: ${p.error}` : p.description} onClick={() => onViewChange(`plugin:${p.id}`)}><span>{p.icon}</span><span>{p.name}{p.error ? " ⚠" : ""}</span></button>)}
 				</div>
-
-
 				</div>
-
-				{view === "chat" && <button type="button" className="workspace-files-toggle" aria-label={t("openFiles")} title={t("openFiles")} aria-expanded={filesOpen} onClick={() => onOpenPanel("right")}><FiFolder aria-hidden="true" /><span>{t("workspaceFiles")}</span></button>}
-
 				{/* Desktop toolbar — hidden on mobile (model controls move into the
 				    input row; sound/lang fold into "⋯" below). Update-check and
 				    GitHub link live only inside the "⋯" panel now, on both

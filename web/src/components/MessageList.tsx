@@ -222,6 +222,24 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 		}
 		return m;
 	}, [state.messages]);
+	// A fast command can finish before its row paints. Keep that last visible
+	// step highlighted while the model is still processing its result.
+	const currentCommandId = useMemo(() => {
+		if (!connected || !state.isStreaming) return;
+		for (let i = messages.length - 1; i >= 0; i--) {
+			const message = messages[i];
+			if (message.role === "user") return;
+			if (message.role !== "assistant") continue;
+			for (let j = message.content.length - 1; j >= 0; j--) {
+				const call = message.content[j];
+				if (call.type !== "toolCall") continue;
+				if (call.name !== "bash" || typeof call.id !== "string") return;
+				// Failed shell calls are filtered out of the displayed command list.
+				if (toolResults.get(call.id)?.isError ?? toolStatuses.get(call.id)?.isError) continue;
+				return call.id;
+			}
+		}
+	}, [messages, connected, state.isStreaming, toolResults, toolStatuses]);
 	const retriedEditIds = useMemo(() => findRetriedEditIds(state.messages, toolResults), [state.messages, toolResults]);
 	// Most streaming frames only add text or arguments; keep the shared map stable
 	// so those frames do not force every historical Message to render again.
@@ -790,7 +808,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 			<div className="messages" ref={scrollRef} onScroll={onScroll} onWheelCapture={onWheelCapture} onPointerDown={onPointerDown} onTouchStart={onTouchStart} onTouchMove={onTouchMove}>
 				{timeline.length === 0 && !state.streamingMessage && (
 					<div className="empty-state">
-						<div className="empty-logo-wrap"><img className="empty-logo" src="/icon/1a-mark.svg" alt="pi-harness" /></div>
+						<div className="empty-logo-wrap"><img className="empty-logo" src="/icon/welcome-mark.svg" alt="pi-harness" /></div>
 						<WelcomeMotto plain />
 					</div>
 				)}
@@ -837,7 +855,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 							onMeasured={storeHeight}
 							lazyRef={attachEl}
 						>
-						<Message connected={connected} recovery={recovery} incident={incidentFor.get(m.id)}
+						<Message currentCommandId={currentCommandId} connected={connected} recovery={recovery} incident={incidentFor.get(m.id)}
 							key={m.id}
 							message={bashGroups.projected.get(m.id) ?? m}
 							toolMessageIds={bashGroups.sources}
@@ -885,7 +903,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 					);
 				})}
 				{state.streamingMessage && streamingHasContent && !bashGroups.owners.has(state.streamingMessage.id) && (
-					<Message connected={connected} recovery={recovery} incident={incidentFor.get(state.streamingMessage.id)}
+					<Message currentCommandId={currentCommandId} connected={connected} recovery={recovery} incident={incidentFor.get(state.streamingMessage.id)}
 						key={state.streamingMessage.id}
 						message={bashGroups.projected.get(state.streamingMessage.id) ?? state.streamingMessage}
 						continuation={!!predecessors.get(state.streamingMessage.id)}

@@ -57,7 +57,7 @@ try {
 		const spinner=page.locator('.bash-row.run .thinking-spinner');
 		assert.notEqual(await spinner.evaluate(el=>getComputedStyle(el).animationName),'none');
 		// Process-step copy is English in both locales (docs/ui-design.md 4.2).
-		assert.match(await page.locator('.process-group.run .process-group-status').innerText(),/Running/);
+		assert.equal(await page.locator('.process-group.run .process-group-status').count(), 0);
 		// 29a: the process group is borderless — no card wash, radius or outline.
 		const card=single.locator('xpath=ancestor::section[contains(@class,"process-group")]');
 		assert.equal(await card.evaluate(el=>getComputedStyle(el).borderRadius),'0px');

@@ -10,23 +10,26 @@ import { listenIsolated, startIsolatedHarness } from "./lib/isolated-server.mjs"
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), "pi-builtin-chat-"))), agent = join(root, "agent"), data = join(root, "data");
 mkdirSync(agent); mkdirSync(data);
+process.env.PI_WEB_DATA_DIR = data;
 writeFileSync(join(agent, "auth.json"), JSON.stringify({ fixture: { type: "api_key", key: "fixture" } }));
 writeFileSync(join(agent, "webui-extensions.json"), JSON.stringify({ autoCheck: false }));
-let child, harness, browser, logs = "", nextCode, calls = 0, port, holdNext = false, release;
+let child, harness, browser, logs = "", nextCode, calls = 0, port, holdNext = false, release, holdAt;
 const clients = [];
+const scriptedCalls = [];
 const model = createServer(async (req, res) => {
 	for await (const _part of req) { /* Consume the local request, never log prompt contents. */ }
 	calls++;
-	if (holdNext) { holdNext = false; await new Promise(resolve => { release = resolve; }); }
+	if (holdNext || calls === holdAt) { holdNext = false; await new Promise(resolve => { release = resolve; }); }
 	const code = nextCode; nextCode = undefined;
-	const delta = code ? { tool_calls: [{ index: 0, id: `call-${calls}`, type: "function", function: { name: "codemode", arguments: JSON.stringify({ code }) } }] } : { content: "Local document verification completed." };
+	const scripted = scriptedCalls.shift();
+	const delta = scripted ? { tool_calls: [{ index: 0, id: `bg-${calls}`, type: "function", function: { name: scripted.name, arguments: JSON.stringify(scripted.args) } }] } : code ? { tool_calls: [{ index: 0, id: `call-${calls}`, type: "function", function: { name: "codemode", arguments: JSON.stringify({ code }) } }] } : { content: "Local document verification completed." };
 	res.writeHead(200, { "content-type": "text/event-stream" });
-	for (const choice of [{ index: 0, delta, finish_reason: null }, { index: 0, delta: {}, finish_reason: code ? "tool_calls" : "stop" }]) res.write(`data: ${JSON.stringify({ id: "fixture", object: "chat.completion.chunk", model: "fixture", choices: [choice] })}\n\n`);
+	for (const choice of [{ index: 0, delta, finish_reason: null }, { index: 0, delta: {}, finish_reason: code || scripted ? "tool_calls" : "stop" }]) res.write(`data: ${JSON.stringify({ id: "fixture", object: "chat.completion.chunk", model: "fixture", choices: [choice] })}\n\n`);
 	res.end("data: [DONE]\n\n");
 });
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function wait(check, label) {
-	for (let i = 0; i < 600; i++) { if (await check()) return; if (child?.exitCode != null) throw Error(logs); await sleep(50); }
+	for (let i = 0; i < 1000; i++) { if (await check()) return; if (child?.exitCode != null) throw Error(logs); await sleep(50); }
 	throw Error(`Timeout: ${label}\n${logs}`);
 }
 async function connect(id, wiki = false) {
@@ -65,8 +68,92 @@ async function reload(client) {
 	await wait(async () => item(await request(client, "builtin-list"), "pi-harness-database").status === "loaded", "reload");
 }
 
+async function verifyBackgroundCommands(a, b) {
+	writeFileSync(join(root, "independent.txt"), "independent read succeeded");
+	const start = calls;
+	const script = "require('fs').appendFileSync('starts','1');const t=setInterval(()=>{if(require('fs').existsSync('finish')){clearInterval(t);console.log('finished')}},50)";
+	scriptedCalls.push({ name: "bash", args: { command: 'node -e "' + script + '"', timeout: 48 } }, { name: "read", args: { path: "independent.txt" } });
+	a.send({ type: "prompt", text: "Start slow test and read independent.txt", requestId: "slow-test" });
+	await wait(() => a.state.backgroundCommands?.some(t => t.state === "background") && !a.state.isStreaming && a.state.messages.some(m => m.role === "toolResult" && m.toolName === "read" && JSON.stringify(m.content).includes("independent read succeeded")), "same agent reads during silent background test");
+	const running = a.state.backgroundCommands.find(t => t.state === "background");
+	assert.equal(running.output, "");
+	const recoveryDir = join(root, "recovery");
+	mkdirSync(recoveryDir);
+	// Resume a copy of the on-disk session as it existed before process exit.
+	const { SessionManager, SettingsManager } = await import("@earendil-works/pi-coding-agent");
+	const { backgroundBash, commandViews } = await import("../dist/server/background-bash.js");
+	const copy = join(recoveryDir, "interrupted.jsonl");
+	writeFileSync(copy, readFileSync(a.state.sessionFile));
+	const recovered = SessionManager.open(copy);
+	const handlers = new Map();
+	backgroundBash(recovered, SettingsManager.inMemory(), () => {}, () => {})({
+		registerTool() {}, on(name, handler) { handlers.set(name, handler); },
+	});
+	await handlers.get("session_start")();
+	assert.equal(commandViews(recovered).find(t => t.id === running.id)?.state, "interrupted");
+	await handlers.get("session_shutdown")();
+	assert.equal(running.detachedAt - running.startedAt >= 29900, true);
+	writeFileSync(join(root, "finish"), "");
+	await wait(() => calls >= start + 4 && !a.state.isStreaming && a.state.backgroundCommands.some(t => t.id === running.id && t.exitCode === 0), "idle completion");
+	assert.equal(readFileSync(join(root, "starts"), "utf8"), "1");
+	assert.equal(calls, start + 4);
+	assert.equal(b.state.backgroundCommands?.length ?? 0, 0);
+	a.send({ type: "trace_get", reqId: "background-trace", conversationId: a.state.conversationId });
+	await wait(() => a.wire.some(m => m.type === "trace_result" && m.reqId === "background-trace"), "background trace");
+	const traceRun = a.wire.find(m => m.reqId === "background-trace").trace.runs.find(r => r.backgroundSpans?.some(s => s.id === running.id));
+	assert(traceRun);
+	const span = traceRun.backgroundSpans.find(s => s.id === running.id);
+	assert(span.endMs > span.startMs && span.state === "done");
+	assert(traceRun.tools.some(t => t.toolName === "read" && t.startMs >= span.startMs && t.endMs <= span.endMs));
+	assert(!JSON.stringify(span).includes("finished"));
+	const control = (id, action) => a.send({ type: "background_command", conversationId: a.state.conversationId, sessionId: a.state.sessionId, id, action });
+	const longCommand = 'node -e "setInterval(()=>{},1000)"';
+	scriptedCalls.push({ name: "bash", args: { command: longCommand, timeout: 15 } });
+	a.send({ type: "prompt", text: "Manual detach", requestId: "manual-detach" });
+	await wait(() => a.state.backgroundCommands.some(t => t.state === "foreground"), "manual foreground");
+	const manual = a.state.backgroundCommands.find(t => t.state === "foreground").id;
+	control(manual, "detach");
+	await wait(() => !a.state.isStreaming && a.state.backgroundCommands.some(t => t.id === manual && t.state === "background"), "manual detach");
+	const beforeStop = calls;
+	control(manual, "stop");
+	await wait(() => a.state.backgroundCommands.some(t => t.id === manual && t.state === "stopped"), "manual stop");
+	await sleep(250);
+	assert.equal(calls, beforeStop, "stopped process does not wake model");
+	scriptedCalls.push({ name: "bash", args: { command: longCommand, background: true, timeout: 1 } });
+	a.send({ type: "prompt", text: "Timeout in background", requestId: "background-timeout" });
+	await wait(() => a.state.backgroundCommands.some(t => t.state === "failed" && /timed out/.test(t.error)) && !a.state.isStreaming && calls === beforeStop + 3, "explicit background timeout");
+	for (const consume of [false, true]) {
+		const before = calls;
+		const gate = `finish-${consume}`;
+		const program = `const t=setInterval(()=>{if(require('fs').existsSync('${gate}')){clearInterval(t);console.log('gate complete')}},50)`;
+		const command = 'node -e "' + program + '"';
+		scriptedCalls.push({ name: "bash", args: { command, background: true, timeout: 15 } });
+		// Hold the second provider call open while the process finishes.
+		const id = `bg-${before + 1}`;
+		holdAt = before + 2;
+		a.send({ type: "prompt", text: gate, requestId: gate });
+		await wait(() => calls === before + 2 && release && a.state.backgroundCommands.some(t => t.id === id && t.state === "background"), "busy provider");
+		if (consume) scriptedCalls.push({ name: "bash_task", args: { action: "read", id } });
+		writeFileSync(join(root, gate), "");
+		await wait(() => a.state.backgroundCommands.some(t => t.id === id && t.exitCode === 0), "completed during provider request");
+		release(); release = undefined;
+		await wait(() => calls === before + 3 && !a.state.isStreaming, "single next model request");
+		if (consume) assert(a.state.messages.some(m => m.role === "toolResult" && m.toolName === "bash_task" && JSON.stringify(m.content).includes("gate complete")));
+		await sleep(250);
+		assert.equal(calls, before + 3);
+	}
+	for (const enabled of [false, true]) {
+		await toggle(a, "background-bash", enabled);
+		a.send({ type: "extensions_reload" });
+		await wait(async () => item(await request(a, "builtin-list"), "background-bash").status === (enabled ? "loaded" : "disabled"), "reload bash");
+		await prompt(a, "Nested bash returns final exit code", 'text((await tools.bash({command:"exit 7"})).exit_code)');
+		assert.match(JSON.stringify(a.state.messages.findLast(m => m.role === "toolResult").content), /7/);
+	}
+	console.log("PASS automatic and manual background execution, recovery, completion delivery, trace and native Bash compatibility");
+}
+
 const supportsDesktop = ["darwin", "win32"].includes(process.platform);
-const inventoryCount = supportsDesktop ? 6 : 5;
+const inventoryCount = supportsDesktop ? 7 : 6;
 const fakeBin = join(root, "fake-bin"), npxCalls = join(root, "npx-calls");
 const pathKey = Object.keys(process.env).find(key => key.toLowerCase() === "path") ?? "PATH";
 mkdirSync(fakeBin);
@@ -74,6 +161,8 @@ writeFileSync(join(fakeBin, process.platform === "win32" ? "npx.cmd" : "npx"), p
 	? `@echo off\r\n>>"${npxCalls}" echo called\r\nexit /b 1\r\n`
 	: `#!/bin/sh\nprintf 'called\\n' >> ${JSON.stringify(npxCalls)}\nexit 1\n`, { mode: 0o755 });
 try {
+	// Simulate upgrading a user who enabled the old bridge before opening chat.
+	writeFileSync(join(agent, "mcp.json"), JSON.stringify({ mcpServers: { playwright_extension: { command: "npx", args: ["--version"] } } }));
 	await listenIsolated(model);
 	writeFileSync(join(agent, "models.json"), JSON.stringify({ providers: { fixture: { api: "openai-completions", baseUrl: `http://127.0.0.1:${model.address().port}`, apiKey: "fixture", models: [{ id: "fixture", input: ["text"], contextWindow: 64000, maxTokens: 8000 }] } } }));
 	writeFileSync(join(agent, "settings.json"), JSON.stringify({ defaultProvider: "fixture", defaultModel: "fixture", defaultTools: ["+codemode", "+tool_search"], retry: { enabled: false }, compaction: { enabled: false } }));
@@ -93,6 +182,9 @@ try {
 		assert.equal(after.reason, "filtered"); assert.deepEqual(after.commands, [], `Wiki ${command} must not inject Skill`);
 	}
 	const state = await request(a, "builtin-list"); assert.equal(state.items.length, inventoryCount);
+	assert.equal(item(state, "background-bash").status, "loaded");
+	assert.equal(item(await request(wiki, "builtin-list"), "background-bash"), undefined);
+	if (process.argv.includes("--background")) await verifyBackgroundCommands(a, b);
 	assert.equal(item(state, "pi-harness-subagents"), undefined);
 	assert.match((await request(a, "builtin-toggle", { id: "pi-harness-subagents", enabled: true, version: state.documentVersion }, 400)).error, /Invalid/);
 	if (supportsDesktop) {
@@ -134,6 +226,13 @@ try {
 	const designCommands = ["skill:design-first", "skill:bug-fix", "skill:feat"];
 	const conflictPath = join(agent, "extensions", "design-first-conflict.ts"), handledPath = join(root, "extension-commands.jsonl");
 	mkdirSync(join(agent, "extensions"), { recursive: true });
+	const bashOverride = join(agent, "extensions", "bash-conflict.ts");
+	writeFileSync(bashOverride, `export default pi => pi.registerTool({ name: "bash", label: "User bash", description: "User bash", parameters: { type: "object", properties: {command: {type:"string"}} }, execute: async () => ({content: [{type:"text",text:"user-owned bash"}],details:{}}) });`);
+	a.send({ type: "extensions_reload" });
+	await wait(async () => item(await request(a, "builtin-list"), "background-bash").reason === "conflict", "user Bash override takes precedence");
+	rmSync(bashOverride);
+	a.send({ type: "extensions_reload" });
+	await wait(async () => item(await request(a, "builtin-list"), "background-bash").status === "loaded", "Bash restored");
 	const callsBeforeConflict = calls;
 	for (const [index, shadowed] of [["skill:feat"], ["skill:design-first"], designCommands].entries()) {
 		writeFileSync(conflictPath, `import { appendFileSync } from 'node:fs'; export default pi => {
@@ -212,6 +311,7 @@ try {
 	writeFileSync(join(data, "document-extensions.json"), saved);
 	console.log("PASS built-in inventory, removed conversion/OKF, version conflicts, cross-client settings, disabled calls and new chat/reload");
 
+	assert(!existsSync(npxCalls), "retired browser MCP must never launch");
 	if (process.argv.includes("--browser")) {
 		const { chromium } = await import("playwright-core"), { CHROME_PATH } = await import("./lib/chrome.mjs");
 		browser = await chromium.launch({ executablePath: CHROME_PATH || chromium.executablePath() });
@@ -220,6 +320,18 @@ try {
 		const page = await context.newPage(), errors = []; page.on("pageerror", error => errors.push(error.message)); page.setDefaultTimeout(15000);
 		await page.goto(`http://127.0.0.1:${port}`);
 		const composer = page.locator(".inputbar textarea");
+		if (process.argv.includes("--background") || process.argv.includes("--background-card")) {
+			scriptedCalls.push({ name: "bash", args: { command: 'node -e "setInterval(()=>{},1000)"', timeout: 40 } });
+			await composer.fill("Background command card");
+			await composer.press("Enter");
+			const detach = page.getByRole("button", { name: "转到后台", exact: true });
+			await detach.click();
+			await page.getByText("后台运行中", {exact:false}).first().waitFor();
+			await page.reload();
+			const stop = page.getByRole("button", { name: "停止命令", exact: true });
+			await stop.click();
+			await page.locator(".bash-row").getByText("Cancelled", {exact:true}).waitFor();
+		}
 		await composer.fill("保留现有需求草稿");
 		async function openSettings(en = false) {
 			try { await page.getByRole("button", { name: en ? "Settings" : "设置", exact: true }).first().click(); }
@@ -230,7 +342,7 @@ try {
 		}
 		await openSettings();
 		const panel = page.locator(".builtin-extensions"), database = panel.locator('[data-builtin-id="pi-harness-database"]');
-		assert.equal(await panel.locator(".builtin-row").count(), inventoryCount + 1);
+		assert.equal(await panel.locator(".builtin-row").count(), inventoryCount);
 		assert.equal(await panel.locator('[data-builtin-id="pi-harness-subagents"]').count(), 0);
 		const design = panel.locator('[data-builtin-id="pi-harness-design-first"]');
 		await design.getByRole("switch").click();
@@ -262,42 +374,12 @@ try {
 		await panel.locator('[data-builtin-id="codemode"]').getByRole("button", { name: "查看设置", exact: true }).click();
 		await page.locator(".native-mcp-panel").waitFor();
 		await page.getByRole("button", { name: "Extensions", exact: true }).click();
-		await panel.getByRole("button", { name: "管理浏览器连接" }).click();
-		const install = page.getByRole("link", { name: "安装浏览器扩展" });
-		assert.match(await install.getAttribute("href"), /mmlmfjhmonkocbjadbfplnigmagldckm$/);
-		const toggleBrowser = page.getByRole("switch", { name: "控制你的浏览器" });
-		await wait(async () => await toggleBrowser.isEnabled(), "global browser preference loaded");
-		assert.equal(await toggleBrowser.isChecked(), false);
-		assert(!existsSync(npxCalls), "ordinary sessions must not start the browser MCP");
-		const browserConfig = () => JSON.parse(readFileSync(join(agent, "mcp.json"), "utf8")).mcpServers["playwright-extension"];
-		await toggleBrowser.click();
-		await wait(() => existsSync(join(agent, "mcp.json")) && browserConfig()?.enabled === true && existsSync(npxCalls), "explicitly enabled browser MCP saved and started");
-		await page.locator(".mcp-server-toggle").filter({ hasText: "playwright-extension" }).waitFor();
-		await toggleBrowser.click();
-		await wait(() => browserConfig()?.enabled === false, "disabled browser MCP saved");
-		await page.reload(); await openSettings();
-		await panel.getByRole("button", { name: "管理浏览器连接" }).click();
-		await wait(async () => await toggleBrowser.isEnabled(), "settings loaded");
-		assert.equal(await toggleBrowser.isChecked(), false);
-		await toggleBrowser.click();
-		await wait(() => browserConfig()?.enabled === true, "browser MCP re-enabled without removing its saved config");
-		const aliasDocument = JSON.parse(readFileSync(join(agent, "mcp.json"), "utf8"));
-		aliasDocument.mcpServers = { playwright_extension: { ...browserConfig(), enabled: false } };
-		writeFileSync(join(agent, "mcp.json"), JSON.stringify(aliasDocument));
-		await page.reload(); await openSettings();
-		await panel.getByRole("button", { name: "管理浏览器连接" }).click();
-		await wait(async () => await toggleBrowser.isEnabled(), "alias settings loaded");
-		assert.equal(await toggleBrowser.isChecked(), false, "the browser switch reflects an existing namespace alias");
-		await toggleBrowser.click();
-		await wait(() => JSON.parse(readFileSync(join(agent, "mcp.json"), "utf8")).mcpServers.playwright_extension?.enabled === true, "alias entry re-enabled");
-		const savedAlias = JSON.parse(readFileSync(join(agent, "mcp.json"), "utf8")).mcpServers;
-		assert(!Object.hasOwn(savedAlias, "playwright-extension"), "alias toggling must not create a conflicting canonical entry");
-		await page.getByRole("button", { name: "Extensions", exact: true }).click();
+		assert.equal(await panel.getByRole("button", { name: "管理浏览器连接" }).count(), 0);
 		await page.route("**/api/extensions", async route => {
 			if (route.request().postDataJSON()?.action === "list") return route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "Package fixture unavailable" }) });
 			await route.continue();
 		});
-		await page.reload(); await openSettings(); assert.equal(await panel.locator(".builtin-row").count(), inventoryCount + 1);
+		await page.reload(); await openSettings(); assert.equal(await panel.locator(".builtin-row").count(), inventoryCount);
 		await page.getByText("Package fixture unavailable", { exact: false }).waitFor();
 		await page.unroute("**/api/extensions"); await page.reload(); await openSettings();
 		mkdirSync("tests/scratch", { recursive: true });

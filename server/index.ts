@@ -1,3 +1,4 @@
+import { controlCommand } from "./background-bash.js";
 import { scmOperation } from "./scm-operation.js";
 import { installNoteAssets } from "./note-assets.js";
 import { installLinkPreview } from "./link-preview.js";
@@ -752,6 +753,9 @@ wss.on("connection", (ws) => {
 				break;
 			case "cycle_thinking":
 				cs.cycleThinking();
+				break;
+			case "background_command":
+				if (cs.conversationId === msg.conversationId && cs.session.sessionId === msg.sessionId) controlCommand(cs.session.sessionManager, msg.id, msg.action);
 				break;
 			case "get_state":
 				// Always a FULL snapshot: the client is (re)connecting or detected

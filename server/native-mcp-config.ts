@@ -1,15 +1,22 @@
-import { browserMcpName, browserMcpConfig } from "./browser-mcp.js";
-import { mcpNamespaceKey } from "./mcp-namespace.js";
+import { mcpNamespaceKey, retiredBrowserServer } from "./mcp-namespace.js";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, mkdirSync, writeFileSync, renameSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { getAgentDir, ProjectTrustStore } from "@earendil-works/pi-coding-agent";
+import { getAgentDir, ProjectTrustStore, type LoadedMcpConfig } from "@earendil-works/pi-coding-agent";
 const sdkDirectory = createRequire(import.meta.url).resolve.paths("@earendil-works/pi-coding-agent")?.map(path => join(path, "@earendil-works/pi-coding-agent/dist/core/mcp-servers.js")).find(path => existsSync(path));
 if (!sdkDirectory) throw new Error("Pi MCP configuration validator missing");
 const { validateMcpServerConfig } = await import(pathToFileURL(sdkDirectory).href) as { validateMcpServerConfig: (name: string, raw: unknown) => object | string };
 import type { NativeMcpConfigState, NativeCodemodeSettings } from "./protocol.js";
+
+const { loadMcpConfig } = await import(new URL("../extensions/mcp/config.js", pathToFileURL(sdkDirectory)).href) as {
+	loadMcpConfig(options: { cwd: string; agentDir: string; projectTrusted: boolean }): LoadedMcpConfig;
+};
+export function loadHarnessMcpConfig(cwd: string, projectTrusted: boolean): LoadedMcpConfig {
+	const loaded = loadMcpConfig({ cwd, agentDir: getAgentDir(), projectTrusted });
+	return { ...loaded, servers: loaded.servers.filter(entry => !retiredBrowserServer(entry.name)) };
+}
 
 const MASK = "••••••••";
 type Document = { mcpServers?: Record<string, Record<string, unknown>>; [key: string]: unknown };
@@ -32,6 +39,9 @@ export class NativeMcpConfigService {
 	get(cwd: string, scope: "global" | "project"): NativeMcpConfigState {
 		const path = this.path(cwd,scope), raw = read(path), document = parseMcpDocument(raw);
 		if (!document || typeof document !== "object" || Array.isArray(document)) throw new Error("MCP configuration must be an object");
+		if (document.mcpServers && typeof document.mcpServers === "object") {
+			for (const name of Object.keys(document.mcpServers)) if (retiredBrowserServer(name)) delete document.mcpServers[name];
+		}
 		const inheritedAutoEnableCodemode = scope === "global" || parseMcpDocument(read(this.path(cwd, "global")))?.autoEnableCodemode !== false;
 		return { path, paths: { global: this.path(cwd, "global"), project: this.path(cwd, "project") }, scope, version: version(raw), document: transform(document, undefined, true) as Record<string,unknown>, trusted: this.isTrusted(cwd), inheritedAutoEnableCodemode };
 	}
@@ -50,6 +60,10 @@ export class NativeMcpConfigService {
 			for (const name of Object.keys(globals)) namespaces.set(mcpNamespaceKey(name), name);
 		}
 		for (const name of Object.keys(document.mcpServers)) {
+			if (retiredBrowserServer(name)) {
+				if (Object.hasOwn(incoming, "mcpServers")) throw new Error("Use the built-in browser in the desktop app.");
+				delete document.mcpServers[name]; continue;
+			}
 			const namespace = mcpNamespaceKey(name), existing = namespaces.get(namespace);
 			if (existing !== undefined && existing !== name) throw new Error(`MCP server namespace conflict: "${existing}" and "${name}"`);
 			namespaces.set(namespace, name);
@@ -59,14 +73,14 @@ export class NativeMcpConfigService {
 			if (scope === "project" && config && typeof config === "object" && !Array.isArray(config) && !["command", "url", "type"].some(key => Object.hasOwn(config, key))) {
 				if (Object.keys(config).some(key => !["enabled", "exposure", "toolExposure"].includes(key))) throw new Error("Project overrides only allow enabled, exposure, and toolExposure");
 				const base = parseMcpDocument(read(this.path(cwd, "global"))).mcpServers?.[name];
-				if (!base && name !== browserMcpName) throw new Error(`No global MCP server to override: ${name}`);
-				candidate = { ...(base ?? browserMcpConfig), ...config };
-				// Pi merges partial project overrides only with file-backed global entries.
-				if (!base) document.mcpServers[name] = candidate;
+				if (!base) throw new Error(`No global MCP server to override: ${name}`);
+				candidate = { ...base, ...config };
 			}
 			const result = validateMcpServerConfig(name, candidate); if (typeof result === "string") throw new Error(result);
 			if (scope === "project" && config.auth) throw new Error("Provider authentication is allowed only in global MCP configuration");
 		}
+		// Keep settings shared with the standalone Pi CLI intact on unrelated saves.
+		for (const [name, config] of Object.entries(old.mcpServers ?? {})) if (retiredBrowserServer(name)) document.mcpServers[name] = config;
 		mkdirSync(dirname(path), { recursive: true }); writeFileSync(`${path}.webui.tmp`, JSON.stringify(document,null,2)+"\n", { mode: 0o600 }); renameSync(`${path}.webui.tmp`,path);
 		return this.get(cwd,scope);
 	}

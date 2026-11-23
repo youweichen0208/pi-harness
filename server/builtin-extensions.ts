@@ -18,9 +18,9 @@ export function documentSettingsVersion(): string {
 }
 export function toggleBuiltinDocument(id: unknown, enabled: unknown, version: unknown): void {
 	if (id === "pi-harness-design-first" && typeof enabled === "boolean" && typeof version === "string") { toggleDesignFirst(enabled, version); return; }
-	if (id !== "pi-harness-database" || typeof enabled !== "boolean") throw Error("Invalid built-in extension change");
+	if ((id !== "background-bash" && id !== "pi-harness-database") || typeof enabled !== "boolean") throw Error("Invalid built-in extension change");
 	if (version !== documentSettingsVersion()) throw Error("Document settings changed; refresh and retry");
-	updateDocumentSettings({ databaseEnabled: enabled });
+	updateDocumentSettings(id === "background-bash" ? { backgroundEnabled: enabled } : { databaseEnabled: enabled });
 }
 
 /** Inventory reads existing session resources; it never runs factories or reloads. */
@@ -71,6 +71,12 @@ export function builtinExtensionsState(session: AgentSession, conversationId: st
 		else design.status = config.enabled ? primaryOwned ? "loaded" : "pending" : primaryOwned ? "pending" : "disabled";
 	} catch (error) { design.status = "error"; design.error = String(error); }
 	items.push(design);
+	if (!wiki) {
+		const loaded = tools.some(tool => tool.name === "bash_task" && owns(tool.sourceInfo.path, "background-bash"));
+		const enabled = documentSettings?.backgroundEnabled;
+		const conflict = enabled && !loaded && resources.extensions.some(ext => ext.tools.has("bash") || ext.tools.has("bash_task"));
+		items.push({ id: "background-bash", enabled, error: documentError, status: documentError ? "error" : conflict ? "unavailable" : loaded !== enabled ? "pending" : loaded ? "loaded" : "disabled", reason: conflict ? "conflict" : undefined, tools: loaded ? ["bash", "bash_task"] : [], commands: [] });
+	}
 	if (!wiki && desktopSupported()) {
 		const grant = desktopGrant(session.sessionManager);
 		const enabled = !!grant.controller;

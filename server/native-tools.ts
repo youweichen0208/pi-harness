@@ -1,3 +1,4 @@
+import { loadHarnessMcpConfig } from "./native-mcp-config.js";
 import { createDatabaseExtension } from "./database/extension.js";
 import { cacheWarmingSettings } from "./cache-warming.js";
 import type { BuiltinExtensionId } from "./protocol.js";
@@ -22,12 +23,16 @@ export function conversationSettings(cwd: string, agentDir: string): SettingsMan
 	return settings;
 }
 
+function harnessMcpExtension(): ExtensionFactory {
+	return createMcpExtension({ loadConfig: ctx => loadHarnessMcpConfig(ctx.cwd, ctx.isProjectTrusted()) });
+}
+
 /** Shared by resource loading and the built-in extension inventory. */
 export const nativeExtensionRegistry = [
 	{ name: "pi-harness-database", replaceable: true, factory: createDatabaseExtension },
 	{ name: "codemode", builtin: true, replaceable: true, factory: createCodemodeExtension },
 	{ name: "tool-search", builtin: true, replaceable: true, factory: createToolSearchExtension },
-	{ name: "mcp", builtin: true, replaceable: true, factory: createMcpExtension },
+	{ name: "mcp", builtin: true, replaceable: true, factory: harnessMcpExtension },
 ] satisfies { name: BuiltinExtensionId; builtin?: boolean; replaceable: boolean; factory: () => ExtensionFactory }[];
 
 /** Same native extensions as the Pi CLI; activation follows the user's settings. */

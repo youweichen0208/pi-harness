@@ -1,3 +1,4 @@
+import { BrowserSnapshotCard } from "./BrowserSnapshotCard";
 import { browserAction, browserTarget } from "../browser-progress";
 import { OutputColor } from "./OutputColor";
 import { RunningIndicator } from "./RunningIndicator";
@@ -24,7 +25,7 @@ import {
 	FiTerminal,
 	FiX,
 } from "react-icons/fi";
-import type { ToolStatus, UiMessage, UiToolCallBlock } from "../types";
+import type { ToolStatus, UiMessage, UiTextBlock, UiToolCallBlock } from "../types";
 import { useChatT } from "../i18n";
 import { Markdown } from "./Markdown";
 import { highlightLine, langFromPath } from "../hljs-lite";
@@ -32,6 +33,7 @@ import { displayReadPath, readPath, splitFrontmatter } from "../read-presentatio
 import { bashCommand, parseBashDiagnostics, parseLabeledBashSteps, type BashStepRun } from "../bash-steps";
 
 export interface ToolView {
+	background?: import("../types").BackgroundCommand;
 	codemode?: UiMessage["codemode"];
 	nestedCalls?: UiMessage["nestedCalls"];
 	/** Tool result message if the tool already finished. */
@@ -53,7 +55,8 @@ export interface ToolView {
 }
 
 /** Live tool_status timing, else the SDK-recorded time on the persisted result (survives reloads). */
-export function toolDuration(view: Pick<ToolView, "status" | "result">): number | undefined {
+export function toolDuration(view: Pick<ToolView, "status" | "result" | "background">): number | undefined {
+	if (view.background) return view.background.endedAt === undefined ? undefined : view.background.endedAt - view.background.startedAt;
 	return view.status?.durationMs ?? view.result?.durationMs;
 }
 
@@ -291,6 +294,7 @@ function fenceCodeBlock(text: string, lang: string): string {
 }
 
 type ToolCallBlockProps = {
+	conversationId?: string;
 	block: UiToolCallBlock;
 	view: ToolView;
 	/** Kill the running bash command (bash cards only, while running). */
@@ -301,6 +305,16 @@ type ToolCallBlockProps = {
 };
 
 export const ToolCallBlock = memo(function ToolCallBlock(props: ToolCallBlockProps) {
+	if (props.block.name === "embedded_browser" && props.view.result && !props.view.result.isError) {
+		let read = false;
+		try { read = JSON.parse(props.block.argumentsText || "{}").action === "read"; } catch { /* Partial arguments use normal tool feedback. */ }
+		if (read) {
+			const parts = props.view.result.content.filter((part): part is UiTextBlock => part.type === "text");
+			return <BrowserSnapshotCard key={props.block.id} id={props.block.id} raw={parts.map(part => part.text).join("")}
+				truncated={parts.some(part => part.truncated)} downloadUrl={props.view.result.toolOutputUrl}
+				conversationId={props.conversationId} />;
+		}
+	}
 	return props.block.name === "codemode" ? <CodemodeCard {...props} /> : <RegularToolCallBlock {...props} />;
 });
 
@@ -331,7 +345,7 @@ function BashCommandHeader({ command, original, directory, running, elapsed, sta
 function RegularToolCallBlock({ block, view, onKillBash, wrap = true }: ToolCallBlockProps) {
 	const nestedCalls = view.result?.nestedCalls ?? view.nestedCalls;
 	const t = useChatT();
-	const browser = browserAction(block.name, t);
+	const browser = browserAction(block.name, t, block.argumentsText);
 	const acpDelegate = block.name === "acp_delegate";
 	const quietDelegate = acpDelegate;
 	const [open, setOpen] = useState(browser || acpDelegate ? false : wrap);
@@ -398,8 +412,8 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true }: ToolCall
 	const output = view.result
 		? view.result.content.map((b) => (b.type === "text" ? b.text : "")).join("")
 		: (view.liveOutput ?? "");
-	const browserTimeout = !!browser && isError && /MCP request timed out after \d+ms/i.test(output);
-	const browserSubject = browser ? browserTarget(block.argumentsText, output) : "";
+	const browserTimeout = !!browser && isError && /Browser request timed out/i.test(output);
+	const browserSubject = browser ? browserTarget(block.argumentsText) : "";
 	const resultImages = view.result?.content.flatMap(part => part.type === "image" && "dataUrl" in part && typeof part.dataUrl === "string" ? [part.dataUrl] : []) ?? [];
 	const imageReadNotice = block.name === "read" && resultImages.length > 0 && !isError && /^Read image file \[image\/[^\]\r\n]+\](?:\s*\[Image: original \d+x\d+, displayed at \d+x\d+\. Multiply coordinates by [\d.]+ to map to original image\.\])?$/.test(output.trim());
 	const nativeExitCode = (view.result?.details as { exitCode?: number } | undefined)?.exitCode ?? view.status?.exitCode;
@@ -566,8 +580,7 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true }: ToolCall
 					</small>
 					<FiChevronRight className={open ? "open" : ""} aria-hidden="true" />
 				</button>
-				{running && !block.name.startsWith("page_reader_") && elapsed >= 8 && !output.trim() && <p className="browser-progress-update">{t("browserConnectHint")}</p>}
-				{open && browserTimeout && <p className="browser-progress-update"><strong>{t("browserResponseTimeout")}</strong> · {t("browserTimeoutHelp")}</p>}
+				{open && browserTimeout && <p className="browser-progress-update"><strong>{t("browserResponseTimeout")}</strong></p>}
 				{running && output.trim() && <div className="browser-progress-update">{output.trim().split("\n").filter(Boolean).at(-1)?.slice(0, 240)}</div>}
 			</> : commandDisplay ? <BashCommandHeader command={commandDisplay.command} original={command!} directory={commandDisplay.directory ?? differentCommandDirectory(block.argumentsText, cwd)} running={isBashRunning} elapsed={elapsed} status={statusLabel} full={fullCommand} onFull={() => { setFullCommand((value) => !value); setOpen(true); }} onKill={onKillBash}>
 				{bashRun && <span className="bash-view-switch"><button type="button" className={bashView === "steps" ? "active" : ""} onClick={() => setBashView("steps")}>{t("bashSteps")}</button><button type="button" className={bashView === "raw" ? "active" : ""} onClick={() => setBashView("raw")}>{t("bashRaw")}</button></span>}

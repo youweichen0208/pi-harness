@@ -1,4 +1,4 @@
-/** Compare DPI consistency within Windows; only code faces remain shared with macOS. */
+/** Compare DPI consistency within Windows; verify shared brand, prose and code faces against macOS. */
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -28,7 +28,9 @@ function compare(expected, actual, path) {
 		expected.forEach((value, index) => compare(value, actual[index], `${path}[${index}]`));
 	} else if (expected && typeof expected === 'object') {
 		assert(actual && typeof actual === 'object', path);
-		for (const key of Object.keys(expected)) compare(expected[key], actual[key], `${path}.${key}`);
+		for (const key of Object.keys(expected)) {
+			compare(expected[key], actual[key], `${path}.${key}`);
+		}
 	} else if (/(?:\.fontFamily|\.family)$/.test(path)) {
 		assert.equal(actual, expected, path);
 	} else assert.equal(actual, expected, path);
@@ -50,10 +52,10 @@ for (const { file, scale } of windows) {
 	assert.deepEqual(commonFonts(win), commonFonts(mac), 'same bundled UI SC and primary JetBrains Mono resources');
 	assert.equal(win.electron, mac.electron, 'Compare the same Electron version');
 	for (const key of ['width', 'height', 'bodySize', 'typography', 'surfaces', 'ui']) compare(windowsReference[key], win[key], `${file}.${key}`);
-	assert(win.typography.light.every(sample => sample.family.startsWith('"Segoe UI"')), 'Windows uses native UI typography');
-	for (const [sample, family] of Object.entries({ playground: 'JetBrains Mono' })) {
+	assert(win.typography.light.every(sample => sample.family.startsWith('Inter')), 'Windows uses the shared UI typography');
+	for (const [sample, family] of Object.entries({ playground: 'JetBrains Mono', notes: 'Inter', brand: 'Libre Baskerville' })) {
 		assert.deepEqual(sharedFace(win, sample, family), sharedFace(mac, sample, family), `${file}.${sample}: actual primary face`);
 	}
-	assert.deepEqual(sharedFace(win, 'playground', 'PI Playground CJK'), sharedFace(mac, 'playground', 'PI Playground CJK'), 'same Sarasa Chinese glyphs in the editor');
+	assert.deepEqual(sharedFace(win, 'playground', 'Source Han Sans SC'), sharedFace(mac, 'playground', 'Source Han Sans SC'), 'same Source Han Sans SC glyphs in the editor');
 	console.log(`PASS ${file}: matches Windows 100% typography and shared code fonts`);
 }

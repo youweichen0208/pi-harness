@@ -18,7 +18,8 @@ async function launch() {
 		await sleep(100);
 	}
 	assert(page); page.setDefaultTimeout(10000);
-	await page.locator('.project-item.active').waitFor();
+	// The links fixture starts with an empty Workspace and only needs the app shell.
+	await page.locator(process.argv.includes('--links') ? '.topbar-actions' : '.project-item.active').waitFor();
 	if (await page.locator('.setup-modal').count()) await page.locator('.setup-modal .modal-close').click();
 	return page;
 }

@@ -32,7 +32,7 @@ import { isKnowledgeLibraryWindow, openKnowledgeLibrary, isWikiWindow, PREFERRED
 import type { ChatReferenceRequest } from "./chat-reference";
 
 import { ProviderAuthModal } from "./components/ProviderAuthModal";
-import { WorkspacePathContext } from "./workspace-context";
+import { BackgroundContext, WorkspacePathContext } from "./workspace-context";
 import {
 	lazy,
 	Suspense,
@@ -46,6 +46,7 @@ import {
 	type PointerEvent as ReactPointerEvent,
 } from "react";
 import { useWorkspaceScm } from "./use-workspace-scm";
+import { BrowserPanel } from "./components/BrowserPanel";
 import { TopBar } from "./components/TopBar";
 import { desktopAPI, flushWindowSaves } from "./desktop";
 import { useNotes } from "./use-notes";
@@ -290,6 +291,7 @@ const WIKI_CHAT_KEY = "pi-wiki-chat-open";
 const WIKI_WORKSPACE_KEY = "pi-wiki-workspace";
 
 export function App() {
+	const [browserOwner, setBrowserOwner] = useState<string>();
 	const beforeClose = useRef(flushWindowSaves);
 	useEffect(() => desktopAPI?.onBeforeClose?.(() => beforeClose.current()), []);
 	const t = useT();
@@ -298,6 +300,10 @@ export function App() {
 	// Conversation selection can arrive before its snapshot. Never present the
 	// previous conversation's transcript or usage under the new selection.
 	const conversationState = chat.state?.conversationId === chat.activeConversationId ? chat.state : null;
+	const activeBrowserOwner = conversationState?.sessionId ? conversationState.conversationId + "/" + conversationState.sessionId : undefined;
+	useEffect(() => {
+		if (browserOwner && browserOwner !== activeBrowserOwner) setBrowserOwner(undefined);
+	}, [browserOwner, activeBrowserOwner]);
 	const workspaceScm = useWorkspaceScm(chat.state?.cwd ?? "", chat.ready && !switching, chat.scmDirty, chat.scmData, rawSend);
 	const activeConversation = chat.conversations.find((item) => item.id === chat.activeConversationId);
 	const activeSession = chat.sessions.find((item) => item.path === conversationState?.sessionFile);
@@ -366,6 +372,15 @@ export function App() {
 		}
 		return rawSend(message);
 	}, [rawSend]);
+	const commandConversation = conversationState?.conversationId;
+	const commandSession = conversationState?.sessionId;
+	const commandTasks = conversationState?.backgroundCommands?.length ? conversationState.backgroundCommands : undefined;
+	const backgroundContext = useMemo(() => ({
+		tasks: commandTasks,
+		control(id: string, action: "detach" | "stop") {
+			if (commandConversation && commandSession) send({ type: "background_command", conversationId: commandConversation, sessionId: commandSession, id, action });
+		},
+	}), [commandTasks, commandConversation, commandSession, send]);
 	/** Full-window file drag in progress (issue #19) — shows the app-wide
 	 *  drop overlay; drop anywhere attaches, the input bar keeps priority via
 	 *  its own stopPropagation handlers. */
@@ -399,6 +414,7 @@ export function App() {
 	const sendToPi = useCallback((text: string) => appendComposerText(chat.activeConversationId, text), [chat.activeConversationId]);
 	const playgroundHost = useMemo(() => ({ status: playground.status, model: conversationState?.model ?? undefined, thinking: conversationState?.thinkingLevel, conversationId: chat.activeConversationId, sendToPi }), [playground.status, conversationState?.model, conversationState?.thinkingLevel, chat.activeConversationId, sendToPi]);
 	const [view, setView] = useState<ViewName>(isWikiWindow ? "wiki" : "chat");
+	const browserOpen = !!browserOwner && browserOwner === activeBrowserOwner && view === "chat" && !switching && chat.ready;
 	const [wikiFileRequest, setWikiFileRequest] = useState<{cwd:string;conversationId:string;path:string;token:string} | null>(null);
 	// 媒体/代码预览（issue #119）：无文本上下文、不产生当前文件 chip，但不禁用聊天输入。
 	const wikiMediaPreview = !!wikiFileRequest?.path && !isWikiDocumentPath(wikiFileRequest.path);
@@ -1415,9 +1431,14 @@ export function App() {
 
 			<div className="workspace-column">
 				{view !== "wiki" && <TopBar
+					onBrowser={window.electronAPI?.browser && activeBrowserOwner ? () => {
+						setDrawer(null);
+						setBrowserOwner(browserOpen ? undefined : activeBrowserOwner);
+					} : undefined}
 					onOpenDatabase={() => { collapseNavigationForTab(); openDatabase(); }}
 					leftCollapsed={leftCollapsed}
-					filesOpen={filesOverlay ? drawer === "right" : !filesCollapsed || inlinePreview}
+					browserOpen={browserOpen}
+					filesOpen={!browserOpen && (filesOverlay ? drawer === "right" : !filesCollapsed || inlinePreview)}
 					gitChangeCount={workspaceScm.files.length}
 					chat={chat}
 					send={send}
@@ -1441,6 +1462,12 @@ export function App() {
 						changeView();
 					}}
 					onOpenPanel={(side) => {
+						if (side === "right" && browserOpen) {
+							setBrowserOwner(undefined);
+							setFilesCollapsed(false);
+							setDrawer(filesOverlay ? "right" : null);
+							return;
+						}
 						if (side === "left" && navigationLocked) return;
 						if (side === "left" && !isNarrow) {
 							setDrawer(null);
@@ -1492,7 +1519,7 @@ export function App() {
 					<div className={`view-pane ${inlinePreview ? "preview-open" : ""} ${view === "chat" ? "" : "hidden"}`}>
 						<ChatDock target={wikiFileRequest || databaseOpen || documentPreview ? wikiChatHost : null}>
 							{conversationState ? (
-								<WorkspacePathContext.Provider value={conversationState.cwd}><MessageList recovery={{ ...toolRecovery, models: chat.models, onLoadModels: () => { if (!chat.models.length && !chat.modelsLoading) send({ type: "list_models" }); } }}
+								<WorkspacePathContext.Provider value={conversationState.cwd}><BackgroundContext.Provider value={backgroundContext}><MessageList recovery={{ ...toolRecovery, models: chat.models, onLoadModels: () => { if (!chat.models.length && !chat.modelsLoading) send({ type: "list_models" }); } }}
 									active={!notesOpen && !scratchOpen && (view === "chat" || view === "wiki" || databaseOpen)}
 									connected={chat.ready}
 									silenceNotified={chat.agentSilence?.conversationId === conversationState.conversationId && chat.agentSilence.phase === "silent"}
@@ -1506,7 +1533,7 @@ export function App() {
 								toolsWrap={chat.settings?.toolsWrap ?? true}
 								pendingEcho={chat.pendingEcho}
 								reloadEvents={chat.reloadEvents}
-								/></WorkspacePathContext.Provider>
+								/></BackgroundContext.Provider></WorkspacePathContext.Provider>
 							) : (
 								<div className="boot-wait">
 									{chat.ready ? t("loadingSession") : t("connectingServer")}
@@ -1564,6 +1591,7 @@ export function App() {
 							/>
 						</ChatDock>
 						<ChangesPanel key={conversationState?.conversationId ?? ""} cwd={conversationState?.cwd ?? ""} data={chat.scmDiffData} send={send} ready={chat.ready && !switching} notRepo={!workspaceScm.loaded || workspaceScm.notRepo} branch={workspaceScm.branch} defaultBase={workspaceScm.base} branches={workspaceScm.branches} dirty={chat.scmDirty} />
+						{browserOpen && browserOwner ? <BrowserPanel key={browserOwner} owner={browserOwner} close={() => setBrowserOwner(undefined)} /> : <>
 						{!isMobile && !filesOverlay && (!filesCollapsed || inlinePreview) && (
 							<ResizeHandle side={inlinePreview ? "editor" : "right"} width={inlinePreview ? 480 : visibleRightWidth} onResize={inlinePreview ? resizeEditor : resizeRight} onReset={inlinePreview ? () => { setEditorShare(0.45); localStorage.setItem("pi-harness:editor-share", "0.45"); } : undefined} />
 						)}
@@ -1599,7 +1627,7 @@ export function App() {
 								/>
 							</div>
 							{inlinePreview && filePreview}
-						</FluidDrawer>
+						</FluidDrawer></>}
 					</div>
 
 					<div className={`view-pane wiki-view ${view === "wiki" ? "" : "hidden"}`}>

@@ -81,7 +81,7 @@ macOS 下若服务由 launchd 拉起（`process.ppid === 1`，LaunchAgent/孤儿
 
 一次性 bash 在所有平台注入显式超时和后台执行指导。POSIX/SSH 启动服务时使用 `cd /path || exit; nohup command </dev/null > /tmp/service.log 2>&1 &`，再执行有超时的健康检查。不要将 `cd … && nohup …` 整个 AND 列表放到后台：外层 shell 可能持续持有 SSH 输出管道，导致服务已启动、探测已完成，但 SSH 和工具一直不结束。`nohup` 本身不能解决继承的管道；使用命令组时需重定向整个后台组。该约束是模型执行指导，不会自动改写用户命令。
 
-一次性 bash 由服务端兜底 120 秒超时（`server/bounded-bash.ts`），模型显式设置的 timeout 保留，用于较长构建。超时通过 SDK 返回工具错误并终止本机命令树；不会自动清理远端服务。持久终端接管 bash 仍走其原有静默解阻逻辑。流式 HTTP 探测应使用 `curl --max-time`，`head -c` 不能保证上游连接结束。
+普通会话的「后台命令」扩展使用原生 Bash 执行器。前台等待 30 秒后返回任务 ID，显式 timeout 从进程启动时计算。bash_task 支持查询输出与停止。
 
 ### 大仓库状态刷新（#132）
 

@@ -25,6 +25,7 @@ import { createAppUpdater } from "./app-updater.mjs";
  *     不受影响）。
  */
 
+import { installEmbeddedBrowser } from "./embedded-browser.mjs";
 import { app, BrowserWindow, Tray, Menu, nativeImage, dialog, ipcMain, shell } from "electron";
 import { randomUUID } from "node:crypto";
 import { fork } from "node:child_process";
@@ -69,6 +70,7 @@ let serverPort = 0;
 // One secret per launch, kept across server restarts so the open window stays authorized.
 const serverToken = desktopServerToken();
 let clientId;
+const embeddedBrowser = installEmbeddedBrowser(() => mainWindow, () => `http://127.0.0.1:${serverPort}`, () => clientId);
 const dataDir = process.env.PI_WEB_DATA_DIR || join(
 	process.env.HOME || process.env.USERPROFILE || "~", ".pi-web-desktop",
 );
@@ -132,6 +134,7 @@ async function startServer(reusePort) {
 			PI_WEB_DATA_DIR: dataDir,
 			// Workspace 列表与命令行版共用 ~/.pi-web 里的同一份；测试指定数据目录时保持隔离
 			...(process.env.PI_WEB_DATA_DIR ? {} : { PI_WEB_WORKSPACES_FILE: join(process.env.HOME || process.env.USERPROFILE || "~", ".pi-web", "project-workspaces.json") }),
+			PI_EMBEDDED_BROWSER: "1",
 			PI_WEB_NO_BROWSER: "1", // 不要自动打开浏览器（本身也不会打开，桌面版有自己的窗口）
 			PI_WEB_PKG_ROOT: getPkgRoot(), // 告诉 server 去哪找 web/dist
 			ELECTRON_RUN_AS_NODE: "1", // 以 Node.js 模式运行（非 Electron）
@@ -139,6 +142,9 @@ async function startServer(reusePort) {
 		stdio: ["ignore", "pipe", "pipe", "ipc"],
 		serialization: "json",
 	});
+
+	embeddedBrowser.attach(serverProcess);
+	serverProcess.once("exit", () => embeddedBrowser.reset());
 
 	// 收集 stdout/stderr 用于调试
 	let serverOut = "";
@@ -402,6 +408,8 @@ function wireAppWindow(win, { hideOnClose }) {
 
 function createWindow() {
 	mainWindow = new BrowserWindow(windowShellOptions());
+	mainWindow.on("hide", () => embeddedBrowser.reset());
+	mainWindow.webContents.on("did-start-navigation", (_e, _url, inPlace, main) => { if (main && !inPlace) embeddedBrowser.hide(); });
 	wireAppWindow(mainWindow, { hideOnClose: true });
 	// 加载 localhost 上的 server
 	mainWindow.loadURL(desktopWindowUrl(serverPort, serverToken));

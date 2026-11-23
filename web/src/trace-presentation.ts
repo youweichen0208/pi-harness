@@ -1,16 +1,5 @@
 import type { UiTraceMetric, UiTraceRun } from "../../server/protocol.js";
 
-export interface TraceTimelineItem {
-	id: string;
-	kind: "model" | "tool" | "host";
-	label: string;
-	status: string;
-	startMs: number;
-	endMs: number;
-	left: number;
-	width: number;
-}
-
 export function formatTraceMs(value: number | null | undefined): string {
 	if (value === null || value === undefined || !Number.isFinite(value)) return "—";
 	if (Math.abs(value) < 1) return `${(value * 1000).toFixed(0)}µs`;
@@ -29,33 +18,23 @@ export function traceRunsFilter(runs: UiTraceRun[], query: string): UiTraceRun[]
 	return runs.filter(run => [run.status, run.runId, ...run.requests.flatMap(request => [request.provider, request.api, request.model, request.status]), ...run.tools.flatMap(tool => [tool.toolName, tool.status])].some(value => value?.toLowerCase().includes(normalized)));
 }
 
-export function traceTimeline(run: UiTraceRun): TraceTimelineItem[] {
-	const items: Omit<TraceTimelineItem, "left" | "width">[] = [];
-	for (const request of run.requests) if (request.hookStartMs !== undefined && request.messageEndMs !== undefined) items.push({
-		id: request.requestId, kind: "model", label: request.model ?? request.provider ?? "model", status: request.status,
-		startMs: request.hookStartMs, endMs: request.messageEndMs,
-	});
-	for (const tool of run.tools) if (tool.endMs !== undefined) items.push({
-		id: tool.toolCallId, kind: "tool", label: tool.toolName, status: tool.status, startMs: tool.startMs, endMs: tool.endMs,
-	});
-	const host = [...run.hostSpans].sort((a, b) => a.startMs - b.startMs || a.endMs - b.endMs);
-	let active: { startMs: number; endMs: number } | undefined;
-	let hostIndex = 0;
-	for (const span of host) {
-		if (active && span.startMs <= active.endMs) {
-			active.endMs = Math.max(active.endMs, span.endMs);
-			continue;
-		}
-		if (active) items.push({ id: `host-${hostIndex++}`, kind: "host", label: "host", status: "observed", startMs: active.startMs, endMs: active.endMs });
-		active = { startMs: span.startMs, endMs: span.endMs };
+export function traceShare(run: UiTraceRun, key: string) {
+	const total = run.aggregates.agent_active_wall_ms;
+	const part = run.aggregates[key];
+	if (total?.status !== "measured" || !total.value || part?.status !== "measured" || part.value == null) return "";
+	return ((100 * part.value) / total.value).toFixed(1) + "%";
+}
+
+/** Input spans are sorted by start and belong to one host category. */
+export function mergeHostIntervals(group: readonly { start: number; end: number }[], lo: number, hi: number) {
+	const merged: { start: number; end: number }[] = [];
+	for (const span of group) {
+		const start = Math.max(lo, span.start);
+		const end = Math.min(hi, span.end);
+		if (end < start) continue;
+		const last = merged.at(-1);
+		if (last && start <= last.end) last.end = Math.max(last.end, end);
+		else merged.push({ start, end });
 	}
-	if (active) items.push({ id: `host-${hostIndex}`, kind: "host", label: "host", status: "observed", startMs: active.startMs, endMs: active.endMs });
-	const start = run.agentStartMs;
-	const fallbackEnd = Math.max(start + 1, ...items.map(item => item.endMs));
-	const end = run.agentSettledMs ?? fallbackEnd;
-	const duration = Math.max(1, end - start);
-	return items.map(item => {
-		const left = Math.max(0, Math.min(100, (item.startMs - start) / duration * 100));
-		return { ...item, left, width: Math.max(0.35, Math.min(100 - left, (item.endMs - item.startMs) / duration * 100)) };
-	});
+	return merged;
 }

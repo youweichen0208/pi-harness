@@ -25,7 +25,7 @@ try {
 	for (const language of ['zh', 'en']) {
 		const page = await browser.newPage({ viewport: { width: 1000, height: 850 } });
 		const errors = [], sent = [];
-		let socket, baseState;
+		let socket, baseState, replaying = false;
 		page.on('pageerror', error => errors.push(String(error)));
 		const image = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aO1kAAAAASUVORK5CYII=';
 		const result = serializeMessage({ role: 'toolResult', toolCallId: 'native', toolName: 'codemode', isError: false, timestamp: 2, content: [{ type: 'text', text: 'Fixture result' }, { type: 'image', mimeType: 'image/png', data: image }], nestedCalls: { complete: true, calls: [{ id: 'child', name: 'mcp__echo__add', arguments: { a: 2, b: 3 }, status: 'ok', durationMs: 12 }] } }, 1);
@@ -35,6 +35,7 @@ try {
 			route.onMessage(wire => { const message = JSON.parse(wire.toString()); sent.push(message); if (!['provider_auth_response', 'cancel_provider_login'].includes(message.type)) upstream.send(wire); });
 			upstream.onMessage(wire => {
 				const message = JSON.parse(wire.toString());
+				if (replaying && ['snapshot', 'snapshot_delta'].includes(message.type)) return;
 				if (message.type === 'snapshot') {
 					message.state.piConfigured = true;
 					message.state.model = { id: 'router', name: 'Router', provider: 'fixture', vision: false };
@@ -56,6 +57,7 @@ try {
 		const picture = page.locator('.codemode-images img');
 		await picture.waitFor();
 		assert(await picture.evaluate(node => node.complete && node.naturalWidth === 1));
+		replaying = true;
 		socket.send(JSON.stringify({ type: 'snapshot', state: { ...baseState, isStreaming: true, messages: baseState.messages.slice(0, 1) } }));
 		const child = { type: 'tool_status', conversationId: baseState.conversationId, toolCallId: 'live-child', parentToolCallId: 'native', toolName: 'mcp__http__add', running: true, isError: false, argumentsText: '{"a":4,"b":5}' };
 		socket.send(JSON.stringify(child));
@@ -67,12 +69,41 @@ try {
 		socket.send(JSON.stringify({ type: 'snapshot', state: baseState }));
 		await page.waitForFunction(() => document.querySelector('.codemode-body')?.textContent.includes('mcp__echo__add'));
 		assert.equal(await page.locator('.codemode-call').count(), 1);
-		const browserTool = 'mcp__playwright_extension__browser_snapshot';
+		const fixture = {
+			snapshot: "fixture-snapshot", title: "Repository overview", text: Array.from({length:16}, (_,i) => "Paragraph " + (i+1)).join("\n"),
+			elements: [{id:1,role:"a",label:"Issues"},{id:2,role:"button",label:"New issue"},{id:3,role:"input",label:"Search"}],
+		};
+		const snapshotMessages = [
+			{id:"read-message",role:"assistant",timestamp:3,content:[{type:"toolCall",id:"read-call",name:"embedded_browser",argumentsText:'{"action":"read"}'}]},
+			serializeMessage({role:"toolResult",toolCallId:"read-call",toolName:"embedded_browser",isError:false,durationMs:18,timestamp:4,content:[{type:"text",text:JSON.stringify(fixture)}]},2),
+		];
+		socket.send(JSON.stringify({type:"snapshot",state:{...baseState,isStreaming:false,messages:snapshotMessages}}));
+		const card = page.locator(".snapshot-card");
+		await card.locator(".snap-title").waitFor();
+		assert.equal(await card.locator(".snap-title").innerText(),fixture.title);
+		assert.equal(await card.locator(".snap-url,.snap-json").count(),0,"legacy snapshot shows neither a fabricated URL nor raw JSON by default");
+		assert.equal((await card.locator(".snap-text").innerText()).split("\n").length,10);
+		await card.getByRole("button",{name:language==="zh"?"展开正文":"Show more text"}).click();
+		assert.equal(await card.locator(".snap-text").innerText(),fixture.text);
+		await card.getByRole("button",{name:language==="zh"?"可点击元素":"Links and buttons",exact:true}).click();
+		assert.equal(await card.locator("tbody tr").count(),2);
+		await card.getByRole("searchbox").fill("new");
+		assert.equal(await card.locator("tbody tr").count(),1);
+		await card.locator("tbody button").click();
+		assert.match(await page.locator(".view-pane textarea:visible").first().inputValue(),/fixture-snapshot/);
+		await card.getByRole("tab",{name:/JSON/}).click();
+		assert.deepEqual(JSON.parse(await card.locator(".snap-json").innerText()),fixture);
+		await card.getByRole("tab",{name:language==="zh"?"摘要":"Summary"}).click();
+		await page.setViewportSize({width:390,height:800});
+		assert(await card.evaluate(el => el.scrollWidth <= el.clientWidth + 1),"snapshot fits narrow chats");
+		await page.setViewportSize({width:1000,height:850});
+		if (process.env.PI_SNAPSHOT_SCREENSHOT && language === "zh") await card.screenshot({path:process.env.PI_SNAPSHOT_SCREENSHOT});
+		const browserTool = 'embedded_browser';
 		const browserMessages = [undefined, 60000].flatMap((durationMs, index) => {
 			const id = `browser-timeout-${index}`;
 			return [
 				{ id, role: 'assistant', timestamp: 3 + index, content: [{ type: 'toolCall', id, name: browserTool, argumentsText: '{}' }] },
-				serializeMessage({ role: 'toolResult', toolCallId: id, toolName: browserTool, isError: true, ...(durationMs === undefined ? {} : { durationMs }), timestamp: 5 + index, content: [{ type: 'text', text: 'MCP request timed out after 60000ms' }] }, index),
+				serializeMessage({ role: 'toolResult', toolCallId: id, toolName: browserTool, isError: true, ...(durationMs === undefined ? {} : { durationMs }), timestamp: 5 + index, content: [{ type: 'text', text: 'Browser request timed out.' }] }, index),
 			];
 		});
 		socket.send(JSON.stringify({ type: 'snapshot', state: { ...baseState, isStreaming: false, messages: browserMessages } }));
@@ -88,7 +119,7 @@ try {
 		await page.locator('[data-tool-call-id="browser-timeout-0"] .tool-step-head').click();
 		const timeoutHelp = page.locator('[data-tool-call-id="browser-timeout-0"] .browser-progress-update');
 		await timeoutHelp.waitFor();
-		assert.match(await timeoutHelp.textContent(), language === 'zh' ? /检查 Chrome/ : /Check the Playwright/);
+		assert.match(await timeoutHelp.textContent(), language === 'zh' ? /响应超时/ : /Timed out/);
 		await page.evaluate(() => {
 			window.deviceActions = [];
 			window.open = url => { window.deviceActions.push(['open', url]); return null; };

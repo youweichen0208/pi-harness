@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FiActivity, FiDownload, FiRefreshCw, FiSearch, FiX } from "react-icons/fi";
-import type { ClientMessage, TraceResult, UiState, UiTraceRun } from "../types";
+import type { ClientMessage, TraceResult, UiState } from "../types";
 import { useT } from "../i18n";
 import { useDialogFocus } from "../use-dialog-focus";
 import { randomUuid } from "../uuid";
-import { formatTraceMs, traceMetric, traceRunsFilter, traceTimeline } from "../trace-presentation";
+import { formatTraceMs, traceMetric, traceShare, traceRunsFilter } from "../trace-presentation";
+import { TraceWaterfall } from "./TraceWaterfall";
 import { renderTraceExportHtml, traceExportFileName } from "../trace-export";
 
 function downloadTrace(format: "html" | "json", trace: NonNullable<TraceResult["trace"]>, state: UiState | null) {
@@ -72,15 +73,15 @@ export function TraceWorkbench({ state, connected, send }: { state: UiState | nu
 		if (open) requestTrace();
 	}, [state?.conversationId]);
 	useEffect(() => { if (open) requestTrace(); }, [open]);
+	const traceRunning = state?.isStreaming || state?.backgroundCommands?.some(task => task.state === "background");
 	useEffect(() => {
-		if (!open || !state?.isStreaming) return;
+		if (!open || !traceRunning) return;
 		const timer = window.setInterval(requestTrace, 2000);
 		return () => window.clearInterval(timer);
-	}, [open, state?.isStreaming, requestTrace]);
+	}, [open, traceRunning, requestTrace]);
 
 	const runs = useMemo(() => traceRunsFilter(trace?.runs ?? [], query), [trace, query]);
 	const selected = runs.find(run => run.runId === selectedRunId) ?? runs.at(-1);
-	const timeline = useMemo(() => selected ? traceTimeline(selected) : [], [selected]);
 	if (!open) return null;
 	const aggregates = selected?.aggregates ?? {};
 	const cards: [string, string][] = [
@@ -99,20 +100,17 @@ export function TraceWorkbench({ state, connected, send }: { state: UiState | nu
 			{error && <div className="trace-error" role="alert">{error}</div>}
 			{!error && !trace?.runs.length && <div className="trace-empty">{loading ? t("loading") : t("traceNoRuns")}</div>}
 			{selected && <div className="trace-body">
-				<aside className="trace-run-list" aria-label={t("traceRuns")}>{runs.map(run => <button key={run.runId} className={run.runId === selected.runId ? "selected" : ""} onClick={() => setSelectedRunId(run.runId)}><span><strong>{run.startedAt ? new Date(run.startedAt).toLocaleTimeString() : run.runId.slice(0, 8)}</strong><small>{run.requests.length} {t("traceRequests")} · {run.tools.length} {t("traceTools")}</small></span><em className={`trace-status status-${run.status}`}>{run.status}</em></button>)}</aside>
+				<aside className="trace-run-list" aria-label={t("traceRuns")}>{runs.map(run => <button key={run.runId} className={run.runId === selected.runId ? "selected" : ""} onClick={() => setSelectedRunId(run.runId)}><span><strong>{run.startedAt ? new Date(run.startedAt).toLocaleTimeString() : run.runId.slice(0, 8)}</strong><small>{formatTraceMs(run.aggregates.agent_active_wall_ms?.value)} · {run.requests.length} {t("traceRequests")} · {run.tools.length} {t("traceTools")}</small></span><em className={`trace-status status-${run.status}`}>{run.status}{run.requestsTruncated || run.toolsTruncated || run.hostSpanOverflow || run.requests.some(r => r.status !== "measured") ? " · ⚠" : ""}</em></button>)}</aside>
 				<main className="trace-detail">
-					<div className="trace-aggregate-grid">{cards.map(([key, label]) => { const metric = traceMetric(aggregates[key]); return <div key={key}><small>{label}</small><strong className={`metric-${metric.status}`}>{metric.text}</strong>{aggregates[key]?.reason && <span>{aggregates[key].reason}</span>}</div>; })}</div>
-					{aggregates.host_observed_lower_bound_ms && aggregates.host_wall_union_ms?.status !== "measured" && <div className="trace-warning">{t("traceObservedLowerBound")}: {formatTraceMs(aggregates.host_observed_lower_bound_ms.value)}</div>}
-					<section className="trace-timeline-section"><h3>{t("traceTimeline")}</h3><div className="trace-timeline">{(["model", "tool", "host"] as const).map(kind => <div className="trace-lane" key={kind}><span>{kind === "model" ? t("traceModel") : kind === "tool" ? t("traceTools") : t("traceHost")}</span><div className="trace-lane-track">{timeline.filter(item => item.kind === kind).map(item => <span key={item.id} role="img" className={`trace-span trace-span-${kind} status-${item.status}`} style={{ left: `${item.left}%`, width: `${item.width}%` }} title={`${item.label} · ${formatTraceMs(item.endMs - item.startMs)} · ${item.status}`} aria-label={`${item.label} ${formatTraceMs(item.endMs - item.startMs)}`} />)}</div></div>)}</div></section>
-					<TraceRequests run={selected} />
-					<section><h3>{t("traceTools")}</h3>{selected.tools.length ? <div className="trace-table">{selected.tools.map(tool => <div className="trace-table-row" key={tool.toolCallId}><strong>{tool.toolName}</strong><span>{formatTraceMs(tool.durationMs ?? (tool.endMs !== undefined ? tool.endMs - tool.startMs : null))}</span><span>{t("traceAssistantGap")}: {formatTraceMs(tool.assistantToToolGapMs)}</span><em className={`trace-status status-${tool.status}`}>{tool.status}</em></div>)}</div> : <p className="trace-muted">{t("traceNoTools")}</p>}</section>
+					<div className="trace-aggregate-grid">{cards.map(([key, label]) => { const metric = traceMetric(aggregates[key]); return <div key={key}><small>{label}</small><strong className={`metric-${metric.status}`}>{metric.text}</strong>{key !== "agent_active_wall_ms" && <small>{traceShare(selected, key)}</small>}{aggregates[key]?.reason && <span>{aggregates[key].reason}</span>}</div>; })}</div>
+					{(["model", "tool", "host"] as const).map((kind, i) => {
+						const lower = aggregates[kind + "_observed_lower_bound_ms"];
+						if (lower?.status !== "measured" || aggregates[kind + "_wall_union_ms"]?.status === "measured") return null;
+						return <div className="trace-warning" key={kind}>{cards[i + 1][1]} · {t("traceObservedLowerBound")} · {formatTraceMs(lower.value)}</div>;
+					})}
+					<TraceWaterfall key={selected.runId} run={selected} />
 				</main>
 			</div>}
 		</section>
 	</div>;
-}
-
-function TraceRequests({ run }: { run: UiTraceRun }) {
-	const t = useT();
-	return <section><h3>{t("traceRequests")}</h3>{run.requests.length ? <div className="trace-table">{run.requests.map(request => <div className="trace-request" key={request.requestId}><div><strong>{request.provider ?? "provider"}/{request.model ?? "model"}</strong><span>turn {request.turnIndex ?? "—"}</span><em className={`trace-status status-${request.status}`}>{request.status}</em></div><div><span>{t("traceProviderDuration")}: {traceMetric(request.metrics.provider_hook_to_message_end_ms).text}</span><span>{t("traceProviderHeaders")}: {traceMetric(request.metrics.provider_hook_to_headers_ms).text}</span><span>{t("traceFirstVisible")}: {traceMetric(request.metrics.first_event_to_first_visible_delta_ms).text}</span><span>{t("traceToolGap")}: {formatTraceMs(request.toolToProviderGapMs)}</span></div></div>)}</div> : <p className="trace-muted">{t("traceNoRequests")}</p>}</section>;
 }

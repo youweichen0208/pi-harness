@@ -7,7 +7,7 @@ export interface TraceStoreRecord {
 	sessionId: string;
 	runId: string;
 	seq: number;
-	type: "run_start" | "provider_request" | "tool_end" | "run_settled";
+	type: "run_start" | "provider_request" | "tool_end" | "background_command" | "run_settled";
 	recordedAt: string;
 	payload: Record<string, unknown>;
 }
@@ -123,6 +123,9 @@ export class TraceStore {
 					if (index >= 0) requests[index] = request as Record<string, unknown>;
 					else requests.push(request as Record<string, unknown>);
 				}
+			} else if (record.type === "background_command") {
+				const run = runs.get(record.runId);
+				if (run) run.backgroundSpans = record.payload.backgroundSpans;
 			} else if (record.type === "tool_end") {
 				const run = runs.get(record.runId);
 				const tool = record.payload.tool as { toolCallId?: string } | undefined;
@@ -133,6 +136,9 @@ export class TraceStore {
 			}
 		}
 		for (const [runId, run] of runs) {
+			if (recoverOpen && Array.isArray(run.backgroundSpans)) {
+				for (const span of run.backgroundSpans) if (span.state === "background") span.state = "interrupted";
+			}
 			if (run.status !== "open" || !recoverOpen) continue;
 			run.status = "interrupted";
 			run.interrupted = true;

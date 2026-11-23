@@ -1,3 +1,4 @@
+import { backgroundBash, commandViews, hasRunningCommand, stopRequestCommands } from "./background-bash.js";
 import { designFirstResources } from "./design-first-resources.js";
 import { bindCacheWarming, cacheWarmingView, setGlobalCacheWarming } from "./cache-warming.js";
 import { CodemodeHistory } from "./codemode-history.js";
@@ -27,9 +28,8 @@ import { Readable } from "node:stream";
 import { openToolOutput, toolOutputManifest, toolOutputId } from "./tool-output.js";
 import { nativeToolDetails, toolExitCode } from "./serialize.js";
 import { flushPromptReload, getSystemPromptState, promptReloadStatus, promptUsesFile, queuePromptReload, writeSystemPromptFile } from "./system-prompt-files.js";
-import { isLoopbackBind } from "./origin-policy.js";
+import { embeddedBrowser } from "./embedded-browser.js";
 import { desktopControl, desktopSupported } from "./desktop-control.js";
-import { pageReader } from "./page-reader.js";
 import { parseNativeMcpStatus } from "./native-mcp-presentation.js";
 import { codemodeDetails } from "./codemode-presentation.js";
 import { NativeMcpConfigService } from "./native-mcp-config.js";
@@ -631,9 +631,13 @@ export class ClientSession {
 			const extensionFactories = nativeToolExtensions(() => databaseScope(this.clientId, cwd, sessionManager));
 			if (executionTrace) extensionFactories.push({ name: "pi-harness-execution-trace", replaceable: false, factory: createExecutionTraceExtension(executionTrace) });
 			if (!wiki) {
-				if (process.platform === "darwin" && isLoopbackBind(process.env.PI_WEB_HOST ?? "127.0.0.1")) {
-					extensionFactories.push({ name: "pi-page-reader", factory: pageReader });
-				}
+				extensionFactories.push({ name: "background-bash", replaceable: true, factory: backgroundBash(sessionManager, settings, () => this.scheduleSnapshot(), view => executionTrace?.backgroundCommand(view)) });
+				if (process.env.PI_EMBEDDED_BROWSER === "1" && process.send) extensionFactories.push({
+					name: "pi-harness-browser", factory: embeddedBrowser(this.clientId, () => {
+						const conv = this.convs.get(this.activeId);
+						return conv?.session.sessionManager === sessionManager ? conv.id + "/" + sessionManager.getSessionId() : undefined;
+					}),
+				});
 				extensionFactories.push({
 					name: "pi-harness-desktop",
 					factory: pi => {
@@ -1343,6 +1347,7 @@ export class ClientSession {
 			// stats are best-effort
 		}
 		const result = {
+			backgroundCommands: commandViews(this.session.sessionManager),
 			tree: conv.tree?.refresh(),
 			clientId: this.clientId,
 			cwd: this.cwd,
@@ -1553,20 +1558,22 @@ export class ClientSession {
 	}
 	async listToolOutputs(conversationId: string, toolCallId: string) {
 		const { conv, result } = this.toolResultForDownload(conversationId, toolCallId);
-		const path = nativeToolDetails(result.toolName, result)?.fullOutputPath;
+		const task = commandViews(conv.session.sessionManager).find(task => task.id === toolCallId);
+		const path = task?.fullOutputPath ?? nativeToolDetails(result.toolName, result)?.fullOutputPath;
 		const text = result.content.filter(part => part.type === "text").map(part => part.text).join("\n");
 		return toolOutputManifest(conv.cwd, result.toolName, text, typeof path === "string" ? path : undefined);
 	}
 	async downloadToolOutput(conversationId: string, toolCallId: string, outputId?: string) {
 		const { conv, result } = this.toolResultForDownload(conversationId, toolCallId);
-		const path = nativeToolDetails(result.toolName, result)?.fullOutputPath;
+		const task = commandViews(conv.session.sessionManager).find(task => task.id === toolCallId);
+		const path = task?.fullOutputPath ?? nativeToolDetails(result.toolName, result)?.fullOutputPath;
 		if (outputId && !(typeof path === "string" && outputId === toolOutputId(path))) {
 			const output = (await this.listToolOutputs(conversationId, toolCallId)).find(output => output.id === outputId);
 			if (!output) throw Object.assign(new Error("Output access denied"), { code: "EACCES" });
 			return { name: output.name, handle: await openToolOutput(conv.cwd, output.path) };
 		}
 		if (typeof path === "string") return { name: path.split(/[\\/]/).pop()!, handle: await openToolOutput(conv.cwd, path) };
-		return { name: "tool-output.txt", handle: { createReadStream: () => Readable.from(result.content.filter(part => part.type === "text").map(part => part.text + "\n")) } };
+		return { name: "tool-output.txt", handle: { createReadStream: () => Readable.from(task ? [task.output] : result.content.filter(part => part.type === "text").map(part => part.text + "\n")) } };
 	}
 
 	resolveDialog(conversationId: string, id: string, value: string | boolean | null): void {
@@ -1799,7 +1806,7 @@ export class ClientSession {
 		let n = 0;
 		for (const c of this.convs.values()) {
 			try {
-				if (c.session.isStreaming) n += 1;
+				if (c.session.isStreaming || hasRunningCommand(c.session.sessionManager)) n += 1;
 			} catch {
 				// session being replaced — not running
 			}
@@ -1985,6 +1992,7 @@ export class ClientSession {
 	 * overnight. The notice fires only on the forced-reset path.
 	 */
 	async abort(): Promise<void> {
+		stopRequestCommands(this.conv.session.sessionManager);
 		// 只停止当前智能体运行。
 		const conv = this.conv;
 		const pendingRecovery = conv.runRecovery?.pending;

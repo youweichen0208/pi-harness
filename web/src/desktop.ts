@@ -12,7 +12,14 @@ export interface DesktopWindowState {
 	fullscreenSettling?: boolean;
 }
 
+export interface BrowserState {
+	active?: number;
+	owner?: string;
+	tabs: { id: number; title: string; url: string; back: boolean; forward: boolean }[];
+}
 export interface DesktopAPI {
+	browser?: (action: string, value?: unknown) => Promise<BrowserState>;
+	onBrowser?: (callback: (state: BrowserState) => void) => () => void;
 	platform: string;
 	assistantVisibility?: (visible: boolean) => Promise<void>;
 	onAssistantHidden?: (callback: () => void) => () => void;

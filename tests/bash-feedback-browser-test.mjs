@@ -51,6 +51,13 @@ try {
 	await page.getByText('Disconnected · waiting to reconnect', {exact:true}).first().waitFor();
 	await page.evaluate(() => window.renderCommand({lastOutputAt:undefined}, 'remounted'));
 	await page.getByText('Waiting for output…', {exact:true}).first().waitFor();
+	await page.clock.install();
+	await page.evaluate(() => window.renderCommand({lastOutputAt:undefined, liveOutput:''}, 'first-output'));
+	await page.getByText('Waiting for output…', {exact:true}).first().waitFor();
+	await page.clock.fastForward(31000);
+	await page.getByText(/部分命令会在结束时才输出|Some commands only print/).first().waitFor();
+	await page.evaluate(() => window.renderCommand({lastOutputAt:Date.now(),liveOutput:'received'}, 'first-output'));
+	await page.getByText('received', {exact:true}).first().waitFor();
 	await page.evaluate(() => window.renderCommand({status:{running:false,isError:false,exitCode:0}}));
 	if (!await page.locator('.bash-row-body').isVisible()) await page.locator('.bash-row-head').click();
 	await page.getByText('Command finished', {exact:true}).first().waitFor();

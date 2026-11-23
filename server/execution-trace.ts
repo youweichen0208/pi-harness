@@ -1,3 +1,4 @@
+import type { BackgroundCommand, BackgroundSpan } from "./protocol.js";
 import { randomUUID } from "node:crypto";
 import { TraceStore, type TraceStoreStatus } from "./trace-store.js";
 import type { AgentSessionEvent, ExtensionFactory } from "@earendil-works/pi-coding-agent";
@@ -25,6 +26,7 @@ export interface ProviderRequestTrace {
 	firstHeadersMs?: number;
 	firstProviderEventMs?: number;
 	firstVisibleDeltaMs?: number;
+	firstOutputKind?: string;
 	messageEndMs?: number;
 	responseAttempts: { atMs: number; status: number }[];
 	responseAttemptsTruncated?: boolean;
@@ -52,6 +54,7 @@ export interface HostSpan {
 }
 
 interface RunState {
+	backgroundSpans?: BackgroundSpan[];
 	runId: string;
 	runSeq: number;
 	bootId: string;
@@ -264,6 +267,16 @@ export class ExecutionTraceSession {
 		request.firstProviderEventMs ??= at;
 	}
 
+	backgroundCommand(view: BackgroundCommand) {
+		const run = this.runs.findLast(r => r.toolCallIds.includes(view.id));
+		if (!run) return;
+		const spans = run.backgroundSpans ??= [];
+		let span = spans.find(s => s.id === view.id);
+		if (!span) spans.push(span = { id: view.id, startMs: this.now(), state: view.state });
+		span.state = view.state;
+		if (view.endedAt) span.endMs = this.now();
+		this.emitRunEvent(run, "background_command", { backgroundSpans: spans.map(s => ({ ...s })) });
+	}
 	observe(event: AgentSessionEvent, conversationId?: string): void {
 		const at = this.now();
 		switch (event.type) {
@@ -296,7 +309,10 @@ export class ExecutionTraceSession {
 				const request = this.requestForMessage(event.message as AssistantMessage);
 				if (request && request.firstVisibleDeltaMs === undefined) {
 					const update = event.assistantMessageEvent;
-					if (("delta" in update && typeof update.delta === "string" && update.delta.length > 0) || update.type === "toolcall_start") request.firstVisibleDeltaMs = at;
+					if (("delta" in update && typeof update.delta === "string" && update.delta.length > 0) || update.type === "toolcall_start") {
+						request.firstVisibleDeltaMs = at;
+						request.firstOutputKind = update.type;
+					}
 				}
 				break;
 			}
@@ -549,11 +565,12 @@ export class ExecutionTraceSession {
 		const hostExact = !!root && !run.hostSpanOverflow;
 		const modelIssue = providerRequestIssue(requests, run.requestsTruncated);
 		const modelExact = !!root && !modelIssue;
-		const toolExact = !!root && !run.toolsTruncated;
+		const toolIssue = run.toolsTruncated ? "tools_truncated" : tools.some(tool => !tool.parentToolCallId && tool.endMs === undefined) ? "tool_end_missing" : undefined;
+		const toolExact = !!root && !toolIssue;
 		const allExact = hostExact && modelExact && toolExact;
 		const aggregateIssue: TraceIssue | undefined = run.hostSpanOverflow
 			? { status: "unmeasured", reason: "host_spans_truncated" }
-			: modelIssue ?? (run.toolsTruncated ? { status: "unmeasured", reason: "tools_truncated" } : undefined);
+			: modelIssue ?? (toolIssue ? { status: "unmeasured", reason: toolIssue } : undefined);
 		return {
 			...this.runMetadata(run),
 			agentSettledMs: run.agentSettledMs,
@@ -562,6 +579,7 @@ export class ExecutionTraceSession {
 			requests,
 			tools,
 			hostSpans: run.hostSpans,
+			backgroundSpans: run.backgroundSpans?.map(span => ({ ...span, observedMs: span.endMs ?? this.now() })),
 			hostSpanOverflow: run.hostSpanOverflow,
 			requestsTruncated: run.requestsTruncated,
 			toolsTruncated: run.toolsTruncated,
@@ -569,7 +587,7 @@ export class ExecutionTraceSession {
 				agent_active_wall_ms: metric(finiteDuration(run.agentSettledMs, run.agentStartMs), root ? "measured" : "unmeasured"),
 				model_wall_union_ms: modelExact ? metric(intervalDuration(modelIntervals), "measured") : metric(null, modelIssue?.status ?? "unmeasured", modelIssue?.reason ?? "run_open"),
 				model_observed_lower_bound_ms: metric(intervalDuration(modelIntervals), root ? "measured" : "unmeasured"),
-				tool_wall_union_ms: toolExact ? metric(intervalDuration(toolIntervals), "measured") : metric(null, "unmeasured", run.toolsTruncated ? "tools_truncated" : "run_open"),
+				tool_wall_union_ms: toolExact ? metric(intervalDuration(toolIntervals), "measured") : metric(null, "unmeasured", toolIssue ?? "run_open"),
 				tool_observed_lower_bound_ms: metric(intervalDuration(toolIntervals), root ? "measured" : "unmeasured"),
 				host_wall_union_ms: hostExact ? metric(intervalDuration(hostIntervals), "measured") : metric(null, "unmeasured", run.hostSpanOverflow ? "host_spans_truncated" : "run_open"),
 				host_observed_lower_bound_ms: metric(intervalDuration(hostIntervals), root ? "measured" : "unmeasured"),
@@ -620,7 +638,7 @@ export class ExecutionTraceSession {
 				const clipped = clipInterval(span, root);
 				if (clipped) intervals.push(clipped);
 			}
-			unclassified = modelIssue ? metric(null, modelIssue.status, modelIssue.reason) : metric(Math.max(0, root.endMs - root.startMs - intervalDuration(intervals)), "measured");
+			unclassified = tools.some(tool => !tool.parentToolCallId && tool.endMs === undefined) ? metric(null, "unmeasured", "tool_end_missing") : modelIssue ? metric(null, modelIssue.status, modelIssue.reason) : metric(Math.max(0, root.endMs - root.startMs - intervalDuration(intervals)), "measured");
 		}
 		return {
 			...request,
@@ -654,7 +672,7 @@ export class ExecutionTraceRegistry {
 			return trace;
 		}
 		trace = new ExecutionTraceSession(sessionId, () => performance.now(), this.bootId, (session, runId, seq, type, payload) => {
-			this.store?.append({ schemaVersion: 1, sessionId: session, runId, seq, type: type as "run_start" | "provider_request" | "tool_end" | "run_settled", recordedAt: new Date().toISOString(), payload });
+			this.store?.append({ schemaVersion: 1, sessionId: session, runId, seq, type: type as "background_command" | "run_start" | "provider_request" | "tool_end" | "run_settled", recordedAt: new Date().toISOString(), payload });
 		});
 		this.sessions.set(sessionId, trace);
 		if (this.sessions.size > ExecutionTraceRegistry.MAX_SESSIONS) {

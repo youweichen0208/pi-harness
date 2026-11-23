@@ -41,6 +41,7 @@ describe("ExecutionTraceSession", () => {
 		const report = trace.report() as any;
 		expect(report.coverage).toMatchObject({ provider_requests_total: 2, provider_requests_matched: 2, trace_coverage: 1 });
 		const run = report.runs[0];
+		expect(run.requests[0].firstOutputKind).toBe("text_delta");
 		expect(run.requests[0].metrics).toMatchObject({
 			provider_hook_to_headers_ms: { value: 180, status: "measured" },
 			headers_to_first_provider_event_ms: { value: 300, status: "measured" },
@@ -62,6 +63,19 @@ describe("ExecutionTraceSession", () => {
 			agent_active_wall_ms: { value: 1490, status: "measured" },
 			queue_wait_ms: { value: 10, status: "measured" },
 		});
+	});
+
+	it("reports an unclosed root tool as incomplete in both aggregation scopes", () => {
+		let clock = 0;
+		const trace = new ExecutionTraceSession("session", () => ++clock);
+		trace.promptAccepted("conversation", "host", "started");
+		emit(trace, "agent_start");
+		emit(trace, "tool_execution_start", { toolCallId: "open", toolName: "bash" });
+		emit(trace, "agent_settled");
+		const report = trace.report() as any;
+		for (const metric of [report.runs[0].aggregates.tool_wall_union_ms, report.runs[0].aggregates.unclassified_wall_ms, report.hostRequests[0].metrics.unclassified_wall_ms]) {
+			expect(metric).toMatchObject({ value: null, status: "unmeasured", reason: "tool_end_missing" });
+		}
 	});
 
 	it("marks overlapping provider requests ambiguous instead of guessing", () => {

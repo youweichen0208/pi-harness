@@ -85,6 +85,11 @@ try {
 	assert.equal(await summary.locator('.process-group-chevron').count(), 0, 'collapsed GPT-style group has no chevron');
 	assert.equal(await summary.locator('.process-group-summary-text').evaluate(el => getComputedStyle(el).backgroundImage), 'none', 'completed title uses solid gray, not a streaming gradient');
 	assert.equal(await summary.locator('.process-group-summary-text').evaluate(el => getComputedStyle(el).animationName), 'none');
+	await send(pureTranscript(), { isStreaming: true, streamingMessage: assistant('reply', { type: 'text', text: '这个' }) });
+	await summary.locator('.streaming-color').waitFor();
+	assert.equal(await summary.locator('.process-group-summary-text').evaluate(el => getComputedStyle(el).animationName), 'waiting-text-shimmer');
+	await send(pureTranscript());
+	await summary.locator('.streaming-color').waitFor({ state: 'detached' });
 	const quietColor = await summary.locator('.process-group-summary-text').evaluate(el => getComputedStyle(el).color);
 	const quietBorder = await summary.locator('.process-group-icon').evaluate(el => getComputedStyle(el).borderTopColor);
 	await summary.screenshot({ path: '/tmp/pi-codex-bash-collapsed-light.png' });
@@ -135,7 +140,7 @@ try {
 	assert.equal(await cmd.textContent(), 'rg -n todo src');
 	assert.equal(await cmd.evaluate(el => getComputedStyle(el).whiteSpace), 'nowrap');
 	assert.equal(await cmd.evaluate(el => getComputedStyle(el).textOverflow), 'ellipsis');
-	assert.match(await cmd.evaluate(el => getComputedStyle(el).fontFamily), /-apple-system/);
+	assert.match(await cmd.evaluate(el => getComputedStyle(el).fontFamily), /^Inter,/);
 	assert.equal(await cmd.evaluate(el => getComputedStyle(el).fontWeight), '400');
 	assert.equal(await cmd.evaluate(el => getComputedStyle(el).fontSize), '14px');
 	assert.equal(await cmd.evaluate(el => getComputedStyle(el).lineHeight), '20px');
@@ -168,8 +173,8 @@ try {
 	assert.match(await page.locator('[data-tool-call-id="p2"] .bash-shell-card .bash-detail-heading').innerText(), /Shell/);
 	assert.equal(await page.locator('[data-tool-call-id="p2"] .bash-request-card').count(), 0);
 	assert.equal(await page.locator('[data-tool-call-id="p2"] .bash-response-card .bash-detail-heading').count(), 0);
-	assert.match(await page.locator('[data-tool-call-id="p2"] .bash-shell-status').innerText(), /成功/);
-	assert.equal(await page.locator('[data-tool-call-id="p2"] .bash-row-body').evaluate(el => getComputedStyle(el).borderLeftWidth), '1px', 'detail guide stays visible');
+	assert.equal(await page.locator('[data-tool-call-id="p2"] .bash-shell-status').count(), 0);
+	assert.equal(await page.locator('[data-tool-call-id="p2"] .bash-row-body').evaluate(el => getComputedStyle(el).borderLeftWidth), '0px', 'Shell detail has no outer border');
 	assert(await page.locator('[data-tool-call-id="p2"] .bash-row-body').evaluate(el => { const style = getComputedStyle(el); return style.borderLeftColor === style.borderTopColor; }), 'detail guide matches the other card borders');
 	await head.click();
 	await page.locator('.process-group-summary-line').first().waitFor();
@@ -207,16 +212,75 @@ try {
 	assert.equal(await page.locator('.process-group-summary-line').count(), 0);
 	assert.equal(await page.locator('.single-command .bash-row.ok .bash-row-icon').count(), 1);
 
+	const iconGap = await page.locator('.single-command .bash-row-head').evaluate(row =>
+		row.querySelector('.bash-row-subtitle').getBoundingClientRect().left - row.querySelector('.bash-state').getBoundingClientRect().right);
+	assert.equal(Math.round(iconGap), 8, 'single commands use the same icon-to-text spacing as a collapsed group');
+	const commandText = page.locator('.single-command .bash-row-subtitle > span').first();
+	assert.equal(await commandText.evaluate(el => getComputedStyle(el).animationName), 'none');
+	await send([user('u-single-live', '运行单条')], { isStreaming: true, streamingMessage: assistant('a-single-live', single) });
+	await page.locator('.single-command .bash-row.run').first().waitFor();
+	assert.equal(await commandText.evaluate(el => getComputedStyle(el).animationName), 'waiting-text-shimmer');
+	await page.emulateMedia({ reducedMotion: 'reduce' });
+	assert.equal(await commandText.evaluate(el => getComputedStyle(el).animationName), 'none');
+	await page.emulateMedia({ reducedMotion: 'no-preference' });
+
+	await send([user('u-fast', '快速命令'), assistant('a-first', pure[0]), result(pure[0]), assistant('a-next', {type:'text', text:'Checking diff'}, single), result(single)], {isStreaming:true});
+	const current = page.locator('[data-tool-call-id="s0"] .current-command-step');
+	await current.waitFor();
+	assert.equal(await current.evaluate(el => getComputedStyle(el).animationName), 'waiting-text-shimmer');
+	assert.equal(await page.locator('[data-tool-call-id="p0"] .bash-row-subtitle > span').evaluate(el => getComputedStyle(el).animationName), 'none');
+
+	await send(pureTranscript(), { isStreaming: true });
+	const group = page.locator('.process-group').first();
+	await group.locator('.process-group-summary-line .streaming-color').waitFor();
+	await group.locator('.process-group-summary-line').click();
+	const labels = group.locator('.bash-row-subtitle > span');
+	await labels.last().waitFor();
+	assert.equal(await labels.count(), pure.length);
+	assert.deepEqual(await labels.evaluateAll(nodes => nodes.map(el => getComputedStyle(el).animationName)),
+		pure.map((_, i) => i === pure.length - 1 ? 'waiting-text-shimmer' : 'none'));
+
+	await group.locator(".process-group-head").click();
+	await group.locator(".process-group-summary-line").waitFor();
+
+	const shimmerFrame = async (label, fraction) => {
+		await label.evaluate((el, fraction) => {
+			const animation = el.getAnimations()[0];
+			animation.pause();
+			animation.currentTime = animation.effect.getTiming().duration * fraction;
+		}, fraction);
+		return label.screenshot();
+	};
+
+	// An invisible failed attempt after a long command must not steal its highlight.
+	const many = Array.from({ length: 35 }, (_, i) => bash(`many-${i}`, i === 34 ? 'grep ' + 'directory/file '.repeat(80) : `echo ${i}`));
+	const hidden = bash('hidden-failure', 'false');
+	await send([user('many', '检查项目'), ...many.flatMap(c => [assistant(`a-${c.id}`, c), result(c)]), assistant('a-hidden', hidden), { ...result(hidden), isError: true }], { isStreaming: true });
+	await group.locator('.process-group-summary-line').click();
+	const lastVisible = group.locator('.bash-row-subtitle > span').last();
+	assert.equal(await group.locator('.bash-row').count(), 8);
+	assert.equal(await group.locator('.process-group-summary').evaluate(el => getComputedStyle(el).animationName), 'waiting-text-shimmer');
+	assert.equal(await lastVisible.evaluate(el => getComputedStyle(el).animationName), 'waiting-text-shimmer');
+	assert(await lastVisible.evaluate(el => el.scrollWidth > el.clientWidth && el.clientWidth > 0 && el.clientWidth <= el.parentElement.clientWidth), 'text shimmer fits the visible portion of the truncated command');
+	for (const label of [group.locator('.process-group-summary'), lastVisible]) {
+		assert(!(await shimmerFrame(label, 0)).equals(await shimmerFrame(label, 0.5)), 'visible glyphs change during the sweep');
+	}
+
 	// G) Running group auto-expands with the plain label and neutral running feedback.
 	const done = bash('r0', 'echo done');
 	const live = bash('live', 'sleep 5');
-	await send([user('u-run', '运行'), assistant('a-r0', done), result(done)], { isStreaming: true, streamingMessage: assistant('a-live', live, { type: 'thinking', thinking: 'Check the current state' }) });
+	await send([...pureTranscript(), assistant('next-section', { type: 'text', text: '接下来运行检查。' }), assistant('a-r0', done), result(done)], { isStreaming: true, streamingMessage: assistant('a-live', live, { type: 'thinking', thinking: 'Check the current state' }) });
 	const runHead = page.locator('.process-group.run .process-group-head').first();
 	await runHead.waitFor();
+	const completedTitle = page.locator('.process-group-summary-line .process-group-summary-text').first();
+	assert.equal(await completedTitle.evaluate(el => getComputedStyle(el).animationName), 'none', 'earlier commands stay static while the next group runs');
+	const shimmerTitle = runHead.locator('.process-group-summary');
+	const firstFrame = await shimmerFrame(shimmerTitle, 0);
+	const middleFrame = await shimmerFrame(shimmerTitle, 0.5);
+	assert(!firstFrame.equals(middleFrame), 'running summary changes painted glyphs during the sweep');
 	assert.match(await runHead.innerText(), /运行了命令/);
 	assert.equal(await runHead.getAttribute('aria-expanded'), 'true');
-	assert.equal(await runHead.locator('.process-group-status .running-indicator').count(), 0, 'neutral flow replaces the green header light');
-	assert.equal(await runHead.locator('.process-group-status').evaluate(el => getComputedStyle(el).animationName), 'waiting-text-shimmer', 'running header uses neutral text shimmer');
+	assert.equal(await runHead.locator('.process-group-status').count(), 0);
 	assert.equal(await runHead.locator('.process-group-summary').evaluate(el => getComputedStyle(el).animationName), 'waiting-text-shimmer', 'command group title shimmers while running');
 	assert.equal(await runHead.locator('.process-group-thought').evaluate(el => getComputedStyle(el).animationName), 'waiting-text-shimmer', 'thought suffix shimmers while running');
 	await page.locator('.bash-row.run').first().waitFor();
@@ -248,12 +312,11 @@ try {
 	assert.equal(await liveSummary.count(), 0);
 	await liveThought.locator('.thinking-toggle').click();
 	await liveSummary.waitFor();
-	assert.equal(await runHead.evaluate(el => getComputedStyle(el, '::after').animationName), 'process-group-flow', 'running header owns the flowing line');
-	assert.equal(await runHead.evaluate(el => getComputedStyle(el, '::before').height), '1px');
+	assert.equal(await runHead.evaluate(el => getComputedStyle(el, '::after').content), 'none');
+	assert.equal(await runHead.evaluate(el => getComputedStyle(el, '::before').content), 'none');
 	await page.screenshot({ path: '/tmp/pi-codex-bash-running.png' });
 	await page.emulateMedia({ reducedMotion: 'reduce' });
-	assert.equal(await runHead.evaluate(el => getComputedStyle(el, '::after').animationName), 'none', 'reduced motion replaces flow with a static line');
-	assert.equal(await runHead.evaluate(el => getComputedStyle(el, '::after').width), await runHead.evaluate(el => getComputedStyle(el).width));
+	assert.equal(await runHead.evaluate(el => getComputedStyle(el, '::after').content), 'none');
 	await page.emulateMedia({ reducedMotion: 'no-preference' });
 	await send([user('u-technical', '技术输出')], { isStreaming: true, streamingMessage: assistant('a-technical', { type: 'thinking', thinking: 'npm run build' }) });
 	const technicalThought = page.locator('.thinking.live').first();
@@ -285,7 +348,7 @@ try {
 	await page.locator('.process-group-summary-line').first().click();
 	const macCommand = page.locator('.bash-row.ok .bash-row-subtitle').first();
 	await macCommand.waitFor();
-	assert.match(await macCommand.evaluate(el => getComputedStyle(el).fontFamily), /-apple-system/, 'macOS command summaries use the native reference stack');
+	assert.match(await macCommand.evaluate(el => getComputedStyle(el).fontFamily), /^Inter,/, 'macOS command summaries use the configured interface stack');
 	assert.equal(await macCommand.evaluate(el => getComputedStyle(el).fontWeight), '400');
 	assert.equal(await macCommand.evaluate(el => getComputedStyle(el).fontSize), '14px');
 	await page.mouse.move(1000, 500);

@@ -75,7 +75,6 @@ const HELP = `pi-harness v${pkg.version} — web chat for the pi coding agent
   pi-harness server quiesce [选项]        进入排空模式：拒绝新的对话/消息/编辑，存量运行继续跑完
   pi-harness server unquiesce [选项]      解除排空模式，恢复接收新工作
   pi-harness install-desktop-control        安装本机桌面控制依赖
-  pi-harness install-page-reader            配置 macOS Chrome 网页读取器
   pi-harness --version / --help
 
 server 选项:
@@ -1776,7 +1775,6 @@ async function main() {
 	checkNodeVersion();
 	const argv = process.argv.slice(2);
 	if (argv.length === 1 && argv[0] === "install-desktop-control") return import("./install-desktop-control.mjs");
-	if (argv.length === 1 && argv[0] === "install-page-reader") return import("./page-reader-install.mjs");
 	if (argv.length === 0) {
 		await startForeground({});
 		return;

@@ -60,6 +60,15 @@ try {
 	await page.goto(`http://127.0.0.1:${port}`);
 
 	await page.locator('.bash-row-head').click();
+	const commandToggle = page.locator('.bash-row-head');
+	assert.equal(await commandToggle.evaluate(el => getComputedStyle(el).outlineStyle), 'none');
+	await commandToggle.press('Tab');
+	await page.keyboard.press('Shift+Tab');
+	assert(await commandToggle.evaluate(el => el.matches(':focus-visible')));
+	assert.equal(await commandToggle.locator(':scope > svg').evaluate(el => getComputedStyle(el).outlineStyle), 'solid');
+	await commandToggle.press('Enter');
+	assert.equal(await commandToggle.getAttribute('aria-expanded'), 'false');
+	await commandToggle.press('Enter');
 	const card = page.locator('.bash-row-body');
 	await card.waitFor();
 	assert(await card.locator('.bash-syntax [class^=hljs]').count() > 0);
@@ -71,7 +80,7 @@ try {
 	// and output expansion remain available without separate Request/Response heads.
 	assert.match(await card.locator('.bash-shell-card .bash-detail-heading').innerText(), /Shell/);
 	assert.equal(await card.locator('.bash-request-card').count(), 0);
-	assert.match(await card.locator('.bash-shell-status').innerText(), /成功/);
+	assert.equal(await card.locator('.bash-shell-status').count(), 0);
 	const shellCommandStyle = await card.locator('.bash-request-code').evaluate(el => { const s = getComputedStyle(el); return { family: s.fontFamily, size: s.fontSize, weight: s.fontWeight, height: s.lineHeight, zoom: s.zoom }; });
 	const shellOutputStyle = await card.locator('.bash-numbered-output').evaluate(el => { const s = getComputedStyle(el); return { family: s.fontFamily, size: s.fontSize, weight: s.fontWeight, height: s.lineHeight, zoom: s.zoom, border: s.borderTopWidth, radius: s.borderTopLeftRadius }; });
 	assert.match(shellCommandStyle.family, /SFMono-Regular/);
@@ -90,6 +99,14 @@ try {
 		await page.setViewportSize({width, height:1000});
 		await page.evaluate(value => document.documentElement.dataset.appearance = value, theme);
 		assert(await card.evaluate(el => el.scrollWidth <= el.clientWidth + 1));
+		assert.deepEqual(await card.evaluate(el => { const s = getComputedStyle(el); return [s.borderLeftWidth, s.borderTopWidth, s.boxShadow]; }), ['0px', '0px', 'none']);
+		assert(await card.locator('.bash-request-code').evaluate(el => [...el.querySelectorAll('[class^=hljs]')].some(token => getComputedStyle(token).color !== getComputedStyle(el).color)));
+		const insets = await card.evaluate(el => {
+			const outer = el.getBoundingClientRect();
+			const inner = el.querySelector('.bash-shell-card').getBoundingClientRect();
+			return [inner.left - outer.left, outer.right - inner.right];
+		});
+		assert(Math.abs(insets[0] - insets[1]) <= 1, `Shell card insets match at ${width}px: ${insets}`);
 		await card.screenshot({path:`/tmp/pi-bash-detail-${theme}-${width}.png`});
 	}
 	const wrap = card.locator('button[aria-pressed]');

@@ -254,11 +254,16 @@ export interface UiTraceRequest {
 	api?: string;
 	model?: string;
 	hookStartMs?: number;
+	firstHeadersMs?: number;
+	firstProviderEventMs?: number;
+	firstVisibleDeltaMs?: number;
+	firstOutputKind?: string;
 	messageEndMs?: number;
 	toolToProviderGapMs?: number;
 	metrics: Record<string, UiTraceMetric>;
 }
 export interface UiTraceTool {
+	turnIndex?: number;
 	toolCallId: string;
 	parentToolCallId?: string;
 	toolName: string;
@@ -269,7 +274,9 @@ export interface UiTraceTool {
 	isError?: boolean;
 	status: string;
 }
+export interface BackgroundSpan { observedMs?: number; id: string; startMs: number; endMs?: number; state: BackgroundCommand["state"] }
 export interface UiTraceRun {
+	backgroundSpans?: BackgroundSpan[];
 	runId: string;
 	sessionId: string;
 	conversationId?: string;
@@ -298,7 +305,20 @@ export interface UiTraceSnapshot {
 }
 export type TraceResult = { type: "trace_result"; reqId: string; conversationId: string; open?: boolean; export?: "html" | "json"; trace?: UiTraceSnapshot; error?: string };
 
+export interface BackgroundCommand {
+	id: string;
+	state: "foreground" | "background" | "stopped" | "failed" | "done" | "interrupted";
+	startedAt: number;
+	detachedAt?: number;
+	endedAt?: number;
+	exitCode?: number;
+	error?: string;
+	fullOutputPath?: string;
+	output: string;
+	cursor: number;
+}
 export interface UiState {
+	backgroundCommands?: BackgroundCommand[];
 	tree?: UiTreeState;
 	recovery?: UiRecovery;
 	runRecovery?: UiRunRecovery | null;
@@ -576,6 +596,7 @@ export type ClientMessage =
 	  }
 	| { type: "cycle_model" }
 	| { type: "cycle_thinking" }
+	| { type: "background_command"; conversationId: string; sessionId: string; id: string; action: "detach" | "stop" }
 	| { type: "get_state" }
 	| { type: "list_sessions" }
 	| { type: "switch_session"; path: string }
@@ -1515,7 +1536,7 @@ export interface ExtensionPackage {
 }
 export interface ExtensionsState { packages: ExtensionPackage[]; version: string; trusted: boolean; checkedAt?: number; autoCheck?: boolean; updateResults?: ExtensionUpdateResult[]; }
 
-export type BuiltinExtensionId = "desktop-control" | "pi-harness-design-first" | "pi-harness-database" | "codemode" | "tool-search" | "mcp";
+export type BuiltinExtensionId = "background-bash" | "desktop-control" | "pi-harness-design-first" | "pi-harness-database" | "codemode" | "tool-search" | "mcp";
 export interface BuiltinExtensionState {
 	id: BuiltinExtensionId;
 	settingsVersion?: string;
@@ -1534,7 +1555,7 @@ export interface BuiltinExtensionsState {
 }
 export type BuiltinExtensionsRequest =
 	| { action: "builtin-list"; conversationId: string }
-	| { action: "builtin-toggle"; conversationId: string; id: "desktop-control" | "pi-harness-design-first" | "pi-harness-database"; enabled: boolean; version: string };
+	| { action: "builtin-toggle"; conversationId: string; id: "background-bash" | "desktop-control" | "pi-harness-design-first" | "pi-harness-database"; enabled: boolean; version: string };
 export interface ExtensionCatalogItem { name: string; description: string; descriptionZh?: string; version?: string; author?: string; downloads?: number; date?: number; types: string[]; image?: string; url: string; repository?: string; }
 export interface ExtensionCatalog { items: ExtensionCatalogItem[]; page: number; pages: number; total?: number; }
 export interface ExtensionPackageDetails { source: string; name: string; version?: string; description?: string; author?: string; repository?: string; license?: string; resources: Record<string, string[]>; canPin: boolean; }

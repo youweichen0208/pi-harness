@@ -48,7 +48,7 @@ import { questionPreviewText } from "../question-markers";
 import { preserveUserTree } from "../user-message-presentation";
 import { BashGroup, latestAttemptStates, stateOf } from "./BashGroup";
 import { emptyProcessStats, ProcessGroup, type ProcessStats } from "./ProcessGroup";
-import { WorkspacePathContext } from "../workspace-context";
+import { BackgroundContext, WorkspacePathContext } from "../workspace-context";
 
 /** 编辑重问编辑器里直接拖入/粘贴文件的上限（与服务端 MAX_UPLOAD_BYTES 一致）。 */
 const MAX_EDIT_UPLOAD_BYTES = 20 * 1024 * 1024;
@@ -128,6 +128,7 @@ interface MessageProps {
 	toolsRunning?: boolean;
 	connected?: boolean;
 	bashActive?: boolean;
+	currentCommandId?: string;
 	toolMessageIds?: ReadonlyMap<string, string>;
 	continuation?: boolean;
 	conversationId?: string;
@@ -189,6 +190,7 @@ export const Message = memo(function Message({
 	toolsRunning,
 	connected = true,
 	bashActive,
+	currentCommandId,
 	toolMessageIds,
 	continuation,
 	conversationId,
@@ -219,6 +221,7 @@ export const Message = memo(function Message({
 	const outputLimited = message.role === "assistant" && message.stopReason === "length" && !turnContinues && !streaming;
 	const hasPartialReply = message.content.some(block => block.type === "text" && typeof block.text === "string" && !!block.text.trim());
 	const cwd = useContext(WorkspacePathContext);
+	const background = useContext(BackgroundContext);
 	const replyQuestions = useMemo(() => message.role === "assistant" ? message.content.flatMap(block => block.type === "text" && typeof block.text === "string" ? parseReplySegments(block.text).flatMap(segment => segment.kind === "questions" ? segment.questions : []) : []) : [], [message.content, message.role]);
 	const answerKey = `${conversationId}:${message.id}`;
 	useEffect(() => {
@@ -404,7 +407,7 @@ export const Message = memo(function Message({
 		// Tools in a message that ended aborted/error and never received a
 		// result were never executed (issue #66) — mark them for the cards.
 		const abandoned = message.role === "assistant" && (message.stopReason === "aborted" || message.stopReason === "error");
-		const viewFor = (item: UiToolCallBlock): ToolView => ({ result: toolResults.get(item.id), nestedCalls: liveNestedCalls(item.id, toolStatuses), liveOutput: liveOutputs.get(item.id)?.text, lastOutputAt: liveOutputs.get(item.id)?.lastOutputAt, connected, codemode: liveOutputs.get(item.id)?.codemode, status: toolStatuses.get(item.id), streaming, ...(abandoned ? { abandoned: true } : {}) });
+		const viewFor = (item: UiToolCallBlock): ToolView => ({ background: background.tasks?.find(task => task.id === item.id), result: toolResults.get(item.id), nestedCalls: liveNestedCalls(item.id, toolStatuses), liveOutput: liveOutputs.get(item.id)?.text, lastOutputAt: liveOutputs.get(item.id)?.lastOutputAt, connected, codemode: liveOutputs.get(item.id)?.codemode, status: toolStatuses.get(item.id), streaming, ...(abandoned ? { abandoned: true } : {}) });
 		for (let i = 0; i < message.content.length; i++) {
 			const block = message.content[i];
 			if (skipText && block.type === "text") continue;
@@ -441,9 +444,9 @@ export const Message = memo(function Message({
 				// 又让人误以为任务没做完。过滤发生在渲染前，所以分组计数、折叠统计、
 				// 本轮命令总数与任务进度都自然一致，不会出现「显示 3 条实际 4 条」。
 				// 仍在运行、排队或从未执行的调用保留：它们的结论还没定。
-				const rendered = calls.filter((call) => stateOf(viewFor(call)) !== "err");
+				const rendered = calls.filter((call) => viewFor(call).background || stateOf(viewFor(call)) !== "err");
 				if (!rendered.length) continue;
-				const items = rendered.map((item) => ({ block: item, view: { ...viewFor(item), streaming: toolsRunning ?? streaming }, messageId: toolMessageIds?.get(item.id) ?? message.id }));
+				const items = rendered.map((item) => ({ block: item, currentStep: item.id === currentCommandId, view: { ...viewFor(item), streaming: toolsRunning ?? streaming }, messageId: toolMessageIds?.get(item.id) ?? message.id }));
 				push(<BashGroup flat active={bashActive ?? toolsRunning ?? streaming} key={first.id} items={items} onKill={onKillBash} />, true, stats => {
 					stats.commands += rendered.length;
 					if (bashActive ?? toolsRunning ?? streaming) stats.live = true;
@@ -500,7 +503,7 @@ export const Message = memo(function Message({
 			// Key by the first row so appending rows during streaming never remounts the list.
 			const key = `process-${isValidElement(run[0]) ? run[0].key : start}`;
 			// Thinking alone needs no summary header; any tool turns the run into a collapsible group.
-			grouped.push(stats.commands + stats.reads + stats.searches > 0 ? <ProcessGroup key={key} stats={stats}>{run}</ProcessGroup> : <div className="process-list" key={key}>{run}</div>);
+			grouped.push(stats.commands + stats.reads + stats.searches > 0 ? <ProcessGroup key={key} stats={stats} currentCommandId={currentCommandId}>{run}</ProcessGroup> : <div className="process-list" key={key}>{run}</div>);
 		}
 		return grouped;
 	};
@@ -1005,7 +1008,7 @@ function Block({
 			...(abandoned ? { abandoned: true } : {}),
 			status: toolStatuses.get(toolCall.id),
 		};
-		return <ToolCallBlock block={toolCall} view={view} onKillBash={onKillBash} wrap={toolsWrap} />;
+		return <ToolCallBlock block={toolCall} conversationId={conversationId} view={view} onKillBash={onKillBash} wrap={toolsWrap} />;
 	}
 
 	const image = asImage(block);

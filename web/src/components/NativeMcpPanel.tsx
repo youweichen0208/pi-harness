@@ -1,5 +1,3 @@
-import { browserMcpName, browserMcpConfig } from "../../../server/browser-mcp";
-import { mcpNamespaceKey } from "../../../server/mcp-namespace";
 import { useDialogFocus } from "../use-dialog-focus";
 import { Dialog } from "./Dialog";
 import { LinkedText } from "./LinkedText";
@@ -73,14 +71,9 @@ export function NativeMcpPanel({ cwd, send, dialog }: { dialog: { id: string; co
 	try { const parsed = JSON.parse(text); if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) document = parsed; } catch { /* raw JSON draft remains editable */ }
 	const configs = (document.mcpServers ?? {}) as Record<string, Record<string, unknown>>;
 	const safeConfigs = configs && typeof configs === "object" && !Array.isArray(configs) ? configs : {};
-	const browserEntryName = Object.keys(safeConfigs).find(name => mcpNamespaceKey(name) === mcpNamespaceKey(browserMcpName));
-	const browserEntry = browserEntryName === undefined ? undefined : safeConfigs[browserEntryName];
 	const rank = (name: string) => { const status = statuses.find(s => s.name === name)?.state; return status === "needs-auth" || status === "failed" || status === "error" ? 0 : status === "starting" || status === "connecting" || status === "disconnected" ? 1 : 2; };
 	const names = [...new Set([...Object.keys(safeConfigs), ...statuses.map(s => s.name)])].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
 	const setServer = (name: string, value: Record<string, unknown> | null) => change(doc => { const servers = { ...(doc.mcpServers as Record<string, unknown> ?? {}) }; if (value === null) delete servers[name]; else servers[name] = value; doc.mcpServers = servers; });
-	const toggleBrowserControl = (enabled: boolean) => {
-		setServer(browserEntryName ?? browserMcpName, { ...(browserEntry ?? browserMcpConfig), enabled });
-	};
 	const applyEditor = () => { if (!editor) return; try { if (!/^[\w-]+$/.test(editor.name) || !editor.original && Object.hasOwn(safeConfigs, editor.name)) throw new Error(t("mcpNameConflict")); const value = JSON.parse(editor.json); if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(t("mcpInvalidServer")); setServer(editor.name, value); setEditor(undefined); } catch (e) { setError((e as Error).message); } };
 	return <section className="native-mcp-panel mcp-workbench" data-dirty={dirty || busy || !!editor || importText !== undefined}>
 		<header className="mcp-page-head"><h3>{t("nativeMcp")}</h3><div className="settings-heading-actions"><button disabled={!state || busy} onClick={() => setAdvanced(true)}>{t("v2EditMcp")}</button><button disabled={busy} onClick={() => request("log", {}, true)}>{t("extLog")}</button></div></header>
@@ -90,19 +83,6 @@ export function NativeMcpPanel({ cwd, send, dialog }: { dialog: { id: string; co
 		{scope === "project" && !state?.trusted && <p className="mcp-warning">{t("mcpUntrusted")} <button disabled={busy} onClick={() => request("trust")}>{t("mcpTrust")}</button></p>}
 		{pending && <p className="mcp-warning" role="status">{t("mcpPending")}</p>}
 		{error && <p className="mcp-error" role="alert">{error} <button disabled={busy} onClick={() => { if (!dirty || window.confirm(t("mcpDiscard"))) request("get"); }}>{t("promptReloadFile")}</button></p>}
-		<section className="settings-group">
-			<h4>{t("browserControl")}</h4>
-			<p className="settings-description">{t("browserSetupHint")}</p>
-			<div className="mcp-server-actions">
-				<a href="https://chromewebstore.google.com/detail/playwright-extension/mmlmfjhmonkocbjadbfplnigmagldckm" target="_blank" rel="noreferrer">{t("browserInstall")}</a>
-				{scope === "global" && <label>
-					<input type="checkbox" role="switch" aria-label={t("browserControl")} checked={!!state && !!browserEntry && browserEntry.enabled !== false}
-						disabled={!state || busy || dirty || editor !== undefined || importText !== undefined}
-						onChange={event => toggleBrowserControl(event.target.checked)} />
-					{t("browserGlobalSwitch")}
-				</label>}
-			</div>
-		</section>
 		<div className="mcp-section-head"><span>{!names.length ? t("v2NoServersHint") : ""}</span><button disabled={!state || busy} onClick={() => setImportText("")}>{t("mcpImport")}</button><button disabled={!state || busy} onClick={() => setEditor({ name: "", json: '{\n  "url": "https://example.com/mcp",\n  "exposure": "codemode"\n}' })}>+ {t("mcpNew")}</button></div>
 		{importText !== undefined && <div className="mcp-editor"><h4>{t("mcpImport")}</h4><p>{t("mcpImportHelp")}</p><textarea aria-label={t("mcpImport")} rows={8} value={importText} onChange={e => setImportText(e.target.value)} /><button onClick={() => { try { const document = importMcpJson(importText, JSON.parse(text)); setText(JSON.stringify(document, null, 2)); request("save", { version: state?.version, document }); setImportText(undefined); setError(""); } catch (e) { setError((e as Error).message); } }}>{t("settingsImportSave")}</button><button onClick={() => setImportText(undefined)}>{t("cancel")}</button></div>}
 		{editor && <div className="mcp-editor"><label>{t("mcpName")}<input disabled={!!editor.original} value={editor.name} onChange={e => setEditor({ ...editor, name: e.target.value })} /></label><p>{t("mcpEditorHelp")}</p><textarea aria-label={t("mcpConfig")} rows={10} value={editor.json} onChange={e => setEditor({ ...editor, json: e.target.value })} spellCheck={false} /><button disabled={busy} onClick={applyEditor}>{t("save")}</button><button onClick={() => setEditor(undefined)}>{t("cancel")}</button></div>}
