@@ -212,10 +212,12 @@ const PANEL_MAX = 520;
 const PANEL_DEFAULT = 240;
 // Keep the file tree docked on compact desktop windows (e.g. 960px).
 const MIN_WORKSPACE_CHAT_WIDTH = 360;
-type PanelSide = "left" | "right" | "editor";
+const browserDefaultWidth = () => Math.round(Math.min(720, Math.max(320, window.innerWidth * 0.38)));
+type PanelSide = "browser" | "left" | "right" | "editor";
 const panelWidthKey = (side: PanelSide) => `pi-harness:${side}-panel-width`;
 function readPanelWidth(side: PanelSide): number {
 	const v = Number(localStorage.getItem(panelWidthKey(side)));
+	if (side === "browser") return Number.isFinite(v) && v >= PANEL_MIN ? v : browserDefaultWidth();
 	return Number.isFinite(v) && v >= PANEL_MIN && v <= PANEL_MAX ? v : side === "editor" ? 480 : side === "right" ? 300 : PANEL_DEFAULT;
 }
 
@@ -234,6 +236,12 @@ function ResizeHandle({
 	const t = useT();
 	const cleanup = useRef<() => void>(() => {});
 	useEffect(() => () => cleanup.current(), []);
+	function dimensions(handle: HTMLDivElement) {
+		const current = side === "editor" || side === "browser" ? handle.nextElementSibling?.getBoundingClientRect().width ?? width : width;
+		if (side === "editor") return { current, maximum: Math.max(PANEL_MIN, current + (handle.previousElementSibling?.getBoundingClientRect().width ?? 0) - 180) };
+		if (side === "browser") return { current, maximum: Math.floor((handle.parentElement?.clientWidth ?? window.innerWidth) * 0.85) };
+		return { current, maximum: PANEL_MAX };
+	}
 	const onPointerDown = useCallback(
 		(e: ReactPointerEvent<HTMLDivElement>) => {
 			if (e.button !== 0) return;
@@ -242,8 +250,7 @@ function ResizeHandle({
 			const handle = e.currentTarget;
 			handle.setPointerCapture(e.pointerId);
 			const startX = e.clientX;
-			const startW = side === "editor" ? e.currentTarget.nextElementSibling?.getBoundingClientRect().width ?? width : width;
-			const maxWidth = side === "editor" ? Math.max(PANEL_MIN, startW + (e.currentTarget.previousElementSibling?.getBoundingClientRect().width ?? 0) - 180) : PANEL_MAX;
+			const { current: startW, maximum: maxWidth } = dimensions(handle);
 			let last = startW;
 			const move = (ev: PointerEvent) => {
 				if (ev.pointerId !== e.pointerId) return;
@@ -281,16 +288,15 @@ function ResizeHandle({
 			onKeyDown={event => {
 				if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
 				event.preventDefault();
-				const current = side === "editor" ? event.currentTarget.nextElementSibling?.getBoundingClientRect().width ?? width : width;
+				const { current, maximum } = dimensions(event.currentTarget);
 				const delta = (event.key === "ArrowRight" ? 16 : -16) * (side === "left" ? 1 : -1);
-				const maximum = side === "editor" ? Math.max(PANEL_MIN, current + (event.currentTarget.previousElementSibling?.getBoundingClientRect().width ?? 0) - 180) : PANEL_MAX;
 				const next = Math.max(PANEL_MIN, Math.min(maximum, current + delta));
 				onResize(next); localStorage.setItem(panelWidthKey(side), String(next));
 			}}
 			onPointerDown={onPointerDown}
 			onDoubleClick={() => {
 				if (onReset) { onReset(); return; }
-				const value = side === "editor" ? 480 : side === "right" ? 300 : PANEL_DEFAULT;
+				const value = side === "browser" ? browserDefaultWidth() : side === "editor" ? 480 : side === "right" ? 300 : PANEL_DEFAULT;
 				onResize(value);
 				localStorage.setItem(panelWidthKey(side), String(value));
 			}}
@@ -775,6 +781,7 @@ export function App() {
 		changesLeftRestore.current = null;
 	}, []);
 	const changedFiles = useMemo(() => taskChanges(conversationState?.taskProgress, conversationState?.messages ?? [], conversationState?.cwd ?? ""), [conversationState?.taskProgress, conversationState?.messages, conversationState?.cwd]);
+	const [browserWidth, setBrowserWidth] = useState(() => readPanelWidth("browser"));
 	const [leftWidth, setLeftWidth] = useState(() => readPanelWidth("left"));
 	const [rightWidth, setRightWidth] = useState(() => readPanelWidth("right"));
 	const resizeLeft = useCallback((w: number) => setLeftWidth(w), []);
@@ -1481,7 +1488,7 @@ export function App() {
 				{scratchOpen && <PaneErrorBoundary name="Playground"><PlaygroundScratch /></PaneErrorBoundary>}
 				<div
 					className={`layout ${notesOpen || scratchOpen ? "notes-chat-hidden" : ""}`}
-					style={{ "--left-w": `${visibleLeftWidth}px`, "--right-w": `${visibleRightWidth}px`, "--editor-share": editorShare } as CSSProperties}
+					style={{ "--left-w": `${visibleLeftWidth}px`, "--right-w": `${visibleRightWidth}px`, "--browser-w": `${browserWidth}px`, "--editor-share": editorShare } as CSSProperties}
 				>
 					{drawer && ((drawer === "left" && (isNarrow || !!previewFile)) || (drawer === "right" && filesOverlay)) && (
 						<div className="drawer-backdrop" onClick={() => setDrawer(null)} />
@@ -1559,7 +1566,7 @@ export function App() {
 							/>
 						</ChatDock>
 						<ChangesPanel key={conversationState?.conversationId ?? ""} cwd={conversationState?.cwd ?? ""} data={chat.scmDiffData} send={send} ready={chat.ready && !switching} notRepo={!workspaceScm.loaded || workspaceScm.notRepo} branch={workspaceScm.branch} defaultBase={workspaceScm.base} branches={workspaceScm.branches} dirty={chat.scmDirty} />
-						{browserOpen && browserOwner ? <BrowserPanel key={browserOwner} owner={browserOwner} close={() => setBrowserOwner(undefined)} /> : <>
+						{browserOpen && browserOwner ? <><ResizeHandle side="browser" width={browserWidth} onResize={setBrowserWidth} /><BrowserPanel key={browserOwner} owner={browserOwner} close={() => setBrowserOwner(undefined)} /></> : <>
 						{!isMobile && !filesOverlay && (!filesCollapsed || inlinePreview) && (
 							<ResizeHandle side={inlinePreview ? "editor" : "right"} width={inlinePreview ? 480 : visibleRightWidth} onResize={inlinePreview ? resizeEditor : resizeRight} onReset={inlinePreview ? () => { setEditorShare(0.45); localStorage.setItem("pi-harness:editor-share", "0.45"); } : undefined} />
 						)}

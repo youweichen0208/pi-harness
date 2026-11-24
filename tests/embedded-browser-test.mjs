@@ -52,6 +52,7 @@ async function waitForSlowRequest(count) {
 let failNavigation = true;
 const site = createServer((req, res) => {
 	res.setHeader("content-type", "text/html");
+	if (req.url === "/wide") return res.end('<title>Wide</title><main style="width:1100px">Wide layout</main>');
 	if (req.url === "/slow") { slowRequestCount++; return; }
 	if (req.url === "/retry") {
 		if (failNavigation) { res.destroy(); return; }
@@ -169,6 +170,21 @@ try {
 		await address.fill(siteOrigin + path);
 		await address.press("Enter");
 	}
+	await enterUrl("/wide");
+	await guestTitle("Wide");
+	const guestFits = () => app.evaluate(({ webContents }) => webContents.getAllWebContents()
+		.find(w => w.getTitle() === "Wide").executeJavaScript("document.documentElement.scrollWidth <= innerWidth + 1"));
+	const handle = page.locator(".resize-browser");
+	const rect = await handle.boundingBox();
+	const panelWidth = () => page.locator(".embedded-browser").evaluate(el => el.clientWidth);
+	const before = await panelWidth();
+	await page.mouse.move(rect.x + rect.width / 2, rect.y + 12);
+	await page.mouse.down();
+	await page.mouse.move(rect.x - 65, rect.y + 12, { steps: 5 });
+	await page.mouse.up();
+	assert(await panelWidth() > before + 50, "drag widens the browser");
+	for (let i = 0; i < 50 && !await guestFits(); i++) await sleep(100);
+	assert(await guestFits(), "wide page fits after dragging");
 	const firstSlow = slowRequestCount + 1;
 	await enterUrl("/slow#/login?RelayState=fixture");
 	await waitForSlowRequest(firstSlow);

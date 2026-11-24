@@ -10,7 +10,7 @@ import { CHROME_PATH } from './lib/chrome.mjs';
 import { portUp } from './lib/port-utils.mjs';
 import { testEnv } from "./lib/test-env.mjs";
 const port = 8999, base = mkdtempSync(join(tmpdir(), 'wiki-code-editor-'));
-writeFileSync(join(base, 'note.md'), '# Code\n\n```java\npublic class Original {}\n```\n\nInsert here.\n');
+writeFileSync(join(base, 'note.md'), '# Code\n\n```java\npublic class Original {}\n```\n\nInsert here.\n\n```mermaid\ninvalid diagram\n```\n');
 let server, browser;
 try {
 	assert.equal(await portUp(port), false);
@@ -28,6 +28,13 @@ try {
 	const failures = [], errors = [];
 	page.on('pageerror', error => errors.push(error.message));
 	const check = (condition, message) => { console.log(condition ? 'PASS' : 'FAIL', message); if (!condition) failures.push(message); };
+	const diagram = editor.locator('pre.wiki-mermaid');
+	await diagram.locator('.mermaid-block-error').waitFor();
+	if (await page.locator('.setup-modal .modal-close').isVisible()) await page.locator('.setup-modal .modal-close').click();
+	await diagram.click({ position: { x: 2, y: 2 } });
+	assert(await diagram.evaluate(pre => pre.hasAttribute('data-frame-selected')));
+	await page.keyboard.press('Backspace');
+	assert.equal(await diagram.count(), 0);
 	await editor.locator('p').last().fill('');
 	await page.keyboard.type('/dmk');
 	check(await page.getByRole('option', { name: '代码块', exact: true }).count() === 1, '/dmk matches code block');
@@ -70,6 +77,7 @@ try {
 	await page.keyboard.press('Meta+s');
 	await page.locator('.wiki-save-status.saved').waitFor();
 	const source = readFileSync(join(base, 'note.md'), 'utf8');
+	assert.doesNotMatch(source, /invalid diagram|```mermaid/);
 	check(source.includes('public class Demo {\nx\n\nreturn 1;'), 'saved Markdown retains exactly one newline');
 	await page.keyboard.press('Meta+s');
 	for (let i = 0; i < 50 && readFileSync(join(base, 'note.md'), 'utf8') !== source; i++) await new Promise(r => setTimeout(r, 100));
@@ -77,6 +85,18 @@ try {
 	check(source.includes('```java\npublic class Original {}\n```'), 'existing untouched code remains unchanged');
 	assert.deepEqual(errors, []);
 	assert.deepEqual(failures, []);
+	const waiting = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+	await waiting.routeWebSocket('**/ws*', () => {});
+	await waiting.goto(page.url());
+	const status = waiting.locator('.wiki-window-body > .boot-wait');
+	await status.waitFor();
+	assert(await status.evaluate(el => {
+		const range = document.createRange();
+		range.selectNodeContents(el);
+		const text = range.getBoundingClientRect(), body = el.parentElement.getBoundingClientRect();
+		return Math.abs(text.x + text.width / 2 - body.x - body.width / 2) < 2
+			&& Math.abs(text.y + text.height / 2 - body.y - body.height / 2) < 2;
+	}), 'connection notice is centered in the Wiki body');
 } finally {
 	await browser?.close();
 	if (server) { server.kill('SIGTERM'); if (server.exitCode === null) await new Promise(r => server.once('exit', r)); }

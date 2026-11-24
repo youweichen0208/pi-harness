@@ -163,7 +163,9 @@ export function installEmbeddedBrowser(getWindow, getOrigin, getClient) {
 		const win = getWindow();
 		if (win && !win.isDestroyed() && !win.webContents.isDestroyed()) win.webContents.send("embedded-browser-state", state());
 	};
-	function layout() {
+	let fitRequest = 0;
+	let fittedWidth, fittedView;
+	function layout(refit = false) {
 		const win = getWindow();
 		const target =
 			win && shown && bounds && current()?.getURL() && current().getURL() !== "about:blank" ? tabs.get(active) : undefined;
@@ -173,6 +175,19 @@ export function installEmbeddedBrowser(getWindow, getOrigin, getClient) {
 			if (attached) win.contentView.addChildView(attached);
 		}
 		if (attached) attached.setBounds(bounds);
+		const width = attached && bounds.width;
+		if (!refit && fittedWidth === width && fittedView === attached) return;
+		fittedWidth = width;
+		fittedView = attached;
+		const request = ++fitRequest;
+		if (!attached || !width) return;
+		const wc = attached.webContents;
+		wc.setZoomFactor(1);
+		void wc.executeJavaScript("Math.max(document.documentElement.scrollWidth, document.body?.scrollWidth || 0)").then(contentWidth => {
+			if (request !== fitRequest || wc.isDestroyed() || !Number.isFinite(contentWidth) || contentWidth <= width + 1) return;
+			wc.setZoomFactor(Math.max(0.25, width / contentWidth));
+			invalidate();
+		}).catch(() => {});
 	}
 	function url(value) {
 		const u = new URL(value);
@@ -245,7 +260,7 @@ export function installEmbeddedBrowser(getWindow, getOrigin, getClient) {
 		});
 		for (const event of ["did-navigate", "did-navigate-in-page", "page-title-updated", "did-stop-loading"])
 			wc.on(event, () => {
-				if (event !== "page-title-updated") layout();
+				if (event !== "page-title-updated") layout(event === "did-stop-loading" && wc.id === active);
 				publish();
 			});
 		const id = wc.id;

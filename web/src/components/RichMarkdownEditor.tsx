@@ -503,6 +503,7 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 	useLayoutEffect(() => {
 		const blocks: KernelBlock[] = [];
 		root.current?.querySelectorAll<HTMLElement>("pre > code").forEach((code) => {
+			if (code.closest("[data-rich-ui]")) return;
 			const pre = code.parentElement!;
 			const detected = code.className.match(/language-([^\s]+)/)?.[1] ?? "";
 			const language = detected === "plaintext" ? "" : detected;
@@ -671,7 +672,7 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 			const open = openMermaidSource.current.has(pre);
 			pre.classList.add('wiki-mermaid');
 			pre.classList.toggle('wiki-mermaid-source-hidden', !open);
-			const chrome = pre.querySelector<HTMLElement>('.fp-code-language');
+			const chrome = pre.querySelector<HTMLElement>(':scope > .fp-code-language');
 			let toggle = chrome?.querySelector<HTMLButtonElement>('button[data-mermaid-source]') ?? null;
 			if (chrome && !toggle) {
 				toggle = document.createElement('button'); toggle.type = 'button'; toggle.dataset.mermaidSource = '';
@@ -1411,7 +1412,7 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 	function deleteCodeBlocks(targets: HTMLElement[]) {
 		const editor = root.current;
 		if (!editor || readOnly || !targets.every(code => editor.contains(code))) return;
-		const codes = Array.from(editor.querySelectorAll<HTMLElement>("pre > code"));
+		const codes = Array.from(editor.querySelectorAll<HTMLElement>("pre > code")).filter(code => !code.closest("[data-rich-ui]"));
 		const next = codes[codes.indexOf(targets.at(-1)!) + 1] ?? codes[codes.indexOf(targets[0]) - 1];
 		for (const code of targets) {
 			const pre = code.parentElement!;
@@ -1764,7 +1765,7 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 						if (!readOnly && (rowTarget !== null || columnTarget !== null)) clearTableTarget();
 						// A header cell can already be detached here (its column highlight replaced it),
 						// so fall back to the cell the press started on instead of the press target.
-						const block = target.closest<HTMLElement>("pre, table") ?? holder?.closest<HTMLElement>("table") ?? null;
+						const block = target.closest(".mermaid-block-error")?.closest<HTMLElement>("pre.wiki-mermaid") ?? target.closest<HTMLElement>("pre, table") ?? holder?.closest<HTMLElement>("table") ?? null;
 						if (!block || !root.current?.contains(block)) return;
 						const index = kernelBlocks.findIndex(cell => cell.code.parentElement === block);
 						if (index >= 0 && !readOnly) {
@@ -1783,7 +1784,7 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 						const rect = block.getBoundingClientRect(), x = event.clientX, y = event.clientY;
 						// Code gutters and header padding are part of the selectable frame.
 						if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) return;
-						const codeRect = block.tagName === "PRE" ? block.querySelector("code")?.getBoundingClientRect() : null;
+						const codeRect = block.tagName === "PRE" ? block.querySelector<HTMLElement>(":scope > code")?.getBoundingClientRect() : null;
 						if (!readOnly && target.matches("code:empty") && block.matches("pre.codeblock")) {
 							event.preventDefault();
 							target.append(document.createElement("br"));
@@ -1810,10 +1811,10 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 						const range = block.ownerDocument.createRange();
 						if (block.tagName === "TABLE") { range.selectNode(block); setTableCell(block.querySelector<HTMLTableCellElement>("th, td")); }
 						else {
-							const code = block.querySelector("code");
+							const code = block.querySelector<HTMLElement>(":scope > code");
 							if (!code) return;
 							range.selectNodeContents(code);
-							if (!readOnly && block.matches(".codeblock:not(.wiki-mermaid)")) {
+							if (!readOnly && block.matches(".codeblock")) {
 								frameSelection.current = [code];
 								block.setAttribute("data-frame-selected", "");
 							}
@@ -1858,7 +1859,7 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 							folded.classList.remove("wiki-mermaid-source-hidden");
 							const toggle = folded.querySelector<HTMLButtonElement>("button[data-mermaid-source]");
 							if (toggle) { toggle.textContent = t("wikiMermaidHideCode"); toggle.setAttribute("aria-expanded", "true"); }
-							const code = folded.querySelector("code");
+							const code = folded.querySelector(":scope > code");
 							if (code) {
 								root.current?.focus({ preventScroll: true });
 								const range = code.ownerDocument.createRange(); range.selectNodeContents(code); range.collapse(false);

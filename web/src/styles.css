@@ -12855,6 +12855,7 @@ html.pi-desktop .wiki-window-header button,
 html.pi-desktop .wiki-window-header button *,
 html.pi-desktop .wiki-window-header .wiki-toolbar-actions,
 html.pi-desktop .wiki-window-header .desktop-window-controls { -webkit-app-region: no-drag; app-region: no-drag; }
+.wiki-window-body > .boot-wait { flex: 1; display: grid; place-items: center; padding: 0; }
 .wiki-window-body { background: var(--bg-elev); }
 .wiki-window-body .wiki-workbench { position: relative; background: var(--bg-elev); }
 .wiki-workbench .wiki-sidebar[hidden] { display: none; }
@@ -16409,7 +16410,9 @@ html[data-platform="win32"] :is(.settings-tab-label, .input-tools .chip, .reply-
 .browser-confirmation { position: absolute; inset: 0; z-index: 1; overflow: auto; box-sizing: border-box; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-content: center; gap: 2px 8px; padding: 4px 8px; background: var(--bg); }
 .browser-confirmation span { grid-column: 1; overflow: auto; white-space: nowrap; }
 .browser-confirmation div { grid-column: 2; grid-row: 1 / span 3; align-self: center; display: flex; gap: 4px; }
-.embedded-browser { width: clamp(320px, 38vw, 720px); flex: none; min-height: 0; display: flex; flex-direction: column; border-left: 1px solid var(--border); background: var(--bg); color: var(--text); }
+.resize-browser { margin: 0; }
+.resize-browser:has(+ .embedded-browser.expanded) { visibility: hidden; }
+.embedded-browser { width: min(var(--browser-w), 85%); flex: none; min-height: 0; display: flex; flex-direction: column; border-left: 1px solid var(--border); background: var(--bg); color: var(--text); }
 .embedded-browser.expanded { position: absolute; inset: 0 0 0 auto; z-index: 5; width: 85%; }
 .embedded-toolbar { display: flex; align-items: center; gap: 4px; padding: 6px 8px; border-bottom: 1px solid var(--border); }
 .embedded-toolbar button { display: inline-flex; align-items: center; gap: 4px; padding: 6px; background: transparent; color: inherit; border: 0; border-radius: var(--r-md); }
