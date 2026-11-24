@@ -41,7 +41,7 @@ try {
 	await page.goto(`http://127.0.0.1:${harness.port}`);
 	const working = page.locator(".trailing-working .waiting-indicator");
 	await working.filter({ hasText: "Thinking" }).waitFor();
-	assert.equal(await working.locator(".waiting-brand i").count(), 3);
+	assert.equal(await working.locator(".waiting-brand").count(), 0);
 	// A persisted paragraph and an actively streaming paragraph both retain the cue.
 	emit({ messages: [user], streamingMessage: answer });
 	await working.filter({ hasText: "Thinking" }).waitFor();

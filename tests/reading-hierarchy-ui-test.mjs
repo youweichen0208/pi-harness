@@ -119,7 +119,7 @@ try {
 	assert.equal(await page.locator('.waiting-indicator').count(),0);
 	await page.clock.runFor(1);
 	await page.locator('.waiting-label',{hasText:'Thinking'}).waitFor();
-	assert.equal(await page.locator('.waiting-brand i').count(),3);
+	assert.equal(await page.locator('.waiting-brand').count(),0);
 	assert.equal(await page.locator('.waiting-duration').count(),0);
 	await page.clock.runFor(3700);
 	assert.equal(await page.locator('.waiting-duration').innerText(),'4 sec');
@@ -128,7 +128,6 @@ try {
 	await page.locator('.waiting-stop').click();
 	assert.equal(submitted.at(-1).type,'abort');
 	await page.emulateMedia({reducedMotion:'reduce'});
-	assert.equal(await page.locator('.waiting-brand i').first().evaluate(el=>getComputedStyle(el).animationName),'none');
 	assert.equal(await page.locator('.waiting-label').evaluate(el=>getComputedStyle(el).animationName),'none');
 	await publish({streamingMessage:{id:'live-wait',role:'assistant',content:[{type:'text',text:'Content arrived'}]}});
 	assert.equal(await page.locator('.waiting-indicator').count(),0);

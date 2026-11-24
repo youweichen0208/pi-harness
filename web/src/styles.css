@@ -271,7 +271,6 @@
 	--tooltip-hover: #47484d;
 	--highlight-fg: #242424;
 	--waiting-coral: #ee8c7c;
-	--waiting-blue: #3e8fc0;
 	--shadow-color: #000;
 	--shadow-soft: #0000000a;
 	--tl-close: #ff5f57;
@@ -279,7 +278,6 @@
 	--tl-maximize: #28c840;
 	--tl-glyph: #0000008c;
 	--r-switch: 999px;
-	--r-waiting: 1.5px;
 	--r-sm: 6px;
 	--r-md: 8px;
 	--r-lg: 12px;
@@ -305,6 +303,8 @@
 	--link: #00729f;
 	--sidebar-bg: #fafafa;
 	--row-active: #efefef;
+	/* 全局悬停行底色：各主题随 --bg-elev2 自动适配；code-workspace 局部覆盖。 */
+	--row-hover: var(--bg-elev2);
 	--bubble-bg: #f5f5f5;
 	--code-chip-bg: #f0f0f0;
 	--green: #12a453;
@@ -11445,21 +11445,15 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { height: 44px;
 .messages > [data-lazy-id]:has(~ .trailing-working:not(:empty)):not(:has(~ [data-lazy-id] .msg)):not(:has(~ .msg)) .bash-group:last-child { margin-bottom: 0; }
 .wiki-chat-messages > :has(+ .waiting-indicator) { margin-bottom: 0; }
 
-/* 31a: a single, quiet brand indicator after the last visible response. */
+/* 31a: a single, quiet text indicator after the last visible response. */
 .waiting-indicator { display: flex; align-items: center; gap: 10px; min-height: 20px; padding-left: 2px; margin-top: 8px; white-space: nowrap; color: var(--text-faint); font-size: 13px; }
-.waiting-brand { display: inline-flex; align-items: center; gap: 3px; flex: none; }
-.waiting-brand i { width: 6px; height: 6px; border-radius: var(--r-waiting); background: var(--waiting-coral); animation: waiting-brand-pulse 1.2s ease-in-out infinite; }
-.waiting-brand i:nth-child(2) { background: var(--waiting-blue); animation-delay: .18s; }
-.waiting-brand i:nth-child(3) { background: var(--yellow); animation-delay: .36s; }
 :root { --thinking-text-gradient: linear-gradient(90deg, var(--thinking-text) 32%, color-mix(in srgb, var(--bg) 85%, var(--text)) 49%, color-mix(in srgb, var(--bg) 85%, var(--text)) 51%, var(--thinking-text) 68%); }
 .waiting-label { font-weight: 500; background: var(--thinking-text-gradient); background-size: 200% 100%; background-clip: text; -webkit-background-clip: text; color: transparent; animation: waiting-text-shimmer 1.4s linear infinite; }
 .waiting-duration { color: oklch(0.62 0.01 80); font-size: 12px; font-variant-numeric: tabular-nums; }
 .waiting-stop { padding: 0; border: 0; background: none; color: var(--text-dim); font: inherit; cursor: pointer; }
 .waiting-stop:hover { color: var(--red); }
-@keyframes waiting-brand-pulse { 0%, 100% { opacity: .25; transform: scale(.75); } 50% { opacity: 1; transform: scale(1); } }
 @keyframes waiting-text-shimmer { from { background-position: 135% 0; } to { background-position: -35% 0; } }
 @media (prefers-reduced-motion: reduce) {
-	.waiting-brand i { animation: none; opacity: 1; transform: none; }
 	.waiting-label { animation: none; background: none; color: var(--text-faint); }
 }
 
@@ -13503,6 +13497,8 @@ html.pi-desktop .wiki-window-header .desktop-window-controls { -webkit-app-regio
 .compact-navigation .global-entries button { height: 30px; padding: 5px 8px; gap: 12px; font-size: 13px; border-radius: var(--r-md); }
 .compact-navigation .global-entries svg, .compact-navigation .sidebar-footer svg { width: 14px; height: 14px; flex: none; }
 .compact-navigation .global-entries button.active, .compact-navigation .project-item.active, .compact-navigation .session-item.active, .compact-navigation .workspace-list-row > button.active { background: var(--navigation-row); }
+.compact-navigation .global-entries button:hover:not(:disabled) { background: var(--row-hover); }
+.compact-navigation .global-entries button:focus-visible, .compact-navigation .compact-workspace-trigger:focus-visible, .compact-navigation .project-item:focus-visible, .compact-navigation .session-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .compact-navigation .workspace-directory { display: flex; width: 100%; flex: 1; min-height: 0; margin-top: 18px; padding-top: 6px; border-top: 1px solid var(--border-soft); background: transparent; overflow-y: auto; }
 .design-workspace .compact-navigation .panel-section-title { display: flex; align-items: center; justify-content: space-between; min-height: 30px; padding: 3px 8px; font-size: 11px; font-weight: 400; letter-spacing: 1px; color: var(--text-faint); }
 .compact-navigation .workspace-directory-label { display: flex; align-items: center; gap: 8px; }
@@ -14183,6 +14179,13 @@ html.pi-desktop .design-workspace .topbar { height: 48px; min-height: 48px; }
 .compact-navigation .global-entries .global-new-chat:hover:not(:disabled) { background: var(--row-hover); color: var(--heading); }
 .compact-navigation .global-entries .global-new-chat:disabled { opacity: .4; cursor: default; }
 .compact-navigation.directory-collapsed:not(:hover):not(:focus-within) .global-new-chat { display: none; }
+/* 「对话」选中时与常驻新建按钮合成一个连续 pill：容器铺选中底、统一圆角，
+   按钮自身透明，「+」左侧加 1px 发丝分隔线；悬停只加深所在半区。 */
+.compact-navigation .global-entries .global-chat-entry:has(> button:first-child.active) { gap: 0; background: var(--navigation-row); border-radius: var(--r-sm); }
+.compact-navigation .global-entries .global-chat-entry:has(> button:first-child.active) > button:first-child { background: transparent; border-radius: var(--r-sm) 0 0 var(--r-sm); }
+.compact-navigation .global-entries .global-chat-entry:has(> button:first-child.active) > button:first-child:hover { background: var(--row-hover); }
+.compact-navigation .global-entries .global-chat-entry:has(> button:first-child.active) .global-new-chat { position: relative; border-radius: 0 var(--r-sm) var(--r-sm) 0; }
+.compact-navigation .global-entries .global-chat-entry:has(> button:first-child.active) .global-new-chat::before { content: ""; position: absolute; left: 0; top: 50%; width: 1px; height: 16px; transform: translateY(-50%); background: var(--border); }
 .change-counts .add { color: color-mix(in srgb, var(--green) 70%, var(--text)); }
 .change-counts .del { color: color-mix(in srgb, var(--red) 70%, var(--text)); }
 
@@ -15869,7 +15872,7 @@ span.rich-math { display: inline-block; }
 	.compact-navigation .session-dot { grid-area: dot; margin-top: 7px; }
 	.compact-navigation .session-info { grid-area: title; }
 	.compact-navigation .session-src { grid-area: source; }
-	.design-workspace .compact-navigation .session-time { grid-area: time; margin: 0; text-align: start; line-height: 15px; font-size: 11px; }
+	.design-workspace .compact-navigation .session-time { grid-area: time; margin: 0; text-align: start; line-height: 16px; font-size: 12px; }
 	.compact-navigation .lp-row > .session-item + .lp-menu-zone { top: 2px; transform: none; }
 	.compact-navigation .lp-row:is(:focus-within, :has(> .session-item:hover, > .lp-menu-zone:is(:hover, .is-open))) > .session-item .session-info { padding-inline-end: 24px; }
 }
@@ -16427,7 +16430,7 @@ html[data-platform="win32"] :is(.settings-tab-label, .input-tools .chip, .reply-
 .embedded-viewport { flex: 1; min-height: 0; overflow: auto; }
 .embedded-viewport:has(.browser-start) { display: flex; flex-direction: column; padding: 24px 18px; }
 .browser-start { width: min(100%, 560px); margin: auto; padding-bottom: min(15vh, 116px); }
-.browser-start h2 { display: flex; align-items: center; justify-content: center; gap: 1px; margin: 0 0 18px; font-size: clamp(28px, 3vw, 40px); font-weight: 650; letter-spacing: -.035em; }
+.browser-start h2 { display: flex; align-items: center; justify-content: center; gap: 1px; margin: 0 0 32px; font-size: clamp(28px, 3vw, 40px); font-weight: 650; letter-spacing: -.035em; }
 .browser-start-search { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 4px 0 14px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--r-lg); }
 .browser-start-search:has(input:focus) { outline: 2px solid var(--accent); outline-offset: -1px; box-shadow: none; }
 .browser-start .browser-start-search input:focus { outline: none; box-shadow: none; }
@@ -16614,7 +16617,9 @@ html[data-platform="win32"] :is(.settings-tab-label, .input-tools .chip, .reply-
 .pg-files .btn[aria-pressed=true] { background: var(--accent-soft); border-color: transparent; }
 .pg-files .pg-filename { box-sizing: border-box; flex: none; min-width: 0; padding: 0 6px; font: inherit; color: var(--text); background: var(--bg-elev); border: 1px solid var(--accent); border-radius: var(--r-sm); }
 .pg-studio .pg-files .pg-filename:focus { outline: none; box-shadow: none; }
-.pg-studio .lc-panel-head [aria-selected=true] { background: var(--accent-soft); border-bottom: 2px solid var(--accent); }
+/* Selected tab stays neutral: the studio head is already --bg-elev, so the
+   selected fill uses --row-active and weight carries the hierarchy. */
+.pg-studio .lc-panel-head [aria-selected=true] { background: var(--row-active); font-weight: 600; }
 .pg-studio .lc-panel-head > [role=tablist] { width: 100%; background: transparent; }
 .pg-studio .lc-panel-head [role=tab] { flex: 1; padding-inline: 4px; }
 .pg-studio .scratch-code-foot { flex-wrap: wrap; }

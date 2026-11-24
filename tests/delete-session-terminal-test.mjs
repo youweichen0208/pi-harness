@@ -7,7 +7,10 @@
  *   1. an EXITED terminal (scrollback only, nothing running) must NOT block
  *      deleting the session — the tab cannot be closed from the current
  *      conversation, so blocking would lock the session forever;
- *   2. a LIVE terminal still blocks, and the notice names the terminal;
+ *   2. a LIVE terminal blocks the FIRST delete with a warning that names it
+ *      and arms a 15s confirm window — the retry proceeds and closes the
+ *      terminal, because the tab is unreachable from the current conversation
+ *      (issue #194);
  *   3. the active conversation is always refused with its own message.
  *
  * Usage: npm run build && node tests/delete-session-terminal-test.mjs
@@ -159,17 +162,27 @@ try {
 	await client.waitForState((state) => state.sessionFile !== sessionB);
 	client.send({ type: "delete_session", path: sessionB });
 	const liveWarning = await client.waitForType("notice", (message) => message.level === "warning" && message.text.includes("运行中的终端"));
-	check("live terminal refuses deletion", liveWarning.text.includes("运行中的终端"));
+	check("live terminal refuses the first delete", liveWarning.text.includes("运行中的终端"));
 	check("warning names the terminal", liveWarning.text.includes(liveTitle));
+	check("first warning explains the confirm retry", liveWarning.text.includes("再次删除"));
 	check("session B transcript kept", existsSync(sessionB));
 
-	// -- active conversation is refused with its own message ------------------
-	client.send({ type: "switch_session", path: sessionB });
-	await client.waitForState((state) => state.sessionFile === sessionB);
+	// Retrying within the confirm window proceeds and closes the terminal
+	// (issue #194: the tab is unreachable in a background conversation, so a
+	// plain refusal used to lock the session forever).
 	client.send({ type: "delete_session", path: sessionB });
+	const closedNotice = await client.waitForType("notice", (message) => message.level === "info" && message.text.includes("已关闭运行中的终端"));
+	check("retry confirms and names the closed terminal", closedNotice.text.includes(liveTitle));
+	check("session B transcript deleted after confirm", !existsSync(sessionB));
+
+	// -- active conversation is refused with its own message ------------------
+	const sessionC = seed("C", "ACTIVE_SESSION");
+	client.send({ type: "switch_session", path: sessionC });
+	await client.waitForState((state) => state.sessionFile === sessionC);
+	client.send({ type: "delete_session", path: sessionC });
 	const activeWarning = await client.waitForType("notice", (message) => message.level === "warning" && message.text.includes("正在使用中"));
 	check("active conversation is refused", activeWarning.text.includes("正在使用中"));
-	check("session B still on disk", existsSync(sessionB));
+	check("session C still on disk", existsSync(sessionC));
 
 	console.log(`\n${passed} checks passed`);
 } catch (error) {

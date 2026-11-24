@@ -96,9 +96,8 @@ try {
 	assert(await page.locator('.panel-right > .panel-body').isVisible());
 	assert.equal(await page.locator('.inputbar textarea').inputValue(),'Review this workspace');
 	socket.send(JSON.stringify({type:'snapshot',state:{...baseState,isStreaming:true,streamingMessage:null,messages:[{id:'classic-wait',role:'user',content:[{type:'text',text:'Analyze this workspace'}]}]}}));
-	await page.locator('.waiting-brand').waitFor();
-	const dots = await page.locator('.waiting-brand i').evaluateAll(nodes => nodes.map(el => { const style = getComputedStyle(el); return [style.backgroundColor, style.borderRadius, style.animationName]; }));
-	assert.deepEqual(dots, [['rgb(238, 140, 124)','1.5px','none'],['rgb(62, 143, 192)','1.5px','none'],['rgb(242, 188, 78)','1.5px','none']]);
+	await page.locator('.waiting-indicator .waiting-label').waitFor();
+	assert.equal(await page.locator('.waiting-brand').count(), 0);
 	assert.deepEqual(errors, []); assert.deepEqual(external, []);
 	console.log('PASS classic UI: tokens, fixed panels, footer, flat transcript, same-chat Wiki, settings, dark and mobile');
 } finally {

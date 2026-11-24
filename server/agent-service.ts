@@ -213,6 +213,12 @@ export class ClientSession {
 	readonly timings = new SnapshotTimings();
 	readonly executionTraces: ExecutionTraceRegistry;
 	private readonly sessionExports: SessionExportService;
+	/** delete_session blocked by live terminals arms a confirm window here
+	 *  (transcript path → expiry): the blocking terminal belongs to a background
+	 *  conversation whose tabs the user cannot reach, so the warning used to be
+	 *  a dead end (issue #194). A second delete within the window proceeds —
+	 *  removeConversation kills those PTYs along with the doomed runtime. */
+	private deleteTerminalConfirm = new Map<string, number>();
 	private promptTraceSeq = 0;
 	private static liveClients = new Map<string, ClientSession>();
 
@@ -2634,6 +2640,7 @@ export class ClientSession {
 			// before releasing any matching runtimes and deleting the transcript.
 			const owners = [...this.convs.values()].filter((conv) =>
 				conv.session.sessionFile && resolve(conv.session.sessionFile) === abs);
+			const closedTerminals: string[] = [];
 			for (const conv of owners) {
 				if (conv.id === this.activeId) {
 					this.emit({
@@ -2654,23 +2661,39 @@ export class ClientSession {
 					});
 					return;
 				}
-				// Only LIVE PTYs block deletion: an exited terminal keeps its scrollback
+				// Only LIVE PTYs give pause: an exited terminal keeps its scrollback
 				// in the manager's history but nothing is running, and the tab can never
 				// be closed from another conversation — it must not lock the session.
+				// A live one can't be reached either, so instead of a dead-end refusal
+				// the first attempt arms a 15s confirm window; retrying the delete then
+				// closes those terminals with the conversation (issue #194).
 				const live = conv.terminals.list().filter((term) => term.running);
 				if (live.length > 0) {
-					this.emit({
-						type: "notice",
-						level: "warning",
-						text: `该对话仍有运行中的终端（${live.map((term) => term.title).join("、")}），请先关闭终端再删除`,
-					});
-					return;
+					const confirmExpiry = this.deleteTerminalConfirm.get(abs) ?? 0;
+					if (confirmExpiry <= Date.now()) {
+						this.deleteTerminalConfirm.set(abs, Date.now() + 15000);
+						this.emit({
+							type: "notice",
+							level: "warning",
+							text: `该对话仍有运行中的终端（${live.map((term) => term.title).join("、")}），再次删除将关闭终端并删除对话`,
+						});
+						return;
+					}
+					this.deleteTerminalConfirm.delete(abs);
+					closedTerminals.push(...live.map((term) => term.title));
 				}
 			}
 			await Promise.all(owners.map((conv) => this.removeConversation(conv.id)));
 			rmSync(abs, { force: true });
 			this.emitConversations();
 			await this.refreshSessions();
+			if (closedTerminals.length > 0) {
+				this.emit({
+					type: "notice",
+					level: "info",
+					text: `已关闭运行中的终端（${closedTerminals.join("、")}）并删除对话`,
+				});
+			}
 		} catch (err) {
 			this.emit({
 				type: "notice",

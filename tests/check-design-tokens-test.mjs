@@ -51,7 +51,7 @@ test("detects purple OKLCH including alpha and hue units without flagging neutra
 
 test("rejects fixed CSS and TSX radii while allowing documented tokens and inheritance", () => {
 	assert.deepEqual(checkCss('.card { border-radius: var(--r-sm) 0 / 50%; }'), []);
-	assert.deepEqual(checkCss('.card { border-radius: inherit; } .switch { border-radius: var(--r-switch); } .waiting-brand i { border-radius: var(--r-waiting); }'), []);
+	assert.deepEqual(checkCss('.card { border-radius: inherit; } .switch { border-radius: var(--r-switch); } .modal { border-radius: var(--r-lg); }'), []);
 	const issues = checkCss('.card { border-radius: 9px; border-top-left-radius: 4px; }');
 	assert.equal(issues.length, 2);
 	assert(issues.every(issue => issue.severity === "error"));
