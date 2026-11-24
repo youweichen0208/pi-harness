@@ -49,7 +49,7 @@ import { desktopAPI, flushWindowSaves } from "./desktop";
 import { useNotes } from "./use-notes";
 import { usePlayground } from "./use-playground";
 import { PlaygroundProvider } from "./playground-context";
-import { appendComposerText, prepareComposerCommand } from "./composer-text";
+import { appendComposerText } from "./composer-text";
 import { NotesList, NotesEditor } from "./components/Notes";
 import { PlaygroundScratch } from "./components/PlaygroundScratch";
 import { PaneErrorBoundary } from "./components/PaneErrorBoundary";
@@ -1716,7 +1716,6 @@ export function App() {
 			{settingsOpen && (
 				<SettingsModal
 					initialTab={settingsInitialTab}
-					onPrepareDesign={() => { prepareComposerCommand(chat.activeConversationId, "skill:design-first"); setView("chat"); setScratchOpen(false); setNotesOpen(false); setSettingsOpen(false); }}
 					onInstallPiCli={installPiCli}
 					chat={chat}
 					send={send}

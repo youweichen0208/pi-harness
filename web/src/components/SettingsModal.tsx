@@ -14,7 +14,6 @@ type Tab = "prompt" | "appearance" | "skills" | "extensions" | "native-mcp";
 interface SettingsModalProps {
 	initialTab?: Tab;
 	onInstallPiCli: () => void;
-	onPrepareDesign: () => void;
 	chat: {
 		ready: boolean;
 		settings: UiSettingsState | null;
@@ -25,12 +24,11 @@ interface SettingsModalProps {
 	onClose: () => void;
 }
 
-export function SettingsModal({ chat, send, onClose, onInstallPiCli, onPrepareDesign, initialTab = "prompt" }: SettingsModalProps) {
+export function SettingsModal({ chat, send, onClose, onInstallPiCli, initialTab = "prompt" }: SettingsModalProps) {
 	const t = useT();
 	const dialogRef = useDialogFocus();
 	const canLeave=()=>!document.querySelector('.ext-editor[data-dirty="true"], .prompt-editor[data-dirty="true"], .mcp-workbench[data-dirty="true"]')||window.confirm(t("extDiscard"));
 	const close=()=>{if(canLeave())onClose();};
-	const prepareDesign=()=>{if(canLeave())onPrepareDesign();};
 	useEffect(() => { const handle = (event: KeyboardEvent) => { if (event.key === "Escape" && !event.defaultPrevented && isTopDialog(dialogRef.current)) close(); }; window.addEventListener("keydown", handle); return () => window.removeEventListener("keydown", handle); }, [onClose]);
 	const [tab, setTab] = useState<Tab>(initialTab);
 	const settings = chat.settings;
@@ -51,18 +49,12 @@ export function SettingsModal({ chat, send, onClose, onInstallPiCli, onPrepareDe
 						{tab !== "appearance" && <label className="tree-edit-preference"><input type="checkbox" checked={settings.editResendNewSession ?? false} onChange={event => send({ type: "set_settings", editResendNewSession: event.target.checked })} />{t("treeEditNewSession")}</label>}
 						{tab === "prompt" && chat.state && <SystemPromptPanel key={`${chat.state.cwd}:${chat.state.conversationId}`} cwd={chat.state.cwd} conversationId={chat.state.conversationId} />}
 						{tab === "appearance" && <AppearancePanel />}
-						{tab === "skills" && chat.state && <>
-							<BuiltinExtensionsPanel designOnly prepareDesign={prepareDesign} key={chat.state.conversationId} cwd={chat.state.cwd} conversationId={chat.state.conversationId}
-								ready={chat.ready} canReload={!chat.state.isStreaming && !chat.state.tree?.verifying && !chat.state.tree?.externallyModified && !chat.state.tree?.busy}
-								reload={() => send({ type: "extensions_reload" })} openNative={() => setTab("native-mcp")} />
-							<SkillsPanel key={chat.state.cwd} cwd={chat.state.cwd} reload={() => send({ type: "extensions_reload" })} />
-						</>}
+						{tab === "skills" && chat.state && <SkillsPanel key={chat.state.cwd} cwd={chat.state.cwd} reload={() => send({ type: "extensions_reload" })} />}
 						{tab === "extensions" && chat.state?.cwd && <ExtensionsPanel
 							cliInstall={{ ready: chat.ready, run: () => { if (canLeave()) onInstallPiCli(); } }}
 							key={chat.state.cwd} cwd={chat.state.cwd}
 							reload={() => send({ type: "extensions_reload" })}
 							builtins={<BuiltinExtensionsPanel
-								prepareDesign={prepareDesign}
 								key={chat.state.conversationId} cwd={chat.state.cwd} conversationId={chat.state.conversationId}
 								ready={chat.ready} canReload={!chat.state.isStreaming && !chat.state.tree?.verifying && !chat.state.tree?.externallyModified && !chat.state.tree?.busy}
 								reload={() => send({ type: "extensions_reload" })} openNative={() => setTab("native-mcp")}

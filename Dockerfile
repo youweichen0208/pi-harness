@@ -24,6 +24,7 @@ COPY package.json package-lock.json ./
 COPY scripts/check-lockfile.mjs ./scripts/check-lockfile.mjs
 RUN npm run check:lockfile && npm ci --omit=dev
 COPY --from=build /app/assets/notebook ./assets/notebook
+COPY --from=build /app/assets/skills ./assets/skills
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/web/dist ./web/dist
 ENV PORT=8787

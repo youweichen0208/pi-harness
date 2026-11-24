@@ -49,25 +49,22 @@ execFileSync(executable, ["--input-type=module", "--eval", `
 	import {tmpdir} from 'node:os';
 	import {join} from 'node:path';
 	import {DefaultResourceLoader, SettingsManager} from '@earendil-works/pi-coding-agent';
-	import {designFirstResources, designFirstSettings, toggleDesignFirst} from './dist/server/design-first-resources.js';
-	const root = mkdtempSync(join(tmpdir(), 'packaged-design-first-'));
+	import {engineeringResources, engineeringSkillNames} from './dist/server/engineering-skills.js';
+	const root = mkdtempSync(join(tmpdir(), 'packaged-engineering-skills-'));
 	try {
-		const loader = new DefaultResourceLoader({cwd:root,agentDir:root,settingsManager:SettingsManager.inMemory(),noExtensions:true,noSkills:true,noThemes:true,noContextFiles:true,noPromptTemplates:true,...designFirstResources('normal',root)});
+		const loader = new DefaultResourceLoader({cwd:root,agentDir:root,settingsManager:SettingsManager.inMemory(),noExtensions:true,noSkills:true,noThemes:true,noContextFiles:true,noPromptTemplates:true,...engineeringResources('normal')});
 		await loader.reload();
-		const names = () => loader.getSkills().skills.map(skill => skill.name).sort();
-		assert.deepEqual(names(), ['bug-fix','design-first','feat']);
+		assert.deepEqual(loader.getSkills().skills.map(skill => skill.name).sort(), [...engineeringSkillNames].sort());
 		assert.deepEqual(loader.getPrompts().prompts, []);
-		for (const skill of loader.getSkills().skills) assert.equal(skill.filePath, join(process.cwd(), 'assets/skills/design-first', skill.name === 'design-first' ? '' : skill.name, 'SKILL.md'));
-		toggleDesignFirst(false,designFirstSettings(root).version,root);
+		for (const skill of loader.getSkills().skills) assert.equal(skill.filePath, join(process.cwd(), 'assets/skills', skill.name, 'SKILL.md'));
 		await loader.reload();
-		assert.deepEqual(loader.getSkills().skills, []);
-		assert.deepEqual(loader.getPrompts().prompts, []);
-		toggleDesignFirst(true,designFirstSettings(root).version,root);
-		await loader.reload();
-		assert.deepEqual(names(), ['bug-fix','design-first','feat']);
+		assert.equal(loader.getSkills().skills.length, 9);
+		const wiki = new DefaultResourceLoader({cwd:root,agentDir:root,settingsManager:SettingsManager.inMemory(),noExtensions:true,noSkills:true,noThemes:true,noContextFiles:true,noPromptTemplates:true,...engineeringResources('wiki')});
+		await wiki.reload();
+		assert.deepEqual(wiki.getSkills().skills, []);
 	} finally {rmSync(root,{recursive:true,force:true});}
 `], {cwd:appRoot,env:{...testEnv({PI_WEB_PKG_ROOT:appRoot}),ELECTRON_RUN_AS_NODE:"1",NODE_PATH:"",NODE_OPTIONS:""},timeout:30000,stdio:"pipe"});
-console.log("PASS packaged Design First skills, installed paths and toggle reload");
+console.log("PASS packaged Engineering Skills, installed paths, reload and Wiki isolation");
 const playgroundMethods = pathToFileURL(join(appRoot, "dist/server/playground-methods.js")).href;
 execFileSync(executable, ["--input-type=module", "--eval", `
 	import assert from 'node:assert/strict';
@@ -87,6 +84,18 @@ assert(existsSync(rgPath) && !isAbsolute(rgRelative) && !rgRelative.startsWith("
 assert.match(execFileSync(rgPath, ["--version"], { encoding: "utf8", timeout: 10000 }), /ripgrep/);
 console.log("PASS packaged ripgrep binary runs without a system installation");
 const { agentRuntimeEnvironment, desktopPythonEnvironment } = await import(pathToFileURL(join(appRoot, "electron/agent-runtime-env.mjs")).href);
+assert.equal(agentRuntimeEnvironment(appRoot, "", executable).PI_WEB_NODE_RUNTIME, executable);
+const approvalTemp = mkdtempSync(join(tmpdir(), "pi-packaged-approval-"));
+try {
+	const document = join(approvalTemp, "change.md"), script = join(appRoot, "assets/skills/engineering/scripts/approval-fingerprint.mjs");
+	writeFileSync(document, "# Approved\n\n## Goal\nKeep runtime access.\n\n## Design\nDesign revision: 1\nUse the bundled executable.\n\n## Approval\nStatus: pending\nApproved revision: none\nApproved content SHA-256: none\nEvidence: no user confirmation recorded\n\n## Acceptance Criteria\n- [ ] Verification works without system Node\n");
+	const env = { ...testEnv(), ELECTRON_RUN_AS_NODE: "1", PI_WEB_NODE_RUNTIME: executable, PATH: process.platform === "win32" ? `${process.env.SystemRoot}\\System32` : "/usr/bin:/bin", NODE_PATH: "", NODE_OPTIONS: "" };
+	const run = command => execFileSync(env.PI_WEB_NODE_RUNTIME, [script, command, document], { env, encoding: "utf8", timeout: 30000 });
+	const fingerprint = run("fingerprint").trim();
+	writeFileSync(document, readFileSync(document, "utf8").replace("Status: pending\nApproved revision: none\nApproved content SHA-256: none\nEvidence: no user confirmation recorded", `Status: approved\nApproved revision: 1\nApproved content SHA-256: ${fingerprint}\nEvidence: User confirmed revision 1`));
+	assert.match(run("verify"), /APPROVED revision 1/);
+} finally { rmSync(approvalTemp, { recursive: true, force: true }); }
+console.log("PASS packaged approval fingerprint uses Electron without a system Node on PATH");
 const runtime = desktopPythonEnvironment(resolve(appRoot, ".."), "");
 execFileSync(executable, ["--input-type=module", "--eval", `
 	import assert from 'node:assert/strict';

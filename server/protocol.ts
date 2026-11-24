@@ -1539,7 +1539,7 @@ export interface ExtensionPackage {
 }
 export interface ExtensionsState { packages: ExtensionPackage[]; version: string; trusted: boolean; checkedAt?: number; autoCheck?: boolean; updateResults?: ExtensionUpdateResult[]; }
 
-export type BuiltinExtensionId = "background-bash" | "desktop-control" | "pi-harness-design-first" | "codemode" | "tool-search" | "mcp";
+export type BuiltinExtensionId = "background-bash" | "desktop-control" | "codemode" | "tool-search" | "mcp";
 export interface BuiltinExtensionState {
 	id: BuiltinExtensionId;
 	settingsVersion?: string;
@@ -1558,7 +1558,7 @@ export interface BuiltinExtensionsState {
 }
 export type BuiltinExtensionsRequest =
 	| { action: "builtin-list"; conversationId: string }
-	| { action: "builtin-toggle"; conversationId: string; id: "background-bash" | "desktop-control" | "pi-harness-design-first"; enabled: boolean; version: string };
+	| { action: "builtin-toggle"; conversationId: string; id: "background-bash" | "desktop-control"; enabled: boolean; version: string };
 export interface ExtensionCatalogItem { name: string; description: string; descriptionZh?: string; version?: string; author?: string; downloads?: number; date?: number; types: string[]; image?: string; url: string; repository?: string; }
 export interface ExtensionCatalog { items: ExtensionCatalogItem[]; page: number; pages: number; total?: number; }
 export interface ExtensionPackageDetails { source: string; name: string; version?: string; description?: string; author?: string; repository?: string; license?: string; resources: Record<string, string[]>; canPin: boolean; }

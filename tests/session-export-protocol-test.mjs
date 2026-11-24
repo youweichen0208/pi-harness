@@ -13,7 +13,6 @@ const { PROTOCOL_VERSION } = await import("../dist/server/protocol-version.js");
 const root = mkdtempSync(join(tmpdir(), "pi-session-export-protocol-"));
 const cwd = join(root, "work"), data = join(root, "data"), agent = join(root, "agent");
 for (const directory of [cwd, data, agent]) mkdirSync(directory, { recursive: true });
-writeFileSync(join(data, "design-first.json"), JSON.stringify({ enabled: false }));
 let modelRequests = 0;
 const model = createServer((req, res) => {
 	void (async () => {

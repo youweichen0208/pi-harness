@@ -12,6 +12,7 @@ import { CHROME_PATH } from "./lib/chrome.mjs";
 import { portUp } from "./lib/port-utils.mjs";
 import { createAgentSessionServices, createAgentSessionFromServices, SessionManager, createCodemodeExtension, createToolSearchExtension, createMcpExtension } from "@earendil-works/pi-coding-agent";
 import { testEnv } from "./lib/test-env.mjs";
+import { engineeringResources } from "../dist/server/engineering-skills.js";
 
 const PROTOCOL_ONLY = process.argv.includes("--protocol-only");
 const waitForUsageReset = page => page.waitForFunction(() => {
@@ -26,12 +27,12 @@ const base = mkdtempSync(join(tmpdir(), "pi-web-new-context-"));
 const workdir = join(base, "work");
 const dataDir = join(base, "data");
 const agentDir = join(base, "agent");
+const isolatedHome = join(base, "home");
 mkdirSync(workdir, { recursive: true });
 mkdirSync(dataDir, { recursive: true });
-// Compare the unextended native baseline; optional built-ins have separate SDK tests.
-// Compare the native Bash loadout after opting out of the harness extension.
+mkdirSync(isolatedHome, { recursive: true });
+// Compare the native loadout with the same bundled Skills and without the optional Bash wrapper.
 writeFileSync(join(dataDir, "document-extensions.json"), JSON.stringify({ backgroundEnabled: false }));
-writeFileSync(join(dataDir, "design-first.json"), JSON.stringify({ enabled: false }));
 mkdirSync(agentDir, { recursive: true });
 mkdirSync(join(agentDir, "extensions"));
 writeFileSync(join(agentDir, "extensions", "cancel-new.ts"), `import { existsSync } from "node:fs"; import { join } from "node:path";
@@ -103,8 +104,8 @@ writeFileSync(
 );
 
 writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ defaultTools: ["+codemode", "+tool_search"] }));
-// Independent native SDK reference, with the same official extensions as Pi CLI.
-const nativeServices = await createAgentSessionServices({ cwd: workdir, agentDir, resourceLoaderOptions: { extensionFactories: [
+// Independent native SDK reference, with the same official extensions and bundled Skills.
+const nativeServices = await createAgentSessionServices({ cwd: workdir, agentDir, resourceLoaderOptions: { noSkills: true, ...engineeringResources("normal"), extensionFactories: [
  { name: "codemode", builtin: true, factory: createCodemodeExtension() },
  { name: "tool-search", builtin: true, factory: createToolSearchExtension() },
  { name: "mcp", builtin: true, factory: createMcpExtension() },
@@ -123,6 +124,8 @@ const server = spawn(process.execPath, ["dist/server/index.js"], {
 		PI_WEB_DATA_DIR: dataDir,
 		PI_WEB_CWD: workdir,
 		PI_CODING_AGENT_DIR: agentDir,
+		HOME: isolatedHome,
+		USERPROFILE: isolatedHome,
 		PI_WEB_HOST: "127.0.0.1",
 		PI_WEB_TOKEN: "",
 	},

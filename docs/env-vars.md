@@ -33,3 +33,5 @@ Pi 1.4.0 的 `PI_CODEMODE_MAX_WORKERS` 控制同一服务进程中所有会话�
 例如前台启动：`PI_CODEMODE_MAX_WORKERS=4 pi-harness`。使用 systemd、launchd 或 Docker 时配置服务进程的环境并重启服务；终端中设置变量不会修改已经运行的服务。该值由 SDK 读取，WebUI 不提供额外设置项；提高上限会增加并发内存占用。
 
 `PI_WEB_PYTHON`：Playground 的 Python 3.9+ 解释器路径，可指向虚拟环境；不接受 shell 参数。未设置时探测 VIRTUAL_ENV、PATH 和 Windows py -3。Jedi 补全与 Black 格式化也使用该环境。见 `architecture-playground.md`。
+
+`PI_WEB_NODE_RUNTIME`：普通会话由 `engineeringResources` 自动注入宿主 `process.execPath`。CLI／Web 指向启动服务的 Node.js 绝对路径；Desktop 由 `agentRuntimeEnvironment` 指向随包 Electron，并以 `ELECTRON_RUN_AS_NODE=1` 使用内置 Node 运行时。原生 Bash 即使 PATH 没有 `node` 也能运行审批指纹脚本；不需要也不应手动替换为下载的 Node。

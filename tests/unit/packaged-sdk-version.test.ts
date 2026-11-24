@@ -9,10 +9,10 @@ test("desktop packaging follows the exact SDK pin and rejects mismatches or rang
 	const out = mkdtempSync(join(tmpdir(), "pi-packaged-pin-"));
 	try {
 		const app = join(out, "resources/app"), sdk = join(app, "node_modules/@earendil-works/pi-coding-agent");
-		const source = join(out, "source"), sourceSkillRoot = join(source, "assets/skills/design-first");
+		const source = join(out, "source"), sourceSkillRoot = join(source, "assets/skills");
 		mkdirSync(join(sdk, "docs"), { recursive: true });
-		cpSync(new URL("../../assets/skills/design-first", import.meta.url), sourceSkillRoot, { recursive: true });
-		const skillRoot = join(app, "assets/skills/design-first");
+		cpSync(new URL("../../assets/skills", import.meta.url), sourceSkillRoot, { recursive: true });
+		const skillRoot = join(app, "assets/skills");
 		cpSync(sourceSkillRoot, skillRoot, { recursive: true });
 		mkdirSync(join(sdk, "examples/extensions"), { recursive: true });
 		const references = [
@@ -34,22 +34,22 @@ test("desktop packaging follows the exact SDK pin and rejects mismatches or rang
 			expect(() => verifyPackagedResources(app, source)).toThrow(`Packaged Pi reference is missing: ${reference}`);
 			writeFileSync(join(sdk, reference), "fixture reference");
 		}
-		for (const reference of readdirSync(skillRoot, { recursive: true }).filter(name => String(name).endsWith(".md"))) {
-			const file = join(skillRoot, String(reference)), body = readFileSync(file);
+		for (const reference of readdirSync(skillRoot, { recursive: true }).map(String).filter(name => name.endsWith(".md"))) {
+			const file = join(skillRoot, reference), body = readFileSync(file);
 			rmSync(file);
-			expect(() => verifyPackagedResources(app, source)).toThrow("Packaged Design First resource is missing");
+			expect(() => verifyPackagedResources(app, source)).toThrow("Packaged Engineering Skills resource is missing");
 			writeFileSync(file, body);
 		}
-		writeFileSync(join(sourceSkillRoot, "references/future.md"), "# Future resource\n");
-		expect(() => verifyPackagedResources(app, source)).toThrow("Packaged Design First resource is missing: references/future.md");
-		writeFileSync(join(skillRoot, "references/future.md"), "# Future resource\n");
+		writeFileSync(join(sourceSkillRoot, "engineering/templates/future.md"), "# Future resource\n");
+		expect(() => verifyPackagedResources(app, source)).toThrow("Packaged Engineering Skills resource is missing: engineering/templates/future.md");
+		writeFileSync(join(skillRoot, "engineering/templates/future.md"), "# Future resource\n");
 		expect(() => verifyPackagedResources(app, source)).not.toThrow();
-		writeFileSync(join(skillRoot, "references/future.md"), "");
-		expect(() => verifyPackagedResources(app, source)).toThrow("Packaged Design First resource is empty: references/future.md");
-		writeFileSync(join(skillRoot, "references/future.md"), "# Future resource\n");
-		writeFileSync(join(skillRoot, "references/unexpected.md"), "# Unexpected resource\n");
-		expect(() => verifyPackagedResources(app, source)).toThrow("Packaged Design First resource is unexpected: references/unexpected.md");
-		rmSync(join(skillRoot, "references/unexpected.md"));
+		writeFileSync(join(skillRoot, "engineering/templates/future.md"), "");
+		expect(() => verifyPackagedResources(app, source)).toThrow("Packaged Engineering Skills resource is empty: engineering/templates/future.md");
+		writeFileSync(join(skillRoot, "engineering/templates/future.md"), "# Future resource\n");
+		writeFileSync(join(skillRoot, "engineering/unexpected.md"), "# Unexpected resource\n");
+		expect(() => verifyPackagedResources(app, source)).toThrow("Packaged Engineering Skills resource is unexpected: engineering/unexpected.md");
+		rmSync(join(skillRoot, "engineering/unexpected.md"));
 		mkdirSync(join(app, "extensions"));
 		writeFileSync(join(app, "extensions/webui.ts"), "export default () => {};");
 		expect(() => verifyPackagedResources(app, source)).toThrow("Desktop must not bundle application extensions");

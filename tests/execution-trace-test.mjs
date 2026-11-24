@@ -16,7 +16,6 @@ const dataDir = join(base, "data");
 const agentDir = join(base, "agent");
 const traceOut = join(base, "trace.json");
 for (const dir of [cwd, dataDir, agentDir]) mkdirSync(dir, { recursive: true });
-writeFileSync(join(dataDir, "design-first.json"), JSON.stringify({ enabled: false }));
 
 const requests = [];
 const mock = createServer((req, res) => {

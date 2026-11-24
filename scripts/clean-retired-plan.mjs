@@ -7,7 +7,7 @@ for (const path of ['subagents/', 'subagent-presentation.js', 'subagent-presenta
 	rmSync(new URL('../dist/server/' + path, import.meta.url), { recursive: true, force: true });
 }
 
-// tsc also leaves compiled Chrome integration modules behind on upgrade.
-for (const module of ["page-reader", "browser-mcp"]) {
+// Remove compiled modules retired from the browser and skill integrations.
+for (const module of ["page-reader", "browser-mcp", "design-first-resources"]) {
 	for (const suffix of [".js", ".js.map"]) rmSync(new URL(`../dist/server/${module}${suffix}`, import.meta.url), { force: true });
 }

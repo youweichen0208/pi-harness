@@ -14,7 +14,6 @@ scrubHostEnv();
 const root = mkdtempSync(join(tmpdir(), "pi-trace-browser-"));
 const agent = join(root, "agent"), data = join(root, "data"), work = join(root, "work");
 for (const directory of [agent, data, work]) mkdirSync(directory, { recursive: true });
-writeFileSync(join(data, "design-first.json"), JSON.stringify({ enabled: false }));
 let browser, harness, fixtureError, modelRequests = 0;
 const chunk = (res, delta, finishReason = null) => res.write(`data: ${JSON.stringify({ id: "trace-ui", object: "chat.completion.chunk", choices: [{ index: 0, delta, finish_reason: finishReason }] })}\n\n`);
 const attack = `TRACE_DONE </pre><script>globalThis.__traceExportExecuted=true</script><iframe src="https://invalid.example"></iframe><meta http-equiv="refresh" content="0;url=https://invalid.example"><img src=x onerror=alert(1)><a href="javascript:alert(1)">click</a>`;

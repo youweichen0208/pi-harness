@@ -8,7 +8,7 @@
 
 ## 内置 Pi 与用户配置
 
-Desktop 使用安装包内精确锁定的 Pi SDK。桌面包不包含应用自己的 `extensions/`，包元数据不声明应用扩展；CLI 的 `/webui` 扩展只随 npm 包提供。用户扩展由原生资源加载器读取 `~/.pi/agent/extensions`、Pi settings.json 声明的本地/已安装扩展包和受信任项目 `.pi/extensions`；`PI_CODING_AGENT_DIR` 可指定其他用户配置目录。沿用原生启停、过滤和项目信任，不复制或删除用户文件。Codemode、tool_search、MCP 属于 Pi 原生能力，继续按原生配置启用。终端执行 `pi update` 更新的是外部 CLI，不会替换桌面内置依赖；内置版本随应用构建升级。用户安装的原生扩展和凭据则由 Desktop 使用的 agent 目录加载，重启或 `/reload` 可加载其变化；不要把“内置版本固定”理解为“用户扩展配置永远无效”。
+Desktop 使用安装包内精确锁定的 Pi SDK。桌面包不包含应用自己的 `extensions/`，包元数据不声明应用扩展；CLI 的 `/webui` 扩展只随 npm 包提供。用户扩展由原生资源加载器读取 `~/.pi/agent/extensions`、Pi settings.json 声明的本地/已安装扩展包和受信任项目 `.pi/extensions`；`PI_CODING_AGENT_DIR` 可指定其他用户配置目录。沿用原生启停、过滤和项目信任，不复制或删除用户文件。Codemode、tool_search、MCP 属于 Pi 原生能力，继续按原生配置启用。终端执行 `pi update` 更新的是外部 CLI，不会替换桌面内置依赖；内置版本随应用构建升级。`agentRuntimeEnvironment` 还向服务及 Agent 工具注入 `PI_WEB_NODE_RUNTIME`，值为当前 Electron 可执行文件绝对路径；Engineering 审批指纹脚本通过它和 `ELECTRON_RUN_AS_NODE=1` 运行，无系统 Node.js 也能验证。用户安装的原生扩展和凭据则由 Desktop 使用的 agent 目录加载，重启或 `/reload` 可加载其变化；不要把“内置版本固定”理解为“用户扩展配置永远无效”。
 
 Pi 1.0 的原生 MCP 配置入口和旧界面 MCP 桥不同，见 [插件文档](architecture-plugins.md)。模型管理提供官方账号登录桥，OpenAI 支持 ChatGPT 授权；真实账号授权由用户在浏览器完成。macOS 产物回归检查 ChatGPT 的 lazy 模块，不能仅凭应用能启动判断 OAuth 功能完整。
 
@@ -42,7 +42,7 @@ macOS 服务的 launchd 标识为 `com.youweichen.pi-harness`（`--name` 自定�
 
 ## Docker
 
-构建和运行阶段都安装 Python、make、g++，供 Linux node-pty 原生编译；git 随运行镜像提供。两个依赖安装阶段先检查 lockfile。
+构建和运行阶段都安装 Python、make、g++，供 Linux node-pty 原生编译；git 随运行镜像提供。两个依赖安装阶段先检查 lockfile。运行阶段同时复制 `assets/notebook`、`assets/skills`、编译服务和前端产物；九项 Engineering Skills 从镜像内 `/app/assets/skills` 加载，不能只验证服务健康而漏查资源。
 
 `docker compose up -d` 构建并启动。镜像以 `node` 用户运行，需要保留的数据都放在卷 `/data` 下：
 
@@ -141,7 +141,7 @@ npm run publish:electron       # 同 build，但 --publish always——本地跑
   顶栏高 44px，项目栏全高显示；macOS 品牌区为原生窗口按钮留空，项目栏开关固定在红绿灯右侧，收起项目栏时标题仍避让这些控件。Windows/Linux 与 macOS 使用同一套窗口按钮：三枚红绿灯圆点固定在 `left: 18px; top: 17px`，顶栏只保留左侧 92px 避让，右侧不再预留按钮空间；顶栏横跨对话与文件栏。设置和文件按钮不压缩，视图入口在空间不足时依次将 Git、终端移入更多菜单。`tests/desktop-toolbar-test.mjs` 在 Chromium 中模拟两平台外壳，验证顶栏边界、状态数字与任务定位（不替代真机窗口验证）。详见 [界面布局](ui-design.md)。
 - 初始窗口背景匹配默认简白主题；Mac 界面使用 SF Pro／苹方，仅 Playground 与 Wiki 的代码保留原代码字体；Windows 界面优先 Segoe UI 与微软雅黑，代码保持 JetBrains Mono；字体子集外字符回退到系统字体。视觉以 `ui-design.md` 的语雀桌面参考为准。顶栏直接提供对话、终端、Git、节点与插件，窄屏横向滚动；Wiki 从左栏知识库进入；连接与路径位于底部状态栏。
 - 流畅界面与 Web 共用：窄窗口抽屉使用可中断弹簧与独立拖动区；系统减少动态效果/透明度与提高对比度设置有对应降级。窗口控件、拖动区域与 IPC 不变。
-- SDK 原生提示词引用的 README、docs 与 examples 通过 extraResources 原样保留，防止 electron-builder 的生产依赖剪枝删除扩展示例。afterPack 检查文档、示例入口及原生 HTML 导出模板/CSS/JS/vendor；native-tools-desktop-test 使用包内 SDK 的真实路径读取资源并实际导出 HTML/JSONL，缺失时阻断打包回归。
+- SDK 原生提示词引用的 README、docs 与 examples 通过 extraResources 原样保留，防止 electron-builder 的生产依赖剪枝删除扩展示例。afterPack 检查文档、示例入口及原生 HTML 导出模板/CSS/JS/vendor，并递归比较源码与包内 `assets/skills/`，拒绝 Engineering Skills 资源缺失、空文件或意外文件；packaged-server-start-test 从实际包路径加载九项 Skills，native-tools-desktop-test 使用包内 SDK 读取资源并实际导出 HTML/JSONL，缺失时阻断打包回归。
 - 原生模块（`node-pty`）：`electron-builder.yml` 里 `npmRebuild: true`，打包时自动
   rebuild 成 Electron 的 Node ABI，不需要手动 `electron-rebuild`；本机需要装好
   Xcode Command Line Tools（mac）/ Visual Studio Build Tools（win）。

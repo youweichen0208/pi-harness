@@ -1,12 +1,20 @@
 # Extensions 原生包管理
 
-Design First 的 M1 指导资源随应用放在 `assets/skills/design-first/`，普通会话通过原生 Skills 提供 `/skill:design-first`、`/skill:bug-fix` 和 `/skill:feat`。沿用当前模型及原生工具，确认属于工作流约定。`<dataDir>/design-first.json` 的 enabled 缺省 true，显式 false 保留；开关在新会话或 reload 后生效。同名用户资源保留原生优先级，损坏配置仅移除内置命令并报告诊断。Wiki、节点和 Playground 不注入这些资源。使用与交付范围见 [Design First Skill](design-first-skill.md)。
+## Engineering Skills V2
 
-内置 Design First 卡片只列出当前实际归它所有的命令；同名用户 Skill 或优先级更高的命令占用 `/skill:design-first` 时从清单移除，显示冲突并禁用“在聊天中准备设计需求”。移除冲突并重载后恢复，执行顺序仍沿用原生规则。
+普通会话通过 `server/engineering-skills.ts` 的 `skillsOverride` 默认加载 `engineering`、`knowledge-sync`、`grilling`、`domain-modeling`、`codebase-design`、`tdd`、`architect`、`blast-radius`、`reflect`，并把 `PI_WEB_NODE_RUNTIME` 设置为宿主 `process.execPath`，供原生 Bash 在 PATH 无 `node` 时运行审批脚本。资源位于 `assets/skills/`，随 npm、Desktop 与 Docker 运行镜像打包；包根通过 `PI_WEB_PKG_ROOT`、源码或编译路径定位。Wiki 不注入，SSH 节点和 Playground 保持独立资源边界。没有独立总开关、内置扩展卡、协议类型或旧 Design First 命令别名。
+
+Pi 1.6 把模型可调用 Skill 的名称、描述和实际文件路径放入系统提示，由原生 read 按需加载；`/skill:name` 使用同一份资源展开。`reflect` 保持用户显式调用，其他 Skill 按任务复杂度和风险读取。Engineering 只负责分类、路由、阶段交接、必要审批和完成标准；专业方法来自对应 Skill。普通需求只使用一份变更文档，位置尊重项目已有约定，设计确认后直接实现。文档记录 Design revision、Approved revision、Goal/Design/Acceptance 内容指纹和真实用户确认；恢复时通过 `approval-fingerprint.mjs` 核对同修订及获批原文，设计与验收均未变才直接继续，批准／指纹缺失或验收／契约变化时只重新确认一次，详见 `assets/skills/engineering/references/resume.md`。Knowledge Sync 必查但只更新有证据的事实，不强制文档结构或生成额外报告。
+
+用户/项目同名 Skill 优先，随包加载器只补充缺失名字。原生 `filePath` / `sourceInfo` 和系统提示 `<location>` 是实际来源；覆盖版本不属于固定版本兼容性承诺，若其要求未授权动作或无法提供必要阶段证据，应明确报告冲突。测试通过隔离 HOME、agentDir、cwd 或 `noSkills` 加显式路径避免个人资源污染。
+
+Matt Pocock Skills 固定 `v1.3.2`（`d1478fcb140db0b93c0c8df17bcfd311844749d0`），Poteto pstack 固定 `005d8f6e8ec057b738adcd08a08b30db0478402d`；MIT License、原始路径和逐项 Pi 适配记录于 `assets/skills/THIRD_PARTY.md`。无 OpenSpec CLI、自动上游同步、默认子 Agent 或自动提交。Reflect 获批后只修改选定 Pi 个人/项目副本，不改随包原件；目录 Skill 复制专属目录，standalone Markdown 只复制明确批准的文件及最小引用，不能复制父目录或工作区；第三方副本的审批清单和产物必须包含对应版权及 LICENSE 文本；集中 THIRD_PARTY 表只用于实际位于随包目录的来源，同名外部覆盖使用其自身许可。TDD 对 codebase-design 按名称读取当前会话实际路径，支持项目副本与随包回退混合使用。
+
+回归：`tests/unit/engineering-skills.test.ts` 验证资源、来源、reload、隔离、双向覆盖、真实引用及删除目标反例和许可证。审批 CLI 使用随 Skill 分发的 Marked 解析器，读取顶层正文段落中的当前批准字段。Goal、Design 或 Acceptance Criteria 用到的引用式链接和图片，其实际目标与标题也计入指纹。回归覆盖历史批准、冲突字段、重复与嵌套标题、精确输出、空证据和文末引用定义变更，并实际执行无项目依赖的 Skill 副本和 PATH 无 `node` 的原生 Bash。`tests/builtin-extensions-test.mjs` 验证真实服务命令、Wiki 排除、原生展开、模型和工具兼容。afterPack 递归比较源与包内资源，`tests/packaged-server-start-test.mjs` 从实际打包路径加载九项 Skills。真实行为验收与三组 A/B 效果评测分开，不由脚本模型结果代替。
 
 文档转 Markdown 与 OKF 知识蒸馏扩展均已移除，不再提供聊天工具、命令或设置条目；实现、Python 资源和打包支持也已删除。
 
-设置 › Extensions 对接 Pi 1.6.0 的 `DefaultPackageManager`、`SettingsManager` 和 `ProjectTrustStore`。安装、移除、更新与资源发现运行在独立 Node worker；浏览页面不执行扩展入口，缺失依赖采用 `resolve(() => "skip")`，不会因浏览自动安装。包变更在新会话生效，当前会话仅在用户点击重载时通过已有 `extensions_reload` 生效。宿主不向模型注册工具、注入消息或系统提示词。
+设置 › Extensions 对接 Pi 1.6.0 的 `DefaultPackageManager`、`SettingsManager` 和 `ProjectTrustStore`。安装、移除、更新与资源发现运行在独立 Node worker；浏览页面不执行扩展入口，缺失依赖采用 `resolve(() => "skip")`，不会因浏览自动安装。包变更在新会话生效，当前会话仅在用户点击重载时通过已有 `extensions_reload` 生效。该包管理路径不向模型注册工具、注入消息或系统提示词；Engineering Skills 的原生资源注入见上节。
 
 扩展代码刷新（issue #64）：jiti 对原生 .js/.mjs 走 Node import()/require()，进程内缓存会让 `/restart`、`/reload` 和 `extensions_reload` 重建扩展工厂后仍命中旧代码——扩展内的 MCP 连接等顶层状态也随之遗留。`server/extension-module-cache.ts` 在每次创建 runtime 前注册受控目录（agentDir/extensions、agentDir/npm、cwd/.pi/extensions、cwd/.pi/npm，realpath 双形式匹配），并仅在用户显式触发的重建前（restartSession、`/reload` 命令、`reloadExtensions`）bump 代数——ESM 缓存不可释放，每次刷新多留一份模块实例，所以设置、提示词、MCP 保存共用的 `session.reload()` 不刷新；代数进程全局，刷新后其他对话懒加载受控模块也拿到新实例。bump 机制：resolve 钩子给受控模块 URL 追加 `?piextgen=<代数>` 绕开 ESM loader 永久缓存（CJS 的 require 会剥掉 search，无副作用），同时清空受控目录下的 require.cache 条目刷新 CJS 本体；`module.registerHooks` 不可用时 ESM 优雅降级为旧行为。.ts 由 jiti 每次实例化重新转译，天然新鲜。回归：`tests/restart-extension-cache-test.mjs` 覆盖 .ts 文件、npm CJS 包、npm ESM 包在 /restart、二次重启与 reloadExtensions() 下拿到新代码与新状态，普通 session.reload() 保持旧代码。
 
@@ -68,7 +76,7 @@ pi.dev 当前通过服务端 HTML 提供目录，没有依赖未公开 JSON API�
 
 ## 设置 v2 的技能与更新
 
-技能页通过 `/api/extensions` 的 `skills-list` / `skills-toggle` 读取 `NativeSkillsState`，`skills-service.ts` 使用原生包管理器发现资源并读取技能元数据，不执行扩展入口、不安装缺失依赖。技能名称与描述可搜索，并按个人、项目和包筛选。桌面使用已有固定目录 IPC 展示个人技能目录（服务端固定 ID `skills:user`，目录不存在时展示 agentDir）；浏览器提供复制路径。开关写入所属范围的原生 `skills` 过滤器，包技能仅修改对应包的 skills 字段，保留 extensions/prompts/themes 等字段。空过滤数组的禁用基线在启用一个技能时保留，避免误启用同包其他技能。涉及多个技能的同一自定义资源目录保持只读；临时资源和未信任项目不能写入。请求沿用工作区、来源、JSON、quiesce 与配置版本校验，和包操作共用写入互斥。写入后由用户点击原生 reload 或新建会话生效。
+技能页通过 `/api/extensions` 的 `skills-list` / `skills-toggle` 读取 `NativeSkillsState`，`skills-service.ts` 使用原生包管理器发现资源并读取技能元数据，不执行扩展入口、不安装缺失依赖。技能名称与描述可搜索，并按个人、项目和包筛选；此处清单、启用数和描述 token 估算只覆盖这些可管理资源，随包只读 Engineering Skills 不计入，当前会话完整提示词仍由系统提示视图展示。桌面使用已有固定目录 IPC 展示个人技能目录（服务端固定 ID `skills:user`，目录不存在时展示 agentDir）；浏览器提供复制路径。开关写入所属范围的原生 `skills` 过滤器，包技能仅修改对应包的 skills 字段，保留 extensions/prompts/themes 等字段。空过滤数组的禁用基线在启用一个技能时保留，避免误启用同包其他技能。涉及多个技能的同一自定义资源目录保持只读；临时资源和未信任项目不能写入。请求沿用工作区、来源、JSON、quiesce 与配置版本校验，和包操作共用写入互斥。写入后由用户点击原生 reload 或新建会话生效。
 
 更新页复用 Extensions 的持久任务、更新所有包、检查和服务器自动检查偏好；管理页提供安装、启停、编辑与重载，v3 同时允许针对单个包使用已有原生更新动作。隐藏应用自己的 pi-harness 项和 standalone 文件；Pi 只展示 Desktop 内置版本，不允许独立升级锁定 SDK。自动检查在管理页进入后按已有六小时间隔执行；安装策略明确为手动，未增加后台安装行为。浏览器回归覆盖开关实际落盘、更新页项目过滤、MCP JSON 编辑以及 390px 布局。
 

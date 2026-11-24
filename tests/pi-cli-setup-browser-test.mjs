@@ -13,6 +13,7 @@ try {
 	browser = await chromium.launch({ executablePath: CHROME_PATH || chromium.executablePath() });
 	for (const lang of ['zh', 'en']) {
 		const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+		const pageErrors = []; page.on('pageerror', error => pageErrors.push(error.message));
 		page.setDefaultTimeout(10000);
 		await page.addInitScript(lang => { localStorage.setItem('pi-harness:lang', lang); Object.defineProperty(navigator, 'clipboard', { value: { writeText: async text => { window.__copiedCommand = text; } } }); }, lang);
 		const commands = [];
@@ -20,10 +21,16 @@ try {
 		const skills = ['user', 'project', 'package'].map((source, i) => ({ id: `fixture-${i}`, name: `sample-${source}`, description: 'A long skill description that remains readable across narrow layouts and wraps without hiding instructions.', enabled: true, path: `/fixture/${source}/SKILL.md`, source, scope: source === 'project' ? 'project' : 'user', canToggle: true, promptVisible: true }));
 		let state = { pi: { status: 'missing' }, node: { status: 'missing' }, npm: { status: 'missing' }, canInstall: false };
 		await page.route('**/api/extensions', async route => {
+			try {
 			const body = route.request().postDataJSON();
 			if (['skills-list', 'skills-toggle'].includes(body.action)) {
 				if (body.action === 'skills-toggle') skills.find(skill => skill.id === body.id).enabled = body.enabled;
 				return route.fulfill({ json: { version: 'fixture', paths: ['/fixture/skills'], skills } });
+			}
+			if (body.action === 'builtin-list') {
+				const actual = await route.fetch(), result = await actual.json();
+				for (const id of ['pi-harness-design-first', 'future-unknown-builtin']) result.items.push({ id, status: 'loaded', tools: [], commands: [] });
+				return route.fulfill({ response: actual, json: result });
 			}
 			if (body.action === 'cli-status') {
 				if (!checkedRoute) {
@@ -40,6 +47,7 @@ try {
 				return route.fulfill({ json: state });
 			}
 			await route.continue();
+			} catch (error) { if (page.isClosed()) return; throw error; }
 		});
 		await page.routeWebSocket('**/ws', route => {
 			const upstream = route.connectToServer();
@@ -75,6 +83,8 @@ try {
 		await page.locator('.settings-skill-row').first().waitFor();
 		assert.equal(await page.locator('.settings-skill-row').count(), 3);
 		assert.equal(await page.locator('.skills-counts > span').count(), 3);
+		assert.match(await page.locator('.skills-counts > span').first().innerText(), lang === 'zh' ? /可管理 3 项/ : /3 manageable/);
+		assert.match(await page.locator('.settings-skills .settings-intro').innerText(), lang === 'zh' ? /随包只读 Engineering Skills/ : /read-only bundled Engineering Skills/i);
 		await page.locator('.skills-search input').fill('sample-project');
 		assert.equal(await page.locator('.settings-skill-row').count(), 1);
 		await page.locator('.skills-search input').fill('');
@@ -99,6 +109,7 @@ try {
 		await page.locator('.builtin-icon').first().waitFor();
 		const builtinTitles = page.locator('.builtin-row-head strong');
 		assert.equal(await builtinTitles.filter({ hasText: lang === 'zh' ? /^计划工具$/ : /^Plan$/ }).count(), 0, 'native plan is no longer listed');
+		assert.equal(await page.locator('[data-builtin-id="pi-harness-design-first"], [data-builtin-id="future-unknown-builtin"]').count(), 0, 'legacy and unknown IDs are ignored');
 		mkdirSync('tests/scratch/extensions-layout', { recursive: true });
 		await page.screenshot({ path: `tests/scratch/extensions-layout/${lang}-light.png` });
 		await page.locator('.builtin-extensions').scrollIntoViewIfNeeded();
@@ -139,6 +150,8 @@ try {
 		assert.equal(await install().count(), 0);
 		await page.setViewportSize({ width: 390, height: 844 });
 		assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+		assert.deepEqual(pageErrors, [], 'legacy built-in IDs must not crash rendering');
+		await page.unrouteAll({ behavior: 'ignoreErrors' });
 		await page.close();
 		console.log(`PASS ${lang}: prerequisites, visible terminal, exact latest command, no duplicate install, redetection`);
 	}

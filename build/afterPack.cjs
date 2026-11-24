@@ -26,20 +26,20 @@ function verifyPackagedResources(packagedRoot, projectDir) {
 		throw new Error("Desktop must not bundle application extensions; load user Pi extensions instead");
 	}
 	const expectedSdk = manifest.dependencies?.["@earendil-works/pi-coding-agent"];
-	const skillRoot = path.join(packagedRoot, "assets/skills/design-first");
-	const sourceSkillRoot = path.join(projectDir, "assets/skills/design-first");
+	const skillRoot = path.join(packagedRoot, "assets/skills");
+	const sourceSkillRoot = path.join(projectDir, "assets/skills");
 	const resourceFiles = root => !fs.existsSync(root) ? [] : fs.readdirSync(root, { recursive: true })
 		.map(String).filter(reference => fs.statSync(path.join(root, reference)).isFile())
 		.map(reference => reference.split(path.sep).join("/")).sort();
 	const expectedResources = resourceFiles(sourceSkillRoot);
-	if (!expectedResources.length) throw new Error("Source Design First resources are missing");
+	if (!expectedResources.length) throw new Error("Source Engineering Skills resources are missing");
 	const packagedResources = resourceFiles(skillRoot), expected = new Set(expectedResources), packaged = new Set(packagedResources);
 	for (const reference of expectedResources) {
-		if (!packaged.has(reference)) throw new Error(`Packaged Design First resource is missing: ${reference}`);
-		if (!fs.statSync(path.join(skillRoot, reference)).size) throw new Error(`Packaged Design First resource is empty: ${reference}`);
+		if (!packaged.has(reference)) throw new Error(`Packaged Engineering Skills resource is missing: ${reference}`);
+		if (!fs.statSync(path.join(skillRoot, reference)).size) throw new Error(`Packaged Engineering Skills resource is empty: ${reference}`);
 	}
 	for (const reference of packagedResources) {
-		if (!expected.has(reference)) throw new Error(`Packaged Design First resource is unexpected: ${reference}`);
+		if (!expected.has(reference)) throw new Error(`Packaged Engineering Skills resource is unexpected: ${reference}`);
 	}
 	const actualSdk = JSON.parse(fs.readFileSync(path.join(sdkRoot, "package.json"), "utf8")).version;
 	if (!/^\d+\.\d+\.\d+(?:-[\w.-]+)?$/.test(expectedSdk ?? "") || actualSdk !== expectedSdk) {

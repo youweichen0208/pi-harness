@@ -189,19 +189,13 @@ pi-harness --port 9000 --cwd /path/to/project
 
 ## 功能导览
 
-### 先对齐方案，再实现
+### 按任务选择 Engineering Skills
 
-当前仓库开发版内置 Design First，普通会话默认可用，沿用输入框中选中的模型：
+普通聊天默认提供九个按需读取的研发 Skills。输入 `/skill:engineering 描述需求` 可以显式选择完整入口：小修改直接实现和验证；普通功能使用一份变更文档，确认设计后按 TDD 实现；复杂架构和高风险变更按需加载架构设计与影响分析。交付前会检查项目已有文档，只更新有证据的事实。
 
-```text
-/skill:bug-fix 描述错误现象和预期行为
-/skill:feat 描述要增加的小功能
-/skill:design-first 描述需要设计、实现和验证的需求
-```
+`/skill:knowledge-sync` 可单独检查文档，`/skill:reflect` 可手动整理长期经验；后者先给出建议，获得确认后才修改你选定的个人或项目 Skill 副本。设计确认是对话中的工作流约定，不是强制工具锁。
 
-AI 会先把方案、任务和验收条件保存到项目文档，等待你确认；确认后使用原有工具改代码、运行测试、记录结果。小改动可以合并为一份变更文档。完成时核对对应 spec：新增行为更新约定，修回既有正确约定则记录无需改文档的原因。完整示例见 [Design First 使用指南](docs/design-first-usage.md)。
-
-换会话可输入 `/skill:design-first 恢复 <change-id>`，从文档和当前源码找回进度。确认属于 Skill 工作流约定，不是强制工具门禁。开关位于设置的 Skills／内置扩展列表，新会话或 `/reload` 后生效；已安装版本未必包含这些尚未发布的入口。
+用户或项目的同名 Skill 保持原生优先级，系统提示中的实际路径标识其来源；未经适配的覆盖版本不自动视为与 Engineering 流程兼容。Wiki 和 SSH 节点不加载这些资源。固定上游版本及本地适配见 `assets/skills/THIRD_PARTY.md`。
 
 ### 在桌面版内置浏览器中操作网页
 
@@ -424,7 +418,6 @@ PI_WEB_TOKEN=换成你自己的长口令 PI_WEB_HOST=0.0.0.0 PI_WEB_ALLOW_HOSTS=
 | --- | --- |
 | [SSH 节点工作台手册](docs/ssh-workbench.md) | 添加服务器、密钥配置、SFTP、故障排查 |
 | [Xshell 与 SSH 连接手册](docs/xshell.md) | 从 Xshell 导入会话 |
-| [Design First 使用指南](docs/design-first-usage.md) | 命令选择、设计确认、文档位置、验证与恢复示例 |
 | [部署文档](docs/deployment.md) | 命令行参数、开机自启、Docker、桌面版细节 |
 | [环境变量参考](docs/env-vars.md) | 端口、监听地址、访问口令等全部配置项 |
 | [开发指南](docs/development.md) | 从源码构建、测试（贡献者） |

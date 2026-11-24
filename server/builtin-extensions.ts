@@ -3,9 +3,6 @@ import { createHash } from "node:crypto";
 import type { AgentSession } from "@earendil-works/pi-coding-agent";
 import { nativeExtensionRegistry } from "./native-tools.js";
 import { getDocumentSettings, updateDocumentSettings } from "./document-extension-settings.js";
-import { designFirstNames, designFirstSettings, designFirstSkillPath, toggleDesignFirst } from "./design-first-resources.js";
-import { resolve } from "node:path";
-import { existsSync } from "node:fs";
 import type { BuiltinExtensionId, BuiltinExtensionsState, BuiltinExtensionState } from "./protocol.js";
 
 const expectedTools: Partial<Record<BuiltinExtensionId, string[]>> = {
@@ -16,7 +13,6 @@ function documentSettingsVersion(): string {
 	return createHash("sha256").update(JSON.stringify(getDocumentSettings())).digest("hex");
 }
 export function toggleBuiltinDocument(id: unknown, enabled: unknown, version: unknown): void {
-	if (id === "pi-harness-design-first" && typeof enabled === "boolean" && typeof version === "string") { toggleDesignFirst(enabled, version); return; }
 	if (id !== "background-bash" || typeof enabled !== "boolean") throw Error("Invalid built-in extension change");
 	if (version !== documentSettingsVersion()) throw Error("Document settings changed; refresh and retry");
 	updateDocumentSettings({ backgroundEnabled: enabled });
@@ -46,26 +42,6 @@ export function builtinExtensionsState(session: AgentSession, conversationId: st
 		if (expected.some(name => !callable.has(name))) return { ...item, status: "disabled", reason: "filtered" };
 		return item;
 	});
-	const design: BuiltinExtensionState = { id: "pi-harness-design-first", status: "unavailable", tools: [], commands: [] };
-	try {
-		const config = designFirstSettings(), path = designFirstSkillPath();
-		design.enabled = config.enabled; design.settingsVersion = config.version;
-		const skills = session.resourceLoader.getSkills().skills;
-		const shadowed = new Set([...session.extensionRunner.getRegisteredCommands().map(command => command.invocationName), ...session.promptTemplates.map(prompt => prompt.name)]);
-		for (const name of designFirstNames) {
-			const skill = skills.find(skill => skill.name === name);
-			const command = `skill:${name}`;
-			if (skill && resolve(skill.filePath) === designFirstSkillPath(undefined, name) && !shadowed.has(command)) design.commands.push(command);
-		}
-		const primaryOwned = design.commands.includes("skill:design-first");
-		const primaryConflict = !primaryOwned && (shadowed.has("skill:design-first") || skills.some(skill => skill.name === "design-first"));
-		if (wiki) { design.reason = "filtered"; }
-		else if (!existsSync(path)) { design.reason = "missing"; }
-		else if (primaryConflict) { design.reason = "conflict"; }
-		else if (config.enabled && !primaryOwned) { design.reason = "missing"; }
-		else design.status = config.enabled ? primaryOwned ? "loaded" : "pending" : primaryOwned ? "pending" : "disabled";
-	} catch (error) { design.status = "error"; design.error = String(error); }
-	items.push(design);
 	if (!wiki) {
 		const loaded = tools.some(tool => tool.name === "bash_task" && owns(tool.sourceInfo.path, "background-bash"));
 		const enabled = documentSettings?.backgroundEnabled;

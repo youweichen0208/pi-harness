@@ -1,5 +1,5 @@
 import { backgroundBash, commandViews, hasRunningCommand, stopRequestCommands } from "./background-bash.js";
-import { designFirstResources } from "./design-first-resources.js";
+import { engineeringResources } from "./engineering-skills.js";
 import { bindCacheWarming, cacheWarmingView, setGlobalCacheWarming } from "./cache-warming.js";
 import { CodemodeHistory } from "./codemode-history.js";
 import { withOutputTokenFloor, withReasoningEnabled } from "./model-output-floor.js";
@@ -608,7 +608,7 @@ export class ClientSession {
 				agentDir: this.agentDir,
 				modelRuntime: this.sharedModelRuntime,
 				settingsManager: settings,
-				resourceLoaderOptions: { ...designFirstResources(wiki ? "wiki" : "normal", this.stateStore.dataDir), extensionFactories },
+				resourceLoaderOptions: { ...engineeringResources(wiki ? "wiki" : "normal"), extensionFactories },
 			});
 			services.modelRuntime = withReasoningEnabled(withOutputTokenFloor(services.modelRuntime, process.env, {
 				metadata: model => this.sources?.outputBudgetMetadata(model.provider, model.id),
