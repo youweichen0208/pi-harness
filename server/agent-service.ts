@@ -608,7 +608,7 @@ export class ClientSession {
 				agentDir: this.agentDir,
 				modelRuntime: this.sharedModelRuntime,
 				settingsManager: settings,
-				resourceLoaderOptions: { ...engineeringResources(wiki ? "wiki" : "normal"), extensionFactories },
+				resourceLoaderOptions: { ...engineeringResources(wiki ? "wiki" : "normal", undefined, { cwd, agentDir: this.agentDir }), extensionFactories },
 			});
 			services.modelRuntime = withReasoningEnabled(withOutputTokenFloor(services.modelRuntime, process.env, {
 				metadata: model => this.sources?.outputBudgetMetadata(model.provider, model.id),

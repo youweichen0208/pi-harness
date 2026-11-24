@@ -105,7 +105,7 @@ writeFileSync(
 
 writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ defaultTools: ["+codemode", "+tool_search"] }));
 // Independent native SDK reference, with the same official extensions and bundled Skills.
-const nativeServices = await createAgentSessionServices({ cwd: workdir, agentDir, resourceLoaderOptions: { noSkills: true, ...engineeringResources("normal"), extensionFactories: [
+const nativeServices = await createAgentSessionServices({ cwd: workdir, agentDir, resourceLoaderOptions: { noSkills: true, ...engineeringResources("normal", undefined, { cwd: workdir, agentDir }), extensionFactories: [
  { name: "codemode", builtin: true, factory: createCodemodeExtension() },
  { name: "tool-search", builtin: true, factory: createToolSearchExtension() },
  { name: "mcp", builtin: true, factory: createMcpExtension() },

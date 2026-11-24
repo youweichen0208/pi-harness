@@ -1,6 +1,6 @@
 ---
 name: engineering
-description: Deliver software changes with minimal ceremony. Use for features, bug fixes, and behavior changes that need risk-based design, implementation, verification, and project knowledge updates.
+description: Use when the user requests changes to a software project, including small fixes, UI tweaks, features, and refactoring. Select the lightest workflow appropriate to the actual risk.
 ---
 
 # Engineering
@@ -9,7 +9,7 @@ Deliver working software with the lightest workflow that fits the risk. Write in
 
 ## Route
 
-- **Quick Fix**: a local, reversible change with clear behavior. Use Understand → Build → Verify → Evolve. Keep the work in the conversation and existing tests.
+- **Quick Fix**: a local, reversible change with clear behavior. Use Understand → Build → Verify → Evolve. Keep the work in the conversation and existing tests: no change document, no `grilling` without material ambiguity, `tdd` only when a useful automated seam exists, and Evolve only when the change produced durable knowledge worth recording.
 - **Feature**: new behavior, an API, or a meaningful interface decision. Use Design → Build → Verify → Evolve and one change document.
 - **Complex Change**: core architecture, cross-module behavior, persistence, compatibility, or high risk. Add the relevant specialist skills below.
 
@@ -46,7 +46,7 @@ Verification is complete when important findings are resolved and every check is
 
 ## Evolve
 
-Read `knowledge-sync` and check the project's existing authoritative documentation. Archive the change document only when the project has an archive convention and every required acceptance criterion is satisfied.
+For Feature and Complex work, read `knowledge-sync` and check the project's existing authoritative documentation. For Quick Fix, skip Evolve unless the change produced a durable fact worth recording; when it did, read `knowledge-sync` for that fact only. Archive the change document only when the project has an archive convention and every required acceptance criterion is satisfied.
 
 Use `/skill:reflect` only when the user explicitly requests durable lessons; it is not a delivery step.
 

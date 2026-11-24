@@ -5,6 +5,12 @@ import type { AgentSession } from "@earendil-works/pi-coding-agent";
 import type { PromptFileView, SystemPromptState } from "./protocol.js";
 import { promptView, estimatePromptTokens } from "./system-prompt-view.js";
 import { reloadSession } from "./session-reload.js";
+import { engineeringAppendBase } from "./engineering-skills.js";
+/** File-sourced append text only: the built-in engineering routing rule is not part of any editable file. */
+function appendFileText(loader:AgentSession["resourceLoader"],cwd:string,agentDir:string):string {
+	const base=engineeringAppendBase({cwd,agentDir});
+	return (base??loader.getAppendSystemPrompt()).join("\n\n");
+}
 const LIMIT=512*1024;
 const hash=(value:string|Buffer)=>createHash("sha256").update(value).digest("hex");
 /** Include the canonical target in CAS, so changing a symlink cannot redirect an outstanding edit. */
@@ -27,7 +33,7 @@ function catalog(session:AgentSession,cwd:string,agentDir:string):PromptFileView
 	if(session.settingsManager.isProjectTrusted()&&!files.some(file=>file.kind==="context")&&!existsSync(join(cwd,"AGENTS.md")))files.push({id:"context:new",path:join(cwd,"AGENTS.md"),kind:"context",scope:"context",active:false,editable:true,tokens:0,content:"",version:"",exists:false});
 	for(const file of files)try{
 		Object.assign(file,read(file.path));
-		const loaded=file.kind==="context"?loader.getAgentsFiles().agentsFiles.find(f=>resolve(f.path)===file.path)?.content:file.active?(file.kind==="system"?loader.getSystemPrompt():loader.getAppendSystemPrompt().join("\n\n")):undefined;
+		const loaded=file.kind==="context"?loader.getAgentsFiles().agentsFiles.find(f=>resolve(f.path)===file.path)?.content:file.active?(file.kind==="system"?loader.getSystemPrompt():appendFileText(loader,cwd,agentDir)):undefined;
 		file.tokens=estimatePromptTokens(loaded??file.content);
 		file.changedOnDisk=loaded!==undefined&&loaded!==file.content;
 	}catch(e){file.editable=false;file.error=(e as Error).message;}

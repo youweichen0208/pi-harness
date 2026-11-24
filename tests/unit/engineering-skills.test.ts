@@ -4,7 +4,7 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } f
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { engineeringResources, engineeringSkillNames, engineeringSkillPath } from "../../server/engineering-skills.js";
+import { engineeringAppendBase, engineeringResources, engineeringRouteMode, engineeringRoutingRule, engineeringSkillNames, engineeringSkillPath } from "../../server/engineering-skills.js";
 
 const names = ["architect", "blast-radius", "codebase-design", "domain-modeling", "engineering", "grilling", "knowledge-sync", "reflect", "tdd"] as const;
 const roots: string[] = [];
@@ -456,5 +456,57 @@ describe("bundled Engineering Skills", () => {
 			if (name === "engineering") expect(entry).toContain("engineering/scripts/vendor/marked-LICENSE.txt");
 		}
 		expect(readFileSync(join(skills, license))).toEqual(readFileSync(resolve("LICENSE")));
+	});
+});
+
+describe("engineering routing rule", () => {
+	const savedMode = process.env.PI_WEB_ENGINEERING_ROUTE;
+	afterEach(() => {
+		if (savedMode === undefined) delete process.env.PI_WEB_ENGINEERING_ROUTE;
+		else process.env.PI_WEB_ENGINEERING_ROUTE = savedMode;
+	});
+
+	it("parses the eval-only route mode with full as default", () => {
+		delete process.env.PI_WEB_ENGINEERING_ROUTE;
+		expect(engineeringRouteMode()).toBe("full");
+		process.env.PI_WEB_ENGINEERING_ROUTE = "description";
+		expect(engineeringRouteMode()).toBe("description");
+		process.env.PI_WEB_ENGINEERING_ROUTE = "off";
+		expect(engineeringRouteMode()).toBe("off");
+		process.env.PI_WEB_ENGINEERING_ROUTE = "unexpected";
+		expect(engineeringRouteMode()).toBe("full");
+	});
+
+	it("appends the rule after file content, keeps the base snapshot, and never duplicates across reloads", async () => {
+		delete process.env.PI_WEB_ENGINEERING_ROUTE;
+		const cwd = temporary(), packageRoot = bundledFixture();
+		writeFileSync(join(cwd, "APPEND_SYSTEM.md"), "user instructions");
+		const scope = { cwd, agentDir: cwd };
+		const loader = new DefaultResourceLoader({
+			cwd, agentDir: cwd, settingsManager: SettingsManager.inMemory(),
+			noSkills: true, noExtensions: true, noPromptTemplates: true, noThemes: true, noContextFiles: true,
+			...engineeringResources("normal", packageRoot, scope),
+		});
+		await loader.reload();
+		expect(loader.getAppendSystemPrompt()).toEqual(["user instructions", engineeringRoutingRule]);
+		expect(engineeringAppendBase(scope)).toEqual(["user instructions"]);
+		writeFileSync(join(cwd, "APPEND_SYSTEM.md"), "updated instructions");
+		await loader.reload();
+		expect(loader.getAppendSystemPrompt()).toEqual(["updated instructions", engineeringRoutingRule]);
+		expect(engineeringAppendBase(scope)).toEqual(["updated instructions"]);
+	});
+
+	it("injects no rule without a scope, in description mode, in off mode, or for isolated kinds", () => {
+		delete process.env.PI_WEB_ENGINEERING_ROUTE;
+		const packageRoot = bundledFixture();
+		expect(engineeringResources("normal", packageRoot).appendSystemPromptOverride).toBeUndefined();
+		process.env.PI_WEB_ENGINEERING_ROUTE = "description";
+		expect(engineeringResources("normal", packageRoot, { cwd: ".", agentDir: "." }).appendSystemPromptOverride).toBeUndefined();
+		process.env.PI_WEB_ENGINEERING_ROUTE = "off";
+		expect(engineeringResources("normal", packageRoot, { cwd: ".", agentDir: "." })).toEqual({});
+		delete process.env.PI_WEB_ENGINEERING_ROUTE;
+		for (const kind of ["wiki", "node", "playground"] as const) {
+			expect(engineeringResources(kind, packageRoot, { cwd: ".", agentDir: "." })).toEqual({});
+		}
 	});
 });

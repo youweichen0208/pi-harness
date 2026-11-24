@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, symlinkSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { createAgentSessionServices, createAgentSessionFromServices, SessionManager, SettingsManager, ProjectTrustStore } from "@earendil-works/pi-coding-agent";
 import { getSystemPromptState, writeSystemPromptFile, queuePromptReload, flushPromptReload, promptReloadStatus, promptUsesFile } from "../../server/system-prompt-files.js";
-import { nativePromptText, promptView } from "../../server/system-prompt-view.js";
+import { estimatePromptTokens, nativePromptText, promptView } from "../../server/system-prompt-view.js";
+import { engineeringResources, engineeringRoutingRule } from "../../server/engineering-skills.js";
 const cleanup:(()=>void)[]=[];
 afterEach(()=>{for(const f of cleanup.splice(0).reverse())f();});
 async function fixture(trusted=true) {
@@ -109,5 +110,29 @@ describe("native system prompt file editing",()=>{
 		expect(f.state().forced).toBe(true);expect(f.state().files.every(f=>!f.editable)).toBe(true);
 		expect(()=>f.save("append:user","blocked")).toThrow(/read-only/);
 		native._runSystemPromptOptions=undefined;
+	});
+	it("keeps the built-in engineering routing rule out of the editable append file view",async()=>{
+		const mode=process.env.PI_WEB_ENGINEERING_ROUTE;delete process.env.PI_WEB_ENGINEERING_ROUTE;
+		try{
+			const root=mkdtempSync(join(tmpdir(),"pi-prompt-unit-")),cwd=join(root,"work"),agentDir=join(root,"agent");
+			cleanup.push(()=>rmSync(root,{recursive:true,force:true}));
+			mkdirSync(join(cwd,".pi"),{recursive:true});mkdirSync(agentDir);
+			writeFileSync(join(cwd,".pi/APPEND_SYSTEM.md"),"project instructions");
+			writeFileSync(join(cwd,"AGENTS.md"),"project context");
+			new ProjectTrustStore(agentDir).set(cwd,true);
+			const services=await createAgentSessionServices({cwd,agentDir,settingsManager:SettingsManager.create(cwd,agentDir,{projectTrusted:true}),
+				resourceLoaderOptions:{noSkills:true,...engineeringResources("normal",resolve("."),{cwd,agentDir})}});
+			const {session}=await createAgentSessionFromServices({services,sessionManager:SessionManager.inMemory(cwd)});
+			cleanup.push(()=>session.dispose());
+			const state=getSystemPromptState(session,cwd,agentDir);
+			expect(state.opaque).toBe(false);expect(state.raw).toContain(engineeringRoutingRule);
+			expect(state.sections.find(s=>s.name==="addendum")?.text).toContain(engineeringRoutingRule);
+			const append=state.files.find(f=>f.id==="append:project")!;
+			expect(append.active).toBe(true);expect(append.changedOnDisk).toBeFalsy();
+			expect(append.tokens).toBe(estimatePromptTokens("project instructions"));
+			expect(append.content).toBe("project instructions");
+		}finally{
+			if(mode===undefined)delete process.env.PI_WEB_ENGINEERING_ROUTE;else process.env.PI_WEB_ENGINEERING_ROUTE=mode;
+		}
 	});
 });

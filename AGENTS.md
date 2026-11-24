@@ -51,7 +51,7 @@ SDK 生命周期：以 `agent_settled` 判定整个任务结束，`agent_end` �
 
 会话由原版 SDK 创建，加载 pi 原生配置、上下文文件、技能、扩展与官方 Codemode/tool_search/MCP。普通会话默认通过可关闭的「后台命令」扩展包装原生 bash；自动动作由原生会话 API 执行并显示事件：正常正文或只有思考的输出截断最多续接 2 次，重复正文／思考隔离后最多恢复 1 次，未执行工具文本最多提醒 1 次，共享每条真实用户请求 3 次宿主自动动作上限；无效推断额度回退也计入该上限。普通用户不手动设置 maxTokens，缺失声明仅在运行时使用 8192 推断值，实际请求按最终物理模型与 Context 通过 SDK 原生裁剪计算。用户停止取消续接，原任务与已执行工具不重放。修改检测、停止、续接、队列或历史隔离前读取 `docs/architecture-core.md`「重复输出保护与有界续接」及「未执行的工具调用」。内置 plan 扩展、开关和自动收尾提醒已移除，不应重新注册。设置中的提示词支持原生文件编辑与空闲时 reload，技能支持原生发现、筛选和启停（见 docs/architecture-extensions.md）；Extensions 管理原生包声明及资源过滤规则，变更通过新会话或用户重载生效。界面偏好不改变模型上下文。网页操作统一使用桌面内置浏览器，由当前普通对话授权；桌面控制按普通会话独立授权，Wiki 不注入。SSH 工作台连接后自动准备本机隔离 pi 会话，复用本机模型、仅启用 SSH 节点工具；节点会话不加载本机上下文、扩展、技能或 MCP。修改启动、消息流、工具或断开清理时读取 `docs/architecture-nodes.md`。
 
-Engineering Skills：普通会话默认加载九项随包 Skills，Wiki／SSH／Playground 隔离，用户同名资源优先。修改编排、知识同步、上游适配、资源加载或打包时读取 `docs/architecture-extensions.md`「Engineering Skills V2」。
+Engineering Skills：普通会话默认加载九项随包 Skills，并向 addendum 注入一条常驻路由规则（软件改动类请求先读 engineering 技能、Skill 内自选路由、只读任务不触发）；Wiki／SSH／Playground 隔离，用户同名资源优先。`PI_WEB_ENGINEERING_ROUTE` 仅供 `dev/skill-eval/` A/B 评测。修改编排、知识同步、上游适配、资源加载或打包时读取 `docs/architecture-extensions.md`「Engineering Skills V2」。
 
 ## 4. 核心架构（摘要）
 

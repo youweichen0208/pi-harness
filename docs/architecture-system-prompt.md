@@ -15,6 +15,8 @@
 
 `system-prompt-files.ts` 从 ResourceLoader 的实际来源读取文件信息。SYSTEM.md / APPEND_SYSTEM.md 各提供个人和项目两个范围：当前 SDK SettingsManager 信任项目且项目 `.pi/` 存在同名文件时，项目优先，否则回退 agentDir；每类只选一份，不合并两份 APPEND。
 
+追加提示词有两种来源：用户／项目的 APPEND_SYSTEM.md（可编辑文件）和 pi-harness 内置的 engineering 路由规则（`engineeringRoutingRule`，经 `appendSystemPromptOverride` 注入，只读，见 `docs/architecture-extensions.md`「Engineering Skills V2」）。文件条目的磁盘比较与 token 统计只含文件来源——注入时记录的 base 快照（`engineeringAppendBase`）是权威口径，不用字符串过滤；完整提示词全文与整体 token 仍包含内置规则，addendum 段在界面只读展示。
+
 信任状态以会话的 `settingsManager.isProjectTrusted()` 为准，页面不改变信任。Pi SDK 的 `createAgentSessionServices()` 默认 SettingsManager 信任项目；这与 MCP 的独立 TrustStore 记录不是同一个状态，不能用 MCP 信任标记推断当前 prompt 的来源。
 
 项目上下文允许编辑 `getAgentsFiles()` 当前实际加载的文件；受信任项目尚无已加载上下文且 cwd/AGENTS.md 不存在时，额外提供固定路径的新建候选。新建复用文件版本与规范化目标路径校验，不接受客户端自定义路径。已有上下文兼容 AGENTS.override.md / AGENTS.md / CLAUDE.md 等原生候选与祖先目录。修改共享文件会影响其他读取该文件的项目。上下文 token 以加载内容计算，磁盘与加载内容不同显示星号。编辑器读取磁盘版本，完整提示词显示当前运行时版本。

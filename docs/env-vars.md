@@ -35,3 +35,5 @@ Pi 1.4.0 的 `PI_CODEMODE_MAX_WORKERS` 控制同一服务进程中所有会话�
 `PI_WEB_PYTHON`：Playground 的 Python 3.9+ 解释器路径，可指向虚拟环境；不接受 shell 参数。未设置时探测 VIRTUAL_ENV、PATH 和 Windows py -3。Jedi 补全与 Black 格式化也使用该环境。见 `architecture-playground.md`。
 
 `PI_WEB_NODE_RUNTIME`：普通会话由 `engineeringResources` 自动注入宿主 `process.execPath`。CLI／Web 指向启动服务的 Node.js 绝对路径；Desktop 由 `agentRuntimeEnvironment` 指向随包 Electron，并以 `ELECTRON_RUN_AS_NODE=1` 使用内置 Node 运行时。原生 Bash 即使 PATH 没有 `node` 也能运行审批指纹脚本；不需要也不应手动替换为下载的 Node。
+
+`PI_WEB_ENGINEERING_ROUTE`：仅供 `dev/skill-eval/` A/B 评测使用的开关，不是用户功能。`full`（默认）加载随包 Engineering Skills 并向 addendum 注入路由规则；`description` 只加载技能、不注入规则；`off` 完全不加载随包技能（作为无技能参照组；「当前发布版」Baseline 请用上一 tag 的 git worktree 测量）。正式部署不要设置。

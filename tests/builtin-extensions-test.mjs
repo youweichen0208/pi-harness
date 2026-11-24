@@ -244,6 +244,8 @@ try {
 	a.send({ type: "prompt", text: "Native baseline", requestId: "native-baseline" });
 	await wait(() => calls === before + 1 && !a.state.isStreaming, "native baseline request");
 	const baselineRequest = modelRequests.at(-1);
+	const baselineSystem = baselineRequest.messages.find(message => message.role === "system");
+	assert.match(typeof baselineSystem?.content === "string" ? baselineSystem.content : "", /load the engineering skill if available/, "normal session prompt carries the routing rule");
 	before = calls;
 	a.send({ type: "prompt", text: "/skill:engineering Preserve $1 and spaces", requestId: "engineering-expansion" });
 	await wait(() => calls === before + 1 && !a.state.isStreaming, "Engineering Skill expansion");
