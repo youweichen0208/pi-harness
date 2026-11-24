@@ -87,8 +87,7 @@ console.log('PASS toolbar positioning and insertion/save');
 	await wiki.screenshot({ path: "/tmp/pi-wiki-toolbar-full.png" });
 	await wiki.setViewportSize({ width: 800, height: 900 });
 	assert.equal(await wiki.locator('.wiki-assistant').isVisible(), false, 'Wiki chat starts collapsed');
-	// Both the document toolbar action and the assistant panel header carry this label; open the panel.
-	await wiki.getByRole('button', { name: '问 pi', exact: true }).nth(1).click();
+	await wiki.locator('.wiki-ask-toggle').click();
 	await wiki.locator('.wiki-assistant').waitFor({ state: 'visible' });
 	await wiki.locator('.wiki-assistant-header').getByRole('button', { name: '收起对话面板', exact: true }).click();
 	await wiki.locator('.wiki-assistant').waitFor({ state: 'hidden' });
