@@ -794,7 +794,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 				{timeline.length === 0 && !state.streamingMessage && (
 					<div className="empty-state">
 						<div className="empty-logo-wrap"><img className="empty-logo" src="/icon/welcome-mark.svg" alt="pi-harness" /></div>
-						<WelcomeMotto plain />
+						<WelcomeMotto />
 					</div>
 				)}
 				{timeline.map((item) => {

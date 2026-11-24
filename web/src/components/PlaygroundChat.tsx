@@ -53,7 +53,7 @@ export function PlaygroundChat({ context, apply }: { context: PlaygroundChatCont
 			<label>{t("pgChatHistory")}<select autoFocus value={state?.id ?? ""} disabled={locked} onKeyDown={e => { if (e.key === "Escape") { setHistoryOpen(false); } }} onChange={e => { playgroundChatRequest("switch", { targetId: e.target.value }); setHistoryOpen(false); }}>{state?.history.map(h => <option key={h.id} value={h.id}>{h.title}</option>)}</select></label>
 		</div>}
 		<div ref={messages} onScroll={e => { const el = e.currentTarget; followOutput.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48; }} className={`messages pg-chat-messages ${empty ? "is-empty" : ""}`} aria-live="polite">
-			{empty && <div className="pg-chat-welcome"><WelcomeMotto plain /></div>}
+			{empty && <div className="pg-chat-welcome"><WelcomeMotto /></div>}
 			{state?.interrupted && <p role="status">{t("pgChatInterrupted")}</p>}
 			{state?.messages.filter(m => m.role === "user" || m.role === "assistant").map((m, i) => <ChatMessage key={i} message={m} />)}
 			{state?.streaming && <ChatMessage message={state.streaming} streaming />}

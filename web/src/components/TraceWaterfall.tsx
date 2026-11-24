@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { FiChevronRight, FiCopy, FiFlag, FiInfo, FiMinus, FiPlus, FiList } from "react-icons/fi";
 import type { UiTraceRun } from "../types";
 import { useT } from "../i18n";
 import { formatTraceMs as ms, traceShare, mergeHostIntervals } from "../trace-presentation";
@@ -18,7 +19,7 @@ const duration = (e: Entry) =>
 		: null;
 const shortModel = (name: string) => name.replace(/^deepseek-v([\d.]+)-flash$/i, "DeepSeek V$1 Flash");
 
-export function TraceWaterfall({ run }: { run: UiTraceRun }) {
+export function TraceWaterfall({ run, details }: { run: UiTraceRun; details: boolean }) {
 	const t = useT();
 	const entries = useMemo(
 		() =>
@@ -58,26 +59,56 @@ export function TraceWaterfall({ run }: { run: UiTraceRun }) {
 			})),
 		[run],
 	);
+	const hostGroups = useMemo(() => {
+		const groups = new Map<string, typeof hosts>();
+		for (const event of hosts) {
+			const group = groups.get(event.label);
+			if (group) group.push(event);
+			else groups.set(event.label, [event]);
+		}
+		return Array.from(groups, ([kind, events]) => {
+			events.sort((a, b) => a.start - b.start);
+			const total = mergeHostIntervals(events, -Infinity, Infinity).reduce((sum, span) => sum + span.end - span.start, 0);
+			return { kind, events, total };
+		});
+	}, [hosts]);
 	const longest = entries
 		.filter((e) => e.kind === "model" && e.status === "measured" && duration(e) !== null)
 		.sort((a, b) => duration(b)! - duration(a)!)[0];
 	const [id, select] = useState<string>();
 	const [windowRange, setRange] = useState<[number, number]>();
 	const [expandedHosts, setExpandedHosts] = useState<Record<string, boolean>>({});
+	const [track, setTrack] = useState("all");
 	const [feedback, setFeedback] = useState("");
 	const entry =
 		[...entries, ...hosts].find((e) => e.id === id) ??
 		longest ??
 		entries.find((e) => e.kind === "tool") ??
-		entries[0];
+		entries[0] ?? hosts[0];
+	const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+	const elapsed = entry && duration(entry);
+	const wall = run.aggregates.agent_active_wall_ms;
+	const share = entry?.status === "measured" && elapsed != null && Number.isFinite(elapsed) &&
+		wall?.status === "measured" && wall.value != null && Number.isFinite(wall.value) && wall.value > 0
+		? (100 * elapsed / wall.value).toFixed(1) + "%"
+		: undefined;
 	const request = run.requests.find((r) => entry?.id === "m:" + r.requestId);
 	const tool = run.tools.find((r) => entry?.id === "t:" + r.toolCallId);
+	const tracks = [
+		["all", t("traceAllTracks")],
+		["model", t("traceModel")],
+		["tool", t("traceTools")],
+		["host", t("traceHost")],
+		["background", t("backgroundTitle")],
+	].filter(([kind]) => kind === "all" || (kind === "host" ? hosts.length > 0 : entries.some(e => e.kind === kind)));
+	const currentTrack = tracks.some(([kind]) => kind === track) ? track : "all";
 	const origin = run.agentStartMs;
 	const limit = Math.max(
 		origin + 0.001,
 		run.agentSettledMs ?? origin, ...entries.map(e => e.end ?? e.start ?? origin), ...hosts.map(e => e.end),
 	);
 	const [lo, hi] = windowRange ?? [origin, limit];
+	const fullRange = lo === origin && hi === limit;
 	const relative = (v?: number) => (v === undefined ? t("wfMissing") : ms(v - origin));
 	function zoom(center: number, width: number) {
 		const size = Math.min(limit - origin, Math.max(0.001, width));
@@ -87,9 +118,10 @@ export function TraceWaterfall({ run }: { run: UiTraceRun }) {
 	const focusTool = (e: Entry) => {
 		if (e.start === undefined) return;
 		select(e.id);
+		setTrack("all");
 		zoom(e.start + (duration(e) ?? 0) / 2, Math.max(1, (duration(e) ?? 0) * 4));
 	};
-	const target = entry?.kind === "tool" ? entry : entries.find((e) => e.kind === "tool");
+	const target = entry?.kind === "tool" ? entry : entries.find((e) => e.kind === "tool" && e.start !== undefined);
 	const stages = request
 		? ([
 				[t("wfStart"), request.hookStartMs],
@@ -162,6 +194,7 @@ export function TraceWaterfall({ run }: { run: UiTraceRun }) {
 	}
 	return (
 		<section className="wf">
+			{!details && <>
 			<p>
 				{run.requests.length ? t("wfCoverage", { matched, total: run.requests.length }) : t("wfNoRequests")}
 				{run.requestsTruncated && " · " + t("wfTruncated")}
@@ -185,6 +218,7 @@ export function TraceWaterfall({ run }: { run: UiTraceRun }) {
 						className="wf-jump"
 						onClick={() => {
 							select(slowest.id);
+							setTrack("all");
 							setRange(undefined);
 						}}
 					>
@@ -193,37 +227,36 @@ export function TraceWaterfall({ run }: { run: UiTraceRun }) {
 				)}
 				{!incomplete && dominant && top.key === keys[3] && " " + t("wfGapHint")}
 			</p>
-			<h3>{t("traceTimeline")}</h3>
+			<div className="wf-heading"><h3>{t("traceTimeline")}</h3>
 			<div className="wf-controls">
-				<button onClick={() => setRange(undefined)}>{t("wfFit")}</button>
-				<button disabled={!target} onClick={() => target && focusTool(target)}>
-					{t("wfZoomTool")}
-				</button>
-				{[2, 0.5].map((scale) => (
-					<button
-						key={scale}
-						aria-label={t(scale === 2 ? "wfOut" : "wfIn")}
-						onClick={() => zoom((hi + lo) / 2, (hi - lo) * scale)}
-					>
-						{scale === 2 ? "−" : "+"}
+				<div className="wf-tracks" role="group" aria-label={t("traceTimeline")}>
+					{tracks.map(([kind, label]) => (
+						<button key={kind} aria-pressed={currentTrack === kind} onClick={() => setTrack(kind)}>{label}</button>
+					))}
+				</div>
+
+				{target?.start !== undefined && <button onClick={() => focusTool(target)}>{t("wfZoomTool")}</button>}
+				<div className="wf-zoom">
+					<button disabled={fullRange} title={t("wfOut")} aria-label={t("wfOut")} onClick={() => zoom((hi + lo) / 2, (hi - lo) * 2)}>
+						<FiMinus aria-hidden="true" />
 					</button>
-				))}
-				<small>
-					{relative(lo)} — {relative(hi)}
-				</small>
+					<button title={t("wfFitHint")} disabled={fullRange} onClick={() => setRange(undefined)}>{t("wfFit")}</button>
+					<button disabled={hi - lo <= .001} title={t("wfIn")} aria-label={t("wfIn")} onClick={() => zoom((hi + lo) / 2, (hi - lo) / 2)}>
+						<FiPlus aria-hidden="true" />
+					</button>
+				</div>
+
 			</div>
-			<div className="wf-axis">
+			</div><div className="wf-chart"><div className="wf-axis">
 				<span>
 					<small>{relative(lo)}</small>
 					<small>{relative((lo + hi) / 2)}</small>
 					<small>{relative(hi)}</small>
 				</span>
 			</div>
-			{entries.map(row)}
-			{Array.from(new Set(hosts.map((e) => e.label))).map((kind) => {
-				const group = hosts
-					.filter((e) => e.label === kind && e.end >= lo && e.start <= hi)
-					.sort((a, b) => a.start - b.start);
+			{entries.filter(e => currentTrack === "all" || currentTrack === e.kind).map(row)}
+			{(currentTrack === "all" || currentTrack === "host") && hostGroups.map(({ kind, events }) => {
+				const group = events.filter(e => e.end >= lo && e.start <= hi);
 				const merged = mergeHostIntervals(group, lo, hi);
 				const total = merged.reduce((sum, e) => sum + e.end - e.start, 0);
 				return (
@@ -249,55 +282,79 @@ export function TraceWaterfall({ run }: { run: UiTraceRun }) {
 					</details>
 				);
 			})}
+			</div></>}
 			{entry && (
 				<section className="wf-detail">
-					<h3>{entry.label}</h3>
-					<select aria-label={t("wfSelect")} value={entry.id} onChange={(e) => select(e.target.value)}>
-						{entries.map((e) => (
-							<option key={e.id} value={e.id}>
-								{e.label} · {ms(duration(e))}
-							</option>
-						))}
-						{entry.kind === "host" && <option value={entry.id}>{entry.label}</option>}
-					</select>
-					<p>{info(entry)}</p>
+					<h3>{t("traceInterval")}</h3>
+					<div className="wf-selection">
+						{entries.length + Number(entry.kind === "host") > 1 ? <select aria-label={t("wfSelect")} value={entry.id} onChange={(e) => select(e.target.value)}>
+							{entries.map((e) => (
+								<option key={e.id} value={e.id}>
+									{e.label}
+								</option>
+							))}
+							{entry.kind === "host" && <option value={entry.id}>{entry.label}</option>}
+						</select> : <strong>{entry.label}</strong>}
+
+						<span className="wf-kind">{t(({ model: "traceRequests", tool: "traceTools", host: "traceHost", background: "backgroundTitle" } as const)[entry.kind])}</span>
+						<span>{ms(elapsed)}{share && ` (${share})`}</span>
+					</div>
+					<p className="wf-interval-meta">{relative(entry.start)} → {relative(entry.end)} · {entry.status}</p>
 					{request && (
 						<>
-							<button
-								onClick={async (e) => {
-									try {
-										await copyText(
-											[request.provider, request.model].filter(Boolean).join("/"),
-											e.currentTarget.ownerDocument,
-										);
-										setFeedback(t("copied"));
-									} catch {
-										setFeedback(t("wfCopyFail"));
-									}
-								}}
-							>
-								{[request.provider, request.model].filter(Boolean).join("/")} · {t("copy")}
-							</button>
-							<span role="status">{feedback}</span>
-							<ol>
+							<div className="wf-detail-grid"><div className="wf-panel"><h4><FiFlag aria-hidden="true" />{t("traceMilestones")}</h4><ol>
 								{stages.map(([label, at], i) => {
 									const previous = stages[i - 1]?.[1];
 									return (
-										<li key={label}>
-											{label} · {relative(at)}{" "}
+										<li key={label} data-observed={at !== undefined}>
+											<span>{label}</span> <span>{relative(at)}{" "}
 											{previous !== undefined && at !== undefined && at >= previous && (
 												<small>(+{ms(at - previous)})</small>
 											)}
-										</li>
+										</span></li>
 									);
 								})}
-							</ol>
-							<p>
-								{t("wfOutputHint")} · {request.firstOutputKind ?? t("wfUnknownKind")}
-							</p>
-							<p>
-								{t("traceToolGap")} · {ms(request.toolToProviderGapMs)}
-							</p>
+							</ol></div>
+							<section className="wf-panel" aria-label={t("traceEventTotals")}>
+								<h4 title={t("traceEventTotals")}><FiList aria-hidden="true" />{t("traceCategories")}</h4>
+								{hostGroups.length ? hostGroups.map(({ kind, events, total }) => (
+									<details className="wf-event-group" key={kind} onToggle={event => {
+										const open = event.currentTarget.open;
+										setOpenGroups(prev => prev[kind] === open ? prev : { ...prev, [kind]: open });
+									}}>
+										<summary>
+											<FiChevronRight aria-hidden="true" />
+											<span>{kind}</span><span>{t("traceEventCount", { count: events.length })}</span><span>{ms(total)}</span>
+										</summary>
+										{openGroups[kind] && <ul className="wf-event-times">
+											{events.map(event => <li key={event.id}><span>{relative(event.start)} → {relative(event.end)}</span><span>{ms(duration(event))}</span></li>)}
+										</ul>}
+									</details>
+								)) : "—"}
+							</section></div>
+							<details className="wf-technical" key={entry.id}>
+								<summary>{t("wfTechnicalDetails")}</summary>
+								<button className="wf-copy" title={t("copy")}
+									onClick={async (e) => {
+										try {
+											await copyText(
+												[request.provider, request.model].filter(Boolean).join("/"),
+												e.currentTarget.ownerDocument,
+											);
+											setFeedback(t("copied"));
+										} catch {
+											setFeedback(t("wfCopyFail"));
+										}
+									}}
+								>
+									{[request.provider, request.model].filter(Boolean).join("/")} <FiCopy aria-label={t("copy")} />
+								</button>
+								<span role="status">{feedback}</span>
+								<div className="wf-footnotes">
+									<span><FiInfo aria-hidden="true" />{t("wfOutputHint")} · {request.firstOutputKind ?? t("wfUnknownKind")}</span>
+									<span>{t("traceToolGap")} · {ms(request.toolToProviderGapMs)}</span>
+								</div>
+							</details>
 						</>
 					)}
 					{tool && (

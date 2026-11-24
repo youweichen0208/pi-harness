@@ -68,6 +68,9 @@ try {
 		const zoom = page.locator('.mermaid-zoom-dialog[open]');
 		const image = zoom.locator('.mermaid-zoom-content > svg');
 		assert.equal(await image.isVisible(), true);
+		const stage = zoom.locator('.mermaid-zoom-stage');
+		const stageBox = await stage.boundingBox();
+		assert(stageBox.height <= (await image.boundingBox()).height + 33, 'short diagrams leave only the stage padding below and above the SVG');
 		assert.deepEqual(await zoom.locator('parsererror').allTextContents(), [], 'the enlarged SVG must be free of XML errors');
 		if (!mindmap) {
 			const expanded = await readLabels(image);
@@ -85,6 +88,16 @@ try {
 		const width = (await image.boundingBox()).width;
 		await zoom.getByRole('button', { name: '放大', exact: true }).click();
 		assert((await image.boundingBox()).width > width, 'zoom increases diagram size');
+		assert(await stage.evaluate(element => element.scrollWidth > element.clientWidth), 'enlarged diagram can scroll horizontally');
+		const x = stageBox.x + stageBox.width / 2;
+		const y = stageBox.y + stageBox.height / 2;
+		await page.mouse.move(x, y);
+		await page.mouse.down();
+		await page.mouse.move(x - 160, y, { steps: 4 });
+		await page.mouse.up();
+		assert(await stage.evaluate(element => element.scrollLeft >= 150), 'dragging left reveals the right side');
+		await page.mouse.move(x, y);
+		assert(await stage.evaluate(element => element.scrollLeft >= 150), 'releasing the mouse ends panning');
 		await page.keyboard.press('Escape');
 		assert.equal(await zoom.count(), 0, 'Escape closes only the diagram');
 		assert.equal(await host.isVisible(), true, 'document remains open');

@@ -15,6 +15,7 @@ const base = mkdtempSync(join(tmpdir(), 'pi-toc-test-'));
 mkdirSync(join(base, 'agent'));
 const original = '# Diagram\n\n```mermaid\nmindmap\n  root((AgentRun))\n    核心定位\n```\n';
 writeFileSync(join(base, 'note.md'), original);
+writeFileSync(join(base, 'paste.md'), '# Paste\n\n```\nplaceholder\n```\n');
 writeFileSync(join(base, 'agent/models.json'), JSON.stringify({ providers: { fixture: { api: 'openai-completions', baseUrl: 'http://127.0.0.1:9', apiKey: 'unused', models: [{ id: 'unused', name: 'Unused', input: ['text'], contextWindow: 32000, maxTokens: 4096 }] } } }));
 writeFileSync(join(base, 'agent/settings.json'), JSON.stringify({ defaultProvider: 'fixture', defaultModel: 'unused' }));
 writeFileSync(join(base, 'agent/auth.json'), JSON.stringify({ fixture: { type: 'api_key', key: 'unused' } }));
@@ -53,6 +54,21 @@ try {
 	await check(dialog);
 	await page.goto(`http://127.0.0.1:${port}/?wiki-window=1&cwd=${encodeURIComponent(base)}&doc=note.md`);
 	await check(page.locator('.wiki-workbench'));
+	await page.goto(`http://127.0.0.1:${port}/?wiki-window=1&cwd=${encodeURIComponent(base)}&doc=paste.md`);
+	const plain = page.locator('.wiki-workbench pre > code').first();
+	await plain.click();
+	await plain.evaluate(code => {
+		const range = document.createRange();
+		range.selectNodeContents(code);
+		const selection = window.getSelection();
+		selection.removeAllRanges();
+		selection.addRange(range);
+		const clipboardData = new DataTransfer();
+		clipboardData.setData('text/plain', 'flowchart LR\n  A[编辑] --> B[运行]');
+		code.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData }));
+	});
+	await page.locator('.wiki-mermaid-preview .mermaid-svg svg .node').first().waitFor();
+	assert.equal(await page.locator('.wiki-mermaid-preview .mermaid-svg svg .node').count(), 2);
 	console.log('PASS Mermaid source folds by default, toggles with mouse/keyboard, and preserves Markdown in file and Wiki hosts');
 } finally {
 	await browser?.close();

@@ -52,9 +52,19 @@ try {
 		};
 		onSent = listener;
 	});
-	await banners.first().click({ position: { x: 20, y: 20 } });
+	await banners.first().locator(".background-request-banner").click();
 	await Promise.race([switched, new Promise((_, reject) => setTimeout(() => reject(Error("No conversation switch")), 3000))]);
 	assert(outgoing.some(message => message.type === "switch_conversation" && message.id === "background-one"));
+	const mismatch = JSON.stringify({ type: "ready", protocolVersion: -1, serverVersion: "fixture" });
+	wire.send(mismatch);
+	const warning = page.locator('.protocol-banner[role="alert"]');
+	await warning.waitFor();
+	await warning.getByRole('button').click();
+	await warning.waitFor({state: 'detached'});
+	await page.mouse.move(0, 0);
+	await banners.last().waitFor({state: 'detached', timeout: 8000});
+	wire.send(mismatch);
+	assert.equal(await warning.count(), 0);
 	assert.deepEqual(errors, []);
 	console.log("PASS long background requests wrap, stack, scroll and retain conversation navigation");
 } finally {

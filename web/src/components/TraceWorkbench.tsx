@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FiActivity, FiDownload, FiRefreshCw, FiSearch, FiX } from "react-icons/fi";
+import { FiBox, FiClock, FiInfo, FiLayers, FiMonitor, FiTool, FiActivity, FiDownload, FiRefreshCw, FiSearch, FiX } from "react-icons/fi";
 import type { ClientMessage, TraceResult, UiState } from "../types";
 import { useT } from "../i18n";
 import { useDialogFocus } from "../use-dialog-focus";
@@ -26,6 +26,7 @@ export function TraceWorkbench({ state, connected, send }: { state: UiState | nu
 	const [open, setOpen] = useState(false);
 	const [trace, setTrace] = useState<TraceResult["trace"]>();
 	const [selectedRunId, setSelectedRunId] = useState<string>();
+	const [details, setDetails] = useState(false);
 	const [query, setQuery] = useState("");
 	const [error, setError] = useState("");
 	const [loading, setLoading] = useState(false);
@@ -93,22 +94,27 @@ export function TraceWorkbench({ state, connected, send }: { state: UiState | nu
 	];
 	return <div className="trace-modal-backdrop">
 		<section className="trace-workbench" ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={t("traceTitle")} onKeyDown={event => { if (event.key === "Escape") { event.stopPropagation(); setOpen(false); } }}>
-			<header className="trace-header"><div><FiActivity /><strong>{t("traceTitle")}</strong><span>{state?.conversationId}</span></div><div><button className="icon-button" aria-label={t("traceExportHtml")} title={t("traceExportHtml")} disabled={!trace} onClick={() => trace && downloadTrace("html", trace, state)}><FiDownload /><span>HTML</span></button><button className="icon-button" aria-label={t("traceExportJson")} title={t("traceExportJson")} disabled={!trace} onClick={() => trace && downloadTrace("json", trace, state)}><FiDownload /><span>JSON</span></button><button className="icon-button" aria-label={t("refresh")} title={t("refresh")} disabled={!connected || loading} onClick={requestTrace}><FiRefreshCw /></button><button className="icon-button" aria-label={t("close")} title={t("close")} onClick={() => setOpen(false)}><FiX /></button></div></header>
+			<header className="trace-header"><div><FiActivity /><strong>{t("traceTitle")}</strong><span>{state?.conversationId}</span></div><div><button className="icon-button trace-download" aria-label={t("traceExportHtml")} title={t("traceExportHtml")} disabled={!trace} onClick={() => trace && downloadTrace("html", trace, state)}><FiDownload /><span>{t("traceDownload")} HTML</span></button><button className="icon-button trace-download" aria-label={t("traceExportJson")} title={t("traceExportJson")} disabled={!trace} onClick={() => trace && downloadTrace("json", trace, state)}><FiDownload /><span>{t("traceDownload")} JSON</span></button><button className="icon-button" aria-label={t("refresh")} title={t("refresh")} disabled={!connected || loading} onClick={requestTrace}><FiRefreshCw /><span>{t("refresh")}</span></button><button className="icon-button" aria-label={t("close")} title={t("close")} onClick={() => setOpen(false)}><FiX /><span>{t("close")}</span></button></div></header>
 			{trace?.persistence.state === "degraded" && <div className="trace-warning" role="status">{t("tracePersistenceDegraded")}: {trace.persistence.error}</div>}
-			{trace && <div className="trace-privacy">{t("traceMetadataNotice")}</div>}
+			{trace && <div className="trace-privacy"><FiInfo aria-hidden="true" />{t("traceMetadataNotice")}</div>}
 			<div className="trace-toolbar"><label><FiSearch /><input value={query} onChange={event => setQuery(event.target.value)} placeholder={t("traceSearch")} aria-label={t("traceSearch")} /></label><span>{runs.length} / {trace?.runs.length ?? 0} {t("traceRuns")}</span></div>
 			{error && <div className="trace-error" role="alert">{error}</div>}
 			{!error && !trace?.runs.length && <div className="trace-empty">{loading ? t("loading") : t("traceNoRuns")}</div>}
+			{!!trace?.runs.length && !selected && <div className="trace-empty">{t("traceNoMatches")}</div>}
 			{selected && <div className="trace-body">
-				<aside className="trace-run-list" aria-label={t("traceRuns")}>{runs.map(run => <button key={run.runId} className={run.runId === selected.runId ? "selected" : ""} onClick={() => setSelectedRunId(run.runId)}><span><strong>{run.startedAt ? new Date(run.startedAt).toLocaleTimeString() : run.runId.slice(0, 8)}</strong><small>{formatTraceMs(run.aggregates.agent_active_wall_ms?.value)} · {run.requests.length} {t("traceRequests")} · {run.tools.length} {t("traceTools")}</small></span><em className={`trace-status status-${run.status}`}>{run.status}{run.requestsTruncated || run.toolsTruncated || run.hostSpanOverflow || run.requests.some(r => r.status !== "measured") ? " · ⚠" : ""}</em></button>)}</aside>
+				<aside className="trace-run-list" aria-label={t("traceRuns")}><h3>{t("traceHistory")}</h3>{runs.map(run => <button key={run.runId} className={run.runId === selected.runId ? "selected" : ""} onClick={() => setSelectedRunId(run.runId)}><span><strong>{run.startedAt ? new Date(run.startedAt).toLocaleTimeString() : run.runId.slice(0, 8)}</strong><small>{formatTraceMs(run.aggregates.agent_active_wall_ms?.value)} · {run.requests.length} {t("traceRequests")} · {run.tools.length} {t("traceTools")}</small></span><em className={`trace-status status-${run.status}`}>{run.status}{run.requestsTruncated || run.toolsTruncated || run.hostSpanOverflow || run.requests.some(r => r.status !== "measured") ? " · ⚠" : ""}</em></button>)}</aside>
 				<main className="trace-detail">
-					<div className="trace-aggregate-grid">{cards.map(([key, label]) => { const metric = traceMetric(aggregates[key]); return <div key={key}><small>{label}</small><strong className={`metric-${metric.status}`}>{metric.text}</strong>{key !== "agent_active_wall_ms" && <small>{traceShare(selected, key)}</small>}{aggregates[key]?.reason && <span>{aggregates[key].reason}</span>}</div>; })}</div>
+					<div className="trace-views">
+						<button aria-pressed={!details} onClick={() => setDetails(false)}>{t("traceOverview")}</button>
+						<button aria-pressed={details} onClick={() => setDetails(true)}>{t("traceDetails")}</button>
+					</div>
+					{!details && <div className="trace-aggregate-grid">{cards.map(([key, label], index) => { const Icon = [FiClock, FiLayers, FiTool, FiMonitor, FiBox][index]; const metric = traceMetric(aggregates[key]); return <div key={key}><small><Icon aria-hidden="true" />{label}</small><strong className={`metric-${metric.status}`}>{metric.text}</strong>{key !== "agent_active_wall_ms" && <small>{traceShare(selected, key)}</small>}{aggregates[key]?.reason && <span>{aggregates[key].reason}</span>}</div>; })}</div>}
 					{(["model", "tool", "host"] as const).map((kind, i) => {
 						const lower = aggregates[kind + "_observed_lower_bound_ms"];
 						if (lower?.status !== "measured" || aggregates[kind + "_wall_union_ms"]?.status === "measured") return null;
 						return <div className="trace-warning" key={kind}>{cards[i + 1][1]} · {t("traceObservedLowerBound")} · {formatTraceMs(lower.value)}</div>;
 					})}
-					<TraceWaterfall key={selected.runId} run={selected} />
+					<TraceWaterfall key={selected.runId} run={selected} details={details} />
 				</main>
 			</div>}
 		</section>

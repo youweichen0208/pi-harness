@@ -7,6 +7,7 @@ import { useT } from "../i18n";
 export function MermaidZoom({ svg, onClose }: { svg: string; onClose: () => void }) {
 	const t = useT();
 	const dialog = useRef<HTMLDialogElement>(null);
+	const drag = useRef<{ id: number; x: number; y: number; left: number; top: number } | null>(null);
 	const [scale, setScale] = useState(1);
 	const markup = useMemo(() => {
 		// Mermaid labels can contain HTML void tags such as <br>. Parse them
@@ -44,7 +45,22 @@ export function MermaidZoom({ svg, onClose }: { svg: string; onClose: () => void
 			<button type="button" aria-label={t("mermaidZoomIn")} disabled={scale >= 8} onClick={() => setScale(value => Math.min(8, value * 1.25))}><FiZoomIn /></button>
 			<button type="button" aria-label={t("closeZoom")} onClick={onClose}><FiX /></button>
 		</div>
-		<div className="mermaid-zoom-stage">
+		<div className="mermaid-zoom-stage"
+			onPointerDown={event => {
+				const stage = event.currentTarget;
+				if (event.pointerType === "touch" || event.button !== 0 || !event.isPrimary) return;
+				if (stage.scrollWidth <= stage.clientWidth && stage.scrollHeight <= stage.clientHeight) return;
+				event.preventDefault();
+				drag.current = { id: event.pointerId, x: event.clientX, y: event.clientY, left: stage.scrollLeft, top: stage.scrollTop };
+				stage.setPointerCapture(event.pointerId);
+			}}
+			onPointerMove={event => {
+				const start = drag.current;
+				if (start?.id !== event.pointerId) return;
+				event.currentTarget.scrollLeft = start.left + start.x - event.clientX;
+				event.currentTarget.scrollTop = start.top + start.y - event.clientY;
+			}}
+			onLostPointerCapture={() => { drag.current = null; }}>
 			<div className="mermaid-zoom-content" style={{ width: `${scale * 100}%` }} dangerouslySetInnerHTML={{ __html: markup }} />
 		</div>
 	</dialog>, document.body);

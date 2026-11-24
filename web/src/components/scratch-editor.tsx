@@ -170,6 +170,8 @@ export const ScratchEditor = forwardRef<ScratchEditorHandle, {
 	formatRef.current = onFormat;
 	const saveRef = useRef(onSave);
 	saveRef.current = onSave;
+	function runCode() { runRef.current(); return true; }
+	function saveCode() { saveRef.current(); return true; }
 
 	useEffect(() => {
 		const theme = new Compartment();
@@ -190,15 +192,11 @@ export const ScratchEditor = forwardRef<ScratchEditorHandle, {
 					theme.of(buildEditorTheme(holder.current!)),
 					cmPlaceholder(placeholder),
 					Prec.highest(keymap.of([
-						{
-							key: "Mod-Enter",
-							run: () => {
-								runRef.current();
-								return true;
-							},
-						},
+						{ key: "Ctrl-Enter", run: runCode },
+						{ mac: "Cmd-Enter", run: runCode },
 						{ key: "Mod-/", run: toggleEditorComment },
-						{ key: "Mod-s", run: () => { saveRef.current(); return true; } },
+						{ key: "Ctrl-s", run: saveCode },
+						{ mac: "Cmd-s", run: saveCode },
 						{ key: "Alt-Shift-f", run: () => { formatRef.current(); return true; } },
 						{ key: "Tab", run: acceptCompletion },
 						indentWithTab,

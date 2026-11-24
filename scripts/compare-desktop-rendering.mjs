@@ -53,7 +53,7 @@ for (const { file, scale } of windows) {
 	assert.equal(win.electron, mac.electron, 'Compare the same Electron version');
 	for (const key of ['width', 'height', 'bodySize', 'typography', 'surfaces', 'ui']) compare(windowsReference[key], win[key], `${file}.${key}`);
 	assert(win.typography.light.every(sample => sample.family.startsWith('Inter')), 'Windows uses the shared UI typography');
-	for (const [sample, family] of Object.entries({ playground: 'JetBrains Mono', notes: 'Inter', motto: 'Inter-SemiBold' })) {
+	for (const [sample, family] of Object.entries({ playground: 'JetBrains Mono', notes: 'Inter', motto: 'Times New Roman' })) {
 		assert.deepEqual(sharedFace(win, sample, family), sharedFace(mac, sample, family), `${file}.${sample}: actual primary face`);
 	}
 	assert.deepEqual(sharedFace(win, 'playground', 'Source Han Sans SC'), sharedFace(mac, 'playground', 'Source Han Sans SC'), 'same Source Han Sans SC glyphs in the editor');

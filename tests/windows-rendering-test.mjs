@@ -106,9 +106,8 @@ try {
 			return used;
 		};
 		for (const [name, selector] of [['motto', '.welcome-motto > span:first-child'], ['mottoEmphasis', '.welcome-motto em']]) {
-			const used = await measureFonts(name, selector, [['Inter', 'Inter SemiBold']]);
-			assert(used.every(font => font.isCustomFont && font.postScriptName === 'Inter-SemiBold'), `${name}: use the bundled Inter face`);
-			assert.equal(await page.locator(selector).evaluate(el => [getComputedStyle(el).fontStyle, getComputedStyle(el).fontWeight].join(' ')), 'normal 600');
+			await measureFonts(name, selector, ['Times New Roman']);
+			assert.equal(await page.locator(selector).evaluate(el => [getComputedStyle(el).fontStyle, getComputedStyle(el).fontWeight].join(' ')), 'italic 400');
 		}
 		const brand = page.locator('.compact-brand').getByRole('img', { name: 'pi-harness', exact: true });
 		const brandBox = await brand.boundingBox();

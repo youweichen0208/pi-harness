@@ -59,6 +59,7 @@ writeFileSync(
 );
 writeFileSync(join(dir, "agent/settings.json"), JSON.stringify({ defaultProvider: "fixture", defaultModel: "unused" }));
 writeFileSync(join(dir, "agent/auth.json"), JSON.stringify({ fixture: { type: "api_key", key: "unused" } }));
+writeFileSync(join(dir, "list.md"), readFileSync(new URL("../docs/python-list-example.md", import.meta.url)));
 let server, browser;
 try {
 	assert.equal(await portUp(port), false);
@@ -69,6 +70,14 @@ try {
 	const sent = [];
 	page.on("websocket", ws => ws.on("framesent", ({payload}) => sent.push(JSON.parse(String(payload)))));
 	await page.goto(`http://127.0.0.1:${port}/?wiki-window=1&cwd=${encodeURIComponent(dir)}`);
+	if (python) {
+		await page.locator('.wiki-tree-main[title="list.md"]').click();
+		await page.locator("[data-code-run-kernel]").click();
+		await page.locator(".wiki-cell-result pre").filter({hasText:"[5, 4, 3, 2, 1]"}).waitFor();
+		assert.match(await page.locator(".wiki-cell-result").allTextContents().then(parts => parts.join("")), /\[1, 2, 3, 4, 5\]/);
+		mkdirSync("tests/scratch", {recursive:true});
+		await page.locator(".fp-rich-document").screenshot({path:"tests/scratch/python-list.png"});
+	}
 	await page.locator('.wiki-tree-main[title="results.ipynb"]').click();
 	const output = page.locator(".nb-output");
 	await output.locator("img").waitFor();
@@ -146,6 +155,20 @@ try {
 	await page.getByRole("option", {name:/Jupyter/}).waitFor();
 	await page.keyboard.press("Enter");
 	await page.locator("[data-code-run-kernel]").waitFor();
+	const emptyCell = page.locator("pre.codeblock:has([data-code-run-kernel])").first();
+	assert.equal(await emptyCell.locator(".fp-code-language button[aria-label] svg").count(), 4);
+	assert.equal((await emptyCell.locator(".fp-code-language").innerText()).trim(), "");
+	const geometry = await emptyCell.evaluate(cell => {
+		const code = cell.querySelector("code");
+		const box = code.getBoundingClientRect();
+		const css = getComputedStyle(code);
+		const firstLine = box.top + code.clientTop + parseFloat(css.paddingTop) + parseFloat(css.lineHeight) / 2;
+		const prompt = cell.querySelector(".wiki-cell-prompt").getBoundingClientRect();
+		const buttons = [...cell.querySelectorAll(".fp-code-language button")].map(button => button.getBoundingClientRect());
+		return {promptOffset: prompt.top + prompt.height / 2 - firstLine, tops: buttons.map(b => b.top), bottoms: buttons.map(b => b.bottom)};
+	});
+	assert(Math.abs(geometry.promptOffset) < 2, JSON.stringify(geometry));
+	for (const edge of [geometry.tops, geometry.bottoms]) assert(Math.max(...edge) - Math.min(...edge) <= 1, JSON.stringify(geometry));
 	await page.keyboard.insertText("print(42)");
 	await page.waitForFunction(() => document.querySelector("code.language-python")?.textContent.includes("print(42)"));
 	if (python) {
@@ -161,7 +184,7 @@ try {
 		assert.ok(text.y >= frame.y && text.y + text.height <= frame.y + frame.height);
 		assert.equal(await output.isVisible(), true);
 		assert.equal(await block.locator(".fp-code-language button").count(), 4);
-		await block.getByRole("button", {name:/复制|Copy/}).click();
+		await block.locator(".fp-code-language").getByRole("button", {name:/复制|Copy/}).click();
 		await block.getByRole("button", {name:/已复制|Copied/}).waitFor();
 	}
 	const cells = page.locator("pre.codeblock:has([data-code-run-kernel])");

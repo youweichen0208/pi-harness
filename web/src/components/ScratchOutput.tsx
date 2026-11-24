@@ -1,9 +1,10 @@
-import { FiCheckCircle, FiAlertCircle, FiClock, FiSquare } from "react-icons/fi";
+import { CopyButton } from "./copy-button";
+import { FiTrash2, FiCheckCircle, FiAlertCircle, FiClock, FiSquare } from "react-icons/fi";
 import type { PlaygroundRunState } from "../playground-run-store";
 import { useT } from "../i18n";
 
 /** Compact output for the script and its current function invocation. */
-export function ScratchOutput({ program, cases, stale, executing }: { executing: boolean; program: PlaygroundRunState; cases?: PlaygroundRunState; stale: boolean }) {
+export function ScratchOutput({ program, cases, stale, executing, clear }: { clear: () => void; executing: boolean; program: PlaygroundRunState; cases?: PlaygroundRunState; stale: boolean }) {
 	const t = useT();
 	const runs = [program, ...(cases ? [cases] : [])];
 	const running = executing || runs.some(run => run.phase === "running");
@@ -14,9 +15,9 @@ export function ScratchOutput({ program, cases, stale, executing }: { executing:
 	const StatusIcon = running ? FiClock : stopped ? FiSquare : failed ? FiAlertCircle : FiCheckCircle;
 	const stdout = runs.map(run => run.stdout).filter(Boolean).join("\n");
 	return <section className="scratch-output" aria-live="polite">
-		<div className={`lc-result-summary ${running || stopped ? "neutral" : failed ? "error" : "success"}`}><StatusIcon aria-hidden="true" /><strong>{t(running ? "playgroundRunning" : stopped ? "pgRunStopped" : failed ? "pgRunError" : "pgRunFinished")}</strong>{stale && <span>{t("pgPreviousResult")}</span>}</div>
-		{actual && "actual" in actual && actual.actual !== undefined && <div className="lc-result-value"><label>{t("pgActual")}</label><pre>{actual.actual}</pre></div>}
-		{stdout && <div className="lc-result-value playground-stream"><label>{t("pgScriptOutput")}</label><pre>{stdout}</pre></div>}
+		<div className={`lc-result-summary ${running || stopped ? "neutral" : failed ? "error" : "success"}`}><StatusIcon aria-hidden="true" /><strong>{t(running ? "playgroundRunning" : stopped ? "pgRunStopped" : failed ? "pgRunError" : "pgRunFinished")}</strong>{!running && <><small>{runs.reduce((sum, run) => sum + run.durationMs, 0)} ms</small><button className="btn" title={t("pgClearOutput")} onClick={clear}><FiTrash2 /></button></>}{stale && <span>{t("pgPreviousResult")}</span>}</div>
+		{stdout && <div className="lc-result-value playground-stream"><label>{t("pgScriptOutput")}<CopyButton text={stdout} /></label><pre>{stdout}</pre></div>}
+		{actual && "actual" in actual && actual.actual !== undefined && <details className="lc-result-value" open={stdout ? undefined : true}><summary>{t("pgActual")}</summary><CopyButton text={String(actual.actual)} /><pre>{actual.actual}</pre></details>}
 		{errors.map((error, index) => <pre className="method-validation" key={index}>{error}</pre>)}
 	</section>;
 }

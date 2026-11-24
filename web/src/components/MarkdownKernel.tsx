@@ -5,7 +5,9 @@ import { richCodeText } from "../rich-code-text";
 import { randomUuid } from "../uuid";
 import { runNotebookCell, wikiRequest } from "../wiki-api";
 import type { NotebookCellOutput } from "../types";
-import { FiTrash2 } from "react-icons/fi";
+import { CopyButton } from "./copy-button";
+import { cellText } from "../../../server/notebook";
+import { FiPlay, FiSquare, FiCheckCircle, FiAlertCircle, FiTrash2 } from "react-icons/fi";
 import { WikiReadingDialog } from "./WikiReading";
 import { Output } from "./NotebookEditor";
 
@@ -99,12 +101,12 @@ export function MarkdownKernel({ cwd, path, conversationId, busyRef, blocks, dis
 				onMouseDown={e => e.preventDefault()} onClick={event => {
 					if (active) void control("interrupt").catch(e => { if (result && alive.current) { result.error = e.message; refresh(n => n+1); } });
 					else void run(block, false, event.shiftKey);
-				}}>{active ? "■" : "▶"}</button>
+				}}>{active ? <FiSquare aria-hidden="true" /> : <FiPlay aria-hidden="true" />}</button>
 			{!disabled && <button type="button" className="wiki-cell-delete" title={t("nbDeleteTitle")} aria-label={t("nbDeleteTitle")} aria-haspopup="dialog" disabled={active} onClick={() => setDeleteTargets([block])}><FiTrash2 aria-hidden="true" /></button>}
 			{result?.missing && <button disabled={!!running} onClick={() => void run(block, true)}>{t("nbInstall")}</button>}
 		</>, block.button, block.id), result && createPortal(<>
 			{richCodeText(block.code) !== result.source && <small>{t("nbChanged")}</small>}
-			{(result.error || result.outputs.length > 0) && <div className="nb-output">{result.error}{result.outputs.map((output,i) => <div key={i} className="wiki-cell-result">
+			{(result.error || result.outputs.length > 0) && <div className="nb-output"><div className="wiki-cell-output-head">{result.error || result.outputs.some(o => o.output_type === "error") ? <FiAlertCircle /> : active ? null : <FiCheckCircle />} {t("pgCellOutput")}<CopyButton text={[result.error, ...result.outputs.map(o => o.traceback?.join("\n") || cellText(o.text ?? o.data?.["text/plain"]))].filter(Boolean).join("")} /></div>{result.error}{result.outputs.map((output,i) => <div key={i} className="wiki-cell-result">
 					{output.output_type === "execute_result" && result.count != null && <span className="wiki-cell-out-prompt">Out[{result.count}]:</span>}
 					<Output output={output} />
 				</div>)}</div>}

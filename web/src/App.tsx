@@ -124,6 +124,27 @@ export interface PendingAttachment {
  *  hovering PAUSES the timer (stays visible as long as the pointer is over it),
  *  resuming when the pointer leaves. Clicking the toast body does NOT hide it —
  *  only the × button dismisses (and the auto timer). */
+function AppBanner({ children, warning = false }: { children: React.ReactNode; warning?: boolean }) {
+	const t = useT();
+	const [visible, setVisible] = useState(true);
+	const [hovered, setHovered] = useState(false);
+	const [focused, setFocused] = useState(false);
+	useEffect(() => {
+		if (!visible || hovered || focused) return;
+		const timer = window.setTimeout(() => setVisible(false), 5000);
+		return () => window.clearTimeout(timer);
+	}, [visible, hovered, focused]);
+	if (!visible) return null;
+	const Icon = warning ? FiAlertTriangle : FiInfo;
+	return <div className="protocol-banner" role={warning ? "alert" : "status"}
+		onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
+		onFocus={() => setFocused(true)} onBlur={event => setFocused(event.currentTarget.contains(event.relatedTarget))}>
+		<Icon className="app-banner-icon" aria-hidden="true" />
+		<div className="app-banner-message">{children}</div>
+		<button type="button" className="app-banner-close" aria-label={t("close")} title={t("close")} onClick={() => setVisible(false)}><FiX aria-hidden="true" /></button>
+	</div>;
+}
+
 function NoticeToast({
 	notice,
 	onDismiss,
@@ -1441,19 +1462,15 @@ export function App() {
 				/>}
 				<RecoveryStatus state={conversationState} send={send} connected={chat.ready} />
 				<div className="app-banners">
-				{chat.pendingDialogs.filter(d => d.conversationId !== chat.activeConversationId).map(d => <button className="protocol-banner background-request-banner" title={`${t("pluginRequest")} · ${d.source} · ${d.title}`} key={d.id} onClick={() => {
+				{chat.pendingDialogs.filter(d => d.conversationId !== chat.activeConversationId).map(d => <AppBanner key={d.id}><button className="background-request-banner" title={`${t("pluginRequest")} · ${d.source} · ${d.title}`} onClick={() => {
 					const navigate = () => { if (rawSend({ type: "switch_conversation", id: d.conversationId })) setView("chat"); };
 					if (wikiGuard.current) wikiGuard.current(navigate);
 					else if (fileGuard.current) fileGuard.current(navigate);
 					else navigate();
-				}}><span>{t("pluginRequest")} · {d.source} · {d.title}</span></button>)}
-				{switchError && <div className="protocol-banner" role="alert"><button onClick={() => send({ type: "set_cwd", path: switchError, source: "ui" })}>{t("retryProjectSwitch")}</button> {switchError}</div>}
-				{switching && <div className="protocol-banner" role="status">{t("switchingProject")} {switching}</div>}
-				{chat.protocolMismatch && (
-					<div className="protocol-banner">
-						<UiIcon name="warning" /> {t("protocolMismatch")}
-					</div>
-				)}
+				}}><span>{t("pluginRequest")} · {d.source} · {d.title}</span></button></AppBanner>)}
+				{switchError && <AppBanner warning key={switchError}><button onClick={() => send({ type: "set_cwd", path: switchError, source: "ui" })}>{t("retryProjectSwitch")}</button> {switchError}</AppBanner>}
+				{switching && <AppBanner key={switching}>{t("switchingProject")} {switching}</AppBanner>}
+				{chat.protocolMismatch && <AppBanner warning>{t("protocolMismatch")}</AppBanner>}
 				</div>
 				{view !== "chat" && view !== "wiki" && chat.notices.length > 0 && <div className="notices notices-overlay">
 					{chat.notices.map((n) => <NoticeToast key={n.id} notice={n} onDismiss={dismissNotice} onOpenExtensions={openExtensionSettings} onSelectDirectory={() => setCwdNoticePicker(n.id)} />)}

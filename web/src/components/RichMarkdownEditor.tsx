@@ -104,6 +104,19 @@ function ensureTrailingParagraph(root: HTMLElement): void {
 }
 
 
+function setCellIcon(button: HTMLButtonElement, label: string, pathData: string) {
+	const ns = "http://www.w3.org/2000/svg";
+	const svg = button.ownerDocument.createElementNS(ns, "svg");
+	svg.setAttribute("viewBox", "0 0 24 24");
+	svg.setAttribute("aria-hidden", "true");
+	const path = button.ownerDocument.createElementNS(ns, "path");
+	path.setAttribute("d", pathData);
+	svg.append(path);
+	button.replaceChildren(svg);
+	button.title = label;
+	button.setAttribute("aria-label", label);
+}
+
 export interface RichEditorHost {
 	uploadImage: (data: string, signal: AbortSignal) => Promise<string>;
 	resolveImage: (source: string) => string;
@@ -502,14 +515,23 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 				chrome.contentEditable = "false";
 				chrome.className = "fp-code-language";
 				if (wiki) {
-					const copy = document.createElement("button"); copy.type = "button"; copy.textContent = t("copy");
+					const copy = document.createElement("button"); copy.type = "button";
+					copy.dataset.codeCopy = "";
+					const showCopy = (state: "copy" | "copied" | "copyFailed") => {
+						const paths = { copy: "M8 8h12v13H8z M16 5V3H3v13h2", copied: "m4 12 5 5 11-11", copyFailed: "m6 6 12 12 M18 6 6 18" };
+						setCellIcon(copy, t(state), paths[state]);
+					};
+					showCopy("copy");
 					copy.onmousedown = event => event.preventDefault();
-					copy.onclick = () => { void copyText(richCodeText(code), code.ownerDocument).then(() => { copy.textContent = t("copied"); }, () => { copy.textContent = t("copyFailed"); }); };
+					copy.onclick = () => { void copyText(richCodeText(code), code.ownerDocument).then(() => showCopy("copied"), () => showCopy("copyFailed")); };
 					chrome.append(copy);
 				}
 				pre.prepend(chrome);
 			}
-			if (wiki && !code.classList.contains("language-mermaid")) {
+			const source = language ? "" : richCodeText(code);
+			const inferredDiagram = /^(?:\s|%%[^\n]*(?:\n|$))*(?:(?:flowchart|graph)[ \t]+(?:LR|RL|TB|TD|BT)\b|(?:sequenceDiagram|classDiagram|stateDiagram(?:-v2)?|erDiagram|gantt|mindmap|journey|pie|timeline|gitGraph)\b(?=[ \t]*(?:\r?\n|$)))/.test(source);
+			pre.toggleAttribute("data-inferred-mermaid", inferredDiagram);
+			if (wiki && language !== "mermaid" && !inferredDiagram) {
 				let gutter = pre.querySelector<HTMLElement>(".wiki-code-gutter");
 				if (!gutter) {
 					gutter = document.createElement("span"); gutter.className = "wiki-code-gutter"; gutter.dataset.richUi = ""; gutter.contentEditable = "false"; gutter.setAttribute("aria-hidden", "true"); pre.prepend(gutter);
@@ -523,29 +545,18 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 					pre.removeAttribute("data-wiki-code-folded");
 				} else {
 					if (!fold) { fold = document.createElement("button"); fold.type = "button"; fold.dataset.codeFold = ""; chrome.prepend(fold); }
-					const updateFold = () => { const closed = pre.hasAttribute("data-wiki-code-folded"); fold!.textContent = closed ? "▸" : "▾"; fold!.setAttribute("aria-expanded", String(!closed)); fold!.title = t(closed ? "wikiCodeExpand" : "wikiCodeCollapse"); fold!.setAttribute("aria-label", fold!.title); };
-					updateFold(); fold.onmousedown = event => event.preventDefault();
-					fold.onclick = () => { pre.toggleAttribute("data-wiki-code-folded"); fold!.focus({ preventScroll: true }); updateFold(); };
+					fold.dataset.summary = t("wikiCodeLines", { count: lines });
+					const updateFold = () => {
+						const closed = pre.hasAttribute("data-wiki-code-folded");
+						const label = t(closed ? "wikiCodeExpand" : "wikiCodeCollapse");
+						if (fold!.title !== label) setCellIcon(fold!, label, "m6 9 6 6 6-6");
+						fold!.setAttribute("aria-expanded", String(!closed));
+					};
+					updateFold();
+					fold.onclick = () => { pre.toggleAttribute("data-wiki-code-folded"); updateFold(); };
 				}
-				let width = chrome.querySelector<HTMLButtonElement>("[data-code-width]");
-				if (!isKernelCell && wiki.width) {
-					if (!width) { width = document.createElement("button"); width.type = "button"; width.dataset.codeWidth = ""; width.textContent = "↔"; chrome.append(width); }
-					width.title = t(wiki.width.focused ? "wikiStandardWidth" : "wikiWideWidth"); width.setAttribute("aria-label", width.title); width.onmousedown = event => event.preventDefault(); width.onclick = () => wiki.width?.onToggle();
-				} else width?.remove();
 			} else {
-				pre.querySelector(".wiki-code-gutter")?.remove(); pre.querySelector("[data-code-fold]")?.remove(); pre.querySelector("[data-code-width]")?.remove(); pre.querySelector("[data-code-ask]")?.remove(); pre.removeAttribute("data-wiki-code-folded");
-			}
-			// Ask pi only exists when the host declares it; hosts without `ask` get no button at all.
-			{
-				const askCode = wiki?.ask;
-				const languageChrome = pre.querySelector<HTMLElement>(".fp-code-language");
-				if (!isKernelCell && askCode && languageChrome) {
-					let askButton = languageChrome.querySelector<HTMLButtonElement>("[data-code-ask]");
-					if (!askButton) { askButton = document.createElement("button"); askButton.type = "button"; askButton.dataset.codeAsk = ""; languageChrome.append(askButton); }
-					askButton.textContent = t("wikiAskPi"); askButton.title = t("wikiAskPi"); askButton.setAttribute("aria-label", t("wikiAskPi"));
-					askButton.onmousedown = event => event.preventDefault();
-					askButton.onclick = () => askCode(richCodeText(code));
-				} else languageChrome?.querySelector("[data-code-ask]")?.remove();
+				pre.querySelector(".wiki-code-gutter")?.remove(); pre.querySelector("[data-code-fold]")?.remove(); pre.removeAttribute("data-wiki-code-folded");
 			}
 			const canRun = !readOnly && !!host?.runCode && ["python", "py", "python3"].includes(language);
 			let runButton = chrome.querySelector<HTMLButtonElement>("button[data-code-run]");
@@ -592,7 +603,7 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 						insert.className = "wiki-cell-insert";
 						insert.dataset.richUi = "";
 						insert.contentEditable = "false";
-						insert.textContent = "＋";
+						setCellIcon(insert, t("nbInsertHere"), "M12 5v14 M5 12h14");
 						chrome.insertBefore(insert, block.button);
 					}
 					insert.title = t("nbInsertHere");
@@ -627,7 +638,7 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 			paintCode(code, true);
 		});
 		if (kernel) setKernelBlocks(blocks);
-	}, [value, readOnly, t, wiki?.width?.focused, wiki?.width, wiki?.ask, host?.runCode]);
+	}, [value, readOnly, t, wiki?.ask, host?.runCode]);
 	useLayoutEffect(() => {
 		root.current?.querySelectorAll<HTMLImageElement>("img").forEach((img) => {
 			const source = img.dataset.richImageSrc ?? img.getAttribute("src") ?? "";
@@ -647,7 +658,7 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		if (!root.current) return;
 		const next: { host: HTMLElement; code: string }[] = [];
 		const caret = window.getSelection()?.anchorNode ?? null;
-		root.current.querySelectorAll<HTMLElement>('pre > code.language-mermaid').forEach(code => {
+		root.current.querySelectorAll<HTMLElement>('pre > code.language-mermaid, pre[data-inferred-mermaid] > code').forEach(code => {
 			const pre = code.parentElement!;
 			// Wiki documents and plain file previews share the fold behavior; only the
 			// preview chrome class differs so each surface keeps its own styling.
@@ -682,7 +693,7 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 		});
 		root.current.querySelectorAll<HTMLElement>('.wiki-mermaid-preview, .fp-mermaid-preview').forEach(host => { if (!next.some(item => item.host === host)) host.remove(); });
 		root.current.querySelectorAll<HTMLElement>('pre.wiki-mermaid').forEach(pre => {
-			if (pre.querySelector('code.language-mermaid')) return;
+			if (pre.hasAttribute('data-inferred-mermaid') || pre.querySelector('code.language-mermaid')) return;
 			pre.classList.remove('wiki-mermaid', 'wiki-mermaid-source-hidden');
 			pre.querySelector('button[data-mermaid-source]')?.remove();
 		});
@@ -1876,6 +1887,12 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 						const text = event.clipboardData.getData("text/plain");
 						// Only text/plain is read: the editor's contract is a small controlled
 						// document format, never a general HTML renderer.
+						if (selectedCode()) {
+							const escaped = document.createElement("span");
+							escaped.textContent = text;
+							command("insertHTML", escaped.innerHTML.replace(/\r\n?|\n/g, "<br>"));
+							return;
+						}
 						const nodes = classifyPaste(text);
 						// Nothing recognized means the paste is ordinary prose: insert it verbatim
 						// so the source the user pasted is exactly the source that lands.

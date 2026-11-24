@@ -100,7 +100,7 @@ export function WikiWindowShell({ documentPath, loading = false, chatOpen, chatW
 				</header>
 				{!empty && <button className="wiki-assistant-context" title={documentPath} onClick={() => setSheet("projects")}><FiBookOpen /><span>{documentName}{project ? ` + ${project.name}` : ""}</span><FiChevronDown /></button>}
 				{empty && <div className="wiki-assistant-welcome wiki-analysis-welcome">
-					<WelcomeMotto plain />
+					<WelcomeMotto />
 				</div>}
 
 				<div id="wiki-panel-chat" className="wiki-agent-host" ref={chatHost} />

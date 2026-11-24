@@ -114,7 +114,7 @@ try {
 		assert.equal(switches(), before);
 		const newChatCount = outgoing.filter((m) => m.type === "new_chat").length;
 		await page.locator(".global-new-chat").click();
-		await page.locator(".empty-state .welcome-plain").waitFor();
+		await page.locator(".empty-state .welcome-paper").waitFor();
 		assert.equal(outgoing.filter((m) => m.type === "new_chat").length, newChatCount + 1);
 		assert.equal(switches(), before, "new chat does not switch cwd when the current project is outside the selected Workspace");
 		assert.equal(await current(), "Work");

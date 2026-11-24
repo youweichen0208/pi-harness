@@ -21,8 +21,23 @@ const scratch = new PlaygroundScratchStore({
 	},
 });
 
-export function usePlaygroundScratch() {
-	const state = useSyncExternalStore(scratch.subscribe, scratch.getSnapshot);
-	useEffect(scratch.connect, []);
-	return { ...state, edit: scratch.edit, save: scratch.flush, reload: scratch.reload };
+const extraDrafts = new Map<string, PlaygroundScratchStore>();
+export function discardExtraDraft(file: string) {
+	extraDrafts.delete(file);
+	sessionStorage.removeItem("pi-harness:playground:" + file);
+}
+
+export function usePlaygroundScratch(file = "main.py") {
+	let store = scratch;
+	if (file !== "main.py") {
+		const key = "pi-harness:playground:" + file;
+		store = extraDrafts.get(file) ?? new PlaygroundScratchStore({
+			async read() { return JSON.parse(sessionStorage.getItem(key) ?? '{"content":"","updatedAt":1}'); },
+			async write(draft) { sessionStorage.setItem(key, JSON.stringify({ ...draft, updatedAt: Date.now() })); },
+		});
+		extraDrafts.set(file, store);
+	}
+	const state = useSyncExternalStore(store.subscribe, store.getSnapshot);
+	useEffect(store.connect, [store]);
+	return { ...state, edit: store.edit, save: store.flush, reload: store.reload };
 }

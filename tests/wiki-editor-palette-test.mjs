@@ -31,12 +31,7 @@ try {
 	let page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
 	page.setDefaultTimeout(10000);
 	await page.context().routeWebSocket('**/ws', route => { sockets.push(route); route.connectToServer(); });
-	await page.goto(`http://127.0.0.1:${port}`);
-	await page.locator('.conn-dot.ok').first().waitFor({ state: 'attached' });
-	const popup = page.context().waitForEvent('page');
-	await page.locator('.file-name', { hasText: 'note.md' }).click();
-	page = await popup;
-	page.setDefaultTimeout(10000);
+	await page.goto(`http://127.0.0.1:${port}/?wiki-window=1&cwd=${encodeURIComponent(base)}&doc=note.md`);
 	const editor = page.locator('.wiki-prose .fp-rich-document');
 
 	await editor.waitFor();
@@ -45,7 +40,12 @@ try {
 	const code=editor.locator('pre > code'), pre=editor.locator('pre');
 	await page.waitForFunction(()=>document.querySelector('.wiki-code-gutter')?.textContent==='1\n2\n3');
 	assert.equal(await code.textContent(),command+'\n');
+	assert.equal(await pre.locator('[data-code-ask]').count(), 0);
+	const copy = pre.getByRole('button', {name:'复制', exact:true});
+	assert.equal(await copy.innerText(), '');
+	assert.equal(await copy.locator('svg').count(), 1);
 	await pre.locator('[data-code-fold]').click();
+	assert.equal(await pre.locator('[data-code-fold]').getAttribute('data-summary'), '3 行代码');
 	assert.equal(await code.isVisible(),false);
 	await pre.locator('[data-code-fold]').press('Enter');
 	assert(await code.isVisible());
@@ -54,9 +54,10 @@ try {
 	await page.keyboard.press('ControlOrMeta+s');
 	await page.locator('.wiki-save-status.saved').waitFor();
 	assert.equal(readFileSync(join(base,'note.md'),'utf8'),original);
-	await pre.locator('[data-code-width]').click();
+	assert.equal(await pre.locator('[data-code-width]').count(), 0);
+	await page.locator('.wiki-width-toggle:visible').first().click();
 	assert(await page.locator('.wiki-workbench.is-focused').count());
-	await pre.locator('[data-code-width]').click();
+	await page.locator('.wiki-width-toggle:visible').first().click();
 	const caretEnd=async locator=>locator.evaluate(el=>{el.closest('[contenteditable]').focus();const r=document.createRange();r.selectNodeContents(el);r.collapse(false);getSelection().removeAllRanges();getSelection().addRange(r);});
 	await caretEnd(code);await page.keyboard.type('edited');await page.keyboard.press('Enter');await page.keyboard.type('new line');
 	await page.waitForFunction(()=>document.querySelector('.wiki-code-gutter')?.textContent==='1\n2\n3\n4');
@@ -67,19 +68,19 @@ try {
 	await editor.locator('[data-wiki-placeholder]').waitFor();
 	await page.keyboard.type('/');
 	const palette=page.locator('.wiki-slash-grid');await palette.waitFor();
-	assert.equal(await palette.getByRole('option').count(),24);
+	assert.equal(await palette.getByRole('option').count(),23);
 	assert.equal(await palette.locator('.wiki-palette-format').count(),12);
 	assert.equal(await palette.locator('.wiki-palette-section').count(),2);
 	await page.keyboard.press('ArrowDown');
-	assert.equal(await palette.getByRole('option',{selected:true}).getAttribute('aria-label'),'标题 6');
+	const secondRow = await palette.getByRole('option',{selected:true}).getAttribute('aria-label');
 	await page.keyboard.press('ArrowDown');
-	assert.equal(await palette.getByRole('option',{selected:true}).getAttribute('aria-label'),'图片');
-	await palette.getByRole('option',{name:'标题 6',exact:true}).click();
+	assert.notEqual(await palette.getByRole('option',{selected:true}).getAttribute('aria-label'),secondRow);
+	await palette.getByRole('option',{name:'标题 3',exact:true}).click();
 	await page.keyboard.type('Deep heading');
-	assert.equal(await editor.locator('h6').innerText(),'Deep heading');
+	assert.equal(await editor.locator('h3').innerText(),'Deep heading');
 	await page.keyboard.press('Enter');await page.keyboard.type('/');
 	await palette.waitFor();
-	assert.equal(await palette.locator('.wiki-insert-recent button').first().innerText(),'标题 6');
+	assert.equal(await palette.locator('.wiki-insert-recent button').first().innerText(),'标题 3');
 	await page.keyboard.press('ArrowRight');await page.keyboard.press('Enter');
 	await page.keyboard.type('Top heading');
 	assert.equal(await editor.locator('h1:not([hidden])').last().innerText(),'Top heading');
@@ -88,9 +89,9 @@ try {
 	await editor.locator('blockquote.rich-highlight').waitFor();
 	await page.keyboard.press('ControlOrMeta+s');await page.locator('.wiki-save-status.saved').waitFor();
 	const saved=readFileSync(join(base,'note.md'),'utf8');
-	assert(saved.includes('###### Deep heading'));assert(saved.includes('> [!NOTE]'));assert(!saved.includes('wiki-code-gutter'));
+	assert(saved.includes('### Deep heading'));assert(saved.includes('> [!NOTE]'));assert(!saved.includes('wiki-code-gutter'));
 	await page.reload();await editor.waitFor();
-	await caretEnd(editor.locator('h6'));await page.keyboard.press('Enter');await page.keyboard.type('/');
+	await caretEnd(editor.locator('h3'));await page.keyboard.press('Enter');await page.keyboard.type('/');
 	await palette.waitFor();assert.equal(await palette.locator('.wiki-insert-recent button').count(),3);
 	await page.screenshot({path:'/tmp/pi-wiki-insert-palette.png'});
 	await palette.screenshot({path:'/tmp/pi-wiki-palette-detail.png'});
@@ -104,7 +105,7 @@ try {
 	await palette.waitFor();
 	const box=await palette.boundingBox();assert(box.x>=0 && box.x+box.width<=391);
 	assert.deepEqual(errors,[]);
-	console.log('PASS numbered code, folding, resize preservation, width toggle, grid/H1-H6, callouts, recent actions and narrow palette');
+	console.log('PASS numbered code, folding, resize preservation, width toggle, grid/H1-H3, callouts, recent actions and narrow palette');
 } finally {
 	await browser?.close();
 	if(server){server.kill('SIGTERM');if(server.exitCode===null) await new Promise(resolve=>server.once('exit',resolve));}
