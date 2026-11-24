@@ -15,9 +15,9 @@ import { isChatModelConfig, mergeChatProvider, readModelCompat } from "./model-c
  * 经 ModelAdminHost 与 ClientSession 解耦（同 settings/goal/slash 服务模式）。
  * UI 文案直接中文（服务端 notice 约定）。apiKey/headers 绝不下发浏览器。
  */
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { writeFileAtomic } from "./private-file.js";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import type { ServerMessage, UiModelConfigEntry, UiProviderConfig } from "./protocol.js";
 
@@ -388,47 +388,6 @@ export class ModelAdminService {
 		return join(this.host.agentDir, "models.json");
 	}
 
-	/** Strip // and /* *\/ comments without touching string literals (URLs contain //). */
-	private static stripJsonComments(src: string): string {
-		let out = "";
-		let inString = false;
-		let i = 0;
-		while (i < src.length) {
-			const c = src[i];
-			const next = src[i + 1];
-			if (inString) {
-				out += c;
-				if (c === "\\") {
-					out += next ?? "";
-					i += 2;
-					continue;
-				}
-				if (c === '"') inString = false;
-				i++;
-				continue;
-			}
-			if (c === '"') {
-				inString = true;
-				out += c;
-				i++;
-				continue;
-			}
-			if (c === "/" && next === "/") {
-				while (i < src.length && src[i] !== "\n") i++;
-				continue;
-			}
-			if (c === "/" && next === "*") {
-				i += 2;
-				while (i < src.length && !(src[i] === "*" && src[i + 1] === "/")) i++;
-				i += 2;
-				continue;
-			}
-			out += c;
-			i++;
-		}
-		return out;
-	}
-
 	/** Read + parse models.json (tolerating // and /* *\/ comments like the SDK). */
 	/** Top-level keys other than providers (`$schema`, SDK 1.2+) are kept so writes round-trip them. */
 	private readModelsConfig(): {
@@ -480,85 +439,6 @@ export class ModelAdminService {
 			},
 		);
 		this.host.emit({ type: "models_config", providers: [...list, ...(this.host.sources?.()?.configs() ?? [])], sources: this.host.sources?.()?.status(this.host.modelRuntime()) });
-	}
-
-	/** Numeric metadata value (NaN/string "unknown" → undefined). */
-	private static numMeta(v: unknown): number | undefined {
-		return typeof v === "number" && Number.isFinite(v) ? v : undefined;
-	}
-
-	private static boolMeta(v: unknown): boolean | undefined {
-		return typeof v === "boolean" ? v : undefined;
-	}
-
-	private static strArrMeta(v: unknown): string[] | undefined {
-		return Array.isArray(v)
-			? v.filter((x): x is string => typeof x === "string")
-			: undefined;
-	}
-
-	/** Best-effort extraction of model metadata from an OpenAI-compatible
-	 *  /models `data[]` item. Most endpoints only return `{ id }` — the extra
-	 *  fields (context_window / max_model_len / modalities / supports_vision /
-	 *  reasoning / display_name) come from vLLM and other extended
-	 *  implementations, and are filled into the form when present. */
-	private static parseOpenAiModel(m: unknown): UiModelConfigEntry {
-		const r = (m ?? {}) as Record<string, unknown>;
-		const id = typeof r.id === "string" ? r.id : "";
-		const name =
-			(typeof r.name === "string" && r.name.trim() ? r.name : undefined) ??
-			(typeof r.display_name === "string" && r.display_name.trim()
-				? r.display_name
-				: undefined);
-		const modalities =
-			strArrMeta(r.modalities) ??
-			strArrMeta(r.input_modalities);
-		const vision =
-			modalities?.includes("image") === true ||
-			boolMeta(r.supports_vision) === true ||
-			boolMeta(r.vision) === true ||
-			strArrMeta(r.input)?.includes("image") === true;
-		const reasoning =
-			boolMeta(r.reasoning) === true ||
-			boolMeta(r.supports_reasoning) === true ||
-			modalities?.includes("reasoning") === true;
-		const contextWindow =
-			numMeta(r.context_window) ??
-			numMeta(r.context_length) ??
-			numMeta(r.max_model_len) ??
-			numMeta(r.max_context_length);
-		const maxTokens =
-			numMeta(r.max_tokens) ??
-			numMeta(r.max_output_tokens) ??
-			numMeta(r.max_completion_tokens);
-		return {
-			id,
-			...(name ? { name } : {}),
-			...(reasoning ? { reasoning: true } : {}),
-			...(vision ? { input: ["text", "image"] } : {}),
-			...(contextWindow ? { contextWindow } : {}),
-			...(maxTokens ? { maxTokens } : {}),
-		};
-	}
-
-	/** google-generative-ai /models shape:
-	 *  { models: [{ name: "models/gemini-flash", displayName, inputTokenLimit,
-	 *               outputTokenLimit, supportedGenerationMethods }] } */
-	private static parseGoogleModel(m: unknown): UiModelConfigEntry {
-		const r = (m ?? {}) as Record<string, unknown>;
-		const rawName = typeof r.name === "string" ? r.name : "";
-		const id = rawName.replace(/^models\//, "");
-		const displayName = typeof r.displayName === "string" ? r.displayName : undefined;
-		return {
-			id,
-			...(displayName && displayName !== id ? { name: displayName } : {}),
-			...(numMeta(r.inputTokenLimit)
-				? { contextWindow: numMeta(r.inputTokenLimit) }
-				: {}),
-			...(numMeta(r.outputTokenLimit)
-				? { maxTokens: numMeta(r.outputTokenLimit) }
-				: {}),
-		};
 	}
 
 	/** Probe a custom provider's OpenAI-compatible /models endpoint (server-side

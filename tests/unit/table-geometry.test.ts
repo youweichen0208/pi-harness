@@ -20,7 +20,7 @@ const cell = (tagName: string, attributes: string[] = []): CellLike => ({
 });
 
 const gutter = () => cell("TD", ["data-rich-gutter"]);
-const headerRow = (...names: string[]) => ({ cells: names.map(name => cell("TH")) });
+const headerRow = (...names: string[]) => ({ cells: names.map(() => cell("TH")) });
 const bodyRow = (...values: string[]) => ({ cells: [gutter(), ...values.map(() => cell("TD"))] });
 
 /** The layout the editor actually produces for a 2-column table. */

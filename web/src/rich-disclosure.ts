@@ -43,7 +43,7 @@ function depthDelta(raw: string): number {
  * an unmatched closer or an opener that never closes stays in its own node, which
  * is exactly the per-node behaviour that existed before.
  */
-export function disclosureSpans(source: string, nodes: SeriesNode[]): Map<number, DisclosureSpan> {
+export function disclosureSpans(_source: string, nodes: SeriesNode[]): Map<number, DisclosureSpan> {
 	const spans = new Map<number, DisclosureSpan>();
 	for (let i = 0; i < nodes.length; i++) {
 		const node = nodes[i];

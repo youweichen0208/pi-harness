@@ -45,7 +45,7 @@ function commandAttemptKey(item: Item) {
 
 /** Presentation only: tool IDs and the authoritative result lookup stay intact. */
 /** Latest attempt of each command, as its row shows it (retries collapse into one row). */
-export function latestAttemptStates(items: Item[], cwd: string) {
+export function latestAttemptStates(items: Item[], _cwd: string) {
 	return consecutiveAttempts(items, commandAttemptKey)
 		.map(group => ({ state: stateOf(group[group.length - 1].view), view: group[group.length - 1].view }));
 }

@@ -1,4 +1,5 @@
 import type { BackgroundCommand, BackgroundSpan } from "./protocol.js";
+import type { OutputBudgetDecision, OutputLimitSource } from "./model-output-floor.js";
 import { randomUUID } from "node:crypto";
 import { TraceStore, type TraceStoreStatus } from "./trace-store.js";
 import type { AgentSessionEvent, ExtensionFactory } from "@earendil-works/pi-coding-agent";
@@ -27,6 +28,12 @@ export interface ProviderRequestTrace {
 	firstProviderEventMs?: number;
 	firstVisibleDeltaMs?: number;
 	firstOutputKind?: string;
+	resolvedBudget?: number;
+	sdkBudget?: number;
+	outputLimitSource?: OutputLimitSource;
+	outputBudgetOverride?: "PI_MAX_TOKENS" | "PI_MAX_TOKENS_FLOOR";
+	outputBudgetFallback?: boolean;
+	contextTokens?: number;
 	messageEndMs?: number;
 	responseAttempts: { atMs: number; status: number }[];
 	responseAttemptsTruncated?: boolean;
@@ -168,6 +175,7 @@ export class ExecutionTraceSession {
 	private readonly hostRequests = new Map<string, HostRequestState>();
 	private readonly messages = new WeakMap<object, ProviderRequestTrace>();
 	private readonly messagesByTimestamp = new Map<number, ProviderRequestTrace>();
+	private readonly pendingBudgets: OutputBudgetDecision[] = [];
 	private readonly backgroundRequestIds: string[] = [];
 	private readonly backgroundToolIds: string[] = [];
 
@@ -198,6 +206,10 @@ export class ExecutionTraceSession {
 		}
 	}
 
+	recordOutputBudget(decision: OutputBudgetDecision): void {
+		this.pendingBudgets.push({ ...decision });
+	}
+
 	beforeProviderRequest(): void {
 		const at = this.now();
 		const run = this.currentRun;
@@ -208,6 +220,7 @@ export class ExecutionTraceSession {
 		}
 		const requestId = run ? `${run.runId}:request-${++this.requestSeq}` : `${this.sessionId}:background-${++this.backgroundSeq}`;
 		const unresolved = run ? this.openRequests(run).filter(request => request.hookStartMs !== undefined) : [];
+		const budget = this.pendingBudgets.shift();
 		const request: ProviderRequestTrace = {
 			requestId,
 			...(run ? { runId: run.runId, turnIndex: this.currentCompaction ? undefined : run.currentTurnIndex } : {}),
@@ -215,6 +228,7 @@ export class ExecutionTraceSession {
 			reasons: run ? unresolved.length ? ["overlapping_provider_requests"] : [] : ["no_active_agent_run"],
 			hookStartMs: at,
 			responseAttempts: [],
+			...(budget ? { resolvedBudget: budget.resolvedBudget, sdkBudget: budget.sdkBudget, outputLimitSource: budget.source, outputBudgetOverride: budget.override, outputBudgetFallback: budget.fallback, contextTokens: budget.contextTokens } : {}),
 		};
 		for (const previous of unresolved) this.markRequest(previous, "ambiguous", "overlapping_provider_requests");
 		if (run) {
@@ -501,6 +515,7 @@ export class ExecutionTraceSession {
 	private endAssistant(message: AssistantMessage, at: number): void {
 		const request = this.requestForMessage(message);
 		if (request) {
+			this.pendingBudgets.length = 0;
 			request.messageEndMs = at;
 			if (request.status === "open") request.status = "measured";
 			if (typeof message.timestamp === "number" && this.messagesByTimestamp.get(message.timestamp) === request) this.messagesByTimestamp.delete(message.timestamp);

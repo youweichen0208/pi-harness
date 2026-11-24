@@ -6,7 +6,7 @@ Design First 的 M1 指导资源随应用放在 `assets/skills/design-first/`，
 
 文档转 Markdown 与 OKF 知识蒸馏扩展均已移除，不再提供聊天工具、命令或设置条目；实现、Python 资源和打包支持也已删除。
 
-设置 › Extensions 对接 Pi 1.5.2 的 `DefaultPackageManager`、`SettingsManager` 和 `ProjectTrustStore`。安装、移除、更新与资源发现运行在独立 Node worker；浏览页面不执行扩展入口，缺失依赖采用 `resolve(() => "skip")`，不会因浏览自动安装。包变更在新会话生效，当前会话仅在用户点击重载时通过已有 `extensions_reload` 生效。宿主不向模型注册工具、注入消息或系统提示词。
+设置 › Extensions 对接 Pi 1.6.0 的 `DefaultPackageManager`、`SettingsManager` 和 `ProjectTrustStore`。安装、移除、更新与资源发现运行在独立 Node worker；浏览页面不执行扩展入口，缺失依赖采用 `resolve(() => "skip")`，不会因浏览自动安装。包变更在新会话生效，当前会话仅在用户点击重载时通过已有 `extensions_reload` 生效。宿主不向模型注册工具、注入消息或系统提示词。
 
 扩展代码刷新（issue #64）：jiti 对原生 .js/.mjs 走 Node import()/require()，进程内缓存会让 `/restart`、`/reload` 和 `extensions_reload` 重建扩展工厂后仍命中旧代码——扩展内的 MCP 连接等顶层状态也随之遗留。`server/extension-module-cache.ts` 在每次创建 runtime 前注册受控目录（agentDir/extensions、agentDir/npm、cwd/.pi/extensions、cwd/.pi/npm，realpath 双形式匹配），并仅在用户显式触发的重建前（restartSession、`/reload` 命令、`reloadExtensions`）bump 代数——ESM 缓存不可释放，每次刷新多留一份模块实例，所以设置、提示词、MCP 保存共用的 `session.reload()` 不刷新；代数进程全局，刷新后其他对话懒加载受控模块也拿到新实例。bump 机制：resolve 钩子给受控模块 URL 追加 `?piextgen=<代数>` 绕开 ESM loader 永久缓存（CJS 的 require 会剥掉 search，无副作用），同时清空受控目录下的 require.cache 条目刷新 CJS 本体；`module.registerHooks` 不可用时 ESM 优雅降级为旧行为。.ts 由 jiti 每次实例化重新转译，天然新鲜。回归：`tests/restart-extension-cache-test.mjs` 覆盖 .ts 文件、npm CJS 包、npm ESM 包在 /restart、二次重启与 reloadExtensions() 下拿到新代码与新状态，普通 session.reload() 保持旧代码。
 
@@ -26,7 +26,7 @@ Design First 的 M1 指导资源随应用放在 `assets/skills/design-first/`，
 
 `/api/extensions` 的 `builtin-list`、`builtin-toggle` 都绑定活动 conversationId，并沿用 cwd/clientId、同源与 quiesce 校验。清单读取已有资源，不执行工厂、不加载包。工具来源必须匹配具名 inline/builtin 路径；第三方同名工具显示冲突。状态区分加载、关闭、待生效、不可用和配置/加载失败，MCP 的加载状态不代表服务器连接成功。查看设置跳转已有 MCP/Codemode 页。
 
-计划开关移入内置条目，继续使用现有计划协议和延迟生效规则。数据库开关复用 document-extensions.json（保存时清除已移除扩展的旧键），使用版本校验避免覆盖其他客户端的修改；关闭立即拒绝后续执行，开启后按会话实际工具状态提示重载或新建会话。内置页重载按钮仅在连接正常、空闲且会话可写时可用。页面打开时轮询轻量清单，切换会话和关闭页面取消请求，迟到结果不覆盖新状态。
+计划开关移入内置条目，继续使用现有计划协议和延迟生效规则。后台命令开关复用 document-extensions.json（保存时清除已移除扩展的旧键），使用版本校验避免覆盖其他客户端的修改；关闭立即拒绝后续执行，开启后按会话实际工具状态提示重载或新建会话。内置页重载按钮仅在连接正常、空闲且会话可写时可用。页面打开时轮询轻量清单，切换会话和关闭页面取消请求，迟到结果不覆盖新状态。
 
 回归：`tests/builtin-extensions-test.mjs` 使用隔离 WebSocket 服务、真实 SDK 和本地模型夹具验证清单、关闭拒绝、跨客户端配置、版本冲突、新会话/重载；`--browser` 覆盖内置条目、旧版浏览器配置隔离、开关、转换与 OKF 入口缺失、设置跳转、包列表失败、中英文与窄屏。它不证明外部模型的自主语义能力。
 
@@ -48,7 +48,7 @@ Desktop 不打包应用自己的 `extensions/` 或声明其扩展入口。会话
 
 更新检查、更新操作使用按范围隔离的原生内存 SettingsManager，避免原生 update(source) 同时更新两个范围或检查时被项目声明去重。SDK 判断版本和 ref 可更新性；固定 npm 版本、带 Git ref 的来源及本地文件不纳入更新。Git 工作树有未提交改动时阻止更新。范围/tag npm 来源只显示可更新标记，不把 registry/latest 当成满足范围的目标版本。
 
-Pi 1.5.2 更新结果由 `extension-updates.ts` 按包收集：更新前后读取实际安装版本或 Git HEAD，保留原生 `result` 和警告事件；离线、锁定、未信任、本地及受保护包明确标记跳过。更新动作直接交给原生 update 做版本判断，不用另一次检查过滤掉无变化或警告结果。一个包失败后继续处理其余包，增量结果经 worker IPC 保留在任务中；`partial` 表示部分失败，崩溃时也保留已收到结果。界面每包一行摘要，警告/错误保留说明，详细日志默认收起，版本未验证不声称更新成功。
+Pi 1.6.0 更新结果由 `extension-updates.ts` 按包收集：更新前后读取实际安装版本或 Git HEAD，保留原生 `result` 和警告事件；离线、锁定、未信任、本地及受保护包明确标记跳过。更新动作直接交给原生 update 做版本判断，不用另一次检查过滤掉无变化或警告结果。一个包失败后继续处理其余包，增量结果经 worker IPC 保留在任务中；`partial` 表示部分失败，崩溃时也保留已收到结果。界面每包一行摘要，警告/错误保留说明，详细日志默认收起，版本未验证不声称更新成功。
 
 ## 目录和展示
 
@@ -84,8 +84,6 @@ pi.dev 当前通过服务端 HTML 提供目录，没有依赖未公开 JSON API�
 已安装页签数量仅统计包，不包括单文件；文件保留路径、打开/复制、重载、开关和展开编辑。键盘支持页签方向键、弹窗焦点循环及关闭后焦点恢复。更新页继续隐藏 pi-harness 和单文件。扩展回归同时覆盖失败重试、详情只读权限、中英文、深色与 390px 窄屏。
 
 #46 回归：`tests/extensions-worker-test.mjs` 在真实 npm 卸载后的 SettingsManager.reload 注入无活跃句柄的异步等待，证明 IPC 不会提前退出；这用于生命周期故障注入，不表示已还原用户原始机器的具体触发条件。另有普通 Node / Electron 原生卸载和并发 HTTP 列表测试。
-
-数据库查询由原生内置扩展 `pi-harness-database` 提供 `database_read`，权限绑定显式附加连接的当前会话；连接与只读执行见 [数据库工作台](architecture-database.md)。
 
 Pi 1.5 的包安装失败会出现在原生资源加载器 warnings 中。会话首次绑定和重载后，WebUI 将 warnings/errors 发送到带 conversationId 的通知；首次 socket attach 前暂存通知。兼容入口仍支持用户扩展从 pi-ai 导入 Type/StringEnum，迁移限制见 [升级说明](pi-1.5-upgrade.md)。
 

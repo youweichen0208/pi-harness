@@ -105,14 +105,37 @@ describe("RunRecoveryCoordinator", () => {
 		expect(f.session.sendCustomMessage).not.toHaveBeenCalled();
 	});
 
+	it("continues when thinking consumes the output budget before any visible answer", async () => {
+		const f = fixture(); f.assistant("length", [{ type: "thinking", thinking: "Still reasoning" }]); await f.settled();
+		expect(f.requests).toHaveLength(1);
+		expect(f.requests[0].messages.at(-1)).toMatchObject({ role: "assistant", stopReason: "length" });
+		expect(f.coordinator.status).toMatchObject({ reason: "length", phase: "recovering", attempt: 1 });
+	});
+
+	it("stops instead of continuing when the SDK projection no longer retains the truncated thinking", async () => {
+		const f = fixture(); f.assistant("length", [{ type: "thinking", thinking: "Still reasoning" }]);
+		vi.spyOn(f.manager, "buildSessionProjection").mockReturnValue({ ...f.manager.buildSessionProjection(), messages: [] });
+		await f.settled();
+		expect(f.requests).toHaveLength(0);
+		expect(f.coordinator.status).toMatchObject({ reason: "length", phase: "stopped", detail: "failed" });
+	});
+
+	it("marks a continuation that returns a provider error as failed without consuming another attempt", async () => {
+		const f = fixture(); f.assistant("length", [{ type: "thinking", thinking: "Still reasoning" }]); await f.settled();
+		expect(f.requests).toHaveLength(1);
+		f.assistant("error", []); await f.settled();
+		expect(f.requests).toHaveLength(1);
+		expect(f.host.toolText).not.toHaveBeenCalled();
+		expect(f.coordinator.status).toMatchObject({ reason: "length", phase: "stopped", detail: "failed", attempt: 1 });
+	});
+
 	it.each([
-		{ content: [{ type: "thinking", thinking: "Still reasoning" }] },
 		{ content: [] },
 		{ content: [{ type: "text", text: "...\n..." }] },
-	] satisfies { content: AssistantMessage["content"] }[])("does not blindly continue length without meaningful visible output %#", async ({ content }) => {
+	] satisfies { content: AssistantMessage["content"] }[])("does not blindly continue length without text or thinking %#", async ({ content }) => {
 		const f = fixture(); f.assistant("length", content); await f.settled();
 		expect(f.session.sendCustomMessage).not.toHaveBeenCalled();
-		expect(f.coordinator.status).toMatchObject({ detail: "thinking-only", phase: "stopped" });
+		expect(f.coordinator.status).toMatchObject({ detail: "empty", phase: "stopped" });
 	});
 
 	it("does not continue length containing an unresolved tool call", async () => {
@@ -144,6 +167,18 @@ describe("RunRecoveryCoordinator", () => {
 		f.user(); f.assistant(); await f.settled();
 		expect(f.requests).toHaveLength(3);
 		expect(f.coordinator.status).toMatchObject({ reason: "length", attempt: 1 });
+	});
+
+	it("shares the total action cap with an invalid-budget fallback", async () => {
+		const f = fixture();
+		expect(f.coordinator.reserveAutomaticAction("invalid-budget")).toBe(true);
+		expect(f.coordinator.reserveToolText()).toBe(true);
+		f.assistant(); await f.settled();
+		expect(f.requests).toHaveLength(1);
+		f.assistant(); await f.settled();
+		expect(f.requests).toHaveLength(1);
+		expect(f.coordinator.status).toMatchObject({ reason: "length", phase: "stopped", detail: "exhausted", attempt: 1 });
+		expect(f.coordinator.reserveAutomaticAction("invalid-budget")).toBe(false);
 	});
 
 	it("restores counts and status without automatically running after reopen", async () => {

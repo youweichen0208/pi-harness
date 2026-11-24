@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { DefaultPackageManager, VERSION, type AgentSession } from "@earendil-works/pi-coding-agent";
 import type { ComponentUpdate } from "./protocol.js";
 

@@ -7,10 +7,11 @@ export const RUN_RECOVERY_ENTRY = "pi-harness:run-recovery";
 export const RUN_CONTINUATION = "pi-harness:run-continuation";
 const PROTECTION_ENTRY = "pi-harness:repetition-protection";
 type Reason = UiRunRecovery["reason"];
+type AutomaticReason = Reason | "invalid-budget";
 type Assistant = Extract<AgentSession["messages"][number], { role: "assistant" }>;
 interface RecordState {
 	root: string;
-	counts: Record<Reason, number>;
+	counts: Record<Reason, number> & Partial<Record<"invalid-budget", number>>;
 	status?: UiRunRecovery;
 }
 interface RecoveryHost {
@@ -96,18 +97,20 @@ export class RunRecoveryCoordinator {
 		if (this.record.status && this.record.status.phase !== "stopped" && this.host.current()) this.save({ ...this.record.status, phase: "stopped", detail: "cancelled" });
 	}
 	dispose(): void { this.cancel(); this.detectors.clear(); }
-	private limit(reason: Reason): number { return reason === "length" ? 2 : 1; }
-	private available(reason: Reason): boolean {
-		return this.record.counts[reason] < this.limit(reason) && Object.values(this.record.counts).reduce((a, b) => a + b, 0) < 3;
+	private limit(reason: AutomaticReason): number { return reason === "length" ? 2 : 1; }
+	private count(reason: AutomaticReason): number { return this.record.counts[reason] ?? 0; }
+	private available(reason: AutomaticReason): boolean {
+		return this.count(reason) < this.limit(reason) && Object.values(this.record.counts).reduce((a, b) => a + b, 0) < 3;
 	}
-	/** Existing tool-text remediation shares this budget rather than starting a new user task. */
-	reserveToolText(): boolean {
+	reserveAutomaticAction(reason: AutomaticReason): boolean {
 		this.syncRoot();
-		if (this.cancelled || !this.available("tool-text")) return false;
-		this.record.counts["tool-text"]++;
+		if (this.cancelled || !this.available(reason)) return false;
+		this.record.counts[reason] = this.count(reason) + 1;
 		this.save(undefined);
 		return true;
 	}
+	/** Existing tool-text remediation shares this budget rather than starting a new user task. */
+	reserveToolText(): boolean { return this.reserveAutomaticAction("tool-text"); }
 	private eligible(epoch: number, root: string): boolean {
 		return this.host.current() && !this.cancelled && this.epoch === epoch && this.rootId() === root && this.host.admitted() && this.session.isIdle && !this.session.getSteeringMessages().length && !this.session.getFollowUpMessages().length;
 	}
@@ -189,13 +192,20 @@ export class RunRecoveryCoordinator {
 			if (last?.role !== "assistant") return;
 			if (this.nativeFailed) { if (last.stopReason === "length") this.fail("length"); return; }
 			if (last.stopReason !== "length") {
-				if (this.record.status?.phase === "recovering") this.save(undefined);
+				if (this.record.status?.phase === "recovering") {
+					if (last.stopReason === "error") { this.fail(this.record.status.reason); return; }
+					this.save(undefined);
+				}
 				this.working = undefined;
 				void this.host.toolText().catch(() => { if (this.epoch === epoch && !this.cancelled) this.fail("tool-text"); }); return;
 			}
 			const text = last.content.filter(b => b.type === "text").map(b => b.text).join("\n");
-			const detail = last.content.some(b => b.type === "toolCall") ? "unsafe" : !/[\p{L}\p{N}]/u.test(text) ? "thinking-only" : undefined;
+			const hasThinking = last.content.some(b => b.type === "thinking" && /\S/u.test(b.thinking));
+			const detail = last.content.some(b => b.type === "toolCall") ? "unsafe" : !/[\p{L}\p{N}]/u.test(text) && !hasThinking ? "empty" : undefined;
 			if (detail) { this.save({ reason: "length", phase: "stopped", attempt: this.record.counts.length, limit: 2, detail }); return; }
+			if (hasThinking && !this.session.sessionManager.buildSessionProjection().messages.some(message => message.role === "assistant" && message.timestamp === last.timestamp && message.content.some(block => block.type === "thinking" && /\S/u.test(block.thinking)))) {
+				this.fail("length"); return;
+			}
 			await this.continue("length", epoch, root);
 		} finally { if (this.working === operation) this.working = undefined; }
 	}
@@ -208,7 +218,12 @@ export class RunRecoveryCoordinator {
 			if (this.host.current() && this.epoch === epoch && this.rootId() === root) this.save({ reason, phase: "stopped", attempt: this.record.counts[reason], limit: this.limit(reason), detail: "cancelled" });
 			return;
 		}
-		const attempt = ++this.record.counts[reason], limit = this.limit(reason);
+		if (!this.reserveAutomaticAction(reason)) {
+			release();
+			this.save({ reason, phase: "stopped", attempt: this.count(reason), limit: this.limit(reason), detail: "exhausted" });
+			return;
+		}
+		const attempt = this.count(reason), limit = this.limit(reason);
 		this.save({ reason, phase: "recovering", attempt, limit });
 		const content = reason === "repetition"
 			? "上一次生成因重复输出已中止，异常回复已隔离。此前已执行的工具调用和结果均已保留。请从尚未完成的步骤继续，不要重复已完成的操作；需要操作时通过真实工具调用执行，任务已完成则直接给出结果。"

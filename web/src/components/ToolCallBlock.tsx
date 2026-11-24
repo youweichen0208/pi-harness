@@ -6,7 +6,6 @@ import { FiGlobe } from "react-icons/fi";
 import { copyText } from "../clipboard";
 import { UiIcon, type UiIconName } from "./UiIcon";
 import { ToolOutputDownload } from "./ToolOutputDownload";
-import { withToken } from "../auth-token";
 import { CodemodeCard } from "./CodemodeCard";
 import { ToolStructuredOutput } from "./ToolStructuredOutput";
 
@@ -22,7 +21,6 @@ import {
 	FiChevronDown,
 	FiChevronRight,
 	FiSquare,
-	FiTerminal,
 	FiX,
 } from "react-icons/fi";
 import type { ToolStatus, UiMessage, UiTextBlock, UiToolCallBlock } from "../types";

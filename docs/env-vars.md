@@ -22,7 +22,7 @@
 | `PI_WEB_PLAYGROUND` | 空 | 设为 `off`（或 `0`/`false`）时**硬关闭 Python 代码运行（Playground）并在设置页锁定为不可修改**，用于 Docker/共享部署；不设置时由 `<PI_WEB_DATA_DIR>/playground.json` 的 `enabled` 决定（首次检测到 Python 默认开启，保留已保存选择）。见 `docs/architecture-playground.md` |
 | `PI_SNAPSHOT_TIMINGS` | `summary` | 默认在真实 `ClientSession` 里有界采样快照管线 duration/count，不逐报文扫描字节。设为 `1`/`detail` 时额外统计每条 WS 消息的未压缩 JSON bytes 与分布；`off`/`0`/`false` 关闭。配合 `PI_SNAPSHOT_TIMINGS_OUT` 在 `SIGTERM`/`SIGINT` 时把按 clientId 分离的报告写成 JSON。调试口径见 `docs/architecture-core.md` |
 | `PI_SNAPSHOT_TIMINGS_OUT` | 空 | 采样报告的输出路径；未设置时不写文件 |
-| `PI_TASK_TIMINGS` | 开启 | 默认通过原生 SDK hooks 记录 Agent Execution Trace（hostRequest/run/request/tool 关联、wall time、gap、宿主快照与 WS span），并以 metadata-only JSONL 持久化到 `<PI_WEB_DATA_DIR>/traces/`；`off`/`0`/`false` 停止新采集。顶栏 Trace 或 `/trace` 查看，`/export` 导出含正文的静态 HTML，`/export json` 只导出非匿名 metadata。不记录提示词、工具参数、响应正文或凭据；见 `docs/architecture-core.md` |
+| `PI_TASK_TIMINGS` | 开启 | 默认通过原生 SDK hooks 记录 Agent Execution Trace（hostRequest/run/request/tool 关联、wall time、gap、宿主快照与 WS span），并以 metadata-only JSONL 持久化到 `<PI_WEB_DATA_DIR>/traces/`；`off`/`0`/`false` 停止新采集。顶栏 Trace 或 `/trace` 查看，`/trace-export` 导出含正文的静态 HTML，`/trace-export json` 只导出非匿名 metadata。不记录提示词、工具参数、响应正文或凭据；见 `docs/architecture-core.md` |
 | `PI_TASK_TIMINGS_OUT` | 空 | 额外在优雅停机时输出完整内存 trace 的路径；未设置时不写此报告。无法唯一关联或 provider 缺少 hook 的指标写为 `ambiguous`/`unmeasured`，不写 0 |
 | `PI_WEB_CLIENT_IDLE_MINUTES` | `30` | 客户端（浏览器标签页）断开且无运行任务、终端、后台服务后，超过 N 分钟回收其会话（释放运行时与定时器；最近项目等状态已持久化，同一 clientId 回来会重建）；0 = 不回收。`client-state.json` 另外最多保留 200 个客户端条目 |
 
@@ -33,7 +33,3 @@ Pi 1.4.0 的 `PI_CODEMODE_MAX_WORKERS` 控制同一服务进程中所有会话�
 例如前台启动：`PI_CODEMODE_MAX_WORKERS=4 pi-harness`。使用 systemd、launchd 或 Docker 时配置服务进程的环境并重启服务；终端中设置变量不会修改已经运行的服务。该值由 SDK 读取，WebUI 不提供额外设置项；提高上限会增加并发内存占用。
 
 `PI_WEB_PYTHON`：Playground 的 Python 3.9+ 解释器路径，可指向虚拟环境；不接受 shell 参数。未设置时探测 VIRTUAL_ENV、PATH 和 Windows py -3。Jedi 补全与 Black 格式化也使用该环境。见 `architecture-playground.md`。
-
-### JDBC 运行时
-
-`PI_WEB_JAVA`：可选，指定 GaussDB JDBC 使用的 `java` / `java.exe` 完整路径；设置后优先使用且不回退。未设置时探测本机 DataGrip bundled runtime、JAVA_HOME 与 PATH。不自动安装 Java。

@@ -40,7 +40,7 @@ try {
 	installTs("v1"); installPkg("cjspkg", "v1"); installPkg("esmpkg", "v1", "module");
 	cs = await ClientSession.create("restart-ext-cache", root, new ClientStateStore(join(root, "state.json")), new ThinkingDurationStore(join(root, "thinking.json")));
 	const wire = []; cs.attachSink(m => wire.push(m));
-	const notices = () => wire.filter(m => m.type === "notice").map(m => m.text);
+	const notices = () => wire.filter(m => m.type === "notice").map(m => m.text).filter(text => /^(?:ts|cjspkg|esmpkg)-/.test(text));
 	const probeAll = async () => { for (const cmd of ["/probets", "/probe-cjspkg", "/probe-esmpkg"]) await cs.prompt(cmd); };
 
 	await probeAll();

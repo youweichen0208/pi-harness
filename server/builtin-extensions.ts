@@ -9,18 +9,17 @@ import { existsSync } from "node:fs";
 import type { BuiltinExtensionId, BuiltinExtensionsState, BuiltinExtensionState } from "./protocol.js";
 
 const expectedTools: Partial<Record<BuiltinExtensionId, string[]>> = {
-	"pi-harness-database": ["database_read"],
 	codemode: ["codemode"], "tool-search": ["tool_search"],
 };
 const owns = (path: string, id: string) => path === `<inline:${id}>` || path === `builtin:${id}`;
-export function documentSettingsVersion(): string {
+function documentSettingsVersion(): string {
 	return createHash("sha256").update(JSON.stringify(getDocumentSettings())).digest("hex");
 }
 export function toggleBuiltinDocument(id: unknown, enabled: unknown, version: unknown): void {
 	if (id === "pi-harness-design-first" && typeof enabled === "boolean" && typeof version === "string") { toggleDesignFirst(enabled, version); return; }
-	if ((id !== "background-bash" && id !== "pi-harness-database") || typeof enabled !== "boolean") throw Error("Invalid built-in extension change");
+	if (id !== "background-bash" || typeof enabled !== "boolean") throw Error("Invalid built-in extension change");
 	if (version !== documentSettingsVersion()) throw Error("Document settings changed; refresh and retry");
-	updateDocumentSettings(id === "background-bash" ? { backgroundEnabled: enabled } : { databaseEnabled: enabled });
+	updateDocumentSettings({ backgroundEnabled: enabled });
 }
 
 /** Inventory reads existing session resources; it never runs factories or reloads. */
@@ -41,10 +40,6 @@ export function builtinExtensionsState(session: AgentSession, conversationId: st
 		const failure = resources.errors.find(error => owns(error.path, id));
 		const item: BuiltinExtensionState = { id, status: "loaded", tools: ownedTools.map(tool => tool.name), commands: extension ? [...extension.commands.keys()] : [] };
 		if (failure) return { ...item, status: "error", error: failure.error };
-		if (id === "pi-harness-database") {
-			if (!documentSettings) return { ...item, status: "error", error: documentError };
-			item.enabled = documentSettings.databaseEnabled;
-		}
 		if (conflict || !extension || expected.some(name => !ownedTools.some(tool => tool.name === name))) return { ...item, status: "unavailable", reason: conflict ? "conflict" : "missing" };
 		if (item.enabled === false) return { ...item, status: "disabled" };
 		if (item.enabled && ownedTools.some(tool => tool.exposure === "hidden")) return { ...item, status: "pending" };

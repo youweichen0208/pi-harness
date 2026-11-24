@@ -73,7 +73,6 @@ App 按 chat.plugins 动态 import 各插件的 client bundle（`/* @vite-ignore
 | demo-mailbox | `dev/plugins/demo-mailbox/` | 内存邮箱 demo，plugin-test 夹具 |
 | webmail | `dev/plugins/webmail/` | 📬 网页邮箱，IMAP/SMTP 邮件管理 |
 | vscode-editor | `dev/plugins/vscode-editor/` | 📝 编辑器 + SSH（原独立插件合并） |
-| db-client | `dev/plugins/db-client/` | 🗄️ 数据库连接管理（mysql2/pg/mssql/sqlite/mongodb/redis） |
 
 ## 回归测试
 
@@ -85,7 +84,6 @@ App 按 chat.plugins 动态 import 各插件的 client bundle（`/* @vite-ignore
 | `plugin-cwd-test.mjs` | 8989 | set_cwd→notifyCwd→广播全链路 |
 | `plugin-update-test.mjs` | — | install/check-updates/rollback 全链路 |
 | `ssh-plugin-test.mjs` | 8964 | SSH 远程文件/终端全链路（mock SSH 服务端） |
-| `db-client-test.mjs` | 8968 | SQLite 全链路协议冒烟 |
 | 单测 `plugin-facilities.test.ts` | — | storage/secrets/deps/apiVersion 门控 |
 | 单测 `plugin-settings.test.ts` | — | schema 解析/校验/持久化 |
 | 单测 `plugin-updater.test.ts` | — | 备份/回滚/prune/资源解析 |
@@ -102,7 +100,7 @@ App 按 chat.plugins 动态 import 各插件的 client bundle（`/* @vite-ignore
 
 `pi-mcp-adapter no longer reads …/mcp.json` 来自第三方扩展，不是 Windows 目录错误。原生 pi 同时使用 mcp.json，WebUI 不执行提示中的 mv、不自动迁移或禁用扩展。遇到这一明确的迁移提示时，通知提供中英文说明和 Extensions 入口：使用内置 MCP 的用户可以关闭旧适配器并重载，保留原生配置；继续使用适配器的用户按其文档维护独立的 mcp-adapter.json。原始提示折叠保留，其他错误原样展示。回归：`notices.test.ts` 与 `notice-drop-browser-test.mjs`。
 
-### Pi 1.5.2 MCP / Codemode 工作台
+### Pi 1.6.0 MCP / Codemode 工作台
 
 原生 MCP 与 Codemode 的底层依赖已拆分为同版本 `pi-mcp` / `pi-codemode`，宿主继续使用 coding-agent 的公开工厂和原生配置校验入口；桌面依赖闭包由包内原生工具回归验证。分类模型（含 Microsoft-Decision-1）通过原生 `models.classify` 使用并计入既有 Codemode 费用展示，不作为聊天模型提供选择。
 

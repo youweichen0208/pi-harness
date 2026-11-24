@@ -1,4 +1,4 @@
-import { outputTokenLimit } from "./model-output-floor.js";
+import type { OutputBudgetMetadata } from "./model-output-floor.js";
 import { mergeModelCompat, readModelCompat } from "./model-config-merge.js";
 import { parse as jsonc, type ParseError } from "jsonc-parser";
 import { createHash } from "node:crypto";
@@ -96,6 +96,7 @@ export class ModelSourceSync {
 	private entries: Entry[] = [];
 	private nativeFallbacks = new Map<string, ModelOrigin>();
 	private nativeMatches = new Map<string, string>();
+	private nativeOutputLimits = new Map<string, OutputBudgetMetadata>();
 	private statuses: ModelSourceStatus[] = [];
 	private bindings = new Set<Binding>();
 	private watchers: FSWatcher[] = [];
@@ -169,13 +170,6 @@ export class ModelSourceSync {
 			try { this.persist(); } catch { this.state = previous; this.storageError = true; entries.length = 0; }
 		}
 		if (!this.storageError) for (const [provider, c] of Object.entries(this.state.local)) entries.push({ aliases: [...new Set([provider, ...Object.entries(this.state.localAliases ?? {}).filter(([, target]) => target === provider).map(([alias]) => alias)])], provider, connection: c, slots: [], origin: { sources: [c.source], mode: "local" } });
-		// Apply after identity/deduplication: a deployment override must not merge
-		// conflicting source declarations. Independent models use the same floor.
-		for (const entry of entries) {
-			const c = entry.connection;
-			const maxTokens = outputTokenLimit(c.maxTokens, c.contextWindow, this.options.env ?? process.env);
-			if (maxTokens !== c.maxTokens) entry.connection = { ...c, maxTokens, unknownCapabilities: c.unknownCapabilities?.filter(field => field !== "maxTokens") };
-		}
 		const next = JSON.stringify([entries, this.statuses.map(s => s.status)]);
 		if (next !== this.previous || piFiles !== this.piFiles) { this.revision++; this.previous = next; this.piFiles = piFiles; this.entries = entries; }
 		this.watchFiles([...result.files, this.file]);
@@ -260,6 +254,7 @@ export class ModelSourceSync {
 	/** Compare only literal native API configuration; never invoke a credential helper for deduplication. */
 	private matchNative(runtime: ModelRuntime) {
 		this.nativeMatches.clear();
+		this.nativeOutputLimits.clear();
 		if (this.state.disabled.includes("pi") || this.statuses[0]?.status !== "ready") return;
 		const env = this.options.env ?? process.env;
 		let nativeAliases = [...(this.state.nativeAliases ?? [])];
@@ -283,27 +278,32 @@ export class ModelSourceSync {
 			if (!safe) continue;
 			let baseUrl: string; try { baseUrl = new URL(m.baseUrl).href; } catch { continue; }
 			const native: Connection = { source: "pi", slot: `${m.provider}/${m.id}`, id: m.id, api: m.api as Connection["api"], baseUrl, key, headers,
+				unknownCapabilities: definition ? capabilityFields.filter(field => definition[field] === undefined) : [],
 				authHeader: p.authHeader === true, reasoning: true, input: m.input, contextWindow: m.contextWindow, maxTokens: m.maxTokens };
 			for (const entry of this.entries) {
 				if (entry.origin.mode !== "synced") continue;
-				// Compare effective limits with the candidate native context before
-				// completing capabilities; otherwise the conservative context cap
-				// itself prevents an otherwise equivalent native match.
-				const c = entry.connection;
-				const candidate = c.unknownCapabilities?.includes("contextWindow")
-					? { ...c, maxTokens: outputTokenLimit(c.maxTokens, native.contextWindow, env) }
-					: c;
-				const completed = completeCapabilities([candidate, native])[0];
+				const completed = completeCapabilities([entry.connection, native])[0];
 				if (!equivalent(native, completed)) continue;
 				entry.connection = completed;
 				this.nativeMatches.set(entry.provider, m.provider);
 				nativeAliases.push({ provider: m.provider, id: m.id, slots: [...entry.slots] });
 			}
 		}
+		for (const m of runtime.getAvailableSnapshot()) {
+			const p = record(providers[m.provider]);
+			const definition = (Array.isArray(p.models) ? p.models.map(record) : []).find(d => d.id === m.id && (!d.type || d.type === "chat"));
+			if (!definition) continue;
+			this.nativeOutputLimits.set(`${m.provider}/${m.id}`, definition.maxTokens === undefined ? { inferred: true } : { userConfiguredCap: m.maxTokens });
+		}
 		if (JSON.stringify(nativeAliases) !== JSON.stringify(this.state.nativeAliases ?? [])) {
 			const previous = this.state.nativeAliases; this.state.nativeAliases = nativeAliases;
 			try { this.persist(); } catch (error) { this.state.nativeAliases = previous; throw error; }
 		}
+	}
+	outputBudgetMetadata(provider: string, id: string): OutputBudgetMetadata | undefined {
+		const entry = this.entries.find(e => e.connection.id === id && (e.provider === provider || e.aliases.includes(provider) || this.nativeMatches.get(e.provider) === provider));
+		if (entry) return entry.connection.unknownCapabilities?.includes("maxTokens") ? { inferred: true } : { userConfiguredCap: entry.connection.maxTokens };
+		return this.nativeOutputLimits.get(`${provider}/${id}`);
 	}
 	visible(provider: string) { if (this.entries.some(e => e.provider !== provider && e.aliases.includes(provider))) return false; const native = this.nativeMatches.get(provider); return this.selectable(provider) && (!native || !this.selectable(native)); }
 
@@ -361,7 +361,7 @@ export class ModelSourceSync {
 		return this.entries.map(({ provider, connection: c, origin }) => ({ providerId: provider, name: c.name || c.id, api: c.api,
 			// Query parameters may hold credentials. Editing an unchanged redacted URL preserves it.
 			baseUrl: c.baseUrl.split("?")[0], authHeader: c.authHeader, origin, compat: readModelCompat(c.providerCompat),
-			models: [{ id: c.id, name: c.name, reasoning: true, input: c.input, contextWindow: c.contextWindow, maxTokens: c.maxTokens, compat: readModelCompat(c.compat) }] }));
+			models: [{ id: c.id, name: c.name, reasoning: true, input: c.input, contextWindow: c.contextWindow, maxTokens: c.unknownCapabilities?.includes("maxTokens") ? undefined : c.maxTokens, compat: readModelCompat(c.compat) }] }));
 	}
 	owns(provider: string) { return /^sync-[a-f0-9]{24}$/.test(provider); }
 	async edit(provider: string, config?: UiProviderConfig) {
@@ -382,7 +382,7 @@ export class ModelSourceSync {
 			const key = config.apiKey?.trim() || c.key;
 			const headers = { ...c.headers };
 			if (!c.authHeader && headers.Authorization === `Bearer ${c.key}`) headers.Authorization = `Bearer ${key}`;
-			this.state.local[provider] = { ...c, compat, providerCompat, unknownCapabilities: [], headers, authHeader: config.authHeader ?? c.authHeader, id: m.id, name: config.name || m.name, api: config.api as Connection["api"], baseUrl, key,
+			this.state.local[provider] = { ...c, compat, providerCompat, unknownCapabilities: m.maxTokens === undefined && c.unknownCapabilities?.includes("maxTokens") ? ["maxTokens"] : [], headers, authHeader: config.authHeader ?? c.authHeader, id: m.id, name: config.name || m.name, api: config.api as Connection["api"], baseUrl, key,
 				reasoning: true, input: m.input?.includes("image") ? ["text", "image"] : ["text"], contextWindow: m.contextWindow || c.contextWindow, maxTokens: m.maxTokens || c.maxTokens };
 		}
 		if (config) this.state.localAliases = { ...this.state.localAliases, ...Object.fromEntries(entry.aliases.filter(id => id !== provider).map(id => [id, provider])) };

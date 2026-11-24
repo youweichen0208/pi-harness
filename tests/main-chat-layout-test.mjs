@@ -181,8 +181,6 @@ try {
 		await input.fill(Array(25).fill('多行输入').join('\n'));
 		assert((await input.boundingBox()).height <= 181);
 		await input.fill('保留这份草稿');
-		await page.locator('.view-switch').getByRole('button', { name: '数据库', exact: true }).click();
-		await page.locator('.database-workbench').waitFor();
 		assert.equal(await input.inputValue(), '保留这份草稿');
 		assert.deepEqual(errors, []);
 		await page.close();

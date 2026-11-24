@@ -65,6 +65,15 @@ describe("ExecutionTraceSession", () => {
 		});
 	});
 
+	it("records resolver and SDK output budgets on their matching provider request", () => {
+		const trace = new ExecutionTraceSession("session", () => 1);
+		emit(trace, "agent_start");
+		trace.recordOutputBudget({ resolvedBudget: 8192, sdkBudget: 4096, source: "inferred", contextTokens: 12000, override: "PI_MAX_TOKENS_FLOOR", fallback: true });
+		trace.beforeProviderRequest();
+		const request = (trace.report() as any).runs[0].requests[0];
+		expect(request).toMatchObject({ resolvedBudget: 8192, sdkBudget: 4096, outputLimitSource: "inferred", outputBudgetOverride: "PI_MAX_TOKENS_FLOOR", outputBudgetFallback: true, contextTokens: 12000 });
+	});
+
 	it("reports an unclosed root tool as incomplete in both aggregation scopes", () => {
 		let clock = 0;
 		const trace = new ExecutionTraceSession("session", () => ++clock);

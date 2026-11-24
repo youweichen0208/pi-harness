@@ -94,7 +94,7 @@ function formatModified(ts: number, yesterday: string): string {
 }
 
 export const LeftPanel = memo(function LeftPanel({
-	directoryCollapsed, onToggleDirectory, notesOpen, scratchOpen, onNavigate, notesList, onOpenSettings, onNewChat, ready, status, cwd, sessionFile, conversations, sessions, projects, projectWorkspaces, projectWorkspaceResult, dirBrowse, activeConversationId, send, active }: LeftPanelProps) {
+	directoryCollapsed, notesOpen, scratchOpen, onNavigate, notesList, onOpenSettings, onNewChat, ready, status, cwd, sessionFile, conversations, sessions, projects, projectWorkspaces, projectWorkspaceResult, dirBrowse, activeConversationId, send, active }: LeftPanelProps) {
 	const { t, locale } = useI18n();
 	const [selectedWorkspace, setSelectedWorkspace] = useState(selectedProjectWorkspace);
 	useEffect(() => {

@@ -7,7 +7,6 @@ import {
 	FiSidebar,
 	FiFolder,
 	FiChevronDown,
-	FiDatabase,
 	FiGitBranch,
 	FiGlobe,
 	FiMenu,
@@ -32,7 +31,6 @@ import { useI18n, type Locale } from "../i18n";
 interface TopBarProps {
 	onBrowser?: () => void;
 	browserOpen?: boolean;
-	onOpenDatabase: () => void;
 	leftCollapsed?: boolean;
 	filesOpen?: boolean;
 	gitChangeCount: number;
@@ -74,13 +72,11 @@ interface TopBarProps {
 export function TopBar({
 	onBrowser,
 	browserOpen = false,
-	onOpenDatabase,
 	leftCollapsed = false,
 	filesOpen = false,
 	gitChangeCount,
 	chat,
 	send,
-	terminal,
 	view,
 	plugins,
 	onViewChange,
@@ -196,7 +192,6 @@ export function TopBar({
 						["git", t("scmTab"), <FiGitBranch />],
 					] as const).map(([id, label, icon]) => <button key={String(id)} type="button" role="tab" aria-label={String(label)} title={id === "git" && notGitRepo ? t("notGitRepoShort") : String(label)} aria-selected={view === id} aria-disabled={id === "git" && notGitRepo} className={view === id ? "active" : ""} onClick={() => { if (id !== "git" || !notGitRepo) onViewChange(id as TopBarProps["view"]); }}>{icon}<span>{label}</span>{id === "git" && !notGitRepo && gitChangeCount > 0 && <em className="tab-change-count">{gitChangeCount}</em>}</button>)}
 					<button type="button" aria-label={t("traceTitle")} title={t("traceTitle")} onClick={openTrace}><FiActivity /><span>Trace</span></button>
-					<button type="button" aria-label={t("dbTitle")} title={t("dbTitle")} onClick={onOpenDatabase}><FiDatabase /><span>{t("dbTitle")}</span></button>
 					<button type="button" role="tab" aria-label={t("nodes")} title={t("nodes")} aria-selected={view === "nodes"} className={view === "nodes" ? "active" : ""} onClick={() => onViewChange("nodes")}><FiShare2 /><span>{t("nodes")}</span></button>
 					{onBrowser && view === "chat" && <button type="button" aria-label={t("embeddedBrowser")} title={t("embeddedBrowser")} aria-expanded={browserOpen} onClick={onBrowser}><FiGlobe aria-hidden="true" /><span>{t("embeddedBrowser")}</span></button>}
 					{view === "chat" && <button type="button" className="workspace-files-toggle" aria-label={t("openFiles")} title={t("openFiles")} aria-expanded={filesOpen} onClick={() => onOpenPanel("right")}><FiFolder aria-hidden="true" /><span>{t("workspaceFiles")}</span></button>}

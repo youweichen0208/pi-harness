@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { decodeText, looksLikeText, previewKind } from "./text-sniff.js";
 import { wikiMetadata, wikiReferences, resolveWikiLink, wikiLinkIndex } from "./wiki-links.js";
 import { readWikiPdf } from "./wiki-pdf.js";

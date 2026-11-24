@@ -35,12 +35,12 @@ export function windowsBashDir(): string {
 }
 
 /** bash.exe (busybox bash applet) used by the terminal and the SDK bash tool. */
-export function windowsBashPath(): string {
+function windowsBashPath(): string {
 	return join(windowsBashDir(), "bash.exe");
 }
 
 /** True when a standard Git Bash install exists (SDK's preferred shell). */
-export function hasGitBash(): boolean {
+function hasGitBash(): boolean {
 	const pf = process.env.ProgramFiles;
 	const pf86 = process.env["ProgramFiles(x86)"];
 	for (const cand of [

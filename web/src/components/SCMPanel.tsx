@@ -303,7 +303,7 @@ export function ScmPanel({
 	/* ------------------------------------------------------------------ */
 
 	const refresh = useCallback(
-		(manual = false, silent = false) => {
+		(_manual = false, silent = false) => {
 			if (!chat.ready || chat.status !== "open") return;
 			if (!chat.state?.cwd) return;
 			// Workspace switch → reset stale selections so nothing from the

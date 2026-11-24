@@ -86,7 +86,7 @@ describe("persistent project workspaces", () => {
 	});
 
 	it("merges an older per-app catalog once, combining same-named workspaces", () => {
-		const { root, file, store } = fixture();
+		const { root, store } = fixture();
 		const [a, b, c] = ["a", "b", "c"].map((name) => { const path = join(root, name); mkdirSync(path); return path; });
 		const shared = store.apply(0, { kind: "create", name: "Work" }).workspaceId;
 		store.apply(1, { kind: "add", id: shared, path: a });

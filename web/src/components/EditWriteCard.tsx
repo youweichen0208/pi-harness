@@ -57,7 +57,7 @@ function ChangeBody({ change, state, path, toolId }: { change: EditWriteChange; 
 	</div>;
 }
 
-export function EditWriteCard({ item, compact = false, retried = false, live = false }: { item: Item; compact?: boolean; retried?: boolean; live?: boolean }) {
+export function EditWriteCard({ item, retried = false, live = false }: { item: Item; compact?: boolean; retried?: boolean; live?: boolean }) {
 	const t = useChatT();
 	const change = useMemo(() => editWriteChange(item.block, item.view.result), [item.block, item.view.result]);
 	// Show the change directly, including historical edits; an explicit collapse wins.

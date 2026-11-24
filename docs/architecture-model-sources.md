@@ -17,17 +17,19 @@ Claude Code 来源的 `settings.env` 凭据优先于服务进程同类全局变�
 
 协议限定 Anthropic Messages、OpenAI Responses 和 OpenAI-compatible Chat Completions。Claude 的模型 ID 或显式别名映射支持末尾 `[1m]`：导入时去掉该后缀，并明确声明 1,000,000 token 上下文；请求使用去掉后缀的模型 ID。sonnet/opus 等未解析别名、云平台认证、modelOverrides、Codex 命令认证/gateway OAuth/query_params、OpenCode 未知 SDK 或无法转换的 options/variants 均报告不支持。不执行 apiKeyHelper、hooks、插件或远程配置；不读取项目配置、系统钥匙串和第三方订阅 token。不发现远程模型、不发起测试推理。
 
-能力声明按字段区分“未声明”和明确值。接口、模型与认证一致的重复来源中，一个来源未声明而另一个明确声明时，采用明确值；多个明确声明存在冲突时保留独立入口，不取最大值，也不通过缺失值把冲突项合并。Claude Code 来源默认声明 `input: ["text", "image"]`，匹配该客户端的图片输入行为（#165）；此默认值不推广到所有 Anthropic Messages 来源。若自定义网关实际仅支持文本，可编辑为本地独立配置并关闭图片能力，后续同步保留该选择。与 Pi/OpenCode 明确声明的文本模型保持独立，不合并能力冲突。其他来源没有可采用的声明时使用保守文本模型配置（32768 上下文、4096 原始输出、推理默认可选、仅文本输入）。可编辑为本地独立配置补充能力。费用字段不来自远程价格目录。
+能力声明按字段区分“未声明”和明确值。接口、模型与认证一致的重复来源中，一个来源未声明而另一个明确声明时，采用明确值；多个明确声明存在冲突时保留独立入口，不取最大值，也不通过缺失值把冲突项合并。Claude Code 来源默认声明 `input: ["text", "image"]`，匹配该客户端的图片输入行为（#165）；此默认值不推广到所有 Anthropic Messages 来源。若自定义网关实际仅支持文本，可编辑为本地独立配置并关闭图片能力，后续同步保留该选择。与 Pi/OpenCode 明确声明的文本模型保持独立，不合并能力冲突。其他来源没有可采用的声明时使用保守文本模型配置（32768 上下文、8192 原始输出、推理默认可选、仅文本输入）。可编辑为本地独立配置补充能力。费用字段不来自远程价格目录。
 
 来源格式依据 [Codex 配置参考](https://learn.chatgpt.com/docs/config-file/config-reference)、[Claude Code 设置](https://code.claude.com/docs/en/settings)、[OpenCode 配置](https://opencode.ai/docs/config/) 与 [OpenCode 凭据](https://opencode.ai/docs/providers/)。新格式必须增加夹具后适配，不能猜测协议或执行认证助手。
 
 ## 统一模型输出额度
 
-模型默认使用声明的 maxTokens。`PI_MAX_TOKENS` 只可降低额度，并受 contextWindow 限制。压缩等调用方显式请求额度继续保留。设为 `0`、空值或非法值时关闭覆盖。修改部署环境后重启生效。
+普通用户不需要设置 maxTokens。provider 目录和显式用户配置共同限定普通请求预算；两者同时存在时取较小值，只有一方声明时使用该值。缺失能力通过现有 `unknownCapabilities` 传递，两个来源都缺失时仅在运行时使用 8192 推断值，不写回模型配置、不参与来源去重或身份分配。
 
-兼容显式设置的旧 `PI_MAX_TOKENS_FLOOR`：仅当未设置 `PI_MAX_TOKENS` 且旧变量存在时保留旧下限行为；新变量优先。默认无环境变量时保留模型声明。
+实际请求在 Pi 原生压缩和最终 `prepareRequest` 之后，通过 `model-output-floor.ts` 的公开 API facade 使用最终物理模型和最终 Context 计算。Resolver 直接调用 Pi 1.6.0 的 `clampMaxTokensToContext()`，共用 4096 固定余量、15% 动态余量及 32768 回退边界；普通有效预算低于 1024 时以 `context-insufficient` 停止，显式预算无法满足时以 `explicit-budget-unavailable` 停止，均不发送非法请求。Trace 分别记录 `resolvedBudget` 与 `sdkBudget`。
 
-覆盖在来源去重与稳定身份分配之后应用，运行时注册和模型管理读取同一份有效额度，不改写本地 Pi／来源文件，不合并原本冲突的能力声明。运行时通过 `model-output-floor.ts` 的公开 API facade 在模型读取、路由和请求边界投影有效额度，reload 后继续生效。该值不会提升远端服务能力；服务端若拒绝，应设置较小的 `PI_MAX_TOKENS`，不自动重复请求试探上限。
+`PI_MAX_TOKENS` 只可降低额度。显式设置的旧 `PI_MAX_TOKENS_FLOOR` 是高级兼容覆盖：仅在没有 `PI_MAX_TOKENS` 时生效，可提高声明值但仍受 SDK Context 裁剪，并记录覆盖来源。调用方显式 `options.maxTokens` 不被推断值或 Floor 改写，但仍需满足 provider 和 Context 安全边界。修改部署环境后重启生效。
+
+仅 inferred 模型遇到明确的输出额度参数错误时，可在任何正文、Thinking 或 toolCall 输出之前以相同 Context、物理模型和思考档位回退到 4096 一次；Abort、已有输出、动作额度不足或通用 API 400 均不重试。预算投影不再顺带修改 reasoning，思考档位由独立能力投影开放。
 
 回归：`tests/unit/model-output-floor.test.ts`、`tests/unit/model-sources.test.ts` 与 `tests/output-limit-context-test.mjs` 检查上下文限制、来源配置隔离、重载和实际 Anthropic 请求额度，以及内部显式小额度保留。
 
@@ -44,7 +46,7 @@ Claude Code 来源的 `settings.env` 凭据优先于服务进程同类全局变�
 
 模型管理保留原生 Pi 文件编辑行为；外部同步条目每项对应一个模型，编辑生成独立副本，后续来源更新不覆盖。删除会抑制该入口所有已合并来源槽位；恢复同步清除删除墓碑，不覆盖仍存在的独立副本。来源文件始终只读。
 
-Pi 1.5.2 的兼容选项在服务商和模型表单中默认收起，允许编辑 `supportsMessageThreads`、`promptCacheKeyMode`、`requiresNonNullAssistantContent`、`requiresToolsWithToolHistory`。模型值优先于服务商；未设置沿用原生默认，显式 `false` 不退化为未设置。协议只投影这四个非敏感字段，`null` 表示删除该项覆盖、缺省表示保留；后端只合并白名单，不接受额外字段覆盖原配置，其他 compat、headers、密钥和 image/classifier 条目继续保留。来源条目编辑后的独立副本在本地保存服务商与模型两层覆盖，注册时按字段合并，来源文件不变。
+Pi 1.6.0 的兼容选项在服务商和模型表单中默认收起，允许编辑 `supportsMessageThreads`、`promptCacheKeyMode`、`requiresNonNullAssistantContent`、`requiresToolsWithToolHistory`。模型值优先于服务商；未设置沿用原生默认，显式 `false` 不退化为未设置。协议只投影这四个非敏感字段，`null` 表示删除该项覆盖、缺省表示保留；后端只合并白名单，不接受额外字段覆盖原配置，其他 compat、headers、密钥和 image/classifier 条目继续保留。来源条目编辑后的独立副本在本地保存服务商与模型两层覆盖，注册时按字段合并，来源文件不变。
 
 回归：`tests/pi152-model-compat-test.mjs` 使用本地模拟接口检查实际请求中的空内容、工具历史、缓存键、Anthropic 增量消息线程以及修改 system/tools 后的完整上下文回退；不使用真实账号或产生模型费用。`tests/model-config-preservation-test.mjs` 验证生产读写路径与未知字段保留；`tests/pi152-model-ui-test.mjs` 验证三态控件、重新打开、中英文和窄屏主题，并检查新增代码语言及 Mermaid 饼图、样式和严格模式下禁用回调。
 

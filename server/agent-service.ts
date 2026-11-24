@@ -2,7 +2,7 @@ import { backgroundBash, commandViews, hasRunningCommand, stopRequestCommands } 
 import { designFirstResources } from "./design-first-resources.js";
 import { bindCacheWarming, cacheWarmingView, setGlobalCacheWarming } from "./cache-warming.js";
 import { CodemodeHistory } from "./codemode-history.js";
-import { withOutputTokenFloor } from "./model-output-floor.js";
+import { withOutputTokenFloor, withReasoningEnabled } from "./model-output-floor.js";
 import { modelConfigurationChanged, modelSourcesFor, type ModelSourceSync } from "./model-source-sync.js";
 import { WikiConversations } from "./wiki-conversations.js";
 import { promptReceiptsFor } from "./prompt-receipts.js";
@@ -11,13 +11,13 @@ import { withSessionErrors } from "./session-errors.js";
 import { WikiChatStore } from "./wiki-chat-store.js";
 import { isSelectableProvider } from "./provider-catalog.js";
 import { modelMatchesEndpoint } from "./model-endpoint-availability.js";
-import { databaseScope } from "./database/service.js";
 import { reloadSession } from "./session-reload.js";
 import { bumpExtensionModuleCache, registerExtensionModuleScope } from "./extension-module-cache.js";
 import { resolveNativeAttachments } from "./user-attachments.js";
 import { estimateTokens } from "@earendil-works/pi-coding-agent";
 import { SessionTreeController } from "./session-tree-controller.js";
 import { SessionBranchCounts } from "./session-file-read.js";
+import { SessionExportService, type SessionExportFormat } from "./session-export.js";
 import { isSessionDirectory } from "./session-directory.js";
 import type { TreeRequest } from "./protocol.js";
 import { createHash, randomUUID } from "node:crypto";
@@ -79,10 +79,8 @@ import {
 	existsSync,
 	rmSync,
 	statSync,
-	writeFileSync,
-	watch,
 } from "node:fs";
-import { basename, dirname, join, relative, resolve, sep } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
 import {
 	createAgentSessionFromServices,
 	createAgentSessionRuntime,
@@ -96,14 +94,11 @@ import {
 	type AgentSessionEvent,
 	type AgentSessionRuntime,
 	type CreateAgentSessionRuntimeFactory,
-	type ExtensionUIContext,
-	type Theme,
 
 } from "@earendil-works/pi-coding-agent";
 // pi-coding-agent 自己压缩历史消息（agent-session.js 的 compact()）走的也是这两个
 // 调用，不是我们临时拼出来的私活。声明成显式依赖、锁成跟 pi-coding-agent 完全
 // 一致的版本号，保证两边用的是同一份实现。
-import { contentText } from "@earendil-works/pi-ai";
 import { estimateContextParts } from "./context-breakdown.js";
 import type {   PluginToolEvent } from "./plugins.js";
 import { SettingsService } from "./settings-service.js";
@@ -118,7 +113,6 @@ import {
 	type DiskProjectSummary,
 	mergeProjectSummaries,
 } from "./client-state.js";
-import { saveUpload } from "./uploads.js";
 import { WebUIContext } from "./webui-context.js";
 import {
 	buildAttachmentMessages,
@@ -127,14 +121,10 @@ import {
 import type {
 		CommandDef,
 		ConversationSummary,
-		FileEntry,
 
 		ServerMessage,
 		SessionSummary,
 		UiMessage,
-		UiModelConfigEntry,
-		UiProviderConfig,
-		UiSettingsState,
 
 		UiState,
 		UiTraceSnapshot,
@@ -201,15 +191,6 @@ export { workspacePath };
 // Per-client persisted UI state (<dataDir>/client-state.json)
 // ---------------------------------------------------------------------------
 
-/** AgentSession 私有方法 `_getSummarizationRequestAuth` 的返回结构。
- *  动它之前先看下面 generateAiTitle() 上的注意事项。 */
-type SummarizationAuth = {
-	model: NonNullable<AgentSession["model"]>;
-	apiKey?: string;
-	headers?: Record<string, string | null>;
-	env?: Record<string, string>;
-};
-
 /**
  * 用当前会话的模型给对话起一个短标题。
  *
@@ -231,6 +212,7 @@ export class ClientSession {
 	/** Bounded snapshot sampler; per-message byte scans require detail mode. */
 	readonly timings = new SnapshotTimings();
 	readonly executionTraces: ExecutionTraceRegistry;
+	private readonly sessionExports: SessionExportService;
 	private promptTraceSeq = 0;
 	private static liveClients = new Map<string, ClientSession>();
 
@@ -503,22 +485,6 @@ export class ClientSession {
 	/** pi-config readiness check, cached briefly so 60ms snapshots don't hit disk. */
 	private piConfig!: PiConfigProbe; // 构造函数里创建（需要 agentDir）
 
-	/** fs.watch on the currently-listed directory — file changes push an instant
-	 *  refresh (`file_changed`) so the tree updates without waiting for the 10s
-	 *  poll. Only the listed directory is watched (one level); navigating
-	 *  re-watches the new target. fs.watch isn't available on every platform /
-	 *  filesystem — failures silently fall back to the poll. */
-	private fsWatcher: ReturnType<typeof watch> | null = null;
-	private watchPath: string | null = null;
-	/** fs.watch on the active repo's git dir — external changes (CLI commit,
-	 *  IDE branch switch) push `scm_changed` so the panel refreshes itself.
-	 *  One watcher per client session, re-targeted when the queried cwd
-	 *  changes; failures (bare repo, unsupported fs) silently disable it. */
-	private gitWatcher: ReturnType<typeof watch> | null = null;
-	private gitWatchCwd: string | null = null;
-	private gitDirtyTimer: ReturnType<typeof setTimeout> | null = null;
-	private watchTimer: ReturnType<typeof setTimeout> | null = null;
-
 	private constructor(
 		clientId: string,
 		cwd: string,
@@ -534,6 +500,7 @@ export class ClientSession {
 		this.piConfig = new PiConfigProbe(agentDir);
 		this.stateStore = stateStore;
 		this.executionTraces = new ExecutionTraceRegistry(join(stateStore.dataDir, "traces"), error => this.emitNotice("warning", `Trace 持久化已降级为内存模式：${error}`));
+		this.sessionExports = new SessionExportService(stateStore.dataDir);
 		this.thinkingDurationStore = thinkingDurationStore;
 		this.settingsSvc = new SettingsService({
 			clientId,
@@ -601,15 +568,6 @@ export class ClientSession {
 		conv.wiki = wiki;
 		cs.convs.set(conv.id, conv);
 		cs.activeId = conv.id;
-		for (const d of runtime.diagnostics) {
-			if (d.type !== "info") {
-				cs.pendingNotices.push({
-					type: "notice",
-					level: d.type,
-					text: d.message,
-				});
-			}
-		}
 		await cs.bindSession();
 		return cs;
 	}
@@ -628,7 +586,7 @@ export class ClientSession {
 			registerExtensionModuleScope(join(cwd, ".pi", "npm"));
 			const settings = conversationSettings(cwd, this.agentDir);
 			const executionTrace = this.executionTraces.forSession(sessionManager.getSessionId());
-			const extensionFactories = nativeToolExtensions(() => databaseScope(this.clientId, cwd, sessionManager));
+			const extensionFactories = nativeToolExtensions();
 			if (executionTrace) extensionFactories.push({ name: "pi-harness-execution-trace", replaceable: false, factory: createExecutionTraceExtension(executionTrace) });
 			if (!wiki) {
 				extensionFactories.push({ name: "background-bash", replaceable: true, factory: backgroundBash(sessionManager, settings, () => this.scheduleSnapshot(), view => executionTrace?.backgroundCommand(view)) });
@@ -652,7 +610,14 @@ export class ClientSession {
 				settingsManager: settings,
 				resourceLoaderOptions: { ...designFirstResources(wiki ? "wiki" : "normal", this.stateStore.dataDir), extensionFactories },
 			});
-			services.modelRuntime = withOutputTokenFloor(services.modelRuntime);
+			services.modelRuntime = withReasoningEnabled(withOutputTokenFloor(services.modelRuntime, process.env, {
+				metadata: model => this.sources?.outputBudgetMetadata(model.provider, model.id),
+				onBudget: (_model, decision, options) => { if (options?.sessionId) this.executionTraces.forSession(options.sessionId)?.recordOutputBudget(decision); },
+				reserveAutomaticAction: (_model, options) => {
+					const conv = [...this.convs.values()].find(item => item.session.sessionId === options?.sessionId);
+					return conv?.runRecovery?.reserveAutomaticAction("invalid-budget") ?? false;
+				},
+			}));
 			if (!this.sources) {
 				this.sources = modelSourcesFor(this.stateStore.dataDir, this.agentDir);
 				this.sourceUnbind = await this.sources.bind(services.modelRuntime,
@@ -823,6 +788,21 @@ export class ClientSession {
 		}
 	}
 
+	private runtimeFallbackMessages = new WeakMap<AgentSessionRuntime, string | undefined>();
+	private notifyRuntimeDiagnostics(conv: Conversation): void {
+		const notices: ServerMessage[] = conv.runtime.takeUnreportedDiagnostics()
+			.filter(diagnostic => diagnostic.type !== "info")
+			.map(diagnostic => ({ type: "notice", conversationId: conv.id, level: diagnostic.type, text: diagnostic.message }));
+		const fallback = conv.runtime.modelFallbackMessage;
+		if (fallback && this.runtimeFallbackMessages.get(conv.runtime) !== fallback) {
+			notices.push({ type: "notice", conversationId: conv.id, level: "warning", text: fallback });
+		}
+		this.runtimeFallbackMessages.set(conv.runtime, fallback);
+		for (const notice of notices) {
+			if (this.sinks.size) this.emit(notice); else this.pendingNotices.push(notice);
+		}
+	}
+
 	/** (Re)attach event plumbing to the ACTIVE conversation's session. */
 	private boundUiSessions = new WeakSet<AgentSession>();
 	private async bindSession(conv = this.conv): Promise<void> {
@@ -830,10 +810,12 @@ export class ClientSession {
 		conv.runRecovery?.dispose();
 		conv.unsubscribe?.();
 		if (conv.session !== conv.runtime.session) {
+			this.sessionExports.invalidate(conv.id);
 			conv.webUi.dispose();
 			conv.webUi = new WebUIContext(msg => this.emit(msg), conv.id, () => `${conv.cwd} · ${conv.title}`);
 		}
 		conv.session = conv.runtime.session;
+		this.notifyRuntimeDiagnostics(conv);
 		conv.tree ??= new SessionTreeController({
 			conversationId: conv.id, runtime: () => conv.runtime,
 			active: () => this.activeId === conv.id && this.convs.get(conv.id) === conv,
@@ -1660,6 +1642,40 @@ export class ClientSession {
 		}, interval);
 	}
 
+	private async exportSession(context: { conversationId: string; requestId: string }, format: SessionExportFormat): Promise<void> {
+		const conv = this.convs.get(context.conversationId);
+		if (this.disposed || !conv || this.activeId !== conv.id) {
+			this.emit({ type: "notice", conversationId: context.conversationId, level: "error", text: "导出对话不可用" });
+			return;
+		}
+		const session = conv.session;
+		const sessionId = session.sessionId;
+		try {
+			const download = await this.sessionExports.create(this.clientId, conv.id, session, format, () =>
+				!this.disposed && this.activeId === conv.id && this.convs.get(conv.id) === conv && conv.session === session && session.sessionId === sessionId);
+			this.emit({ type: "session_export", conversationId: conv.id, sessionId, token: download.token, name: download.name, format });
+			this.emit({
+				type: "notice", conversationId: conv.id, level: "info",
+				text: format === "html"
+					? "原生 HTML 包含完整会话树、系统提示词与工具内容，可能包含其他分支和敏感信息，请妥善保管。"
+					: "已生成当前分支的原生 JSONL 下载。",
+			});
+		} catch (error) {
+			this.emit({ type: "notice", conversationId: conv.id, level: "error", text: `导出会话失败：${(error as Error).message}` });
+		}
+	}
+
+	consumeSessionExport(conversationId: string, sessionId: string, token: string) {
+		return this.sessionExports.consume(this.clientId, conversationId, sessionId, token, () => {
+			const conv = this.convs.get(conversationId);
+			return !this.disposed && conv?.session.sessionId === sessionId;
+		});
+	}
+
+	finishSessionExport(token: string): Promise<void> {
+		return this.sessionExports.finish(token);
+	}
+
 	/** Slash-command catalog + native command execution — 自包含模块，见
 	 *  slash-commands.ts（内置命令拦截 + 扩展/模板/技能目录推送）。 */
 	private readonly slash = new SlashCommandsService({
@@ -1670,6 +1686,7 @@ export class ClientSession {
 		startNewSession: () => this.startNewSession(),
 		restartSession: (conversationId) => this.restartSession(conversationId),
 		traceCommand: (context, format) => this.traceRequest({ type: "trace_get", reqId: `command-${context.requestId}`, conversationId: context.conversationId, open: true, ...(format ? { export: format } : {}) }),
+		exportCommand: (context, format) => this.exportSession(context, format),
 		treeCommand: async (name, args, context) => {
 				const conv = this.conv;
 				if (conv.id !== context.conversationId) return;
@@ -1760,11 +1777,6 @@ export class ClientSession {
 	/** Replace the current settings with the named preset and apply it. */
 
 	/** Remove a named preset. */
-
-		/** Make settings effective in the running runtime（流式中则延迟到 agent_settled）。 */
-	private async applyRuntimeSettings(): Promise<void> {
-		return this.settingsSvc.applyRuntime();
-	}
 
 	/** 把终端工具开关应用到 session 的活跃工具集：关闭时从活跃集中剔除
 	 *  terminal_*（工具仍留在注册表，重开时可直接加回）。session.reload() 与新
@@ -2244,6 +2256,7 @@ export class ClientSession {
 
 		const result = await previous.runtime.newSession();
 		if (result.cancelled) return;
+		this.sessionExports.invalidate(previous.id);
 
 		previous.unsubscribe?.();
 		previous.tree?.dispose();
@@ -2465,6 +2478,7 @@ export class ClientSession {
 
 		conv.tree?.dispose();
 		conv.webUi.dispose();
+		this.sessionExports.invalidate(id);
 		this.convs.delete(id);
 
 		conv.terminals.killAll();
@@ -3314,6 +3328,7 @@ export class ClientSession {
 
 	async dispose(): Promise<void> {
 		this.sourceUnbind?.();
+		this.sessionExports.dispose();
 
 		ClientSession.liveClients.delete(this.clientId);
 		this.disposed = true;

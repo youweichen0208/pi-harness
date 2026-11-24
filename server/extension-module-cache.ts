@@ -25,7 +25,7 @@
  */
 import module from "node:module";
 import { realpathSync } from "node:fs";
-import { join, resolve, sep } from "node:path";
+import { resolve, sep } from "node:path";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 

@@ -6,10 +6,7 @@ import { frozenAttachmentText } from "./user-attachments.js";
  *
  * 从 agent-service.ts 抽出，行为保持不变；上下文经 AttachmentContext 注入。
  */
-import type {
-	AgentSession,
-	ModelRuntime,
-} from "@earendil-works/pi-coding-agent";
+import type { AgentSession } from "@earendil-works/pi-coding-agent";
 import { validateEditorSnapshots } from "./editor-snapshot.js";
 import type { PromptAttachment, ServerMessage } from "./protocol.js";
 import {
@@ -46,7 +43,7 @@ export async function buildAttachmentMessages(
 	if (!attachments || attachments.length === 0) return [];
 	validateEditorSnapshots(ctx.cwd, attachments);
 	const fs = await import("node:fs/promises");
-	const { resolve, sep, relative, extname, join, basename } =
+	const { resolve, sep, relative, extname, basename } =
 		await import("node:path");
 
 	const root = resolve(ctx.cwd);
@@ -144,18 +141,7 @@ export async function buildAttachmentMessages(
 	 *  a plain path reference (the model can still attempt to read them). */
 	const MAX_PATH_IMAGE_BYTES = 5 * 1024 * 1024;
 	for (const [idx, att] of attachments.entries()) {
-		if (att.imageData) {
-			const raw = att.imageData.replace(/^data:[^;]*;base64,/, "");
-			const mimeType = att.mimeType?.startsWith("image/")
-				? att.mimeType
-				: "image/png";
-			const bytes = Buffer.byteLength(raw, "base64");
-			// Only images that would actually be sent (non-empty, under the cap).
-			if (bytes > 0 && bytes <= 2 * 1024 * 1024) {
-
-			}
-			continue;
-		}
+		if (att.imageData) continue;
 		if (att.nativeRef || att.editorSnapshot || att.fileData || !att.path) continue;
 		const ext = extname(att.path).toLowerCase();
 		if (!IMAGE_EXT.has(ext) || ext === ".svg") continue;

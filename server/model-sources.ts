@@ -80,7 +80,7 @@ export function discoverModels(options: DiscoveryOptions = {}): { connections: C
 			unknownCapabilities: capabilityFields.filter(field => metadata[field] === undefined),
 			name: string(metadata.name) || undefined, reasoning: true,
 			input: Array.isArray(metadata.input) && metadata.input.includes("image") ? ["text", "image"] : ["text"],
-			contextWindow: positive(metadata.contextWindow, 32768), maxTokens: positive(metadata.maxTokens, 4096) });
+			contextWindow: positive(metadata.contextWindow, 32768), maxTokens: positive(metadata.maxTokens, 8192) });
 	};
 	let failures: SourceError[] = [];
 	const attempt = (fn: () => void) => {

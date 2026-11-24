@@ -102,7 +102,7 @@ export function restoreBackup(dataDir: string, id: string): string | null {
 }
 
 /** 保留最近 BACKUP_KEEP 份，删除更旧的。 */
-export function pruneBackups(dataDir: string, id: string, keep = BACKUP_KEEP): void {
+function pruneBackups(dataDir: string, id: string, keep = BACKUP_KEEP): void {
 	const backups = listBackups(dataDir, id);
 	for (const b of backups.slice(keep)) {
 		try {

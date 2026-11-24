@@ -1,6 +1,6 @@
 import { useT } from "../i18n";
 import type { ReactNode } from "react";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef } from "react";
 import { FiCalendar, FiClock, FiLink } from "react-icons/fi";
 import { LuMoveHorizontal } from "react-icons/lu";
 import type { DocumentHost } from "./RichMarkdownEditor";
@@ -27,7 +27,7 @@ export interface DocumentBacklink {
  * the rich/source switch and the layout.
  */
 export function DocumentReading({ title, chips, properties, sourceLabel, editor,
-	sourceEditor, source, onToggleSource, sourceEnabled, backlinks, backlinksReady, backlinksTitle,
+	sourceEditor, source, sourceEnabled, backlinks, backlinksReady, backlinksTitle,
 	backlinksEmpty, backlinksMore, onShowMoreBacklinks, backlinksLoading, onMouseUp, onKeyUp, onClick, articleRef }: {
 	title: string;
 	chips: DocumentChip[];
@@ -52,9 +52,7 @@ export function DocumentReading({ title, chips, properties, sourceLabel, editor,
 	articleRef?: React.Ref<HTMLElement>;
 }) {
 	const t = useT();
-	const [internalSource, setInternalSource] = useState(false);
-	const showingSource = source ?? internalSource;
-	const effectiveSource = sourceEnabled === false ? false : showingSource;
+	const effectiveSource = sourceEnabled === false ? false : source ?? false;
 	return <article ref={articleRef} className={`wiki-document ${effectiveSource ? "is-source" : ""}`} onMouseUp={onMouseUp} onKeyUp={onKeyUp} onClick={onClick}>
 		<header className="wiki-document-heading">
 			<h1>{title}</h1>

@@ -2,7 +2,6 @@ import { controlCommand } from "./background-bash.js";
 import { scmOperation } from "./scm-operation.js";
 import { installNoteAssets } from "./note-assets.js";
 import { installLinkPreview } from "./link-preview.js";
-import { installDatabaseRoutes } from "./database/routes.js";
 import { installSystemPromptRoutes } from "./system-prompt-routes.js";
 import { installExtensionsRoutes } from "./extensions-routes.js";
 import { installCodemodeImageRoutes } from "./codemode-image-routes.js";
@@ -29,7 +28,7 @@ import { installOpenAIProxyRoutes } from "./openai-proxy-routes.js";
  *   all share one conversation list per project.
  *   PI_CODING_AGENT_DIR  pi config dir (auth/models/skills) — passed to the SDK
  */
-import { existsSync, writeFileSync } from "node:fs";
+import { createReadStream, existsSync, writeFileSync } from "node:fs";
 import { stat } from "node:fs/promises";
 import { createServer, type IncomingMessage } from "node:http";
 import { createConnection } from "node:net";
@@ -178,7 +177,6 @@ const stopPlayground = installPlaygroundRoutes(app, { dataDir: DATA_DIR, allowed
 installCodemodeImageRoutes(app, () => service, originAllowed);
 installOpenAIProxyRoutes(app, openAIProxy, originAllowed);
 installExtensionsRoutes(app, () => service, originAllowed);
-installDatabaseRoutes(app, () => service, originAllowed);
 installSystemPromptRoutes(app, () => service, originAllowed);
 installKnowledgeLibraryRoutes(app, DATA_DIR, originAllowed);
 const closeNotebooks = installWikiRoutes(app, () => service, join(DATA_DIR, "wiki"), originAllowed, () => projectWorkspaces.read());
@@ -262,6 +260,25 @@ app.get(["/api/tool-output", "/api/tool-output-list"], async (req, res) => {
 		const code = (error as NodeJS.ErrnoException).code;
 		res.status(code === "ENOENT" ? 404 : code === "EACCES" || code === "EPERM" ? 403 : 500).end(code === "ENOENT" ? "Output file may have been cleaned up" : code === "EACCES" || code === "EPERM" ? "Output access denied" : "Output server error");
 	}
+});
+
+app.get("/api/session-export", async (req, res) => {
+	if (!originAllowed(req)) { res.status(403).end("Forbidden"); return; }
+	const { clientId, conversationId, sessionId, token } = req.query;
+	if (![clientId, conversationId, sessionId, token].every(value => typeof value === "string")) { res.status(400).end("Invalid request"); return; }
+	const cs = service.get(clientId as string);
+	const download = cs?.consumeSessionExport(conversationId as string, sessionId as string, token as string);
+	if (!cs || !download) { res.status(404).end("Export download expired or unavailable"); return; }
+	res.attachment(download.name);
+	res.setHeader("X-Content-Type-Options", "nosniff");
+	res.setHeader("Cache-Control", "no-store");
+	const stream = createReadStream(download.path);
+	const cleanup = () => { void cs.finishSessionExport(download.token); };
+	res.once("finish", cleanup);
+	res.once("close", cleanup);
+	stream.once("error", () => res.destroy());
+	req.setTimeout(120_000, () => res.destroy());
+	stream.pipe(res);
 });
 
 app.get("/api/file", async (req, res) => {

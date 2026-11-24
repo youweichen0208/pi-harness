@@ -50,7 +50,7 @@ try {
 	assert.equal((await api("scratch", { content: "stale", expectedVersion: version }, "PUT")).status, 409);
 	assert.equal((await api("scratch", { content: "unversioned" }, "PUT")).status, 409);
 	assert.equal((await (await api("scratch")).json()).content, "print(2)");
-	console.log("PASS Python runtime: UTF-8 streams, stdin EOF, syntax/runtime/import failures, timeout, output budget, cancellation, concurrency, auth, config and preserved Java draft");
+	console.log("PASS Python runtime: UTF-8 streams, stdin EOF, syntax/runtime/import failures, timeout, output budget, cancellation, concurrency, auth, config and preserved legacy draft");
 } finally { await fixture.stop(); }
 const locked = await playgroundFixture({ PI_WEB_PLAYGROUND: "off" });
 try { assert.equal((await (await locked.api("status")).json()).locked, true); assert.equal((await locked.api("config", { enabled: true })).status, 403); } finally { await locked.stop(); }

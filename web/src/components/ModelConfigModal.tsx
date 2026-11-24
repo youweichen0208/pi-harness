@@ -8,7 +8,6 @@ import {
 	FiEdit2,
 	FiKey,
 	FiPlus,
-	FiRefreshCw,
 	FiTrash2,
 	FiX,
 } from "react-icons/fi";
@@ -154,7 +153,6 @@ export function ModelConfigModal({
 	providerStatus,
 	sources = [],
 	fetchModelsResult,
-	refreshProviderResult,
 	cloneProviderResult,
 	onClose,
 }: ModelConfigModalProps) {
@@ -178,9 +176,6 @@ export function ModelConfigModal({
 	const [fetchMsg, setFetchMsg] = useState<{ ok: boolean; text: string } | null>(null);
 	const handledReq = useRef(0);
 	/** Saved-provider list refresh: in-flight flags per providerId + reqId echo. */
-	const [refreshing, setRefreshing] = useState<Record<string, boolean>>({});
-	const refreshReqId = useRef(0);
-	const handledRefreshReq = useRef(0);
 	/** Clone built-in → custom draft: in-flight flag + reqId echo. */
 	const [cloning, setCloning] = useState<string | null>(null);
 	const cloneReqId = useRef(0);
@@ -311,24 +306,6 @@ export function ModelConfigModal({
 		send({ type: "save_model_config", providerId, config });
 		onClose();
 	};
-
-	/** Re-fetch the SAVED provider's model list server-side (credentials stay
-	 *  on the server) and merge into its models.json entry. */
-	const refreshProvider = (providerId: string) => {
-		if (refreshing[providerId]) return;
-		const reqId = ++refreshReqId.current + Date.now();
-		setRefreshing((m) => ({ ...m, [providerId]: true }));
-		send({ type: "refresh_provider_models", providerId, reqId });
-	};
-
-	// Refresh results clear the per-provider spinner; the server also emits a
-	// notice with the added/total counts.
-	useEffect(() => {
-		if (!refreshProviderResult || refreshProviderResult.reqId === handledRefreshReq.current)
-			return;
-		handledRefreshReq.current = refreshProviderResult.reqId;
-		setRefreshing({});
-	}, [refreshProviderResult]);
 
 	/** Ask the server to copy a built-in provider (baseUrl + model catalog)
 	 *  into an editable custom draft — lets a second API key coexist with the
@@ -630,13 +607,6 @@ export function ModelConfigModal({
 									}
 									placeholder={t("contextWindow")}
 									title="contextWindow"
-								/>
-								<input
-									type="number"
-									value={m.maxTokens}
-									onChange={(e) => setModel(i, { maxTokens: e.target.value })}
-									placeholder={t("maxOutput")}
-									title="maxTokens"
 								/>
 								<button
 									type="button"

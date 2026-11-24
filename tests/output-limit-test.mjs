@@ -64,17 +64,17 @@ try {
 		for (const scenario of ["thinking", "empty", "partial"]) {
 			mode = scenario; toolReturned = false;
 			const before = requests;
-			const expectedRequests = before + (scenario === "partial" ? 4 : 2);
+			const expectedRequests = before + (scenario === "empty" ? 2 : 4);
 			await input.fill(`Write ${scenario} report ${locale}`);
 			await input.press("Enter");
 			const action = page.getByRole("button", { name: locale === "zh" ? "调整输出额度" : "Adjust output limit", exact: true });
 			const continueAction = page.getByRole("button", { name: locale === "zh" ? "准备继续" : "Prepare to continue", exact: true });
 			for (let attempt = 0; attempt < 200 && !(requests === expectedRequests && !state?.isStreaming && state?.runRecovery?.phase === "stopped"); attempt++) await page.waitForTimeout(50);
 			assert.equal(state?.runRecovery?.phase, "stopped", "bounded automatic recovery has settled");
-			assert.equal(state.runRecovery.detail, scenario === "partial" ? "exhausted" : "thinking-only");
-			await action.waitFor();
+			assert.equal(state.runRecovery.detail, scenario === "empty" ? "empty" : "exhausted");
+			await page.locator(".reply-output-limit").last().waitFor();
 			await page.waitForTimeout(200);
-			assert.equal(requests, expectedRequests, "partial answers get at most two continuations; thinking-only and empty answers do not continue");
+			assert.equal(requests, expectedRequests, "partial and thinking-only answers get at most two continuations; empty answers do not continue");
 			assert.equal(state.isStreaming, false);
 			assert.equal(state.taskProgress.status, "failed");
 			const last = state.messages.findLast(message => message.role === "assistant");
@@ -86,21 +86,20 @@ try {
 			if (scenario === "partial") await page.getByText("Partial report preserved.", { exact: true }).last().waitFor();
 			assert.equal(state.taskProgress.steps[0].status, "done", "completed read remains successful");
 			await input.fill("Keep my draft");
-			await action.click();
-			await page.locator(".modal-backdrop").waitFor();
-			await page.locator(".modal-backdrop").click({ position: { x: 2, y: 2 } });
-			assert.equal(await input.inputValue(), "Keep my draft", "settings preserves the draft");
+			assert.equal(await action.count(), 0, "output-limit recovery never offers manual budget adjustment");
+			assert.equal(await page.locator(".modal-backdrop").count(), 0, "output-limit recovery does not open model settings");
 			if (scenario === "partial") {
 				await continueAction.click();
 				assert((await input.inputValue()).startsWith("Keep my draft\n\n"));
 			} else {
 				assert.equal(await continueAction.count(), 0, "no blind continue when no answer was generated");
-				assert.match(await page.locator(".reply-output-limit").last().innerText(), locale === "zh" ? /仅发送「继续」可能再次截断/ : /may hit the same limit again/);
+				assert.match(await page.locator(".reply-output-limit").last().innerText(), locale === "zh" ? /自动续接/ : /automatic continuations/);
 			}
 			assert.equal(requests, expectedRequests, "preparing continuation only edits the draft");
 			await input.fill("");
 			await page.reload();
-			await action.waitFor();
+			await page.locator(".reply-output-limit").last().waitFor();
+			assert.equal(await action.count(), 0);
 			assert.equal(state.taskProgress.status, "failed", "reload preserves truncation outcome");
 			assert.equal(requests, expectedRequests, "reloading an exhausted turn must not restart recovery");
 			if (scenario === "partial") {
@@ -115,7 +114,7 @@ try {
 		await page.waitForTimeout(200);
 		assert.equal(await page.getByRole("button", { name: locale === "zh" ? "准备继续" : "Prepare to continue", exact: true }).count(), 0, "old messages cannot continue the wrong turn");
 		assert.deepEqual(errors, []);
-		console.log(`PASS ${locale}: bounded partial continuation, thinking-only limits, failed task, preserved tools, draft, reload, manual continuation`);
+		console.log(`PASS ${locale}: bounded partial and thinking-only continuation, empty limits, failed task, preserved tools, draft, reload, manual continuation`);
 		await context.close();
 	}
 } finally {

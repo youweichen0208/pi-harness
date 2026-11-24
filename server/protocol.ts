@@ -238,7 +238,7 @@ export interface UiRunRecovery {
 	attempt: number;
 	limit: number;
 	messageId?: string;
-	detail?: "exhausted" | "unsafe" | "thinking-only" | "cancelled" | "failed";
+	detail?: "exhausted" | "unsafe" | "empty" | "thinking-only" | "cancelled" | "failed";
 }
 
 export interface UiTraceMetric {
@@ -304,6 +304,7 @@ export interface UiTraceSnapshot {
 	privacy: { containsMessageContent: false; anonymous: false; notice: string };
 }
 export type TraceResult = { type: "trace_result"; reqId: string; conversationId: string; open?: boolean; export?: "html" | "json"; trace?: UiTraceSnapshot; error?: string };
+export type SessionExportResult = { type: "session_export"; conversationId: string; sessionId: string; token: string; name: string; format: "html" | "jsonl" };
 
 export interface BackgroundCommand {
 	lastOutputAtMs?: number;
@@ -1110,6 +1111,7 @@ export interface UiSettingsState {
 export type ServerMessage =
 	| PlaygroundChatEvent
 	| TraceResult
+	| SessionExportResult
 	| { type: "queue_recalled"; conversationId: string; requestId: string; text: string; images: { data: string; mimeType: string }[] }
 	| TreeResponse
 	| { type: "native_mcp_result"; requestId: string; cwd: string; state?: NativeMcpConfigState; error?: string; pending?: boolean; tools?: string[]; toolInfo?: NativeMcpTool[]; servers?: NativeMcpServerStatus[]; statusText?: string; codemode?: NativeCodemodeSettings; log?: string }
@@ -1537,7 +1539,7 @@ export interface ExtensionPackage {
 }
 export interface ExtensionsState { packages: ExtensionPackage[]; version: string; trusted: boolean; checkedAt?: number; autoCheck?: boolean; updateResults?: ExtensionUpdateResult[]; }
 
-export type BuiltinExtensionId = "background-bash" | "desktop-control" | "pi-harness-design-first" | "pi-harness-database" | "codemode" | "tool-search" | "mcp";
+export type BuiltinExtensionId = "background-bash" | "desktop-control" | "pi-harness-design-first" | "codemode" | "tool-search" | "mcp";
 export interface BuiltinExtensionState {
 	id: BuiltinExtensionId;
 	settingsVersion?: string;
@@ -1556,7 +1558,7 @@ export interface BuiltinExtensionsState {
 }
 export type BuiltinExtensionsRequest =
 	| { action: "builtin-list"; conversationId: string }
-	| { action: "builtin-toggle"; conversationId: string; id: "background-bash" | "desktop-control" | "pi-harness-design-first" | "pi-harness-database"; enabled: boolean; version: string };
+	| { action: "builtin-toggle"; conversationId: string; id: "background-bash" | "desktop-control" | "pi-harness-design-first"; enabled: boolean; version: string };
 export interface ExtensionCatalogItem { name: string; description: string; descriptionZh?: string; version?: string; author?: string; downloads?: number; date?: number; types: string[]; image?: string; url: string; repository?: string; }
 export interface ExtensionCatalog { items: ExtensionCatalogItem[]; page: number; pages: number; total?: number; }
 export interface ExtensionPackageDetails { source: string; name: string; version?: string; description?: string; author?: string; repository?: string; license?: string; resources: Record<string, string[]>; canPin: boolean; }
@@ -1603,51 +1605,6 @@ export interface NodeAgentState {
 	notice?: string;
 	error?: string;
 	editorText?: { id: string; text: string };
-}
-
-/** Built-in read-only database workbench HTTP protocol. Secrets are input-only. */
-export type DatabaseDriver = "mysql" | "postgres" | "gaussdb";
-export interface DatabaseJdbcReference {
-	configDir: string; driverId: string; driverClass: string; jarNames: string[]; fingerprint: string;
-}
-export interface DatabaseJdbcSelection { mode?: "automatic" | "disabled"; configDir?: string; driverId?: string; sourceId?: string; driverClass?: string; jarPaths?: string[] }
-export interface DatabaseJdbcDriver { id: string; name: string; driverClass: string; configDir: string }
-export interface DatabaseConfig {
-	name: string; driver: DatabaseDriver; host: string; port: number; user: string; db_name: string;
-	jdbc?: DatabaseJdbcReference;
-	tls?: { enabled: boolean; ca?: string };
-}
-export interface DatabaseConnection extends DatabaseConfig {
-	id: string; version: string; hasPassword: boolean; source?: { path: string; id: string; kind: "datagrip" | "dbeaver"; jdbcSelection?: DatabaseJdbcSelection };
-	issue?: string; needsTest?: boolean;
-}
-export interface DatabaseImportItem {
-	key: string; connection: DatabaseConfig; sourceId: string; issue?: string; hasPassword: boolean;
-	change: "new" | "updated" | "unchanged" | "missing";
-}
-export interface DatabaseImportPreview { ticket: string; source: string; items: DatabaseImportItem[] }
-export interface DatabaseGrid { columns: string[]; rows: (string | number | boolean | null)[][]; truncated: boolean; elapsedMs: number; sql: string; database: string; connectionId: string }
-export type DatabaseOperation =
-	| { action: "list" }
-	| { action: "save"; connection: DatabaseConfig & { id?: string; version?: string; password?: string } }
-	| { action: "delete"; id: string; version: string }
-	| { action: "test"; connection: DatabaseConfig & { id?: string; version?: string; password?: string } }
-	| { action: "scan" }
-	| { action: "jdbc_drivers"; configDir?: string }
-	| { action: "jdbc_configure"; id: string; version: string; mode?: "automatic" | "disabled"; configDir?: string; driverId?: string }
-	| { action: "sync" }
-	| { action: "preview"; kind: "datagrip" | "dbeaver"; path: string; content?: string; jdbcSelection?: DatabaseJdbcSelection }
-	| { action: "import"; ticket: string; keys: string[] }
-	| { action: "grant"; ids: string[]; versions: Record<string, string> }
-	| { action: "revoke"; id: string }
-	| { action: "run"; id: string; version: string; database?: string; operation: "databases" | "tables" | "describe" | "page" | "query"; schema?: string; table?: string; offset?: number; sql?: string }
-	| { action: "cancel"; target: string };
-export type DatabaseRequest = DatabaseOperation & { clientId: string; cwd: string; conversationId: string; requestId: string };
-export interface DatabaseResponse {
-	requestId: string; error?: string; connections?: DatabaseConnection[]; grants?: string[];
-	jdbcDrivers?: DatabaseJdbcDriver[]; jdbcRuntime?: "detected" | "missing";
-	syncIssues?: { path: string; sourceId?: string; issue: string; category?: "unsupported-driver" }[];
-	sources?: { kind: "datagrip" | "dbeaver"; path: string }[]; preview?: DatabaseImportPreview; grid?: DatabaseGrid;
 }
 
 /** Global notes HTTP API; deliberately independent of agent sessions. */

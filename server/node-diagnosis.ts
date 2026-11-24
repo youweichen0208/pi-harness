@@ -4,7 +4,7 @@ const stepLimit = 4;
 const checkpoint = "SSH diagnosis checkpoint. Stop tool use and answer the user now: give the best-supported conclusion and its scope, the single observation that could overturn it, and the smallest missing input (or say none). Wait for the user's response.";
 export const nodeDiagnosisInstructions = `During diagnosis, supply the same diagnosticGoal on all tool calls testing the same hypothesis, including another path, host or tool. Omit it for ordinary independent work. Stop as soon as the evidence supports an answer. At ${stepLimit} steps on one subgoal, or two consecutive tool failures, give a checkpoint: current defensible conclusion, one fact that could overturn it, and what input is missing. Wait for that input before branching.
 A successful search with no matches is negative evidence within the searched source and time range. Check at most one other relevant location for the same hypothesis. Distinguish unavailable logs and failed searches from an actual absence of matches. If a redacted request body or request ID from the user is the cheapest discriminating input, ask for it immediately.
-When a toolchain is missing or repeatedly fails, state the gap and an existing alternative (for example, inspect the source repository or ask for existing CFR output when the JDK is unavailable). Do not implement a replacement class parser or build a new toolchain to prolong diagnosis.`;
+When a toolchain is missing or repeatedly fails, state the gap and an existing alternative (for example, inspect the source repository or ask for existing tool output). Do not implement a replacement parser or build a new toolchain to prolong diagnosis.`;
 
 export const nodeDiagnosisGuard: ExtensionFactory = pi => {
 	let previousGoal = "";

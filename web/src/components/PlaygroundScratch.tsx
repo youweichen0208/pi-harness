@@ -35,7 +35,6 @@ export function PlaygroundScratch() {
 	const cancelled = useRef(false);
 	const [language, setLanguage] = useState<{ state: "loading" | "ready" | "error"; reason?: string }>({ state: "loading" });
 	const languageStatus = useCallback((state: "loading" | "ready" | "error", reason?: string) => setLanguage({ state, reason }), []);
-	const [formatting, setFormatting] = useState(false);
 	const [formatFailure, setFormatFailure] = useState<{ source: string; message: string; operation: "format" | "indent" } | null>(null);
 	const formatController = useRef<AbortController | null>(null);
 	useEffect(() => () => formatController.current?.abort(), []);
@@ -100,7 +99,7 @@ export function PlaygroundScratch() {
 		let stage = saveAfter ? "indent" as const : operation;
 		const controller = new AbortController();
 		formatController.current = controller;
-		setFormatting(true); setFormatFailure(null);
+		setFormatFailure(null);
 		const transform = async (action: "format" | "indent", range = {}) => {
 			const response = await fetch(withToken(`/api/playground/${action}`), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: source, ...range }), signal: controller.signal });
 			if (!response.ok) { const error = await response.json(); throw new Error(error.error || "format failed"); }
@@ -124,7 +123,6 @@ export function PlaygroundScratch() {
 		} finally {
 			formatController.current = null;
 			if (!controller.signal.aborted) {
-				setFormatting(false);
 				if (saveAfter) await save();
 			}
 		}

@@ -144,7 +144,7 @@ try {
 	await client.waitForState((state) => state.sessionFile !== sessionA);
 	client.send({ type: "delete_session", path: sessionA });
 	await client.waitForType("sessions", () => true);
-	const warning = client.received.find((message) => message.type === "notice" && message.level === "warning");
+	const warning = client.received.find((message) => message.type === "notice" && message.level === "warning" && /终端|正在使用中|后台任务/.test(message.text));
 	check("exited terminal no longer blocks deletion", !warning);
 	check("session A transcript deleted from disk", !existsSync(sessionA));
 
@@ -158,7 +158,7 @@ try {
 	client.send({ type: "new_chat" });
 	await client.waitForState((state) => state.sessionFile !== sessionB);
 	client.send({ type: "delete_session", path: sessionB });
-	const liveWarning = await client.waitForType("notice", (message) => message.level === "warning");
+	const liveWarning = await client.waitForType("notice", (message) => message.level === "warning" && message.text.includes("运行中的终端"));
 	check("live terminal refuses deletion", liveWarning.text.includes("运行中的终端"));
 	check("warning names the terminal", liveWarning.text.includes(liveTitle));
 	check("session B transcript kept", existsSync(sessionB));
@@ -167,7 +167,7 @@ try {
 	client.send({ type: "switch_session", path: sessionB });
 	await client.waitForState((state) => state.sessionFile === sessionB);
 	client.send({ type: "delete_session", path: sessionB });
-	const activeWarning = await client.waitForType("notice", (message) => message.level === "warning");
+	const activeWarning = await client.waitForType("notice", (message) => message.level === "warning" && message.text.includes("正在使用中"));
 	check("active conversation is refused", activeWarning.text.includes("正在使用中"));
 	check("session B still on disk", existsSync(sessionB));
 

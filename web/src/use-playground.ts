@@ -10,7 +10,7 @@ async function fetchStatus(redetect: boolean): Promise<PlaygroundStatus> {
 
 /**
  * App-level Playground status: whether execution is allowed, whether the
- * environment has locked it, and whether a JDK is present.
+ * environment has locked it, and whether Python is available.
  *
  * Refreshed on load, on window focus/online and whenever the socket reconnects,
  * matching the notes pattern — the switch lives on the server, so another tab or

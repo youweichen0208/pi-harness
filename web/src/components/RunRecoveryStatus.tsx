@@ -11,6 +11,7 @@ export function RunRecoveryStatus({ state, connected, send }: { state: Pick<UiSt
 	const reason = recovery.reason === "length" ? "runRecoveryLength" : recovery.reason === "tool-text" ? "runRecoveryToolText" : "runRecoveryRepetition";
 	const detail = recovery.detail === "exhausted" ? "runRecoveryExhausted"
 		: recovery.detail === "unsafe" ? "runRecoveryUnsafe"
+		: recovery.detail === "empty" ? "runRecoveryEmpty"
 		: recovery.detail === "thinking-only" ? "runRecoveryThinkingOnly"
 		: recovery.detail === "cancelled" ? "runRecoveryCancelled"
 		: recovery.detail === "failed" ? "runRecoveryFailed" : "runRecoveryStopped";

@@ -24,6 +24,7 @@ export interface SlashHost {
 	isModelVisible?: (provider: string) => boolean;
 	treeCommand?: (name: string, args: string, context: { conversationId: string; requestId: string }) => Promise<void>;
 	traceCommand?: (context: { conversationId: string; requestId: string }, format?: "html" | "json") => void;
+	exportCommand?: (context: { conversationId: string; requestId: string }, format: "html" | "jsonl") => Promise<void>;
 	emit: (msg: ServerMessage) => void;
 	/** 当前工作目录（/cwd 无参数时回显）。 */
 	cwd: () => string;
@@ -58,7 +59,8 @@ export const NATIVE_COMMANDS: {
 }[] = [
 	{ name: "tree", description: "查看会话树与切换分支", descriptionEn: "Browse the session tree and switch branches" },
 	{ name: "trace", description: "查看当前会话执行时间线", descriptionEn: "Inspect the current session execution trace" },
-	{ name: "export", description: "导出当前会话与 Trace；可用 json 仅导出 metadata", descriptionEn: "Export this session and trace; use json for metadata only", argumentHint: "[html|json]", argumentHintEn: "[html|json]" },
+	{ name: "export", description: "原生导出会话：HTML 含完整会话树，jsonl 仅当前分支", descriptionEn: "Native session export: HTML includes the full tree; jsonl contains the current branch", argumentHint: "[html|jsonl]", argumentHintEn: "[html|jsonl]" },
+	{ name: "trace-export", description: "导出当前会话与 Trace；可用 json 仅导出 metadata", descriptionEn: "Export this session and trace; use json for metadata only", argumentHint: "[html|json]", argumentHintEn: "[html|json]" },
 	{ name: "clone", description: "复制当前分支为新会话", descriptionEn: "Clone this branch into a new session" },
 	{ name: "fork", description: "选择用户消息派生新会话", descriptionEn: "Choose a user message to fork" },
 	{ name: "name", description: "重命名当前会话", descriptionEn: "Rename this session", argumentHint: "<名称>", argumentHintEn: "<name>" },
@@ -149,9 +151,19 @@ export class SlashCommandsService {
 			case "trace":
 				this.host.traceCommand?.(context);
 				return true;
-			case "export":
+			case "trace-export":
 				this.host.traceCommand?.(context, args.toLowerCase() === "json" ? "json" : "html");
 				return true;
+			case "export": {
+				const format = !args || args === "html" ? "html" : args === "jsonl" ? "jsonl" : undefined;
+				if (!format) {
+					this.host.emit({ type: "notice", conversationId: context.conversationId, level: "error", text: "用法：/export [html|jsonl]。Web 导出仅支持受控下载，不接受文件路径。" });
+					return true;
+				}
+				if (!this.host.exportCommand) throw new Error("Session export unavailable");
+				await this.host.exportCommand(context, format);
+				return true;
+			}
 			case "tree": case "clone": case "fork": case "name":
 				await this.host.treeCommand?.(name, args, context);
 				return true;

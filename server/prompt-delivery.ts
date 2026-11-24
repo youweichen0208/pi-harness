@@ -49,7 +49,7 @@ export async function deliverPrompt(session: AgentSession, text: string, asides:
 			}
 			if (event.type === "agent_settled") {
 				pendingPromptsBySession.delete(session);
-				// SDK 1.5.2 iterates its live listener array. Splicing this listener
+				// SDK 1.6.0 iterates its live listener array. Splicing this listener
 				// synchronously skips the following listener (including Stop's
 				// settled acknowledgement), falsely triggering a forced reset.
 				queueMicrotask(unsubscribe);

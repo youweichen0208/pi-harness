@@ -15,7 +15,12 @@ test("desktop packaging follows the exact SDK pin and rejects mismatches or rang
 		const skillRoot = join(app, "assets/skills/design-first");
 		cpSync(sourceSkillRoot, skillRoot, { recursive: true });
 		mkdirSync(join(sdk, "examples/extensions"), { recursive: true });
-		const references = ["README.md", "docs/extensions.md", "examples/extensions/README.md", "examples/extensions/hello.ts"];
+		const references = [
+			"README.md", "docs/extensions.md", "examples/extensions/README.md", "examples/extensions/hello.ts",
+			"dist/core/export-html/template.html", "dist/core/export-html/template.css", "dist/core/export-html/template.js",
+			"dist/core/export-html/vendor/marked.min.js", "dist/core/export-html/vendor/marked-cjk-friendly.min.js", "dist/core/export-html/vendor/highlight.min.js",
+		];
+		mkdirSync(join(sdk, "dist/core/export-html/vendor"), { recursive: true });
 		for (const reference of references) writeFileSync(join(sdk, reference), "fixture reference");
 		writeFileSync(join(sdk, "docs/codemode.md"), "models.generateImages");
 

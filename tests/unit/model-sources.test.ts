@@ -25,7 +25,8 @@ describe("read-only API discovery", () => {
 	it.each(["vendor/unknown", "codeagent/maas-deepseek-v4.1-flash-baidu-codeagent[1m]"])("enables reasoning for undeclared model %s", model => {
 		const f = fixture();
 		f.put(".claude/settings.json", { model, env: { ANTHROPIC_API_KEY: "fixture" } });
-		expect(discoverModels(f.options).connections[0]).toMatchObject({ reasoning: true, maxTokens: 4096 });
+		expect(discoverModels(f.options).connections[0]).toMatchObject({ reasoning: true, maxTokens: 8192 });
+		expect(discoverModels(f.options).connections[0].unknownCapabilities).toContain("maxTokens");
 	});
 	it("requires no Pi or CLI and does not invent models for absent sources", () => {
 		const f = fixture(); expect(discoverModels(f.options).statuses.every(s => s.status === "missing")).toBe(true);
@@ -347,21 +348,25 @@ it("preserves declared output limits for synced and independent models", async (
 	const unbind = await sync.bind(runtime, () => false, () => {});
 	try {
 		const config = sync.configs()[0];
-		expect(config.models[0].maxTokens).toBe(4096);
-		expect(runtime.getModel(config.providerId, config.models[0].id)?.maxTokens).toBe(4096);
+		expect(config.models[0].maxTokens).toBeUndefined();
+		expect(sync.outputBudgetMetadata(config.providerId, config.models[0].id)).toEqual({ inferred: true });
+		expect(runtime.getModel(config.providerId, config.models[0].id)?.maxTokens).toBe(8192);
 		await sync.edit(config.providerId, { ...config, models: [{ ...config.models[0], maxTokens: 2048 }] });
 		expect(sync.configs()[0].models[0].maxTokens).toBe(2048);
+		expect(sync.outputBudgetMetadata(config.providerId, config.models[0].id)).toEqual({ userConfiguredCap: 2048 });
 		expect(runtime.getModel(config.providerId, config.models[0].id)?.maxTokens).toBe(2048);
 	} finally { unbind(); }
 });
 
-it.each(["", "0", "-1", "NaN", "Infinity", "1.5", "9007199254740992"])("ignores disabled/invalid floor %s", floor => {
+it.each(["", "0", "-1", "NaN", "Infinity", "1.5", "9007199254740992"])("keeps inferred output capabilities out of persisted configuration %s", floor => {
 	const f = fixture(); f.claude();
 	const sync = new ModelSourceSync(join(f.home, "data"), join(f.home, "pi"), { home: f.home, env: { PI_MAX_TOKENS_FLOOR: floor } });
-	expect(sync.configs()[0].models[0].maxTokens).toBe(4096);
+	const config = sync.configs()[0];
+	expect(config.models[0].maxTokens).toBeUndefined();
+	expect(sync.outputBudgetMetadata(config.providerId, config.models[0].id)).toEqual({ inferred: true });
 });
 
-it("caps the floor at context size and preserves provider identities and source files", async () => {
+it("keeps inferred budgets out of provider identities and source files when overrides change", async () => {
 	const f = fixture(); f.claude();
 	const file = join(f.home, ".claude/settings.json"), original = readFileSync(file, "utf8");
 	const env = { PI_MAX_TOKENS_FLOOR: "0" };
@@ -369,11 +374,12 @@ it("caps the floor at context size and preserves provider identities and source 
 	const id = sync.configs()[0].providerId;
 	env.PI_MAX_TOKENS_FLOOR = "999999"; await sync.sync();
 	expect(sync.configs()[0].providerId).toBe(id);
-	expect(sync.configs()[0].models[0].maxTokens).toBe(sync.configs()[0].models[0].contextWindow);
+	expect(sync.configs()[0].models[0].maxTokens).toBeUndefined();
+	expect(sync.outputBudgetMetadata(id, sync.configs()[0].models[0].id)).toEqual({ inferred: true });
 	expect(readFileSync(file, "utf8")).toBe(original);
 });
 
-it("does not let native capability completion erase the configured synced floor", async () => {
+it("keeps inferred output capabilities separate when native declarations conflict", async () => {
 	const f = fixture(); f.claude("shared");
 	f.put("pi/models.json", { providers: { native: { api: "anthropic-messages", baseUrl: "https://api.anthropic.com", apiKey: "shared", models: [{ id: "claude-example-1", reasoning: false, input: ["text"], contextWindow: 32768, maxTokens: 4096 }] } } });
 	const runtime = await ModelRuntime.create({ authPath: join(f.home, "pi/auth.json"), modelsPath: join(f.home, "pi/models.json"), allowModelNetwork: false });
@@ -381,11 +387,27 @@ it("does not let native capability completion erase the configured synced floor"
 	const unbind = await sync.bind(runtime, () => false, () => {});
 	try {
 		const config = sync.configs()[0];
-		expect(config.models[0].maxTokens).toBe(16384);
+		expect(config.models[0].maxTokens).toBeUndefined();
+		expect(sync.outputBudgetMetadata(config.providerId, config.models[0].id)).toEqual({ inferred: true });
 		expect(sync.visible(config.providerId)).toBe(true);
 		expect(runtime.getModel("native", "claude-example-1")?.maxTokens).toBe(4096);
 		expect(runtime.getModel("native", "claude-example-1")?.input).toEqual(["text"]);
 		expect(runtime.getModel(config.providerId, "claude-example-1")?.input).toEqual(["text", "image"]);
 		expect(sync.origin("native").sources).toEqual(["pi"]);
+	} finally { unbind(); }
+});
+
+
+it("infers a missing native maxTokens declaration without persisting it", async () => {
+	const f = fixture();
+	const modelsPath = join(f.home, "pi/models.json");
+	f.put("pi/models.json", { providers: { native: { api: "anthropic-messages", baseUrl: "https://gateway.example", apiKey: "shared", models: [{ id: "native-model", reasoning: false, input: ["text"], contextWindow: 32768 }] } } });
+	const runtime = await ModelRuntime.create({ authPath: join(f.home, "pi/auth.json"), modelsPath, allowModelNetwork: false });
+	const sync = new ModelSourceSync(join(f.home, "data"), join(f.home, "pi"), { home: f.home, env: {} });
+	const unbind = await sync.bind(runtime, () => false, () => {});
+	try {
+		expect(runtime.getModel("native", "native-model")?.maxTokens).toBe(16384);
+		expect(sync.outputBudgetMetadata("native", "native-model")).toEqual({ inferred: true });
+		expect(readFileSync(modelsPath, "utf8")).not.toContain("maxTokens");
 	} finally { unbind(); }
 });

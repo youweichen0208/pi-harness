@@ -37,6 +37,7 @@ const NATIVE_NAMES = [
 	"copy",
 	"trace",
 	"export",
+	"trace-export",
 ];
 
 function connect() {
@@ -174,7 +175,7 @@ async function main() {
 	console.log(`[3] /cwd valid → ${TMP_CWD}`);
 
 	c.send({ type: "prompt", text: "/cwd /nonexistent-zzz" });
-	const cwdBad = await c.wait((m) => m.type === "notice", 6000);
+	const cwdBad = await c.wait((m) => m.type === "notice" && m.text.includes("切换工作目录失败"), 6000);
 	if (!cwdBad.text.includes("切换工作目录失败")) {
 		throw new Error("FAIL: /cwd invalid path should notice an error");
 	}
@@ -182,7 +183,7 @@ async function main() {
 
 	// --- 4. native /model with no match ---
 	c.send({ type: "prompt", text: "/model 这个模型必然不存在xyz" });
-	const modelBad = await c.wait((m) => m.type === "notice", 6000);
+	const modelBad = await c.wait((m) => m.type === "notice" && m.text.includes("没有匹配到模型"), 6000);
 	if (!modelBad.text.includes("没有匹配到模型")) {
 		throw new Error("FAIL: /model no-match should notice an error");
 	}

@@ -32,12 +32,6 @@ async function activate(id: string, manifest?: Record<string, unknown>): Promise
 	return h;
 }
 
-const TOOL = {
-	name: "probe_tool",
-	description: "d",
-	execute: async () => [{ type: "text" as const, text: "ok" }],
-};
-
 beforeEach(() => {
 	dir = mkdtempSync(join(tmpdir(), "plugin-perm-test-"));
 	mgr = new PluginManager(dir, dir);

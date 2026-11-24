@@ -10,7 +10,7 @@ import { NodeAgent } from "./node-agent.js";
 import { execFile } from "node:child_process";
 import { randomUUID, createHash } from "node:crypto";
 import { readFileSync, writeFileSync, mkdirSync, renameSync, statSync } from "node:fs";
-import { join, dirname, resolve } from "node:path";
+import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import ssh2, { Client, type ClientChannel, type SFTPWrapper } from "ssh2";
 

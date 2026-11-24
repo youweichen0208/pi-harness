@@ -51,7 +51,7 @@ Wiki 使用独立顶层窗口（ADR-0003）：浏览器命名弹窗 `pi-wiki`，
 
 **退出与恢复**：关闭窗口先走文档保存和运行中断确认。关闭后运行实例可由闲置客户端清理，持久 transcript 保留。刷新优先复用仍存活的 runtime；服务重启后旧 conversationId 不再有效时重新按工作区恢复历史。明确指定的 URL 文档决定正文，恢复对话不会强制打开历史里的某篇文档。新建／切历史前保存文档，保存失败或中断取消保留现场。聊天草稿按工作区及稳定 sessionId 存 sessionStorage，额外引用随对话持久保存。运行中切换文档、工作区或对话仍先确认中断并等待 `agent_settled`。
 
-`WikiWindowShell` 管理浮动／固定展示，`ChatDock` 移动同一个 MessageList + ChatInput 宿主，切换布局不重建聊天。默认收起问 pi、显示大纲；打开问 pi 默认浮动（420px，视口内拖动与缩放），固定模式替换右侧大纲，收起恢复大纲。localStorage 保存布局选择和浮动位置／尺寸，sessionStorage 保存展开状态。小于 900px 使用覆盖面板，暂不提供固定和拖动。文档改动抽屉在浮动助手之上。`WikiDocumentModal` 同时承载数据库与普通单文件文档弹窗。
+`WikiWindowShell` 管理浮动／固定展示，`ChatDock` 移动同一个 MessageList + ChatInput 宿主，切换布局不重建聊天。默认收起问 pi、显示大纲；打开问 pi 默认浮动（420px，视口内拖动与缩放），固定模式替换右侧大纲，收起恢复大纲。localStorage 保存布局选择和浮动位置／尺寸，sessionStorage 保存展开状态。小于 900px 使用覆盖面板，暂不提供固定和拖动。文档改动抽屉在浮动助手之上。`WikiDocumentModal` 承载普通单文件文档弹窗。
 
 聊天正文文件链接继续在当前 Wiki 窗口内打开，保留保存与中断保护；不导航到裸文件 URL。回归：`wiki-chat-links-desktop-test.mjs` 覆盖 Electron 流式、冻结和完成回复的链接、切文件夹、空目录与主窗口隔离。
 
@@ -85,7 +85,7 @@ Wiki 左侧目录栏顶部的「打开文件夹」复用 `FolderPickerModal` 与
 
 右栏发送通过 `ChatInput.beforeSend` 排空 Wiki 保存队列；冲突或失败时不发送且保留聊天草稿。保存完成后再次检查打开请求 token、cwd 与 conversationId，关闭或导航后的迟到操作不发送。模型设置入口先经过文档关闭保护再打开设置。
 
-`WikiDocumentModal`（数据库弹窗与普通对话里的单文件文档弹窗共用）使用原生模态 dialog，让后台界面 inert 并约束焦点，关闭恢复原焦点且不滚动背景。编辑器的浮动工具条与嵌套弹窗 portal 挂入文档 dialog，Escape 优先关闭内部菜单、搜索及确认框。Wiki 全屏对 `document.documentElement` 调用 Fullscreen API，视图同时铺满视口；Electron 会把全屏页面画在已打开的 dialog 之上（#89），全屏时保留滚动、焦点与选区；退出全屏监听 `fullscreenchange` 恢复原尺寸，退出 Wiki mode 时退出由它进入的全屏。退出前先等待进入请求完成；桌面版还要等 macOS 全屏动画结束（主进程在 `enter-html-full-screen` 到 `enter-full-screen` 之间发布 `fullscreenSettling`），动画中途退出会让页面停在全屏且退出请求永不返回。请求被拒绝时只做窗口内铺满。全程只改变尺寸，保留编辑器实例、草稿与光标。Electron 主进程同步 `enter/leave-html-full-screen` 窗口状态。回归：`tests/wiki-fullscreen-electron-test.mjs`。同项目同文档的滚动位置保存在最多 100 项的内存缓存中，重新打开时恢复。
+`WikiDocumentModal`（普通对话里的单文件文档弹窗）使用原生模态 dialog，让后台界面 inert 并约束焦点，关闭恢复原焦点且不滚动背景。编辑器的浮动工具条与嵌套弹窗 portal 挂入文档 dialog，Escape 优先关闭内部菜单、搜索及确认框。Wiki 全屏对 `document.documentElement` 调用 Fullscreen API，视图同时铺满视口；Electron 会把全屏页面画在已打开的 dialog 之上（#89），全屏时保留滚动、焦点与选区；退出全屏监听 `fullscreenchange` 恢复原尺寸，退出 Wiki mode 时退出由它进入的全屏。退出前先等待进入请求完成；桌面版还要等 macOS 全屏动画结束（主进程在 `enter-html-full-screen` 到 `enter-full-screen` 之间发布 `fullscreenSettling`），动画中途退出会让页面停在全屏且退出请求永不返回。请求被拒绝时只做窗口内铺满。全程只改变尺寸，保留编辑器实例、草稿与光标。Electron 主进程同步 `enter/leave-html-full-screen` 窗口状态。回归：`tests/wiki-fullscreen-electron-test.mjs`。同项目同文档的滚动位置保存在最多 100 项的内存缓存中，重新打开时恢复。
 
 ## 共用阅读画布（DocumentReading，2026-11-04）
 

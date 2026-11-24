@@ -3,7 +3,6 @@
 # then runs a slim runtime image. `docker compose up -d` = one-command deploy
 # with auto-restart on boot (`restart: unless-stopped`).
 #
-# The build compiles the JDBC bridge; the runtime does not bundle Java or vendor drivers.
 FROM node:22-bookworm-slim AS base
 WORKDIR /app
 # Both dependency installs need node-gyp on Linux (node-pty has no Linux
@@ -13,9 +12,6 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 FROM base AS build
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends openjdk-17-jdk-headless \
-    && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json ./
 COPY scripts/check-lockfile.mjs ./scripts/check-lockfile.mjs
 RUN npm run check:lockfile && npm ci

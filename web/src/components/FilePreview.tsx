@@ -255,12 +255,6 @@ const WorkspaceFilePreviewContent = memo(function WorkspaceFilePreviewContent({
 		}
 	};
 
-	const selectAll = () => {
-		if (lines.length === 0) return;
-		anchorRef.current = 1;
-		setSel({ start: 1, end: lines.length });
-	};
-
 	const addToChat = () => {
 		if (!sel) return;
 		onAddLines(file.path, file.name, sel.start, sel.end);
@@ -311,7 +305,6 @@ const WorkspaceFilePreviewContent = memo(function WorkspaceFilePreviewContent({
 		setZoom(Math.min(200, Math.max(50, next)));
 	};
 
-	const selCount = sel ? sel.end - sel.start + 1 : 0;
 	const isBinary = loaded?.binary ?? false;
 	const truncated = loaded?.truncated ?? false;
 	// Preview category from the server ("text" while loading). Media kinds are

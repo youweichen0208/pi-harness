@@ -1,4 +1,4 @@
-import { appendComposerText, openComposerModelSettings } from "../composer-text";
+import { appendComposerText } from "../composer-text";
 import { UiIcon } from "./UiIcon";
 import { DelegateNotification } from "./DelegateNotification";
 import { ToolRecoveryCard, type ToolRecoveryActions } from "./ToolRecoveryCard";
@@ -690,9 +690,8 @@ export const Message = memo(function Message({
 							<div className="msg-error reply-output-limit" role="status">
 								<span>{t(hasPartialReply ? "replyLengthLimit" : "replyLengthNoText")}</span>
 								{message.usage && <span>{t("replyOutputUsed", { n: message.usage.output })}</span>}
-								{isLast && !streaming && !turnContinues && conversationId && <div className="reply-output-actions">
-									<button type="button" className="btn" onClick={() => openComposerModelSettings(conversationId)}>{t("replyAdjustOutput")}</button>
-									{hasPartialReply && <button type="button" className="btn" onClick={() => appendComposerText(conversationId, t("replyContinuePrompt"))}>{t("replyPrepareContinue")}</button>}
+								{isLast && !streaming && !turnContinues && conversationId && hasPartialReply && <div className="reply-output-actions">
+									<button type="button" className="btn" onClick={() => appendComposerText(conversationId, t("replyContinuePrompt"))}>{t("replyPrepareContinue")}</button>
 								</div>}
 							</div>
 						)}

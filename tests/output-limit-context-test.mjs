@@ -5,7 +5,7 @@ import { mkdtempSync, readFileSync, mkdirSync, writeFileSync, rmSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createAgentSession, SessionManager, ModelRuntime } from "@earendil-works/pi-coding-agent";
-import { withOutputTokenFloor } from "../dist/server/model-output-floor.js";
+import { withOutputTokenFloor, withReasoningEnabled } from "../dist/server/model-output-floor.js";
 import { ModelSourceSync } from "../dist/server/model-source-sync.js";
 import { listenIsolated } from "./lib/isolated-server.mjs";
 const root = mkdtempSync(join(tmpdir(), "pi-length-context-"));
@@ -52,13 +52,14 @@ try {
 		session.dispose(); session = undefined;
 	}
 	// Native models.json uses the same floor without modifying the source file.
-	const nativeRuntime = withOutputTokenFloor(await ModelRuntime.create({ authPath: join(agent, "auth.json"), modelsPath: join(agent, "models.json"), allowModelNetwork: false }));
+	const nativeRuntime = withReasoningEnabled(withOutputTokenFloor(await ModelRuntime.create({ authPath: join(agent, "auth.json"), modelsPath: join(agent, "models.json"), allowModelNetwork: false })));
 	assert.equal(nativeRuntime.getModel("fixture", "fixture").maxTokens, 4096);
 	({ session } = await createAgentSession({ cwd: root, agentDir: agent, modelRuntime: nativeRuntime, tools: [], sessionManager: SessionManager.inMemory(root) }));
 	assert(session.getAvailableThinkingLevels().includes("medium"));
 	session.setThinkingLevel("medium");
 	await session.prompt("Write report with native model");
 	assert.equal(requests.at(-1).thinking?.type, "enabled");
+	assert((requests.at(-1).thinking?.budget_tokens ?? 0) < requests.at(-1).max_tokens, "thinking budget leaves room for the answer");
 	assert.equal(requests.at(-1).max_tokens, 4096);
 	assert.equal(session.messages.at(-1).stopReason, "length");
 	await nativeRuntime.refresh({ allowNetwork: false });
@@ -78,27 +79,32 @@ try {
 	const sync = new ModelSourceSync(join(root, "data"), isolatedAgent, { home: root, env });
 	unbind = await sync.bind(runtime, () => session?.isStreaming ?? false, () => {});
 	const provider = sync.configs()[0].providerId;
-	({ session } = await createAgentSession({ cwd: root, agentDir: isolatedAgent, modelRuntime: runtime, model: runtime.getModel(provider, "fixture"), tools: [], sessionManager: SessionManager.inMemory(root) }));
+	const effectiveRuntime = withReasoningEnabled(withOutputTokenFloor(runtime, env, { metadata: model => sync.outputBudgetMetadata(model.provider, model.id) }));
+	({ session } = await createAgentSession({ cwd: root, agentDir: isolatedAgent, modelRuntime: effectiveRuntime, model: effectiveRuntime.getModel(provider, "fixture"), tools: [], sessionManager: SessionManager.inMemory(root) }));
 	await session.prompt("Write report with synced model");
 	assert.equal(requests.at(-1).max_tokens, 4096);
 	assert.equal(session.messages.at(-1).stopReason, "length");
 	env.PI_MAX_TOKENS_FLOOR = "128000"; await sync.sync();
-	assert.equal(sync.configs()[0].models[0].maxTokens, 128000);
-	await session.setModel(runtime.getModel(provider, "fixture"));
+	assert.equal(sync.configs()[0].models[0].maxTokens, 4096);
+	assert.equal(effectiveRuntime.getModel(provider, "fixture")?.maxTokens, 128000);
+	await session.setModel(effectiveRuntime.getModel(provider, "fixture"));
 	await session.prompt("Finish the report after increasing the output budget");
 	assert.equal(requests.at(-1).max_tokens, 128000);
 	assert(requests.at(-1).messages.some(m => m.role === "assistant" && JSON.stringify(m.content).includes("UNFINISHED_REASONING_FIXTURE")));
 	assert.equal(session.messages.at(-1).stopReason, "stop");
 	assert(session.messages.at(-1).content.some(b => b.text === "REPORT_COMPLETE_FIXTURE"));
-	await runtime.complete(runtime.getModel(provider, "fixture"), { messages: [{ role: "user", content: "Explicit small budget", timestamp: Date.now() }] }, { maxTokens: 1 });
-	assert.equal(requests.at(-1).max_tokens, 1, "metadata floor does not overwrite explicit call budgets");
+	const beforeExplicit = requests.length;
+	const explicit = await effectiveRuntime.complete(effectiveRuntime.getModel(provider, "fixture"), { messages: [{ role: "user", content: "Explicit small budget", timestamp: Date.now() }] }, { maxTokens: 1 });
+	assert.equal(explicit.stopReason, "error");
+	assert.equal(explicit.errorMessage, "explicit-budget-unavailable");
+	assert.equal(requests.length, beforeExplicit, "unsatisfiable explicit budgets fail before any provider request");
 	const localConfig = sync.configs()[0];
 	await sync.edit(provider, { ...localConfig, models: [{ ...localConfig.models[0], maxTokens: 180000 }] });
-	await session.setModel(runtime.getModel(provider, "fixture"));
+	await session.setModel(effectiveRuntime.getModel(provider, "fixture"));
 	await session.prompt("Write with an independent model");
 	assert.equal(requests.at(-1).max_tokens, 180000);
 	console.log("PASS independent model: declared 180000 on wire");
-	console.log("PASS explicit synced floor: 4096 → 128000 on wire, preserved history, explicit maxTokens=1 unchanged");
+	console.log("PASS explicit synced floor: 4096 → 128000 on wire, preserved history, invalid explicit budget rejected before send");
 } finally {
 	session?.dispose(); unbind?.(); mock.closeAllConnections(); await new Promise(resolve => mock.close(resolve));
 	rmSync(root, { recursive: true, force: true });

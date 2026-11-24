@@ -1,5 +1,4 @@
 import { loadHarnessMcpConfig } from "./native-mcp-config.js";
-import { createDatabaseExtension } from "./database/extension.js";
 import { cacheWarmingSettings } from "./cache-warming.js";
 import type { BuiltinExtensionId } from "./protocol.js";
 import { SettingsManager, createCodemodeExtension, createMcpExtension, createToolSearchExtension, type InlineExtension, type ExtensionFactory } from "@earendil-works/pi-coding-agent";
@@ -29,15 +28,14 @@ function harnessMcpExtension(): ExtensionFactory {
 
 /** Shared by resource loading and the built-in extension inventory. */
 export const nativeExtensionRegistry = [
-	{ name: "pi-harness-database", replaceable: true, factory: createDatabaseExtension },
 	{ name: "codemode", builtin: true, replaceable: true, factory: createCodemodeExtension },
 	{ name: "tool-search", builtin: true, replaceable: true, factory: createToolSearchExtension },
 	{ name: "mcp", builtin: true, replaceable: true, factory: harnessMcpExtension },
 ] satisfies { name: BuiltinExtensionId; builtin?: boolean; replaceable: boolean; factory: () => ExtensionFactory }[];
 
 /** Same native extensions as the Pi CLI; activation follows the user's settings. */
-export function nativeToolExtensions(databaseScope?: () => string): InlineExtension[] {
-	return nativeExtensionRegistry.map(extension => ({ ...extension, factory: extension.name === "pi-harness-database" ? createDatabaseExtension(databaseScope) : extension.factory() }));
+export function nativeToolExtensions(): InlineExtension[] {
+	return nativeExtensionRegistry.map(extension => ({ ...extension, factory: extension.factory() }));
 }
 
 /** Stable settings aliases for the SDK's named inline extension paths. */

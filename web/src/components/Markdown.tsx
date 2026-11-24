@@ -25,7 +25,7 @@ interface MarkdownProps {
 	sourceLines?: boolean;
 	/** Interpret local file references in user-pasted text. */
 	fileLinks?: boolean;
-	/** Offer a Run control on Java code blocks. Set only where a Run belongs:
+	/** Offer a Run control on Python code blocks. Set only where a Run belongs:
 	 *  the conversation, never tool-call cards or the streaming renderer. */
 	runnable?: boolean;
 }
@@ -102,7 +102,7 @@ export function PreWithCopy({ children, fileLinks, showLanguage, runnable, ...pr
 	const code = codeText(children);
 	const child = Array.isArray(children) ? children[0] : children;
 	const language = child && typeof child === "object" && "props" in child ? /language-([\w+-]+)/.exec(String(child.props.className ?? ""))?.[1] : undefined;
-	// A Java block is code, never box-drawing art, and it is the only block a Run
+	// A Python block is code, never box-drawing art, and it is the only block a Run
 	// control attaches to.
 	if (runnable && ["python", "py", "python3"].includes(language ?? "")) {
 		return (

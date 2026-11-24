@@ -1,4 +1,3 @@
-import { answerHistory } from "../answer-history";
 import { WelcomeMotto } from "./WelcomeMotto";
 import { UiIcon } from "./UiIcon";
 import { ReplyActions } from "./ReplyActions";
@@ -34,7 +33,6 @@ import { retriedEditIds as findRetriedEditIds } from "../edit-write-presentation
 import { parseSkillBlock } from "../skill-block";
 import { isEmptyReply } from "../collapsed-groups";
 import { messageTimeGaps } from "../time-gaps";
-import { CollapsedGroup } from "./CollapsedGroup";
 import { LazyMount } from "./LazyMount";
 import {
 	applyPlan,
@@ -260,7 +258,6 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 	/** Empty retries render nothing; repeated questions fold into the copy that is shown. */
 	const emptyReplies = useMemo(() => new Set(state.messages.filter(isEmptyReply).map(message => message.id)), [state.messages]);
 	const predecessors = assistantPredecessors(messages);
-	const messageIndex = useMemo(() => new Map(state.messages.map((message, index) => [message.id, index])), [state.messages]);
 	const streamingHasContent = state.streamingMessage?.content.some((block) => block.type === "text" ? (typeof block.text === "string" && !!block.text.trim()) || !!block.truncated : block.type === "thinking" ? typeof block.thinking === "string" && !!block.thinking.trim() : true) ?? false;
 	const changeSummaries = useMemo(() => turnChangeSummaries(state.messages, state.taskProgress, state.cwd, state.isStreaming), [state.messages, state.taskProgress, state.cwd, state.isStreaming]);
 	const lastUserIndex = state.messages.findLastIndex((message) => message.role === "user" && message.origin !== "auto-reminder" && message.origin !== "auto-recovery");
@@ -270,8 +267,6 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 	const lastId = rawLastId ? repeatedErrors.hidden.get(rawLastId) ?? rawLastId : null;
 	// History stays expanded: every persisted message is fully rendered. The lazy
 	// window below still decides what is mounted, so long chats stay responsive.
-	const answerRounds = useMemo(() => answerHistory(state.messages), [state.messages]);
-	const historyExpanded = useMemo(() => new Set([...expanded, ...answerRounds.protectedIds]), [expanded, answerRounds]);
 	const foldedAnswers = useMemo(() => ({ heads: new Map<string, { ids: string[]; count: number }>(), hidden: new Set<string>() }), []);
 	const settledGroups = useMemo(() => groupBashMessages(state.messages, 0, new Set(timeGaps.keys())), [state.messages, timeGaps]);
 	const bashGroups = useMemo(() => withStreamingMessage(settledGroups, state.messages, state.streamingMessage), [settledGroups, state.messages, state.streamingMessage]);
@@ -290,7 +285,6 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 	}, [state.messages, state.streamingMessage, bashGroups, emptyReplies, repeatedErrors]);
 	// 相邻的同角色折叠消息并成一条摘要，仅在折叠区生效；历史已恒为展开，所以
 	// 这里只需要一份空结果，保留调用点结构以兼容惰性窗口。
-	const collapsed = useMemo(() => ({ groupAt: new Map<number, UiMessage[]>(), absorbed: new Set<number>() }), []);
 
 	// ---- 惰性窗口化（lazy windowing，纯函数见 lazy-window.ts）----------------
 	// 视口缓冲带之外的重型消息替换为等高占位 div；滚动临近时换回真实内容并
@@ -390,7 +384,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 	// （依赖用服务端缓存的消息数组——引用稳定，流式增量不会每帧重跑）
 	useEffect(() => {
 		const ids = new Set(state.messages.map((m) => m.id));
-		for (const [id, el] of elsRef.current) {
+		for (const [id] of elsRef.current) {
 			if (ids.has(id)) continue;
 			elsRef.current.delete(id);
 			heightsRef.current.delete(id);
@@ -547,15 +541,6 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
 	}, []);
-	const collapse = useCallback((id: string) => {
-		setExpanded((prev) => {
-			if (!prev.has(id)) return prev;
-			const next = new Set(prev);
-			next.delete(id);
-			return next;
-		});
-	}, []);
-
 	/** Scroll the conversation to a question; expand it first if it's collapsed. */
 	const jumpTo = useCallback(
 		(id: string) => {

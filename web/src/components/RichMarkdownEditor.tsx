@@ -4,7 +4,7 @@ import { pasteHtml } from "../paste-format-html";
 import { copyText } from "../clipboard";
 import { RichCommands } from "../rich-commands";
 import { editableDisclosures, cleanStyle } from "../rich-content";
-import { diffAgainstBaseline, canReplaceBlockTag, mergeBlockFormat, paintedBlockStyle, sampleFormat, type FormatSample, type InlineKey } from "../format-painter";
+import { diffAgainstBaseline, canReplaceBlockTag, paintedBlockStyle, sampleFormat, type FormatSample, type InlineKey } from "../format-painter";
 import { RichFormattingToolbar } from "./RichFormattingToolbar";
 import { RichLinkCardDialog } from "./RichLinkCardDialog";
 import { decorateWikiTables } from "../wiki-table-presentation";
@@ -30,14 +30,14 @@ import { createPortal } from "react-dom";
 import { WikiReadingDialog } from "./WikiReading";
 import { TEXT_HIGHLIGHT_COLORS } from "../remark-text-highlight";
 import { Fragment, memo, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { FiCalendar, FiBold, FiItalic, FiSquare, FiType, FiCode, FiPlay, FiList, FiCheckSquare, FiMinus, FiLink, FiImage, FiArrowUp, FiArrowDown, FiArrowLeft, FiArrowRight } from "react-icons/fi";
+import { FiCalendar, FiSquare, FiType, FiCode, FiPlay, FiList, FiCheckSquare, FiMinus, FiLink, FiImage, FiArrowUp, FiArrowDown, FiArrowLeft, FiArrowRight } from "react-icons/fi";
 import { markdownImageUrl } from "../markdown-image";
 import { withToken } from "../auth-token";
 import { getClientId } from "../use-chat";
 import { richCodeText } from "../rich-code-text";
 import { createRichCodeHighlighter } from "../rich-code-highlight";
 import { useT } from "../i18n";
-import { LuHeading2, LuHeading3, LuTableOfContents, LuPanelTop, LuInfo, LuLightbulb, LuTriangleAlert, LuChevronsUpDown, LuListOrdered } from "react-icons/lu";
+import { LuTableOfContents, LuPanelTop, LuInfo, LuLightbulb, LuTriangleAlert, LuChevronsUpDown, LuListOrdered } from "react-icons/lu";
 import { mountRichDocument, prepareRichDocument, readRichDocument, renderToc } from "../rich-markdown";
 import type { RichDocument, RichLabels } from "../rich-markdown";
 
@@ -107,7 +107,7 @@ function ensureTrailingParagraph(root: HTMLElement): void {
 export interface RichEditorHost {
 	uploadImage: (data: string, signal: AbortSignal) => Promise<string>;
 	resolveImage: (source: string) => string;
-	/** Offer a Run control on Java code blocks. Only the Notes host provides it,
+	/** Offer a Run control on Python code blocks. Only the Notes host provides it,
 	 *  so the Wiki host deliberately gets no Run control. */
 	runCode?: (code: string) => void;
 }
@@ -417,7 +417,6 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 				const selected = !!range && range.compareBoundaryPoints(Range.START_TO_START, contents) <= 0 && range.compareBoundaryPoints(Range.END_TO_END, contents) >= 0;
 				table.toggleAttribute("data-table-selected", selected);
 			});
-			const blocks: KernelBlock[] = [];
 		root.current?.querySelectorAll<HTMLElement>("pre > code").forEach(code => {
 				const contents = document.createRange(); contents.selectNodeContents(code);
 				const selected = !!range && !!code.textContent && range.compareBoundaryPoints(Range.START_TO_START, contents) <= 0 && range.compareBoundaryPoints(Range.END_TO_END, contents) >= 0;
@@ -1359,24 +1358,6 @@ export const RichMarkdownEditor = memo(function RichMarkdownEditor({ value, read
 			selection?.addRange(caret);
 			update();
 		}
-	};
-	const toggleHighlight = (color: typeof TEXT_HIGHLIGHT_COLORS[number]) => {
-		const range = highlightSelection();
-		if (!range || !root.current) return;
-		const walker = document.createTreeWalker(root.current, NodeFilter.SHOW_TEXT);
-		const colors: string[] = [];
-		let node: Node | null;
-		while ((node = walker.nextNode())) {
-			if (!node.textContent || !range.intersectsNode(node)) continue;
-			if (range.endContainer === node && range.endOffset === 0 || range.startContainer === node && range.startOffset === node.textContent.length) continue;
-			let element = node.parentElement, background = "";
-			while (element && element !== root.current) {
-				if (element.style.backgroundColor && element.style.backgroundColor !== "transparent") { background = element.style.backgroundColor; break; }
-				element = element.parentElement;
-			}
-			colors.push(background);
-		}
-		command("hiliteColor", colors.length && colors.every(value => value === color.rgb || value === color.hex) ? "transparent" : color.hex);
 	};
 	const insertLink = (address: string, internal = false) => {
 		const range = linkRange.current;

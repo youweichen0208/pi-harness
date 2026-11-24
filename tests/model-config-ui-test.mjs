@@ -258,6 +258,7 @@ async function run() {
 
 		const inC = await rowFor("mock-c").locator(":scope > select").inputValue();
 		check("mock-c stays text (no metadata)", inC === "text", `input=${inC}`);
+		check("max output editor is hidden", await page.locator('.model-row input[title="maxTokens"]').count() === 0);
 
 		// Error path: invalid baseUrl → inline error message.
 		await inputs.nth(2).fill("ht!tp://nope");

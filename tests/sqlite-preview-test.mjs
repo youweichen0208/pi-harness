@@ -52,6 +52,7 @@ try {
 	let apiUrl, requests = 0;
 	page.on("request", (request) => { if (request.url().includes("/api/sqlite?")) { apiUrl = request.url(); requests++; } });
 	await page.locator(".setup-modal .modal-close").click();
+	await page.locator(".tree-hidden-summary").click();
 	await page.locator(".file-name", { hasText: ".codegraph" }).click();
 	await page.locator(".file-name", { hasText: "graph.db" }).click();
 	const viewer = page.locator(".sqlite-preview");

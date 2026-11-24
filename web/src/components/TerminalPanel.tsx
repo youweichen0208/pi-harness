@@ -3,7 +3,6 @@ import { randomUuid } from "../uuid";
 import {
 	FiCheck,
 	FiChevronDown,
-	FiEdit2,
 	FiFolder,
 	FiFolderPlus,
 	FiMenu,

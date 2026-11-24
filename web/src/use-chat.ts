@@ -1067,6 +1067,11 @@ export function useChat() {
 					dispatch({ type: "message_delta", msg });
 					break;
 				}
+				case "session_export":
+					void import("./download").then(({ downloadSessionExport }) => downloadSessionExport(msg)).then(result => {
+						if (!result.ok && !result.cancelled) pushNotice("error", `下载会话导出失败：${result.error}`);
+					}).catch(error => pushNotice("error", `下载会话导出失败：${error instanceof Error ? error.message : String(error)}`));
+					break;
 				case "notice": {
 					if ((!msg.conversationId || msg.conversationId === authoritative.current.activeConversationId) && /MCP|mcp/i.test(msg.text)) window.dispatchEvent(new CustomEvent("pi-mcp-notice", { detail: msg.text }));
 					const id = ++noticeId.current;

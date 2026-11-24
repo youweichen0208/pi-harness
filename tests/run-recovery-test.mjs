@@ -48,10 +48,16 @@ const model = createServer((req, res) => { void (async () => {
 	assert(name, "fixture request retains the original user task");
 	const history = requests.get(name) ?? []; requests.set(name, history); history.push(body);
 	const nth = history.length;
+	if (name === "thinking_rejected" && nth === 2) {
+		res.writeHead(400, { "content-type": "application/json" });
+		return res.end(JSON.stringify({ error: { message: "Unsupported replayed thinking context" } }));
+	}
 	res.writeHead(200, { "content-type": "text/event-stream" });
 	res.flushHeaders(); streams.set(`${name}:${nth}`, res);
 	if (name === "length_once") return finish(res, nth === 1 ? "The first part explains the request lifecycle and records the observed state." : "RECOVERED_length_once", nth === 1 ? "length" : "stop");
 	if (name === "length_exhaust") return finish(res, `Partial result number ${nth}: the next section has not yet been completed.`, "length");
+	if (name === "thinking_once") return nth === 1 ? finish(res, "Consider the available evidence and select a useful next step.", "length", true) : finish(res, "RECOVERED_thinking_once");
+	if (name === "thinking_rejected") return finish(res, "Thinking that the provider will reject on replay.", "length", true);
 	if (name === "thinking_only") return finish(res, "Consider the available evidence and select a useful next step.", "length", true);
 	if (name === "text_progress" || name === "thinking_progress") {
 		if (nth === 1) {
@@ -150,10 +156,20 @@ try {
 	assert.equal(client.state.runRecovery.detail, "exhausted");
 	assert.equal(client.state.runRecovery.attempt, 2);
 	console.log("PASS length recovery stops after two additional model requests");
+	await fresh(client); await prompt(client, "thinking_once");
+	await settled(client, "thinking_once", 2, state => !state.runRecovery && JSON.stringify(state.messages).includes("RECOVERED_thinking_once"));
+	assert(JSON.stringify(requests.get("thinking_once")[1].messages).includes("上一次回复因输出额度耗尽而截断"), "thinking-only continuation uses the SDK session context");
+	console.log("PASS thinking-only length stop continues through the protocol-native SDK context");
+	await fresh(client); await prompt(client, "thinking_rejected");
+	await settled(client, "thinking_rejected", 2, state => state.runRecovery?.phase === "stopped");
+	assert.equal(client.state.runRecovery.detail, "failed");
+	assert.equal(client.state.runRecovery.attempt, 1);
+	console.log("PASS rejected thinking replay stops without another continuation");
 	await fresh(client); await prompt(client, "thinking_only");
-	await settled(client, "thinking_only", 1, state => state.runRecovery?.phase === "stopped");
-	assert.equal(client.state.runRecovery.detail, "thinking-only");
-	console.log("PASS thinking-only length stop does not auto-continue");
+	await settled(client, "thinking_only", 3, state => state.runRecovery?.phase === "stopped");
+	assert.equal(client.state.runRecovery.detail, "exhausted");
+	assert.equal(client.state.runRecovery.attempt, 2);
+	console.log("PASS repeated thinking-only length stops after two continuations");
 	const { serializeConversation } = await import(pathToFileURL(join(getPackageDir(), "dist/core/compaction/utils.js")));
 	for (const name of ["text_progress", "thinking_progress"]) {
 		await fresh(client); await prompt(client, name);
@@ -173,6 +189,7 @@ try {
 	assert.equal(client.state.runRecovery.detail, "exhausted");
 	assertQuarantined(client, "repeat_twice");
 	console.log("PASS repeated recovery failure stops without a third model request");
+	client = await connect();
 	await fresh(client); await prompt(client, "manual");
 	await wait(() => count("manual") === 1 && client.state.isStreaming, "manual request started");
 	const manualWireStart = client.wire.length;

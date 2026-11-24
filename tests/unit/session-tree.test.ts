@@ -44,7 +44,7 @@ describe("pinned SDK tree selector contract", () => {
 	}
 });
 test("labels, multiple roots, visible parents, sibling leaf targets and revision", () => {
-	const { sm, first, second, third, leaf } = fixture();
+	const { sm, first, second, third } = fixture();
 	const before = treeRevision(sm);
 	sm.appendLabelChange(first, "updated");
 	expect(treeRevision(sm)).not.toBe(before);

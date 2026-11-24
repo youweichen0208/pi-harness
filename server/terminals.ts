@@ -13,10 +13,9 @@
  * directory (the same directory the agent operates in — see set_cwd).
  */
 import { chmodSync, existsSync, readdirSync, realpathSync, statSync } from "node:fs";
-import { randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { homedir, tmpdir } from "node:os";
+import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 // MUST run before node-pty is required: rewrites the installed node-pty copies
 // so their worker/agent handlers tolerate Node `--watch`'s IPC traffic (see the
@@ -537,7 +536,6 @@ export class TerminalManager {
 		// (exited) does NOT grant one, or re-running exited terminals while at
 		// the cap could push the live count past MAX_TERMINALS.
 		if (!existing && !this.ensureSpawnAllowed(id)) return;
-		const hasHistory = this.history.has(id);
 		const rawDir = resolveCommandCwd(def.cwd, pwd);
 		const dir = this.safeCwd(rawDir);
 		const command = expandPwd(def.command.trim(), pwd);

@@ -15,13 +15,13 @@ const root = mkdtempSync(join(tmpdir(), "pi-trace-browser-"));
 const agent = join(root, "agent"), data = join(root, "data"), work = join(root, "work");
 for (const directory of [agent, data, work]) mkdirSync(directory, { recursive: true });
 writeFileSync(join(data, "design-first.json"), JSON.stringify({ enabled: false }));
-let browser, harness, fixtureError;
+let browser, harness, fixtureError, modelRequests = 0;
 const chunk = (res, delta, finishReason = null) => res.write(`data: ${JSON.stringify({ id: "trace-ui", object: "chat.completion.chunk", choices: [{ index: 0, delta, finish_reason: finishReason }] })}\n\n`);
 const attack = `TRACE_DONE </pre><script>globalThis.__traceExportExecuted=true</script><iframe src="https://invalid.example"></iframe><meta http-equiv="refresh" content="0;url=https://invalid.example"><img src=x onerror=alert(1)><a href="javascript:alert(1)">click</a>`;
 const escapedAttack = attack.replace(/[&<>"']/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
 const model = createServer((req, res) => { void (async () => {
 	let raw = ""; for await (const part of req) raw += part;
-	const body = JSON.parse(raw);
+	const body = JSON.parse(raw); modelRequests++;
 	const text = body.messages.map(message => typeof message.content === "string" ? message.content : JSON.stringify(message.content)).join("\n");
 	const hasToolResult = body.messages.some(message => message.role === "tool");
 	res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache" }); res.flushHeaders();
@@ -114,8 +114,8 @@ try {
 	await exported.close();
 	await page.getByRole("button", { name: "关闭", exact: true }).click();
 	const jsonEvent = page.waitForEvent("download");
-	await send(page, "/export json");
-	const jsonDownload = await jsonEvent;
+	await send(page, "/trace-export json");
+	const jsonDownload = await jsonEvent.catch(async error => { console.error("Trace JSON export page:", await page.locator("body").innerText()); throw error; });
 	await page.locator(".trace-workbench").waitFor();
 	const metadata = JSON.parse(readFileSync(await jsonDownload.path(), "utf8"));
 	assert.equal(metadata.privacy.containsMessageContent, false);
@@ -148,6 +148,23 @@ try {
 	await page.setViewportSize({width:1440,height:960});
 
 	await page.getByRole("button", { name: "关闭", exact: true }).click();
+	const requestsBeforeExports = modelRequests;
+	const nativeHtmlEvent = page.waitForEvent("download");
+	await send(page, "/export");
+	const nativeHtmlDownload = await nativeHtmlEvent.catch(async error => { console.error("Native HTML export page:", await page.locator("body").innerText()); throw error; });
+	const nativeHtml = readFileSync(await nativeHtmlDownload.path(), "utf8");
+	assert(nativeHtmlDownload.suggestedFilename().endsWith(".html"));
+	assert(nativeHtml.includes("<html"));
+	assert(!nativeHtml.includes("pi-harness session export"));
+	const nativeJsonlEvent = page.waitForEvent("download");
+	await send(page, "/export jsonl");
+	const nativeJsonlDownload = await nativeJsonlEvent;
+	const nativeJsonl = readFileSync(await nativeJsonlDownload.path(), "utf8");
+	assert(nativeJsonlDownload.suggestedFilename().endsWith(".jsonl"));
+	assert(nativeJsonl.includes('"type":"message"'));
+	await send(page, "/export ../outside");
+	await page.locator(".notice").filter({ hasText: "仅支持受控下载" }).waitFor();
+	assert.equal(modelRequests, requestsBeforeExports, "native and trace exports never call the model");
 	await send(page, "/trace");
 	await page.locator(".trace-workbench").waitFor();
 

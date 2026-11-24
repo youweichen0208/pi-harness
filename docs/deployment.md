@@ -103,7 +103,7 @@ npm run publish:electron       # 同 build，但 --publish always——本地跑
 
 - 主进程 `fork()` 一个隐藏子进程跑 `dist/server/index.js`（`ELECTRON_RUN_AS_NODE=1`，
   即用 Electron 自带的 Node 运行时跑纯 Node 代码，不是渲染进程）。
-- 桌面 Pi SDK 精确锁定为 1.4.0；终端 `pi update` 只更新外部 CLI。
+- 桌面 Pi SDK 精确锁定为 1.6.0；终端 `pi update` 只更新外部 CLI。
 - 打包排除仓库里的 `.pi`、`.omp`、`.env*`，以及本地 `.claude` 工作树、`.playwright-mcp`、`.scratch` 和 npm 压缩包。electron-builder 不读取 `.gitignore`，这些目录必须在 `files` 中显式排除，避免嵌套旧安装包和调试产物。产物运行 `tests/packaged-server-start-test.mjs`、`tests/native-tools-desktop-test.mjs`、`tests/provider-auth-test.mjs`，检查开发目录未被带入、终端、Codemode worker、SDK 文档、OAuth lazy 模块。
 
 - 通过 stdout 里的 `⚡ pi-harness` 标记（见 `server/index.ts` 的 `httpServer.listen` 回调）
@@ -139,9 +139,9 @@ npm run publish:electron       # 同 build，但 --publish always——本地跑
 - Electron 渲染页加 `pi-desktop` 类，次要操作位于设置菜单；窗口宽度
   ≤900px 时右侧文件树变为抽屉。Web 和桌面共用工作区布局，模型设置位于输入框底部；
   顶栏高 44px，项目栏全高显示；macOS 品牌区为原生窗口按钮留空，项目栏开关固定在红绿灯右侧，收起项目栏时标题仍避让这些控件。Windows/Linux 与 macOS 使用同一套窗口按钮：三枚红绿灯圆点固定在 `left: 18px; top: 17px`，顶栏只保留左侧 92px 避让，右侧不再预留按钮空间；顶栏横跨对话与文件栏。设置和文件按钮不压缩，视图入口在空间不足时依次将 Git、终端移入更多菜单。`tests/desktop-toolbar-test.mjs` 在 Chromium 中模拟两平台外壳，验证顶栏边界、状态数字与任务定位（不替代真机窗口验证）。详见 [界面布局](ui-design.md)。
-- 初始窗口背景匹配默认简白主题；Mac 界面使用 SF Pro／苹方，仅 Playground 与 Wiki 的代码保留原代码字体；Windows 界面优先 Segoe UI 与微软雅黑，代码保持 JetBrains Mono；字体子集外字符回退到系统字体。视觉以 `ui-design.md` 的语雀桌面参考为准。顶栏直接提供对话、终端、Git、数据库、节点与插件，窄屏横向滚动；Wiki 从左栏知识库进入；连接与路径位于底部状态栏。
+- 初始窗口背景匹配默认简白主题；Mac 界面使用 SF Pro／苹方，仅 Playground 与 Wiki 的代码保留原代码字体；Windows 界面优先 Segoe UI 与微软雅黑，代码保持 JetBrains Mono；字体子集外字符回退到系统字体。视觉以 `ui-design.md` 的语雀桌面参考为准。顶栏直接提供对话、终端、Git、节点与插件，窄屏横向滚动；Wiki 从左栏知识库进入；连接与路径位于底部状态栏。
 - 流畅界面与 Web 共用：窄窗口抽屉使用可中断弹簧与独立拖动区；系统减少动态效果/透明度与提高对比度设置有对应降级。窗口控件、拖动区域与 IPC 不变。
-- SDK 原生提示词引用的 README、docs 与 examples 通过 extraResources 原样保留，防止 electron-builder 的生产依赖剪枝删除扩展示例。afterPack 检查文档和示例入口；native-tools-desktop-test 使用包内 SDK 的真实路径读取资源，缺失时阻断打包回归。
+- SDK 原生提示词引用的 README、docs 与 examples 通过 extraResources 原样保留，防止 electron-builder 的生产依赖剪枝删除扩展示例。afterPack 检查文档、示例入口及原生 HTML 导出模板/CSS/JS/vendor；native-tools-desktop-test 使用包内 SDK 的真实路径读取资源并实际导出 HTML/JSONL，缺失时阻断打包回归。
 - 原生模块（`node-pty`）：`electron-builder.yml` 里 `npmRebuild: true`，打包时自动
   rebuild 成 Electron 的 Node ABI，不需要手动 `electron-rebuild`；本机需要装好
   Xcode Command Line Tools（mac）/ Visual Studio Build Tools（win）。
@@ -210,15 +210,11 @@ Desktop 包含 Pi SDK 和扩展运行环境，普通本地扩展不要求独立�
 
 Desktop 不额外内置 Git、npm 或独立 Node.js。npm 来源社区包使用系统包管理工具（也支持 Pi 的自定义 `npmCommand`）；Git 来源需要 Git，包依赖或安装脚本可能还需要 npm/Node.js。缺失时界面提示安装并重试，PATH 变更后可能需要重启应用。远程 Web 部署需在运行服务的电脑上准备工具及扩展文件。
 
-### GaussDB 本地 JDBC
-
-应用包包含自建 JDBC 桥接，不包含 Java 运行时或厂商驱动。DataGrip 与服务需运行在能读取同一配置、jar 和证书的环境中；启动用户必须有对应文件权限。可设置 PI_WEB_JAVA 为 java/java.exe 的完整路径。Docker 构建阶段安装 JDK 17，运行镜像不带 Java；容器需要自行提供兼容 Java、配置、驱动及证书，宿主 Windows/macOS 的绝对路径不会自动转换为容器路径。
-
 ### Vercel 静态前端
 
-仓库根目录的 `vercel.json` 将 Vercel 构建固定为 `npm run build:web`，发布 `web/dist`。静态托管不需要编译 JDBC 桥接，因此不要求 JDK。完整的 `npm run build` 仍为 CLI、Docker 与桌面版构建服务端及 JDBC 桥接，必须具备 JDK 17+。
+仓库根目录的 `vercel.json` 将 Vercel 构建固定为 `npm run build:web`，发布 `web/dist`。静态托管只构建前端；完整的 `npm run build` 为 CLI、Docker 与桌面版构建前端和服务端。
 
-Vercel 静态部署只提供前端资源，不运行本项目的常驻 WebSocket、PTY 或本机数据库服务；完整功能使用上述 CLI / Docker / 桌面部署。此配置不添加后端代理或改变 API 路由。
+Vercel 静态部署只提供前端资源，不运行本项目的常驻 WebSocket、PTY 或本机服务；完整功能使用上述 CLI / Docker / 桌面部署。此配置不添加后端代理或改变 API 路由。
 
 
 ### Windows 窗口控件恢复（2026-11-18）

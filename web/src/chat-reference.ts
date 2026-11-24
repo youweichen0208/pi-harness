@@ -1,6 +1,5 @@
 /** UI-only transfer: never sends a prompt or attaches an entire document. */
 export interface ChatReferenceRequest {
-	database?: { id: string; name: string; version: string };
 	id: string;
 	cwd: string;
 	conversationId: string;

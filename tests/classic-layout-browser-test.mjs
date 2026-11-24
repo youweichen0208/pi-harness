@@ -1,4 +1,4 @@
-/** Classic v1.3.1 layout with current database and document workbenches. */
+/** Classic v1.3.1 layout with the current document workbench. */
 import assert from 'node:assert/strict';
 import { spawn, execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
@@ -34,9 +34,11 @@ try {
 	await page.locator('.setup-modal .modal-close').click();
 	await page.locator('.status-dot.ok').waitFor();
 	mkdirSync('tests/scratch', { recursive: true });
-	await page.locator('.workspace-group-manager input').fill('Studio');
-	await page.locator('.workspace-group-actions button[type=submit]').click();
-	await page.locator('.workspace-outside button').click();
+	await page.locator('.compact-empty-create').click();
+	await page.locator('.workspace-name-field input').fill('Studio');
+	await page.locator('.workspace-name-actions button').last().click();
+	await page.locator('.lp-add-project').click();
+	await page.locator('.fpk-open-btn').click();
 	await page.locator('.project-item.active').waitFor();
 	assert(await page.locator('.inputbar textarea').isVisible());
 	assert.equal(await page.locator('.home-onboarding, .conversation-home-heading, .workbench-panel-tabs').count(), 0);
@@ -53,14 +55,6 @@ try {
 	assert(await page.locator('.panel-right > .panel-lower').isVisible());
 	await page.locator('.inputbar textarea').fill('Review this workspace');
 	await page.screenshot({path:'tests/scratch/classic-chat.png'});
-	const database = page.locator('.view-switch').getByRole('button',{name:'数据库',exact:true});
-	await database.click();
-	await page.locator('.database-workbench').waitFor();
-	assert.equal(await page.locator('.wiki-agent-chat .inputbar textarea').inputValue(),'Review this workspace');
-	await page.locator('.database-actions').getByRole('button',{name:'新建连接',exact:true}).click();
-	await page.locator('.database-form').waitFor();
-	await page.screenshot({path:'tests/scratch/classic-database.png'});
-	await page.locator('.wiki-modal-header > button').last().click();
 	await page.locator('.file-name',{hasText:'README.md'}).first().click();
 	await page.locator('.wiki-prose .fp-rich-document').waitFor();
 	assert.equal(await page.locator('.wiki-document-heading h1').evaluate(el => getComputedStyle(el).fontFamily.split(',')[0].replaceAll('"','')), 'Source Serif 4');
@@ -78,11 +72,8 @@ try {
 	await page.evaluate(() => document.documentElement.dataset.appearance = 'light');
 	await page.setViewportSize({width:390,height:844});
 	await page.emulateMedia({reducedMotion:'reduce'});
-	await database.click();
-	await page.locator('.database-workbench').waitFor();
 	assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
 	await page.screenshot({path:'tests/scratch/classic-mobile.png'});
-	await page.locator('.wiki-modal-header > button').last().click();
 	await page.locator('.topbar .brand .panel-toggle').click();
 	await page.locator('.drawer-left.open .sidebar-brand').waitFor();
 	await page.screenshot({path:'tests/scratch/classic-mobile-sidebar.png'});
@@ -109,7 +100,7 @@ try {
 	const dots = await page.locator('.waiting-brand i').evaluateAll(nodes => nodes.map(el => { const style = getComputedStyle(el); return [style.backgroundColor, style.borderRadius, style.animationName]; }));
 	assert.deepEqual(dots, [['rgb(238, 140, 124)','1.5px','none'],['rgb(62, 143, 192)','1.5px','none'],['rgb(242, 188, 78)','1.5px','none']]);
 	assert.deepEqual(errors, []); assert.deepEqual(external, []);
-	console.log('PASS classic UI: tokens, fixed panels, footer, flat transcript, same-chat database/Wiki, settings, dark and mobile');
+	console.log('PASS classic UI: tokens, fixed panels, footer, flat transcript, same-chat Wiki, settings, dark and mobile');
 } finally {
 	await browser?.close();
 	if (server) { server.kill('SIGTERM'); if (server.exitCode === null) await new Promise(r => server.once('exit',r)); }

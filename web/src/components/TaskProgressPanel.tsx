@@ -2,7 +2,6 @@ import { RunningIndicator } from "./RunningIndicator";
 import { isToolTextContinuation } from "../../../server/tool-text";
 import { currentCodemodeGroups, type CodemodeActivity } from "../codemode-records";
 import { CodemodeRecords } from "./CodemodeRecords";
-import { UiIcon } from "./UiIcon";
 import { toolTextIncidents } from "../tool-text";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FiChevronRight } from "react-icons/fi";
@@ -46,7 +45,6 @@ function TaskProgressContent({ send, codemode, liveOutputs, toolStatuses, conver
 	const [expandedPhase, setExpandedPhase] = useState<string | null>(null);
 	// 运行中的步骤默认展开自己的条目（读者要看的正是此刻在跑什么），可折叠。
 	const [compactActive, setCompactActive] = useState(false);
-	const [expanded, setExpanded] = useState<string | null>(null);
 	// 命令列表超过这个数就只先露几条：一整屏都是命令时，步骤日志就失去扫读能力。
 	const [allItemsShown, setAllItemsShown] = useState<string | null>(null);
 	const scrollRef = useRef<HTMLDivElement>(null);

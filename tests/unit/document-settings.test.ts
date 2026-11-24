@@ -14,19 +14,19 @@ function settingsFile() {
 describe("document extension settings", () => {
 	it("defaults to lazy enabled and observes external disables while retaining other settings", () => {
 		const file = settingsFile();
-		expect(getDocumentSettings()).toEqual({ backgroundEnabled: true, databaseEnabled: true });
-		writeFileSync(file, JSON.stringify({ pdfEnabled: false, okfEnabled: true, futureOption: "keep" }));
-		expect(getDocumentSettings().databaseEnabled).toBe(true);
-		updateDocumentSettings({ databaseEnabled: false });
-		expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({ backgroundEnabled: true, databaseEnabled: false, futureOption: "keep" });
+		expect(getDocumentSettings()).toEqual({ backgroundEnabled: true });
+		writeFileSync(file, JSON.stringify({ pdfEnabled: false, okfEnabled: true, databaseEnabled: false, futureOption: "keep" }));
+		expect(getDocumentSettings().backgroundEnabled).toBe(true);
+		updateDocumentSettings({ backgroundEnabled: false });
+		expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({ backgroundEnabled: false, futureOption: "keep" });
 	});
 	it("does not enable features or replace configuration when a saved file is invalid", () => {
 		const file = settingsFile();
 		writeFileSync(file, "broken");
 		expect(() => getDocumentSettings()).toThrow(/document-extensions/);
-		expect(() => updateDocumentSettings({ databaseEnabled: true })).toThrow();
+		expect(() => updateDocumentSettings({ backgroundEnabled: true })).toThrow();
 		expect(readFileSync(file, "utf8")).toBe("broken");
-		writeFileSync(file, JSON.stringify({ databaseEnabled: "invalid" }));
+		writeFileSync(file, JSON.stringify({ backgroundEnabled: "invalid" }));
 		expect(() => getDocumentSettings()).toThrow(/boolean/);
 	});
 });

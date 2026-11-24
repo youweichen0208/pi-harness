@@ -73,18 +73,18 @@ it("normalizes what it writes, so a bad value never lands on disk", () => {
 	expect(JSON.parse(readFileSync(file, "utf8")).timeoutMs).toBe(60000);
 });
 
-it("enables a fresh installation only when a JDK is available", () => {
+it("enables a fresh installation only when Python is available", () => {
 	const { file } = fixture();
 	const store = new PlaygroundConfigStore(file);
 	expect(store.read(false).enabled).toBe(false);
 	expect(store.read(true).enabled).toBe(true);
-	// Discovery is not a user choice: installing a JDK later can enable it.
+	// Discovery is not a user choice: installing Python later can enable it.
 	expect(store.read(false).enabled).toBe(false);
 	store.write({ ...store.read(true), enabled: false });
 	expect(new PlaygroundConfigStore(file).read(true).enabled).toBe(false);
 });
 
-it("keeps damaged and invalid settings disabled even with a JDK", () => {
+it("keeps damaged and invalid settings disabled even with Python available", () => {
 	const { file } = fixture();
 	for (const data of ['{broken', '{}', '{"enabled":"true"}']) {
 		writeFileSync(file, data);

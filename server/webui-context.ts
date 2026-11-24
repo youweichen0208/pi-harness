@@ -60,7 +60,7 @@ const mockTui = new Proxy(
 
 interface WidgetEntry {
 	/** Renders the widget to plain text lines, or undefined when empty. */
-	render: (width: number) => string[] | undefined;
+	render: (width: number) => readonly string[] | undefined;
 	/** Whether the widget can be disposed. */
 	dispose?: () => void;
 }
@@ -73,7 +73,7 @@ interface WidgetEntry {
 export class WebUIContext {
 	readonly theme = mockTheme;
 	private widgets = new Map<string, WidgetEntry>();
-	private lastLines = new Map<string, string[]>();
+	private lastLines = new Map<string, readonly string[]>();
 	private emit: (msg: ServerMessage) => void;
 
 	private disposed = false;
@@ -98,7 +98,7 @@ export class WebUIContext {
 		}
 		if (typeof content === "function") {
 			let comp:
-				| { render?: (w: number) => string[] | undefined; dispose?: () => void }
+				| { render?: (w: number) => readonly string[] | undefined; dispose?: () => void }
 				| undefined;
 			try {
 				// Mock TUI/theme: extensions only read a handful of theme helpers;
@@ -121,7 +121,7 @@ export class WebUIContext {
 	refresh(): void {
 		let changed = false;
 		for (const [key, w] of this.widgets) {
-			let lines: string[] | undefined;
+			let lines: readonly string[] | undefined;
 			try {
 				lines = w.render(WIDGET_WIDTH);
 			} catch {
@@ -144,7 +144,7 @@ export class WebUIContext {
 	/** Render all widgets to their current text lines (without emitting). */
 	snapshot(): { key: string; lines: string[] }[] {
 		return [...this.widgets.entries()].map(([key, w]) => {
-			let lines: string[] | undefined;
+			let lines: readonly string[] | undefined;
 			try {
 				lines = w.render(WIDGET_WIDTH);
 			} catch {

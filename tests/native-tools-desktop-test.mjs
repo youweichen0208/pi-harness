@@ -114,6 +114,11 @@ export default function(pi) { pi.registerTool({name:'legacy_fixture', label:'Leg
 		assert.deepEqual(resourceLoader.getExtensions().errors, []);
 		await session.prompt("Record the changed tool loadout before resume.");
 		const saved = session.sessionFile; assert(saved);
+		const exportedHtml = join(cwd, "packaged-session.html"), exportedJsonl = join(cwd, "packaged-session.jsonl");
+		await session.exportToHtml(exportedHtml); session.exportToJsonl(exportedJsonl);
+		assert(readFileSync(exportedHtml, "utf8").includes('<script id="session-data"'));
+		assert(readFileSync(exportedJsonl, "utf8").includes("Record the changed tool loadout"));
+		console.log('PASS packaged native HTML/JSONL export resources');
 		const resumedLoader = new DefaultResourceLoader({ cwd, agentDir, settingsManager, extensionFactories: [...nativeToolExtensions(), { name: "new-tools", factory: pi => {
 			for (const [name, defaultActive] of [["new_active_tool", true], ["new_inactive_tool", false]]) pi.registerTool({ name, defaultActive, label: name, description: name, parameters: {type:"object",properties:{}}, execute: async () => ({content:[{type:"text",text:"fixture"}],details:{}}) });
 		} }] }); await resumedLoader.reload();

@@ -83,11 +83,25 @@ export async function downloadFile(
 	path: string,
 	name: string,
 ): Promise<DownloadResult> {
+	return downloadResource(downloadUrl(path), name);
+}
+
+export async function downloadSessionExport(message: { conversationId: string; sessionId: string; token: string; name: string }): Promise<DownloadResult> {
+	const qs = new URLSearchParams({
+		clientId: getClientId(),
+		conversationId: message.conversationId,
+		sessionId: message.sessionId,
+		token: message.token,
+	});
+	return downloadResource(withToken(`/api/session-export?${qs}`), message.name, false);
+}
+
+async function downloadResource(url: string, name: string, preferPicker = true): Promise<DownloadResult> {
 	// On Windows the save name must be sanitized or the save silently fails
 	// with an unreadable name (e.g. "a:b.txt" → refused).
 	const saveName = IS_WINDOWS ? sanitizeFileName(name) : name;
 	try {
-		const res = await fetch(downloadUrl(path));
+		const res = await fetch(url);
 		if (!res.ok) {
 			const body = await res.text().catch(() => "");
 			return {
@@ -101,11 +115,11 @@ export async function downloadFile(
 		if (len > BLOB_MAX_BYTES) {
 			// Too big to buffer — let the browser stream it natively. This is
 			// the one path still subject to Safe Browsing on Windows.
-			window.location.assign(downloadUrl(path));
+			window.location.assign(url);
 			return { ok: true };
 		}
 		const blob = await res.blob();
-		if (window.showSaveFilePicker && window.isSecureContext) {
+		if (preferPicker && window.showSaveFilePicker && window.isSecureContext) {
 			return saveViaFilePicker(blob, saveName);
 		}
 		return saveViaAnchor(blob, saveName);

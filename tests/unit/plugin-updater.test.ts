@@ -19,7 +19,6 @@ import {
 	ensureBackup,
 	listBackups,
 	restoreBackup,
-	pruneBackups,
 	resolveRemoteSha,
 	checkPluginUpdates,
 	execGit,

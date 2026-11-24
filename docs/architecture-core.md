@@ -3,7 +3,7 @@
 ## 原生上下文边界
 
 
-会话由 pi 1.5.0 原版 SDK 创建。WebUI 只桥接用户输入、原生事件和界面交互；普通本地会话通过可关闭的后台命令扩展复用原生 bash，不注入终端状态消息。原生配置文件、技能、用户扩展和官方 MCP/Codemode/tool_search 由 pi 加载。WebUI 设置支持显示偏好、界面插件可见性及原生配置管理；Extensions 管理用户明确选择的包；系统提示词页编辑用户选择的原生 SYSTEM/APPEND/上下文文件，空闲时原生 reload，下一次请求由 SDK 应用变化；来源、文件校验与运行中保存见 [系统提示词架构](architecture-system-prompt.md)。新会话、切换、恢复和重载共用同一个原生运行时工厂。历史 transcript 不会改写。
+会话由 pi 1.6.0 原版 SDK 创建。WebUI 只桥接用户输入、原生事件和界面交互；普通本地会话通过可关闭的后台命令扩展复用原生 bash，不注入终端状态消息。原生配置文件、技能、用户扩展和官方 MCP/Codemode/tool_search 由 pi 加载。WebUI 设置支持显示偏好、界面插件可见性及原生配置管理；Extensions 管理用户明确选择的包；系统提示词页编辑用户选择的原生 SYSTEM/APPEND/上下文文件，空闲时原生 reload，下一次请求由 SDK 应用变化；来源、文件校验与运行中保存见 [系统提示词架构](architecture-system-prompt.md)。新会话、切换、恢复和重载共用同一个原生运行时工厂。历史 transcript 不会改写。
 
 > 改代码前必读。本文档覆盖快照驱动、协议单源、安全边界、多对话并发等全局架构决策。
 
@@ -52,7 +52,7 @@ SDK `tool_execution_update.partialResult` 是累计输出快照，服务端发�
 
 `hello` 可带 `protocolVersion`，`ready.serverVersion` 回带运行中 pi-harness 包的版本（不是 pi SDK 的 `VERSION`，底栏也显示此值）；前端比对协议不一致时显示持久刷新横幅（应用原地更新后「界面新的/WS 旧的」混跑防护）。常量在 server/ 与 web/ 各一份 protocol-version.ts，`check:protocol` 校验两份一致——改协议时必须同步 bump。
 
-## 全局缓存预热（Pi 1.5.2）
+## 全局缓存预热（Pi 1.6.0）
 
 `cache-warming.ts` 只调整原生全局 `cacheWarming` 的缺省读取：没有明确值时使用 `streaming`，显式 `off` / `streaming` / `idle` 保留；项目配置不能开启付费预热。界面通过 `set_cache_warming` 请求原生 SettingsManager 持久化，并串行同步普通、Wiki、后台及 SSH 的已加载会话；新创建与替换的会话也登记，dispose 时注销。原生 SDK 负责调度，宿主不增加预热模型请求。
 
@@ -104,7 +104,7 @@ SDK `tool_execution_update.partialResult` 是累计输出快照，服务端发�
 
 ### Agent Execution Trace（默认开启）
 
-`server/execution-trace.ts` 默认通过原生 inline extension 的 `before_provider_request`、`after_provider_response`、`provider_stream_event` 与 SDK 生命周期事件记录执行 trace；`PI_TASK_TIMINGS=off/0/false` 停止新采集。Trace 不进入模型上下文，不保存提示词、工具参数、header 值或响应正文，但 session/run/request/tool/model 标识和时间仍属于非匿名 metadata。宿主 prompt accepted 使用独立 hostRequestId，SDK agent_start 使用随机 runId，并由宿主 `onEvent` 注入 conversationId，因此排队或自动续接的 run 也保留会话归属；host request 的映射仍可单独标记为 ambiguous。provider request、assistant timestamp、toolCallId/parentToolCallId 分层关联。response 只在同 session 唯一活动请求下归属，stream 另校验 provider/api/model；SDK 1.5.2 的 message 事件对象身份不稳定，使用经契约测试验证的 assistant timestamp 回退。并发、乱序或缺 hook 写 `ambiguous`/`unmeasured`，不猜测归属。
+`server/execution-trace.ts` 默认通过原生 inline extension 的 `before_provider_request`、`after_provider_response`、`provider_stream_event` 与 SDK 生命周期事件记录执行 trace；`PI_TASK_TIMINGS=off/0/false` 停止新采集。Trace 不进入模型上下文，不保存提示词、工具参数、header 值或响应正文，但 session/run/request/tool/model 标识和时间仍属于非匿名 metadata。宿主 prompt accepted 使用独立 hostRequestId，SDK agent_start 使用随机 runId，并由宿主 `onEvent` 注入 conversationId，因此排队或自动续接的 run 也保留会话归属；host request 的映射仍可单独标记为 ambiguous。provider request、assistant timestamp、toolCallId/parentToolCallId 分层关联。response 只在同 session 唯一活动请求下归属，stream 另校验 provider/api/model；SDK 1.6.0 的 message 事件对象身份不稳定，使用经契约测试验证的 assistant timestamp 回退。并发、乱序或缺 hook 写 `ambiguous`/`unmeasured`，不猜测归属。
 
 所有耗时使用单调 wall clock；model/tool/host 采用分层区间并集，不把并行工具或嵌套宿主处理重复累加，也不把 wall time 称 CPU。`task_e2e`、`agent_active`、`queue_wait` 分开，模型与工具之间的空档只称 gap。trace 同时报告已识别请求覆盖率；完全不可见的内部请求不在分母中。首次助手输出事件为 SDK 报告的非空 delta（文本、思考或工具参数）或 toolcall_start，新记录通过 firstOutputKind 指明具体类别。根工具缺少结束时间时，工具并集及依赖该区间的未归因时间均标记未测量。每个 session 最多保留 50 个内存 run，registry 最多 32 个 session；每 run 最多 2048 个 host span、512 个 request、1024 个 tool 和 32 个 response attempt；run 外的 request/tool 分别最多保留 512/256 条，宿主请求最多 256 条。任何截断、请求归属歧义或请求区间不完整都会把受影响的精确聚合降级为 `null + unmeasured/ambiguous`，同时保留 observed lower bound，不能显示成 0。
 
@@ -112,7 +112,9 @@ SDK `tool_execution_update.partialResult` 是累计输出快照，服务端发�
 
 内置浏览器发现快照已失效时，工具结束记录使用 `status: "stale_snapshot"`、`isError: false`，保留本次耗时。模型需重新读取页面或截图。缺少必填参数和真正的执行异常仍按 SDK 错误处理。
 
-协议 v62 的 `trace_get`/`trace_result` 只读当前 conversation 所属 session 的内存与持久化记录。顶栏 Trace 和 `/trace` 打开 `TraceWorkbench`：run 筛选、聚合指标、模型／工具／宿主时间线及调度 gap；运行中每 2 秒刷新。`/export` 和标题栏 HTML 按钮下载包含 transcript 与 Trace 的本地静态 HTML；所有不可信字段均转义，CSP 禁止脚本与外部资源。`/export json` 或 JSON 按钮只下载 trace metadata，明确标注非匿名；与 OMP 的 transcript/Timeline/Trace 导出相似，但本实现额外区分 onEvent、snapshot 与 WS 宿主归因，不提供公网分享。
+协议 v62 的 `trace_get`/`trace_result` 只读当前 conversation 所属 session 的内存与持久化记录。顶栏 Trace 和 `/trace` 打开 `TraceWorkbench`：run 筛选、聚合指标、模型／工具／宿主时间线及调度 gap；运行中每 2 秒刷新。`/trace-export` 和标题栏 HTML 按钮下载包含 transcript 与 Trace 的本地静态 HTML；所有不可信字段均转义，CSP 禁止脚本与外部资源。`/trace-export json` 或 JSON 按钮只下载 trace metadata，明确标注非匿名；与 OMP 的 transcript/Timeline/Trace 导出相似，但本实现额外区分 onEvent、snapshot 与 WS 宿主归因，不提供公网分享。
+
+协议 v64 增加 `session_export`。`/export`／`/export html` 调用原生 `exportToHtml()`，包含完整会话树、系统提示词和工具定义/结果，可能含其他分支及敏感上下文；`/export jsonl` 调用 `exportToJsonl()`，只包含当前分支。Web 不接受任意输出路径，`session-export.ts` 在生成前校验 client/conversation/session 归属、源文件大小、Entry 数和单客户端并发，再写入 `<dataDir>/exports/` 的唯一私有文件并检查最终大小。随机短期单次 token 绑定三类归属；HTTP 原子消费后以 attachment 文件流下载，完成、中断、超时、会话替换或 TTL 后清理，不能在应用 Origin 内预览执行 HTML。原生导出与 Trace 导出互不混用，均不调用模型。
 
 `PI_TASK_TIMINGS_OUT` 另外在优雅停机时输出按 client/session 分离的完整内存 JSON。快照管线 `SnapshotTimings` 默认 `summary`，只记录有界 duration/count；`PI_SNAPSHOT_TIMINGS=1/detail` 才逐报文执行 `Buffer.byteLength` 并统计 bytes。契约回归为 `tests/execution-trace-test.mjs`，浏览器与恢复回归为 `tests/trace-browser-test.mjs`（含下载 HTML 的离线浏览器安全验收）；真实文件系统故障、120-run 压缩和重开回归为 `tests/unit/trace-store-reliability.test.ts`，导出攻击矩阵为 `tests/unit/trace-export.test.ts`。
 
@@ -132,7 +134,7 @@ SDK `tool_execution_update.partialResult` 是累计输出快照，服务端发�
 
 最后一条助手消息的 `stopReason === "length"` 表示回答被输出额度截断；有正文、只有思考或完全空内容均保留可见提示。`agent_settled` 仍表示运行结束，但不代表回答完成：有任务时复用 `failed` 状态，已成功的工具步骤不改为失败，原生计划快照不改写。后续正常助手回复可清除本轮截断失败判定。纯聊天不虚构任务。
 
-提示区显示本轮实际输出 token 用量，并提供按 conversationId 打开当前输入框模型管理的「调整输出额度」。正常非空正文 `length` 在原生恢复稳定结束后最多自动续接两次，保留正文和工具结果，不提高额度、不重发原问题。只有思考、空回复、包含未完成工具调用或原生恢复失败时不自动续接。最终已停止的部分正文仍提供「准备继续」，追加普通后续请求到草稿，保留已有输入，由用户发送；不承诺断点续写。
+提示区显示本轮实际输出 token 用量和自动恢复结果，不提供手动调整额度入口。正常非空正文或只有思考的 `length` 在原生恢复稳定结束后最多自动续接两次，保留正文、思考和工具结果，不提高额度、不重发原问题。续接前确认 SDK projection 仍保留目标 assistant；projection 缺失、续接请求报错或 provider 拒绝思考回放时以 `failed` 停止。完全空回复、没有正文或思考、包含未完成工具调用或原生恢复失败时不自动续接。连续续接仍耗尽后只显示回复未完成；最终已停止的部分正文仍提供「准备继续」，追加普通后续请求到草稿，保留已有输入，由用户发送；不承诺断点续写。
 
 ### 重复输出保护与有界续接（#173 / #174）
 

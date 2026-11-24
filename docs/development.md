@@ -16,7 +16,7 @@ npm run check:design # 设计令牌检查（硬编码颜色与非令牌圆角报
 npm test             # 设计令牌检查 + vitest 纯函数单测（tests/unit/，毫秒级零 token）
 npm run test:smoke   # 零 token 协议冒烟聚合跑器（tests/run-smoke.mjs，自包含测试）
 node tests/execution-trace-test.mjs  # 锁定 SDK hooks、延迟边界与完整工具往返契约
-node tests/trace-browser-test.mjs   # 真实浏览器/SDK：/trace、/export、离线 HTML 安全、重启与中断恢复
+node tests/trace-browser-test.mjs   # 真实浏览器/SDK：/trace、/trace-export、原生 /export、离线 HTML 安全、重启与中断恢复
 npx vitest run tests/unit/trace-store-reliability.test.ts tests/unit/trace-export.test.ts
 npm run test:freeze  # 冻结/重连回归测试（Playwright，需要本机 chromium headless）
 ```
@@ -113,7 +113,7 @@ spawn 后记录 `server.pid`，测试收尾（含异常 catch 路径）用 `proc
 
 1.5.2 的适配与实际验证见 [Pi 1.5 升级说明](pi-1.5-upgrade.md)。
 
-SDK / pi-ai 当前精确锁定 1.5.2。升级前必须验证内部 prompt-templates 适配器：`tests/unit/prompt-delivery.test.ts` 覆盖 `$@`、位置参数、无占位符、带引号参数、空格/换行/Tab/CRLF 分隔、同名扩展优先级、input 钩子一次、原生两种队列模式及撤回；`tests/current-file-protocol-test.mjs --browser` 验证模型实际输入和冻结附件编辑。`tests/native-tools-desktop-test.mjs` 在普通 Node 和三平台打包产物中验证模块定位与展开契约。只有这些检查通过才能更新适配器版本保护；加载或版本不兼容时保留失败和草稿保护，禁止回退到独立 custom message 投递。
+SDK / pi-ai 当前精确锁定 1.6.0。1.6.0 的适配与验证见 [Pi 1.6 升级说明](pi-1.6-upgrade.md)。升级前必须验证内部 prompt-templates 适配器：`tests/unit/prompt-delivery.test.ts` 覆盖 `$@`、位置参数、无占位符、带引号参数、空格/换行/Tab/CRLF 分隔、同名扩展优先级、input 钩子一次、原生两种队列模式及撤回；`tests/current-file-protocol-test.mjs --browser` 验证模型实际输入和冻结附件编辑。`tests/native-tools-desktop-test.mjs` 在普通 Node 和三平台打包产物中验证模块定位与展开契约。只有这些检查通过才能更新适配器版本保护；加载或版本不兼容时保留失败和草稿保护，禁止回退到独立 custom message 投递。
 
 1.0.4 → 1.2.0 升级（2026-10-13）：`dist/core/prompt-templates.js`、`system-prompt.js`、`mcp-servers.js` 与 1.0.4 字节一致，两处版本保护随之改为 1.2.0。适配：`agent_settled.aborted` 为真时不触发未执行工具调用提醒；工具耗时优先使用 SDK 记录的 `durationMs`（`tool_execution_end` 与持久化的 toolResult，重载后保留，UiMessage 新增可选字段）；codemode 运行中显示经过时间；模型配置写回保留 `$schema` 等顶层字段。
 
@@ -122,35 +122,10 @@ SDK / pi-ai 当前精确锁定 1.5.2。升级前必须验证内部 prompt-templa
 Pi 1.0.4 起的专项（1.4.0 继续适用，文件名保留 `pi-104-`）：`pi-104-prompt-contract-test.mjs` 核对 Codemode on/only 的模型请求、getter、隐藏规则和技能；`pi-104-upstream-fixes-test.mjs` 验证初始化中的 MCP 关闭、Codemode 内建对象修改后结算及 read 图片，均进入零 token 冒烟。资源基准与已知问题复现另见 [原生能力与资源审查](pi-native-resource-review.md)，不在 CI 中运行长时间性能场景。
 
 
-内置扩展回归：`builtin-extensions-test.mjs` 纳入零 token 冒烟，验证按平台能力生成的清单、数据库与桌面控制开关、浏览器管理入口、重载，以及子代理和转换／OKF 入口缺失。原生上下文基线关闭 plan 内置工具。`--browser` 额外覆盖设置界面、中英文与窄屏布局。
+内置扩展回归：`builtin-extensions-test.mjs` 纳入零 token 冒烟，验证按平台能力生成的清单、后台命令与桌面控制开关、浏览器管理入口、重载，以及子代理和转换／OKF 入口缺失。原生上下文基线关闭 plan 内置工具。`--browser` 额外覆盖设置界面、中英文与窄屏布局。
 
 历史 subagent 工具调用只做向后兼容：已移除的内置 Workspace 调查扩展不再注册工具、设置或协议类型，旧会话里的 `subagent` 卡片退化为通用工具卡；`acp_delegate` 的 ACP 分身处理保留。
 
-
-### 数据库工作台回归
-
-`npx vitest run tests/unit/database.test.ts` 无外部服务。真实驱动与浏览器回归使用专用测试实例，不可指向业务数据库：
-
-```bash
-docker run --rm -d --name pi-db-test-pg -e POSTGRES_PASSWORD=pi_test_only -e POSTGRES_DB=analytics -p 127.0.0.1:9277:5432 postgres:17-alpine
-docker run --rm -d --name pi-db-test-mysql -e MYSQL_ROOT_PASSWORD=pi_test_only -e MYSQL_DATABASE=analytics -p 127.0.0.1:9278:3306 mysql:8.0
-npm run build
-node tests/database-test.mjs --browser
-node tests/database-tls-test.mjs
-docker rm -f pi-db-test-pg pi-db-test-mysql
-```
-
-先等待两个数据库完成初始化；端口冲突时使用其它 ≥8900 的端口，并以 PI_TEST_PG_PORT / PI_TEST_MYSQL_PORT 传给测试。协议/浏览器测试另使用 9274/9275，TLS 测试使用 9280，启动前检查端口；临时应用 data-dir、模型夹具及 TLS 容器由测试自行清理。MariaDB 可替换 MySQL 测试实例，用相同 PI_TEST_MYSQL_PORT 运行。
-
-3a/4a 回复回归：`node tests/chat-redesign-ui-test.mjs` 验证分段问题汇总、推荐／其他回答与发送；5a 的 `node tests/node-terminal-pty-test.mjs` 在本机 POSIX PTY 验证中文、包装过滤、退出码、取消、超时和手动占用保护（Windows 跳过，跨平台 SSH 模拟回归由 node-agent/node-workbench 测试承担）。两者纳入冒烟。节点浏览器另运行 `node tests/node-agent-test.mjs --browser`，核对执行确认、终端定位及窄屏布局。
-
-代码搜索：`tests/code-search-ui-test.mjs` 覆盖真实 WS/ripgrep 的高亮、预览、打开定位、输入取消、过期批次、正则及文件名切换；桌面启动回归还核对包内 rg 路径和可执行性。
-
-### JDBC 桥接构建
-
-`npm run build:server` 同时运行 `build:jdbc`，需要 JDK 17+（JAVA_HOME 或 PATH）；桥接使用 Java 8 字节码，仅依赖标准库。首次直接运行 `dev:server` 前执行 `npm run build:jdbc`，`npm run dev` 自动准备桥接。单测中的 JDBC 测试同样需要 javac/jar。无 Java 的终端用户仍可使用原生 MySQL/PostgreSQL。
-
-本地验证：`npm run typecheck`、`npm run build`、`npm test`、`node tests/packaged-jdbc-test.mjs`、`node tests/database-jdbc-browser-test.mjs`。不需要真实数据库或模型服务；厂商驱动与目标 Windows 的兼容性单独验收。
 
 ## Design First Skill 回归
 

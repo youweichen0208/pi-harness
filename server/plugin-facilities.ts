@@ -232,7 +232,7 @@ const depInstallLocks = new Map<string, Promise<boolean>>();
 /** 确保依赖就绪：先逐个解析，缺了才一次性 `npm install` 补装，装完复查。
  *  返回 true = 全部可用；false = 安装失败或超时。同目录并发调用单飞合并。
  *
- *  这是 webmail / db-client / vscode-editor 三家手搓 ensureXxxMod 的上收——
+ *  这是各插件手搓 ensureXxxMod 的上收——
  *  之前每家都自己拼 spawn 参数、自己处理 win32 的 npm.cmd、自己等 install 完成。 */
 export function ensurePluginDeps(
 	pluginDir: string,
