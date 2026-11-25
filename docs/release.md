@@ -1,5 +1,9 @@
 # 发布流程
 
+## 2.2.0 Workspace 图谱
+
+主窗口新增「图谱」，可构建、浏览和更新 Workspace 索引，查看 TypeScript 跨仓关系的两端源码。普通聊天新增 `/build-graph`、`/update-graph` 和显式的 `/ask --graph` 查询。[中英双语发布说明](../.github/release-notes/v2.2.0.md)
+
 ## 2.1.0 知识学习与问答
 
 普通聊天新增 `/learn` 和 `/ask`。学习条目逐篇确认后写入，跨仓回答按步骤引用源码。历史对话可以重新打开仍有效的证据。WebSocket 协议升至 v66。[中英双语发布说明](../.github/release-notes/v2.1.0.md)
