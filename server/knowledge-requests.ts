@@ -1,9 +1,6 @@
 import type { PromptAttachment } from "./protocol.js";
 
-export type KnowledgeMode = "ask" | "learn" | "build-graph" | "update-graph";
-export function isGraphMaintenance(mode?: KnowledgeMode): boolean {
-	return mode === "build-graph" || mode === "update-graph";
-}
+export type KnowledgeMode = "ask" | "learn";
 
 export type KnowledgeSourceKind = "repository" | "knowledge";
 
@@ -42,7 +39,6 @@ export interface KnowledgeEvidence {
 
 export interface KnowledgeRequestContext {
 	mode: KnowledgeMode;
-	graphQuery?: boolean;
 	requestId: string;
 	conversationId: string;
 	sessionId: string;
@@ -55,7 +51,6 @@ export interface KnowledgeRequestContext {
 }
 
 export interface DeferredKnowledgePrompt {
-	graphWorkspaceId?: string;
 	text: string;
 	normalizedText: string;
 	attachments?: PromptAttachment[];
@@ -74,20 +69,17 @@ export interface KnowledgeConversationState {
 }
 
 export const knowledgeReadToolNames = ["knowledge_sources", "source_list", "source_search", "source_read"] as const;
-export const graphReadTools = ["graph_status", "graph_search", "graph_neighbors", "graph_path"] as const;
-export const knowledgeToolNames = [...knowledgeReadToolNames, "knowledge_write", "knowledge_investigate", ...graphReadTools, "graph_build", "graph_update"] as const;
+export const knowledgeToolNames = [...knowledgeReadToolNames, "knowledge_write", "knowledge_investigate"] as const;
 
-export function toolsForKnowledgeMode(mode: KnowledgeMode, graphQuery = false): readonly string[] {
+export function toolsForKnowledgeMode(mode: KnowledgeMode): readonly string[] {
 	switch (mode) {
 		case "learn": return [...knowledgeReadToolNames, "knowledge_write"];
-		case "ask": return [...knowledgeReadToolNames, "knowledge_investigate", ...(graphQuery ? graphReadTools : [])];
-		case "build-graph": return ["graph_status", "graph_build"];
-		case "update-graph": return ["graph_status", "graph_update"];
+		case "ask": return [...knowledgeReadToolNames, "knowledge_investigate"];
 	}
 }
 
 export function parseKnowledgeCommand(text: string): { mode: KnowledgeMode; normalizedText: string; args: string } | null {
-	const match = /^\/(?:skill:)?(learn|ask|build-graph|update-graph)(?:\s+([\s\S]*))?$/.exec(text.trim());
+	const match = /^\/(?:skill:)?(learn|ask)(?:\s+([\s\S]*))?$/.exec(text.trim());
 	if (!match) return null;
 	const mode = match[1] as KnowledgeMode, args = match[2] ?? "";
 	return { mode, normalizedText: `/skill:${mode}${args ? ` ${args}` : ""}`, args };

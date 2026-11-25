@@ -201,6 +201,10 @@ export class WebUIContext {
 	private dialogMessages = new Map<string, Extract<ServerMessage, { type: "dialog" }>>();
 	private pendingDialogs = new Map<string, (value: string | boolean | null) => void>();
 	replayDialogs(send: (message: ServerMessage) => void): void { for (const message of this.dialogMessages.values()) send(message); }
+	/** True while an extension dialog still awaits a browser answer — the owning
+	 *  conversation has user-facing work in flight and must not be treated as a
+	 *  blank chat to reuse. */
+	hasPendingDialog(): boolean { return this.pendingDialogs.size > 0; }
 
 	select: ExtensionUIContext["select"] = (title, options, config) => this.openDialog("select", title, [options], config) as Promise<string | undefined>;
 	confirm: ExtensionUIContext["confirm"] = (title, message, config) => this.openDialog("confirm", title, [message], config) as Promise<boolean>;

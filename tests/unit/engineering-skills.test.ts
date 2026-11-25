@@ -6,7 +6,7 @@ import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { engineeringAppendBase, engineeringResources, engineeringRouteMode, engineeringRoutingRule, engineeringSkillNames, engineeringSkillPath } from "../../server/engineering-skills.js";
 
-const names = ["architect", "ask", "blast-radius", "build-graph", "codebase-design", "domain-modeling", "engineering", "grilling", "knowledge-sync", "learn", "reflect", "tdd", "update-graph"] as const;
+const names = ["architect", "ask", "blast-radius", "codebase-design", "domain-modeling", "engineering", "grilling", "knowledge-sync", "learn", "reflect", "tdd"] as const;
 const roots: string[] = [];
 
 function temporary() {
@@ -73,7 +73,7 @@ describe("bundled Engineering Skills", () => {
 		expect(loader.getSkills().skills).toEqual([]);
 	});
 
-	it.each(["engineering", "build-graph", "update-graph"])("keeps a %s user override and reports its actual path", async name => {
+	it.each(["engineering"])("keeps a %s user override and reports its actual path", async name => {
 		const cwd = temporary(), packageRoot = bundledFixture();
 		const userSkill = join(cwd, `user-${name}.md`);
 		writeFileSync(userSkill, `---\nname: ${name}\ndescription: User-owned workflow\n---\nUser instructions.\n`);
@@ -84,7 +84,7 @@ describe("bundled Engineering Skills", () => {
 		});
 		await loader.reload();
 		const skills = loader.getSkills().skills;
-		expect(skills).toHaveLength(13);
+		expect(skills).toHaveLength(11);
 		expect(skills.filter(skill => skill.name === name)).toHaveLength(1);
 		expect(skills.find(skill => skill.name === name)?.filePath).toBe(userSkill);
 		writeFileSync(userSkill, `---\nname: ${name}\ndescription: Updated user workflow\n---\nUpdated instructions.\n`);
@@ -146,6 +146,37 @@ describe("bundled Engineering Skills", () => {
 		cpSync(skillsRoot, copy, { recursive: true });
 		rmSync(join(copy, "engineering/templates/change.md"));
 		expect(() => localReferences(copy)).toThrow(/engineering[\\/]templates[\\/]change\.md/);
+	});
+
+	it("bounds grilling with an explicit question budget and stop condition", () => {
+		const root = resolve(".");
+		const grilling = readFileSync(engineeringSkillPath("grilling", root), "utf8");
+		expect(grilling).toContain("## Question Budget");
+		expect(grilling).toMatch(/ask no questions/i);
+		expect(grilling).toContain("default maximum of 5");
+		expect(grilling).toMatch(/low-risk, reversible decisions autonomously/i);
+		expect(grilling).toMatch(/sound, implementable design/i);
+		expect(grilling).toMatch(/exhaustive design-tree/i);
+		expect(grilling).not.toContain("Ask the whole frontier in one round");
+		const engineering = readFileSync(engineeringSkillPath("engineering", root), "utf8");
+		expect(engineering).toMatch(/already clear/i);
+	});
+
+	it("pins learn and ask knowledge-quality contracts without coupling to exact wording", () => {
+		const root = resolve(".");
+		const learn = readFileSync(engineeringSkillPath("learn", root), "utf8");
+		expect(learn).toContain("## Knowledge Quality");
+		for (const status of ["verified", "inferred", "unverified"]) expect(learn).toContain(`\`${status}\``);
+		expect(learn).toMatch(/weakest material claim/i);
+		expect(learn).toMatch(/explicit user-confirmed decisions/i);
+		expect(learn).toMatch(/confirmed decision does not establish implementation correctness/i);
+		expect(learn).toMatch(/never promote/i);
+		expect(learn).toMatch(/preserve existing valid knowledge/i);
+		expect(learn).toMatch(/version conflict/i);
+		expect(learn).toContain("knowledge_write");
+		const ask = readFileSync(engineeringSkillPath("ask", root), "utf8");
+		expect(ask).toContain("source_read");
+		expect(ask).toMatch(/without reading key evidence yourself/i);
 	});
 
 	it("preserves upstream seam vocabulary and explicit resume and standalone-copy contracts", () => {
@@ -438,7 +469,7 @@ describe("bundled Engineering Skills", () => {
 			expect(content).not.toContain("subagent_type");
 		}
 		expect(readFileSync(engineeringSkillPath("engineering", root), "utf8").split("\n").length).toBeLessThanOrEqual(100);
-		for (const name of ["reflect", "learn", "ask", "build-graph", "update-graph"] as const) expect(readFileSync(engineeringSkillPath(name, root), "utf8")).toContain("disable-model-invocation: true");
+		for (const name of ["reflect", "learn", "ask"] as const) expect(readFileSync(engineeringSkillPath(name, root), "utf8")).toContain("disable-model-invocation: true");
 		const notice = readFileSync(join(root, "assets/skills/THIRD_PARTY.md"), "utf8");
 		expect(notice).toContain("d1478fcb140db0b93c0c8df17bcfd311844749d0");
 		expect(notice).toContain("005d8f6e8ec057b738adcd08a08b30db0478402d");
@@ -450,7 +481,7 @@ describe("bundled Engineering Skills", () => {
 		const skills = resolve("assets/skills");
 		const notice = readFileSync(join(skills, "THIRD_PARTY.md"), "utf8").split("\n");
 		const license = "LICENSES/pi-harness-MIT.txt";
-		for (const name of ["engineering", "knowledge-sync", "ask", "learn", "build-graph", "update-graph"]) {
+		for (const name of ["engineering", "knowledge-sync", "ask", "learn"]) {
 			const entry = notice.find(line => line.includes(`\`${name}/\``));
 			expect(entry, name).toContain(license);
 			if (name === "engineering") expect(entry).toContain("engineering/scripts/vendor/marked-LICENSE.txt");

@@ -20,7 +20,10 @@ try {
 	install("v1");
 	cs = await ClientSession.create("restart", root, new ClientStateStore(join(root, "state.json")), new ThinkingDurationStore(join(root, "thinking.json")));
 	const wire = []; cs.attachSink(message => wire.push(message));
-	const conv = cs.conv, previous = conv.session, terminals = conv.terminals;
+	const conv = cs.conv, previous = conv.session;
+	// Terminals belong to the project workspace, so a session restart must hand
+	// back the SAME manager (and therefore the same PTYs).
+	const workspaceKey = cs.terminalRegistryKeyOf(root), terminals = cs.terminalsFor(workspaceKey);
 	const manager = previous.sessionManager;
 	manager.appendMessage({ role: "user", content: "Keep this exact branch", timestamp: Date.now() });
 	manager.appendMessage({ role: "assistant", content: [{ type: "text", text: "Preserved response" }], api: "openai-completions", provider: "fixture", model: "fixture", usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } }, stopReason: "stop", timestamp: Date.now() });
@@ -31,7 +34,7 @@ try {
 	await cs.prompt("/probe");
 	assert(wire.some(m => m.type === "notice" && m.text === "v1:2"), JSON.stringify(wire.filter(m => m.type === "notice")));
 	const otherRuntime = await createAgentSessionRuntime(cs.makeRuntimeFactory(), { cwd: root, agentDir: process.env.PI_CODING_AGENT_DIR, sessionManager: SessionManager.inMemory(root) });
-	const other = cs.makeConversation(otherRuntime, "other", cs.makeTerminalManager("other", root)); cs.convs.set(other.id, other);
+	const other = cs.makeConversation(otherRuntime, "other"); cs.convs.set(other.id, other);
 	await cs.bindSession(other);
 	const history = manager.getBranch(), leaf = manager.getLeafId(), sessionId = previous.sessionId;
 	install("v2");
@@ -42,7 +45,7 @@ try {
 	assert(cs.convs.get(other.id) === other);
 	assert.equal(conv.session.sessionManager, manager);
 	assert.equal(conv.session.sessionId, sessionId);
-	assert.equal(conv.terminals, terminals);
+	assert.equal(cs.terminalsFor(workspaceKey), terminals);
 	assert.equal(manager.getLeafId(), leaf);
 	assert.deepEqual(manager.getBranch(), history);
 	await cs.prompt("/probe");

@@ -28,7 +28,7 @@ interface TerminalPanelProps {
 		create: (meta: TerminalMeta) => void;
 		close: (id: string) => void;
 		register: (
-			conversationId: string,
+			workspaceId: string,
 			id: string,
 			writer: { write(data: string): void; dispose(): void },
 		) => () => void;
@@ -179,16 +179,18 @@ export function TerminalPanel({ chat, send, terminal, active, focusRequest }: Te
 	// -- tab management --------------------------------------------------------
 
 	const openTab = (
-		meta: Omit<TerminalMeta, "running" | "exitCode" | "id" | "conversationId" | "cols" | "rows"> &
+		meta: Omit<TerminalMeta, "running" | "exitCode" | "id" | "workspaceId" | "cols" | "rows"> &
 			Partial<Pick<TerminalMeta, "cols" | "rows">>,
 	) => {
 		if (!chat.ready) return; // topbar already shows the connection state
 		const id = randomUuid();
-		const conversationId = chat.activeConversationId || chat.state?.conversationId || "";
+		// The workspace key is server-provided (canonical realpath). Deriving it
+		// from cwd here would break bridge routing whenever they differ.
+		const workspaceId = chat.state?.workspaceId ?? "";
 		terminal.create({
 			...meta,
 			id,
-			conversationId,
+			workspaceId,
 			cols: meta.cols ?? 80,
 			rows: meta.rows ?? 24,
 			running: true,
@@ -208,7 +210,7 @@ export function TerminalPanel({ chat, send, terminal, active, focusRequest }: Te
 
 
 	const closeTab = (id: string) => {
-		const tab = chat.terminals.find((item) => item.id === id);		if (tab) send({ type: "terminal_kill", terminalId: id, conversationId: tab.conversationId });
+		const tab = chat.terminals.find((item) => item.id === id);		if (tab) send({ type: "terminal_kill", terminalId: id, workspaceId: tab.workspaceId });
 		terminal.close(id);
 		if (activeId === id) {
 			const rest = chat.terminals.filter((t) => t.id !== id);
@@ -220,7 +222,7 @@ export function TerminalPanel({ chat, send, terminal, active, focusRequest }: Te
 		const tab = chat.terminals.find((item) => item.id === id);
 		setRenamingId(null);
 		if (!tab || tab.title === title) return;
-		send({ type: "terminal_rename", terminalId: id, title, conversationId: tab.conversationId });
+		send({ type: "terminal_rename", terminalId: id, title, workspaceId: tab.workspaceId });
 	};
 
 
@@ -334,8 +336,8 @@ export function TerminalPanel({ chat, send, terminal, active, focusRequest }: Te
 				) : (
 					chat.terminals.map((t) => (
 						<TermXterm
-							key={`${t.conversationId}:${t.id}`}
-							conversationId={t.conversationId}
+							key={`${t.workspaceId}:${t.id}`}
+							workspaceId={t.workspaceId}
 							terminalId={t.id}
 							cols={t.cols}
 							rows={t.rows}

@@ -65,21 +65,6 @@ execFileSync(executable, ["--input-type=module", "--eval", `
 	} finally {rmSync(root,{recursive:true,force:true});}
 `], {cwd:appRoot,env:{...testEnv({PI_WEB_PKG_ROOT:appRoot}),ELECTRON_RUN_AS_NODE:"1",NODE_PATH:"",NODE_OPTIONS:""},timeout:30000,stdio:"pipe"});
 console.log("PASS packaged Engineering Skills, installed paths, reload and Wiki isolation");
-execFileSync(executable, ["--input-type=module", "--eval", `
-	import assert from 'node:assert/strict';
-	import {mkdtempSync, rmSync, writeFileSync} from 'node:fs';
-	import {join} from 'node:path';
-	import {tmpdir} from 'node:os';
-	import {indexWorkspaceGraph} from './dist/server/workspace-graph-index.js';
-	const root = mkdtempSync(join(tmpdir(), 'pi-packaged-graph-'));
-	try {
-		writeFileSync(join(root, 'a.ts'), 'import "./b.js";');
-		writeFileSync(join(root, 'b.ts'), 'export const b = 1;');
-		const result = await indexWorkspaceGraph([{ id: 'package-test', root }]);
-		assert.deepEqual(result.repositories[0].edges[0].anchors.map(a => a.path), ['a.ts', 'b.ts']);
-	} finally { rmSync(root, { recursive: true, force: true }); }
-`], {cwd:appRoot,env:{...testEnv(),ELECTRON_RUN_AS_NODE:"1",NODE_PATH:"",NODE_OPTIONS:""},timeout:30000,stdio:"pipe"});
-console.log("PASS packaged Workspace Graph indexes and locates a real import");
 
 const playgroundMethods = pathToFileURL(join(appRoot, "dist/server/playground-methods.js")).href;
 execFileSync(executable, ["--input-type=module", "--eval", `

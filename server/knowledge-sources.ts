@@ -77,20 +77,6 @@ export function resolveWorkspaceScope(
 	};
 }
 
-/** Maintenance always publishes a whole group. Optional text is a selector, never a search or model instruction. */
-export function graphWorkspaceSelector(args: string, candidates: WorkspaceScopeResult["candidates"], queuedId?: string): string | undefined {
-	if (queuedId) {
-		if (!candidates.some(group => group.id === queuedId)) throw new KnowledgeScopeError("排队时选定的 Workspace 已不再包含当前项目，请重新提交图谱维护命令。");
-		return queuedId;
-	}
-	if (!candidates.length) throw new KnowledgeScopeError("请先将当前项目加入 Workspace。");
-	const requested = args.trim();
-	if (!requested) return candidates.length === 1 ? candidates[0].id : undefined;
-	const matches = candidates.filter(group => group.id === requested || group.name === requested);
-	if (matches.length !== 1) throw new KnowledgeScopeError("图谱维护按整个 Workspace 执行。请留空，或填写当前项目所属分组的完整唯一名称或 ID。");
-	return matches[0].id;
-}
-
 function clauseSources(clause: string, scope: KnowledgeScope): KnowledgeSource[] {
 	let remaining = clause.toLowerCase();
 	const matches = new Map<string, KnowledgeSource>();

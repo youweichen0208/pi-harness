@@ -68,7 +68,6 @@ import { Dialog } from "./components/Dialog";
 const TerminalPanel = lazy(() =>
 	import("./components/TerminalPanel").then((m) => ({ default: m.TerminalPanel })),
 );
-const GraphWorkbench = lazy(() => import("./components/GraphWorkbench"));
 const NodeWorkbench = lazy(() => import("./components/NodeWorkbench").then((m) => ({ default: m.NodeWorkbench })));
 import { ScmPanel } from "./components/SCMPanel";
 import { PluginView } from "./components/PluginView";
@@ -307,7 +306,7 @@ function ResizeHandle({
 }
 
 /** 顶栏视图：内置三个 + 每个已装插件一个 `plugin:<id>`。 */
-type ViewName = "chat" | "wiki" | "terminal" | "git" | "graph" | "nodes" | `plugin:${string}`;
+type ViewName = "chat" | "wiki" | "terminal" | "git" | "nodes" | `plugin:${string}`;
 
 /** Wiki 聊天展开状态（随标签页）。 */
 const WIKI_CHAT_KEY = "pi-wiki-chat-open";
@@ -803,7 +802,8 @@ export function App() {
 	const resizeEditor = useCallback((w: number) => {
 		const pane = document.querySelector(".view-pane.preview-open:not(.hidden)");
 		const main = pane?.querySelector(".main");
-		const editor = pane?.querySelector(".drawer-right");
+		// The file column is a sibling of the panes now, not a child of the preview pane.
+		const editor = document.querySelector(".layout > .drawer-right.preview-open");
 		const available = (main?.getBoundingClientRect().width ?? 0) + (editor?.getBoundingClientRect().width ?? 0);
 		if (available > 0) {
 			const share = Math.min(0.85, Math.max(0.15, w / available));
@@ -845,9 +845,15 @@ export function App() {
 	// In a three-column chat, let navigation yield space before hiding files.
 	const compactChat = view === "chat" && !inlinePreview && !isNarrow;
 	const visibleLeftWidth = compactChat ? Math.min(leftWidth, Math.max(180, viewportWidth * 0.16)) : leftWidth;
-	const visibleRightWidth = compactChat ? Math.min(rightWidth, Math.max(220, viewportWidth * 0.21)) : rightWidth;
+	// Every view now docks the file column, so every view yields width to it the
+	// same way the conversation does.
+	const compactRight = !inlinePreview && !isNarrow;
+	const visibleRightWidth = compactRight ? Math.min(rightWidth, Math.max(220, viewportWidth * 0.21)) : rightWidth;
 	const filesOverlayForChat = isNarrow || viewportWidth - (leftCollapsed ? 56 : visibleLeftWidth) - visibleRightWidth <= MIN_WORKSPACE_CHAT_WIDTH;
-	const filesOverlay = !inlinePreview && filesOverlayForChat;
+	// The inline file editor belongs to the conversation view. Terminal, Git and
+	// Nodes keep the file tree docked instead of the editor split.
+	const inlinePreviewHere = inlinePreview && view === "chat";
+	const filesOverlay = !inlinePreviewHere && filesOverlayForChat;
 	useEffect(() => {
 		setDrawer(current => current === "right" ? null : current);
 	}, [filesOverlayForChat]);
@@ -880,6 +886,8 @@ export function App() {
 				if (view === "wiki") void openWikiDocument(path);
 				else { setView("chat"); setWikiChatOpen(true); setPreviewFile({ path, name, cwd }); }
 			} else {
+				// The inline editor lives in the conversation layout, so a file opened
+				// from Terminal/Git/Nodes brings the conversation back.
 				setView("chat");
 				setDrawer("right");
 				setPreviewFile({ path, name, cwd });
@@ -963,15 +971,15 @@ export function App() {
 
 	const [terminalFocus, setTerminalFocus] = useState<{ id: string }>();
 	const installPiCli = () => {
-		const conversationId = chat.activeConversationId || chat.state?.conversationId;
-		if (!chat.ready || switching || !conversationId || !chat.state?.cwd) return;
-		const existing = chat.terminals.find(item => item.conversationId === conversationId && item.command?.command === PI_CLI_INSTALL_COMMAND);
+		const workspaceId = chat.state?.workspaceId;
+		if (!chat.ready || switching || !workspaceId || !chat.state?.cwd) return;
+		const existing = chat.terminals.find(item => item.workspaceId === workspaceId && item.command?.command === PI_CLI_INSTALL_COMMAND);
 		const id = existing?.id ?? randomUuid();
 		const command: CommandDef = { name: "Install Pi CLI", command: PI_CLI_INSTALL_COMMAND, cwd: "${pwd}" };
-		if (!existing) terminal.create({ id, conversationId, title: command.name, cwd: chat.state.cwd, cols: 80, rows: 24, running: true, exitCode: null, command });
+		if (!existing) terminal.create({ id, workspaceId, title: command.name, cwd: chat.state.cwd, cols: 80, rows: 24, running: true, exitCode: null, command });
 		else if (!existing.running) {
 			terminal.restart(id);
-			send({ type: "run_command", terminalId: id, conversationId, command, cols: 80, rows: 24 });
+			send({ type: "run_command", terminalId: id, workspaceId, command, cols: 80, rows: 24 });
 		}
 		setTerminalFocus({ id });
 		setSettingsOpen(false);
@@ -993,7 +1001,7 @@ export function App() {
 				send({
 					type: "run_command",
 					terminalId: existing.id,
-					conversationId: existing.conversationId,
+					workspaceId: existing.workspaceId,
 					command: def,
 					cols: 80,
 					rows: 24,
@@ -1002,7 +1010,7 @@ export function App() {
 				const id = randomUuid();
 				terminal.create({
 					id,
-					conversationId: chat.activeConversationId || chat.state?.conversationId || "",
+					workspaceId: chat.state?.workspaceId ?? "",
 					title,
 					cwd: chat.state?.cwd ?? "",
 					cols: 80,
@@ -1299,15 +1307,15 @@ export function App() {
 		try { localStorage.setItem(PREFERRED_CHAT_MODEL_KEY, `${model.provider}/${model.id}`); } catch { /* Model choice remains in the session. */ }
 	}, [model, chat.models, chat.modelsLoading]);
 
-	// A same-project history switch changes the owner without changing cwd.
-	// Wait for its matching snapshot before creating a default terminal.
-	const terminalConversationId = conversationState?.conversationId;
+	// Terminals belong to the workspace, so a history switch inside one project
+	// must not create a second default shell — the list simply stays.
+	const terminalWorkspaceId = conversationState?.workspaceId;
 	const terminalCwd = conversationState?.cwd;
 	const createShell = useCallback(() => {
-		if (!chat.ready || !terminalConversationId || chat.terminals.length !== 0) return false;
+		if (!chat.ready || !terminalWorkspaceId || chat.terminals.length !== 0) return false;
 		terminal.create({
 			id: randomUuid(),
-			conversationId: terminalConversationId,
+			workspaceId: terminalWorkspaceId,
 			title: t("terminalTitle", { n: 1 }),
 			cwd: terminalCwd ?? "",
 			cols: 80,
@@ -1316,7 +1324,7 @@ export function App() {
 			exitCode: null,
 		});
 		return true;
-	}, [chat.ready, terminalConversationId, terminalCwd, chat.terminals.length, t, terminal]);
+	}, [chat.ready, terminalWorkspaceId, terminalCwd, chat.terminals.length, t, terminal]);
 
 	// If the user clicked Terminal while the initial connection was still
 	// loading, complete that request as soon as the session becomes ready.
@@ -1420,7 +1428,7 @@ export function App() {
 					<span><UiIcon name="paperclip" /> {t("dropHereToAttach")}</span>
 				</div>
 			)}
-			{view !== "nodes" && view !== "graph" && view !== "wiki" && <FluidDrawer side="left" onOpen={() => { if (!navigationLocked) setDrawer("left"); }} open={!navigationLocked && drawer === "left"} overlay={isNarrow} label={t("workspaceProjects")} onClose={() => setDrawer(null)}
+			{view !== "nodes" && view !== "wiki" && <FluidDrawer side="left" onOpen={() => { if (!navigationLocked) setDrawer("left"); }} open={!navigationLocked && drawer === "left"} overlay={isNarrow} label={t("workspaceProjects")} onClose={() => setDrawer(null)}
 				className={`panel-drawer drawer-left ${drawer === "left" ? "open" : ""}`}
 			>
 				<LeftPanel
@@ -1447,7 +1455,7 @@ export function App() {
 					activeConversationId={chat.activeConversationId}
 				/>
 			</FluidDrawer>}
-			{view !== "nodes" && view !== "graph" && view !== "wiki" && !isMobile && !leftCollapsed && (
+			{view !== "nodes" && view !== "wiki" && !isMobile && !leftCollapsed && (
 				<ResizeHandle side="left" width={visibleLeftWidth} onResize={resizeLeft} />
 			)}
 
@@ -1609,42 +1617,7 @@ export function App() {
 							/>
 						</ChatDock>
 						<ChangesPanel key={conversationState?.conversationId ?? ""} cwd={conversationState?.cwd ?? ""} data={chat.scmDiffData} send={send} ready={chat.ready && !switching} notRepo={!workspaceScm.loaded || workspaceScm.notRepo} branch={workspaceScm.branch} defaultBase={workspaceScm.base} branches={workspaceScm.branches} dirty={chat.scmDirty} />
-						{browserOpen && browserOwner ? <><ResizeHandle side="browser" width={browserWidth} onResize={setBrowserWidth} /><BrowserPanel key={browserOwner} owner={browserOwner} close={() => setBrowserOwner(undefined)} /></> : <>
-						{!isMobile && !filesOverlay && (!filesCollapsed || inlinePreview) && (
-							<ResizeHandle side={inlinePreview ? "editor" : "right"} width={inlinePreview ? 480 : visibleRightWidth} onResize={inlinePreview ? resizeEditor : resizeRight} onReset={inlinePreview ? () => { setEditorShare(0.45); localStorage.setItem("pi-harness:editor-share", "0.45"); } : undefined} />
-						)}
-						<FluidDrawer side="right" onOpen={() => setDrawer("right")} open={drawer === "right"} overlay={filesOverlay} label={t("workspaceFiles")} onClose={() => setDrawer(null)}
-							className={`panel-drawer drawer-right ${filesCollapsed && !inlinePreview ? "files-collapsed" : ""} ${drawer === "right" ? "open" : ""}`}
-						>
-							<div className="file-list-host" hidden={inlinePreview}>
-								<RightPanel
-									codemode={conversationState?.codemode}
-									liveOutputs={chat.liveOutputs}
-									toolStatuses={chat.toolStatuses}
-									onSearchFiles={openFileSearch}
-									active={!codePreview && !filesCollapsed && !inlinePreview && !switching && view === "chat" && (!filesOverlay || drawer === "right")}
-									send={send}
-									files={chat.files}
-									changed={workspaceScm.files}
-									notRepo={!workspaceScm.loaded || workspaceScm.notRepo}
-									fileChanged={chat.fileChanged}
-									widgets={chat.widgets}
-									messages={conversationState?.messages ?? []}
-									streamingMessage={conversationState?.streamingMessage ?? null}
-									taskProgress={conversationState?.taskProgress}
-									isStreaming={conversationState?.isStreaming}
-									conversationId={chat.activeConversationId}
-									agentSilence={chat.agentSilence}
-									cwd={chat.state?.cwd ?? ""}
-									onAttach={(path, name, mode, isDir) => {
-										setDrawer(null);
-										attach(path, name, mode, isDir);
-									}}
-									onPreview={openPreview}
-								/>
-							</div>
-							{inlinePreview && filePreview}
-						</FluidDrawer></>}
+						{browserOpen && browserOwner && <><ResizeHandle side="browser" width={browserWidth} onResize={setBrowserWidth} /><BrowserPanel key={browserOwner} owner={browserOwner} close={() => setBrowserOwner(undefined)} /></>}
 					</div>
 
 					<div className={`view-pane wiki-view ${view === "wiki" ? "" : "hidden"}`}>
@@ -1677,9 +1650,6 @@ export function App() {
 						</Suspense>
 						</TerminalViewBoundary>
 					</div>
-					{view === "graph" && <div className="view-pane">
-						<Suspense fallback={null}><GraphWorkbench catalog={chat.projectWorkspaces} send={send} ready={chat.ready} /></Suspense>
-					</div>}
 					<div className={`view-pane ${view === "nodes" ? "" : "hidden"}`}>
 						<Suspense fallback={null}>{visited.current.has("nodes") && <NodeWorkbench active={view === "nodes"} send={send} dirBrowse={chat.dirBrowse} />}</Suspense>
 					</div>
@@ -1700,6 +1670,45 @@ export function App() {
 							</div>
 						);
 					})}
+					{/* The file column is a sibling of the view panes so Terminal, Git and
+					    Nodes keep it. The inline editor split stays conversation-only. */}
+					{view !== "wiki" && !(browserOpen && browserOwner) && <>
+						{!isMobile && !filesOverlay && (!filesCollapsed || inlinePreviewHere) && (
+							<ResizeHandle side={inlinePreviewHere ? "editor" : "right"} width={inlinePreviewHere ? 480 : visibleRightWidth} onResize={inlinePreviewHere ? resizeEditor : resizeRight} onReset={inlinePreviewHere ? () => { setEditorShare(0.45); localStorage.setItem("pi-harness:editor-share", "0.45"); } : undefined} />
+						)}
+						<FluidDrawer side="right" onOpen={() => setDrawer("right")} open={drawer === "right"} overlay={filesOverlay} label={t("workspaceFiles")} onClose={() => setDrawer(null)}
+							className={`panel-drawer drawer-right ${inlinePreviewHere ? "preview-open" : ""} ${filesCollapsed && !inlinePreviewHere ? "files-collapsed" : ""} ${drawer === "right" ? "open" : ""}`}
+						>
+							<div className="file-list-host" hidden={inlinePreviewHere}>
+								<RightPanel
+									codemode={conversationState?.codemode}
+									liveOutputs={chat.liveOutputs}
+									toolStatuses={chat.toolStatuses}
+									onSearchFiles={openFileSearch}
+									active={!codePreview && !filesCollapsed && !inlinePreviewHere && !switching && (!filesOverlay || drawer === "right")}
+									send={send}
+									files={chat.files}
+									changed={workspaceScm.files}
+									notRepo={!workspaceScm.loaded || workspaceScm.notRepo}
+									fileChanged={chat.fileChanged}
+									widgets={chat.widgets}
+									messages={conversationState?.messages ?? []}
+									streamingMessage={conversationState?.streamingMessage ?? null}
+									taskProgress={conversationState?.taskProgress}
+									isStreaming={conversationState?.isStreaming}
+									conversationId={chat.activeConversationId}
+									agentSilence={chat.agentSilence}
+									cwd={chat.state?.cwd ?? ""}
+									onAttach={(path, name, mode, isDir) => {
+										setDrawer(null);
+										attach(path, name, mode, isDir);
+									}}
+									onPreview={openPreview}
+								/>
+							</div>
+							{inlinePreviewHere && filePreview}
+						</FluidDrawer>
+					</>}
 				</div>
 			</div>
 			{view !== "wiki" && <FooterBar chat={chat} send={send} />}

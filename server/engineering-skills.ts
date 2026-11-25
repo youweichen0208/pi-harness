@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 
 type DefaultResourceLoaderOptions = ConstructorParameters<typeof DefaultResourceLoader>[0];
 
-export const engineeringSkillNames = ["engineering", "knowledge-sync", "grilling", "domain-modeling", "codebase-design", "tdd", "architect", "blast-radius", "reflect", "learn", "ask", "build-graph", "update-graph"] as const;
+export const engineeringSkillNames = ["engineering", "knowledge-sync", "grilling", "domain-modeling", "codebase-design", "tdd", "architect", "blast-radius", "reflect", "learn", "ask"] as const;
 export type EngineeringSkillName = typeof engineeringSkillNames[number];
 export type EngineeringSessionKind = "normal" | "wiki" | "node" | "playground";
 

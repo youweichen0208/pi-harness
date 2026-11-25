@@ -51,9 +51,7 @@ SDK 生命周期：以 `agent_settled` 判定整个任务结束，`agent_end` �
 
 会话由原版 SDK 创建，加载 pi 原生配置、上下文文件、技能、扩展与官方 Codemode/tool_search/MCP。普通会话默认通过可关闭的「后台命令」扩展包装原生 bash；自动动作由原生会话 API 执行并显示事件：正常正文或只有思考的输出截断最多续接 2 次，重复正文／思考隔离后最多恢复 1 次，未执行工具文本最多提醒 1 次，共享每条真实用户请求 3 次宿主自动动作上限；无效推断额度回退也计入该上限。普通用户不手动设置 maxTokens，缺失声明仅在运行时使用 8192 推断值，实际请求按最终物理模型与 Context 通过 SDK 原生裁剪计算。用户停止取消续接，原任务与已执行工具不重放。修改检测、停止、续接、队列或历史隔离前读取 `docs/architecture-core.md`「重复输出保护与有界续接」及「未执行的工具调用」。内置 plan 扩展、开关和自动收尾提醒已移除，不应重新注册。设置中的提示词支持原生文件编辑与空闲时 reload，技能支持原生发现、筛选和启停（见 docs/architecture-extensions.md）；Extensions 管理原生包声明及资源过滤规则，变更通过新会话或用户重载生效。界面偏好不改变模型上下文。网页操作统一使用桌面内置浏览器，由当前普通对话授权；桌面控制按普通会话独立授权，Wiki 不注入。SSH 工作台连接后自动准备本机隔离 pi 会话，复用本机模型、仅启用 SSH 节点工具；节点会话不加载本机上下文、扩展、技能或 MCP。修改启动、消息流、工具或断开清理时读取 `docs/architecture-nodes.md`。
 
-Engineering Skills：普通会话默认加载十三项随包 Skills，并向 addendum 注入一条常驻路由规则（软件改动类请求先读 engineering 技能、Skill 内自选路由、只读任务不触发）；Wiki／SSH／Playground 隔离，用户同名资源优先。`PI_WEB_ENGINEERING_ROUTE` 仅供 `dev/skill-eval/` A/B 评测。修改编排、知识同步、上游适配、资源加载或打包时读取 `docs/architecture-extensions.md`「Engineering Skills V2」。修改 `/learn`、`/ask`、来源范围、并行调查、知识写入、证据链或引用预览时读取 `docs/architecture-knowledge.md`。
-
-Workspace 图谱：修改索引、分组范围、图谱页、构建/更新 Skill、Ask 图查询或 Wiki 引用检查前读 `docs/architecture-workspace-graph.md`。
+Engineering Skills：普通会话默认加载十一项随包 Skills，并向 addendum 注入一条常驻路由规则（软件改动类请求先读 engineering 技能、Skill 内自选路由、只读任务不触发）；Wiki／SSH／Playground 隔离，用户同名资源优先。`PI_WEB_ENGINEERING_ROUTE` 仅供 `dev/skill-eval/` A/B 评测。修改编排、知识同步、上游适配、资源加载或打包时读取 `docs/architecture-extensions.md`「Engineering Skills V2」。修改 `/learn`、`/ask`、来源范围、并行调查、知识写入、证据链或引用预览时读取 `docs/architecture-knowledge.md`。
 
 ## 4. 核心架构（摘要）
 
@@ -65,10 +63,10 @@ Workspace 图谱：修改索引、分组范围、图谱页、构建/更新 Skill
 | **项目分组与切换缓存** | `docs/architecture-core.md` | 修改 workspace 分组、切换、缓存或异步归属时阅读：请求确认、权威状态与展示分离、3 项目/32MiB LRU、隐藏视图刷新策略；界面切换不弹成功通知，命令切换在目标会话保留事件 |
 | **协议单源** | `docs/architecture-core.md` | `server/protocol.ts` 是唯一事实源；`web/src/types.ts` 是 `export type *` shim；新增消息只改 protocol.ts，两端 switch 各加分支 |
 | **安全边界** | `docs/architecture-core.md` | 默认只绑 loopback；WS Origin/Host 同权威校验；quiesce 准入控制；控制 socket；provider headers 不下发浏览器 |
-| **多对话并发** | `docs/architecture-core.md` | 每对话手动终端和文件操作SessionRuntime；对话按项目归属；set_cwd 切到目标项目对话；8 个上限/项目；共享同一个 ModelRuntime |
+| **多对话并发** | `docs/architecture-core.md` | 每对话独立的 SessionRuntime 与文件操作状态（终端不在此列）；对话按项目归属；set_cwd 切到目标项目对话；8 个上限/项目；共享同一个 ModelRuntime |
 | **附件** | `docs/architecture-attachments.md` | 三种模式（inline/reference/lines）；图片问答（base64 + 缩放）；文件上传（fileData 落盘） |
 | **文件预览** | `docs/architecture-attachments.md` | 修改右栏编辑、保存冲突或草稿离开保护时阅读；512KB 预览、媒体 HTTP Range、下载 |
-| **终端** | `docs/architecture-terminal.md` | 每 Conversation 一个 TerminalManager；spawn 统一准入；按键编码纯函数；输出微批合并；node-pty × --watch 兼容自愈 |
+| **终端** | `docs/architecture-terminal.md` | 终端属于项目工作区（`TerminalRegistry`，键=规范化项目根），删除对话不杀 PTY；spawn 统一准入；按键编码纯函数；输出微批合并；node-pty × --watch 兼容自愈 |
 | **SCM** | `docs/architecture-terminal.md` | 只读 git 查询走 spawn；同 cwd 状态合并与进程树超时；未跟踪文件限量预览；git-dir watcher；写操作走可见终端 tab |
 | **插件** | `docs/architecture-plugins.md` | <dataDir>/plugins/<id>/ 目录（manifest.json + index.mjs + client/entry.mjs）；attach 时热重扫；MCP 工具桥 |
 | **SSH 节点** | `docs/architecture-nodes.md` | 修改 Xshell 7 全量同步、保存密码/主密码复用、本机认证覆盖、SSH config、执行确认或终端引用时阅读；本机隔离 Agent 与 ssh2 节点工具 |

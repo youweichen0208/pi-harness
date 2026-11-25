@@ -4967,6 +4967,15 @@ span.msg-editor-hint svg {
 .toolcall-code .codeblock {
 	margin: 0;
 }
+/* Read code preview with a line-number gutter (reference design): the gutter
+   and the code scroll together inside .toolcall-code; line-height matches the
+   highlighted code so numbers stay aligned. */
+.toolcall-code.numbered { display: flex; align-items: stretch; }
+.toolcall-code.numbered .code-gutter { flex: none; display: flex; flex-direction: column; padding: 12px 8px 12px 10px; border: 1px solid var(--border); border-right: 0; border-radius: var(--r-md) 0 0 var(--r-md); background: var(--bg-elev2); color: var(--text-faint); font: 12px/1.55 var(--mono); text-align: right; user-select: none; }
+.toolcall-code.numbered .code-gutter span { display: block; }
+.toolcall-code.numbered .code-pane { flex: 1; min-width: 0; }
+.toolcall-code.numbered .code-pane .md, .toolcall-code.numbered .code-pane .codeblock { margin: 0; }
+.toolcall-code.numbered .code-pane .codeblock pre { border-radius: 0 var(--r-md) var(--r-md) 0; }
 
 /* `edit` tool result — the diff the tool computed server-side (see
    EditDiffDetails/DiffView in ToolCallBlock.tsx), rendered as colored +/-
@@ -8705,8 +8714,9 @@ html.pi-desktop .desktop-window-controls {
 
 /* Share the actual remaining pane width; do not reserve 360px for chat. */
 @media (min-width: 769px) {
-	.view-pane.preview-open > .main { flex: calc(1 - var(--editor-share, 0.5)) 1 0px; }
-	.view-pane.preview-open > .drawer-right {
+	/* Inline editor split: the pane stack and the file column share the layout row. */
+	.layout:has(> .drawer-right.preview-open) > .view-pane:not(.hidden) { flex: calc(1 - var(--editor-share, 0.5)) 1 0px; }
+	.layout > .drawer-right.preview-open {
 		flex: var(--editor-share, 0.5) 1 0px;
 		width: 0;
 		min-width: 0;
@@ -8717,7 +8727,7 @@ html.pi-desktop .desktop-window-controls {
 @media (min-width: 769px) and (max-width: 1200px) {
 	.view-pane.preview-open > .drawer-left,
 	.view-pane.preview-open > .resize-left { display: none; }
-	html.pi-desktop .view-pane.preview-open > .drawer-right {
+	html.pi-desktop .layout > .drawer-right.preview-open {
 		position: static;
 		inset: auto;
 		z-index: auto;
@@ -8935,8 +8945,8 @@ img.brand-logo, img.empty-logo { background: transparent; object-fit: contain; }
 .design-workspace .statusbar > .status-dot, .design-workspace .statusbar > .status-ctx { display: none; }
 .design-workspace .files-collapsed { display: none !important; }
 @media (min-width: 1201px) {
-	.design-workspace .workspace-column:has(.view-pane:not(.hidden) .drawer-right:not(.files-collapsed)):not(:has(.preview-open:not(.hidden))) > .topbar { margin-right: 0; }
-	.design-workspace .view-pane:not(.preview-open) > .drawer-right { margin-top: -52px; }
+	.design-workspace .workspace-column:has(> .layout > .drawer-right:not(.files-collapsed)):not(:has(.preview-open:not(.hidden))) > .topbar { margin-right: 0; }
+	.design-workspace .layout > .drawer-right:not(.preview-open) { margin-top: -52px; }
 }
 @media (min-width: 769px) and (max-width: 1200px) {
 	.design-workspace.document-open > .drawer-left, .design-workspace.document-open > .resize-left { display: none; }
@@ -8978,13 +8988,13 @@ html.pi-desktop .design-workspace .topbar { height: 52px; padding-left: 20px; }
 	.design-workspace .input-tools .dd-menu { top: auto; bottom: calc(100% + 8px); left: 0; right: auto; max-height: min(360px, calc(100vh - 200px)); }
 }
 @media (min-width: 1201px) {
-	.design-workspace .workspace-column:has(.view-pane:not(.hidden):not(.preview-open) .drawer-right:not(.files-collapsed)) > .statusbar { position: absolute; bottom: 0; right: 0; width: var(--right-w); min-height: 80px; padding: 12px 16px; display: flex; flex-wrap: wrap; align-content: center; gap: 8px 12px; background: var(--output-bg); }
-	.design-workspace .workspace-column:has(.view-pane:not(.hidden):not(.preview-open) .drawer-right:not(.files-collapsed)) > .statusbar .status-cwd { width: 100%; margin-left: 0; font: 10.5px var(--mono); }
-	.design-workspace .view-pane:not(.preview-open) .file-list-host { padding-bottom: 80px; }
+	.design-workspace .workspace-column:has(> .layout > .drawer-right:not(.files-collapsed):not(.preview-open)) > .statusbar { position: absolute; bottom: 0; right: 0; width: var(--right-w); min-height: 80px; padding: 12px 16px; display: flex; flex-wrap: wrap; align-content: center; gap: 8px 12px; background: var(--output-bg); }
+	.design-workspace .workspace-column:has(> .layout > .drawer-right:not(.files-collapsed):not(.preview-open)) > .statusbar .status-cwd { width: 100%; margin-left: 0; font: 10.5px var(--mono); }
+	.design-workspace .layout > .drawer-right:not(.preview-open) .file-list-host { padding-bottom: 80px; }
 }
 @media (min-width: 769px) and (max-width: 900px) {
-	.design-workspace .view-pane:not(.preview-open) > .drawer-right { position: fixed; top: 52px; bottom: 0; right: 0; z-index: 60; width: min(320px, 86vw); transform: translateX(105%); background: var(--bg-elev); transition: transform .2s ease; }
-	.design-workspace .view-pane:not(.preview-open) > .drawer-right.open { transform: none; }
+	.design-workspace .layout > .drawer-right:not(.preview-open) { position: fixed; top: 52px; bottom: 0; right: 0; z-index: 60; width: min(320px, 86vw); transform: translateX(105%); background: var(--bg-elev); transition: transform .2s ease; }
+	.design-workspace .layout > .drawer-right:not(.preview-open).open { transform: none; }
 }
 @media (min-width: 769px) and (max-width: 1200px) {
 	.design-workspace.document-open > .drawer-left.open { display: block; position: fixed; inset: 52px auto 0 0; z-index: 60; height: auto; background: var(--bg-elev); }
@@ -9003,8 +9013,8 @@ html.pi-desktop .design-workspace .topbar { height: 52px; padding-left: 20px; }
 	.design-workspace .input-tools-left .chip-model { max-width: 80px; }
 }
 @media (min-width: 1201px) {
-	.design-workspace .workspace-column:has(.view-pane:not(.hidden):not(.preview-open) .drawer-right:not(.files-collapsed)) > .statusbar .status-cwd,
-	.design-workspace .workspace-column:has(.view-pane:not(.hidden):not(.preview-open) .drawer-right:not(.files-collapsed)) > .statusbar .status-cwd-wrap { flex: 0 0 100%; max-width: 100%; margin-left: 0; }
+	.design-workspace .workspace-column:has(> .layout > .drawer-right:not(.files-collapsed):not(.preview-open)) > .statusbar .status-cwd,
+	.design-workspace .workspace-column:has(> .layout > .drawer-right:not(.files-collapsed):not(.preview-open)) > .statusbar .status-cwd-wrap { flex: 0 0 100%; max-width: 100%; margin-left: 0; }
 }
 html.pi-desktop-win32 .design-workspace .desktop-window-controls,
 html.pi-desktop-linux .design-workspace .desktop-window-controls { position: fixed; top: 0; right: 0; z-index: 70; height: 52px; }
@@ -9060,12 +9070,12 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { position: fix
 .workspace-stat-label { color: var(--text-faint); }
 .workspace-stat-path { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 @media (min-width: 1201px) {
-	.design-workspace .workspace-column:has(.view-pane:not(.hidden):not(.preview-open) .drawer-right:not(.files-collapsed)) > .statusbar { display: grid; grid-template-columns: 1fr; gap: 6px; padding: 12px 16px; font-size: 12px; }
-	.design-workspace .workspace-column:has(.view-pane:not(.hidden):not(.preview-open) .drawer-right:not(.files-collapsed)) > .statusbar .status-branch, .design-workspace .workspace-column:has(.view-pane:not(.hidden):not(.preview-open) .drawer-right:not(.files-collapsed)) > .statusbar .status-messages, .design-workspace .workspace-column:has(.view-pane:not(.hidden):not(.preview-open) .drawer-right:not(.files-collapsed)) > .statusbar .status-cwd { width: 100%; display: flex; justify-content: space-between; gap: 12px; min-width: 0; }
-	.design-workspace .workspace-column:has(.view-pane:not(.hidden):not(.preview-open) .drawer-right:not(.files-collapsed)) > .statusbar .status-branch svg { display: none; }
-	.design-workspace .workspace-column:has(.view-pane:not(.hidden):not(.preview-open) .drawer-right:not(.files-collapsed)) > .statusbar .status-branch-name, .design-workspace .workspace-column:has(.view-pane:not(.hidden):not(.preview-open) .drawer-right:not(.files-collapsed)) > .statusbar .status-messages > span:last-child, .design-workspace .workspace-column:has(.view-pane:not(.hidden):not(.preview-open) .drawer-right:not(.files-collapsed)) > .statusbar .workspace-stat-path { font: 12px var(--mono); }
-	.design-workspace .workspace-column:has(.view-pane:not(.hidden):not(.preview-open) .drawer-right:not(.files-collapsed)) > .statusbar .workspace-stat-path { direction: rtl; text-align: right; }
-	.design-workspace .view-pane:not(.preview-open) .file-list-host { padding-bottom: 90px; }
+	.design-workspace .workspace-column:has(> .layout > .drawer-right:not(.files-collapsed):not(.preview-open)) > .statusbar { display: grid; grid-template-columns: 1fr; gap: 6px; padding: 12px 16px; font-size: 12px; }
+	.design-workspace .workspace-column:has(> .layout > .drawer-right:not(.files-collapsed):not(.preview-open)) > .statusbar .status-branch, .design-workspace .workspace-column:has(> .layout > .drawer-right:not(.files-collapsed):not(.preview-open)) > .statusbar .status-messages, .design-workspace .workspace-column:has(> .layout > .drawer-right:not(.files-collapsed):not(.preview-open)) > .statusbar .status-cwd { width: 100%; display: flex; justify-content: space-between; gap: 12px; min-width: 0; }
+	.design-workspace .workspace-column:has(> .layout > .drawer-right:not(.files-collapsed):not(.preview-open)) > .statusbar .status-branch svg { display: none; }
+	.design-workspace .workspace-column:has(> .layout > .drawer-right:not(.files-collapsed):not(.preview-open)) > .statusbar .status-branch-name, .design-workspace .workspace-column:has(> .layout > .drawer-right:not(.files-collapsed):not(.preview-open)) > .statusbar .status-messages > span:last-child, .design-workspace .workspace-column:has(> .layout > .drawer-right:not(.files-collapsed):not(.preview-open)) > .statusbar .workspace-stat-path { font: 12px var(--mono); }
+	.design-workspace .workspace-column:has(> .layout > .drawer-right:not(.files-collapsed):not(.preview-open)) > .statusbar .workspace-stat-path { direction: rtl; text-align: right; }
+	.design-workspace .layout > .drawer-right:not(.preview-open) .file-list-host { padding-bottom: 90px; }
 }
 @media (max-width: 768px) {
 	.design-workspace .view-switch button:not(.plugin-tab) > span { display: none; }
@@ -9101,7 +9111,7 @@ body { -webkit-font-smoothing: antialiased; }
 .design-workspace > .statusbar > .status-dot, .design-workspace > .statusbar > .status-connection { display: inline-block; }
 .design-workspace .sidebar-connection { display: none; }
 .design-workspace .sidebar-footer { justify-content: flex-end; border-top: 0; }
-.design-workspace .view-pane:not(.preview-open) .file-list-host { padding-bottom: 0; }
+.design-workspace .layout > .drawer-right:not(.preview-open) .file-list-host { padding-bottom: 0; }
 .design-workspace .project-item.active { background: transparent; }
 .design-workspace .project-item.active:hover { background: var(--row-hover); }
 .design-workspace .inputbox > .attach-row { margin: 0; padding: 10px 12px 0; gap: 6px; }
@@ -9211,9 +9221,9 @@ body { -webkit-font-smoothing: antialiased; }
 .fp-rich-document h1 { font-size: 27px; line-height: 1.28; }
 .fp-rich-document h2 { font-size: 20px; line-height: 1.35; }
 .fp-rich-document :not(pre) > code { padding: .04em .17em; box-decoration-break: clone; -webkit-box-decoration-break: clone; overflow-wrap: normal; word-break: normal; }
-.design-workspace .view-pane.preview-open > .resize-right { cursor: col-resize; width: 6px; background: transparent; }
-.design-workspace .view-pane.preview-open > .resize-right::after { content: ""; position: absolute; left: 2px; top: 0; bottom: 0; width: 1px; background: var(--border); }
-.design-workspace .view-pane.preview-open > .resize-right:hover::after { width: 2px; background: var(--accent); }
+.design-workspace .layout > .resize-right { cursor: col-resize; width: 6px; background: transparent; }
+.design-workspace .layout > .resize-right::after { content: ""; position: absolute; left: 2px; top: 0; bottom: 0; width: 1px; background: var(--border); }
+.design-workspace .layout > .resize-right:hover::after { width: 2px; background: var(--accent); }
 
 /* Question navigation: the tick stays visible, and its caption is a compact tooltip. */
 .design-workspace .qn-rail { opacity: 1; }
@@ -9862,8 +9872,8 @@ html.pi-desktop .design-workspace .topbar-actions > .topbar-more .chip > svg { f
 .design-workspace .topbar-actions > .changes-toggle { flex-shrink: 0; }
 /* A visible file column already reserves the entire right edge of the window. */
 @media (min-width: 1201px) {
-	html.pi-desktop-win32 .design-workspace .workspace-column:has(.view-pane:not(.hidden) .drawer-right:not(.files-collapsed)):not(:has(.preview-open:not(.hidden))) > .topbar,
-	html.pi-desktop-linux .design-workspace .workspace-column:has(.view-pane:not(.hidden) .drawer-right:not(.files-collapsed)):not(:has(.preview-open:not(.hidden))) > .topbar { padding-right: 144px; }
+	html.pi-desktop-win32 .design-workspace .workspace-column:has(> .layout > .drawer-right:not(.files-collapsed)):not(:has(.preview-open:not(.hidden))) > .topbar,
+	html.pi-desktop-linux .design-workspace .workspace-column:has(> .layout > .drawer-right:not(.files-collapsed)):not(:has(.preview-open:not(.hidden))) > .topbar { padding-right: 144px; }
 }
 
 /* Running command reference: one command, one clock, a separate task stop. */
@@ -9950,7 +9960,7 @@ html.pi-desktop .design-workspace .topbar-actions > .panel-toggle { position: re
 html.pi-desktop-win32 .design-workspace .desktop-window-controls,
 html.pi-desktop-linux .design-workspace .desktop-window-controls { height: 44px; }
 @media (min-width: 1201px) {
-	.design-workspace .view-pane:not(.preview-open) > .drawer-right { margin-top: -44px; }
+	.design-workspace .layout > .drawer-right:not(.preview-open) { margin-top: -44px; }
 }
 @media (min-width: 769px) {
 	html.pi-desktop-darwin .design-workspace .project-panel-toggle { position: fixed; left: 92px; top: 8px; z-index: 75; }
@@ -9963,8 +9973,8 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { height: 44px;
 	.design-workspace .view-switch button { padding-inline: 7px; }
 }
 @media (min-width: 769px) and (max-width: 900px) {
-	.design-workspace .view-pane:not(.preview-open) > .drawer-right,
-	html.pi-desktop .design-workspace .view-pane:not(.preview-open) > .drawer-right { top: 44px; }
+	.design-workspace .layout > .drawer-right:not(.preview-open),
+	html.pi-desktop .design-workspace .layout > .drawer-right:not(.preview-open) { top: 44px; }
 }
 
 /* Todo updates stay compact; waiting is a paused task, not an active run. */
@@ -11798,8 +11808,8 @@ pre.wiki-mermaid-source-hidden > .fp-mermaid-preview { padding-bottom: 0; }
 .bash-group.historical-step .bash-group-head strong { font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bash-group.historical-step .bash-group-duration { display: none; }
 .design-workspace.changes-open .workspace-column { position: relative; }
-.design-workspace.changes-open .view-pane:not(.hidden) > .drawer-right,
-.design-workspace.changes-open .view-pane:not(.hidden) > .resize-handle { display: none; }
+.design-workspace.changes-open .layout > .drawer-right,
+.design-workspace.changes-open .layout > .resize-handle { display: none; }
 @media (min-width: 1200px) {
 	.design-workspace.changes-open .topbar { width: 600px; height: 48px; min-height: 48px; }
 	.design-workspace.changes-open .topbar .view-switch { display: none; }
@@ -12955,7 +12965,7 @@ html.pi-desktop .wiki-window-header .desktop-window-controls { -webkit-app-regio
 .change-summary-unavailable { color: var(--text-faint); font-size: 11px; }
 @media (min-width: 1201px) {
 	.design-workspace:not(.changes-open) .workspace-column > .topbar { margin-right: 0; }
-	.design-workspace:not(.changes-open) .view-pane:not(.preview-open) > .drawer-right { margin-top: 0; border-left: 1px solid var(--border-soft); }
+	.design-workspace:not(.changes-open) .layout > .drawer-right:not(.preview-open) { margin-top: 0; border-left: 1px solid var(--border-soft); }
 	html:is(.pi-desktop-win32, .pi-desktop-linux) .design-workspace:not(.changes-open) .workspace-column > .topbar { padding-right: 144px; }
 }
 @media (max-width: 1100px) {
@@ -14211,7 +14221,7 @@ html.pi-desktop .design-workspace .topbar { height: 48px; min-height: 48px; }
 
 @media (min-width: 769px) {
 	.design-workspace.dual-navigation > .resize-left { display: block; }
-	:root .design-workspace .view-pane:not(.preview-open) > .drawer-right[data-fluid-drawer="overlay"] {
+	:root .design-workspace .layout > .drawer-right[data-fluid-drawer="overlay"] {
 		position: fixed; top: 48px; bottom: 0; right: 0; z-index: 60;
 		width: min(320px, 86vw); margin-top: 0;
 	}
@@ -15463,10 +15473,18 @@ span.rich-math { display: inline-block; }
    only appears after clicking the row, and it previews a bounded number of
    lines (READ_PREVIEW_LINES) before the `展开全部 · N 行` control. */
 .toolcall.toolcall-read { margin: 0; border: 0; border-radius: 0; box-shadow: none; background: transparent; overflow: visible; }
-.toolcall.toolcall-read > .toolcall-read-head { display: flex; align-items: center; gap: 9px; width: 100%; min-width: 0; min-height: 34px; padding: 8px 12px; border: 0; background: transparent; color: var(--text); text-align: left; font: 12px/1.5 var(--sans); cursor: pointer; }
-.toolcall.toolcall-read > .toolcall-read-head > svg { flex: none; color: var(--text-faint); }
-.toolcall.toolcall-read > .toolcall-read-head:hover { background: var(--output-bg); }
-.toolcall.toolcall-read > .toolcall-read-head:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.toolcall-read-headrow { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; padding: 0 12px 0 0; }
+.toolcall.toolcall-read .toolcall-read-head { display: flex; align-items: center; gap: 9px; min-width: 0; flex: 0 1 auto; min-height: 34px; padding: 4px 12px; border: 0; background: transparent; color: var(--text); text-align: left; font: 12px/1.5 var(--sans); cursor: pointer; }
+.toolcall.toolcall-read .toolcall-read-head:hover { background: var(--output-bg); }
+.toolcall.toolcall-read .toolcall-read-head:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.toolcall-read-icon { display: inline-grid; place-items: center; flex: none; width: 24px; height: 24px; border-radius: var(--r-sm); background: color-mix(in srgb, var(--link) 12%, transparent); color: var(--link); }
+.toolcall-read-icon svg { width: 14px; height: 14px; }
+.toolcall-read-chevron { display: inline-grid; place-items: center; flex: none; width: 24px; height: 24px; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--text-faint); cursor: pointer; }
+.toolcall-read-chevron:hover { color: var(--text); background: var(--bg-elev2); }
+.toolcall-read-headrow .toolcall-read-actions { flex: none; padding: 0; gap: 6px; }
+.toolcall-read-headrow .toolcall-read-actions button { display: inline-flex; align-items: center; gap: 5px; width: auto; height: auto; min-height: 26px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--bg-elev); color: var(--text-dim); padding: 3px 10px; font: 11px var(--sans); }
+.toolcall-read-headrow .toolcall-read-actions button:hover { color: var(--text); border-color: var(--accent); background: var(--bg-elev); }
+.toolcall-read-headrow .toolcall-read-actions button svg { width: 12px; height: 12px; }
 .toolcall-read-state { display: inline-grid; place-items: center; flex: none; width: 12px; font: 11px var(--mono); color: var(--text-faint); }
 .toolcall-read-state.ok { color: var(--green); }
 .toolcall-read-state.err { color: var(--red); }
@@ -15474,7 +15492,7 @@ span.rich-math { display: inline-block; }
 .toolcall-read-state .thinking-spinner { width: 10px; height: 10px; border-width: 2px; }
 .toolcall-read-title { display: flex; align-items: baseline; gap: 10px; min-width: 0; flex: 0 1 auto; max-width: 100%; }
 .toolcall-read-title > span { flex: none; color: var(--text-dim); font-size: 12px; }
-.toolcall-read-title > code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 11.5px/1.7 var(--mono); }
+.toolcall-read-title > code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 11.5px/1.7 var(--mono); background: color-mix(in srgb, var(--link) 10%, transparent); color: var(--link); padding: 1px 8px; border-radius: var(--r-sm); }
 .toolcall-read-stats { flex: none; color: var(--text-dim); font: 11px var(--mono); white-space: nowrap; }
 .toolcall.err .toolcall-read-stats { color: var(--red); }
 .toolcall.toolcall-read > .toolcall-body { padding: 0 12px 10px 34px; border: 0; }
@@ -15500,8 +15518,9 @@ span.rich-math { display: inline-block; }
 /* 「展开其余 N 行」留在卡片内部：内联 diff 被截断时它是卡片自己的底部操作，
    不能飘到卡片外面。 */
 :root .design-workspace .change-summary > .change-more { margin-top: 4px; border-top: 1px solid var(--border-soft); padding-top: 8px; }
-.read-group-items > .toolcall-read > .toolcall-read-head { padding-left: 26px; }
+.read-group-items > .toolcall-read .toolcall-read-headrow { padding-left: 14px; }
 @media (max-width: 760px) { .toolcall.toolcall-read > .toolcall-body { padding-left: 12px; } }
+@media (max-width: 760px) { .toolcall-read-stats { display: none; } .toolcall-read-headrow .toolcall-read-actions button { font-size: 0; gap: 0; padding: 3px 7px; } }
 @media (max-width: 560px) { .toolcall-read-title { flex-basis: auto; } }
 
 /* Expanded commands share the card surface; command and result have distinct sections. */

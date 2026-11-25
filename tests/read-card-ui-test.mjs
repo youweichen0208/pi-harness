@@ -106,14 +106,17 @@ try {
 	await page.locator('.toolcall-read .toolcall-output-more').click();
 	assert.equal(await previewLines(), 180, 'the expand control reveals the whole file');
 	// Tab-indented sources keep a 4-wide tab (not the browser default 8 that
-	// pushed deeply nested code ~300px right), ligatures stay off, and zoom/copy
-	// ride on the output-label row instead of a separate band above the code.
+	// pushed deeply nested code ~300px right), ligatures stay off, zoom/copy sit
+	// as bordered buttons on the header row, and the code has a line-number gutter.
 	const codeStyle = await page.locator('.toolcall-read .toolcall-code pre').evaluate(el => { const s = getComputedStyle(el); return { tabSize: s.tabSize }; });
 	const glyphLigatures = await page.locator('.toolcall-read .toolcall-code pre code').first().evaluate(el => getComputedStyle(el).fontVariantLigatures);
 	assert.equal(codeStyle.tabSize, '4', 'code preview uses tab-size 4');
 	assert.equal(glyphLigatures, 'none', 'code preview renders literal characters, no ligatures');
-	assert.equal(await page.locator('.toolcall-read .toolcall-output-label .toolcall-read-actions').count(), 1, 'zoom/copy share the output-label row');
+	assert.equal(await page.locator('.toolcall-read .toolcall-read-headrow .toolcall-read-actions').count(), 1, 'zoom/copy are header-row buttons');
 	assert.equal(await page.locator('.toolcall-read .toolcall-body > .toolcall-read-actions').count(), 0, 'no separate action band above the code');
+	assert.equal(await page.locator('.toolcall-read .toolcall-code.numbered .code-gutter span').count(), 180, 'line-number gutter matches expanded line count');
+	const previewText = (await page.locator('.toolcall-read .toolcall-code code').first().textContent()) ?? '';
+	assert(previewText.startsWith('const line1'), `read preview drops the indentation every line shares (got ${JSON.stringify(previewText.slice(0, 20))})`);
 	await page.locator('.toolcall-read').screenshot({ path: '/tmp/pi-read-card-text.png' });
 
 	assert.deepEqual(errors, []);

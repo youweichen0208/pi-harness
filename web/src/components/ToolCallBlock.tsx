@@ -20,14 +20,16 @@ import {
 	FiMaximize2,
 	FiChevronDown,
 	FiChevronRight,
+	FiChevronUp,
 	FiSquare,
 	FiX,
+	FiBookOpen,
 } from "react-icons/fi";
 import type { ToolStatus, UiMessage, UiTextBlock, UiToolCallBlock } from "../types";
 import { useChatT } from "../i18n";
 import { Markdown } from "./Markdown";
 import { highlightLine, langFromPath } from "../hljs-lite";
-import { displayReadPath, readPath, splitFrontmatter } from "../read-presentation";
+import { dedentReadPreview, displayReadPath, readPath, splitFrontmatter } from "../read-presentation";
 import { bashCommand, parseBashDiagnostics, parseLabeledBashSteps, type BashStepRun } from "../bash-steps";
 
 export interface ToolView {
@@ -425,6 +427,10 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true }: ToolCall
 	const commandDisplay = command ? commandPresentation(command, cwd) : null;
 	const limitedOutput = block.name !== "bash" && outputLines.length > READ_PREVIEW_LINES && !expanded && !zoomed;
 	const visibleOutput = limitedOutput ? outputLines.slice(0, READ_PREVIEW_LINES).join("\n") : output;
+	// `read` previews drop the indentation every line shares, so nested JSX
+	// starts at the left edge instead of ~30 columns in (see the read card's
+	// reference design). Markdown reads keep their own layout.
+	const readCodeText = block.name === "read" ? dedentReadPreview(visibleOutput) : visibleOutput;
 	const markdownRead = isMarkdown && markdownPreview && !isError ? splitFrontmatter(visibleOutput) : null;
 	const targetPath = block.name === "read" ? readPath(block.argumentsText) : null;
 	const structured = generic;
@@ -480,16 +486,22 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true }: ToolCall
 	// there is no output label to host it (empty file / image-only result).
 	const readActions = targetPath && !zoomed ? (
 		<span className="toolcall-read-actions">
-			<button type="button" className="toolcall-expand" title={t("zoomCode")} onClick={() => setZoomed(true)}>{t("zoomCode")}</button>
-			<button type="button" className="toolcall-copy" title={t(copyError ? "copyFailed" : copied ? "copied" : "copyArgs")} onClick={copyArgs}>{t(copyError ? "copyFailed" : copied ? "copied" : "copy")}</button>
+			<button type="button" className="toolcall-expand" title={t("zoomCode")} onClick={() => setZoomed(true)}><FiMaximize2 aria-hidden="true" />{t("zoomCode")}</button>
+			<button type="button" className="toolcall-copy" title={t(copyError ? "copyFailed" : copied ? "copied" : "copyArgs")} onClick={copyArgs}>{copied ? <FiCheck aria-hidden="true" /> : <FiCopy aria-hidden="true" />}{t(copyError ? "copyFailed" : copied ? "copied" : "copy")}</button>
 		</span>
 	) : null;
-	const hasReadOutputLabel = !!targetPath && output.length > 0 && !imageReadNotice;
+	// Line numbers for the read code preview gutter (respect a read offset).
+	const previewLineNumbers = (() => {
+		const ls = visibleOutput.replace(/\r\n/g, "\n").split("\n");
+		if (ls.at(-1) === "") ls.pop();
+		let start = 1;
+		try { const o = (JSON.parse(block.argumentsText ?? "{}") as { offset?: unknown }).offset; if (typeof o === "number" && o > 0) start = o; } catch { /* partial args number from 1 */ }
+		return ls.map((_, i) => start + i);
+	})();
 	// Rendered in place *and* inside the zoom overlay — kept as one value so
 	// the two views can never drift apart.
 	const bodyContent = (
 		<>
-			{readActions && !hasReadOutputLabel && readActions}
 
 			{block.argumentsText && (!targetPath || zoomed) && (!compactBash || fullCommand || zoomed) && (
 				<div className="toolcall-args">
@@ -533,7 +545,6 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true }: ToolCall
 							<RunningIndicator />
 						)}
 						<span className="toolcall-output-spacer" />
-						{readActions}
 						{isMarkdown && !isError && (
 							<button
 								type="button"
@@ -557,13 +568,14 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true }: ToolCall
 							<Markdown text={markdownRead?.body ?? visibleOutput} />
 						</div>
 					) : codeLang ? (
-						<div className="toolcall-code">
-							<Markdown text={fenceCodeBlock(visibleOutput, codeLang)} />
+						<div className="toolcall-code numbered">
+							<div className="code-gutter" aria-hidden="true">{previewLineNumbers.map(n => <span key={n}>{n}</span>)}</div>
+							<div className="code-pane"><Markdown text={fenceCodeBlock(readCodeText, codeLang)} /></div>
 						</div>
 					) : (
-						<pre>{visibleOutput}</pre>
+						<pre>{readCodeText}</pre>
 					)}
-					{block.name !== "bash" && outputLines.length > READ_PREVIEW_LINES && <button type="button" className="toolcall-output-more" onClick={() => setExpanded((value) => !value)}>{expanded || zoomed ? t("collapseCode") : t("expandAllLines", { n: outputLines.length })}</button>}
+					{block.name !== "bash" && outputLines.length > READ_PREVIEW_LINES && <button type="button" className="toolcall-output-more" onClick={() => setExpanded((value) => !value)}>{expanded || zoomed ? <FiChevronUp aria-hidden="true" /> : <FiChevronDown aria-hidden="true" />}{expanded || zoomed ? t("collapseCode") : t("expandAllLines", { n: outputLines.length })}</button>}
 				</div>
 			))}
 			{generic && !output && view.result?.toolOutputUrl && <div className="toolcall-result-actions">{!output && <span>{t("toolOutputFileOnly")}</span>}<ToolOutputDownload url={view.result.toolOutputUrl} compact /></div>}
@@ -598,15 +610,19 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true }: ToolCall
 				<button type="button" className="toolcall-copy" onClick={copyArgs}>{t(copyError ? "copyFailed" : copied ? "copied" : "copy")}</button>
 				<button type="button" className="toolcall-toggle" onClick={() => setOpen((value) => !value)}>{t(open ? "collapseCode" : "expandCode")}</button>
 			</BashCommandHeader> : targetPath ? (
-			<button type="button" className="toolcall-head toolcall-read-head" aria-expanded={open} aria-label={`${t("readVerb")} ${displayReadPath(targetPath)}"`} onClick={() => setOpen((v) => !v)}>
-				<span className={`toolcall-read-state ${statusClass}`} aria-hidden="true">
-					{statusClass === "run" ? <RunningIndicator /> : statusClass === "err" ? "✗" : readNotExecuted ? "−" : "✓"}
-				</span>
-				<span className="toolcall-read-title"><span>{t("readVerb")}</span><code title={targetPath}>{displayReadPath(targetPath)}</code></span>
-				{readStats && <span className="toolcall-read-stats">{readStats}</span>}
+			<div className="toolcall-read-headrow">
+				<button type="button" className="toolcall-head toolcall-read-head" aria-expanded={open} aria-label={`${t("readVerb")} ${displayReadPath(targetPath)}`} onClick={() => setOpen((v) => !v)}>
+					<span className={`toolcall-read-state ${statusClass}`} aria-hidden="true">
+						{statusClass === "run" ? <RunningIndicator /> : statusClass === "err" ? "✗" : readNotExecuted ? "−" : "✓"}
+					</span>
+					<span className="toolcall-read-icon" aria-hidden="true"><FiBookOpen /></span>
+					<span className="toolcall-read-title"><span>{t("readVerb")}</span><code title={targetPath}>{displayReadPath(targetPath)}</code></span>
+					{readStats && <span className="toolcall-read-stats">{readStats}</span>}
+				</button>
 				<span className="toolcall-spacer" />
-				{open ? <FiChevronDown aria-hidden="true" /> : <FiChevronRight aria-hidden="true" />}
-			</button>
+				{readActions}
+				<button type="button" className="toolcall-read-chevron" aria-label={open ? t("collapseCode") : t("expandCode")} onClick={() => setOpen((v) => !v)}>{open ? <FiChevronDown aria-hidden="true" /> : <FiChevronRight aria-hidden="true" />}</button>
+			</div>
 			) : (
 			<div className="toolcall-head">
 				<span className="toolcall-icon">{generic ? <FiTool aria-hidden="true" /> : toolIcon(block.name)}</span>

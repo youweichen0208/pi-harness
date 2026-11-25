@@ -1,6 +1,6 @@
 # 终端架构
 
-终端侧栏复用 Workspace 项目分组与目录浏览协议：创建分组后引导加入项目目录；点击分组中的项目走 `set_cwd`，新终端沿当前活动对话和项目 cwd 创建。不同项目的终端随各自对话保存；切换项目时先发送目标会话快照，再发送其 `terminal_list` 和回放，前端在会话 ID 改变时清空旧列表，避免继续展示上一项目的 shell。所选分组不含当前 cwd 时，终端创建与运行命令入口暂停，直到选择该分组中的项目。终端与左栏的分组选择通过浏览器本地选择事件同步；该事件只影响界面过滤，不自行切换 cwd。
+终端侧栏复用 Workspace 项目分组与目录浏览协议：创建分组后引导加入项目目录；点击分组中的项目走 `set_cwd`，新终端沿当前项目 cwd 创建。**终端属于项目工作区，不属于对话**：同一项目的不同对话共享同一份终端列表（切换对话不重建、不闪烁），切项目时才换成该项目自己的列表（先发目标快照，再发其 `terminal_list` 和回放）。前端以快照里的 `workspaceId`（规范化项目根）为键清空/替换，不从 `cwd` 自行推导。所选分组不含当前 cwd 时，终端创建与运行命令入口暂停，直到选择该分组中的项目。终端与左栏的分组选择通过浏览器本地选择事件同步；该事件只影响界面过滤，不自行切换 cwd。删除对话、删除分组、从分组移除项目都不影响终端进程。
 
 普通终端的 xterm 实例在页面热更新后可能重建，而服务端 PTY 继续运行。实例重新挂载时先请求 `terminal_replay` 回放服务端保留的输出，再发送幂等的 `terminal_create`；回放携带 `reset`，替换当前 xterm 画面，避免与连接恢复时的自动回放重复。这样静止的 shell 提示符也会恢复显示。
 
@@ -9,9 +9,11 @@
 ## 终端管理
 
 - 终端视图延迟加载有独立错误边界。旧页面引用的构建脚本失效或网络加载失败时，仅显示终端加载失败提示，不卸载主界面或聊天草稿；提供返回对话和手动刷新，禁止自动刷新丢失未发送内容。加载期间显示状态。回归：`node tests/terminal-startup-ui-test.mjs --fresh --missing-chunk`，覆盖脚本 404、草稿保留、刷新恢复及终端输入／重连。
-- 每个 `Conversation` 一个 `TerminalManager`；agent 可调用 `terminal_create`、`terminal_list`、`terminal_close`、`terminal_input`、`terminal_key`、`terminal_read`，支持命名多终端、增量 cursor、Enter/Tab/方向键及 Ctrl/Alt 组合。PTY 工作目录限制在该对话工作区，最多 16 个终端，输入/读取有大小与等待上限。
-- 顶栏首次打开终端时，默认 shell 使用与当前活动会话匹配的快照 ID；创建回调必须依赖会话 ID，不能只依赖 cwd。同项目切换历史会话不会改变 cwd，沿用旧 ID 会把终端创建到后台会话，当前界面只剩空白光标。回归：`tests/terminal-startup-ui-test.mjs`（macOS 隔离 zsh，覆盖会话切换后首次打开及断线恢复；`--fresh` 检查直接打开）。
-- **所有 spawn 路径统一准入**：`terminal_create`（浏览器/agent）与 `run_command`（命令列表）共用 `validateId`（字母/数字/.-_:/≤80 字符）+ `ensureSpawnAllowed`（新 live PTY 需低于 `MAX_TERMINALS`；已在运行的同名终端原地重启不占新名额；**history 里的已退出终端不保留名额**——满员时重跑已退出终端同样拒绝，堵住"唯一 ID 无限生成 PTY"的洞）；失败统一走 `fail()`（notice + 终端内红色报错 + terminal_exit）。
+- `server/terminal-registry.ts` 为每个**规范化项目根**（`ProjectRootKey`，`resolve` + `realpathSync.native`，统一处理符号链接与 Windows 盘符大小写）持有一个 `TerminalManager`。键就是 `TerminalManager.safeCwd()` 已强制的 PTY 边界，因此「所有权」与「目录围墙」是同一个事实。**刻意不用 Workspace 分组 id 作 owner**：`ProjectWorkspaceStore` 是纯 UI 目录（一个路径可属于 0 个或多个分组，删分组没有资源语义），无法拥有进程。终端消息按 `workspaceId` + `terminalId` 路由（id 只需在工作区内唯一），不再按 `conversationId`。
+- PTY 工作目录限制在该工作区内，每工作区最多 16 个 live PTY；另有服务级上限（`MAX_LIVE_TERMINALS_TOTAL = 48`）——满额时**拒绝新建**并提示用户关闭终端，绝不驱逐别人正在跑的 shell。空闲槽（零 live PTY）按 LRU 保留最近 8 个工作区的已退出终端滚动历史，多出的丢弃。
+- 客户端传入的 `workspaceId` 只是提示：服务端必须把它规范化成自己已知的工作区（活动对话、已打开对话的项目、最近项目，或已拥有终端的工作区），否则拒绝，避免伪造/笔误的 id 在用户没打开过的目录里拉起 shell。
+- 顶栏首次打开终端、或切到一个还没有终端标签的项目时，默认 shell 用快照里的 `workspaceId` 定位创建目标。**同项目切换历史会话不应重建终端**：工作区键不变，列表与 xterm 实例原地保留（回归：`tests/terminal-workspace-scope-test.mjs` 断言切换前后是同一个 PTY id）。只有切项目才换列表。
+- **所有 spawn 路径统一准入**：`terminal_create`（浏览器）与 `run_command`（命令列表）共用 `validateId`（字母/数字/.-_:/≤80 字符）+ `ensureSpawnAllowed`（新 live PTY 需低于每工作区 `MAX_TERMINALS` 与服务级 `MAX_LIVE_TERMINALS_TOTAL`；已在运行的同名终端原地重启不占新名额；**history 里的已退出终端不保留名额**——满员时重跑已退出终端同样拒绝，堵住"唯一 ID 无限生成 PTY"的洞）；失败统一走 `fail()`（notice + 终端内红色报错 + terminal_exit）。
 
 ## terminal_key 按键编码
 
@@ -27,7 +29,7 @@
 
 ## 输出合并
 
-输出经带 `conversationId` 的 `terminal_output` 推给浏览器；未挂载终端保留 200KB 输出窗口，切回对话时回放。socket 断开不杀 PTY；切换/重连保留状态，对话被释放或服务关闭时才杀掉全部 PTY。
+输出经带 `workspaceId` 的 `terminal_output` 推给浏览器；未挂载终端保留 200KB 输出窗口，切回该项目时回放。服务端只把 `terminal_output` / `terminal_exit` / `terminal_list` 推给**活动工作区**，后台工作区继续在自己的 PTY 缓冲里累积，因此切项目不会串流别的项目的输出，也不会被后台的 spawn/exit 覆盖标签页（notice 不受此限）。socket 断开不杀 PTY。释放时机只有三个：用户关闭标签、服务关闭、空闲槽被 LRU 丢弃（前提是零 live PTY）。**删除对话不再是释放时机**——历史列表 ✕ 只删会话文件与 runtime。
 
 **终端输出微批合并**（`terminals.ts` 的 `queueOut`/`flushPending`，窗口 `OUTPUT_FLUSH_MS=16ms`）：`pty.onData` 每 chunk 先入 `pendingOut` 缓冲再统一 flush 一条 `terminal_output`——构建等场景每秒数百上千个小 chunk 的 WS 帧风暴降 10~50 倍；exit/kill/原地重启先 flush 再发退出事件保证顺序。
 

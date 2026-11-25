@@ -168,24 +168,34 @@ async function run() {
 		c.send({ type: "switch_session", path });
 		await c.next((m) => (m.type === "snapshot" || m.type === "snapshot_delta") && m.state?.sessionFile === path, "selected session");
 	}
-	c.send({ type: "delete_session", path: sess2 });
-	await c.next((m) => m.type === "notice" && m.level === "warning", "active session protected");
-	check("当前会话不能删除", existsSync(sess2));
 
-	// 2) delete_session 删除一条 → 磁盘消失 + 列表刷新只剩一条
+	// 1) 活动对话也能直接删除：服务端先自动离开（同项目其它对话），再删记录。
 	// （attach 后有防抖的后台重复推送，必须等“确实不含被删项”的那一份）
-	c.send({ type: "delete_session", path: sess1 });
+	c.send({ type: "delete_session", path: sess2 });
 	const s2 = await c.next(
 		(m) =>
 			m.type === "sessions" &&
-			!(m.sessions ?? []).some((x) => x.path === sess1),
+			!(m.sessions ?? []).some((x) => x.path === sess2),
 		"sessions #2（不含被删项）",
-		3000,
+		8000,
 	);
 	const paths2 = (s2.sessions ?? []).map((x) => x.path);
+	check("当前选中的对话可以直接删除", !existsSync(sess2), sess2);
+	check("删除后列表不再包含该会话", !paths2.includes(sess2), paths2.join(","));
+	check("另一条会话仍在", paths2.includes(sess1) && existsSync(sess1));
+
+	// 2) delete_session 删除剩下那条（此时它是活动对话）→ 磁盘消失、列表清空
+	c.send({ type: "delete_session", path: sess1 });
+	const s3 = await c.next(
+		(m) =>
+			m.type === "sessions" &&
+			!(m.sessions ?? []).some((x) => x.path === sess1),
+		"sessions #3（不含被删项）",
+		8000,
+	);
+	const paths3 = (s3.sessions ?? []).map((x) => x.path);
 	check("删除后文件从磁盘消失", !existsSync(sess1), sess1);
-	check("删除后列表不再包含该会话", !paths2.includes(sess1), paths2.join(","));
-	check("另一条会话仍在", paths2.includes(sess2));
+	check("删除后列表不再包含该会话", !paths3.includes(sess1), paths3.join(","));
 
 	// 3) 越界路径拒绝：会话目录之外的文件不能删
 	c.send({ type: "delete_session", path: join(workDir, "a.txt") });

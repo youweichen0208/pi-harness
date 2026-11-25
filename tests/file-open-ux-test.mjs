@@ -85,7 +85,7 @@ try {
 	await page.locator(".fp-header-action", { hasText: "改动 1" }).click();
 	await page.locator(".fp-diff-view pre").waitFor();
 	assert.match(await page.locator(".fp-diff-view pre").textContent(), /Changed by pi/);
-	const handle = await page.locator(".view-pane:not(.hidden) .resize-right").boundingBox();
+	const handle = await page.locator(".layout > .resize-right").boundingBox();
 	await page.mouse.move(handle.x + handle.width / 2, handle.y + 120);
 	await page.mouse.down();
 	await page.mouse.move(handle.x - 80, handle.y + 120);
@@ -99,9 +99,8 @@ try {
 	await page.locator(".file-name", { hasText: "note.md" }).click();
 	await page.locator(".fp-markdown h1").waitFor();
 	const restoredShare = await page.evaluate(() => {
-		const pane = document.querySelector(".view-pane:not(.hidden)");
-		const chat = pane.querySelector(".main").getBoundingClientRect().width;
-		const editor = pane.querySelector(".drawer-right").getBoundingClientRect().width;
+		const chat = document.querySelector(".view-pane:not(.hidden) .main").getBoundingClientRect().width;
+		const editor = document.querySelector(".layout > .drawer-right").getBoundingClientRect().width;
 		return editor / (chat + editor);
 	});
 	assert(Math.abs(restoredShare - savedShare) < 0.005);

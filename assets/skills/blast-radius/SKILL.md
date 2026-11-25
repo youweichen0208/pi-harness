@@ -38,4 +38,4 @@ An assertion alone is not proof. Step 4 is usually one small script that imports
 
 Write plainly, cite real code, and omit private information. The result must distinguish verified facts from inference.
 
-When an explicitly graph-enabled Ask request exposes graph tools, use `graph_neighbors` with `impact: true` to locate candidate importers and event consumers. Verify material caller and consumer relationships by reading the source. Ordinary Engineering work uses the available native tools and does not build or refresh an index.
+Locate candidate importers and event consumers with the available native search tools. Verify material caller and consumer relationships by reading the source. Ordinary Engineering work uses the available native tools and does not build or refresh an index.

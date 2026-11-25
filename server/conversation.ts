@@ -3,7 +3,6 @@ import type { AgentSession, AgentSessionRuntime } from "@earendil-works/pi-codin
 import type { UiMessage } from "./protocol.js";
 import type { RecoveryState } from "./recovery-state.js";
 import type { SessionTreeController } from "./session-tree-controller.js";
-import type { TerminalManager } from "./terminals.js";
 import type { ThinkingTimings } from "./thinking-timing.js";
 import type { WebUIContext } from "./webui-context.js";
 import type { RunRecoveryCoordinator } from "./run-recovery.js";
@@ -90,8 +89,8 @@ export interface Conversation {
 	/** Monotonic sequence for message_delta/tool_delta pushes of this conversation —
 	 *  a gap on the client triggers a get_state resync. */
 	deltaSeq: number;
-	/** PTYs belong to the conversation, not the browser socket or client. */
-	terminals: TerminalManager;
+	// PTYs do NOT live here: terminals are workspace-owned (see
+	// terminal-registry.ts). Deleting a conversation must never kill a shell.
 	// Per-conversation serialization caches. Message ids derive from
 	// (role, timestamp); two conversations can produce identical pairs, so
 	// these must never be shared across conversations.

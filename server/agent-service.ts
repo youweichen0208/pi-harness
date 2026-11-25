@@ -1,9 +1,8 @@
 import { backgroundBash, commandViews, hasRunningCommand, stopRequestCommands } from "./background-bash.js";
-import type { WorkspaceGraphService } from "./workspace-graph.js";
 import { engineeringResources } from "./engineering-skills.js";
 import { knowledgeExtension, validKnowledgeTool } from "./knowledge-tools.js";
-import { emptyKnowledgeState, isGraphMaintenance, parseKnowledgeCommand, toolsForKnowledgeMode, type DeferredKnowledgePrompt, type KnowledgeRequestContext } from "./knowledge-requests.js";
-import { assertKnowledgeEvidenceAccess, canonicalSourceRoot, graphWorkspaceSelector, KnowledgeScopeError, resolveRequestScope, resolveWorkspaceScope } from "./knowledge-sources.js";
+import { emptyKnowledgeState, parseKnowledgeCommand, toolsForKnowledgeMode, type DeferredKnowledgePrompt, type KnowledgeRequestContext } from "./knowledge-requests.js";
+import { assertKnowledgeEvidenceAccess, canonicalSourceRoot, KnowledgeScopeError, resolveRequestScope, resolveWorkspaceScope } from "./knowledge-sources.js";
 import { branchEvidence, KNOWLEDGE_EVIDENCE_ENTRY } from "./knowledge-evidence.js";
 import { KnowledgeLibrary } from "./knowledge-library.js";
 import { ProjectWorkspaceStore } from "./project-workspaces.js";
@@ -155,6 +154,7 @@ import {
 	saveCommandsFile,
 	TerminalManager,
 } from "./terminals.js";
+import { projectRootKey, TerminalRegistry, type ProjectRootKey } from "./terminal-registry.js";
 
 const SNAPSHOT_INTERVAL_MS = 60;
 /** While assistant deltas are flowing, live rendering is carried by
@@ -222,12 +222,6 @@ export class ClientSession {
 	readonly timings = new SnapshotTimings();
 	readonly executionTraces: ExecutionTraceRegistry;
 	private readonly sessionExports: SessionExportService;
-	/** delete_session blocked by live terminals arms a confirm window here
-	 *  (transcript path → expiry): the blocking terminal belongs to a background
-	 *  conversation whose tabs the user cannot reach, so the warning used to be
-	 *  a dead end (issue #194). A second delete within the window proceeds —
-	 *  removeConversation kills those PTYs along with the doomed runtime. */
-	private deleteTerminalConfirm = new Map<string, number>();
 	private promptTraceSeq = 0;
 	private static liveClients = new Map<string, ClientSession>();
 
@@ -246,13 +240,16 @@ export class ClientSession {
 	wikiDocumentSession(path: string): SessionManager | undefined {
 		return [...this.convs.values()].reverse().find(conv => conv.wiki && conv.cwd === this.cwd && this.wikiChats.settings(this.cwd, conv.session.sessionManager.getSessionId()).documentPath === path)?.session.sessionManager ?? this.wikiBlankDocuments.get(`${this.cwd}\0${path}`);
 	}
-	wikiSessionBusy(id: string): boolean { return [...this.convs.values()].some(conv => conv.wiki && conv.session.sessionManager.getSessionId() === id && (conv.session.isStreaming || conv.runRecovery?.pending || conv.terminals.list().length > 0)); }
+	wikiSessionBusy(id: string): boolean { return [...this.convs.values()].some(conv => conv.wiki && conv.session.sessionManager.getSessionId() === id && (conv.session.isStreaming || conv.runRecovery?.pending)); }
 	ownsWikiSession(id: string): boolean { return [...this.convs.values()].some(conv => conv.wiki && conv.session.sessionManager.getSessionId() === id); }
 	private readonly thinkingDurationStore: ThinkingDurationStore;
 	/** Open conversations — each owns its OWN runtime, so starting a new chat
 	 *  or switching chats never interrupts an in-flight run. `runtime` and
 	 *  `session` accessors below target the ACTIVE conversation. */
 	private convs = new Map<string, Conversation>();
+	/** Terminals belong to project workspaces, not conversations (see
+	 *  terminal-registry.ts). Deleting a chat therefore never kills a PTY. */
+	private readonly terminalRegistry = new TerminalRegistry((key) => (msg) => this.emitTerminal(key, msg));
 	private activeId = "";
 	private convSeq = 0;
 	private creatingConversation = false;
@@ -332,50 +329,98 @@ export class ClientSession {
 		return this.conv.session;
 	}
 
-	/** PTYs are owned by individual conversations; this getter targets the active one
-	 * for compatibility with the existing terminal-panel dispatch path. */
-	get terminals(): TerminalManager {
-		return this.conv.terminals;
+	/** Canonical workspace key for a directory (public for snapshot construction).
+	 *  Directories that no longer exist still get a stable key (resolved path) so
+	 *  a stale conversation cannot crash a push; spawning into it is refused
+	 *  later by safeCwd(). */
+	terminalRegistryKeyOf(dir: string): ProjectRootKey {
+		return projectRootKey(dir) ?? resolve(dir);
 	}
 
-	getTerminalManager(conversationId?: string): TerminalManager | undefined {
-		return (conversationId ? this.convs.get(conversationId) : this.conv)?.terminals;
+	/** Memoized active workspace key. `emitTerminal` runs once per output batch
+	 *  (every ~16ms per terminal) and must not stat/realpath the disk each time,
+	 *  so the key is recomputed only when the active conversation or its cwd
+	 *  actually changes. */
+	private activeKeyCache: { id: string; cwd: string; key: ProjectRootKey } | null = null;
+
+	/** Workspace key of the ACTIVE conversation. Falls back to the service cwd so
+	 *  a terminal event during teardown (the registry is drained while the client
+	 *  is disposing) can never throw "no active conversation". */
+	private activeWorkspaceKey(): ProjectRootKey {
+		const cwd = this.convs.get(this.activeId)?.cwd ?? this.cwd;
+		const cached = this.activeKeyCache;
+		if (cached && cached.id === this.activeId && cached.cwd === cwd) return cached.key;
+		const key = this.terminalRegistryKeyOf(cwd);
+		this.activeKeyCache = { id: this.activeId, cwd, key };
+		return key;
 	}
 
-	getTerminalCwd(conversationId?: string): string {
-		return (conversationId ? this.convs.get(conversationId) : this.conv)?.cwd ?? this.cwd;
+	/** Terminal manager for a workspace key, created on first use. */
+	terminalsFor(key: ProjectRootKey): TerminalManager {
+		return this.terminalRegistry.ensure(key);
 	}
 
-	private makeTerminalManager(conversationId: string, cwd: string): TerminalManager {
-		const mgr = new TerminalManager((msg) => this.emitTerminal(conversationId, msg), cwd);
-
-		return mgr;
+	/**
+	 * Validate the workspace an inbound terminal message targets.
+	 *
+	 * The client's `workspaceId` is a HINT, never authority: it must canonicalize
+	 * to a workspace this server already knows (the active one, an open
+	 * conversation's project, a recent project, or a workspace that already owns
+	 * terminals). Anything else is refused, so a typo or a forged id can never
+	 * open a shell somewhere the user never opened.
+	 */
+	terminalWorkspace(workspaceId?: string): ProjectRootKey | undefined {
+		const requested = workspaceId?.trim();
+		if (!requested) return this.activeWorkspaceKey();
+		// Fast paths first: keystrokes carry the canonical key we handed out, so
+		// the common cases must stay string comparisons (no syscalls per input).
+		if (this.terminalRegistry.has(requested)) return requested;
+		if (requested === this.activeWorkspaceKey()) return requested;
+		const key = projectRootKey(requested);
+		if (!key) return undefined;
+		if (this.terminalRegistry.has(key)) return key;
+		if (key === this.activeWorkspaceKey()) return key;
+		for (const conv of this.convs.values()) if (this.terminalRegistryKeyOf(conv.cwd) === key) return key;
+		for (const project of this.stateStore.get(this.clientId).projects) if (this.terminalRegistryKeyOf(project.path) === key) return key;
+		return undefined;
 	}
 
-	private emitTerminal(conversationId: string, msg: ServerMessage): void {
-		// Background conversations keep collecting output in their own PTY buffer.
-		// Do not stream it into the active xterm; push the retained window on switch.
-		if (msg.type === "terminal_output" && conversationId !== this.activeId) return;
+	/** Manager for a validated key. `spawn` creates the workspace slot when
+	 *  missing; read paths must not, or a stale id could resurrect empty state. */
+	terminalManagerFor(key: ProjectRootKey | undefined, spawn = false): TerminalManager | undefined {
+		if (!key) return undefined;
+		return spawn ? this.terminalRegistry.ensure(key) : this.terminalRegistry.get(key);
+	}
+
+	/** Reclaim idle workspace slots (called after a tab close). Slots that still
+	 *  own a live PTY are never touched. */
+	reapIdleTerminalWorkspaces(): void {
+		this.terminalRegistry.reap();
+	}
+
+	private emitTerminal(workspaceId: ProjectRootKey, msg: ServerMessage): void {
+		// Only the ACTIVE workspace streams terminal traffic to the browser. The
+		// others keep collecting output in their own PTY buffer; switching replays
+		// it. terminal_list is filtered the same way, so a background workspace's
+		// spawn/exit can never overwrite the tabs being displayed. Notices (e.g. a
+		// size-limit rejection) still flow: they are client-wide UI events.
 		if (msg.type === "terminal_output" || msg.type === "terminal_exit" || msg.type === "terminal_list") {
-			this.emit({ ...msg, conversationId } as ServerMessage);
+			if (workspaceId !== this.activeWorkspaceKey()) return;
+			this.emit({ ...msg, workspaceId } as ServerMessage);
 			return;
 		}
 		this.emit(msg);
 	}
 
-	private pushTerminals(conversation = this.conv): void {
-		this.emit({
-			type: "terminal_list",
-			conversationId: conversation.id,
-			terminals: conversation.terminals.list(),
-		});
-		for (const output of conversation.terminals.replay()) {
-			this.emit({
-				type: "terminal_output",
-				conversationId: conversation.id,
-				terminalId: output.terminalId,
-				data: output.data,
-			});
+	/** Push the ACTIVE workspace's terminal list + retained output. Always pushes,
+	 *  even when the workspace owns no terminals, so switching to a terminal-free
+	 *  project clears the previous project's tabs. */
+	private pushTerminals(): void {
+		const workspaceId = this.activeWorkspaceKey();
+		const manager = this.terminalRegistry.get(workspaceId);
+		this.emit({ type: "terminal_list", workspaceId, terminals: manager?.list() ?? [] });
+		for (const output of manager?.replay() ?? []) {
+			this.emit({ type: "terminal_output", workspaceId, terminalId: output.terminalId, data: output.data });
 		}
 	}
 
@@ -518,7 +563,6 @@ export class ClientSession {
 		stateStore: ClientStateStore,
 		thinkingDurationStore: ThinkingDurationStore,
 		knowledgeWiki?: WikiService,
-		private readonly graph?: WorkspaceGraphService,
 	) {
 		this.clientId = clientId;
 		this.knowledgeWorkspaces = new ProjectWorkspaceStore(resolve(process.env.PI_WEB_WORKSPACES_FILE || join(stateStore.dataDir, "project-workspaces.json")));
@@ -577,14 +621,12 @@ export class ClientSession {
 		thinkingDurationStore: ThinkingDurationStore,
 		wiki = false,
 		knowledgeWiki?: WikiService,
-		graph?: WorkspaceGraphService,
 	): Promise<ClientSession> {
 		const agentDir = process.env.PI_CODING_AGENT_DIR ?? getAgentDir();
 
-		const cs = new ClientSession(clientId, cwd, agentDir, stateStore, thinkingDurationStore, knowledgeWiki, graph);
+		const cs = new ClientSession(clientId, cwd, agentDir, stateStore, thinkingDurationStore, knowledgeWiki);
 		cs.wikiClient = wiki;
 		const conversationId = cs.nextConversationId();
-		const terminals = cs.makeTerminalManager(conversationId, cwd);
 		const runtime = await createAgentSessionRuntime(cs.makeRuntimeFactory(false, undefined, wiki), {
 			cwd,
 			agentDir,
@@ -597,7 +639,7 @@ export class ClientSession {
 		// The first conversation also seeds the shared
 		// ModelRuntime that every later conversation reuses.
 		cs.sharedModelRuntime = runtime.services.modelRuntime;
-		const conv = cs.makeConversation(runtime, conversationId, terminals);
+		const conv = cs.makeConversation(runtime, conversationId);
 		conv.wiki = wiki;
 		cs.convs.set(conv.id, conv);
 		cs.activeId = conv.id;
@@ -624,7 +666,6 @@ export class ClientSession {
 			if (!wiki) {
 				const owner = () => [...this.convs.values()].find(item => item.session.sessionManager === sessionManager);
 				extensionFactories.push(knowledgeExtension({
-					graph: this.graph,
 					getContext: () => owner()?.knowledge.active,
 					sourceState: () => this.knowledgeSourceState(),
 					skillFiles: () => owner()?.session.resourceLoader.getSkills().skills.map(skill => skill.filePath) ?? [],
@@ -687,7 +728,6 @@ export class ClientSession {
 	private makeConversation(
 		runtime: AgentSessionRuntime,
 		id: string,
-		terminals: TerminalManager,
 	): Conversation {
 		return {
 			id,
@@ -715,7 +755,6 @@ export class ClientSession {
 
 			deltaSeq: 0,
 			thinkingTimings: new ThinkingTimings(),
-			terminals,
 			msgIds: new Map(),
 			nextMsgId: 1,
 			userSeqByTs: new Map(),
@@ -788,15 +827,15 @@ export class ClientSession {
 		this.pushSettings();
 		// Reconnect: push the background-task list — it must survive reconnects
 		// and outlive the conversation that started the tasks.
-		// PTYs are conversation-owned and survive a socket reconnect.
+		// PTYs are workspace-owned and outlive both sockets and conversations.
 		this.pushTerminals();
 	}
 
 	detachSink(send: (msg: ServerMessage) => void): void {
 		this.sinks.delete(send);
-		// PTYs intentionally survive a socket drop: they are owned by the
-		// conversation and can be inspected after reconnecting. Only conversation
-		// disposal or server shutdown kills them.
+		// PTYs intentionally survive a socket drop: they are owned by the project
+		// workspace, so they can be inspected after reconnecting (or from another
+		// tab). Only an explicit close or server shutdown kills them.
 		if (this.sinks.size === 0) {
 			this.idleSince = Date.now();
 			this.files.unwatchDir();
@@ -813,7 +852,7 @@ export class ClientSession {
 			idleSince: this.idleSince,
 			streamingConversations: this.activeConversations(),
 			queuedMessages: this.pendingMessages(),
-			liveTerminals: [...this.convs.values()].reduce((n, conv) => n + conv.terminals.list().length, 0),
+			liveTerminals: this.terminalRegistry.liveCount(),
 			switchingWorkspace: this.cwdSwitchRunning,
 			disposed: this.disposed,
 		}, now, idleMs);
@@ -1176,7 +1215,7 @@ export class ClientSession {
 			this.sessionsTimer = null;
 			if (this.disposed) return;
 			for (const conv of [...this.convs.values()]) {
-				if (conv.wiki && conv.id !== this.activeId && !conv.session.isStreaming && !conv.runRecovery?.pending && conv.terminals.list().length === 0) this.removeConversation(conv.id);
+				if (conv.wiki && conv.id !== this.activeId && !conv.session.isStreaming && !conv.runRecovery?.pending) this.removeConversation(conv.id);
 			}
 			this.invalidateLists();
 			this.emitConversations();
@@ -1393,6 +1432,11 @@ export class ClientSession {
 			tree: conv.tree?.refresh(),
 			clientId: this.clientId,
 			cwd: this.cwd,
+			/** Canonical terminal workspace of the active conversation. Terminals are
+			 *  workspace resources, so this — not conversationId — is what every
+			 *  terminal message is routed by. Resolved through the same path as
+			 *  pushTerminals() so the two can never disagree. */
+			workspaceId: this.activeWorkspaceKey(),
 			sessionId: this.session.sessionId,
 			sessionFile: this.session.sessionFile,
 			conversationId: this.activeId,
@@ -1952,29 +1996,27 @@ export class ClientSession {
 		};
 	}
 
-	private async prepareKnowledgeRequest(conv: Conversation, mode: KnowledgeRequestContext["mode"], args: string, rawCommand: string, requestId: string, signal: AbortSignal, queuedGraphWorkspaceId?: string): Promise<KnowledgeRequestContext> {
+	private async prepareKnowledgeRequest(conv: Conversation, mode: KnowledgeRequestContext["mode"], args: string, rawCommand: string, requestId: string, signal: AbortSignal): Promise<KnowledgeRequestContext> {
 		const session = conv.session;
 		if (conv.wiki) throw new Error("此命令仅在普通对话中可用");
 		if (session.extensionRunner.getCommand(`skill:${mode}`)) throw new Error(`/skill:${mode} 已被其他扩展命令拦截，无法保证知识权限`);
-		const graphQuery = mode === "ask" && /^--graph(?:\s|$)/.test(args);
-		for (const name of toolsForKnowledgeMode(mode, graphQuery)) if (!validKnowledgeTool(session, name)) throw new Error(`Knowledge tool ${name} is unavailable or replaced`);
+		for (const name of toolsForKnowledgeMode(mode)) if (!validKnowledgeTool(session, name)) throw new Error(`Knowledge tool ${name} is unavailable or replaced`);
 		const skill = session.resourceLoader.getSkills().skills.find(item => item.name === mode);
 		if (!skill) throw new Error(`Knowledge Skill ${mode} 未加载`);
 		readFileSync(skill.filePath, "utf8");
 		const state = this.knowledgeSourceState();
 		const initial = resolveWorkspaceScope({ cwd: conv.cwd }, state);
-		const maintenance = isGraphMaintenance(mode);
-		let workspaceId = maintenance ? graphWorkspaceSelector(args, initial.candidates, queuedGraphWorkspaceId) : undefined;
-		if (!workspaceId && initial.issue === "ambiguous_workspace") {
+		let workspaceId: string | undefined;
+		if (initial.issue === "ambiguous_workspace") {
 			const options = initial.candidates.map(candidate => `${candidate.name} (${candidate.id})`);
 			const selected = await conv.webUi.select("选择本次知识请求的 Workspace", options, { signal });
 			if (!selected) throw new Error("已取消知识请求：需要选择 Workspace");
 			workspaceId = initial.candidates[options.indexOf(selected)]?.id;
 			if (!workspaceId) throw new Error("Workspace 选择已失效");
-		} else if (!workspaceId && initial.issue) throw new Error(`当前 Workspace 不可用：${initial.issue}`);
+		} else if (initial.issue) throw new Error(`当前 Workspace 不可用：${initial.issue}`);
 		workspaceId ??= initial.scope.workspaceId;
 		let scope = resolveWorkspaceScope({ cwd: conv.cwd, workspaceId }, state).scope;
-		for (let attempt = 0; !maintenance && attempt < 8; attempt++) {
+		for (let attempt = 0; attempt < 8; attempt++) {
 			try { scope = resolveRequestScope(args, scope); break; }
 			catch (error) {
 				if (!(error instanceof KnowledgeScopeError) || error.sources.length < 2) throw error;
@@ -1989,7 +2031,7 @@ export class ClientSession {
 		}
 		signal.throwIfAborted();
 		return {
-			mode, graphQuery, requestId, conversationId: conv.id, sessionId: session.sessionId, root: "", rawCommand, skillPath: skill.filePath,
+			mode, requestId, conversationId: conv.id, sessionId: session.sessionId, root: "", rawCommand, skillPath: skill.filePath,
 			scope, evidence: conv.knowledge.evidence, evidenceOrder: conv.knowledge.evidenceOrder,
 		};
 	}
@@ -2050,18 +2092,7 @@ export class ClientSession {
 		const holdForKnowledge = !!knowledge || !!conv.knowledge.active || this.preparingKnowledge.has(conv) || conv.knowledge.pending.length > 0;
 		if (!fromQueue && holdForKnowledge && (this.submitting.has(conv) || conv.knowledge.draining || conv.knowledge.active || conv.knowledge.pending.length || conv.session.isStreaming || conv.runRecovery?.pending || conv.knowledge.nativeSteering.length || conv.knowledge.nativeFollowUp.length || (knowledge && conv.tree?.busy))) {
 			if (this.quiesceBlocked()) { acknowledge(false); return; }
-			let graphWorkspaceId: string | undefined;
-			if (knowledge && isGraphMaintenance(knowledge.mode)) {
-				try {
-					const eligible = resolveWorkspaceScope({ cwd: conv.cwd }, this.knowledgeSourceState()).candidates;
-					graphWorkspaceId = graphWorkspaceSelector(knowledge.args, eligible);
-				} catch (error) {
-					acknowledge(false);
-					this.emit({ type: "notice", level: "error", conversationId: conv.id, text: (error as Error).message });
-					return;
-				}
-			}
-			conv.knowledge.pending.push({ text, normalizedText: commandText, attachments, queue, requestId, graphWorkspaceId });
+			conv.knowledge.pending.push({ text, normalizedText: commandText, attachments, queue, requestId });
 			this.refreshKnowledgeQueue(conv);
 			acknowledge(true);
 			if (this.executionTraces.enabled) {
@@ -2107,7 +2138,7 @@ export class ClientSession {
 			// Native slash commands (see NATIVE_COMMANDS) are executed here and
 			// never reach the SDK. Extension / skill / template commands fall
 			// through — AgentSession.prompt() handles those itself.
-			const slash = isGraphMaintenance(knowledge?.mode) ? null : parseSlash(commandText);
+			const slash = parseSlash(commandText);
 			if (slash) sideEffectsStarted = true;
 			if (slash && (await this.slash.exec(slash.name, slash.args, { conversationId: conv.id, requestId: requestId ?? `reload-${Date.now()}` }))) {
 				acknowledge(true, true);
@@ -2146,7 +2177,7 @@ export class ClientSession {
 			if (!s.isStreaming) { conv.toolsExecutedSincePrompt = false; conv.lastTaskEndedAt = undefined; }
 			conv.toolTextContinues = 0;
 			if (knowledge) {
-				preparedKnowledge = await this.prepareKnowledgeRequest(conv, knowledge.mode, knowledge.args, knowledge.normalizedText, knowledgeRequestId!, preparation!.signal, fromQueue?.graphWorkspaceId);
+				preparedKnowledge = await this.prepareKnowledgeRequest(conv, knowledge.mode, knowledge.args, knowledge.normalizedText, knowledgeRequestId!, preparation!.signal);
 				if (this.conv !== conv || conv.session !== s || conv.rebuilding) throw new Error("Conversation changed");
 				conv.knowledge.active = preparedKnowledge;
 			}
@@ -2480,7 +2511,7 @@ export class ClientSession {
 		previous.unsubscribe?.();
 		previous.tree?.dispose();
 
-		const conv = this.makeConversation(previous.runtime, previous.id, previous.terminals);
+		const conv = this.makeConversation(previous.runtime, previous.id);
 		// IDs and delta sequence remain monotonic within this conversation.
 		conv.wiki = previous.wiki;
 		conv.deltaSeq = previous.deltaSeq;
@@ -2523,9 +2554,19 @@ export class ClientSession {
 		// on every click: if the active chat has no messages it IS the new chat.
 		// Project switching retains warm runtimes, including blank conversations;
 		// only a blank belonging to the current project may be reused.
+		// "Blank" must mean a genuinely fresh chat: no messages, nothing queued and
+		// no run in flight. An extension dialog awaiting an answer or a streaming
+		// turn keeps the conversation — it used to be protected only because owning a
+		// terminal made it non-blank. Terminals are workspace-owned now, so the
+		// real signal is the work itself.
 		const isBlank = (c: Conversation): boolean => {
 			try {
-				return c.session.getSessionStats().totalMessages === 0 && c.terminals.list().length === 0;
+				return c.session.getSessionStats().totalMessages === 0
+					&& !c.session.isStreaming
+					&& !c.runRecovery?.pending
+					&& !c.webUi.hasPendingDialog()
+					&& c.queueSteering.length === 0
+					&& c.queueFollowUp.length === 0;
 			} catch {
 				// session being replaced — treat as used so we don't switch onto it
 				return false;
@@ -2557,7 +2598,7 @@ export class ClientSession {
 				if (this.wikiBlankDocuments.size > 32) this.wikiBlankDocuments.delete(this.wikiBlankDocuments.keys().next().value!);
 			}
 		}
-		const replaceActive = fresh && active && active.wiki && !active.session.isStreaming && active.terminals.list().length === 0 ? active : null;
+		const replaceActive = fresh && active && active.wiki && !active.session.isStreaming ? active : null;
 		// Cap is per project — conversations of other projects keep their own
 		// lists and don't consume this project's slots.
 		const openInProject = [...this.convs.values()].filter(
@@ -2582,7 +2623,6 @@ export class ClientSession {
 		const prevThinking = this.conv.session.thinkingLevel;
 		try {
 			const conversationId = this.nextConversationId();
-			const terminals = this.makeTerminalManager(conversationId, this.cwd);
 			const runtime = await createAgentSessionRuntime(
 				this.makeRuntimeFactory(false, undefined, wiki),
 				{
@@ -2591,7 +2631,7 @@ export class ClientSession {
 					sessionManager: manager ?? (wiki ? SessionManager.create(this.cwd, this.wikiChats.directory(this.cwd)) : SessionManager.create(this.cwd)),
 				},
 			);
-			const conv = this.makeConversation(runtime, conversationId, terminals);
+			const conv = this.makeConversation(runtime, conversationId);
 			conv.wiki = wiki;
 			this.convs.set(conv.id, conv);
 			this.activeId = conv.id;
@@ -2630,21 +2670,23 @@ export class ClientSession {
 	 *
 	 * - still streaming → it becomes a background run: ensure it is listed;
 	 * - idle + listed + continued → keep it (the user did continue it);
-	 * - any retained terminal state → keep it listed until the terminals are closed;
 	 * - idle + just-viewed (never prompted this visit) → ALSO kept listed, as
 	 *   long as the owning project is under its MAX_OPEN_CONVERSATIONS cap.
 	 *   Disposing on every glance meant switching back to a project you'd only
 	 *   looked at (not typed into) paid a full cold restart — a fresh
-	 *   AgentSessionRuntime + SessionManager.continueRecent() disk resume +
-	 *   TerminalManager — every single time. That cost is real on any
+	 *   AgentSessionRuntime + SessionManager.continueRecent() disk resume —
+	 *   every single time. That cost is real on any
 	 *   platform but lands hardest on Windows (slower fs I/O, AV scanning
 	 *   every spawned process/file, ConPTY init), which is what made "project
 	 *   switching" itself feel slow rather than just the first visit. Idle
-	 *   conversations are cheap to hold (no streaming, no PTYs) — bounding by
-	 *   the existing per-project cap keeps memory use where it already was
-	 *   allowed to go, just makes it more likely to actually get there.
+	 *   conversations are cheap to hold (no streaming, no PTYs of their own) —
+	 *   bounding by the existing per-project cap keeps memory use where it
+	 *   already was allowed to go, just makes it more likely to actually get there.
 	 * - only over-cap does the caller now actually drop it (returns it so
 	 *   removal happens after the active conversation has been switched away).
+	 *
+	 * Terminals are NOT a keep-warm reason: they belong to the workspace, so
+	 * disposing an idle conversation cannot harm a running shell.
 	 */
 	private displaceActive(): Conversation | null {
 		const conv = this.conv;
@@ -2653,12 +2695,6 @@ export class ClientSession {
 		// switches away without sending another prompt.
 
 		if (conv.session.isStreaming || conv.runRecovery?.pending) {
-			conv.listed = true;
-			return null;
-		}
-		// Terminal state is a reason to keep an otherwise idle conversation alive:
-		// switching chats must not kill a PTY the user or agent may still need.
-		if (conv.terminals.list().length > 0) {
 			conv.listed = true;
 			return null;
 		}
@@ -2681,7 +2717,7 @@ export class ClientSession {
 	 *  session stays persisted on disk, so it remains recoverable from the
 	 *  history list. Never removes the active conversation. */
 	async retireWikiSession(id: string): Promise<void> {
-		if (this.wikiSessionBusy(id)) throw new Error("Wiki conversation has running tasks or terminals");
+		if (this.wikiSessionBusy(id)) throw new Error("Wiki conversation has running tasks");
 		for (const conv of [...this.convs.values()]) {
 			if (conv.wiki && conv.session.sessionManager.getSessionId() === id) {
 				if (conv.id === this.activeId) throw new Error("Wiki conversation is active");
@@ -2700,7 +2736,10 @@ export class ClientSession {
 		this.sessionExports.invalidate(id);
 		this.convs.delete(id);
 
-		conv.terminals.killAll();
+		// Terminals are workspace-owned: disposing a conversation releases its
+		// runtime only. Idle workspace slots are reclaimed separately, and never
+		// while they still own a live PTY.
+		this.terminalRegistry.reap();
 		conv.unsubscribe?.();
 		conv.unsubscribe = undefined;
 		return conv.runtime.dispose().catch(() => {});
@@ -2854,16 +2893,7 @@ export class ClientSession {
 			// before releasing any matching runtimes and deleting the transcript.
 			const owners = [...this.convs.values()].filter((conv) =>
 				conv.session.sessionFile && resolve(conv.session.sessionFile) === abs);
-			const closedTerminals: string[] = [];
 			for (const conv of owners) {
-				if (conv.id === this.activeId) {
-					this.emit({
-						type: "notice",
-						level: "warning",
-						text: "该对话正在使用中，请先切换到其他对话再删除",
-					});
-					return;
-				}
 				if (
 					conv.session.isStreaming ||
 					conv.queueSteering.length > 0 || conv.queueFollowUp.length > 0
@@ -2871,43 +2901,39 @@ export class ClientSession {
 					this.emit({
 						type: "notice",
 						level: "warning",
-						text: "该对话仍有后台任务，请先停止任务再删除",
+						text: conv.id === this.activeId
+							? "当前对话仍在运行，请先停止任务再删除"
+							: "该对话仍有后台任务，请先停止任务再删除",
 					});
 					return;
 				}
-				// Only LIVE PTYs give pause: an exited terminal keeps its scrollback
-				// in the manager's history but nothing is running, and the tab can never
-				// be closed from another conversation — it must not lock the session.
-				// A live one can't be reached either, so instead of a dead-end refusal
-				// the first attempt arms a 15s confirm window; retrying the delete then
-				// closes those terminals with the conversation (issue #194).
-				const live = conv.terminals.list().filter((term) => term.running);
-				if (live.length > 0) {
-					const confirmExpiry = this.deleteTerminalConfirm.get(abs) ?? 0;
-					if (confirmExpiry <= Date.now()) {
-						this.deleteTerminalConfirm.set(abs, Date.now() + 15000);
-						this.emit({
-							type: "notice",
-							level: "warning",
-							text: `该对话仍有运行中的终端（${live.map((term) => term.title).join("、")}），再次删除将关闭终端并删除对话`,
-						});
-						return;
-					}
-					this.deleteTerminalConfirm.delete(abs);
-					closedTerminals.push(...live.map((term) => term.title));
+			}
+			// Terminals are no longer a reason to block: they belong to the project
+			// workspace, so deleting a chat leaves every PTY (and its scrollback)
+			// exactly as it was. Issue #194's confirm window retired with that coupling.
+			// The ACTIVE conversation cannot release its own runtime: leave it first
+			// (most recently used sibling of this project, else a fresh chat) so the
+			// user no longer has to switch away by hand before closing a chat. The
+			// second read catches a sibling that shares this transcript: removing it
+			// while active would silently keep its runtime and delete its file.
+			const activeOwner = owners.find((conv) => conv.id === this.activeId);
+			if (activeOwner) {
+				const left = await this.leaveForRemoval(activeOwner);
+				if (left && !owners.some((conv) => conv.id === this.activeId)) {
+					// left behind — proceed
+				} else {
+					this.emit({
+						type: "notice",
+						level: "warning",
+						text: "当前对话暂时无法离开，请稍后重试删除",
+					});
+					return;
 				}
 			}
 			await Promise.all(owners.map((conv) => this.removeConversation(conv.id)));
 			rmSync(abs, { force: true });
 			this.emitConversations();
 			await this.refreshSessions();
-			if (closedTerminals.length > 0) {
-				this.emit({
-					type: "notice",
-					level: "info",
-					text: `已关闭运行中的终端（${closedTerminals.join("、")}）并删除对话`,
-				});
-			}
 		} catch (err) {
 			this.emit({
 				type: "notice",
@@ -2915,6 +2941,23 @@ export class ClientSession {
 				text: `删除会话失败：${(err as Error).message}`,
 			});
 		}
+	}
+
+	/** Move off `target` because it is about to be removed.
+	 *
+	 * The active conversation owns the session/render target, so it cannot be
+	 * released while active. Prefer a sibling of the same project (its runtime is
+	 * already warm, so this is a pure slot change), otherwise start a fresh chat;
+	 * the caller removes `target` once `activeId` points somewhere else.
+	 * Returns false when neither route worked (busy switching, quiesce, …). */
+	private async leaveForRemoval(target: Conversation): Promise<boolean> {
+		const sibling = [...this.convs.values()]
+			.filter((conv) => conv.id !== target.id && conv.cwd === this.cwd && !conv.wiki)
+			.sort((a, b) => b.lastActiveAt - a.lastActiveAt)[0];
+		if (sibling) await this.switchConversation(sibling.id);
+		if (this.activeId !== target.id) return true;
+		await this.newChat(true);
+		return this.activeId !== target.id;
 	}
 
 	async browseDirs(path?: string): Promise<void> {
@@ -2982,7 +3025,6 @@ export class ClientSession {
 		if (this.conv.tree?.busy) { this.emitNotice("warning", "等待当前切换完成。"); return false; }
 		if (this.quiesceBlocked()) return false;
 		let openedRuntime: AgentSessionRuntime | null = null;
-		let openedTerminals: TerminalManager | null = null;
 		let installed = false;
 		let candidate: Conversation | undefined;
 		let previous: Conversation | undefined;
@@ -3008,7 +3050,6 @@ export class ClientSession {
 			const targetCwd = sessionManager.getCwd();
 			if (!isSessionDirectory(targetCwd)) throw new Error("原项目目录已失效，请恢复原目录后重新打开此会话。");
 			const conversationId = this.nextConversationId();
-			openedTerminals = this.makeTerminalManager(conversationId, targetCwd);
 			openedRuntime = await createAgentSessionRuntime(
 				this.makeRuntimeFactory(),
 				{
@@ -3034,10 +3075,8 @@ export class ClientSession {
 				// running list. Roll that presentation-only mutation back because no
 				// switch will take place.
 				this.conv.listed = oldListed;
-				openedTerminals.killAll();
 				await openedRuntime.dispose();
 				openedRuntime = null;
-				openedTerminals = null;
 				this.emit({
 					type: "notice",
 					level: "warning",
@@ -3049,7 +3088,6 @@ export class ClientSession {
 			const conv = this.makeConversation(
 				openedRuntime,
 				conversationId,
-				openedTerminals,
 			);
 			// Deliberately resumed — must not be dismissed when the user later
 			// switches away without sending a new message.
@@ -3062,7 +3100,6 @@ export class ClientSession {
 			await this.bindSession(conv);
 			installed = true;
 			openedRuntime = null;
-			openedTerminals = null;
 			if (displaced) this.removeConversation(displaced.id);
 			this.conv.lastActiveAt = Date.now();
 			this.webUi.refresh();
@@ -3079,7 +3116,6 @@ export class ClientSession {
 				this.convs.delete(candidate.id);
 				if (!this.disposed) { this.emitConversations(); this.pushTerminals(); }
 			}
-			openedTerminals?.killAll();
 			if (openedRuntime) await openedRuntime.dispose().catch(() => {});
 			this.emit({
 				type: "notice",
@@ -3367,7 +3403,6 @@ export class ClientSession {
 			} else {
 				// First visit to this project: resume its most recent session.
 				const conversationId = this.nextConversationId();
-				const terminals = this.makeTerminalManager(conversationId, abs);
 				const newRuntime = await createAgentSessionRuntime(
 					this.makeRuntimeFactory(),
 					{
@@ -3376,7 +3411,7 @@ export class ClientSession {
 						sessionManager: SessionManager.continueRecent(abs),
 					},
 				);
-				const conv = this.makeConversation(newRuntime, conversationId, terminals);
+				const conv = this.makeConversation(newRuntime, conversationId);
 				this.convs.set(conv.id, conv);
 				try {
 					await this.bindSession(conv);
@@ -3571,10 +3606,8 @@ export class ClientSession {
 		ClientSession.liveClients.delete(this.clientId);
 		this.disposed = true;
 		this.codeSearch.cancel();
-		for (const conv of this.convs.values()) {
-
-			conv.terminals.killAll();
-		}
+		// Service shutdown is one of the few legitimate PTY release points.
+		this.terminalRegistry.closeAll();
 		if (this.snapshotTimer) {
 			clearTimeout(this.snapshotTimer);
 			this.snapshotTimer = null;
@@ -3649,7 +3682,6 @@ export class AgentService {
 		private cwd: string,
 		stateFile: string,
 		knowledgeWiki?: WikiService,
-		private readonly graph?: WorkspaceGraphService,
 	) {
 		this.knowledgeWiki = knowledgeWiki ?? new WikiService(join(dirname(stateFile), "wiki"));
 		this.stateStore = new ClientStateStore(stateFile);
@@ -3789,7 +3821,6 @@ export class AgentService {
 					this.thinkingDurationStore,
 					!!wikiCwd,
 					this.knowledgeWiki,
-					this.graph,
 				).finally(() => {
 					this.pending.delete(clientId);
 				});

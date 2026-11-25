@@ -8,7 +8,6 @@ import { createKnowledgeSourceReader } from "./knowledge-source-reader.js";
 import { assertKnowledgeSourceAccess, canonicalSourceRoot, gitFileEvidence } from "./knowledge-sources.js";
 import { MAX_KNOWLEDGE_EVIDENCE } from "./knowledge-evidence.js";
 import { createKnowledgeInvestigateTool } from "./knowledge-investigate.js";
-import { graphTools } from "./knowledge-graph-tools.js";
 import { createKnowledgeWriteTool } from "./knowledge-write.js";
 import { RUN_CONTINUATION } from "./run-recovery.js";
 import { TOOL_TEXT_CONTINUE_PROMPT } from "./tool-text.js";
@@ -151,7 +150,7 @@ export function knowledgeExtension(host: KnowledgeToolHost): InlineExtension {
 			ordinaryTools = undefined;
 			authorized = undefined;
 		};
-		for (const tool of [...sourceTools(host), ...graphTools(host), createKnowledgeWriteTool(host), createKnowledgeInvestigateTool(host, () => shutdown.signal)]) pi.registerTool(tool);
+		for (const tool of [...sourceTools(host), createKnowledgeWriteTool(host), createKnowledgeInvestigateTool(host, () => shutdown.signal)]) pi.registerTool(tool);
 		pi.on("before_agent_start", (event, ctx) => {
 			const context = host.getContext(), mode = eventMode(event, context);
 			const options = event.systemPromptOptions;
@@ -163,7 +162,7 @@ export function knowledgeExtension(host: KnowledgeToolHost): InlineExtension {
 			}
 			ordinaryTools = withoutKnowledgeTools(options.selectedTools);
 			pi.appendEntry(ORDINARY_TOOL_ENTRY, ordinaryTools);
-			const allowed = mode ? toolsForKnowledgeMode(mode, context.graphQuery) : [];
+			const allowed = mode ? toolsForKnowledgeMode(mode) : [];
 			if (!mode || !allowed.every(name => validKnowledgeTool(pi, name))) {
 				// Pi reports errors thrown by hooks and continues preparing the run.
 				// Clear executable tools before cancelling a failed identity check.
@@ -181,7 +180,7 @@ export function knowledgeExtension(host: KnowledgeToolHost): InlineExtension {
 			});
 		});
 		pi.on("tool_call", event => {
-			const context = host.getContext(), allowed = context ? toolsForKnowledgeMode(context.mode, context.graphQuery) : [];
+			const context = host.getContext(), allowed = context ? toolsForKnowledgeMode(context.mode) : [];
 			if (knowledgeToolNames.includes(event.toolName as typeof knowledgeToolNames[number])) {
 				if (!context || authorized !== context || !allowed.includes(event.toolName) || !validKnowledgeTool(pi, event.toolName)) return { block: true, reason: "Knowledge tool is not authorized for this request" };
 				return;

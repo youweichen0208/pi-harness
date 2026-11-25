@@ -67,7 +67,8 @@ function restoreReloadEvents(): ReloadStatus[] {
 /** A terminal tab. The output stream itself lives in the xterm instance
  * (via the terminal bridge) — this is just the tab metadata. */
 export interface TerminalMeta extends TerminalInfo {
-	conversationId: string;
+	/** Canonical workspace the PTY belongs to (server-provided snapshot key). */
+	workspaceId: string;
 }
 
 export interface ChatState {
@@ -295,9 +296,9 @@ type Action =
 	| { type: "slash_commands"; commands: SlashCommandInfo[] }
 	| { type: "terminal_add"; meta: TerminalMeta }
 	| { type: "terminal_remove"; id: string }
-	| { type: "terminal_exit"; conversationId?: string; terminalId: string; exitCode: number | null }
+	| { type: "terminal_exit"; workspaceId?: string; terminalId: string; exitCode: number | null }
 	| { type: "terminal_restart"; terminalId: string }
-	| { type: "terminal_list"; conversationId?: string; terminals: TerminalInfo[] }
+	| { type: "terminal_list"; workspaceId?: string; terminals: TerminalInfo[] }
 
 	| { type: "settings"; settings: UiSettingsState }
 
@@ -321,16 +322,15 @@ interface TerminalWriter {
 }
 
 function makeTerminalBridge() {
-	/** Multiple writers may subscribe to the same (conversation, terminal) pair —
-	 *  e.g. the SCM panel's hidden query terminal parses output through its own
-	 *  writer while a (hidden) xterm instance may also be registered for it.
+	/** Multiple writers may subscribe to the same (workspace, terminal) pair —
+	 *  e.g. a hidden parser plus a mounted xterm instance.
 	 *  A Set keeps them all: later registrations no longer shadow earlier ones. */
 	const writers = new Map<string, Set<TerminalWriter>>();
 	const buffers = new Map<string, string>();
-	const key = (conversationId: string, terminalId: string) => `${conversationId}:${terminalId}`;
+	const key = (workspaceId: string, terminalId: string) => `${workspaceId}:${terminalId}`;
 	return {
-		write(conversationId: string, terminalId: string, data: string, reset = false): void {
-			const writerKey = key(conversationId, terminalId);
+		write(workspaceId: string, terminalId: string, data: string, reset = false): void {
+			const writerKey = key(workspaceId, terminalId);
 			const set = writers.get(writerKey);
 			if (set && set.size > 0) {
 				for (const w of set) {
@@ -350,8 +350,8 @@ function makeTerminalBridge() {
 		},
 		/** Register a writer (xterm instance / output parser); flushes buffered
 		 *  output to the new subscriber. Returns an unregister fn. */
-		register(conversationId: string, terminalId: string, writer: TerminalWriter): () => void {
-			const writerKey = key(conversationId, terminalId);
+		register(workspaceId: string, terminalId: string, writer: TerminalWriter): () => void {
+			const writerKey = key(workspaceId, terminalId);
 			let set = writers.get(writerKey);
 			if (!set) {
 				set = new Set();
@@ -453,7 +453,7 @@ function reducer(state: ChatState, action: Action): ChatState {
 				ready: action.status === "open" ? state.ready : false,
 				agentSilence: action.status === "closed" ? null : state.agentSilence,
 				agentSilenceByConversation: action.status === "closed" ? {} : state.agentSilenceByConversation,
-				// PTYs are conversation-owned and survive socket reconnects. Clear only
+				// PTYs are workspace-owned and survive socket reconnects. Clear only
 				// the browser views so xterm writers remount when the server replays them.
 				terminals: action.status === "closed" ? [] : state.terminals,
 			};
@@ -473,9 +473,10 @@ function reducer(state: ChatState, action: Action): ChatState {
 				...state,
 				ready: true,
 				state: action.state,
-				// Terminal lists are conversation-owned. Clear the old view before
-				// the new conversation's terminal_list arrives after this snapshot.
-				...(state.state?.conversationId !== action.state.conversationId ? { terminals: [] } : {}),
+				// Tabs belong to the workspace, not the conversation: switching chats in
+				// one project keeps them, switching projects clears them before the new
+				// workspace's terminal_list arrives after this snapshot.
+				...(state.state?.workspaceId !== action.state.workspaceId ? { terminals: [] } : {}),
 				...(state.state?.cwd !== action.state.cwd ? { sessions: [], files: null, conversationFilesChecked: null, fileContent: null, scmData: null, scmPanelResults: {}, scmDiffData: null } : {}),
 				activeConversationId: action.state.conversationId,
 				agentSilence: action.state.isStreaming ? state.agentSilenceByConversation[action.state.conversationId] ?? null : null,
@@ -654,11 +655,8 @@ function reducer(state: ChatState, action: Action): ChatState {
 				terminals: state.terminals.filter((t) => t.id !== action.id),
 			};
 		case "terminal_exit":
-			if (
-				action.conversationId &&
-				(state.activeConversationId || state.state?.conversationId) &&
-				action.conversationId !== (state.activeConversationId || state.state?.conversationId)
-			) return state;
+			// The server only forwards exit events for the ACTIVE workspace, so the
+			// tab that matches this id is always the one being displayed.
 			return {
 				...state,
 				terminals: state.terminals.map((t) =>
@@ -678,18 +676,11 @@ function reducer(state: ChatState, action: Action): ChatState {
 				),
 			};
 		case "terminal_list":
-			if (
-				action.conversationId &&
-				(state.activeConversationId || state.state?.conversationId) &&
-				action.conversationId !== (state.activeConversationId || state.state?.conversationId)
-			) {
-				return state;
-			}
 			return {
 				...state,
 				terminals: action.terminals.map((terminal) => ({
 					...terminal,
-					conversationId: action.conversationId ?? state.state?.conversationId ?? "",
+					workspaceId: action.workspaceId ?? state.state?.workspaceId ?? "",
 				})),
 			};
 		default:
@@ -1265,7 +1256,7 @@ export function useChat() {
 
 				case "terminal_output":
 					bridgeRef.current.write(
-						msg.conversationId ?? authoritative.current.activeConversationId,
+						msg.workspaceId ?? authoritative.current.state?.workspaceId ?? "",
 						msg.terminalId,
 						msg.data,
 						msg.reset,
@@ -1274,7 +1265,7 @@ export function useChat() {
 				case "terminal_exit":
 					dispatch({
 						type: "terminal_exit",
-						conversationId: msg.conversationId,
+						workspaceId: msg.workspaceId,
 						terminalId: msg.terminalId,
 						exitCode: msg.exitCode,
 					});
@@ -1282,7 +1273,7 @@ export function useChat() {
 				case "terminal_list":
 					dispatch({
 						type: "terminal_list",
-						conversationId: msg.conversationId,
+						workspaceId: msg.workspaceId,
 						terminals: msg.terminals,
 					});
 					break;
@@ -1408,8 +1399,8 @@ export function useChat() {
 		[],
 	);
 	const terminalRegister = useCallback(
-		(conversationId: string, id: string, writer: TerminalWriter) =>
-			bridgeRef.current.register(conversationId, id, writer),
+		(workspaceId: string, id: string, writer: TerminalWriter) =>
+			bridgeRef.current.register(workspaceId, id, writer),
 		[],
 	);
 

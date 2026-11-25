@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createKnowledgeSourceReader } from "../../server/knowledge-source-reader.js";
-import { KnowledgeScopeError, assertKnowledgeEvidenceAccess, assertKnowledgeSourceAccess, graphWorkspaceSelector, resolveRequestScope, resolveWorkspaceScope } from "../../server/knowledge-sources.js";
+import { KnowledgeScopeError, assertKnowledgeEvidenceAccess, assertKnowledgeSourceAccess, resolveRequestScope, resolveWorkspaceScope } from "../../server/knowledge-sources.js";
 import type { KnowledgeEvidence } from "../../server/knowledge-requests.js";
 
 const roots: string[] = [];
@@ -140,20 +140,3 @@ describe("bounded knowledge reader", () => {
 	});
 });
 
-
-it("requires an exact, unambiguous maintenance Workspace selector", () => {
-	const groups = [{ name: "API Team", id: "one" }, { name: "Operations", id: "two" }];
-	expect(graphWorkspaceSelector("", groups)).toBeUndefined();
-	expect(graphWorkspaceSelector("", groups.slice(0, 1))).toBe("one");
-	const renamed = [{ id: "one", name: "Renamed" }, { id: "two", name: "API Team" }];
-	expect(graphWorkspaceSelector("API Team", renamed, "one")).toBe("one");
-	expect(() => graphWorkspaceSelector("API Team", renamed.slice(1), "one")).toThrow(KnowledgeScopeError);
-	expect(graphWorkspaceSelector("API Team", groups)).toBe("one");
-	expect(graphWorkspaceSelector("two", groups)).toBe("two");
-	expect(() => graphWorkspaceSelector("", [])).toThrow(KnowledgeScopeError);
-	for (const text of ["API", "build API Team", "跳过 Operations", "不要索引 Operations"]) {
-		expect(() => graphWorkspaceSelector(text, groups)).toThrow(KnowledgeScopeError);
-	}
-	expect(() => graphWorkspaceSelector("API Team", [...groups, { name: "API Team", id: "three" }])).toThrow(KnowledgeScopeError);
-	expect(() => graphWorkspaceSelector("one", [...groups, { name: "one", id: "three" }])).toThrow(KnowledgeScopeError);
-});

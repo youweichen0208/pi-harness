@@ -1,11 +1,13 @@
 /**
- * TerminalManager — conversation-owned PTY sessions (node-pty) bridged over
+ * TerminalManager — workspace-owned PTY sessions (node-pty) bridged over
  * the WebSocket protocol, plus the user command list persisted in
  * `<workspaceRoot>/.pi/commands.json`.
  *
- * Each conversation gets its own manager; terminals are shared across browser
- * tabs through the session emit. A socket drop does not kill them: the
- * conversation owns their lifecycle and releases them on disposal.
+ * Each project workspace gets its own manager (see terminal-registry.ts);
+ * terminals are shared across browser tabs through the session emit. A socket
+ * drop does not kill them, and neither does deleting a conversation: only an
+ * explicit close, an idle workspace slot being reclaimed, or server shutdown
+ * releases the PTYs.
  *
  * Commands file format:
  *   { "commands": [ { "name": "dev", "command": "npm run dev", "cwd": "${pwd}" } ] }
@@ -153,15 +155,6 @@ interface TermEntry {
 	pendingOut: string;
 	/** Timer for the coalescing window; null = nothing pending. */
 	flushTimer: ReturnType<typeof setTimeout> | null;
-
-	/** true = 该终端被 agent 的 terminal_create/input/key 触碰过（用户手开的
-	 *  终端永远不参与静默提醒）。同时也是「当前纪元仍武装」的标志：看门狗
-	 *  触发一次后清零，下次 agent 触碰重新开始计时。 */
-
-	/** 最后一次 PTY 输出 / 输入写入的时刻——静默时长以它为基准。 */
-
-	/** 静默看门狗 timer；null = 未武装。 */
-
 }
 
 const isWindows = process.platform === "win32";
@@ -441,10 +434,11 @@ export function encodeTerminalKey(
 }
 
 /**
- * Owns one or more PTYs for a conversation. All output is forwarded as
- * `terminal_output` messages through the provided emit (broadcast to every
- * socket attached to the client session). Failed spawns emit an error notice and
- * terminal_exit instead of throwing into the WebSocket dispatcher.
+ * Owns the PTYs of ONE project workspace (a TerminalRegistry slot, not a
+ * conversation). All output is forwarded as `terminal_output` messages through
+ * the provided emit (broadcast to every socket attached to the client session).
+ * Failed spawns emit an error notice and terminal_exit instead of throwing into
+ * the WebSocket dispatcher.
  */
 export class TerminalManager {
 	/** Live PTYs only. Exited entries move to history so they no longer consume
@@ -457,7 +451,16 @@ export class TerminalManager {
 	constructor(
 		private emit: (msg: ServerMessage) => void,
 		private readonly workspaceRoot: string,
+		/** Service-wide live-PTY budget. `live` counts every workspace including
+		 *  this one, so a new workspace cannot push the total past `max`; at the
+		 *  cap we REFUSE the spawn instead of evicting someone else's shell. */
+		private readonly quota?: { live: () => number; max: number },
 	) {}
+
+	/** Live PTYs (exited history entries do not count). */
+	liveCount(): number {
+		return this.terms.size;
+	}
 
 	/** Start a plain interactive shell in the given directory. */
 	create(
@@ -662,8 +665,6 @@ export class TerminalManager {
 		return true;
 	}
 
-	/** 武装（或按当前 lastActivityAt 重置）静默看门狗。 */
-
 	/** Emit output immediately, bypassing the coalescing window (rare paths:
 	 *  one-shot hints/banners — not per-chunk data). */
 	private writeOut(id: string, data: string): void {
@@ -701,10 +702,6 @@ export class TerminalManager {
 		}
 		for (const wake of entry.waiters) wake();
 		entry.waiters.clear();
-		// 纪元内的输出重置静默倒计时。
-
-		// 输出观察器：累积匹配，命中一次即移除（终端接管 bash 的完成检测）。
-
 	}
 
 	private validateId(id: string): string | null {
@@ -725,6 +722,13 @@ export class TerminalManager {
 		if (this.terms.has(id)) return true;
 		if (this.terms.size >= MAX_TERMINALS) {
 			this.fail(id, `终端数量已达上限（${MAX_TERMINALS}）`);
+			return false;
+		}
+		// Service-wide cap on top of the per-workspace one: terminals now outlive
+		// conversations, so "16 per project" alone would grow with every project
+		// the user ever opened. Refuse the NEW PTY; never evict a live one.
+		if (this.quota && this.quota.live() >= this.quota.max) {
+			this.fail(id, `终端总数已达上限（${this.quota.max}），请先关闭一些终端`);
 			return false;
 		}
 		return true;
@@ -773,67 +777,26 @@ export class TerminalManager {
 		this.emit({ type: "terminal_list", terminals: this.list() });
 	}
 
-	/** Replay the retained output window after switching back to this conversation. */
+	/** Retained output window, replayed when the user returns to this workspace. */
 	replay(): { terminalId: string; data: string }[] {
 		return [...this.terms.values(), ...this.history.values()]
 			.filter((entry) => entry.output.length > 0)
 			.map((entry) => ({ terminalId: entry.id, data: entry.output }));
 	}
 
-	/** Read output after an absolute cursor. */
-	read(id: string, cursor = 0, maxBytes = 20_000): { data: string; cursor: number; running: boolean; exitCode: number | null } | null {
-		const entry = this.find(id);
-		if (!entry) return null;
-		const start = Math.max(entry.outputOffset, Math.min(cursor, entry.outputOffset + entry.output.length));
-		const end = Math.min(start + Math.max(1, Math.floor(maxBytes) || 20_000), entry.outputOffset + entry.output.length);
-		return { data: entry.output.slice(start - entry.outputOffset, end - entry.outputOffset), cursor: end, running: !entry.exited, exitCode: entry.exitCode };
-	}
-
-	async waitForOutput(id: string, cursor: number, timeoutMs: number, signal?: AbortSignal): Promise<void> {
-		const current = this.read(id, cursor, 1);
-		if (!current || current.cursor > cursor || !current.running) return;
-		await new Promise<void>((resolvePromise) => {
-			const entry = this.find(id);
-			if (!entry) return resolvePromise();
-			let timer: ReturnType<typeof setTimeout> | undefined;
-			const done = () => {
-				if (timer) clearTimeout(timer);
-				entry.waiters.delete(done);
-				signal?.removeEventListener("abort", done);
-				resolvePromise();
-			};
-			entry.waiters.add(done);
-			timer = setTimeout(done, Math.max(0, Math.min(timeoutMs, 120_000)));
-			signal?.addEventListener("abort", done, { once: true });
-		});
-	}
-
-	inputChecked(id: string, data: string): string | null {
-		if (data.length > MAX_INPUT) return `输入过长（上限 ${MAX_INPUT} 字符）`;
+	/**
+	 * Input from the browser. Oversized payloads are dropped with a notice rather
+	 * than written into the PTY (a truncated shell command is worse than none).
+	 */
+	input(id: string, data: string): void {
+		if (data.length > MAX_INPUT) {
+			this.emit({ type: "notice", level: "error", text: `输入过长（上限 ${MAX_INPUT} 字符）` });
+			return;
+		}
 		const entry = this.terms.get(id);
-		if (!entry || entry.exited) return "终端不存在或进程已退出";
-		// 已武装的纪元里任何人（含用户手动敲键盘）写了输入都算新活动，重置倒计时。
-
+		if (!entry || entry.exited) return;
 		entry.pty.write(data);
-		return null;
 	}
-
-	key(id: string, key: string, modifiers: { ctrl?: boolean; alt?: boolean; shift?: boolean } = {}): string | null {
-		const encoded = encodeTerminalKey(key, modifiers);
-		if ("error" in encoded) return encoded.error;
-		return this.inputChecked(id, encoded.data);
-	}
-
-	/** 解除静默看门狗（退出/关闭/全部停止时）。 */
-
-	/** 输出末尾的绝对 cursor（terminal-backed bash 的读取起点）。 */
-	endCursor(id: string): number | null {
-		const entry = this.find(id);
-		if (!entry) return null;
-		return entry.outputOffset + entry.output.length;
-	}
-
-	/** 注册一次性输出观察器：命中 re 或终端退出时回调一次。返回注销函数。 */
 
 	/** Emit a terminal failure (bad cwd, spawn error) and mark the terminal dead. */
 	private fail(id: string, text: string): void {
@@ -856,8 +819,6 @@ export class TerminalManager {
 		this.appendOutput(entry, banner);
 		this.emit({ type: "terminal_output", terminalId: id, data: banner });
 		entry.exited = true;
-		// 终端退出 → 未命中的输出观察器以 null 回调（宿主可据此通知「终端已关闭」）。
-
 		entry.exitCode = exitCode;
 		this.terms.delete(id);
 		while (this.history.size >= MAX_TERMINAL_HISTORY) {
@@ -868,10 +829,6 @@ export class TerminalManager {
 		this.history.set(id, entry);
 		this.emit({ type: "terminal_exit", terminalId: id, exitCode });
 		this.emitList();
-	}
-
-	input(id: string, data: string): void {
-		void this.inputChecked(id, data);
 	}
 
 	resize(id: string, cols: number, rows: number): void {
@@ -930,7 +887,7 @@ export class TerminalManager {
 		return true;
 	}
 
-	/** Kill every terminal owned by this conversation. */
+	/** Kill every terminal of this workspace (service shutdown / workspace disposal). */
 	killAll(): void {
 		for (const entry of this.terms.values()) {
 

@@ -126,43 +126,6 @@ try {
 	assert(normal.includes("write") && normal.includes("bash"), JSON.stringify(normal));
 	assert(!normal.includes("knowledge_write") && !normal.includes("source_read"));
 	console.log("PASS direct Ask, evidence IDs, write blocking and ordinary tool restoration");
-	assert(!normal.some(name => name.startsWith("graph_")));
-	const resultFor = name => client.state.messages.findLast(message => message.role === "toolResult" && message.toolName === name);
-	const exposed = index => requests[index].tools.map(item => item.function.name).sort();
-	scripted.push(tool("graph_update", {}));
-	let graphRun = await prompt(client, "/update-graph workspace-a", "graph-update-before-build", 2);
-	assert.deepEqual(exposed(graphRun), ["graph_status", "graph_update"]);
-	assert.match(JSON.stringify(resultFor("graph_update")), /baseline|first/i);
-	for (const [index, text] of ["/build-graph 只查 repo-a", "/skill:build-graph 跳过 repo-b", "/update-graph 不要索引 repo-b", "/build-graph except repo-b", "/build-graph other-group"].entries()) {
-		const requestId = "graph-scope-refusal-" + index, before = calls;
-		client.send({ type: "prompt", text, requestId });
-		await wait(() => client.wire.some(message => message.type === "prompt_result" && message.requestId === requestId && message.receipt === "rejected"), "scope rejected before delivery");
-		assert.equal(calls, before, "invalid whole-workspace selectors never reached the model");
-		const response = await fetch(`http://127.0.0.1:${harness.port}/api/workspace-graph`, {
-			method: "POST", headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ workspaceId: "workspace-a", request: { op: "graph_status" } }),
-		});
-		assert(response.ok, "graph status");
-		assert.equal((await response.json()).state, "not_indexed", "no graph job was created");
-	}
-	scripted.push(tool("graph_build", {}));
-	graphRun = await prompt(client, "/skill:build-graph Workspace A", "graph-build", 2);
-	assert.deepEqual(exposed(graphRun), ["graph_build", "graph_status"]);
-	assert.equal(resultFor("graph_build").isError, false, JSON.stringify(resultFor("graph_build")));
-	scripted.push(tool("graph_status", {}));
-	graphRun = await prompt(client, "/ask --graph 只查 repo-a", "ask-graph-scope", 2);
-	assert.deepEqual(exposed(graphRun), [...declared, "graph_status", "graph_search", "graph_neighbors", "graph_path"].sort());
-	const graphStatus = JSON.parse(resultFor("graph_status").content[0].text);
-	assert.deepEqual(graphStatus.sources.map(source => source.name), ["repo-a"]);
-	scripted.push(tool("graph_neighbors", { nodeId: "no-such-node", impact: true }));
-	await prompt(client, "/skill:ask --graph 只查 repo-a", "ask-graph-impact", 2);
-	assert.equal(resultFor("graph_neighbors").isError, false, JSON.stringify(resultFor("graph_neighbors")));
-	assert.deepEqual(JSON.parse(resultFor("graph_neighbors").content[0].text).edges, []);
-	scripted.push(tool("graph_build", {}));
-	await prompt(client, "/ask --graph 修改索引", "ask-graph-block-build", 1);
-	assert(resultFor("graph_build").isError);
-	assert.match(resultFor("graph_build").content[0].text, /not found|not authorized/i);
-	console.log("PASS graph command isolation, shared service, scoped Ask and build/update capabilities");
 	const learner = await connect("knowledge-learn");
 	// A new client resumes this project's latest native session, which the Ask client still owns.
 	const resumedConversation = learner.state.conversationId;

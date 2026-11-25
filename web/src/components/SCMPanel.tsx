@@ -375,7 +375,7 @@ export function ScmPanel({
 				send({
 					type: "run_command",
 					terminalId: existing.id,
-					conversationId: existing.conversationId,
+					workspaceId: existing.workspaceId,
 					command: def,
 					cols: 80,
 					rows: 24,
@@ -384,7 +384,7 @@ export function ScmPanel({
 				const id = randomUuid();
 				terminal.create({
 					id,
-					conversationId: chat.activeConversationId || chat.state?.conversationId || "",
+					workspaceId: chat.state?.workspaceId ?? "",
 					title,
 					cwd: chat.state?.cwd ?? "",
 					cols: 80,
@@ -447,7 +447,7 @@ export function ScmPanel({
 	const handlePull = () => void performOperation("pull");
 	const openRecoveryTerminal = () => {
 		if (!chat.ready || !chat.state) return;
-		terminal.create({ id: randomUuid(), conversationId: chat.state.conversationId, title: "Git", cwd: chat.state.cwd, cols: 80, rows: 24, running: true, exitCode: null });
+		terminal.create({ id: randomUuid(), workspaceId: chat.state.workspaceId, title: "Git", cwd: chat.state.cwd, cols: 80, rows: 24, running: true, exitCode: null });
 		onSwitchToTerminal();
 	};
 

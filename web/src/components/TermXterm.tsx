@@ -12,7 +12,7 @@ const CTRL_V = "\x16";
 interface TermXtermProps {
 	cols: number;
 	rows: number;
-	conversationId: string;
+	workspaceId: string;
 	terminalId: string;
 	/** When set, the server runs this command in a new shell instead of a bare shell. */
 	command?: CommandDef;
@@ -22,7 +22,7 @@ interface TermXtermProps {
 	active: boolean;
 	send: (msg: ClientMessage) => boolean;
 	register: (
-		conversationId: string,
+		workspaceId: string,
 		id: string,
 		writer: { write(data: string): void; replace?(data: string): void; dispose(): void },
 	) => () => void;
@@ -37,7 +37,7 @@ interface TermXtermProps {
 export function TermXterm({
 	cols,
 	rows,
-	conversationId,
+	workspaceId,
 	terminalId,
 	command,
 	cwd,
@@ -129,18 +129,18 @@ export function TermXterm({
 			if (classifyTerminalPaste(data.getData("text/plain"), types) !== "image") return;
 			event.preventDefault();
 			event.stopPropagation();
-			send({ type: "terminal_input", terminalId, conversationId, data: CTRL_V });
+			send({ type: "terminal_input", terminalId, workspaceId, data: CTRL_V });
 		};
 		container.addEventListener("paste", onPaste, true);
 
-		const unregister = register(conversationId, terminalId, {
+		const unregister = register(workspaceId, terminalId, {
 			write: (data) => term.write(data),
 			replace: (data) => { term.reset(); term.write(data); },
 			dispose: () => term.dispose(),
 		});
 		// A hot reload can remount xterm while its PTY keeps running. Restore the
 		// retained prompt/output before the idempotent terminal_create below.
-		if (!command) send({ type: "terminal_replay", terminalId, conversationId });
+		if (!command) send({ type: "terminal_replay", terminalId, workspaceId });
 
 		const sendDims = () => {
 			if (!activeRef.current || !container.clientWidth || !container.clientHeight) return;
@@ -149,7 +149,7 @@ export function TermXterm({
 				send({
 					type: "terminal_resize",
 					terminalId,
-					conversationId,
+					workspaceId,
 					cols: term.cols,
 					rows: term.rows,
 				});
@@ -169,7 +169,7 @@ export function TermXterm({
 				send({
 					type: "run_command",
 					terminalId,
-					conversationId,
+					workspaceId,
 					command,
 					cols: term.cols,
 					rows: term.rows,
@@ -178,7 +178,7 @@ export function TermXterm({
 				send({
 					type: "terminal_create",
 					terminalId,
-					conversationId,
+					workspaceId,
 					cwd,
 					cols: term.cols,
 					rows: term.rows,
@@ -187,7 +187,7 @@ export function TermXterm({
 		});
 
 		const onData = term.onData((data) => {
-			send({ type: "terminal_input", terminalId, conversationId, data });
+			send({ type: "terminal_input", terminalId, workspaceId, data });
 		});
 
 		let ro: ResizeObserver | null = null;
@@ -213,7 +213,7 @@ export function TermXterm({
 			termRef.current = null;
 		};
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [conversationId, terminalId, commandKey, send, register]);
+	}, [workspaceId, terminalId, commandKey, send, register]);
 
 	// Becoming visible: re-fit (size may have changed while hidden) and focus.
 	useEffect(() => {
@@ -226,7 +226,7 @@ export function TermXterm({
 				send({
 					type: "terminal_resize",
 					terminalId,
-					conversationId,
+					workspaceId,
 					cols: inst.term.cols,
 					rows: inst.term.rows,
 				});

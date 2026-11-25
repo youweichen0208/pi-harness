@@ -1,17 +1,16 @@
 /**
  * delete_session vs. terminal ownership.
  *
- * A conversation stays warm after the user switches away whenever it still owns
- * a terminal, so a session can be "in use" by a background conversation the
- * user cannot see. Rules under test:
- *   1. an EXITED terminal (scrollback only, nothing running) must NOT block
- *      deleting the session — the tab cannot be closed from the current
- *      conversation, so blocking would lock the session forever;
- *   2. a LIVE terminal blocks the FIRST delete with a warning that names it
- *      and arms a 15s confirm window — the retry proceeds and closes the
- *      terminal, because the tab is unreachable from the current conversation
- *      (issue #194);
- *   3. the active conversation is always refused with its own message.
+ * Terminals belong to the PROJECT WORKSPACE, not to a conversation, so deleting
+ * a chat is pure session bookkeeping and must never disturb a running shell.
+ * Rules under test:
+ *   1. a LIVE terminal survives deleting the background session that created it
+ *      — no warning, no 15s confirm window, PTY still running and echoing;
+ *   2. a LIVE terminal also survives deleting the ACTIVE session (the server
+ *      still leaves it first, but only the runtime/transcript goes away);
+ *   3. deleting the last conversation of a project keeps its terminals: coming
+ *      back to that project lists them again and they are still running;
+ *   4. an EXITED terminal keeps its scrollback and never blocks anything.
  *
  * Usage: npm run build && node tests/delete-session-terminal-test.mjs
  */
@@ -33,17 +32,20 @@ mkdirSync(workdir, { recursive: true });
 mkdirSync(dataDir, { recursive: true });
 const sessionsDir = join(agentDir, "sessions", `--${workdir.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-")}--`);
 mkdirSync(sessionsDir, { recursive: true });
+const sessionsDirFor = (cwd) => join(agentDir, "sessions", `--${cwd.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-")}--`);
 
-const seed = (id, text) => {
-	const path = join(sessionsDir, `2026-10-19T00-00-0${id === "A" ? 0 : 1}-000Z_${id}.jsonl`);
+const seed = (id, text, cwd = workdir) => {
+	const dir = sessionsDirFor(cwd);
+	mkdirSync(dir, { recursive: true });
+	const path = join(dir, `2026-10-19T00-00-0${id === "A" ? 0 : 1}-000Z_${id}.jsonl`);
 	writeFileSync(path, [
-		{ type: "session", version: 3, id, timestamp: "2026-10-19T00:00:00.000Z", cwd: workdir },
+		{ type: "session", version: 3, id, timestamp: "2026-10-19T00:00:00.000Z", cwd },
 		{ type: "message", id: `user-${id}`, parentId: null, timestamp: "2026-10-19T00:00:01.000Z", message: { role: "user", content: [{ type: "text", text }], timestamp: Date.now() } },
 	].map((row) => JSON.stringify(row)).join("\n") + "\n");
 	return path;
 };
-const sessionA = seed("A", "EXITED_TERMINAL_SESSION");
-const sessionB = seed("B", "LIVE_TERMINAL_SESSION");
+const sessionA = seed("A", "FIRST_TERMINAL_SESSION");
+const sessionB = seed("B", "SECOND_TERMINAL_SESSION");
 
 const repoRoot = realpathSync(new URL("../", import.meta.url));
 const server = spawn(process.execPath, ["dist/server/index.js"], {
@@ -108,6 +110,23 @@ class Client {
 		}
 		throw new Error("timeout waiting for state");
 	}
+	/** Create a terminal in the ACTIVE workspace and wait until it is live. */
+	async createTerminal(terminalId, cwd) {
+		this.send({ type: "terminal_create", terminalId, cwd, cols: 60, rows: 16 });
+		return this.waitForType("terminal_list", (message) => message.terminals.some((item) => item.id === terminalId && item.running));
+	}
+	/** Assert the PTY is actually alive: it must echo a marker back. */
+	async expectAlive(terminalId, marker) {
+		this.send({ type: "terminal_input", terminalId, data: `echo ${marker}\r` });
+		await this.waitForType("terminal_output", (message) => message.terminalId === terminalId && message.data.includes(marker));
+	}
+	/** Switch to another project and back, so the server re-pushes the list. */
+	async roundTripProject(dir) {
+		this.send({ type: "set_cwd", path: base, source: "ui" });
+		await this.waitForState((state) => realpathSync(state.cwd) === realpathSync(base));
+		this.send({ type: "set_cwd", path: dir, source: "ui" });
+		await this.waitForState((state) => realpathSync(state.cwd) === realpathSync(dir));
+	}
 }
 
 let client;
@@ -130,59 +149,91 @@ try {
 	await client.waitForType("ready");
 	await client.waitForState((state) => Boolean(state.conversationId));
 
-	// -- session A: terminal that already exited ------------------------------
+	// -- 1. deleting the session that created a live terminal ------------------
 	client.send({ type: "switch_session", path: sessionA });
 	await client.waitForState((state) => state.sessionFile === sessionA);
-	const terminalA = "term-exited";
-	client.send({ type: "terminal_create", terminalId: terminalA, cwd: workdir, cols: 60, rows: 16 });
-	await client.waitForType("terminal_list", (message) => message.terminals.some((item) => item.id === terminalA));
-	client.send({ type: "terminal_input", terminalId: terminalA, data: "exit\r" });
-	await client.waitForType("terminal_exit", (message) => message.terminalId === terminalA);
-	await client.waitForType("terminal_list", (message) => message.terminals.some((item) => item.id === terminalA && !item.running));
-	check("exited terminal is retained with running=false", true);
+	const terminalA = "term-live-a";
+	await client.createTerminal(terminalA, workdir);
+	await client.expectAlive(terminalA, "ALIVE_A");
 
-	// Switching away keeps the conversation warm because it owns a terminal, so
-	// the transcript is owned by a BACKGROUND conversation when we delete it.
 	client.send({ type: "new_chat" });
 	await client.waitForState((state) => state.sessionFile !== sessionA);
 	client.send({ type: "delete_session", path: sessionA });
 	await client.waitForType("sessions", () => true);
-	const warning = client.received.find((message) => message.type === "notice" && message.level === "warning" && /终端|正在使用中|后台任务/.test(message.text));
-	check("exited terminal no longer blocks deletion", !warning);
+	const blockA = client.received.find((message) =>
+		message.type === "notice" && message.level === "warning" && /终端|正在使用中|后台任务/.test(message.text));
+	check("a live terminal no longer blocks deleting its session", !blockA);
 	check("session A transcript deleted from disk", !existsSync(sessionA));
 
-	// -- session B: live terminal --------------------------------------------
+	// The PTY must have survived the delete: still listed after re-entering the
+	// project, still running, and still echoing input.
+	await client.roundTripProject(workdir);
+	const listAfterA = await client.waitForType("terminal_list", (message) =>
+		message.terminals.some((item) => item.id === terminalA));
+	check("the terminal is still listed after the delete", listAfterA.terminals.some((item) => item.id === terminalA && item.running));
+	await client.expectAlive(terminalA, "STILL_A");
+	check("and it still echoes input after the delete", true);
+
+	// -- 2. deleting the ACTIVE session that owns a live terminal --------------
 	client.send({ type: "switch_session", path: sessionB });
 	await client.waitForState((state) => state.sessionFile === sessionB);
-	const terminalB = "term-live";
-	client.send({ type: "terminal_create", terminalId: terminalB, cwd: workdir, cols: 60, rows: 16 });
-	const liveList = await client.waitForType("terminal_list", (message) => message.terminals.some((item) => item.id === terminalB && item.running));
-	const liveTitle = liveList.terminals.find((item) => item.id === terminalB).title;
-	client.send({ type: "new_chat" });
-	await client.waitForState((state) => state.sessionFile !== sessionB);
+	const terminalB = "term-live-b";
+	await client.createTerminal(terminalB, workdir);
+	await client.expectAlive(terminalB, "ALIVE_B");
+	const activeB = client.state.conversationId;
+	const markB = client.received.length;
 	client.send({ type: "delete_session", path: sessionB });
-	const liveWarning = await client.waitForType("notice", (message) => message.level === "warning" && message.text.includes("运行中的终端"));
-	check("live terminal refuses the first delete", liveWarning.text.includes("运行中的终端"));
-	check("warning names the terminal", liveWarning.text.includes(liveTitle));
-	check("first warning explains the confirm retry", liveWarning.text.includes("再次删除"));
-	check("session B transcript kept", existsSync(sessionB));
+	await client.waitForState((state) => state.conversationId !== activeB);
+	const blockB = client.received.slice(markB).find((message) =>
+		message.type === "notice" && /正在使用中|无法离开|仍在运行|仍有后台任务|运行中的终端/.test(message.text));
+	check("the active session closes without a terminal warning", !blockB);
+	check("session B transcript deleted from disk", !existsSync(sessionB));
+	await client.roundTripProject(workdir);
+	const listAfterB = await client.waitForType("terminal_list", (message) =>
+		message.terminals.some((item) => item.id === terminalB));
+	check("its terminal survived too", listAfterB.terminals.some((item) => item.id === terminalB && item.running));
+	await client.expectAlive(terminalB, "STILL_B");
+	check("and it still echoes input after the delete", true);
 
-	// Retrying within the confirm window proceeds and closes the terminal
-	// (issue #194: the tab is unreachable in a background conversation, so a
-	// plain refusal used to lock the session forever).
-	client.send({ type: "delete_session", path: sessionB });
-	const closedNotice = await client.waitForType("notice", (message) => message.level === "info" && message.text.includes("已关闭运行中的终端"));
-	check("retry confirms and names the closed terminal", closedNotice.text.includes(liveTitle));
-	check("session B transcript deleted after confirm", !existsSync(sessionB));
+	// -- 3. last conversation of a project ------------------------------------
+	const soloDir = join(base, "solo");
+	mkdirSync(soloDir, { recursive: true });
+	const sessionD = seed("D", "SOLO_SESSION", soloDir);
+	client.send({ type: "switch_session", path: sessionD });
+	await client.waitForState((state) => state.sessionFile === sessionD);
+	check("project switched to the solo workspace", realpathSync(client.state.cwd) === realpathSync(soloDir));
+	const terminalD = "term-solo";
+	await client.createTerminal(terminalD, soloDir);
+	await client.expectAlive(terminalD, "ALIVE_D");
+	const activeD = client.state.conversationId;
+	const markD = client.received.length;
+	client.send({ type: "delete_session", path: sessionD });
+	await client.waitForState((state) => state.conversationId !== activeD);
+	const blockD = client.received.slice(markD).find((message) =>
+		message.type === "notice" && /正在使用中|无法离开|仍在运行|仍有后台任务|运行中的终端/.test(message.text));
+	check("the sole conversation of a project closes", !blockD);
+	check("an empty fresh chat takes over", client.state.sessionFile !== sessionD && client.state.messages.length === 0);
+	check("session D transcript deleted from disk", !existsSync(sessionD));
 
-	// -- active conversation is refused with its own message ------------------
-	const sessionC = seed("C", "ACTIVE_SESSION");
-	client.send({ type: "switch_session", path: sessionC });
-	await client.waitForState((state) => state.sessionFile === sessionC);
-	client.send({ type: "delete_session", path: sessionC });
-	const activeWarning = await client.waitForType("notice", (message) => message.level === "warning" && message.text.includes("正在使用中"));
-	check("active conversation is refused", activeWarning.text.includes("正在使用中"));
-	check("session C still on disk", existsSync(sessionC));
+	// Re-entering the project must still surface that terminal (nothing is left
+	// anchored to the deleted conversation).
+	client.send({ type: "set_cwd", path: soloDir, source: "ui" });
+	await client.waitForState((state) => realpathSync(state.cwd) === realpathSync(soloDir));
+	const soloList = await client.waitForType("terminal_list", (message) =>
+		message.terminals.some((item) => item.id === terminalD));
+	check("its terminal is reachable again on re-entry", soloList.terminals.some((item) => item.id === terminalD && item.running));
+	await client.expectAlive(terminalD, "STILL_D");
+	check("and it still echoes input after re-entry", true);
+
+	// -- 4. an exited terminal keeps its scrollback ---------------------------
+	const terminalExit = "term-exited";
+	await client.createTerminal(terminalExit, soloDir);
+	client.send({ type: "terminal_input", terminalId: terminalExit, data: "exit\r" });
+	await client.waitForType("terminal_exit", (message) => message.terminalId === terminalExit);
+	const exitedList = await client.waitForType("terminal_list", (message) =>
+		message.terminals.some((item) => item.id === terminalExit && !item.running));
+	check("an exited terminal stays in the list with running=false", !exitedList.terminals.find((item) => item.id === terminalExit).running);
+	check("its live siblings are untouched", exitedList.terminals.some((item) => item.id === terminalD && item.running));
 
 	console.log(`\n${passed} checks passed`);
 } catch (error) {
@@ -190,5 +241,5 @@ try {
 	process.exitCode = 1;
 } finally {
 	client?.ws.close();
-	server.kill("SIGTERM");
+	server.kill("SIGKILL");
 }

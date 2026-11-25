@@ -1,5 +1,3 @@
-import { WorkspaceGraphService } from "./workspace-graph.js";
-import { parseGraphRequest } from "./workspace-graph-query.js";
 import { controlCommand } from "./background-bash.js";
 import { scmOperation } from "./scm-operation.js";
 import { installNoteAssets } from "./note-assets.js";
@@ -209,18 +207,6 @@ app.get("/api/sqlite", async (req, res) => {
 	} catch (error) {
 		if (!controller.signal.aborted) res.status(400).json({ ...identity, error: (error as Error).message });
 	}
-});
-
-app.post("/api/workspace-graph", async (req, res) => {
-	res.setHeader("Cache-Control", "no-store");
-	if (!originAllowed(req) || !req.is("application/json")) { res.status(403).json({ error: "Forbidden" }); return; }
-	try {
-		const { workspaceId, request } = req.body ?? {};
-		if (typeof workspaceId !== "string" || !workspaceId || workspaceId.length > 128) throw Error("Invalid Workspace.");
-		const action = parseGraphRequest(request);
-		if ((action.op === "graph_build" || action.op === "graph_update") && service.quiesceInfo().quiesced) throw Error("Service paused.");
-		res.json(await workspaceGraph.execute(workspaceId, action));
-	} catch (error) { res.status(400).json({ error: (error as Error).message }); }
 });
 
 app.post("/api/scm-operation", async (req, res) => {
@@ -517,17 +503,11 @@ const heartbeatTimer = setInterval(() => {
 	}
 }, 10_000);
 
-const graphLibrary = new KnowledgeLibrary(DATA_DIR);
-const workspaceGraph = new WorkspaceGraphService(DATA_DIR, () => projectWorkspaces.read(), () => {
-	const library = graphLibrary.read();
-	return library.available ? library.cwd : null;
-});
 const service = new AgentService(
 	CWD,
 	// Per-client persisted UI state: last-used workspace + recent projects.
 	join(DATA_DIR, "client-state.json"),
 	sharedWiki,
-	workspaceGraph,
 );
 
 const nodeWorkbench = new NodeWorkbench(DATA_DIR);
@@ -982,36 +962,61 @@ wss.on("connection", (ws) => {
 				void cs.cloneProvider(msg.provider, msg.reqId);
 				break;
 			case "terminal_create": {
-				const tm = cs.getTerminalManager(msg.conversationId);
-				if (tm) tm.create(msg.terminalId, msg.cwd, msg.cols, msg.rows, cs.getTerminalCwd(msg.conversationId));
+				// Terminals belong to a workspace. The client's workspaceId is only a
+				// hint: an unknown/unresolvable workspace is refused rather than
+				// silently retargeted to the active project.
+				const key = cs.terminalWorkspace(msg.workspaceId);
+				if (!key) {
+					send({ type: "notice", level: "error", text: "终端工作区已失效，请重新打开该项目" });
+					break;
+				}
+				cs.terminalManagerFor(key, true)?.create(msg.terminalId, msg.cwd, msg.cols, msg.rows, key);
 				break;
 			}
-			case "terminal_input":
-				cs.getTerminalManager(msg.conversationId)?.input(msg.terminalId, msg.data);
+			case "terminal_input": {
+				const key = cs.terminalWorkspace(msg.workspaceId);
+				if (key) cs.terminalManagerFor(key)?.input(msg.terminalId, msg.data);
 				break;
+			}
 			case "terminal_replay": {
-				const output = cs.getTerminalManager(msg.conversationId)?.replay().find(item => item.terminalId === msg.terminalId);
-				if (output) send({ type: "terminal_output", conversationId: msg.conversationId, terminalId: msg.terminalId, data: output.data, reset: true });
+				const key = cs.terminalWorkspace(msg.workspaceId);
+				const output = key && cs.terminalManagerFor(key)?.replay().find(item => item.terminalId === msg.terminalId);
+				if (output) send({ type: "terminal_output", workspaceId: key!, terminalId: msg.terminalId, data: output.data, reset: true });
 				break;
 			}
-			case "terminal_resize":
-				cs.getTerminalManager(msg.conversationId)?.resize(msg.terminalId, msg.cols, msg.rows);
+			case "terminal_resize": {
+				const key = cs.terminalWorkspace(msg.workspaceId);
+				if (key) cs.terminalManagerFor(key)?.resize(msg.terminalId, msg.cols, msg.rows);
 				break;
-			case "terminal_kill":
-				cs.getTerminalManager(msg.conversationId)?.kill(msg.terminalId);
+			}
+			case "terminal_kill": {
+				const key = cs.terminalWorkspace(msg.workspaceId);
+				if (key) cs.terminalManagerFor(key)?.kill(msg.terminalId);
+				// A closed tab may leave the workspace with zero live PTYs — drop such
+				// idle slots (least recently used first) instead of holding them forever.
+				cs.reapIdleTerminalWorkspaces();
 				break;
-			case "terminal_rename":
-				cs.getTerminalManager(msg.conversationId)?.rename(msg.terminalId, msg.title);
+			}
+			case "terminal_rename": {
+				const key = cs.terminalWorkspace(msg.workspaceId);
+				if (key) cs.terminalManagerFor(key)?.rename(msg.terminalId, msg.title);
 				break;
-			case "run_command":
-				cs.getTerminalManager(msg.conversationId)?.runCommand(
+			}
+			case "run_command": {
+				const key = cs.terminalWorkspace(msg.workspaceId);
+				if (!key) {
+					send({ type: "notice", level: "error", text: "终端工作区已失效，请重新打开该项目" });
+					break;
+				}
+				cs.terminalManagerFor(key, true)?.runCommand(
 					msg.terminalId,
 					msg.command,
 					msg.cols,
 					msg.rows,
-					cs.getTerminalCwd(msg.conversationId),
+					key,
 				);
 				break;
+			}
 			case "list_commands":
 				void cs.listCommands();
 				break;
@@ -1202,7 +1207,6 @@ async function shutdown(): Promise<void> {
 	await playgroundChat.close();
 	await stopPlayground();
 	await nodeWorkbench.dispose();
-	await workspaceGraph.close();
 	pluginMgr.dispose();
 
 	// Optional timing dump (PI_SNAPSHOT_TIMINGS_OUT): written here because

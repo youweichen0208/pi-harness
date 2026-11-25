@@ -132,31 +132,6 @@ try {
 	assert.equal(receipts("ORIGINAL_ONLY").length, 1);
 	assert.equal(receipts("ORIGINAL_ONLY")[0].conversationId, firstConversation);
 	assert(!calls.some(c => ["QUEUE_TEST_WITH_TEXT", "QUEUE_TEST_WITH_IMAGE"].includes(c.marker)));
-	const group = id => ({ id, name: "Shared", paths: [cwd] });
-	const catalog = join(data, "project-workspaces.json");
-	writeFileSync(catalog, JSON.stringify({ revision: 1, workspaces: [group("original")] }));
-	const graphGate = hold("QUEUE_TEST_HOLD_GRAPH");
-	prompt("HOLD_GRAPH", "/ask ");
-	await wait(() => calls.at(-1)?.marker === "QUEUE_TEST_HOLD_GRAPH", "graph queue gate");
-	send({ type: "prompt", text: "/build-graph 跳过 repo-b", requestId: "invalid-maintenance" });
-	send({ type: "prompt", text: "/build-graph Shared", requestId: "named-maintenance" });
-	send({ type: "prompt", text: "/update-graph", requestId: "implicit-maintenance" });
-	await wait(() => ["invalid-maintenance", "named-maintenance", "implicit-maintenance"].every(id => receipts(id).length), "maintenance receipts");
-	assert.equal(receipts("invalid-maintenance")[0].receipt, "rejected");
-	assert.equal(receipts("named-maintenance")[0].receipt, "accepted");
-	assert.equal(receipts("implicit-maintenance")[0].receipt, "accepted");
-	const beforeDrain = calls.length;
-	writeFileSync(catalog, JSON.stringify({ revision: 2, workspaces: [group("replacement")] }));
-	graphGate.resolve();
-	await wait(() => wire.filter(m => m.type === "notice" && m.text.includes("排队时选定的 Workspace")).length === 2, "refusal to retarget both maintenance requests");
-	assert.equal(calls.length, beforeDrain);
-	const status = await fetch(`http://127.0.0.1:${harness.port}/api/workspace-graph`, {
-		method: "POST", headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({ workspaceId: "replacement", request: { op: "graph_status" } }),
-	});
-	assert(status.ok);
-	assert.equal((await status.json()).state, "not_indexed");
-	console.log("PASS queued graph maintenance scope rejection and workspace ID binding");
 	console.log("PASS FIFO independent Knowledge runs, tool declarations, receipts, queued attachments, recall and same-project conversation isolation");
 } finally {
 	for (const gate of holds.values()) gate.resolve();

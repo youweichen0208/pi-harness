@@ -327,6 +327,9 @@ export interface UiState {
 	runSettings?: { autoCompaction: boolean; autoRetry: boolean; repetitionProtection: boolean; cacheWarming?: CacheWarmingMode };
 	clientId: string;
 	cwd: string;
+	/** Canonical workspace key backing the terminal panel (realpath of cwd).
+	 *  Terminal messages route by this, so the client never derives it itself. */
+	workspaceId: string;
 	sessionId: string;
 	sessionFile?: string;
 	/** Id of the ACTIVE conversation (see `conversations` message). */
@@ -416,7 +419,7 @@ export interface CommandDef {
 	cwd?: string;
 }
 
-/** Metadata for a persistent PTY owned by one conversation. */
+/** Metadata for a persistent PTY owned by one project workspace. */
 export interface TerminalInfo {
 	id: string;
 	title: string;
@@ -529,16 +532,21 @@ export type ClientMessage =
 			cwd: string;
 			cols: number;
 			rows: number;
-			/** Optional because old UI clients target the active conversation. */
-			conversationId?: string;
+			/** Target workspace (canonical project root). Optional because the
+			 *  active workspace is the default; the server never trusts the value
+			 *  blindly — it must normalize to a workspace it already knows. */
+			workspaceId?: string;
 	  }
-	| { type: "terminal_input"; terminalId: string; data: string; conversationId?: string }
-	| { type: "terminal_replay"; terminalId: string; conversationId?: string }
-	| { type: "terminal_resize"; terminalId: string; cols: number; rows: number; conversationId?: string }
-	| { type: "terminal_kill"; terminalId: string; conversationId?: string }
+	// Terminals belong to a WORKSPACE, not to a conversation: deleting a chat
+	// must never kill a shell the user is still using. Every message below is
+	// routed by `workspaceId` (+ `terminalId`, unique within that workspace).
+	| { type: "terminal_input"; terminalId: string; data: string; workspaceId?: string }
+	| { type: "terminal_replay"; terminalId: string; workspaceId?: string }
+	| { type: "terminal_resize"; terminalId: string; cols: number; rows: number; workspaceId?: string }
+	| { type: "terminal_kill"; terminalId: string; workspaceId?: string }
 	/** Rename a tab (live or exited). The server keeps the name and re-pushes
 	 *  terminal_list, so every attached client sees the same tab label. */
-	| { type: "terminal_rename"; terminalId: string; title: string; conversationId?: string }
+	| { type: "terminal_rename"; terminalId: string; title: string; workspaceId?: string }
 	// Runs a command in a new shell; if the terminal already exists it is
 	// RESTARTED in place (current process killed, fresh shell runs it again).
 	| {
@@ -547,7 +555,7 @@ export type ClientMessage =
 			command: CommandDef;
 			cols: number;
 			rows: number;
-			conversationId?: string;
+			workspaceId?: string;
 	  }
 	// Re-discover extensions/skills/prompt templates from disk after an
 	// external change (e.g. `pi remove npm:<pkg>` finished in the terminal).
@@ -1219,9 +1227,11 @@ export type ServerMessage =
 			durationMs?: number;
 	  }
 	// -- terminal ------------------------------------------------------------
-	| { type: "terminal_output"; conversationId?: string; terminalId: string; data: string; reset?: boolean }
-	| { type: "terminal_exit"; conversationId?: string; terminalId: string; exitCode: number | null }
-	| { type: "terminal_list"; conversationId?: string; terminals: TerminalInfo[] }
+	| { type: "terminal_output"; workspaceId?: string; terminalId: string; data: string; reset?: boolean }
+	| { type: "terminal_exit"; workspaceId?: string; terminalId: string; exitCode: number | null }
+	/** Full list for ONE workspace. Sent on attach, workspace switch, and every
+	 *  spawn/exit/kill; the client replaces its tabs with it. */
+	| { type: "terminal_list"; workspaceId?: string; terminals: TerminalInfo[] }
 	// -- command list (.pi/commands.json) ------------------------------------
 	| { type: "commands"; cwd: string; commands: CommandDef[]; path: string }
 	/** The slash-command catalog for the chat input (builtin + extension +
@@ -1744,71 +1754,4 @@ export interface ModelAccount {
 	enabled: boolean;
 	replaceKey: boolean;
 	error?: string;
-}
-
-// Workspace Graph is queried on demand. It is independent of chat snapshots.
-export type GraphLifecycle = "not_indexed" | "building" | "ready" | "stale" | "updating" | "failed";
-
-export interface GraphAnchor {
-	role?: string;
-	sourceId: string;
-	path: string;
-	line: number;
-	endLine: number;
-	sha256: string;
-}
-
-export interface GraphNode {
-	id: string;
-	sourceId: string;
-	label: string;
-	kind: "repository" | "module" | "symbol";
-	anchor?: GraphAnchor;
-}
-
-export interface GraphEdge {
-	id: string;
-	from: string;
-	to: string;
-	label: string;
-	kind: "imports" | "flow";
-	anchors: GraphAnchor[];
-}
-
-export type WorkspaceGraphRequest =
-	| { op: "graph_build" | "graph_update" | "graph_status" }
-	| { op: "graph_search"; query: string; sourceId?: string }
-	| { op: "graph_neighbors"; nodeId: string }
-	| { op: "graph_impact"; nodeId: string }
-	| { op: "graph_document"; path: string }
-	| { op: "graph_path"; from: string; to: string }
-	| { op: "graph_evidence"; edgeId: string; anchor: number };
-
-export interface GraphDocumentReview {
-	path: string;
-	references: {
-		state: "verified" | "stale" | "unavailable" | "unverified";
-		sourceId?: string;
-		path?: string;
-		line?: number;
-		endLine?: number;
-		nodeId?: string;
-	}[];
-	truncated: boolean;
-}
-
-export interface WorkspaceGraphResult {
-	/** Changes when a source gains or loses eligibility within this version. */
-	freshness?: string;
-	review?: GraphDocumentReview;
-	workspaceId: string;
-	state: GraphLifecycle;
-	version?: string;
-	publishedAt?: number;
-	error?: string;
-	sources: { id: string; name: string }[];
-	nodes: GraphNode[];
-	edges: GraphEdge[];
-	truncated?: boolean;
-	evidence?: { anchor: GraphAnchor; firstLine: number; lines: string[] };
 }

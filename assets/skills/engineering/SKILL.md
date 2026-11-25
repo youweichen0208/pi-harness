@@ -21,7 +21,7 @@ Load a selected skill with the native read tool from its entry in `<available_sk
 
 Read the relevant AGENTS.md, project map, glossary, ADRs, and code. Investigate facts before asking questions.
 
-- For material requirement or domain ambiguity, read `grilling`; when terms or decisions need to change, also read `domain-modeling`.
+- For material requirement or domain ambiguity, read `grilling`; when terms or decisions need to change, also read `domain-modeling`. When the request is already clear, design directly without an interview.
 - For interface or test-seam choices, read `codebase-design`.
 - For complex architecture, read `architect`.
 - Identify affected public interfaces, core modules, persistence, compatibility, and platform behavior before implementation.
