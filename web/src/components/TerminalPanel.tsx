@@ -116,7 +116,10 @@ export function TerminalPanel({ chat, send, terminal, active, focusRequest }: Te
 	useEffect(() => {
 		if (!chat.projectWorkspaces || selectedGroup) return;
 		const first = chat.projectWorkspaces.workspaces[0]?.id ?? "";
-		if (first !== selectedWorkspace) chooseWorkspace(first);
+		if (first !== selectedWorkspace) {
+			if (chat.projectWorkspaces.workspaces.length > 1) setSelectedWorkspace(first);
+			else chooseWorkspace(first);
+		}
 	}, [chat.projectWorkspaces, selectedGroup, selectedWorkspace]);
 	useEffect(() => {
 		if (!workspaceOpen) return;

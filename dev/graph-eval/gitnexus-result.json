@@ -1,0 +1,207 @@
+{
+  "engine": "gitnexus@1.6.12",
+  "platform": "Darwin/arm64",
+  "node": "v26.0.0",
+  "metrics": {
+    "cold-sdk": {
+      "seconds": 4.646,
+      "max_rss_bytes": 931266560,
+      "exit": 0
+    },
+    "cold-harness": {
+      "seconds": 4.691,
+      "max_rss_bytes": 970014720,
+      "exit": 0
+    },
+    "group-create": {
+      "seconds": 0.087,
+      "max_rss_bytes": 64684032,
+      "exit": 0
+    },
+    "group-add-sdk": {
+      "seconds": 0.089,
+      "max_rss_bytes": 65404928,
+      "exit": 0
+    },
+    "group-add-harness": {
+      "seconds": 0.082,
+      "max_rss_bytes": 65503232,
+      "exit": 0
+    },
+    "cold-group-sync": {
+      "seconds": 1.196,
+      "max_rss_bytes": 570064896,
+      "exit": 0
+    },
+    "contracts": {
+      "seconds": 0.133,
+      "max_rss_bytes": 79872000,
+      "exit": 0
+    },
+    "impact": {
+      "seconds": 0.263,
+      "max_rss_bytes": 357040128,
+      "exit": 0
+    },
+    "scoped-impact": {
+      "seconds": 0.257,
+      "max_rss_bytes": 339296256,
+      "exit": 0
+    },
+    "owners-sdk": {
+      "seconds": 0.203,
+      "max_rss_bytes": 297058304,
+      "exit": 0
+    },
+    "owners-harness": {
+      "seconds": 0.207,
+      "max_rss_bytes": 306790400,
+      "exit": 0
+    },
+    "sdk-emit": {
+      "seconds": 0.203,
+      "max_rss_bytes": 291471360,
+      "exit": 0
+    },
+    "sdk-listeners": {
+      "seconds": 0.198,
+      "max_rss_bytes": 310657024,
+      "exit": 0
+    },
+    "host-callback": {
+      "seconds": 0.248,
+      "max_rss_bytes": 307953664,
+      "exit": 0
+    },
+    "host-property": {
+      "seconds": 0.201,
+      "max_rss_bytes": 288260096,
+      "exit": 0
+    },
+    "updated-harness": {
+      "seconds": 4.873,
+      "max_rss_bytes": 984203264,
+      "exit": 0
+    },
+    "updated-group-sync": {
+      "seconds": 1.184,
+      "max_rss_bytes": 564461568,
+      "exit": 0
+    }
+  },
+  "cold_allocated_bytes": {
+    "sdk": 15622144,
+    "harness": 15060992,
+    "registry": 110592
+  },
+  "updated_allocated_bytes": {
+    "sdk": 15622144,
+    "harness": 17158144,
+    "registry": 110592
+  },
+  "contracts": {
+    "contracts": [],
+    "crossLinks": [],
+    "missingRepos": [],
+    "unreadableRepos": [],
+    "suppressedMatchStages": [],
+    "truncated": false
+  },
+  "cold_cross_links": [],
+  "updated_cross_links": [],
+  "group_impact": {
+    "summary": {
+      "direct": 2,
+      "processes_affected": 2,
+      "modules_affected": 2,
+      "cross_repo_hits": 0
+    },
+    "cross": [],
+    "truncated": false,
+    "outOfScope": []
+  },
+  "sdk_only_impact": {
+    "summary": {
+      "direct": 2,
+      "processes_affected": 2,
+      "modules_affected": 2,
+      "cross_repo_hits": 0
+    },
+    "cross": [],
+    "truncated": false,
+    "outOfScope": []
+  },
+  "cold_indexes": {
+    "sdk": {
+      "stats": {
+        "files": 5,
+        "nodes": 611,
+        "edges": 2082,
+        "communities": 23,
+        "processes": 55,
+        "embeddings": 0
+      },
+      "capabilities": {
+        "graph": {
+          "provider": "ladybugdb",
+          "status": "available"
+        },
+        "fts": {
+          "provider": "ladybugdb-fts",
+          "status": "unavailable",
+          "skipReason": "extension-unavailable"
+        },
+        "vectorSearch": {
+          "provider": "ladybugdb-vector",
+          "status": "unavailable",
+          "exactScanLimit": 10000
+        }
+      }
+    },
+    "harness": {
+      "stats": {
+        "files": 3,
+        "nodes": 584,
+        "edges": 2595,
+        "communities": 20,
+        "processes": 52,
+        "embeddings": 0
+      },
+      "capabilities": {
+        "graph": {
+          "provider": "ladybugdb",
+          "status": "available"
+        },
+        "fts": {
+          "provider": "ladybugdb-fts",
+          "status": "unavailable",
+          "skipReason": "extension-unavailable"
+        },
+        "vectorSearch": {
+          "provider": "ladybugdb-vector",
+          "status": "unavailable",
+          "exactScanLimit": 10000
+        }
+      }
+    }
+  },
+  "native_local_edges": {
+    "sdk-emit": {
+      "markdown": "| src | relation | dst |\n| --- | --- | --- |\n| Method:packages/coding-agent/src/core/agent-session.ts:AgentSession._emitAgentSettled#0 | CALLS | Method:packages/coding-agent/src/core/agent-session.ts:AgentSession._emit#1 |",
+      "row_count": 1
+    },
+    "sdk-listeners": {
+      "markdown": "| src | relation | dst |\n| --- | --- | --- |\n| Method:packages/coding-agent/src/core/agent-session.ts:AgentSession._emit#1 | ACCESSES | Property:packages/coding-agent/src/core/agent-session.ts:AgentSession._eventListeners |\n| Method:packages/coding-agent/src/core/agent-session.ts:AgentSession.subscribe#1 | ACCESSES | Property:packages/coding-agent/src/core/agent-session.ts:AgentSession._eventListeners |",
+      "row_count": 2
+    },
+    "host-callback": {
+      "markdown": "| src | callback | dst |\n| --- | --- | --- |\n| Method:server/agent-service.ts:ClientSession.bindSession#1 | Function:server/agent-service.ts:ClientSession.bindSession.unsubscribe@934:2 | Method:server/agent-service.ts:ClientSession.onEvent#2 |",
+      "row_count": 1
+    },
+    "host-property": {
+      "markdown": "| src | relation | dst |\n| --- | --- | --- |\n| Method:server/agent-service.ts:ClientSession.onEvent#2 | ACCESSES | Property:server/conversation.ts:Conversation.lastTaskEndedAt |",
+      "row_count": 1
+    }
+  },
+  "update_mode": "Incremental: changed=1, added=0, deleted=0 (skipping wipe + 2 unchanged file rows preserved)"
+}

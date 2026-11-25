@@ -25,7 +25,7 @@ assert(!JSON.parse(readFileSync(join(appRoot, "package.json"), "utf8")).pi?.exte
 // A checkout-local package can otherwise hide missing runtime dependencies by
 // resolving them from the repository's parent node_modules directory.
 const packagedRequire = createRequire(join(appRoot, "package.json"));
-for (const name of ["undici", "unified", "remark-parse", "@vscode/ripgrep", "@lezer/python"]) {
+for (const name of ["undici", "unified", "remark-parse", "@vscode/ripgrep", "@lezer/python", "typescript"]) {
 	const resolved = packagedRequire.resolve(name);
 	const inside = relative(appRoot, resolved);
 	assert(!isAbsolute(inside) && inside !== ".." && !inside.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`), `${name} must resolve inside the packaged app: ${resolved}`);
@@ -58,13 +58,29 @@ execFileSync(executable, ["--input-type=module", "--eval", `
 		assert.deepEqual(loader.getPrompts().prompts, []);
 		for (const skill of loader.getSkills().skills) assert.equal(skill.filePath, join(process.cwd(), 'assets/skills', skill.name, 'SKILL.md'));
 		await loader.reload();
-		assert.equal(loader.getSkills().skills.length, 11);
+		assert.deepEqual(loader.getSkills().skills.map(skill => skill.name).sort(), [...engineeringSkillNames].sort());
 		const wiki = new DefaultResourceLoader({cwd:root,agentDir:root,settingsManager:SettingsManager.inMemory(),noExtensions:true,noSkills:true,noThemes:true,noContextFiles:true,noPromptTemplates:true,...engineeringResources('wiki')});
 		await wiki.reload();
 		assert.deepEqual(wiki.getSkills().skills, []);
 	} finally {rmSync(root,{recursive:true,force:true});}
 `], {cwd:appRoot,env:{...testEnv({PI_WEB_PKG_ROOT:appRoot}),ELECTRON_RUN_AS_NODE:"1",NODE_PATH:"",NODE_OPTIONS:""},timeout:30000,stdio:"pipe"});
 console.log("PASS packaged Engineering Skills, installed paths, reload and Wiki isolation");
+execFileSync(executable, ["--input-type=module", "--eval", `
+	import assert from 'node:assert/strict';
+	import {mkdtempSync, rmSync, writeFileSync} from 'node:fs';
+	import {join} from 'node:path';
+	import {tmpdir} from 'node:os';
+	import {indexWorkspaceGraph} from './dist/server/workspace-graph-index.js';
+	const root = mkdtempSync(join(tmpdir(), 'pi-packaged-graph-'));
+	try {
+		writeFileSync(join(root, 'a.ts'), 'import "./b.js";');
+		writeFileSync(join(root, 'b.ts'), 'export const b = 1;');
+		const result = await indexWorkspaceGraph([{ id: 'package-test', root }]);
+		assert.deepEqual(result.repositories[0].edges[0].anchors.map(a => a.path), ['a.ts', 'b.ts']);
+	} finally { rmSync(root, { recursive: true, force: true }); }
+`], {cwd:appRoot,env:{...testEnv(),ELECTRON_RUN_AS_NODE:"1",NODE_PATH:"",NODE_OPTIONS:""},timeout:30000,stdio:"pipe"});
+console.log("PASS packaged Workspace Graph indexes and locates a real import");
+
 const playgroundMethods = pathToFileURL(join(appRoot, "dist/server/playground-methods.js")).href;
 execFileSync(executable, ["--input-type=module", "--eval", `
 	import assert from 'node:assert/strict';

@@ -1,3 +1,5 @@
+import { WorkspaceGraphService } from "./workspace-graph.js";
+import { parseGraphRequest } from "./workspace-graph-query.js";
 import { controlCommand } from "./background-bash.js";
 import { scmOperation } from "./scm-operation.js";
 import { installNoteAssets } from "./note-assets.js";
@@ -5,7 +7,7 @@ import { installLinkPreview } from "./link-preview.js";
 import { installSystemPromptRoutes } from "./system-prompt-routes.js";
 import { installExtensionsRoutes } from "./extensions-routes.js";
 import { installCodemodeImageRoutes } from "./codemode-image-routes.js";
-import { installKnowledgeLibraryRoutes } from "./knowledge-library.js";
+import { KnowledgeLibrary, installKnowledgeLibraryRoutes } from "./knowledge-library.js";
 import { installWikiRoutes } from "./wiki-routes.js";
 import { WikiService } from "./wiki-service.js";
 import { OpenAIProxySettings } from "./openai-proxy.js";
@@ -207,6 +209,18 @@ app.get("/api/sqlite", async (req, res) => {
 	} catch (error) {
 		if (!controller.signal.aborted) res.status(400).json({ ...identity, error: (error as Error).message });
 	}
+});
+
+app.post("/api/workspace-graph", async (req, res) => {
+	res.setHeader("Cache-Control", "no-store");
+	if (!originAllowed(req) || !req.is("application/json")) { res.status(403).json({ error: "Forbidden" }); return; }
+	try {
+		const { workspaceId, request } = req.body ?? {};
+		if (typeof workspaceId !== "string" || !workspaceId || workspaceId.length > 128) throw Error("Invalid Workspace.");
+		const action = parseGraphRequest(request);
+		if ((action.op === "graph_build" || action.op === "graph_update") && service.quiesceInfo().quiesced) throw Error("Service paused.");
+		res.json(await workspaceGraph.execute(workspaceId, action));
+	} catch (error) { res.status(400).json({ error: (error as Error).message }); }
 });
 
 app.post("/api/scm-operation", async (req, res) => {
@@ -503,11 +517,17 @@ const heartbeatTimer = setInterval(() => {
 	}
 }, 10_000);
 
+const graphLibrary = new KnowledgeLibrary(DATA_DIR);
+const workspaceGraph = new WorkspaceGraphService(DATA_DIR, () => projectWorkspaces.read(), () => {
+	const library = graphLibrary.read();
+	return library.available ? library.cwd : null;
+});
 const service = new AgentService(
 	CWD,
 	// Per-client persisted UI state: last-used workspace + recent projects.
 	join(DATA_DIR, "client-state.json"),
 	sharedWiki,
+	workspaceGraph,
 );
 
 const nodeWorkbench = new NodeWorkbench(DATA_DIR);
@@ -1182,6 +1202,7 @@ async function shutdown(): Promise<void> {
 	await playgroundChat.close();
 	await stopPlayground();
 	await nodeWorkbench.dispose();
+	await workspaceGraph.close();
 	pluginMgr.dispose();
 
 	// Optional timing dump (PI_SNAPSHOT_TIMINGS_OUT): written here because

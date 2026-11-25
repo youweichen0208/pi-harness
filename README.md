@@ -191,7 +191,9 @@ pi-harness --port 9000 --cwd /path/to/project
 
 ### 按任务选择 Engineering Skills
 
-普通聊天提供十一项随包 Skills。输入 `/skill:engineering 描述需求` 可以显式选择完整入口：小修改直接实现和验证；普通功能使用一份变更文档，确认设计后按 TDD 实现；复杂架构和高风险变更按需加载架构设计与影响分析。交付前会检查项目已有文档，只更新有证据的事实。
+顶栏「图谱」可构建和浏览当前 Workspace 的 TypeScript 模块依赖及有源码依据的跨仓事件链。点关系可查看两端源码，也可检查一篇知识库文档的来源。详见 [Workspace 图谱](docs/architecture-workspace-graph.md)。
+
+普通聊天提供十三项随包 Skills。通过 `/build-graph`、`/update-graph` 管理当前 Workspace 的代码关系索引，`/ask --graph 问题` 可沿索引线索回读源码。输入 `/skill:engineering 描述需求` 可以显式选择完整入口：小修改直接实现和验证；普通功能使用一份变更文档，确认设计后按 TDD 实现；复杂架构和高风险变更按需加载架构设计与影响分析。交付前会检查项目已有文档，只更新有证据的事实。
 
 `/ask 问题` 检索当前 Workspace 和知识库，点击回答中的引用可查看原文件行号。`/learn 主题` 从当前对话整理长期知识，每篇文档经你查看差异并确认后保存。未分组项目可查当前目录和知识库。
 

@@ -130,7 +130,10 @@ export const LeftPanel = memo(function LeftPanel({
 	useEffect(() => {
 		if (projectWorkspaces && !selectedGroup) {
 			const next = projectWorkspaces.workspaces[0]?.id ?? "";
-			if (next !== selectedWorkspace) chooseWorkspace(next);
+			if (next !== selectedWorkspace) {
+				if (projectWorkspaces.workspaces.length > 1) setSelectedWorkspace(next);
+				else chooseWorkspace(next);
+			}
 		}
 	}, [projectWorkspaces, selectedWorkspace, selectedGroup]);
 	useEffect(() => {

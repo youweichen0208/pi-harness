@@ -1745,3 +1745,70 @@ export interface ModelAccount {
 	replaceKey: boolean;
 	error?: string;
 }
+
+// Workspace Graph is queried on demand. It is independent of chat snapshots.
+export type GraphLifecycle = "not_indexed" | "building" | "ready" | "stale" | "updating" | "failed";
+
+export interface GraphAnchor {
+	role?: string;
+	sourceId: string;
+	path: string;
+	line: number;
+	endLine: number;
+	sha256: string;
+}
+
+export interface GraphNode {
+	id: string;
+	sourceId: string;
+	label: string;
+	kind: "repository" | "module" | "symbol";
+	anchor?: GraphAnchor;
+}
+
+export interface GraphEdge {
+	id: string;
+	from: string;
+	to: string;
+	label: string;
+	kind: "imports" | "flow";
+	anchors: GraphAnchor[];
+}
+
+export type WorkspaceGraphRequest =
+	| { op: "graph_build" | "graph_update" | "graph_status" }
+	| { op: "graph_search"; query: string; sourceId?: string }
+	| { op: "graph_neighbors"; nodeId: string }
+	| { op: "graph_impact"; nodeId: string }
+	| { op: "graph_document"; path: string }
+	| { op: "graph_path"; from: string; to: string }
+	| { op: "graph_evidence"; edgeId: string; anchor: number };
+
+export interface GraphDocumentReview {
+	path: string;
+	references: {
+		state: "verified" | "stale" | "unavailable" | "unverified";
+		sourceId?: string;
+		path?: string;
+		line?: number;
+		endLine?: number;
+		nodeId?: string;
+	}[];
+	truncated: boolean;
+}
+
+export interface WorkspaceGraphResult {
+	/** Changes when a source gains or loses eligibility within this version. */
+	freshness?: string;
+	review?: GraphDocumentReview;
+	workspaceId: string;
+	state: GraphLifecycle;
+	version?: string;
+	publishedAt?: number;
+	error?: string;
+	sources: { id: string; name: string }[];
+	nodes: GraphNode[];
+	edges: GraphEdge[];
+	truncated?: boolean;
+	evidence?: { anchor: GraphAnchor; firstLine: number; lines: string[] };
+}

@@ -86,6 +86,8 @@ export function parseSlash(text: string): { name: string; args: string } | null 
 }
 
 export const KNOWLEDGE_COMMANDS = [
+	{ name: "build-graph", description: "为当前 Workspace 构建关系图谱", descriptionEn: "Build the current Workspace graph", argumentHint: "[Workspace 名称或 ID]", argumentHintEn: "[Workspace name or ID]" },
+	{ name: "update-graph", description: "刷新当前 Workspace 的关系图谱", descriptionEn: "Update the current Workspace graph", argumentHint: "[Workspace 名称或 ID]", argumentHintEn: "[Workspace name or ID]" },
 	{ name: "learn", description: "从当前会话提取并沉淀知识", descriptionEn: "Distill and save knowledge from this session", argumentHint: "[主题]", argumentHintEn: "[topic]" },
 	{ name: "ask", description: "结合 Workspace 与知识库查证回答", descriptionEn: "Answer with Workspace and knowledge evidence", argumentHint: "<问题>", argumentHintEn: "<question>" },
 ] as const;

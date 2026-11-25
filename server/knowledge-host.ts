@@ -3,7 +3,10 @@ import type { KnowledgeEvidence, KnowledgeRequestContext } from "./knowledge-req
 import type { KnowledgeSourceState } from "./knowledge-sources.js";
 import type { WikiService } from "./wiki-service.js";
 
+import type { WorkspaceGraphService } from "./workspace-graph.js";
+
 export interface KnowledgeToolHost {
+	graph?: Pick<WorkspaceGraphService, "execute">;
 	getContext(): KnowledgeRequestContext | undefined;
 	sourceState(): KnowledgeSourceState;
 	skillFiles?(): string[];

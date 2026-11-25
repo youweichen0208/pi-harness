@@ -17,6 +17,7 @@ import {
 	FiSettings,
 	FiTerminal,
 	FiActivity,
+	FiGitMerge,
 } from "react-icons/fi";
 import { desktopAPI } from "../desktop";
 import type { ChatState } from "../use-chat";
@@ -51,8 +52,8 @@ interface TopBarProps {
 		}) => void;
 		restart: (id: string) => void;
 	};
-	view: "chat" | "wiki" | "terminal" | "git" | "nodes" | `plugin:${string}`;
-	onViewChange: (view: "chat" | "wiki" | "terminal" | "git" | "nodes" | `plugin:${string}`) => void;
+	view: "chat" | "wiki" | "terminal" | "git" | "graph" | "nodes" | `plugin:${string}`;
+	onViewChange: (view: "chat" | "wiki" | "terminal" | "git" | "graph" | "nodes" | `plugin:${string}`) => void;
 	/** Installed optional plugins (<dataDir>/plugins) — one view tab each. */
 	plugins: { id: string; name: string; icon?: string; description?: string; error?: string }[];
 	/** Open a side panel as a mobile drawer ("left" = history, "right" = files). */
@@ -181,8 +182,8 @@ export function TopBar({
 				<span className="conn-label">{connLabel}</span>
 			</div>
 
-			{view !== "nodes" && view !== "terminal" && view !== "git" && <button type="button" className="project-panel-toggle" title={t(leftCollapsed ? "expandProjects" : "collapseProjects")} aria-label={t(leftCollapsed ? "expandProjects" : "collapseProjects")} aria-expanded={!leftCollapsed} onClick={() => onOpenPanel("left")}><FiSidebar /></button>}
-			<div className="header-location"><button type="button" className="conversation-title-button" title={t("treeTitle")} aria-label={`${t("currentConversation")} · ${t("treeTitle")}`} onClick={() => openSessionTree()}><strong>{t("currentConversation")}</strong><FiChevronDown className="conversation-title-chevron" aria-hidden="true" /></button></div>
+			{view !== "nodes" && view !== "graph" && view !== "terminal" && view !== "git" && <button type="button" className="project-panel-toggle" title={t(leftCollapsed ? "expandProjects" : "collapseProjects")} aria-label={t(leftCollapsed ? "expandProjects" : "collapseProjects")} aria-expanded={!leftCollapsed} onClick={() => onOpenPanel("left")}><FiSidebar /></button>}
+			{view !== "graph" && <div className="header-location"><button type="button" className="conversation-title-button" title={t("treeTitle")} aria-label={`${t("currentConversation")} · ${t("treeTitle")}`} onClick={() => openSessionTree()}><strong>{t("currentConversation")}</strong><FiChevronDown className="conversation-title-chevron" aria-hidden="true" /></button></div>}
 			<div className="topbar-actions">
 				<div className="panel-tab-bar">
 				<div className="view-switch" role="tablist" aria-label={t("viewSwitch")}>
@@ -190,6 +191,7 @@ export function TopBar({
 						["chat", t("chat"), <FiMessageSquare />],
 						["terminal", t("terminal"), <FiTerminal />],
 						["git", t("scmTab"), <FiGitBranch />],
+							["graph", t("graphTab"), <FiGitMerge />],
 					] as const).map(([id, label, icon]) => <button key={String(id)} type="button" role="tab" aria-label={String(label)} title={id === "git" && notGitRepo ? t("notGitRepoShort") : String(label)} aria-selected={view === id} aria-disabled={id === "git" && notGitRepo} className={view === id ? "active" : ""} onClick={() => { if (id !== "git" || !notGitRepo) onViewChange(id as TopBarProps["view"]); }}>{icon}<span>{label}</span>{id === "git" && !notGitRepo && gitChangeCount > 0 && <em className="tab-change-count">{gitChangeCount}</em>}</button>)}
 					<button type="button" aria-label={t("traceTitle")} title={t("traceTitle")} onClick={openTrace}><FiActivity /><span>Trace</span></button>
 					<button type="button" role="tab" aria-label={t("nodes")} title={t("nodes")} aria-selected={view === "nodes"} className={view === "nodes" ? "active" : ""} onClick={() => onViewChange("nodes")}><FiShare2 /><span>{t("nodes")}</span></button>

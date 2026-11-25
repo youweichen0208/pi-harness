@@ -1,0 +1,65 @@
+{
+	"owners": [
+		{
+			"source": "harness",
+			"path": "server/agent-service.ts",
+			"id": "harness::server_agent_service_clientsession_bindsession",
+			"name": "bindSession",
+			"line": 852
+		},
+		{
+			"source": "harness",
+			"path": "server/agent-service.ts",
+			"id": "harness::server_agent_service_clientsession_onevent",
+			"name": "onEvent",
+			"line": 982
+		},
+		{
+			"source": "sdk",
+			"path": "packages/coding-agent/src/core/agent-session.ts",
+			"id": "sdk::packages_coding_agent_src_core_agent_session_agentsession_emit",
+			"name": "_emit",
+			"line": 1104
+		},
+		{
+			"source": "sdk",
+			"path": "packages/coding-agent/src/core/agent-session.ts",
+			"id": "sdk::packages_coding_agent_src_core_agent_session_agentsession_emitagentsettled",
+			"name": "_emitAgentSettled",
+			"line": 1143
+		},
+		{
+			"source": "sdk",
+			"path": "packages/coding-agent/src/core/agent-session.ts",
+			"id": "sdk::packages_coding_agent_src_core_agent_session_agentsession_subscribe",
+			"name": "subscribe",
+			"line": 1457
+		}
+	],
+	"calls": [
+		{
+			"source": "harness::server_agent_service_clientsession_bindsession",
+			"target": "harness::server_agent_service_clientsession_bindsession",
+			"relation": "calls",
+			"path": "server/agent-service.ts",
+			"location": "L878",
+			"confidence": "EXTRACTED"
+		},
+		{
+			"source": "harness::server_agent_service_clientsession_bindsession",
+			"target": "harness::server_agent_service_clientsession_onevent",
+			"relation": "calls",
+			"path": "server/agent-service.ts",
+			"location": "L938",
+			"confidence": "EXTRACTED"
+		},
+		{
+			"source": "sdk::packages_coding_agent_src_core_agent_session_agentsession_emitagentsettled",
+			"target": "sdk::packages_coding_agent_src_core_agent_session_agentsession_emit",
+			"relation": "calls",
+			"path": "packages/coding-agent/src/core/agent-session.ts",
+			"location": "L1150",
+			"confidence": "EXTRACTED"
+		}
+	]
+}

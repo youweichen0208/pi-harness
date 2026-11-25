@@ -68,6 +68,7 @@ import { Dialog } from "./components/Dialog";
 const TerminalPanel = lazy(() =>
 	import("./components/TerminalPanel").then((m) => ({ default: m.TerminalPanel })),
 );
+const GraphWorkbench = lazy(() => import("./components/GraphWorkbench"));
 const NodeWorkbench = lazy(() => import("./components/NodeWorkbench").then((m) => ({ default: m.NodeWorkbench })));
 import { ScmPanel } from "./components/SCMPanel";
 import { PluginView } from "./components/PluginView";
@@ -306,7 +307,7 @@ function ResizeHandle({
 }
 
 /** 顶栏视图：内置三个 + 每个已装插件一个 `plugin:<id>`。 */
-type ViewName = "chat" | "wiki" | "terminal" | "git" | "nodes" | `plugin:${string}`;
+type ViewName = "chat" | "wiki" | "terminal" | "git" | "graph" | "nodes" | `plugin:${string}`;
 
 /** Wiki 聊天展开状态（随标签页）。 */
 const WIKI_CHAT_KEY = "pi-wiki-chat-open";
@@ -1419,7 +1420,7 @@ export function App() {
 					<span><UiIcon name="paperclip" /> {t("dropHereToAttach")}</span>
 				</div>
 			)}
-			{view !== "nodes" && view !== "wiki" && <FluidDrawer side="left" onOpen={() => { if (!navigationLocked) setDrawer("left"); }} open={!navigationLocked && drawer === "left"} overlay={isNarrow} label={t("workspaceProjects")} onClose={() => setDrawer(null)}
+			{view !== "nodes" && view !== "graph" && view !== "wiki" && <FluidDrawer side="left" onOpen={() => { if (!navigationLocked) setDrawer("left"); }} open={!navigationLocked && drawer === "left"} overlay={isNarrow} label={t("workspaceProjects")} onClose={() => setDrawer(null)}
 				className={`panel-drawer drawer-left ${drawer === "left" ? "open" : ""}`}
 			>
 				<LeftPanel
@@ -1446,7 +1447,7 @@ export function App() {
 					activeConversationId={chat.activeConversationId}
 				/>
 			</FluidDrawer>}
-			{view !== "nodes" && view !== "wiki" && !isMobile && !leftCollapsed && (
+			{view !== "nodes" && view !== "graph" && view !== "wiki" && !isMobile && !leftCollapsed && (
 				<ResizeHandle side="left" width={visibleLeftWidth} onResize={resizeLeft} />
 			)}
 
@@ -1674,6 +1675,9 @@ export function App() {
 						</Suspense>
 						</TerminalViewBoundary>
 					</div>
+					{view === "graph" && <div className="view-pane">
+						<Suspense fallback={null}><GraphWorkbench catalog={chat.projectWorkspaces} send={send} ready={chat.ready} /></Suspense>
+					</div>}
 					<div className={`view-pane ${view === "nodes" ? "" : "hidden"}`}>
 						<Suspense fallback={null}>{visited.current.has("nodes") && <NodeWorkbench active={view === "nodes"} send={send} dirBrowse={chat.dirBrowse} />}</Suspense>
 					</div>

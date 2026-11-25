@@ -1,8 +1,9 @@
 import { backgroundBash, commandViews, hasRunningCommand, stopRequestCommands } from "./background-bash.js";
+import type { WorkspaceGraphService } from "./workspace-graph.js";
 import { engineeringResources } from "./engineering-skills.js";
 import { knowledgeExtension, validKnowledgeTool } from "./knowledge-tools.js";
-import { emptyKnowledgeState, parseKnowledgeCommand, toolsForKnowledgeMode, type KnowledgeRequestContext } from "./knowledge-requests.js";
-import { assertKnowledgeEvidenceAccess, canonicalSourceRoot, KnowledgeScopeError, resolveRequestScope, resolveWorkspaceScope } from "./knowledge-sources.js";
+import { emptyKnowledgeState, isGraphMaintenance, parseKnowledgeCommand, toolsForKnowledgeMode, type DeferredKnowledgePrompt, type KnowledgeRequestContext } from "./knowledge-requests.js";
+import { assertKnowledgeEvidenceAccess, canonicalSourceRoot, graphWorkspaceSelector, KnowledgeScopeError, resolveRequestScope, resolveWorkspaceScope } from "./knowledge-sources.js";
 import { branchEvidence, KNOWLEDGE_EVIDENCE_ENTRY } from "./knowledge-evidence.js";
 import { KnowledgeLibrary } from "./knowledge-library.js";
 import { ProjectWorkspaceStore } from "./project-workspaces.js";
@@ -517,6 +518,7 @@ export class ClientSession {
 		stateStore: ClientStateStore,
 		thinkingDurationStore: ThinkingDurationStore,
 		knowledgeWiki?: WikiService,
+		private readonly graph?: WorkspaceGraphService,
 	) {
 		this.clientId = clientId;
 		this.knowledgeWorkspaces = new ProjectWorkspaceStore(resolve(process.env.PI_WEB_WORKSPACES_FILE || join(stateStore.dataDir, "project-workspaces.json")));
@@ -575,10 +577,11 @@ export class ClientSession {
 		thinkingDurationStore: ThinkingDurationStore,
 		wiki = false,
 		knowledgeWiki?: WikiService,
+		graph?: WorkspaceGraphService,
 	): Promise<ClientSession> {
 		const agentDir = process.env.PI_CODING_AGENT_DIR ?? getAgentDir();
 
-		const cs = new ClientSession(clientId, cwd, agentDir, stateStore, thinkingDurationStore, knowledgeWiki);
+		const cs = new ClientSession(clientId, cwd, agentDir, stateStore, thinkingDurationStore, knowledgeWiki, graph);
 		cs.wikiClient = wiki;
 		const conversationId = cs.nextConversationId();
 		const terminals = cs.makeTerminalManager(conversationId, cwd);
@@ -621,6 +624,7 @@ export class ClientSession {
 			if (!wiki) {
 				const owner = () => [...this.convs.values()].find(item => item.session.sessionManager === sessionManager);
 				extensionFactories.push(knowledgeExtension({
+					graph: this.graph,
 					getContext: () => owner()?.knowledge.active,
 					sourceState: () => this.knowledgeSourceState(),
 					skillFiles: () => owner()?.session.resourceLoader.getSkills().skills.map(skill => skill.filePath) ?? [],
@@ -1929,7 +1933,7 @@ export class ClientSession {
 			this.refreshKnowledgeQueue(conv);
 			if (!next) { this.flushSnapshot(); return; }
 			state.draining = true;
-			void this.deliverAcceptedPrompt(next.text, next.attachments, next.queue, next.requestId, undefined, undefined, true)
+			void this.deliverAcceptedPrompt(next.text, next.attachments, next.queue, next.requestId, undefined, undefined, next)
 				.finally(() => {
 					state.draining = false;
 					this.refreshKnowledgeQueue(conv);
@@ -1948,27 +1952,29 @@ export class ClientSession {
 		};
 	}
 
-	private async prepareKnowledgeRequest(conv: Conversation, mode: "ask" | "learn", args: string, rawCommand: string, requestId: string, signal: AbortSignal): Promise<KnowledgeRequestContext> {
+	private async prepareKnowledgeRequest(conv: Conversation, mode: KnowledgeRequestContext["mode"], args: string, rawCommand: string, requestId: string, signal: AbortSignal, queuedGraphWorkspaceId?: string): Promise<KnowledgeRequestContext> {
 		const session = conv.session;
-		if (conv.wiki) throw new Error("Learn 和 Ask 仅在普通对话中可用");
+		if (conv.wiki) throw new Error("此命令仅在普通对话中可用");
 		if (session.extensionRunner.getCommand(`skill:${mode}`)) throw new Error(`/skill:${mode} 已被其他扩展命令拦截，无法保证知识权限`);
-		for (const name of toolsForKnowledgeMode(mode)) if (!validKnowledgeTool(session, name)) throw new Error(`Knowledge tool ${name} is unavailable or replaced`);
+		const graphQuery = mode === "ask" && /^--graph(?:\s|$)/.test(args);
+		for (const name of toolsForKnowledgeMode(mode, graphQuery)) if (!validKnowledgeTool(session, name)) throw new Error(`Knowledge tool ${name} is unavailable or replaced`);
 		const skill = session.resourceLoader.getSkills().skills.find(item => item.name === mode);
 		if (!skill) throw new Error(`Knowledge Skill ${mode} 未加载`);
 		readFileSync(skill.filePath, "utf8");
 		const state = this.knowledgeSourceState();
-		let workspaceId: string | undefined;
 		const initial = resolveWorkspaceScope({ cwd: conv.cwd }, state);
-		if (initial.issue === "ambiguous_workspace") {
+		const maintenance = isGraphMaintenance(mode);
+		let workspaceId = maintenance ? graphWorkspaceSelector(args, initial.candidates, queuedGraphWorkspaceId) : undefined;
+		if (!workspaceId && initial.issue === "ambiguous_workspace") {
 			const options = initial.candidates.map(candidate => `${candidate.name} (${candidate.id})`);
 			const selected = await conv.webUi.select("选择本次知识请求的 Workspace", options, { signal });
 			if (!selected) throw new Error("已取消知识请求：需要选择 Workspace");
 			workspaceId = initial.candidates[options.indexOf(selected)]?.id;
 			if (!workspaceId) throw new Error("Workspace 选择已失效");
-		} else if (initial.issue) throw new Error(`当前 Workspace 不可用：${initial.issue}`);
-		else workspaceId = initial.scope.workspaceId;
+		} else if (!workspaceId && initial.issue) throw new Error(`当前 Workspace 不可用：${initial.issue}`);
+		workspaceId ??= initial.scope.workspaceId;
 		let scope = resolveWorkspaceScope({ cwd: conv.cwd, workspaceId }, state).scope;
-		for (let attempt = 0; attempt < 8; attempt++) {
+		for (let attempt = 0; !maintenance && attempt < 8; attempt++) {
 			try { scope = resolveRequestScope(args, scope); break; }
 			catch (error) {
 				if (!(error instanceof KnowledgeScopeError) || error.sources.length < 2) throw error;
@@ -1983,7 +1989,7 @@ export class ClientSession {
 		}
 		signal.throwIfAborted();
 		return {
-			mode, requestId, conversationId: conv.id, sessionId: session.sessionId, root: "", rawCommand, skillPath: skill.filePath,
+			mode, graphQuery, requestId, conversationId: conv.id, sessionId: session.sessionId, root: "", rawCommand, skillPath: skill.filePath,
 			scope, evidence: conv.knowledge.evidence, evidenceOrder: conv.knowledge.evidenceOrder,
 		};
 	}
@@ -2024,7 +2030,7 @@ export class ClientSession {
 		requestId?: string,
 		onAccepted?: (ok: boolean) => void,
 		onReceipt?: (result: PromptResult) => void,
-		fromQueue = false,
+		fromQueue?: DeferredKnowledgePrompt,
 	): Promise<void> {
 		const conv = this.conv;
 		const receiptSessionId = conv.session.sessionId;
@@ -2044,7 +2050,18 @@ export class ClientSession {
 		const holdForKnowledge = !!knowledge || !!conv.knowledge.active || this.preparingKnowledge.has(conv) || conv.knowledge.pending.length > 0;
 		if (!fromQueue && holdForKnowledge && (this.submitting.has(conv) || conv.knowledge.draining || conv.knowledge.active || conv.knowledge.pending.length || conv.session.isStreaming || conv.runRecovery?.pending || conv.knowledge.nativeSteering.length || conv.knowledge.nativeFollowUp.length || (knowledge && conv.tree?.busy))) {
 			if (this.quiesceBlocked()) { acknowledge(false); return; }
-			conv.knowledge.pending.push({ text, normalizedText: commandText, attachments, queue, requestId });
+			let graphWorkspaceId: string | undefined;
+			if (knowledge && isGraphMaintenance(knowledge.mode)) {
+				try {
+					const eligible = resolveWorkspaceScope({ cwd: conv.cwd }, this.knowledgeSourceState()).candidates;
+					graphWorkspaceId = graphWorkspaceSelector(knowledge.args, eligible);
+				} catch (error) {
+					acknowledge(false);
+					this.emit({ type: "notice", level: "error", conversationId: conv.id, text: (error as Error).message });
+					return;
+				}
+			}
+			conv.knowledge.pending.push({ text, normalizedText: commandText, attachments, queue, requestId, graphWorkspaceId });
 			this.refreshKnowledgeQueue(conv);
 			acknowledge(true);
 			if (this.executionTraces.enabled) {
@@ -2090,7 +2107,7 @@ export class ClientSession {
 			// Native slash commands (see NATIVE_COMMANDS) are executed here and
 			// never reach the SDK. Extension / skill / template commands fall
 			// through — AgentSession.prompt() handles those itself.
-			const slash = parseSlash(commandText);
+			const slash = isGraphMaintenance(knowledge?.mode) ? null : parseSlash(commandText);
 			if (slash) sideEffectsStarted = true;
 			if (slash && (await this.slash.exec(slash.name, slash.args, { conversationId: conv.id, requestId: requestId ?? `reload-${Date.now()}` }))) {
 				acknowledge(true, true);
@@ -2129,7 +2146,7 @@ export class ClientSession {
 			if (!s.isStreaming) { conv.toolsExecutedSincePrompt = false; conv.lastTaskEndedAt = undefined; }
 			conv.toolTextContinues = 0;
 			if (knowledge) {
-				preparedKnowledge = await this.prepareKnowledgeRequest(conv, knowledge.mode, knowledge.args, knowledge.normalizedText, knowledgeRequestId!, preparation!.signal);
+				preparedKnowledge = await this.prepareKnowledgeRequest(conv, knowledge.mode, knowledge.args, knowledge.normalizedText, knowledgeRequestId!, preparation!.signal, fromQueue?.graphWorkspaceId);
 				if (this.conv !== conv || conv.session !== s || conv.rebuilding) throw new Error("Conversation changed");
 				conv.knowledge.active = preparedKnowledge;
 			}
@@ -3632,6 +3649,7 @@ export class AgentService {
 		private cwd: string,
 		stateFile: string,
 		knowledgeWiki?: WikiService,
+		private readonly graph?: WorkspaceGraphService,
 	) {
 		this.knowledgeWiki = knowledgeWiki ?? new WikiService(join(dirname(stateFile), "wiki"));
 		this.stateStore = new ClientStateStore(stateFile);
@@ -3771,6 +3789,7 @@ export class AgentService {
 					this.thinkingDurationStore,
 					!!wikiCwd,
 					this.knowledgeWiki,
+					this.graph,
 				).finally(() => {
 					this.pending.delete(clientId);
 				});

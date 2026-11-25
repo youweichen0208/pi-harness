@@ -232,7 +232,7 @@ try {
 	await wait(() => a.wire.some(message => message.type === "slash_commands"), "slash commands");
 	const commands = a.wire.findLast(message => message.type === "slash_commands").commands;
 	assert(commands.some(command => command.name === "skill:personal-example" && command.source === "skill"), "personal skills remain available");
-	const engineeringNames = ["engineering", "knowledge-sync", "grilling", "domain-modeling", "codebase-design", "tdd", "architect", "blast-radius", "reflect", "learn", "ask"];
+	const engineeringNames = ["engineering", "knowledge-sync", "grilling", "domain-modeling", "codebase-design", "tdd", "architect", "blast-radius", "reflect", "learn", "ask", "build-graph", "update-graph"];
 	for (const name of engineeringNames) assert(commands.some(command => command.name === `skill:${name}` && command.source === "skill"), `${name} in native command catalog`);
 	for (const name of ["skill:design-first", "skill:bug-fix", "skill:feat"]) assert(!commands.some(command => command.name === name), `${name} retired from bundled catalog`);
 	const wikiCommandStart = wiki.wire.length;
@@ -240,7 +240,7 @@ try {
 	await wait(() => wiki.wire.slice(wikiCommandStart).some(message => message.type === "slash_commands"), "Wiki slash commands");
 	const wikiCommands = wiki.wire.slice(wikiCommandStart).find(message => message.type === "slash_commands").commands;
 	for (const name of engineeringNames) assert(!wikiCommands.some(command => command.name === `skill:${name}`), `${name} excluded from Wiki`);
-	for (const name of ["ask", "learn"]) {
+	for (const name of ["ask", "learn", "build-graph", "update-graph"]) {
 		assert(commands.some(command => command.name === name));
 		assert(!wikiCommands.some(command => command.name === name));
 	}
@@ -260,7 +260,7 @@ try {
 	assert(expandedText.includes(join(process.cwd(), "assets/skills/engineering/SKILL.md")), "expanded Skill uses the bundled absolute path");
 	assert.equal(expandedRequest.model, baselineRequest.model, "Skill invocation preserves the selected model");
 	assert.deepEqual(expandedRequest.tools, baselineRequest.tools, "Skill invocation preserves native tools");
-	console.log("PASS eleven bundled Skills, isolated Wiki resources, native expansion, model and tool compatibility");
+	console.log("PASS thirteen bundled Skills, isolated Wiki resources, native expansion, model and tool compatibility");
 	assert(!commands.some(command => ["documents", "pdf-md", "okf"].includes(command.name)), "conversion and OKF commands removed");
 	mkdirSync(join(agent, "extensions"), { recursive: true });
 	const bashOverride = join(agent, "extensions", "bash-conflict.ts");

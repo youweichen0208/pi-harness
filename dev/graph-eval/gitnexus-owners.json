@@ -1,0 +1,35 @@
+{
+  "engine": "gitnexus@1.6.12",
+  "owners": [
+    {
+      "source": "sdk",
+      "path": "packages/coding-agent/src/core/agent-session.ts",
+      "name": "_emit",
+      "line": 1104
+    },
+    {
+      "source": "sdk",
+      "path": "packages/coding-agent/src/core/agent-session.ts",
+      "name": "_emitAgentSettled",
+      "line": 1143
+    },
+    {
+      "source": "sdk",
+      "path": "packages/coding-agent/src/core/agent-session.ts",
+      "name": "subscribe",
+      "line": 1457
+    },
+    {
+      "source": "harness",
+      "path": "server/agent-service.ts",
+      "name": "bindSession",
+      "line": 852
+    },
+    {
+      "source": "harness",
+      "path": "server/agent-service.ts",
+      "name": "onEvent",
+      "line": 982
+    }
+  ]
+}

@@ -27,7 +27,7 @@ export class KnowledgeScopeError extends Error {
 	}
 }
 
-function source(kind: KnowledgeSourceKind, path: string): KnowledgeSource {
+export function knowledgeSource(kind: KnowledgeSourceKind, path: string): KnowledgeSource {
 	if (!isAbsolute(path)) throw new KnowledgeScopeError("Knowledge sources require absolute paths");
 	const root = resolve(path);
 	const id = createHash("sha256").update(JSON.stringify([kind, root])).digest("hex");
@@ -47,7 +47,7 @@ export function resolveWorkspaceScope(
 	{ cwd, workspaceId }: { cwd: string; workspaceId?: string },
 	state: KnowledgeSourceState,
 ): WorkspaceScopeResult {
-	const current = source("repository", cwd);
+	const current = knowledgeSource("repository", cwd);
 	const candidates = state.catalog.workspaces.filter(group => groupContains(group, cwd));
 	const selected = workspaceId ? state.catalog.workspaces.find(group => group.id === workspaceId) : candidates.length === 1 ? candidates[0] : undefined;
 	const workspace = selected && candidates.includes(selected) ? selected : undefined;
@@ -56,11 +56,11 @@ export function resolveWorkspaceScope(
 			: !workspaceId && candidates.length > 1 ? "ambiguous_workspace" : undefined;
 	const sources = new Map<string, KnowledgeSource>([[current.id, current]]);
 	for (const root of workspace?.paths ?? []) {
-		const entry = source("repository", root);
+		const entry = knowledgeSource("repository", root);
 		sources.set(entry.id, entry);
 	}
 	if (state.library.available && state.library.cwd) {
-		const entry = source("knowledge", state.library.cwd);
+		const entry = knowledgeSource("knowledge", state.library.cwd);
 		sources.set(entry.id, entry);
 	}
 	const all = [...sources.values()];
@@ -75,6 +75,20 @@ export function resolveWorkspaceScope(
 			sources: all,
 		},
 	};
+}
+
+/** Maintenance always publishes a whole group. Optional text is a selector, never a search or model instruction. */
+export function graphWorkspaceSelector(args: string, candidates: WorkspaceScopeResult["candidates"], queuedId?: string): string | undefined {
+	if (queuedId) {
+		if (!candidates.some(group => group.id === queuedId)) throw new KnowledgeScopeError("排队时选定的 Workspace 已不再包含当前项目，请重新提交图谱维护命令。");
+		return queuedId;
+	}
+	if (!candidates.length) throw new KnowledgeScopeError("请先将当前项目加入 Workspace。");
+	const requested = args.trim();
+	if (!requested) return candidates.length === 1 ? candidates[0].id : undefined;
+	const matches = candidates.filter(group => group.id === requested || group.name === requested);
+	if (matches.length !== 1) throw new KnowledgeScopeError("图谱维护按整个 Workspace 执行。请留空，或填写当前项目所属分组的完整唯一名称或 ID。");
+	return matches[0].id;
 }
 
 function clauseSources(clause: string, scope: KnowledgeScope): KnowledgeSource[] {

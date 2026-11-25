@@ -50,6 +50,8 @@ try {
 		const first = await browser.newPage();
 		await first.addInitScript(() => localStorage.setItem("pi-harness:project-workspace", "deleted-workspace"));
 		await first.goto(`http://127.0.0.1:${port}`);
+		await first.locator(".conn-dot.ok").first().waitFor({ state: "attached" });
+		await first.locator(".setup-modal .modal-close").waitFor({ timeout: 2500 }).catch(() => {});
 		if (await first.locator(".setup-modal .modal-close").isVisible()) await first.locator(".setup-modal .modal-close").click();
 		await first.getByRole("button", { name: "新建 Workspace", exact: true }).first().click();
 		await first.getByRole("dialog", { name: "新建 Workspace" }).getByRole("textbox").waitFor();
@@ -79,15 +81,21 @@ try {
 	assert.deepEqual(disk.workspaces[0].paths, [projects[1]]);
 	console.log("PASS workspace protocol: shared catalog, conflict recovery, persisted membership, unchanged cwd");
 	if (process.argv.includes("--browser")) {
-		const page = await browser.newPage();
+		// Exercise the full-width 240px navigation before the compact/mobile cases below.
+		const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
 		const outgoing = [];
 		page.on("websocket", (socket) => socket.on("framesent", ({ payload }) => outgoing.push(JSON.parse(String(payload)))));
 		await page.goto(`http://127.0.0.1:${port}`);
+		await page.locator(".conn-dot.ok").first().waitFor({ state: "attached" });
+		await page.locator(".setup-modal .modal-close").waitFor({ timeout: 2500 }).catch(() => {});
 		if (await page.locator(".setup-modal .modal-close").isVisible()) await page.locator(".setup-modal .modal-close").click();
 		const current = () => page.evaluate(() => document.querySelector(".compact-workspace-trigger > span")?.textContent ?? "");
 		const currentIs = (name) => page.waitForFunction((name) => document.querySelector(".compact-workspace-trigger > span")?.textContent === name, name);
 		await currentIs("Work");
 		const switches = () => outgoing.filter((m) => m.type === "set_cwd").length;
+		// Terminal tooltips display the absolute cwd on the first line, followed by the rename hint.
+		const terminalSelector = cwd => `.term-tab-main[title^=${JSON.stringify(realpathSync(cwd))}]`;
+		const tabsFor = cwd => page.locator(terminalSelector(cwd));
 		const before = switches();
 		await page.locator(".compact-workspace-trigger").click();
 		assert.equal(await page.locator(".workspace-list-row").count(), 1);
@@ -119,6 +127,8 @@ try {
 		assert.equal(switches(), before, "new chat does not switch cwd when the current project is outside the selected Workspace");
 		assert.equal(await current(), "Work");
 		await page.reload();
+		await page.locator(".conn-dot.ok").first().waitFor({ state: "attached" });
+		await page.locator(".setup-modal .modal-close").waitFor({ timeout: 2500 }).catch(() => {});
 		if (await page.locator(".setup-modal .modal-close").isVisible()) await page.locator(".setup-modal .modal-close").click();
 		await page.locator(`.project-item[title="${projects[1]}"]`).waitFor();
 		assert.equal(await current(), "Work");
@@ -186,7 +196,7 @@ try {
 		await page.locator(".design-workspace.left-collapsed").waitFor();
 		assert.equal(await page.locator(".design-workspace > .drawer-left").evaluate(element => Math.round(element.getBoundingClientRect().width)), 56);
 		assert.equal(await page.locator(".term-tabs-block .panel-header").count(), 0, "terminal list does not repeat a section header");
-		assert.equal(await page.locator(".term-workspace-trigger span").innerText(), "Mobile");
+		assert.equal(await page.locator(".term-workspace-label strong").innerText(), "Mobile");
 		assert.equal(await page.locator(".term-workspace-trigger .workspace-book").count(), 1, "Workspace uses the main navigation symbol");
 		assert.equal(await page.locator(".term-workspace-trigger .workspace-book").evaluate(element => element.innerHTML), await page.locator(".compact-workspace-trigger .workspace-book").evaluate(element => element.innerHTML));
 		assert.equal(await page.locator(".term-workspace-trigger .tree-icon-folder").count(), 0);
@@ -209,22 +219,22 @@ try {
 		await page.locator(".fpk-modal-foot input").fill(projects[1]);
 		await page.locator(".fpk-open-btn").click();
 		await page.locator(`.term-project-row.active[title="${projects[1]}"]`).waitFor();
-		await page.locator('.term-tab-main[title$="/project-a"]').waitFor({ state: "detached" });
-		await page.locator('.term-tab-main[title$="/project-b"]').first().waitFor();
+		await tabsFor(projects[0]).waitFor({ state: "detached" });
+		await tabsFor(projects[1]).first().waitFor();
 		assert.equal(await page.locator(".term-tab").count(), 1, "only this project's terminal is shown");
 		await page.locator(".term-tabs-block .panel-new").click();
-		await page.waitForFunction(() => document.querySelectorAll('.term-tab-main[title$="/project-b"]').length === 2);
+		await page.waitForFunction(selector => document.querySelectorAll(selector).length === 2, terminalSelector(projects[1]));
 		for (let i = 0; i < 50 && outgoing.filter(m => m.type === "terminal_create").at(-1)?.cwd !== projects[1]; i++) await sleep(100);
 		assert.equal(outgoing.filter(m => m.type === "terminal_create").at(-1)?.cwd, projects[1]);
 		await page.locator(`.term-project-row[title="${projects[0]}"]`).click();
-		await page.locator('.term-tab-main[title$="/project-a"]').waitFor();
-		assert.equal(await page.locator('.term-tab-main[title$="/project-b"]').count(), 0);
+		await tabsFor(projects[0]).waitFor();
+		assert.equal(await tabsFor(projects[1]).count(), 0);
 		await page.locator('.term-xterm:not(.hidden) .xterm-helper-textarea').pressSequentially("pwd");
 		await page.keyboard.press("Enter");
 		await page.waitForFunction(path => document.querySelector('.term-xterm:not(.hidden)')?.textContent.includes(path), realpathSync(projects[0]));
 		await page.locator(`.term-project-row[title="${projects[1]}"]`).click();
-		await page.locator('.term-tab-main[title$="/project-b"]').first().waitFor();
-		assert.equal(await page.locator('.term-tab-main[title$="/project-a"]').count(), 0);
+		await tabsFor(projects[1]).first().waitFor();
+		assert.equal(await tabsFor(projects[0]).count(), 0);
 		await page.locator('.term-xterm:not(.hidden) .xterm-helper-textarea').pressSequentially("pwd");
 		await page.keyboard.press("Enter");
 		await page.waitForFunction(path => document.querySelector('.term-xterm:not(.hidden)')?.textContent.includes(path), realpathSync(projects[1]));

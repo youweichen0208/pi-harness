@@ -18,6 +18,10 @@ Answer with evidence. Work in the user's language and lead with the conclusion.
 6. Answer a direct question with the conclusion and its source. For a multi-step chain, explain how each handoff works and cite the original lines that establish it. When a diagram makes the chain easier to follow, use a fenced Mermaid block and put the evidence links in matching step order beneath it. Mark an unsupported hop as a gap or an inference.
 7. For an incident, distinguish paths the code permits from the path observed for that incident. If the deployment version, task logs or metrics needed to decide are missing, say which observation would distinguish the plausible causes.
 
+## Optional graph lookup
+
+With an explicit `/ask --graph` request, graph tools can suggest candidate nodes, neighbors and paths for a cross-repository question. Check the published state. Query a relevant node and follow a bounded path when it advances the question. A stale, absent, partial or empty result falls back to source search. Use `source_read` to read the actual supporting lines of each hop before citing it. For change-impact questions use `graph_neighbors` with `impact: true` on a located symbol or module to identify dependent importers and downstream event consumers. Verify each material relationship in the affected source before reporting impact. Graph anchors are leads and do not issue evidence IDs.
+
 ## Rules
 
 - Search only relevant and authorized sources, including when the user excludes a source.

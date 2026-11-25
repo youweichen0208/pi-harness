@@ -28,7 +28,8 @@ pi-harness/
 │   ├── component-updates.ts    # pi Agent / 扩展版本检查、来源校验与包更新
 │   ├── extension-module-cache.ts # /restart、/reload 与扩展重载刷新扩展模块缓存（registerHooks 代数 + require.cache 清理，issue #64）
 │   ├── knowledge-*.ts           # Learn / Ask 请求、登记来源、证据、调查与审批写入，见 architecture-knowledge.md
-│   ├── engineering-skills.ts     # 普通会话的十一项随包 Skills：路径、同名覆盖、诊断与会话隔离
+│   ├── workspace-graph.ts       # 分组来源、快照发布和受控查询；索引 worker、SQLite 目录和 Wiki 核验见 docs/architecture-workspace-graph.md
+│   ├── engineering-skills.ts     # 普通会话的十三项随包 Skills：路径、同名覆盖、诊断与会话隔离
 │   ├── system-prompt-view.ts / system-prompt-files.ts / system-prompt-routes.ts # 原生提示词分段、文件编辑与 reload
 │   ├── session-reload.ts         # 提示词、设置、MCP 与斜杠命令共用的按会话重载队列
 │   ├── settings-service.ts     # 界面偏好与原生资源只读视图（扩展命名见 extension-display.ts）
@@ -92,7 +93,7 @@ pi-harness/
 ├── electron/                   # Electron 桌面版壳子（main.mjs 主进程 + 沙箱兼容的 preload.cjs），本地构建，不进 npm 包
 ├── electron-builder.yml        # Electron 打包配置（mac dmg/zip、win nsis/portable、linux AppImage/deb）
 ├── build/                      # electron-builder 用的图标源文件（icon.png 1024x1024 + icon.ico）；installer.nsh 为 NSIS 安装/卸载前运行中实例检测
-├── assets/skills/              # 十一项随包 Skills、必要参考、固定上游记录与 MIT License
+├── assets/skills/              # 十三项随包 Skills、必要参考、固定上游记录与 MIT License
 ├── dev/                        # 本地开发辅助（不入 npm 包）
 ├── Dockerfile / docker-compose.yml
 ├── docs/                       # 详细文档（本文件的分拆）
@@ -123,6 +124,7 @@ pi-harness/
 | `ChangesPanel.tsx` / `ChangeSummaryCard.tsx` | 35a 对话改动面板及每轮汇总；修改范围、定位、折叠、搜索或轮次统计前读取 `docs/chat-diff-design.md` 与 `docs/architecture-terminal.md`；本轮共用 `task-outputs.ts`，Git 范围走 `scm_diff`（协议 v41） |
 | `TerminalPanel.tsx` / `TermXterm.tsx` | 终端视图 + xterm 实例桥接 |
 | `SCMPanel.tsx` | 源代码管理（Git）视图：status/branch/diff；提交/推送/拉取/切换分支 |
+| `GraphWorkbench.tsx` / `GraphDiagram.tsx` | Workspace 图谱浏览、构建与更新、执行链证据、改动影响与文档引用核验 |
 | `TopBar.tsx` / `FooterBar.tsx` | 顶栏（项目／会话标题、视图切换、文件栏开关）、状态栏（连接／版本／分支／工作目录及扩展状态）；模型与思考强度在 `ChatInput.tsx` 底部 |
 | `Dialog.tsx` | 扩展 `ui.select/confirm/input` → 浏览器弹窗 |
 | `ModelConfigModal.tsx` / `PiSetupModal.tsx` | models.json 管理 / 首次配置引导 |

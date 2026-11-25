@@ -8,6 +8,7 @@ import { createKnowledgeSourceReader } from "./knowledge-source-reader.js";
 import { assertKnowledgeSourceAccess, canonicalSourceRoot, gitFileEvidence } from "./knowledge-sources.js";
 import { MAX_KNOWLEDGE_EVIDENCE } from "./knowledge-evidence.js";
 import { createKnowledgeInvestigateTool } from "./knowledge-investigate.js";
+import { graphTools } from "./knowledge-graph-tools.js";
 import { createKnowledgeWriteTool } from "./knowledge-write.js";
 import { RUN_CONTINUATION } from "./run-recovery.js";
 import { TOOL_TEXT_CONTINUE_PROMPT } from "./tool-text.js";
@@ -15,7 +16,7 @@ import { TOOL_TEXT_CONTINUE_PROMPT } from "./tool-text.js";
 export const KNOWLEDGE_EXTENSION_PATH = "<inline:pi-harness-knowledge>";
 const ORDINARY_TOOL_ENTRY = "pi-harness:knowledge-ordinary-tools";
 
-function eventMode(event: BeforeAgentStartEvent, context: KnowledgeRequestContext | undefined): "ask" | "learn" | undefined {
+function eventMode(event: BeforeAgentStartEvent, context: KnowledgeRequestContext | undefined): KnowledgeRequestContext["mode"] | undefined {
 	if (!context) return undefined;
 	if (event.messageType === "custom") {
 		const details = event.message.details as { requestEntryId?: unknown } | undefined;
@@ -150,7 +151,7 @@ export function knowledgeExtension(host: KnowledgeToolHost): InlineExtension {
 			ordinaryTools = undefined;
 			authorized = undefined;
 		};
-		for (const tool of [...sourceTools(host), createKnowledgeWriteTool(host), createKnowledgeInvestigateTool(host, () => shutdown.signal)]) pi.registerTool(tool);
+		for (const tool of [...sourceTools(host), ...graphTools(host), createKnowledgeWriteTool(host), createKnowledgeInvestigateTool(host, () => shutdown.signal)]) pi.registerTool(tool);
 		pi.on("before_agent_start", (event, ctx) => {
 			const context = host.getContext(), mode = eventMode(event, context);
 			const options = event.systemPromptOptions;
@@ -162,7 +163,7 @@ export function knowledgeExtension(host: KnowledgeToolHost): InlineExtension {
 			}
 			ordinaryTools = withoutKnowledgeTools(options.selectedTools);
 			pi.appendEntry(ORDINARY_TOOL_ENTRY, ordinaryTools);
-			const allowed = mode ? toolsForKnowledgeMode(mode) : [];
+			const allowed = mode ? toolsForKnowledgeMode(mode, context.graphQuery) : [];
 			if (!mode || !allowed.every(name => validKnowledgeTool(pi, name))) {
 				// Pi reports errors thrown by hooks and continues preparing the run.
 				// Clear executable tools before cancelling a failed identity check.
@@ -180,7 +181,7 @@ export function knowledgeExtension(host: KnowledgeToolHost): InlineExtension {
 			});
 		});
 		pi.on("tool_call", event => {
-			const context = host.getContext(), allowed = context ? toolsForKnowledgeMode(context.mode) : [];
+			const context = host.getContext(), allowed = context ? toolsForKnowledgeMode(context.mode, context.graphQuery) : [];
 			if (knowledgeToolNames.includes(event.toolName as typeof knowledgeToolNames[number])) {
 				if (!context || authorized !== context || !allowed.includes(event.toolName) || !validKnowledgeTool(pi, event.toolName)) return { block: true, reason: "Knowledge tool is not authorized for this request" };
 				return;

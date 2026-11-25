@@ -12,6 +12,8 @@ When copying one of these Skills, include the project license as `LICENSE` in th
 | `knowledge-sync/` | [pi-harness MIT](LICENSES/pi-harness-MIT.txt) | — |
 | `learn/` | [pi-harness MIT](LICENSES/pi-harness-MIT.txt) | — |
 | `ask/` | [pi-harness MIT](LICENSES/pi-harness-MIT.txt) | — |
+| `build-graph/` | [pi-harness MIT](LICENSES/pi-harness-MIT.txt) | — |
+| `update-graph/` | [pi-harness MIT](LICENSES/pi-harness-MIT.txt) | — |
 
 ## Engineering approval helper
 
@@ -43,7 +45,7 @@ The helper ships [Marked 16.4.2](https://github.com/markedjs/marked/tree/v16.4.2
 | Bundled path | Upstream path | Pi / V2 adaptations |
 | --- | --- | --- |
 | `architect/SKILL.md` | `pstack/skills/architect/SKILL.md` | Enable model-selected use; keep large or contested design comparison in the current session instead of automatically invoking Arena. |
-| `blast-radius/SKILL.md` | `pstack/skills/blast-radius/SKILL.md` | Enable model-selected use; partition wide changes in the current session instead of invoking Arena; remove the final Unslop dependency while retaining evidence and plain-writing requirements. |
+| `blast-radius/SKILL.md` | `pstack/skills/blast-radius/SKILL.md` | Enable model-selected use; partition wide changes in the current session instead of invoking Arena; remove the final Unslop dependency while retaining evidence and plain-writing requirements; describe optional, verified graph impact leads. |
 | `reflect/SKILL.md` | `pstack/skills/reflect/SKILL.md` | Keep explicit user invocation and edit approval; acknowledge partial transcript access; copy approved changes to Pi personal or trusted project Skill directories instead of Cursor paths; distinguish directory Skills from standalone files, approve the exact copy list, and include the corresponding third-party copyright and license notice; preserve bundled originals. |
 
 Arena, Swarm, Correct, How, Why, and Unslop are not vendored in M1. No upstream Skill is edited in a user's personal installation.
