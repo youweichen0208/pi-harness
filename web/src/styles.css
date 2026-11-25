@@ -9584,6 +9584,9 @@ body { -webkit-font-smoothing: antialiased; }
 .toolcall-steps:has(.bash-card-more[open]), .toolcall-diagnostics:has(.bash-card-more[open]) { position: relative; z-index: 10; }
 .design-workspace .toolcall-steps .toolcall-head > .toolcall-copy, .design-workspace .toolcall-diagnostics .toolcall-head > .toolcall-copy { opacity: 1; pointer-events: auto; }
 .fp-line.from-tool, .fp-edit-line.from-tool { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.fp-evidence .fp-code { user-select: text; -webkit-user-select: text; }
+.fp-evidence .fp-line { cursor: text; }
+.fp-evidence .fp-empty { gap: 8px; flex-direction: column; }
 .read-group-items { display: block; padding: 0; }
 .read-file-row { border-top: 1px solid var(--border-soft); }
 .read-file-head { display: flex; align-items: center; gap: 9px; width: 100%; padding: 8px 12px; border: 0; background: transparent; color: var(--text-dim); font: 11px var(--sans); text-align: left; cursor: pointer; }

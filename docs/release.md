@@ -1,5 +1,11 @@
 # 发布流程
 
+## 2.1.0 知识学习与问答
+
+普通聊天新增 `/learn` 和 `/ask`。学习条目逐篇确认后写入，跨仓回答按步骤引用源码。历史对话可以重新打开仍有效的证据。WebSocket 协议升至 v66。[中英双语发布说明](../.github/release-notes/v2.1.0.md)
+
+Version 2.1.0 adds `/learn` and `/ask` to regular chats. Users review each knowledge edit before saving. Cross-repository answers link individual steps to source lines, and valid citations can be reopened from chat history. The WebSocket protocol is now v66.
+
 ## 1.37.0：内置浏览器视觉操作
 
 桌面浏览器支持页内查找、多标签查阅、截图交互与操作确认，同时更新聊天排版和浏览器起始页。发布说明见 `.github/release-notes/v1.37.0.md`。

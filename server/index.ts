@@ -7,6 +7,7 @@ import { installExtensionsRoutes } from "./extensions-routes.js";
 import { installCodemodeImageRoutes } from "./codemode-image-routes.js";
 import { installKnowledgeLibraryRoutes } from "./knowledge-library.js";
 import { installWikiRoutes } from "./wiki-routes.js";
+import { WikiService } from "./wiki-service.js";
 import { OpenAIProxySettings } from "./openai-proxy.js";
 import { installOpenAIProxyRoutes } from "./openai-proxy-routes.js";
 
@@ -73,6 +74,7 @@ const CWD = resolve(process.env.PI_WEB_CWD ?? process.cwd());
 const DATA_DIR = resolve(process.env.PI_WEB_DATA_DIR ?? join(homedir(), ".pi-web"));
 const openAIProxy = new OpenAIProxySettings(DATA_DIR);
 openAIProxy.install();
+const sharedWiki = new WikiService(join(DATA_DIR, "wiki"));
 
 /** Bind address. Default is loopback ONLY — the service is a local personal
  *  tool and should not be reachable from the network unless explicitly asked
@@ -179,7 +181,7 @@ installOpenAIProxyRoutes(app, openAIProxy, originAllowed);
 installExtensionsRoutes(app, () => service, originAllowed);
 installSystemPromptRoutes(app, () => service, originAllowed);
 installKnowledgeLibraryRoutes(app, DATA_DIR, originAllowed);
-const closeNotebooks = installWikiRoutes(app, () => service, join(DATA_DIR, "wiki"), originAllowed, () => projectWorkspaces.read());
+const closeNotebooks = installWikiRoutes(app, () => service, join(DATA_DIR, "wiki"), originAllowed, () => projectWorkspaces.read(), sharedWiki);
 
 app.get("/api/health", (_req, res) => {
 	res.json({ ok: true, piVersion: VERSION, pid: process.pid });
@@ -505,6 +507,7 @@ const service = new AgentService(
 	CWD,
 	// Per-client persisted UI state: last-used workspace + recent projects.
 	join(DATA_DIR, "client-state.json"),
+	sharedWiki,
 );
 
 const nodeWorkbench = new NodeWorkbench(DATA_DIR);
@@ -723,6 +726,7 @@ wss.on("connection", (ws) => {
 			if (msg.type === "read_file" || msg.type === "write_file") send({
 				type: "file_result", operation: msg.type === "read_file" ? "read" : "write",
 				requestId: msg.requestId, cwd: msg.cwd ?? cs.cwd, path: msg.path,
+				...(msg.type === "read_file" && msg.evidenceId !== undefined ? { evidenceId: msg.evidenceId, conversationId: msg.conversationId, errorCode: "evidence_unavailable" as const } : {}),
 				ok: false, error: "工作区切换中，请稍后重试",
 			});
 			return;

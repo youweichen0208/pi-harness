@@ -6,11 +6,13 @@ export function openSessionTree() { window.dispatchEvent(new Event("pi-tree-open
 export function navigateSibling(conversationId: string, targetId: string) {
 	window.dispatchEvent(new CustomEvent("pi-tree-navigate", { detail: { conversationId, targetId } }));
 }
-export type TreeDraft = { id: string; conversationId: string; text: string; images?: { data: string; mimeType: string }[] };
+import type { PromptAttachment } from "../../server/protocol";
+
+export type TreeDraft = { id: string; conversationId: string; text: string; images?: { data: string; mimeType: string }[]; attachments?: PromptAttachment[] };
 const drafts = new Map<string, TreeDraft[]>();
 const received = new Set<string>();
 export function queueTreeDraft(draft: TreeDraft) {
-	if ((!draft.text && !draft.images?.length) || received.has(draft.id)) return;
+	if ((!draft.text && !draft.images?.length && !draft.attachments?.length) || received.has(draft.id)) return;
 	received.add(draft.id);
 	if (received.size > 256) received.delete(received.values().next().value!);
 	const pending = drafts.get(draft.conversationId) ?? [];

@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { basename, dirname, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, join, relative, resolve, sep, isAbsolute } from "node:path";
 import { decodeText, looksLikeText, previewKind } from "./text-sniff.js";
 import { wikiMetadata, wikiReferences, resolveWikiLink, wikiLinkIndex } from "./wiki-links.js";
 import { readWikiPdf } from "./wiki-pdf.js";
@@ -377,6 +377,56 @@ export class WikiService {
 		if (notebookPath(path)) readNotebook(text);
 		writeFileSync(abs, next);
 		this.record(cwd, { files: new Map([[path, data]]), skipped: [] }, { files: new Map([[path, next]]), skipped: [] }, "user", path);
+	}
+	/** Inspect the same portable Markdown target both before approval and at commit. */
+	knowledgeDocument(cwd: string, path: string, skillFiles: readonly string[] = []) {
+		if (!/\.(?:md|markdown)$/i.test(path)) throw new Error("Knowledge entries must be Markdown files");
+		const target = this.newPath(cwd, path);
+		if (!statSync(dirname(target.absolute)).isDirectory() || realpathSync(dirname(target.absolute)) !== dirname(target.absolute)) throw new Error("Knowledge entries require a real parent directory");
+		if (isKnowledgeEvidence(cwd, target.path) || /(?:^|[\\/])(?:\.pi|\.claude|\.agents)[\\/]skills(?:[\\/]|$)/i.test(target.absolute) || basename(target.absolute).toLowerCase() === "skill.md") throw new Error("This knowledge target is read-only");
+		for (const skill of skillFiles) {
+			const directorySkill = basename(skill).toLowerCase() === "skill.md";
+			const fromSkill = relative(directorySkill ? dirname(skill) : skill, target.absolute);
+			if (!fromSkill || directorySkill && !isAbsolute(fromSkill) && fromSkill !== ".." && !fromSkill.startsWith(".." + sep)) throw new Error("Skill resources are read-only");
+		}
+		// A library can itself point inside a Skill directory or immutable evidence export.
+		for (let directory = dirname(target.absolute); ; directory = dirname(directory)) {
+			if (existsSync(join(directory, "SKILL.md")) || basename(directory) === "evidence" && skipTraversalDirectory(dirname(directory), "evidence")) throw new Error("This knowledge target is read-only");
+			if (directory === dirname(directory)) break;
+		}
+		const stat = lstatSync(target.absolute, { throwIfNoEntry: false });
+		if (!stat) return { ...target, current: null };
+		if (!stat.isFile() || stat.size > MAX_FILE) throw new Error("File is read-only");
+		const current = readFileSync(target.absolute);
+		if (current.length > MAX_FILE || !looksLikeText(current) || !Buffer.from(decodeText(current)).equals(current)) throw new Error("File is read-only");
+		return { ...target, current };
+	}
+	writeKnowledgeDocument(cwd: string, path: string, text: string, expectedVersion: string | null, attribution: RevisionAttribution = {}, skillFiles: readonly string[] = []): { status: "created" | "updated" | "unchanged"; version: string; diskWritten: boolean; warnings: string[] } {
+		if (this.busy(cwd)) throw new Error("Wait for the current Wiki request to finish");
+		const { absolute, path: normalizedPath, current } = this.knowledgeDocument(cwd, path, skillFiles);
+		path = normalizedPath;
+		const next = Buffer.from(text, "utf8");
+		if (next.length > MAX_FILE || !looksLikeText(next) || !Buffer.from(decodeText(next)).equals(next)) throw new Error("Knowledge entries must be complete UTF-8 text");
+		if ((current ? hash(current) : null) !== expectedVersion) throw new WikiConflictError("File changed on disk; reload before saving");
+		if (current?.equals(next)) return { status: "unchanged", version: hash(next), diskWritten: false, warnings: [] };
+		if (expectedVersion === null) {
+			if (!statSync(dirname(absolute)).isDirectory()) throw new Error("Parent directory must already exist");
+			writeFileSync(absolute, next, { flag: "wx" });
+		} else {
+			const temporary = `${absolute}.${process.pid}.${randomUUID()}.tmp`;
+			try {
+				writeFileSync(temporary, next, { mode: statSync(absolute).mode });
+				const latest = readFileSync(absolute);
+				if (hash(latest) !== expectedVersion || lstatSync(absolute).isSymbolicLink()) throw new WikiConflictError("File changed during approval; save was not written");
+				renameSync(temporary, absolute);
+			} finally { rmSync(temporary, { force: true }); }
+		}
+		const warnings: string[] = [];
+		try {
+			this.record(cwd, { files: new Map(current ? [[path, current]] : []), skipped: [] }, { files: new Map([[path, next]]), skipped: [] }, "pi", `Learn: ${path}`, attribution);
+		} catch (error) { warnings.push(`Knowledge was written, but its Wiki history could not be updated: ${(error as Error).message}`); }
+		try { this.invalidate(cwd); } catch (error) { warnings.push(`Knowledge was written, but its index could not be invalidated: ${(error as Error).message}`); }
+		return { status: expectedVersion === null ? "created" : "updated", version: hash(next), diskWritten: true, warnings };
 	}
 	change(cwd: string, id: string, path: string): WikiChange {
 		const revision = this.history(cwd).find(r => r.id === id), change = revision?.changes.find(c => c.path === path);

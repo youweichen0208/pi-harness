@@ -126,9 +126,11 @@ Pi 1.0.4 起的专项（1.4.0 继续适用，文件名保留 `pi-104-`）：`pi-
 
 ### Engineering Skills 回归
 
-`npx vitest run tests/unit/engineering-skills.test.ts tests/unit/packaged-sdk-version.test.ts` 验证九项原生资源、用户同名覆盖的实际路径、reload、Wiki/节点/Playground 隔离、引用闭包、固定版本记录及打包失败分支。构建后运行 `node tests/builtin-extensions-test.mjs` 和 `node tests/new-chat-context-test.mjs --protocol-only`，验证真实服务目录、显式 Skill 展开、参数、模型/工具及原生提示词一致性；测试隔离个人 Skills。
+`npx vitest run tests/unit/engineering-skills.test.ts tests/unit/packaged-sdk-version.test.ts` 验证十一项原生资源、用户同名覆盖的实际路径、reload、Wiki/节点/Playground 隔离、引用闭包、固定版本记录及打包失败分支。构建后运行 `node tests/builtin-extensions-test.mjs` 和 `node tests/new-chat-context-test.mjs --protocol-only`，验证真实服务目录、显式 Skill 展开、参数、模型/工具及原生提示词一致性；测试隔离个人 Skills。
 
-L1 还需从实际 npm 安装包、Docker 运行容器和可定位到九项 Skills 的 Desktop 目录包加载资源；旧 Design First 的 `.app` 记录不能替代 V2 证据。L2 用真实模型分别验证 Quick Fix、Bug、普通功能、核心接口、失败处理、恢复和手动 Reflect；只有 L1/L2 均通过才称为 M1 闭环验收。普通 Agent／Design First／V2 的完整 L3 A/B 是后续效果评测，不替代 L2，也不阻塞已通过的 M1。本地证据放在已忽略的 `.scratch/engineering-skills-v2/`，不提交过程报告。
+Knowledge Engine 的零 token 端到端回归运行 `node tests/knowledge-engine-test.mjs`，加 `--browser` 可检查证据预览。行为验收和包内测试见 [Knowledge Engine](architecture-knowledge.md)。
+
+L1 还需从实际 npm 安装包、Docker 运行容器和可定位到十一项 Skills 的 Desktop 目录包加载资源；旧 Design First 的 `.app` 记录不能替代 V2 证据。L2 用真实模型分别验证 Quick Fix、Bug、普通功能、核心接口、失败处理、恢复和手动 Reflect；只有 L1/L2 均通过才称为 M1 闭环验收。普通 Agent／Design First／V2 的完整 L3 A/B 是后续效果评测，不替代 L2，也不阻塞已通过的 M1。本地证据放在已忽略的 `.scratch/engineering-skills-v2/`，不提交过程报告。
 
 历史 subagent 工具调用只做向后兼容：已移除的内置 Workspace 调查扩展不再注册工具、设置或协议类型，旧会话里的 `subagent` 卡片退化为通用工具卡；`acp_delegate` 的 ACP 分身处理保留。
 

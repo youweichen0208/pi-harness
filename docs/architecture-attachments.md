@@ -36,6 +36,8 @@
 
 ## 文件预览协议
 
+协议 v66 的知识引用通过 `read_file` 的 `evidenceId` 打开。服务端按当前分支记录定位来源，返回带原始行号的文本窗口。证据预览没有自动保存、附件或当前文件引用。协议及失效条件见 [Knowledge Engine](architecture-knowledge.md)。
+
 - 客户端发 `{ type: "read_file", path, cwd?, requestId? }` → 服务端回 `file_content`（含 cwd、requestId、文本原始字节的 SHA-256 version，以及内容/类型/大小）。失败回 `file_result`（operation: read）。
 - 保存发 `write_file`（path、text、cwd、requestId、expectedVersion；明确覆盖时 force: true），成功/失败均回 `file_result`（operation: write、cwd、path、requestId、ok；成功含新 version，冲突含 conflict）。服务端校验工作区、路径、文本类型和大小，比较磁盘当前版本后写入；版本比较到写入之间无 await，以串行处理本进程中的保存。与外部进程之间不提供文件系统事务锁。
 - 写入保留原有 UTF-8 和 2MB 内容上限；磁盘文件超过读取上限或为二进制时拒绝编辑。工作区切换期间读写返回明确失败。协议版本同步至 v13。

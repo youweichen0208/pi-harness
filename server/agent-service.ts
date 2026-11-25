@@ -1,5 +1,12 @@
 import { backgroundBash, commandViews, hasRunningCommand, stopRequestCommands } from "./background-bash.js";
 import { engineeringResources } from "./engineering-skills.js";
+import { knowledgeExtension, validKnowledgeTool } from "./knowledge-tools.js";
+import { emptyKnowledgeState, parseKnowledgeCommand, toolsForKnowledgeMode, type KnowledgeRequestContext } from "./knowledge-requests.js";
+import { assertKnowledgeEvidenceAccess, canonicalSourceRoot, KnowledgeScopeError, resolveRequestScope, resolveWorkspaceScope } from "./knowledge-sources.js";
+import { branchEvidence, KNOWLEDGE_EVIDENCE_ENTRY } from "./knowledge-evidence.js";
+import { KnowledgeLibrary } from "./knowledge-library.js";
+import { ProjectWorkspaceStore } from "./project-workspaces.js";
+import { WikiService } from "./wiki-service.js";
 import { bindCacheWarming, cacheWarmingView, setGlobalCacheWarming } from "./cache-warming.js";
 import { CodemodeHistory } from "./codemode-history.js";
 import { withOutputTokenFloor, withReasoningEnabled } from "./model-output-floor.js";
@@ -77,6 +84,7 @@ export { QuiesceRejectedError };
  */
 import {
 	existsSync,
+	readFileSync,
 	rmSync,
 	statSync,
 } from "node:fs";
@@ -105,7 +113,7 @@ import { SettingsService } from "./settings-service.js";
 
 import { SlashCommandsService, parseSlash } from "./slash-commands.js";
 import { ModelAdminService } from "./model-admin.js";
-import { FilesService, existingConversationFiles, workspacePath } from "./files-service.js";
+import { FilesService, existingConversationFiles, workspacePath, type FileReadOptions } from "./files-service.js";
 import { CodeSearch } from "./code-search.js";
 import {
 
@@ -231,6 +239,7 @@ export class ClientSession {
 	/** Persisted per-client UI state (last workspace + recent projects). */
 	private readonly stateStore: ClientStateStore;
 	get wikiChats(): WikiChatStore { return new WikiChatStore(join(this.stateStore.dataDir, "wiki")); }
+	readonly knowledgeWiki: WikiService;
 	get connected(): boolean { return this.sinks.size > 0; }
 	private wikiBlankDocuments = new Map<string, SessionManager>();
 	wikiDocumentSession(path: string): SessionManager | undefined {
@@ -276,6 +285,16 @@ export class ClientSession {
 		isDisposed: () => this.disposed,
 		getCwd: () => this.cwd,
 		getActiveCwd: () => this.conv?.cwd ?? this.cwd,
+		resolveEvidence: (conversationId, cwd, id) => {
+			const conv = this.convs.get(conversationId);
+			if (!conv || conv.wiki || this.disposed || this.switchingWorkspace || this.activeId !== conversationId || conv.cwd !== cwd) return;
+			const evidence = branchEvidence(conv.session.sessionManager, conversationId, id);
+			if (!evidence) return;
+			const source = assertKnowledgeEvidenceAccess(evidence, conversationId, cwd, this.knowledgeSourceState());
+			const root = canonicalSourceRoot(source.root);
+			if (evidence.canonicalRoot !== root) return;
+			return { evidence, root };
+		},
 	});
 	/** One ripgrep search at a time per client; a newer request replaces it. */
 	private readonly codeSearch = new CodeSearch((msg) => { if (!this.disposed) this.emit(msg); });
@@ -497,8 +516,12 @@ export class ClientSession {
 		agentDir: string,
 		stateStore: ClientStateStore,
 		thinkingDurationStore: ThinkingDurationStore,
+		knowledgeWiki?: WikiService,
 	) {
 		this.clientId = clientId;
+		this.knowledgeWorkspaces = new ProjectWorkspaceStore(resolve(process.env.PI_WEB_WORKSPACES_FILE || join(stateStore.dataDir, "project-workspaces.json")));
+		this.knowledgeLibrary = new KnowledgeLibrary(stateStore.dataDir);
+		this.knowledgeWiki = knowledgeWiki ?? new WikiService(join(stateStore.dataDir, "wiki"));
 		ClientSession.liveClients.set(clientId, this);
 
 		this.cwd = cwd;
@@ -551,10 +574,11 @@ export class ClientSession {
 		stateStore: ClientStateStore,
 		thinkingDurationStore: ThinkingDurationStore,
 		wiki = false,
+		knowledgeWiki?: WikiService,
 	): Promise<ClientSession> {
 		const agentDir = process.env.PI_CODING_AGENT_DIR ?? getAgentDir();
 
-		const cs = new ClientSession(clientId, cwd, agentDir, stateStore, thinkingDurationStore);
+		const cs = new ClientSession(clientId, cwd, agentDir, stateStore, thinkingDurationStore, knowledgeWiki);
 		cs.wikiClient = wiki;
 		const conversationId = cs.nextConversationId();
 		const terminals = cs.makeTerminalManager(conversationId, cwd);
@@ -595,6 +619,19 @@ export class ClientSession {
 			const extensionFactories = nativeToolExtensions();
 			if (executionTrace) extensionFactories.push({ name: "pi-harness-execution-trace", replaceable: false, factory: createExecutionTraceExtension(executionTrace) });
 			if (!wiki) {
+				const owner = () => [...this.convs.values()].find(item => item.session.sessionManager === sessionManager);
+				extensionFactories.push(knowledgeExtension({
+					getContext: () => owner()?.knowledge.active,
+					sourceState: () => this.knowledgeSourceState(),
+					skillFiles: () => owner()?.session.resourceLoader.getSkills().skills.map(skill => skill.filePath) ?? [],
+					parent: () => {
+						const session = owner()?.session;
+						if (!session?.model) throw new Error("Knowledge parent model unavailable");
+						return { model: session.model, thinkingLevel: session.thinkingLevel, modelRuntime: session.modelRuntime, agentDir: this.agentDir };
+					},
+					recordEvidence: evidence => sessionManager.appendCustomEntry(KNOWLEDGE_EVIDENCE_ENTRY, { sessionId: sessionManager.getSessionId(), evidence }),
+					wiki: this.knowledgeWiki,
+				}));
 				extensionFactories.push({ name: "background-bash", replaceable: true, factory: backgroundBash(sessionManager, settings, () => this.scheduleSnapshot(), view => executionTrace?.backgroundCommand(view)) });
 				if (process.env.PI_EMBEDDED_BROWSER === "1" && process.send) extensionFactories.push({
 					name: "pi-harness-browser", factory: embeddedBrowser(this.clientId, () => {
@@ -650,6 +687,7 @@ export class ClientSession {
 	): Conversation {
 		return {
 			id,
+			knowledge: emptyKnowledgeState(),
 			recovery: {},
 			webUi: new WebUIContext(msg => this.emit(msg), id, () => `${runtime.cwd} · ${this.convs.get(id)?.title ?? conversationTitle(runtime.session)}`),
 			title: runtime.session.sessionManager.getSessionName() || conversationTitle(runtime.session),
@@ -813,6 +851,15 @@ export class ClientSession {
 	private boundUiSessions = new WeakSet<AgentSession>();
 	private async bindSession(conv = this.conv): Promise<void> {
 		if (this.disposed || this.convs.get(conv.id) !== conv) return;
+		if (conv.session !== conv.runtime.session) {
+			conv.knowledge.active = undefined;
+			conv.knowledge.pending = [];
+			conv.knowledge.evidence.clear();
+			conv.knowledge.evidenceOrder = [];
+			conv.knowledge.nativeSteering = [];
+			conv.knowledge.nativeFollowUp = [];
+			this.refreshKnowledgeQueue(conv);
+		}
 		conv.runRecovery?.dispose();
 		conv.unsubscribe?.();
 		if (conv.session !== conv.runtime.session) {
@@ -1031,8 +1078,10 @@ export class ClientSession {
 				break;
 			}
 			case "queue_update":
-				conv.queueSteering = event.steering.map(skillAwareTitleText).map(text => text.length > 2000 ? text.slice(0, 2000) + "…" : text);
-				conv.queueFollowUp = event.followUp.map(skillAwareTitleText).map(text => text.length > 2000 ? text.slice(0, 2000) + "…" : text);
+				conv.knowledge.nativeSteering = event.steering.map(skillAwareTitleText);
+				conv.knowledge.nativeFollowUp = event.followUp.map(skillAwareTitleText);
+				this.refreshKnowledgeQueue(conv);
+				this.scheduleKnowledgeDrain(conv);
 				break;
 			// A run finished or a new entry was persisted — keep the session list fresh
 			// (new chat + first message, completed turns, compaction, etc.).
@@ -1052,6 +1101,7 @@ export class ClientSession {
 					this.settingsSvc.consumePendingReload();
 					void this.applySettingsReload();
 				}
+				this.scheduleKnowledgeDrain(conv);
 				break;
 			}
 			case "entry_appended":
@@ -1528,8 +1578,17 @@ export class ClientSession {
 		const previous = this.recalledQueues.get(requestId);
 		if (previous) { this.emit(previous); return; }
 		if (this.recalledQueues.size >= 8) { this.emitNotice("warning", "请先接收已撤回的消息，再继续撤回。"); return; }
+		const pending = conv.knowledge.pending.splice(0);
 		const restored = recallPending(conv.session);
-		const result: Extract<ServerMessage, { type: "queue_recalled" }> = { type: "queue_recalled", conversationId, requestId, text: [...restored.steering, ...restored.followUp].join("\n\n"), images: restored.images };
+		conv.knowledge.nativeSteering = [];
+		conv.knowledge.nativeFollowUp = [];
+		this.refreshKnowledgeQueue(conv);
+		const attachments = pending.flatMap(item => item.attachments ?? []);
+		const result: Extract<ServerMessage, { type: "queue_recalled" }> = {
+			type: "queue_recalled", conversationId, requestId,
+			text: [...restored.steering, ...restored.followUp, ...pending.map(item => item.text)].join("\n\n"), images: restored.images,
+			...(attachments.length ? { attachments } : {}),
+		};
 		this.recalledQueues.set(requestId, result);
 		this.emit(result);
 		this.flushSnapshot();
@@ -1685,6 +1744,7 @@ export class ClientSession {
 	/** Slash-command catalog + native command execution — 自包含模块，见
 	 *  slash-commands.ts（内置命令拦截 + 扩展/模板/技能目录推送）。 */
 	private readonly slash = new SlashCommandsService({
+		knowledgeEnabled: () => !this.conv.wiki,
 		isModelVisible: provider => this.sources?.visible(provider) ?? isSelectableProvider(provider),
 		emit: (msg) => this.emit(msg),
 		cwd: () => this.cwd,
@@ -1841,6 +1901,93 @@ export class ClientSession {
 		return n;
 	}
 
+	private refreshKnowledgeQueue(conv: Conversation): void {
+		const preview = (text: string) => {
+			const value = skillAwareTitleText(text);
+			return value.length > 2000 ? `${value.slice(0, 2000)}…` : value;
+		};
+		conv.queueSteering = [...conv.knowledge.nativeSteering, ...conv.knowledge.pending.filter(item => !item.queue).map(item => preview(item.normalizedText))];
+		conv.queueFollowUp = [...conv.knowledge.nativeFollowUp, ...conv.knowledge.pending.filter(item => item.queue).map(item => preview(item.normalizedText))];
+	}
+
+	private readonly submitting = new Map<Conversation, number>();
+	private readonly preparingKnowledge = new Map<Conversation, AbortController>();
+
+	private scheduleKnowledgeDrain(conv: Conversation): void {
+		if (this.disposed) return;
+		setImmediate(() => {
+			if (this.disposed || this.convs.get(conv.id) !== conv) return;
+			const state = conv.knowledge;
+			if (state.draining || this.submitting.has(conv)) return;
+			if (conv.session.isStreaming || conv.runRecovery?.pending || state.nativeSteering.length || state.nativeFollowUp.length || conv.tree?.busy) {
+				if ((state.active || state.pending.length) && conv.runRecovery?.pending && !conv.session.isStreaming) setTimeout(() => this.scheduleKnowledgeDrain(conv), 100);
+				return;
+			}
+			state.active = undefined;
+			if (this.activeId !== conv.id) return;
+			const next = state.pending.shift();
+			this.refreshKnowledgeQueue(conv);
+			if (!next) { this.flushSnapshot(); return; }
+			state.draining = true;
+			void this.deliverAcceptedPrompt(next.text, next.attachments, next.queue, next.requestId, undefined, undefined, true)
+				.finally(() => {
+					state.draining = false;
+					this.refreshKnowledgeQueue(conv);
+					this.scheduleKnowledgeDrain(conv);
+				});
+		});
+	}
+
+	private readonly knowledgeWorkspaces: ProjectWorkspaceStore;
+	private readonly knowledgeLibrary: KnowledgeLibrary;
+
+	private knowledgeSourceState() {
+		return {
+			catalog: this.knowledgeWorkspaces.read(),
+			library: this.knowledgeLibrary.read(),
+		};
+	}
+
+	private async prepareKnowledgeRequest(conv: Conversation, mode: "ask" | "learn", args: string, rawCommand: string, requestId: string, signal: AbortSignal): Promise<KnowledgeRequestContext> {
+		const session = conv.session;
+		if (conv.wiki) throw new Error("Learn 和 Ask 仅在普通对话中可用");
+		if (session.extensionRunner.getCommand(`skill:${mode}`)) throw new Error(`/skill:${mode} 已被其他扩展命令拦截，无法保证知识权限`);
+		for (const name of toolsForKnowledgeMode(mode)) if (!validKnowledgeTool(session, name)) throw new Error(`Knowledge tool ${name} is unavailable or replaced`);
+		const skill = session.resourceLoader.getSkills().skills.find(item => item.name === mode);
+		if (!skill) throw new Error(`Knowledge Skill ${mode} 未加载`);
+		readFileSync(skill.filePath, "utf8");
+		const state = this.knowledgeSourceState();
+		let workspaceId: string | undefined;
+		const initial = resolveWorkspaceScope({ cwd: conv.cwd }, state);
+		if (initial.issue === "ambiguous_workspace") {
+			const options = initial.candidates.map(candidate => `${candidate.name} (${candidate.id})`);
+			const selected = await conv.webUi.select("选择本次知识请求的 Workspace", options, { signal });
+			if (!selected) throw new Error("已取消知识请求：需要选择 Workspace");
+			workspaceId = initial.candidates[options.indexOf(selected)]?.id;
+			if (!workspaceId) throw new Error("Workspace 选择已失效");
+		} else if (initial.issue) throw new Error(`当前 Workspace 不可用：${initial.issue}`);
+		else workspaceId = initial.scope.workspaceId;
+		let scope = resolveWorkspaceScope({ cwd: conv.cwd, workspaceId }, state).scope;
+		for (let attempt = 0; attempt < 8; attempt++) {
+			try { scope = resolveRequestScope(args, scope); break; }
+			catch (error) {
+				if (!(error instanceof KnowledgeScopeError) || error.sources.length < 2) throw error;
+				const options = error.sources.map(source => `${source.name} — ${source.root}`);
+				const selected = await conv.webUi.select("选择限定来源", options, { signal });
+				if (!selected) throw new Error("已取消知识请求：限定来源仍有歧义");
+				const source = error.sources[options.indexOf(selected)];
+				if (!source) throw new Error("来源选择已失效");
+				args = args.replace(new RegExp(source.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"), source.id);
+				if (attempt === 7) throw new Error("未能确定本次检索范围");
+			}
+		}
+		signal.throwIfAborted();
+		return {
+			mode, requestId, conversationId: conv.id, sessionId: session.sessionId, root: "", rawCommand, skillPath: skill.filePath,
+			scope, evidence: conv.knowledge.evidence, evidenceOrder: conv.knowledge.evidenceOrder,
+		};
+	}
+
 	queryPromptReceipt(requestId: string): PromptResult {
 		return promptReceiptsFor(this.stateStore.dataDir).query(this.clientId, requestId);
 	}
@@ -1877,21 +2024,43 @@ export class ClientSession {
 		requestId?: string,
 		onAccepted?: (ok: boolean) => void,
 		onReceipt?: (result: PromptResult) => void,
+		fromQueue = false,
 	): Promise<void> {
 		const conv = this.conv;
 		const receiptSessionId = conv.session.sessionId;
-		// Plain queued/steering prompts cancel automatic continuation while
-		// allowing the interrupted reply to be isolated. Commands may navigate.
-		conv.runRecovery?.cancel(false, !parseSlash(text));
+		const knowledge = parseKnowledgeCommand(text);
+		const commandText = knowledge?.normalizedText ?? text;
+		const knowledgeRequestId = knowledge ? requestId ?? `${receiptSessionId}:knowledge-${++this.promptTraceSeq}` : requestId;
+		let preparedKnowledge: KnowledgeRequestContext | undefined;
 		let releaseModels: (() => void) | undefined;
 		let sideEffectsStarted = false;
 		let acknowledged = false;
 		const acknowledge = (ok: boolean, commandExecuted?: boolean) => {
-			if (acknowledged) return;
+			if (acknowledged || fromQueue) return;
 			acknowledged = true;
 			if (requestId) (onReceipt ?? (result => this.emit(result)))({ type: "prompt_result", requestId, conversationId: conv.id, sessionId: receiptSessionId, ok, commandExecuted, attachmentsConsumed: ok && !commandExecuted, receipt: ok ? "accepted" : sideEffectsStarted ? "unknown" : "rejected" });
 			onAccepted?.(ok);
 		};
+		const holdForKnowledge = !!knowledge || !!conv.knowledge.active || this.preparingKnowledge.has(conv) || conv.knowledge.pending.length > 0;
+		if (!fromQueue && holdForKnowledge && (this.submitting.has(conv) || conv.knowledge.draining || conv.knowledge.active || conv.knowledge.pending.length || conv.session.isStreaming || conv.runRecovery?.pending || conv.knowledge.nativeSteering.length || conv.knowledge.nativeFollowUp.length || (knowledge && conv.tree?.busy))) {
+			if (this.quiesceBlocked()) { acknowledge(false); return; }
+			conv.knowledge.pending.push({ text, normalizedText: commandText, attachments, queue, requestId });
+			this.refreshKnowledgeQueue(conv);
+			acknowledge(true);
+			if (this.executionTraces.enabled) {
+				const hostRequestId = knowledgeRequestId ?? `${receiptSessionId}:host-${++this.promptTraceSeq}`;
+				this.executionTraces.promptAccepted(receiptSessionId, conv.id, hostRequestId, "queued");
+			}
+			this.flushSnapshot();
+			this.scheduleKnowledgeDrain(conv);
+			return;
+		}
+		this.submitting.set(conv, (this.submitting.get(conv) ?? 0) + 1);
+		const preparation = knowledge ? new AbortController() : undefined;
+		if (preparation) this.preparingKnowledge.set(conv, preparation);
+		// Plain queued/steering prompts cancel automatic continuation while
+		// allowing the interrupted reply to be isolated. Commands may navigate.
+		conv.runRecovery?.cancel(false, !parseSlash(commandText));
 		try {
 			if (this.creatingConversation || this.openingHistory) throw new Error("Conversation is changing; retry when ready");
 			if (this.restartingSession) throw new Error("当前会话正在重启，请稍后重试。");
@@ -1901,27 +2070,27 @@ export class ClientSession {
 			// A failed rebuild stays recoverable through /restart, which rebuilds
 			// from the original session file without touching the dead session.
 			if (conv.rebuilding) {
-				if (parseSlash(text)?.name !== "restart" || this.forcedResets.has(conv)) throw new Error("当前会话正在强制重建或恢复失败，请输入 /restart 重试或新开对话。");
+				if (parseSlash(commandText)?.name !== "restart" || this.forcedResets.has(conv)) throw new Error("当前会话正在强制重建或恢复失败，请输入 /restart 重试或新开对话。");
 				sideEffectsStarted = true;
 				await this.restartSession(conv.id);
 				acknowledge(true, true);
 				this.flushSnapshot();
 				return;
 			}
-			if (!["tree", "fork"].includes(parseSlash(text)?.name ?? "")) await conv.tree?.waitForVerification();
+			if (!["tree", "fork"].includes(parseSlash(commandText)?.name ?? "")) await conv.tree?.waitForVerification();
 			const s = conv.session;
-			if (parseSlash(text)?.name !== "restart") {
+			if (parseSlash(commandText)?.name !== "restart") {
 				await flushPromptReload(s);
 				const promptReloadError = promptReloadStatus(s).reloadError;
 				if (promptReloadError) throw new Error(`Native prompt reload failed: ${promptReloadError}`);
 			}
 			if (this.conv !== conv || conv.session !== s || conv.rebuilding) throw new Error("Conversation changed");
-			const extensionCommand = text.startsWith("/") && s.extensionRunner.getCommand(text.slice(1).split(" ", 1)[0]);
+			const extensionCommand = commandText.startsWith("/") && s.extensionRunner.getCommand(commandText.slice(1).split(" ", 1)[0]);
 			if (!extensionCommand) { attachments = resolveNativeAttachments(s, attachments); validateEditorSnapshots(this.cwd, attachments); }
 			// Native slash commands (see NATIVE_COMMANDS) are executed here and
 			// never reach the SDK. Extension / skill / template commands fall
 			// through — AgentSession.prompt() handles those itself.
-			const slash = parseSlash(text);
+			const slash = parseSlash(commandText);
 			if (slash) sideEffectsStarted = true;
 			if (slash && (await this.slash.exec(slash.name, slash.args, { conversationId: conv.id, requestId: requestId ?? `reload-${Date.now()}` }))) {
 				acknowledge(true, true);
@@ -1939,8 +2108,8 @@ export class ClientSession {
 				if (!updated && this.sources?.owns(s.model.provider)) throw new Error("当前模型已移除，请选择其他模型");
 				if (updated && modelConfigurationChanged(updated, s.model)) await s.setModel(updated);
 			}
-			if (conv.title === DEFAULT_CONV_TITLE && text.trim()) {
-				const temporary = skillAwareTitleText(text).trim().replace(/\s+/g, " ");
+			if (conv.title === DEFAULT_CONV_TITLE && commandText.trim()) {
+				const temporary = skillAwareTitleText(commandText).trim().replace(/\s+/g, " ");
 				conv.title = temporary.length > 30 ? `${temporary.slice(0, 30)}…` : temporary;
 				this.emitConversations();
 			}
@@ -1959,13 +2128,32 @@ export class ClientSession {
 			if (this.conv !== conv || conv.session !== s || conv.rebuilding) throw new Error("Conversation changed");
 			if (!s.isStreaming) { conv.toolsExecutedSincePrompt = false; conv.lastTaskEndedAt = undefined; }
 			conv.toolTextContinues = 0;
-				sideEffectsStarted = true;
-			await deliverPrompt(s, text, asides, queue, acknowledge, disposition => {
-				if (!this.executionTraces.enabled) return;
-				const hostRequestId = requestId ?? `${receiptSessionId}:host-${++this.promptTraceSeq}`;
-				this.executionTraces.promptAccepted(receiptSessionId, conv.id, hostRequestId, disposition);
-			});
+			if (knowledge) {
+				preparedKnowledge = await this.prepareKnowledgeRequest(conv, knowledge.mode, knowledge.args, knowledge.normalizedText, knowledgeRequestId!, preparation!.signal);
+				if (this.conv !== conv || conv.session !== s || conv.rebuilding) throw new Error("Conversation changed");
+				conv.knowledge.active = preparedKnowledge;
+			}
+			sideEffectsStarted = true;
+			try {
+				await deliverPrompt(s, commandText, asides, queue, acknowledge, disposition => {
+					if (!this.executionTraces.enabled) return;
+					const hostRequestId = knowledgeRequestId ?? `${receiptSessionId}:host-${++this.promptTraceSeq}`;
+					this.executionTraces.promptAccepted(receiptSessionId, conv.id, hostRequestId, disposition);
+				});
+				if (preparedKnowledge) {
+					preparedKnowledge.root = s.sessionManager.getBranch().findLast(entry => {
+						if (entry.type !== "message" || entry.message.role !== "user") return false;
+						const content = entry.message.content;
+						const text = typeof content === "string" ? content : content.filter(part => part.type === "text").map(part => part.text).join("\n");
+						return text !== TOOL_TEXT_CONTINUE_PROMPT;
+					})?.id ?? "";
+				}
+			} catch (error) {
+				if (conv.knowledge.active === preparedKnowledge) conv.knowledge.active = undefined;
+				throw error;
+			}
 		} catch (err) {
+			if (conv.knowledge.active === preparedKnowledge) conv.knowledge.active = undefined;
 			acknowledge(false);
 			this.emit({
 				type: "notice",
@@ -1973,6 +2161,11 @@ export class ClientSession {
 				conversationId: conv.id,
 				text: `提示发送失败：${(err as Error).message}`,
 			});
+		} finally {
+			const remaining = (this.submitting.get(conv) ?? 1) - 1;
+			if (remaining) this.submitting.set(conv, remaining); else this.submitting.delete(conv);
+			if (this.preparingKnowledge.get(conv) === preparation) this.preparingKnowledge.delete(conv);
+			this.scheduleKnowledgeDrain(conv);
 		}
 		releaseModels?.();
 		// The active conversation has been continued since it was opened — it
@@ -2015,6 +2208,9 @@ export class ClientSession {
 		const conv = this.conv;
 		const pendingRecovery = conv.runRecovery?.pending;
 		conv.runRecovery?.cancel(true);
+		this.preparingKnowledge.get(conv)?.abort();
+		conv.knowledge.pending = [];
+		this.refreshKnowledgeQueue(conv);
 		if (!pendingRecovery || !conv.session.isIdle) await this.interruptRun(conv, "已停止");
 		conv.runningToolNames.clear();
 		if (conv.stallNoticed) this.emit({ type: "agent_silence", conversationId: conv.id, phase: "active", since: Date.now(), activity: "model" });
@@ -2501,6 +2697,7 @@ export class ClientSession {
 		if (!this.convs.has(id) || id === this.activeId) return;
 		const displaced = this.displaceActive();
 		this.activeId = id;
+		this.scheduleKnowledgeDrain(this.conv);
 		this.cwd = this.conv.cwd;
 		// All listed conversations share the current project's cwd, so this is
 		// normally a no-op — kept defensive for stale clients.
@@ -3048,7 +3245,7 @@ export class ClientSession {
 	}
 
 	/** Read a workspace file for the preview panel (size-capped, binary-safe). */
-	async readFile(relPath: string, options?: { requestId?: string; cwd?: string }): Promise<void> {
+	async readFile(relPath: string, options?: FileReadOptions): Promise<void> {
 		return this.files.readFile(relPath, options);
 	}
 
@@ -3183,6 +3380,7 @@ export class ClientSession {
 			this.conv.promptedSinceActive = false;
 			this.conv.lastActiveAt = Date.now();
 			this.cwd = abs;
+			this.scheduleKnowledgeDrain(this.conv);
 			this.files.unwatchGit();
 			this.files.unwatchDir();
 			if (source !== "ui") {
@@ -3428,10 +3626,14 @@ export class AgentService {
 	 *  PluginManager.notifyCwd，让插件宿主的 host.cwd 实时跟随当前项目。 */
 	onClientCwdChanged: ((cwd: string) => void) | undefined = undefined;
 
+	readonly knowledgeWiki: WikiService;
+
 	constructor(
 		private cwd: string,
 		stateFile: string,
+		knowledgeWiki?: WikiService,
 	) {
+		this.knowledgeWiki = knowledgeWiki ?? new WikiService(join(dirname(stateFile), "wiki"));
 		this.stateStore = new ClientStateStore(stateFile);
 		this.thinkingDurationStore = new ThinkingDurationStore(join(dirname(stateFile), "thinking-durations.json"));
 		const idleMs = clientIdleMsFromEnv(process.env.PI_WEB_CLIENT_IDLE_MINUTES);
@@ -3568,6 +3770,7 @@ export class AgentService {
 					this.stateStore,
 					this.thinkingDurationStore,
 					!!wikiCwd,
+					this.knowledgeWiki,
 				).finally(() => {
 					this.pending.delete(clientId);
 				});

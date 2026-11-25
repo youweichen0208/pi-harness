@@ -8,10 +8,10 @@ import { statSync } from "node:fs";
 import { extname, basename } from "node:path";
 
 /** Wiki uses the same authenticated client and original SDK session as chat. */
-export function installWikiRoutes(app: Express, service: () => AgentService, dataDir: string, originAllowed: (req: Request) => boolean, projects: () => ProjectWorkspaceCatalog) {
+export function installWikiRoutes(app: Express, service: () => AgentService, dataDir: string, originAllowed: (req: Request) => boolean, projects: () => ProjectWorkspaceCatalog, sharedWiki?: WikiService) {
 	const seen = new Set<string>();
 	const notebooks = notebookKernels(dirname(dataDir));
-	const wiki = new WikiService(dataDir);
+	const wiki = sharedWiki ?? new WikiService(dataDir);
 	app.post("/api/wiki", async (req, res) => {
 		res.setHeader("Cache-Control", "no-store");
 		if (!originAllowed(req) || !req.is("application/json")) { res.status(403).json({ error: "Forbidden" }); return; }

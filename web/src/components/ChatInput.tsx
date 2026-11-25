@@ -101,6 +101,7 @@ interface ChatInputProps {
 	onNotice: (level: "info" | "warning" | "error", text: string) => void;
 	/** Called after a prompt is successfully sent — clears pending attachments. */
 	onSent: (conversationId: string, sent: ChatInputProps["attachments"]) => void;
+	onRestoreAttachments?: (attachments: PromptAttachment[]) => void;
 	/** Opens the custom-model config modal (mobile input row). */
 	onManageModels: () => void;
 }
@@ -127,6 +128,7 @@ export const ChatInput = memo(function ChatInput({
 	onAddLocalFiles,
 	onNotice,
 	onSent,
+	onRestoreAttachments,
 	onManageModels,
 }: ChatInputProps) {
 	const t = useT();
@@ -698,7 +700,7 @@ export const ChatInput = memo(function ChatInput({
 			<TreeDraftRestore conversationId={activeConversationId} active={active} text={text} replace={setText} restoreImages={images => onAddImageFiles(images.map((image, index) => {
 				const bytes = Uint8Array.from(atob(image.data), char => char.charCodeAt(0));
 				return new File([bytes], `recalled-${index}.${image.mimeType.split("/")[1] ?? "png"}`, { type: image.mimeType });
-			}))} />
+			}))} restoreAttachments={onRestoreAttachments} />
 			{workingStatus && <div className="composer-working">{workingStatus}</div>}
 			{pendingCount > 0 && <div className="composer-queue">
 				<div className="composer-queue-head">

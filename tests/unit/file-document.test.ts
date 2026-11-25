@@ -91,3 +91,30 @@ it("disabled and disposed files cannot supply a current-file snapshot", () => {
 	expect(document.context).not.toBeNull();
 	close(); expect(document.readContext(document.id)).toBeNull();
 });
+it("requires the citation and conversation on replies and keeps even a complete source read-only", () => {
+	vi.useFakeTimers();
+	const sent: ClientMessage[] = [];
+	const evidence = { id: "ev_1", conversationId: "conversation", sessionId: "session", openId: "preview" };
+	const file = { cwd: "/work", path: "", name: "", evidence };
+	const document = new FileDocument(file, message => { sent.push(message); return true; }, true);
+	const close = document.connect();
+	const request = sent[0];
+	if (request.type !== "read_file") throw new Error("Expected evidence read");
+	expect(request).toMatchObject({ path: "", evidenceId: evidence.id, conversationId: evidence.conversationId });
+	const reply: Extract<ServerMessage, { type: "file_content" }> = { type: "file_content", cwd: file.cwd, path: "guide.md", name: "guide.md",
+		conversationId: evidence.conversationId, requestId: request.requestId, kind: "text", text: "# Guide", size: 7, lines: 1, binary: false, truncated: false,
+		evidence: { ...evidence, path: "guide.md", requestId: "ask", sourceName: "notes", sourceKind: "knowledge", sourceId: "source",
+			startLine: 1, endLine: 1, fingerprint: "hash", workingTree: "unknown" } };
+	document.receiveContent({ ...reply, conversationId: "other" });
+	document.receiveContent({ ...reply, evidence: undefined });
+	document.receiveContent({ ...reply, requestId: "old" });
+	expect(document.getSnapshot().loaded).toBeNull();
+	document.receiveContent(reply);
+	expect(document.getSnapshot().loaded).toEqual(reply);
+	document.edit("changed"); document.externalChanged(); vi.advanceTimersByTime(801);
+	expect(document.getSnapshot().draft).toBe("# Guide");
+	expect(document.context).toBeNull();
+	expect(document.save(true)).toBe(false);
+	expect(sent).toHaveLength(1);
+	close();
+});

@@ -58,7 +58,7 @@ execFileSync(executable, ["--input-type=module", "--eval", `
 		assert.deepEqual(loader.getPrompts().prompts, []);
 		for (const skill of loader.getSkills().skills) assert.equal(skill.filePath, join(process.cwd(), 'assets/skills', skill.name, 'SKILL.md'));
 		await loader.reload();
-		assert.equal(loader.getSkills().skills.length, 9);
+		assert.equal(loader.getSkills().skills.length, 11);
 		const wiki = new DefaultResourceLoader({cwd:root,agentDir:root,settingsManager:SettingsManager.inMemory(),noExtensions:true,noSkills:true,noThemes:true,noContextFiles:true,noPromptTemplates:true,...engineeringResources('wiki')});
 		await wiki.reload();
 		assert.deepEqual(wiki.getSkills().skills, []);
@@ -255,3 +255,8 @@ try {
 	}
 	rmSync(temp, { recursive: true, force: true });
 }
+
+// Exercise the Knowledge extension through the packaged service and its own ripgrep.
+execFileSync(process.execPath, [resolve("tests/knowledge-engine-test.mjs"), "--package", appRoot, "--executable", executable], {
+	env: testEnv(), timeout: 180000, stdio: "inherit",
+});

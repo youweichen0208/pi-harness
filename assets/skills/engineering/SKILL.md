@@ -48,7 +48,7 @@ Verification is complete when important findings are resolved and every check is
 
 For Feature and Complex work, read `knowledge-sync` and check the project's existing authoritative documentation. For Quick Fix, skip Evolve unless the change produced a durable fact worth recording; when it did, read `knowledge-sync` for that fact only. Archive the change document only when the project has an archive convention and every required acceptance criterion is satisfied.
 
-Use `/skill:reflect` only when the user explicitly requests durable lessons; it is not a delivery step.
+Use `/skill:learn` or `/skill:reflect` only when the user explicitly requests knowledge distillation or durable lessons; neither is a delivery step.
 
 ## Resume and finish
 

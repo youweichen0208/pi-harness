@@ -12,6 +12,7 @@ import { taskChanges } from "./changes";
 import { ChangesPanel } from "./components/ChangesPanel";
 import { useToolRecovery } from "./use-tool-recovery";
 import { randomUuid } from "./uuid";
+import { PROJECT_WORKSPACE_SELECTION_EVENT } from "./project-workspaces";
 import { SessionTreeWorkbench } from "./components/SessionTreeWorkbench";
 import { TraceWorkbench } from "./components/TraceWorkbench";
 import { RecoveryStatus } from "./components/RecoveryStatus";
@@ -102,7 +103,7 @@ import {
 	type SoundSettings,
 } from "./sounds";
 
-export interface PendingAttachment {
+export interface PendingAttachment extends PromptAttachment {
 	path: string;
 	name: string;
 	mode: "inline" | "reference" | "lines";
@@ -339,13 +340,13 @@ export function App() {
 		}
 	}, [chat.activeConversationId, attachments]);
 	const [previewFile, setPreviewFile] = useState<PreviewFile | null>(null);
-	const documentPreview = !!previewFile && /\.(md|markdown)$/i.test(previewFile.path);
-	const codePreview = !!previewFile && !isWikiWindow && !documentPreview && !/\.svg$/i.test(previewFile.name) && !!langFromPath(previewFile.name);
+	const documentPreview = !!previewFile && !previewFile.evidence && /\.(md|markdown)$/i.test(previewFile.path);
+	const codePreview = !!previewFile && !previewFile.evidence && !isWikiWindow && !documentPreview && !/\.svg$/i.test(previewFile.name) && !!langFromPath(previewFile.name);
 	const inlinePreview = !!previewFile && !documentPreview && !codePreview;
 	const previousPreview = useRef<PreviewFile | null>(null);
 	useLayoutEffect(() => {
 		const previous = previousPreview.current;
-		if (previous && (previous.cwd !== previewFile?.cwd || previous.path !== previewFile?.path)) {
+		if (previous && !previous.evidence && (previous.cwd !== previewFile?.cwd || previous.path !== previewFile?.path)) {
 			setAttachments(keepNonPreviewAttachments);
 			for (const [id, draft] of attachmentDrafts.current) {
 				attachmentDrafts.current.set(id, keepNonPreviewAttachments(draft));
@@ -362,9 +363,17 @@ export function App() {
 	const wikiContextReader = useRef<ReadCurrentFile | null>(null);
 	const wikiContextSaver = useRef<SaveCurrentFile | null>(null);
 	const [wikiCurrentFile, setWikiCurrentFile] = useState<CurrentFileContext | null>(null);
+	useLayoutEffect(() => {
+		if (!previewFile) return;
+		const evidence = previewFile.evidence;
+		if (evidence && (switching || evidence.conversationId !== chat.activeConversationId || evidence.sessionId !== conversationState?.sessionId)
+			|| !switching && chat.state?.cwd && previewFile.cwd !== chat.state.cwd) setPreviewFile(null);
+	}, [switching, chat.state?.cwd, chat.activeConversationId, conversationState?.sessionId, previewFile]);
 	useEffect(() => {
-		if (!switching && chat.state?.cwd && previewFile && previewFile.cwd !== chat.state.cwd) setPreviewFile(null);
-	}, [switching, chat.state?.cwd, previewFile]);
+		const closeEvidence = () => setPreviewFile(current => current?.evidence ? null : current);
+		window.addEventListener(PROJECT_WORKSPACE_SELECTION_EVENT, closeEvidence);
+		return () => window.removeEventListener(PROJECT_WORKSPACE_SELECTION_EVENT, closeEvidence);
+	}, []);
 	const fileGuard = useRef<FileNavigationGuard | null>(null);
 	const wikiGuard = useRef<((next: () => void, cancel?: () => void) => void) | null>(null);
 	const { coordinator: wikiCoordinator, busy: wikiBusy } = useWikiCoordinator(chat.state?.conversationId ?? "", !!chat.state?.isStreaming, chat.ready && !switching, chat.state?.sessionId);
@@ -884,6 +893,23 @@ export function App() {
 		} else open();
 	}, [switching, chat.state?.cwd, chat.state?.model?.provider, chat.state?.model?.id, chat.state?.thinkingLevel, view, openWikiDocument]);
 	useEffect(() => {
+		const onEvidence = (event: Event) => {
+			const { id, line } = (event as CustomEvent<{ id?: unknown; line?: unknown }>).detail ?? {};
+			if (view !== "chat" || isWikiWindow || switching || !conversationState || !chat.ready || typeof id !== "string" || !/^ev_[a-f0-9]{32}$/.test(id)) return;
+			if (line !== undefined && (typeof line !== "number" || !Number.isSafeInteger(line) || line < 1)) return;
+			const { cwd, conversationId, sessionId } = conversationState;
+			const open = () => {
+				setBrowserOwner(undefined);
+				setDrawer("right");
+				setPreviewFile({ cwd, path: "", name: "", evidence: { id, line, conversationId, sessionId, openId: randomUuid() } });
+			};
+			if (fileGuard.current) fileGuard.current(open);
+			else open();
+		};
+		window.addEventListener("pi-harness:open-evidence", onEvidence);
+		return () => window.removeEventListener("pi-harness:open-evidence", onEvidence);
+	}, [view, switching, conversationState, chat.ready]);
+	useEffect(() => {
 		const onToolFile = (event: Event) => {
 			const detail = (event as CustomEvent<{ path?: string; line?: number }>).detail;
 			const cwd = chat.state?.cwd?.replaceAll("\\", "/").replace(/\/$/, "");
@@ -1074,6 +1100,19 @@ export function App() {
 		setAttachments((prev) =>
 			prev.filter((a) => (a.key ? a.key !== pathOrKey : a.path !== pathOrKey)),
 		);
+	const restoreAttachments = useCallback((items: PromptAttachment[]) => {
+		const restored = items.map(item => ({ ...item, name: item.name || item.path.split(/[\\/]/).pop() || item.uploadPath?.split(/[\\/]/).pop() || t("attachment"),
+			mode: item.mode ?? "inline", ...(item.path ? {} : { key: randomUuid() }) }));
+		setAttachments(previous => {
+			const next = [...previous];
+			for (const item of restored) {
+				if (!next.some(a => a.path === item.path && a.mode === item.mode && a.lines?.start === item.lines?.start && a.lines?.end === item.lines?.end
+					&& a.imageData === item.imageData && a.fileData === item.fileData && a.uploadPath === item.uploadPath
+					&& a.nativeRef?.entryId === item.nativeRef?.entryId && a.nativeRef?.index === item.nativeRef?.index && a.name === item.name)) next.push(item);
+			}
+			return next;
+		});
+	}, [t]);
 
 	// Side panels live in mobile drawers — any action inside them (session
 	// switch, cwd change, file list…) should close the drawer. Stable wrapper
@@ -1292,7 +1331,7 @@ export function App() {
 	const filePreview = previewFile && <FilePreviewContent autoSave={documentPreview}
 		dialog={documentPreview}
 		onOpenTarget={path => { if (documentPreview) setPreviewFile({ path, name: path.split("/").at(-1) ?? path, cwd: previewFile.cwd }); }}
-		key={`${previewFile.cwd}:${previewFile.path}`}
+		key={previewFile.evidence?.openId ?? `${previewFile.cwd}:${previewFile.path}`}
 		file={previewFile}
 		contextReader={contextReader}
 		contextSaver={contextSaver}
@@ -1563,6 +1602,7 @@ export function App() {
 								onNotice={pushNotice}
 								onManageModels={openManageModels}
 								onSent={clearAttachments}
+								onRestoreAttachments={restoreAttachments}
 							/>
 						</ChatDock>
 						<ChangesPanel key={conversationState?.conversationId ?? ""} cwd={conversationState?.cwd ?? ""} data={chat.scmDiffData} send={send} ready={chat.ready && !switching} notRepo={!workspaceScm.loaded || workspaceScm.notRepo} branch={workspaceScm.branch} defaultBase={workspaceScm.base} branches={workspaceScm.branches} dirty={chat.scmDirty} />

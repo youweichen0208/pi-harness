@@ -27,7 +27,8 @@ pi-harness/
 │   ├── playground-source.ts    # 纯函数：Python 导入错误判定、输出限额、needs-the-project 判定
 │   ├── component-updates.ts    # pi Agent / 扩展版本检查、来源校验与包更新
 │   ├── extension-module-cache.ts # /restart、/reload 与扩展重载刷新扩展模块缓存（registerHooks 代数 + require.cache 清理，issue #64）
-│   ├── engineering-skills.ts     # 普通会话的九项随包 Engineering Skills：路径、同名覆盖、诊断与会话隔离
+│   ├── knowledge-*.ts           # Learn / Ask 请求、登记来源、证据、调查与审批写入，见 architecture-knowledge.md
+│   ├── engineering-skills.ts     # 普通会话的十一项随包 Skills：路径、同名覆盖、诊断与会话隔离
 │   ├── system-prompt-view.ts / system-prompt-files.ts / system-prompt-routes.ts # 原生提示词分段、文件编辑与 reload
 │   ├── session-reload.ts         # 提示词、设置、MCP 与斜杠命令共用的按会话重载队列
 │   ├── settings-service.ts     # 界面偏好与原生资源只读视图（扩展命名见 extension-display.ts）
@@ -91,7 +92,7 @@ pi-harness/
 ├── electron/                   # Electron 桌面版壳子（main.mjs 主进程 + 沙箱兼容的 preload.cjs），本地构建，不进 npm 包
 ├── electron-builder.yml        # Electron 打包配置（mac dmg/zip、win nsis/portable、linux AppImage/deb）
 ├── build/                      # electron-builder 用的图标源文件（icon.png 1024x1024 + icon.ico）；installer.nsh 为 NSIS 安装/卸载前运行中实例检测
-├── assets/skills/              # 九项 Engineering Skills、必要参考、固定上游记录与 MIT License
+├── assets/skills/              # 十一项随包 Skills、必要参考、固定上游记录与 MIT License
 ├── dev/                        # 本地开发辅助（不入 npm 包）
 ├── Dockerfile / docker-compose.yml
 ├── docs/                       # 详细文档（本文件的分拆）

@@ -85,8 +85,13 @@ export function parseSlash(text: string): { name: string; args: string } | null 
 	return { name: m[1], args: m[2].trim() };
 }
 
+export const KNOWLEDGE_COMMANDS = [
+	{ name: "learn", description: "从当前会话提取并沉淀知识", descriptionEn: "Distill and save knowledge from this session", argumentHint: "[主题]", argumentHintEn: "[topic]" },
+	{ name: "ask", description: "结合 Workspace 与知识库查证回答", descriptionEn: "Answer with Workspace and knowledge evidence", argumentHint: "<问题>", argumentHintEn: "<question>" },
+] as const;
+
 export class SlashCommandsService {
-	constructor(private readonly host: SlashHost) {}
+	constructor(private readonly host: SlashHost & { knowledgeEnabled?: () => boolean }) {}
 
 	/**
 	 * Catalog of slash commands for the chat input: web-native builtins first,
@@ -98,6 +103,10 @@ export class SlashCommandsService {
 		const commands: SlashCommandInfo[] = [];
 		const seen = new Set<string>();
 		for (const c of NATIVE_COMMANDS) {
+			commands.push({ ...c, source: "builtin" });
+			seen.add(c.name);
+		}
+		if (this.host.knowledgeEnabled?.()) for (const c of KNOWLEDGE_COMMANDS) {
 			commands.push({ ...c, source: "builtin" });
 			seen.add(c.name);
 		}

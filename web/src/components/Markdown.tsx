@@ -73,7 +73,16 @@ export function MarkdownBody({ text, imageSrc, sourceLines, fileLinks, runnable 
 		<ReactMarkdown remarkPlugins={links} rehypePlugins={rehypePlugins} components={{ pre: ({ children, ...props }) => <PreWithCopy {...props} fileLinks={fileLinks} runnable={runnable}>{children}</PreWithCopy>, li: RouteListItem, a: ({ node: _node, href, children, ...props }) => {
 			const pr = /^https?:\/\/github\.com\/[^/]+\/[^/]+\/pull\/(\d+)(?:[?#].*)?$/.exec(href ?? "");
 			return <a {...props} href={href} className={pr ? "pr-reference" : undefined} onClick={event => {
-				if (href?.startsWith("#pi-change=")) { event.preventDefault(); const path = decodeURIComponent(href.slice(11)); changes?.show(changes.files, path); }
+				if (href?.startsWith("#pi-evidence=")) {
+					event.preventDefault();
+					const id = /^#pi-evidence=(ev_[a-f0-9]{32})$/.exec(href)?.[1];
+					const anchor = /:(\d+)(?:[-–]\d+)?\s*$/.exec(event.currentTarget.textContent ?? "");
+					const line = anchor ? Number(anchor[1]) : undefined;
+					if (id && event.currentTarget.closest(".msg-assistant")) {
+						window.dispatchEvent(new CustomEvent("pi-harness:open-evidence", { detail: { id, line } }));
+					}
+				}
+				else if (href?.startsWith("#pi-change=")) { event.preventDefault(); const path = decodeURIComponent(href.slice(11)); changes?.show(changes.files, path); }
 				else if (fileLinks && href?.startsWith("#pi-file=")) { event.preventDefault(); openLocalFile(href.slice(9)); }
 				else if (changes && href && !/^(?:[a-z]+:|#|\/\/)/i.test(href) && /\.[a-z0-9]+(?:#L\d+)?$/i.test(href)) { event.preventDefault(); const [path, line] = href.split("#L"); const file = changes.files.find(file => file.path === path); if (file) changes.show(changes.files, file.path); else window.dispatchEvent(new CustomEvent("pi-harness:open-tool-file", { detail: { path: decodeURIComponent(path), line: Number(line) || 1 } })); }
 			}}>{pr ? `#${pr[1]}` : children}</a>;

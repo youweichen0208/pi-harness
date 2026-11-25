@@ -1,5 +1,6 @@
 import { workspaceFilePath } from "../workspace-file-path";
 import { useFileDocument } from "../use-file-document";
+import type { FileIdentity } from "../file-document";
 import { UiIcon } from "./UiIcon";
 import type { CurrentFileContext, ReadCurrentFile, SaveCurrentFile } from "../current-file";
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -36,11 +37,7 @@ import { PlaygroundResult } from "./PlaygroundRun";
 const MAX_PREVIEW_LINES = 5000;
 let filePreviewScmRequestId = -5000;
 
-export interface PreviewFile {
-	path: string;
-	name: string;
-	cwd: string;
-}
+export type PreviewFile = FileIdentity;
 
 export type FileNavigationGuard = (action: () => void) => void;
 
@@ -81,6 +78,7 @@ interface Range {
 
 export const FilePreviewContent = memo(function FilePreviewContent(props: FilePreviewProps) {
 	const t = useT();
+	if (props.file.evidence) return <EvidencePreview {...props} />;
 	const location = workspaceFilePath(props.file.cwd, props.file.path);
 	if (!location.outside) return <WorkspaceFilePreviewContent {...props} />;
 	const reason = t("fileOutsideWorkspace");
@@ -99,6 +97,37 @@ export const FilePreviewContent = memo(function FilePreviewContent(props: FilePr
 		<div className="fp-empty" role="status">{reason}</div>
 	</div></div>;
 });
+
+function EvidencePreview({ file, send, connected, disabled, content, result, onClose }: FilePreviewProps) {
+	const t = useT();
+	const { document, loaded, loading, error } = useFileDocument(file, send, false, connected, disabled, content, result);
+	const evidence = loaded?.evidence;
+	const firstLine = loaded?.startLine ?? 1;
+	const highlight = useRef<HTMLDivElement>(null);
+	const html = useMemo(() => loaded && !loading && !error
+		? highlightLines(loaded.text, langFromPath(loaded.name)).slice(0, loaded.lines) : [], [loaded, loading, error]);
+	useLayoutEffect(() => { highlight.current?.scrollIntoView({ block: "center" }); }, [html]);
+	const path = evidence ? `${evidence.sourceName}/${evidence.path}:${evidence.startLine}${evidence.endLine > evidence.startLine ? "–" + evidence.endLine : ""}` : t("evidencePreview");
+	return <div className="fp-embedded fp-evidence"><div className="fp">
+		<div className="fp-title-row">
+			<button type="button" className="fp-back" aria-label={t("backToFiles")} title={t("backToFiles")} onClick={onClose}>←</button>
+			<span className="fp-file-path" title={path}>{path}</span>
+			<span className="fp-header-actions">{t("fileReadOnly")}</span>
+		</div>
+		{error ? <div className="fp-empty" role="alert">
+			{t(error.code === "stale_evidence" ? "evidenceStale" : "evidenceUnavailable")}
+			<button type="button" className="btn" disabled={!connected || disabled} onClick={document.reload}>{t("fileReload")}</button>
+		</div> : !evidence || loading ? <div className="fp-empty" role="status">{t("loading")}</div> :
+			<div className="fp-code no-wrap" tabIndex={0} role="region" aria-label={path}>{html.map((line, index) => {
+				const n = firstLine + index;
+				const cited = n >= evidence.startLine && n <= evidence.endLine;
+				return <div key={n} ref={n === (file.evidence?.line ?? evidence.startLine) ? highlight : undefined} data-line={n} className={`fp-line${cited ? " from-tool" : ""}`}>
+					<span className="fp-num">{n}</span>
+					<span className="fp-code-text hljs" dangerouslySetInnerHTML={{ __html: line || "\u200b" }} />
+				</div>;
+			})}</div>}
+	</div></div>;
+}
 
 const WorkspaceFilePreviewContent = memo(function WorkspaceFilePreviewContent({
 	result, guard, disabled, connected, contextReader, contextSaver, onContextChange, autoSave = false,

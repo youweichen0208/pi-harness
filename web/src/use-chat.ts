@@ -1136,10 +1136,12 @@ export function useChat() {
 					dispatch({ type: "prompt_result", result: msg });
 					break;
 				case "file_result":
+					if (msg.evidenceId && (msg.conversationId !== authoritative.current.activeConversationId || msg.cwd !== confirmedCwd.current || switchRef.current)) break;
 					dispatch({ type: "file_result", result: msg });
 					break;
 				case "file_content":
 					if (msg.cwd !== confirmedCwd.current || switchRef.current) break;
+					if (msg.evidence && msg.conversationId !== authoritative.current.activeConversationId) break;
 					dispatch({ type: "file_content", content: msg });
 					break;
 				case "models":
@@ -1254,7 +1256,7 @@ export function useChat() {
 					emitTreeResponse(msg);
 					break;
 				case "queue_recalled":
-					queueTreeDraft({ id: msg.requestId, conversationId: msg.conversationId, text: msg.text, images: msg.images });
+					queueTreeDraft({ id: msg.requestId, conversationId: msg.conversationId, text: msg.text, images: msg.images, attachments: msg.attachments });
 					ws.send(JSON.stringify({ type: "queue_recall_ack", conversationId: msg.conversationId, requestId: msg.requestId }));
 					break;
 				case "extension_editor":

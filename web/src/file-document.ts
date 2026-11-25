@@ -9,14 +9,14 @@ export interface FileDocumentState {
 	draft: string;
 	loading: boolean;
 	status: "saved" | "saving" | "failed";
-	error: { kind: "offline" | "failed"; message?: string } | null;
+	error: { kind: "offline" | "failed"; message?: string; code?: Result["errorCode"] } | null;
 	conflict: boolean;
 	remoteText: string | null;
 	leave: boolean;
 	savedAt: Date;
 	readRevision: number;
 }
-type Identity = { cwd: string; path: string; name: string };
+export type FileIdentity = { cwd: string; path: string; name: string; evidence?: { id: string; conversationId: string; sessionId: string; openId: string; line?: number } };
 
 /** Owns one open file, including the disk baseline used by send and navigation. */
 export class FileDocument {
@@ -35,7 +35,7 @@ export class FileDocument {
 	private connected = true;
 	private disabled = false;
 
-	constructor(readonly file: Identity, private send: (message: ClientMessage) => boolean, private autoSave = false) {}
+	constructor(readonly file: FileIdentity, private send: (message: ClientMessage) => boolean, private autoSave = false) {}
 	getSnapshot = () => this.state;
 	subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
 	private publish(patch: Partial<FileDocumentState>) {
@@ -44,7 +44,7 @@ export class FileDocument {
 		this.schedule();
 	}
 	get dirty() { return this.state.loaded !== null && this.state.draft !== this.state.loaded.text; }
-	get canEdit() { const c = this.state.loaded; return !!c && c.kind === "text" && !c.binary && !c.truncated; }
+	get canEdit() { const c = this.state.loaded; return !this.file.evidence && !!c && c.kind === "text" && !c.binary && !c.truncated; }
 	get eligible() { return this.active && this.canEdit && !this.state.loading && !this.disabled; }
 	get context(): CurrentFileContext | null { return this.eligible ? { ...this.file, id: this.id, dirty: this.dirty } : null; }
 	connect = () => {
@@ -65,7 +65,7 @@ export class FileDocument {
 		}
 		if (changed) this.publish({}); else this.schedule();
 	}
-	edit = (draft: string) => { if (this.active) this.publish({ draft }); };
+	edit = (draft: string) => { if (this.active && !this.file.evidence) this.publish({ draft }); };
 	private schedule() {
 		clearTimeout(this.idleTimer);
 		if (this.active && this.autoSave && this.dirty && this.eligible && this.connected && this.state.status === "saved") {
@@ -79,17 +79,22 @@ export class FileDocument {
 		this.readId = randomUuid();
 		this.publish({ loading: true, error: null });
 		this.readTimer = setTimeout(() => this.failRead(), 15000);
-		if (!this.connected || !this.send({ type: "read_file", ...this.file, requestId: this.readId })) this.failRead();
+		const { cwd, path, evidence } = this.file;
+		if (!this.connected || !this.send({ type: "read_file", cwd, path, requestId: this.readId,
+			...(evidence && { evidenceId: evidence.id, conversationId: evidence.conversationId, line: evidence.line }) })) this.failRead();
 	};
 	externalChanged = () => {
-		if (!this.active || !this.state.loaded || this.disabled || !this.connected) return;
+		if (!this.active || this.file.evidence || !this.state.loaded || this.disabled || !this.connected) return;
 		if (this.pending) { this.compareAfterSave = true; return; }
 		this.compareAfterSave = false;
 		this.compareId = randomUuid();
 		this.send({ type: "read_file", ...this.file, requestId: this.compareId });
 	};
 	receiveContent(content: FileContent | null) {
-		if (!this.active || !content || content.cwd !== this.file.cwd || content.path !== this.file.path) return;
+		if (!this.active || !content || content.cwd !== this.file.cwd) return;
+		const evidence = this.file.evidence;
+		if (evidence ? content.evidence?.id !== evidence.id || content.conversationId !== evidence.conversationId
+			: content.evidence || content.path !== this.file.path) return;
 		if (content.requestId && content.requestId === this.readId) {
 			this.readId = ""; clearTimeout(this.readTimer);
 			this.publish({ loaded: content, draft: content.text, loading: false, conflict: false, status: "saved", error: null, remoteText: null, savedAt: new Date(), readRevision: this.state.readRevision + 1 });
@@ -101,10 +106,13 @@ export class FileDocument {
 		}
 	}
 	receiveResult(result: Result | null) {
-		if (!this.active || !result || result.cwd !== this.file.cwd || result.path !== this.file.path) return;
+		if (!this.active || !result || result.cwd !== this.file.cwd) return;
+		const evidence = this.file.evidence;
+		if (evidence ? result.evidenceId !== evidence.id || result.conversationId !== evidence.conversationId
+			: result.evidenceId || result.path !== this.file.path) return;
 		if (result.operation === "read" && result.requestId === this.readId) {
 			this.readId = ""; clearTimeout(this.readTimer);
-			this.publish({ loading: false, error: { kind: "failed", message: result.error } });
+			this.publish({ loading: false, error: { kind: "failed", message: result.error, code: result.errorCode } });
 		}
 		if (result.operation !== "write" || !this.pending || result.requestId !== this.pending.id) return;
 		const saved = this.pending;

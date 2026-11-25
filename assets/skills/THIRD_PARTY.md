@@ -10,6 +10,8 @@ When copying one of these Skills, include the project license as `LICENSE` in th
 | --- | --- | --- |
 | `engineering/` | [pi-harness MIT](LICENSES/pi-harness-MIT.txt) | [Marked license](engineering/scripts/vendor/marked-LICENSE.txt) |
 | `knowledge-sync/` | [pi-harness MIT](LICENSES/pi-harness-MIT.txt) | — |
+| `learn/` | [pi-harness MIT](LICENSES/pi-harness-MIT.txt) | — |
+| `ask/` | [pi-harness MIT](LICENSES/pi-harness-MIT.txt) | — |
 
 ## Engineering approval helper
 

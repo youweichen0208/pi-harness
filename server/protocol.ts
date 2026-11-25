@@ -610,7 +610,7 @@ export type ClientMessage =
 	/** Confirm conversation file candidates against the current workspace. */
 	| { type: "check_conversation_files"; cwd: string; reqId: number; paths: string[] }
 	/** Read a workspace file for the preview panel (size-capped, binary-safe). */
-	| { type: "read_file"; path: string; requestId?: string; cwd?: string }
+	| { type: "read_file"; path: string; requestId?: string; cwd?: string; evidenceId?: string; conversationId?: string; line?: number }
 	/** Save text edited in the file preview panel. */
 	| { type: "write_file"; path: string; text: string; requestId?: string; cwd?: string; expectedVersion?: string; force?: boolean }
 	| { type: "list_models" }
@@ -839,6 +839,22 @@ export interface SqlitePreviewResponse {
 	path: string;
 	data?: SqlitePreviewData;
 	error?: string;
+}
+
+/** Original source and complete line range of a server-issued Knowledge citation. */
+export interface FileEvidenceView {
+	id: string;
+	requestId: string;
+	conversationId: string;
+	sourceId: string;
+	sourceName: string;
+	sourceKind: "repository" | "knowledge";
+	path: string;
+	startLine: number;
+	endLine: number;
+	fingerprint: string;
+	revision?: string;
+	workingTree: "clean" | "modified" | "untracked" | "unknown";
 }
 
 export interface FileEntry {
@@ -1112,7 +1128,7 @@ export type ServerMessage =
 	| PlaygroundChatEvent
 	| TraceResult
 	| SessionExportResult
-	| { type: "queue_recalled"; conversationId: string; requestId: string; text: string; images: { data: string; mimeType: string }[] }
+	| { type: "queue_recalled"; conversationId: string; requestId: string; text: string; images: { data: string; mimeType: string }[]; attachments?: PromptAttachment[] }
 	| TreeResponse
 	| { type: "native_mcp_result"; requestId: string; cwd: string; state?: NativeMcpConfigState; error?: string; pending?: boolean; tools?: string[]; toolInfo?: NativeMcpTool[]; servers?: NativeMcpServerStatus[]; statusText?: string; codemode?: NativeCodemodeSettings; log?: string }
 	| { type: "node_event"; requestId?: string; event: string; nodeId?: string; terminalId?: string; conversationId?: string; data?: Record<string, unknown>; error?: string }
@@ -1261,10 +1277,14 @@ export type ServerMessage =
 	 *  10s polling). */
 	| { type: "file_changed"; path: string }
 	| PromptResult
-	| { type: "file_result"; operation: "read" | "write"; requestId?: string; cwd: string; path: string; ok: boolean; version?: string; error?: string; conflict?: boolean }
+	| { type: "file_result"; operation: "read" | "write"; requestId?: string; cwd: string; path: string; ok: boolean; version?: string; error?: string; conflict?: boolean; conversationId?: string; evidenceId?: string; errorCode?: "evidence_unavailable" | "stale_evidence" }
 	| {
 			type: "file_content";
 			requestId?: string;
+			conversationId?: string;
+			evidence?: FileEvidenceView;
+			/** Original one-based offset for an evidence preview window. */
+			startLine?: number;
 			version?: string;
 			cwd: string;
 			path: string;

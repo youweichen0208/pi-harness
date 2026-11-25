@@ -1,8 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
-import { FileDocument } from "./file-document";
+import { FileDocument, type FileIdentity } from "./file-document";
 import type { ClientMessage, FileContent, ServerMessage } from "./types";
 
-export function useFileDocument(file: { cwd: string; path: string; name: string }, send: (message: ClientMessage) => boolean, autoSave: boolean, connected: boolean, disabled: boolean, content: FileContent | null, result: Extract<ServerMessage, { type: "file_result" }> | null, changed?: { path: string } | null) {
+export function useFileDocument(file: FileIdentity, send: (message: ClientMessage) => boolean, autoSave: boolean, connected: boolean, disabled: boolean, content: FileContent | null, result: Extract<ServerMessage, { type: "file_result" }> | null, changed?: { path: string } | null) {
 	const transport = useRef(send); transport.current = send;
 	// The preview host keys each mount by cwd:path.
 	const [document] = useState(() => new FileDocument(file, message => transport.current(message), autoSave));

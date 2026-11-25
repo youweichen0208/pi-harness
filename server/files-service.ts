@@ -7,8 +7,11 @@
  */
 import { createHash } from "node:crypto";
 import { readFileSync, realpathSync, statSync, writeFileSync, watch } from "node:fs";
-import { isAbsolute, resolve, relative, sep } from "node:path";
-import type { ServerMessage, FileEntry, FileSearchResult } from "./protocol.js";
+import { basename, isAbsolute, resolve, relative, sep } from "node:path";
+import type { ClientMessage, ServerMessage, FileEntry, FileSearchResult } from "./protocol.js";
+import type { KnowledgeEvidence } from "./knowledge-requests.js";
+import { evidenceView, evidenceWindow } from "./knowledge-evidence.js";
+import { readKnowledgeTextFile } from "./knowledge-source-reader.js";
 import { ripgrepFileNames } from "./code-search.js";
 import {
 	previewKind,
@@ -204,7 +207,10 @@ export interface FilesHost {
 	getCwd: () => string;
 	/** SCM 查询的工作区（当前活动对话所属项目，可能与 getCwd 不同）。 */
 	getActiveCwd: () => string;
+	resolveEvidence?: (conversationId: string, cwd: string, id: string) => { evidence: KnowledgeEvidence; root: string } | undefined;
 }
+
+export type FileReadOptions = Omit<Extract<ClientMessage, { type: "read_file" }>, "type" | "path">;
 
 export class FilesService {
 	// ---- 当前列出目录的 watcher ----
@@ -636,7 +642,11 @@ export class FilesService {
 	}
 
 	/** Read a workspace file for the preview panel (size-capped, binary-safe). */
-	async readFile(relPath: string, options: { requestId?: string; cwd?: string } = {}): Promise<void> {
+	async readFile(relPath: string, options: FileReadOptions = {}): Promise<void> {
+		if (options.evidenceId !== undefined) {
+			await this.readEvidence(relPath, options);
+			return;
+		}
 		const cwd = this.host.getCwd();
 		try {
 			if (options.cwd !== undefined && options.cwd !== cwd) throw new Error("工作区已改变");
@@ -721,11 +731,39 @@ export class FilesService {
 		}
 	}
 
+	/** Resolve a citation before and after the asynchronous file read. */
+	private async readEvidence(path: string, options: FileReadOptions): Promise<void> {
+		const { requestId, conversationId, evidenceId, cwd } = options;
+		const failed = (errorCode: "stale_evidence" | "evidence_unavailable") => this.host.emit({
+			type: "file_result", operation: "read", ok: false, requestId, cwd: cwd ?? this.host.getCwd(), path, conversationId, evidenceId, errorCode,
+			error: errorCode === "stale_evidence" ? "The cited file has changed." : "Evidence is unavailable.",
+		});
+		try {
+			if (!cwd || !requestId || !conversationId || !evidenceId || cwd !== this.host.getCwd()) return failed("evidence_unavailable");
+			const resolveCitation = () => this.host.resolveEvidence?.(conversationId, cwd, evidenceId);
+			const citation = resolveCitation();
+			if (!citation) return failed("evidence_unavailable");
+			const { evidence, root } = citation;
+			const target = options.line ?? evidence.startLine;
+			if (!Number.isSafeInteger(target) || target < evidence.startLine || target > evidence.endLine) return failed("evidence_unavailable");
+			const file = await readKnowledgeTextFile(root, evidence.path);
+			if (resolveCitation()?.root !== root) return failed("evidence_unavailable");
+			if (file.sha256 !== evidence.fingerprint) return failed("stale_evidence");
+			if (target < 1 || target > file.lines.length) return failed("evidence_unavailable");
+			this.host.emit({ type: "file_content", requestId, cwd, conversationId, evidence: evidenceView(evidence),
+				path: evidence.path, name: basename(evidence.path), version: file.sha256, kind: "text", binary: false, size: file.size,
+				...evidenceWindow(file.lines, target) });
+		} catch {
+			failed("evidence_unavailable");
+		}
+	}
+
 	/** Save text from the file preview panel within the active workspace. */
 	async writeFile(relPath: string, text: string, options: { requestId?: string; cwd?: string; expectedVersion?: string; force?: boolean } = {}): Promise<void> {
 		const cwd = this.host.getCwd();
 		const result = { type: "file_result" as const, operation: "write" as const, requestId: options.requestId, cwd, path: relPath };
 		try {
+			if ("evidenceId" in options) throw new Error("Knowledge evidence is read-only");
 			if (options.cwd !== undefined && options.cwd !== cwd) throw new Error("工作区已改变");
 			const wp = workspacePath(resolve(cwd), relPath);
 			if (!wp || !isRealPathInWorkspace(cwd, wp.abs)) throw new Error("路径超出工作区");
