@@ -1,5 +1,9 @@
 # 发布流程
 
+## 2.3.0 终端工作区化与 Skills 契约
+
+终端改为归属项目工作区（`TerminalRegistry`），删除对话不再终止进程；移除 Workspace 图谱，跨仓查证统一为 `/ask` 并行调查与源码搜索；grilling 增加 Question Budget，learn 增加 Knowledge Quality status 契约；包含读取预览重排与顶栏导航改进。SDK / pi-ai 保持 1.6.0。本次发布 GitHub 三平台桌面 Release，不发布 npm。[中英双语发布说明](../.github/release-notes/v2.3.0.md)
+
 ## 2.2.0 Workspace 图谱
 
 主窗口新增「图谱」，可构建、浏览和更新 Workspace 索引，查看 TypeScript 跨仓关系的两端源码。普通聊天新增 `/build-graph`、`/update-graph` 和显式的 `/ask --graph` 查询。[中英双语发布说明](../.github/release-notes/v2.2.0.md)
