@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useContext, useState } from "react";
-import { FiChevronRight, FiMoreHorizontal } from "react-icons/fi";
+import { FiCheck, FiChevronRight, FiMoreHorizontal } from "react-icons/fi";
 import type { UiToolCallBlock } from "../types";
 import { useChatT } from "../i18n";
 import { WorkspacePathContext } from "../workspace-context";
@@ -86,7 +86,7 @@ export function EditWriteCard({ item, retried = false, live = false }: { item: I
 	const path = outputPath(trimmed, cwd);
 	return <div className={`change-card ${state}`} data-tool-call-id={item.block.id} onMouseEnter={() => window.dispatchEvent(new CustomEvent("pi:tool-hover", { detail: { toolCallId: item.block.id } }))} onMouseLeave={() => window.dispatchEvent(new CustomEvent("pi:tool-hover", { detail: { toolCallId: null } }))}>
 		<div className="change-card-head">
-			<button type="button" className="change-card-toggle" aria-expanded={open && !noDiff} disabled={noDiff} onClick={() => setManual(!open)}>{!noDiff && <FiChevronRight className={open ? "open" : ""} />}<span className={`change-state ${state}`} aria-label={retried ? t("changeRetried") : state === "err" ? t("error") : state === "done" ? t("done") : state === "skipped" ? t("toolNotExecuted") : state === "running" ? t("running") : t("toolQueued")}><i /></span><span className="change-verb">{item.block.name === "edit" ? t("changeEdit") : t("changeWrite")}</span><code title={absolute}>{path}</code></button>
+			<button type="button" className="change-card-toggle" aria-expanded={open && !noDiff} disabled={noDiff} onClick={() => setManual(!open)}>{!noDiff && <FiChevronRight className={open ? "open" : ""} />}<span className={`change-state ${state}`} aria-label={retried ? t("changeRetried") : state === "err" ? t("error") : state === "done" ? t("done") : state === "skipped" ? t("toolNotExecuted") : state === "running" ? t("running") : t("toolQueued")}>{state === "done" ? <FiCheck aria-hidden="true" /> : <i />}</span><span className="change-verb">{item.block.name === "edit" ? t("changeEdit") : t("changeWrite")}</span><code title={absolute}>{path}</code></button>
 			<span className="change-counts">{!change.error && <>{change.added > 0 && <span className="add">+{change.added}</span>}{change.removed > 0 && <span className="del">−{change.removed}</span>}</>}</span>
 			<details className="change-raw"><summary aria-label={t("more")}><FiMoreHorizontal /></summary><div><strong>{t("changeRawArgs")}</strong><pre>{item.block.argumentsText}</pre>{change.output && <><strong>{t("changeRawOutput")}</strong><pre>{change.output}</pre></>}</div></details>
 		</div>

@@ -4442,6 +4442,13 @@ span.msg-editor-hint svg {
 	padding: 12px 14px;
 	overflow-x: auto;
 	margin: 0;
+	/* Tab-indented sources (this repo included) must not inherit the browser
+	   default tab-size of 8 — a 5-level JSX nest pushed the preview ~300px
+	   right and clipped every long line. 4 matches the file preview and
+	   Playground. Ligatures off: `=>` must read as two characters, not ⇒. */
+	tab-size: 4;
+	font-variant-ligatures: none;
+	font-feature-settings: "liga" 0, "calt" 0;
 }
 .codeblock code {
 	background: transparent;
@@ -4457,6 +4464,11 @@ span.msg-editor-hint svg {
    左边 26px 的留白，一行命令也撑成一大块黑色。选择器提到 (0,2,2) 压过它。 */
 .codeblock pre code.hljs {
 	padding: 0;
+	/* The `font:` shorthand on `.toolcall-output pre` resets font-variant-ligatures
+	   to normal on the pre; pin it on the code element that holds the glyphs so
+	   `=>`/`===` never render as ⇒/≡ regardless of the surrounding shorthand. */
+	font-variant-ligatures: none;
+	font-feature-settings: "liga" 0, "calt" 0;
 }
 /* Light appearance: replace the bundled github-dark token colors with a
    palette that reads on the light code island. :where() keeps this at
@@ -4785,6 +4797,7 @@ span.msg-editor-hint svg {
 	font-size: 12px;
 	color: var(--text-dim);
 	white-space: pre;
+	tab-size: 4;
 	overflow: auto;
 	max-height: 200px;
 	background: var(--bg-elev2);
@@ -4971,6 +4984,7 @@ span.msg-editor-hint svg {
 	font-family: var(--mono);
 	font-size: 12px;
 	line-height: 1.55;
+	tab-size: 4;
 }
 .toolcall-diff-header { position: sticky; top: 0; z-index: 1; display: flex; justify-content: space-between; gap: 16px; padding: 6px 10px; min-width: 100%; background: var(--bg-elev); border-bottom: 1px solid var(--border); color: var(--text-dim); }
 .toolcall-diff-header span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -5021,6 +5035,7 @@ span.msg-editor-hint svg {
 	font-family: var(--mono);
 	font-size: 12px;
 	line-height: 1.5;
+	tab-size: 4;
 	color: var(--code-fg);
 	/* terminal-style: keep original line breaks & column layout, scroll horizontally
      instead of wrapping long lines */
@@ -9315,6 +9330,8 @@ body { -webkit-font-smoothing: antialiased; }
 .change-state.err { color: var(--red); }
 .change-state.running { color: var(--progress-text); }
 .change-state i { display: block; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+/* 成功的编辑/写入用绿勾代替绿点（2026-11 用户决定）：圆点只表示进行中/排队等未定状态。 */
+.change-state svg { flex: none; width: 12px; height: 12px; }
 .change-open { flex: none; padding: 4px 5px; border: 0; border-radius: var(--r-sm); background: none; color: var(--text-dim); font: 11px var(--sans); cursor: pointer; }
 .change-open:hover, .change-raw summary:hover { background: var(--bg-elev2); color: var(--text); }
 .change-raw { position: relative; flex: none; }
@@ -15464,6 +15481,11 @@ span.rich-math { display: inline-block; }
 .toolcall-read-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; padding: 2px 0 8px; }
 .toolcall-read-actions button { width: auto; height: auto; min-height: 22px; border: 0; background: transparent; color: var(--text-dim); padding: 2px 0; font: 11px var(--sans); cursor: pointer; }
 .toolcall-read-actions button:hover { color: var(--accent); }
+/* Zoom/copy ride on the output-label row (right side) — no separate action
+   band above the code. The label's uppercase/tracking must not leak into the
+   buttons. */
+.toolcall-output-label .toolcall-read-actions { padding: 0; gap: 4px 12px; text-transform: none; letter-spacing: normal; }
+.toolcall.toolcall-read .toolcall-output { margin-top: 4px; }
 .toolcall-read .tool-image-preview { width: fit-content; max-width: 100%; overflow: hidden; background: var(--bg-elev2); border: 1px solid var(--border-soft); border-radius: var(--r-md); }
 .toolcall-read .tool-image-preview + .tool-image-preview { margin-top: 12px; }
 .toolcall-read .tool-result-image { display: flex; justify-content: center; padding: 16px; cursor: zoom-in; }
@@ -16413,9 +16435,18 @@ html[data-platform="win32"] :is(.settings-tab-label, .input-tools .chip, .reply-
 .browser-load-error button { flex: none; }
 .embedded-controls { position: relative; }
 .embedded-controls:has(.browser-confirmation) > .embedded-toolbar { visibility: hidden; }
-.browser-confirmation { position: absolute; inset: 0; z-index: 1; overflow: auto; box-sizing: border-box; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-content: center; gap: 2px 8px; padding: 4px 8px; background: var(--bg); }
-.browser-confirmation span { grid-column: 1; overflow: auto; white-space: nowrap; }
-.browser-confirmation div { grid-column: 2; grid-row: 1 / span 3; align-self: center; display: flex; gap: 4px; }
+.browser-confirmation { position: absolute; inset: 0; z-index: 1; overflow: auto; box-sizing: border-box; display: flex; align-items: center; align-items: safe center; gap: 10px; padding: 6px 10px; background: var(--bg-elev2); border-bottom: 1px solid var(--border); }
+.browser-confirmation-text { flex: 1; min-width: 0; }
+.browser-confirmation-text strong { display: block; font-size: 13px; font-weight: 600; color: var(--heading); }
+.browser-confirmation-text span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--text-dim); }
+.browser-confirmation-text span + span { margin-top: 2px; white-space: normal; overflow-wrap: anywhere; }
+.browser-confirmation-actions { flex: none; display: flex; gap: 6px; }
+.browser-confirmation-actions button { padding: 5px 12px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--bg-elev); color: var(--text); font: 13px var(--sans); cursor: pointer; }
+.browser-confirmation-actions button:hover { background: var(--row-hover); }
+.browser-confirmation-actions button:last-child { background: var(--action); border-color: transparent; color: var(--action-fg); }
+.browser-confirmation-actions button:last-child:hover { background: color-mix(in srgb, var(--action) 88%, var(--text)); }
+.browser-confirmation-actions button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (pointer: coarse) { .browser-confirmation-actions button { min-height: 44px; padding: 8px 14px; } }
 .resize-browser { margin: 0; }
 .resize-browser:has(+ .embedded-browser.expanded) { visibility: hidden; }
 .embedded-browser { width: min(var(--browser-w), 85%); flex: none; min-height: 0; display: flex; flex-direction: column; border-left: 1px solid var(--border); background: var(--bg); color: var(--text); }

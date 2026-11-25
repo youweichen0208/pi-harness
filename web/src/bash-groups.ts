@@ -1,7 +1,8 @@
 import type { UiContentBlock, UiMessage } from "../../server/protocol.js";
 
-/** Tools rendered as rows of the shared process list (3a): commands, reads and searches. */
-export const PROCESS_TOOLS = new Set(["bash", "read", "grep"]);
+/** Tools rendered as rows of the shared process list (3a): commands, reads and searches.
+ * `bash_task` controls background commands and reads as a command row, not a generic card. */
+export const PROCESS_TOOLS = new Set(["bash", "bash_task", "read", "grep"]);
 
 /** Thinking and process tool calls share one list; prose, edits and other tools end it. */
 export function isProcessBlock(block: UiContentBlock): boolean {

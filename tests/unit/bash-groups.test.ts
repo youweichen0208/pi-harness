@@ -32,6 +32,13 @@ describe("command groups", () => {
 		expect(groups.projected.get("a")?.content.map(block => block.type)).toEqual(["toolCall", "thinking", "toolCall", "thinking"]);
 		expect(groups.projected.get("r")?.content.map(block => block.type)).toEqual(["text"]);
 	});
+	it("merges bash_task control calls into the same command list", () => {
+		const task: UiMessage = { id: "t", role: "assistant", content: [{ type: "toolCall", id: "tool-t", name: "bash_task", argumentsText: '{"action":"list"}' }] };
+		const groups = groupBashMessages([call("a"), result("a"), task, result("t"), call("b")]);
+		expect(groups.owners.get("t")).toBe("a");
+		expect(groups.owners.get("b")).toBe("a");
+		expect(groups.projected.get("a")?.content.map(block => block.type === "toolCall" ? block.id : undefined)).toEqual(["tool-a", "tool-t", "tool-b"]);
+	});
 	it("adds the streaming message without re-projecting settled owners", () => {
 		const settled = groupBashMessages([call("a"), result("a")]);
 		const live = withStreamingMessage(settled, [call("a"), result("a")], { id: "s", role: "assistant", content: [{ type: "thinking", thinking: "…" }] });

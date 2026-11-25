@@ -27,6 +27,21 @@ export function bashCommand(argumentsText?: string): string | null {
 	} catch { return null; }
 }
 
+/** `bash_task` controls background commands; present the call as a command line
+ * (`bash_task list` / `bash_task read <id>`) so it reads as one row of the command list. */
+export function bashTaskCommand(argumentsText?: string): string {
+	try {
+		const args: unknown = JSON.parse(argumentsText ?? "");
+		if (!args || typeof args !== "object") return "bash_task";
+		const { action, id, cursor } = args as { action?: unknown; id?: unknown; cursor?: unknown };
+		const parts = ["bash_task"];
+		if (typeof action === "string" && action) parts.push(action);
+		if (typeof id === "string" && id) parts.push(id);
+		if (typeof cursor === "number") parts.push(`--cursor ${cursor}`);
+		return parts.join(" ");
+	} catch { return "bash_task"; }
+}
+
 /** Split top-level `&&` and `;` while preserving the original separators. */
 function commandParts(command: string): { text: string; separator: "" | "&&" | ";" }[] {
 	const parts: { text: string; separator: "" | "&&" | ";" }[] = [];

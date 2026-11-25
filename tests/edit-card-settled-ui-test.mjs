@@ -77,14 +77,17 @@ try {
 	});
 	await page.goto(`http://127.0.0.1:${port}`);
 
-	// 1) While the call runs, the diff is open.
+	// 1) While the call runs, the diff is open and the state mark is still a dot.
 	await card().waitFor();
 	await body().waitFor();
+	assert.equal(await card().locator('.change-state i').count(), 1, 'unsettled edits keep the dot');
 
-	// 2) The dot turns green: the diff must stay open, not be yanked away.
+	// 2) The mark turns into a green check: the diff must stay open, not be yanked away.
 	socket.send(JSON.stringify({ type: 'tool_status', conversationId, toolCallId: 'edit1', toolName: 'edit', isError: false, running: false, durationMs: 40 }));
 	await page.waitForFunction(() => document.querySelector('.change-card[data-tool-call-id="edit1"]')?.className.includes('done'));
 	assert.equal(await body().count(), 1, 'the diff stays open the moment the call settles');
+	assert.equal(await card().locator('.change-state.done svg').count(), 1, 'settled edits show a check mark');
+	assert.equal(await card().locator('.change-state i').count(), 0, 'the green dot is gone once done');
 
 	// 3) The result lands: still open, still green.
 	await show(settled);
@@ -124,9 +127,8 @@ try {
 		await page.evaluate(value => document.documentElement.dataset.appearance = value, theme);
 		await summary.screenshot({ path: `/tmp/pi-edit-summary-${theme}.png` });
 	}
-	await summary.locator('header button').click();
-	await page.locator('.changes-panel .changes-line.add').waitFor();
-	assert.match(await page.locator('.changes-panel .changes-line.add').innerText(), /new/, 'view all opens the same historical edit');
+	// 5297c6c 起内联摘要的 header（含「全部查看」）按设计隐藏，不再提供该入口。
+	assert.equal(await summary.locator('> header').evaluate(el => getComputedStyle(el).display), 'none', 'inline summary header stays hidden by design');
 	// 6) 几百行的写入不再整段铺开：默认 12 行 + 「展开其余 N 行」。
 	const bigDiff = Array.from({ length: 40 }, (_, index) => `+${index + 1} const value${index + 1} = ${index + 1};`).join('\n');
 	await show([
@@ -159,6 +161,14 @@ try {
 	assert.match((await body().locator('.change-more').textContent()) ?? '', /展开其余 28 行/);
 	await body().locator('.change-more').click();
 	assert.equal(await body().locator('.changes-line').count(), 40, 'the write card can reveal the whole file');
+
+	// 8) 折叠文件行时，「展开其余 N 行／收起」footer 随 diff 一起隐藏，
+	// 不留一个空框里孤零零的按钮（长写入卡片截图里的问题）。
+	await body().locator('.change-summary-file').click();
+	assert.equal(await body().locator('.changes-line').count(), 0, 'collapsing the file row hides the diff');
+	assert.equal(await body().locator('.change-more').count(), 0, 'the expand/collapse footer hides with the diff, no orphaned button');
+	await body().locator('.change-summary-file').click();
+	assert.equal(await body().locator('.change-more').count(), 1, 're-expanding the file row brings the footer back');
 
 	assert.deepEqual(errors, [], 'no browser errors');
 	console.log('PASS edits show changes directly and support collapse, expand and historical review');

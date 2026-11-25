@@ -120,6 +120,17 @@ try {
 		const timeoutHelp = page.locator('[data-tool-call-id="browser-timeout-0"] .browser-progress-update');
 		await timeoutHelp.waitFor();
 		assert.match(await timeoutHelp.textContent(), language === 'zh' ? /响应超时/ : /Timed out/);
+		// Ordinary browser failures hide the inline "Error · duration" label; details stay reachable by expanding.
+		const failedClick = { id: 'browser-error', role: 'assistant', timestamp: 7, content: [{ type: 'toolCall', id: 'browser-error', name: browserTool, argumentsText: '{"action":"clickAt","x":10,"y":20}' }] };
+		socket.send(JSON.stringify({ type: 'snapshot', state: { ...baseState, isStreaming: false, messages: [failedClick, serializeMessage({ role: 'toolResult', toolCallId: 'browser-error', toolName: browserTool, isError: true, durationMs: 22600, timestamp: 8, content: [{ type: 'text', text: 'Element not found' }] }, 0)] } }));
+		const errorCard = page.locator('[data-tool-call-id="browser-error"]');
+		await errorCard.waitFor();
+		assert.match(await errorCard.locator('.tool-step-head').textContent(), language === 'zh' ? /点击元素/ : /Click element/);
+		assert.equal(await errorCard.locator('.tool-step-head .tool-step-state').count(), 0);
+		assert.doesNotMatch(await errorCard.locator('.tool-step-head').textContent(), /Error|出错|22\.6/);
+		await errorCard.locator('.tool-step-head').click();
+		await errorCard.locator('.toolcall-body').waitFor();
+		assert.match(await errorCard.locator('.toolcall-body').textContent(), /Element not found/);
 		await page.evaluate(() => {
 			window.deviceActions = [];
 			window.open = url => { window.deviceActions.push(['open', url]); return null; };

@@ -1,5 +1,13 @@
 import { expect, test } from "vitest";
-import { parseBashDiagnostics, parseLabeledBashSteps, splitCommandChain } from "../../web/src/bash-steps.js";
+import { bashTaskCommand, parseBashDiagnostics, parseLabeledBashSteps, splitCommandChain } from "../../web/src/bash-steps.js";
+
+test("bash_task calls present as command lines", () => {
+	expect(bashTaskCommand('{"action":"list"}')).toBe("bash_task list");
+	expect(bashTaskCommand('{"action":"read","id":"toolu_abc","cursor":12}')).toBe("bash_task read toolu_abc --cursor 12");
+	expect(bashTaskCommand('{"action":"stop","id":"toolu_abc"}')).toBe("bash_task stop toolu_abc");
+	expect(bashTaskCommand('{"action":"li')).toBe("bash_task");
+	expect(bashTaskCommand(undefined)).toBe("bash_task");
+});
 
 test("splits only top-level && and maps emitted labels to actual steps", () => {
 	expect(splitCommandChain('echo "a && b" && grep "x && y" file && echo done')).toEqual(['echo "a && b"', 'grep "x && y" file', 'echo done']);

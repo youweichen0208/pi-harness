@@ -27,6 +27,9 @@ export function ChangeSummaryCard({ files, inlineDiff = false, footer }: { files
 			{file.counted ? <ChangeCounts files={[file]} /> : <span className="change-summary-unavailable" title={t("changesUnavailable")}>—</span>}{inlineDiff && !collapsed.has(file.path) ? <FiChevronDown /> : <FiChevronRight />}
 		</button>{inlineDiff && !collapsed.has(file.path) && <ChangeDiff file={file} gaps={gaps} expandGap={id => setGaps(previous => new Set([...previous, id]))} />}</Fragment>)}
 		{!all && files.length > 6 && <button className="changes-more" onClick={() => setAll(true)}>{t("changesMore", { n: files.length - 6 })}</button>}
-		{footer}
+		{/* The expand/collapse footer belongs to the diff body: when every file row
+		    is collapsed there is no diff to act on, so an orphaned 「收起／展开其余 N 行」
+		    button in an empty box must not remain (write cards with long content). */}
+		{(!inlineDiff || files.some(file => !collapsed.has(file.path))) && footer}
 	</section>;
 }

@@ -134,10 +134,12 @@ export function BrowserPanel({ owner, close }: { owner: string; close: () => voi
 					/>
 				</form>
 				{state.confirmation && <div className="browser-confirmation" role="group" aria-label={t("browserConfirmAction")}>
-					<strong>{t("browserConfirmAction")}</strong>
-					<span>{state.confirmation.site} · {state.confirmation.target}</span>
-					{state.confirmation.purpose && <span>{state.confirmation.purpose}</span>}
-					<div>{[false, true].map(accept => <button key={String(accept)} onClick={() =>
+					<div className="browser-confirmation-text">
+						<strong>{t("browserConfirmAction")}</strong>
+						<span>{state.confirmation.site} · {state.confirmation.target}</span>
+						{state.confirmation.purpose && <span>{state.confirmation.purpose}</span>}
+					</div>
+					<div className="browser-confirmation-actions">{[false, true].map(accept => <button key={String(accept)} onClick={() =>
 						command("answer", { id: state.confirmation!.id, accept })}>{t(accept ? "confirm" : "cancel")}</button>)}</div>
 				</div>}
 			</div>

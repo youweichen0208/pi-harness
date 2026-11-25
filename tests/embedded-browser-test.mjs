@@ -110,6 +110,17 @@ async function launch() {
 	await browser.click();
 	assert.equal(await browser.getAttribute("aria-expanded"), "true");
 	await page.locator(".embedded-viewport").waitFor();
+	// Regression (nav consistency): the browser button stays visible on the
+	// terminal view, clicking it returns to chat, and the labeled settings
+	// dropdown does not fall back into the tab row while navigation is locked.
+	const terminalTab = switcher.getByRole("tab", { name: /^(终端|Terminal)$/i });
+	await terminalTab.click();
+	assert.equal(await terminalTab.getAttribute("aria-selected"), "true", "terminal view active");
+	await browser.waitFor();
+	assert.equal(await page.locator(".topbar-more").count(), 0, "no settings fallback dropdown on terminal");
+	await browser.click();
+	assert.equal(await terminalTab.getAttribute("aria-selected"), "false", "browser click from terminal returns to chat");
+	await page.locator(".embedded-viewport").waitFor();
 }
 async function go() {
 	const home = page.locator(".browser-start-search input");

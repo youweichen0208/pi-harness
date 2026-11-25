@@ -89,7 +89,7 @@ try {
 	await page.locator('.toolcall-zoom').waitFor();
 
 	// --- 文本读取：行数 + 最大展示行数 -------------------------------------
-	const longText = Array.from({ length: 180 }, (_, index) => `const line${index + 1} = ${index + 1};`).join('\n');
+	const longText = Array.from({ length: 180 }, (_, index) => `\t\t\tconst line${index + 1} = ${index + 1};`).join('\n');
 	phaseMessages = [
 		{ id: 'user', role: 'user', content: [{ type: 'text', text: 'Read app.ts' }] },
 		{ id: 'read', role: 'assistant', content: [{ type: 'toolCall', id: 'read1', name: 'read', argumentsText: JSON.stringify({ path: 'app.ts' }) }] },
@@ -105,6 +105,16 @@ try {
 	assert.equal(await previewLines(), 10, 'expanded read previews at most READ_PREVIEW_LINES lines');
 	await page.locator('.toolcall-read .toolcall-output-more').click();
 	assert.equal(await previewLines(), 180, 'the expand control reveals the whole file');
+	// Tab-indented sources keep a 4-wide tab (not the browser default 8 that
+	// pushed deeply nested code ~300px right), ligatures stay off, and zoom/copy
+	// ride on the output-label row instead of a separate band above the code.
+	const codeStyle = await page.locator('.toolcall-read .toolcall-code pre').evaluate(el => { const s = getComputedStyle(el); return { tabSize: s.tabSize }; });
+	const glyphLigatures = await page.locator('.toolcall-read .toolcall-code pre code').first().evaluate(el => getComputedStyle(el).fontVariantLigatures);
+	assert.equal(codeStyle.tabSize, '4', 'code preview uses tab-size 4');
+	assert.equal(glyphLigatures, 'none', 'code preview renders literal characters, no ligatures');
+	assert.equal(await page.locator('.toolcall-read .toolcall-output-label .toolcall-read-actions').count(), 1, 'zoom/copy share the output-label row');
+	assert.equal(await page.locator('.toolcall-read .toolcall-body > .toolcall-read-actions').count(), 0, 'no separate action band above the code');
+	await page.locator('.toolcall-read').screenshot({ path: '/tmp/pi-read-card-text.png' });
 
 	assert.deepEqual(errors, []);
 	console.log('PASS read rows mirror bash rows, line-count cap, image preview, collapse, zoom, themes and narrow width');

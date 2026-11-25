@@ -474,16 +474,22 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true }: ToolCall
 		}
 	};
 
+	// Read-card actions live on the output-label row (right side) instead of
+	// occupying their own row above the code — one less stacked band between
+	// the read row and the file body. The standalone row remains only when
+	// there is no output label to host it (empty file / image-only result).
+	const readActions = targetPath && !zoomed ? (
+		<span className="toolcall-read-actions">
+			<button type="button" className="toolcall-expand" title={t("zoomCode")} onClick={() => setZoomed(true)}>{t("zoomCode")}</button>
+			<button type="button" className="toolcall-copy" title={t(copyError ? "copyFailed" : copied ? "copied" : "copyArgs")} onClick={copyArgs}>{t(copyError ? "copyFailed" : copied ? "copied" : "copy")}</button>
+		</span>
+	) : null;
+	const hasReadOutputLabel = !!targetPath && output.length > 0 && !imageReadNotice;
 	// Rendered in place *and* inside the zoom overlay — kept as one value so
 	// the two views can never drift apart.
 	const bodyContent = (
 		<>
-			{targetPath && !zoomed && (
-				<div className="toolcall-read-actions">
-					<button type="button" className="toolcall-expand" title={t("zoomCode")} onClick={() => setZoomed(true)}>{t("zoomCode")}</button>
-					<button type="button" className="toolcall-copy" title={t(copyError ? "copyFailed" : copied ? "copied" : "copyArgs")} onClick={copyArgs}>{t(copyError ? "copyFailed" : copied ? "copied" : "copy")}</button>
-				</div>
-			)}
+			{readActions && !hasReadOutputLabel && readActions}
 
 			{block.argumentsText && (!targetPath || zoomed) && (!compactBash || fullCommand || zoomed) && (
 				<div className="toolcall-args">
@@ -527,6 +533,7 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true }: ToolCall
 							<RunningIndicator />
 						)}
 						<span className="toolcall-output-spacer" />
+						{readActions}
 						{isMarkdown && !isError && (
 							<button
 								type="button"
@@ -570,12 +577,15 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true }: ToolCall
 					<FiGlobe className="browser-step-icon" aria-hidden="true" />
 					<strong>{browser}</strong>
 					{browserSubject && <span className="browser-progress-target" title={browserSubject}>{browserSubject}</span>}
-					<small className={`tool-step-state ${isError ? "failed" : ""}`}>
+					{/* 用户决定（2026-11）：浏览器步骤普通失败不在行内展示「Error · 时长」。
+					    与失败的 bash 同一理由——模型会自己换做法重试，失败状态留在时间线上
+					    只是噪音；点开该行仍能看到完整错误输出。响应超时保留原有的专门提示。 */}
+					{(!isError || browserTimeout) && <small className={`tool-step-state ${isError ? "failed" : ""}`}>
 						{running && <RunningIndicator />}
 						{browserTimeout ? t("browserResponseTimeout") : statusLabel}
 						{browserTimeout && duration && ` · ${duration}`}
 						{running && elapsed > 0 && ` · ${elapsed}s`}
-					</small>
+					</small>}
 					<FiChevronRight className={open ? "open" : ""} aria-hidden="true" />
 				</button>
 				{open && browserTimeout && <p className="browser-progress-update"><strong>{t("browserResponseTimeout")}</strong></p>}

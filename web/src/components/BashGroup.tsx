@@ -12,7 +12,7 @@ import type { UiToolCallBlock } from "../types";
 import { toolDuration, type ToolView } from "./ToolCallBlock";
 import { ToolOutputDownload } from "./ToolOutputDownload";
 
-type Item = { currentStep?: boolean; messageId?: string; block: UiToolCallBlock; view: ToolView };
+type Item = { currentStep?: boolean; messageId?: string; /** Display command for calls that are not literal shell commands (`bash_task`). */ command?: string; block: UiToolCallBlock; view: ToolView };
 const seconds = (ms: number) => ms < 1000 ? "" : commandDuration(ms);
 
 /** Seconds since mount while `active` — live elapsed timer for running rows. */
@@ -40,7 +40,7 @@ export function stateOf(view: ToolView): "ok" | "err" | "run" | "empty" {
 }
 
 function commandAttemptKey(item: Item) {
-	return item.view.background ? item.block.id : bashCommand(item.block.argumentsText) ?? item.block.argumentsText ?? item.block.id;
+	return item.view.background ? item.block.id : item.command ?? bashCommand(item.block.argumentsText) ?? item.block.argumentsText ?? item.block.id;
 }
 
 /** Presentation only: tool IDs and the authoritative result lookup stay intact. */
@@ -77,7 +77,7 @@ export function BashGroup({ items, onKill, active = false, flat = false }: { ite
 	return <section className={`bash-group ${state} ${!open ? "historical-step" : ""}`}>
 		{!flat && <button type="button" className="bash-group-head" aria-expanded={open} onClick={() => setOpen(!open)}>
 			<span className={`bash-state ${state}`} aria-label={t(failed ? "error" : running ? "running" : skipped ? "toolNotExecuted" : "done")}>{failed ? "✗" : running ? <FiTerminal className="bash-row-icon" aria-hidden="true" /> : skipped ? "−" : "✓"}</span>
-			<strong>{!open ? commandReading(commandPresentation(bashCommand(items[0].block.argumentsText) ?? "", cwd).command).title : t(running ? "bashGroupRunning" : "bashGroupCount", { n: items.length })}</strong>{!open && items.length > 1 && <span className="bash-group-count">{t("changesCommands", { n: items.length })}</span>}
+			<strong>{!open ? commandReading(commandPresentation(items[0].command ?? bashCommand(items[0].block.argumentsText) ?? "", cwd).command).title : t(running ? "bashGroupRunning" : "bashGroupCount", { n: items.length })}</strong>{!open && items.length > 1 && <span className="bash-group-count">{t("changesCommands", { n: items.length })}</span>}
 			{failed > 0 && <span className="bash-state err">{t("bashGroupFailed", { n: failed })}</span>}
 			{measured && seconds(durations.reduce<number>((sum, ms) => sum + (ms ?? 0), 0)) && <span className="bash-group-duration">{seconds(durations.reduce<number>((sum, ms) => sum + (ms ?? 0), 0))}</span>}
 			{open ? <FiChevronDown /> : <FiChevronRight />}
@@ -89,7 +89,7 @@ export function BashGroup({ items, onKill, active = false, flat = false }: { ite
 	</section>;
 }
 
-function BashRow({ block, view, currentStep, onKill, revealed, messageId, attempts, historical, history, compact }: Item & { onKill?: () => void; revealed: boolean; attempts?: number; historical?: boolean; history?: ReactNode; compact?: boolean }) {
+function BashRow({ block, view, currentStep, onKill, revealed, messageId, attempts, historical, history, compact, command: commandOverride }: Item & { onKill?: () => void; revealed: boolean; attempts?: number; historical?: boolean; history?: ReactNode; compact?: boolean }) {
 	const t = useChatT();
 	const cwd = useContext(WorkspacePathContext);
 	const { control } = useContext(BackgroundContext);
@@ -110,7 +110,7 @@ function BashRow({ block, view, currentStep, onKill, revealed, messageId, attemp
 		window.addEventListener("pi:reveal-tool", jump);
 		return () => window.removeEventListener("pi:reveal-tool", jump);
 	}, [block.id]);
-	const command = bashCommand(block.argumentsText) ?? block.argumentsText ?? "bash";
+	const command = commandOverride ?? bashCommand(block.argumentsText) ?? block.argumentsText ?? "bash";
 	const display = commandPresentation(command, cwd);
 	const subtitle = commandPreview(command, cwd);
 	const commandLines = display.command.trimEnd().split(/\r?\n/);
@@ -160,11 +160,11 @@ function BashRow({ block, view, currentStep, onKill, revealed, messageId, attemp
 			{open ? <FiChevronDown /> : <FiChevronRight />}
 		</button>
 		{task && <div className="bash-row-actions">
-			{task.state === "background" && <span>{t("backgroundRunning")}{!output && " · " + t("backgroundEmpty")}</span>}
+			{/* Auto-detach at 30s owns backgrounding; the card only offers a clickable entry into the live output. */}
+			{task.state === "background" && <button type="button" aria-expanded={open} onClick={() => setOpen(!open)}>{t("backgroundTask")}{!output && " · " + t("backgroundEmpty")}</button>}
 			{task.state === "stopped" && <span>{t("cancelled")}</span>}
 			{task.state === "interrupted" && <span>{t("backgroundInterrupted")}</span>}
 			{task.exitCode !== undefined && <span>{t("bashExitCode", { n: task.exitCode })}</span>}
-			{task.state === "foreground" && <button disabled={view.connected === false} onClick={() => control?.(task.id, "detach")}>{t("backgroundDetach")}</button>}
 			{state === "run" && <button disabled={view.connected === false} onClick={() => control?.(task.id, "stop")}>{t("backgroundStop")}</button>}
 		</div>}
 		{open && <div className="bash-row-body">

@@ -47,6 +47,7 @@ import { splitFrontmatter } from "../read-presentation";
 import { questionPreviewText } from "../question-markers";
 import { preserveUserTree } from "../user-message-presentation";
 import { BashGroup, latestAttemptStates, stateOf } from "./BashGroup";
+import { bashTaskCommand } from "../bash-steps";
 import { emptyProcessStats, ProcessGroup, type ProcessStats } from "./ProcessGroup";
 import { BackgroundContext, WorkspacePathContext } from "../workspace-context";
 
@@ -432,11 +433,13 @@ export const Message = memo(function Message({
 				else for (const item of changes) push(<EditWriteCard key={`${message.id}-${item.id}`} item={{ block: item, view: viewFor(item) }} retried={retriedEditIds?.has(item.id)} live={editsLive} />);
 				continue;
 			}
-			if (first?.name === "bash") {
+			// bash_task 只是后台命令的 list/read/stop 控制，本质仍是命令运行：
+			// 与 bash 同组渲染成命令行（`bash_task list`），不再落回通用工具卡片。
+			if (first?.name === "bash" || first?.name === "bash_task") {
 				const calls = [first];
 				while (i + 1 < message.content.length) {
 					const next = asToolCall(message.content[i + 1]);
-					if (next?.name !== "bash") break;
+					if (next?.name !== "bash" && next?.name !== "bash_task") break;
 					calls.push(next); i++;
 				}
 				// 用户决定（2026-11）：失败的 bash 不进入对话记录。一条命令失败后
@@ -446,7 +449,7 @@ export const Message = memo(function Message({
 				// 仍在运行、排队或从未执行的调用保留：它们的结论还没定。
 				const rendered = calls.filter((call) => viewFor(call).background || stateOf(viewFor(call)) !== "err");
 				if (!rendered.length) continue;
-				const items = rendered.map((item) => ({ block: item, currentStep: item.id === currentCommandId, view: { ...viewFor(item), streaming: toolsRunning ?? streaming }, messageId: toolMessageIds?.get(item.id) ?? message.id }));
+				const items = rendered.map((item) => ({ block: item, currentStep: item.id === currentCommandId, view: { ...viewFor(item), streaming: toolsRunning ?? streaming }, messageId: toolMessageIds?.get(item.id) ?? message.id, ...(item.name === "bash_task" ? { command: bashTaskCommand(item.argumentsText) } : {}) }));
 				push(<BashGroup flat active={bashActive ?? toolsRunning ?? streaming} key={first.id} items={items} onKill={onKillBash} />, true, stats => {
 					stats.commands += rendered.length;
 					if (bashActive ?? toolsRunning ?? streaming) stats.live = true;

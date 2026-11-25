@@ -298,12 +298,15 @@ try {
 		await page.goto(`http://127.0.0.1:${port}`);
 		const composer = page.locator(".inputbar textarea");
 		if (process.argv.includes("--background") || process.argv.includes("--background-card")) {
-			scriptedCalls.push({ name: "bash", args: { command: 'node -e "setInterval(()=>{},1000)"', timeout: 40 } });
+			scriptedCalls.push({ name: "bash", args: { command: 'node -e "setInterval(()=>{},1000)"', timeout: 40, background: true } });
 			await composer.fill("Background command card");
 			await composer.press("Enter");
-			const detach = page.getByRole("button", { name: "转到后台", exact: true });
-			await detach.click();
-			await page.getByText("后台运行中", {exact:false}).first().waitFor();
+			// Manual detach is gone: backgrounding is automatic (30s / background:true); the card shows a clickable background-task entry.
+			const task = page.getByRole("button", { name: /后台任务/ }).first();
+			await task.waitFor();
+			assert.equal(await page.getByRole("button", { name: "转到后台", exact: true }).count(), 0);
+			await task.click();
+			await page.locator(".bash-row-body").first().waitFor();
 			await page.reload();
 			const stop = page.getByRole("button", { name: "停止命令", exact: true });
 			await stop.click();

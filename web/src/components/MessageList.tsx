@@ -516,7 +516,7 @@ export const MessageList = memo(function MessageList({ recovery, state, connecte
 				if (idx >= 0 && !expanded.has(owner)) expand(owner);
 				setPinned((prev) => prev.has(owner) ? prev : new Set(prev).add(owner));
 			});
-			const toolIds = source?.toolCallId ? [source.toolCallId] : source?.content.flatMap((block) => block.type === "toolCall" && block.name === "bash" && typeof block.id === "string" ? [block.id] : []) ?? [];
+			const toolIds = source?.toolCallId ? [source.toolCallId] : source?.content.flatMap((block) => block.type === "toolCall" && (block.name === "bash" || block.name === "bash_task") && typeof block.id === "string" ? [block.id] : []) ?? [];
 			for (const toolCallId of toolIds) flushSync(() => window.dispatchEvent(new CustomEvent("pi:reveal-tool", { detail: { toolCallId, search: true } })));
 		},
 		[state.messages, expanded, expand, bashGroups],

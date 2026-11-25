@@ -1455,9 +1455,11 @@ export function App() {
 				{view !== "wiki" && <TopBar
 					onBrowser={window.electronAPI?.browser && activeBrowserOwner ? () => {
 						setDrawer(null);
-						setBrowserOwner(browserOpen ? undefined : activeBrowserOwner);
+						if (browserOpen) setBrowserOwner(undefined);
+						else { setBrowserOwner(activeBrowserOwner); if (view !== "chat") setView("chat"); }
 					} : undefined}
 					leftCollapsed={leftCollapsed}
+					hideSettingsFallback={navigationLocked && !isMobile}
 					browserOpen={browserOpen}
 					filesOpen={!browserOpen && (filesOverlay ? drawer === "right" : !filesCollapsed || inlinePreview)}
 					gitChangeCount={workspaceScm.files.length}
