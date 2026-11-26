@@ -84,7 +84,7 @@ export function EditWriteCard({ item, retried = false, live = false }: { item: I
 	// 末尾斜杠在某些调用传目录时会出现，渲染前去掉。
 	const trimmed = absolute.replace(/\/+$/, "") || absolute;
 	const path = outputPath(trimmed, cwd);
-	return <div className={`change-card ${state}`} data-tool-call-id={item.block.id} onMouseEnter={() => window.dispatchEvent(new CustomEvent("pi:tool-hover", { detail: { toolCallId: item.block.id } }))} onMouseLeave={() => window.dispatchEvent(new CustomEvent("pi:tool-hover", { detail: { toolCallId: null } }))}>
+	return <div className={`change-card transcript-tool ${state}`} data-tool-call-id={item.block.id} onMouseEnter={() => window.dispatchEvent(new CustomEvent("pi:tool-hover", { detail: { toolCallId: item.block.id } }))} onMouseLeave={() => window.dispatchEvent(new CustomEvent("pi:tool-hover", { detail: { toolCallId: null } }))}>
 		<div className="change-card-head">
 			<button type="button" className="change-card-toggle" aria-expanded={open && !noDiff} disabled={noDiff} onClick={() => setManual(!open)}>{!noDiff && <FiChevronRight className={open ? "open" : ""} />}<span className={`change-state ${state}`} aria-label={retried ? t("changeRetried") : state === "err" ? t("error") : state === "done" ? t("done") : state === "skipped" ? t("toolNotExecuted") : state === "running" ? t("running") : t("toolQueued")}>{state === "done" ? <FiCheck aria-hidden="true" /> : <i />}</span><span className="change-verb">{item.block.name === "edit" ? t("changeEdit") : t("changeWrite")}</span><code title={absolute}>{path}</code></button>
 			<span className="change-counts">{!change.error && <>{change.added > 0 && <span className="add">+{change.added}</span>}{change.removed > 0 && <span className="del">−{change.removed}</span>}</>}</span>

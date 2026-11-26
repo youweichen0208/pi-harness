@@ -539,7 +539,7 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true }: ToolCall
 			{structured && output && <ToolStructuredOutput key={block.id} output={output} url={view.result?.toolOutputUrl} error={isError} truncated={!!view.result?.content.some(part => part.type === "text" && part.truncated)} />}
 			{output.length > 0 && !imageReadNotice && !structured && (block.name === "bash" ? bashRun && bashView === "steps" ? <BashSteps run={bashRun} wrap={lineWrap} /> : bashDiagnostics.length > 0 ? <BashFailure diagnostics={bashDiagnostics} output={output} wrap={lineWrap} /> : <BashOutput output={output} wrap={lineWrap} cwd={differentCommandDirectory(block.argumentsText, cwd) ?? ""} searchOutput={searchOutputKind(block.argumentsText)} command={commandDisplay?.command ?? ""} /> : (
 				<div className="toolcall-output">
-					<div className="toolcall-output-label">
+					{(block.name !== "read" || isError || zoomed) && <div className="toolcall-output-label">
 						{isError ? t("errorOutput") : block.name === "read" ? t("modelReadOnly") : t("output")}
 						{running && (
 							<RunningIndicator />
@@ -559,7 +559,7 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true }: ToolCall
 								{markdownPreview ? t("readRaw") : t("showMarkdownPreview")}
 							</button>
 						)}
-					</div>
+					</div>}
 					{editDiff ? (
 						<DiffView diff={editDiff} lang={editLang} path={editPath} />
 					) : isMarkdown && markdownPreview && !isError ? (
@@ -583,7 +583,7 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true }: ToolCall
 	);
 
 	return (
-		<div data-tool-call-id={browser ? block.id : undefined} className={browser ? "change-card browser-progress" : `toolcall ${block.name === "read" ? "toolcall-read" : ""} ${generic ? "toolcall-generic" : ""} ${structured ? "toolcall-structured" : ""} ${statusClass} ${block.name === "bash" ? "toolcall-bash" : ""} ${bashRun ? "toolcall-steps" : ""} ${bashDiagnostics.length ? "toolcall-diagnostics" : ""} ${quietDelegate ? "toolcall-delegate-quiet" : ""}`} onMouseEnter={() => notifyToolHover(block.id)} onMouseLeave={() => notifyToolHover(null)}>
+		<div data-tool-call-id={browser ? block.id : undefined} className={browser ? "change-card browser-progress" : `toolcall ${(block.name === "read" || generic) && !quietDelegate ? "transcript-tool" : ""} ${block.name === "read" ? "toolcall-read" : ""} ${generic ? "toolcall-generic" : ""} ${structured ? "toolcall-structured" : ""} ${statusClass} ${block.name === "bash" ? "toolcall-bash" : ""} ${bashRun ? "toolcall-steps" : ""} ${bashDiagnostics.length ? "toolcall-diagnostics" : ""} ${quietDelegate ? "toolcall-delegate-quiet" : ""}`} onMouseEnter={() => notifyToolHover(block.id)} onMouseLeave={() => notifyToolHover(null)}>
 			{browser ? <>
 				<button type="button" className="tool-step-head" aria-expanded={open} onClick={() => setOpen(v => !v)}>
 					<FiGlobe className="browser-step-icon" aria-hidden="true" />
@@ -612,10 +612,10 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true }: ToolCall
 			</BashCommandHeader> : targetPath ? (
 			<div className="toolcall-read-headrow">
 				<button type="button" className="toolcall-head toolcall-read-head" aria-expanded={open} aria-label={`${t("readVerb")} ${displayReadPath(targetPath)}`} onClick={() => setOpen((v) => !v)}>
-					<span className={`toolcall-read-state ${statusClass}`} aria-hidden="true">
-						{statusClass === "run" ? <RunningIndicator /> : statusClass === "err" ? "✗" : readNotExecuted ? "−" : "✓"}
-					</span>
 					<span className="toolcall-read-icon" aria-hidden="true"><FiBookOpen /></span>
+					{(statusClass === "run" || statusClass === "err" || readNotExecuted) && <span className={`toolcall-read-state ${statusClass}`} aria-hidden="true">
+						{statusClass === "run" ? <RunningIndicator /> : statusClass === "err" ? "✗" : "−"}
+					</span>}
 					<span className="toolcall-read-title"><span>{t("readVerb")}</span><code title={targetPath}>{displayReadPath(targetPath)}</code></span>
 					{readStats && <span className="toolcall-read-stats">{readStats}</span>}
 				</button>

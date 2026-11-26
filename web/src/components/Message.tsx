@@ -393,7 +393,7 @@ export const Message = memo(function Message({
 
 	const renderContentBlocks = (skipText: boolean): ReactNode[] => {
 
-		// 3a: consecutive thinking/command/read/search rows share one list.
+		// 3a: consecutive thinking/command/search rows share one list.
 		const elements: { node: ReactNode; process: boolean; tally?: (stats: ProcessStats) => void }[] = [];
 		const push = (node: ReactNode, process = false, tally?: (stats: ProcessStats) => void) => elements.push({ node, process, tally });
 		const tallyTool = (stats: ProcessStats, view: ToolView, id: string) => {
@@ -471,10 +471,7 @@ export const Message = memo(function Message({
 					reads.push(next);
 					i++;
 				}
-				push(<ReadGroup key={`${message.id}-${first.id}`} items={reads.map((item) => ({ block: item, view: viewFor(item) }))} wrap={toolsWrap} />, true, stats => {
-					stats.reads += reads.length;
-					for (const item of reads) tallyTool(stats, viewFor(item), item.id);
-				});
+				push(<ReadGroup key={`${message.id}-${first.id}`} items={reads.map((item) => ({ block: item, view: viewFor(item) }))} wrap={toolsWrap} />);
 				continue;
 			}
 

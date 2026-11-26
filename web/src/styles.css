@@ -16793,3 +16793,43 @@ html[data-platform="win32"] :is(.settings-tab-label, .input-tools .chip, .reply-
 .wg-doc-review input { min-width: 0; width: 100%; }
 .wg-doc-review button { justify-self: start; padding: 5px 9px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--bg); }
 .wg-doc-refs > div { display: grid; gap: 4px; padding: 7px 0; border-top: 1px solid var(--border-soft); }
+
+/* Keep the composer in normal layout throughout typing and IME composition. */
+@supports (field-sizing: content) {
+	.inputbox textarea.chat-prompt-field { field-sizing: content; min-width: 0; overflow-y: auto; }
+}
+
+/* A compact tool heading owns its preview. Nested file rows share its left edge. */
+:root .design-workspace .transcript-tool {
+	margin: 2px 0; min-width: 0; border: 0; border-radius: 0;
+	background: transparent; box-shadow: none;
+}
+:root .design-workspace .transcript-tool:has(> :is(.toolcall-body, .change-card-body)) {
+	border: 1px solid var(--review-border); border-radius: var(--r-md); background: var(--review-bg);
+}
+:root .design-workspace .transcript-tool > :is(.change-card-head, .toolcall-read-headrow, .toolcall-head) {
+	min-height: 30px; padding: 2px 6px; gap: 6px; border: 0;
+}
+:root .design-workspace .transcript-tool .toolcall-read-head { min-height: 26px; padding: 0; gap: 8px; }
+:root .design-workspace .transcript-tool > .toolcall-head > .toolcall-icon,
+:root .design-workspace .transcript-tool .toolcall-read-icon { width: 16px; height: 16px; background: transparent; color: var(--text-dim); }
+:root .design-workspace .transcript-tool > :is(.change-card-body, .toolcall-body) {
+	padding: 0; border-top: 1px solid var(--review-border); min-width: 0;
+}
+:root .design-workspace .transcript-tool > .change-card-body > .change-summary-inline {
+	margin: 0; border: 0; border-radius: 0;
+}
+:root .design-workspace .transcript-tool .change-summary-inline > .change-summary-file { padding-inline: 6px; gap: 6px; }
+
+:root .design-workspace .transcript-tool > .toolcall-read-headrow { padding-inline-start: 0; }
+
+:root .design-workspace .toolcall-read .toolcall-output-more { border: 0; box-shadow: none; background: transparent; }
+:root .design-workspace .toolcall-read .toolcall-output { margin-top: 0; }
+
+/* File previews sit directly inside the read card. */
+:root .design-workspace .toolcall-read .toolcall-output > .toolcall-markdown,
+:root .design-workspace .toolcall-read .toolcall-output > pre,
+:root .design-workspace .toolcall-read .toolcall-code.numbered .code-gutter,
+:root .design-workspace .toolcall-read .toolcall-code .codeblock pre {
+	border: 0; border-radius: 0; box-shadow: none;
+}

@@ -1,8 +1,8 @@
 import type { UiContentBlock, UiMessage } from "../../server/protocol.js";
 
-/** Tools rendered as rows of the shared process list (3a): commands, reads and searches.
+/** Tools rendered as rows of the shared process list (3a): commands and searches.
  * `bash_task` controls background commands and reads as a command row, not a generic card. */
-export const PROCESS_TOOLS = new Set(["bash", "bash_task", "read", "grep"]);
+export const PROCESS_TOOLS = new Set(["bash", "bash_task", "grep"]);
 
 /** Thinking and process tool calls share one list; prose, edits and other tools end it. */
 export function isProcessBlock(block: UiContentBlock): boolean {
@@ -42,9 +42,9 @@ function step(groups: ProcessGroups, byId: Map<string, UiMessage>, message: UiMe
 	byId.set(message.id, message);
 }
 
-/** Merge thinking, commands, reads and searches across assistant messages and their
+/** Merge thinking, commands and searches across assistant messages and their
  * invisible results into one list per stretch between prose paragraphs.
- * Never cross user/text/edit/event boundaries, errors or the history fold boundary.
+ * Never cross user/text/read/edit/event boundaries, errors or the history fold boundary.
  * Source IDs remain anchors in MessageList, so navigation still reaches a group.
  */
 export function groupBashMessages(messages: UiMessage[], start = 0, barriers = new Set<number>()): ProcessGroups {

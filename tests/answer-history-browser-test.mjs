@@ -38,11 +38,8 @@ try {
 	assert.equal(await page.locator('.answer-summary').count(), 4);
 	assert.equal(await page.locator('.answer-summary-item').count(), 8);
 	assert.equal(await page.locator('.answer-history-expand').count(), 0);
-	assert.equal(await page.locator('.process-group.ok').count(), 1);
-	// A single tool call renders headless: the summary line stands in for the
-	// toggle head, and the tool row is visible without a click.
-	assert.equal(await page.locator('.process-group-head').count(), 0);
-	assert.equal(await page.locator('.process-group-summary-line').count(), 1);
+	await page.locator('.toolcall-read-head').waitFor();
+	assert.equal(await page.locator('.process-group').count(), 0);
 	// Every round is present as its own assistant message (4 replies + the tool
 	// call message), all mounted without any click.
 	assert.equal(await page.locator('.msg-assistant').count(), 5);

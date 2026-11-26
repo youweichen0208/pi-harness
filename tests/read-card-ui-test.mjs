@@ -58,7 +58,7 @@ try {
 	});
 	await page.goto(`http://127.0.0.1:${port}`);
 
-	await page.locator('.process-group-summary-line').click();
+	assert.equal(await page.locator('.process-group-summary-line').count(), 0);
 	await page.locator('.toolcall-read').waitFor();
 	assert.equal(await page.locator('.read-group-head,.read-file-head').count(), 0, 'single read has no redundant nested rows');
 	assert.equal(await page.locator('.toolcall-read .read-download,.toolcall-read .toolcall-output').count(), 0, 'image read hides full output download and redundant notice');
@@ -96,7 +96,7 @@ try {
 		{ id: 'result', role: 'toolResult', toolCallId: 'read1', content: [{ type: 'text', text: longText }], durationMs: 120 },
 	];
 	await page.reload();
-	await page.locator('.process-group-summary-line').click();
+	assert.equal(await page.locator('.process-group-summary-line').count(), 0);
 	await page.locator('.toolcall-read').waitFor();
 	const stats = await page.locator('.toolcall-read-stats').textContent();
 	assert.match(stats ?? '', /180/, `read row shows the line count (got ${stats})`);

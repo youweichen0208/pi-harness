@@ -17,9 +17,9 @@ try {
 	const card=page.locator('.toolcall-structured');
 	await card.waitFor();
 	assert.equal(await card.locator('.toolcall-action').textContent(),'action: sources');
-	const nameBox = await card.locator('.toolcall-name-toggle > span').boundingBox();
-	const actionBox = await card.locator('.toolcall-action').boundingBox();
-	assert(actionBox.y >= nameBox.y + nameBox.height);
+	const actionBelowName = await card.locator('.toolcall-name-toggle').evaluate(button =>
+		button.querySelector('small').getBoundingClientRect().top >= button.querySelector('span').getBoundingClientRect().bottom);
+	assert(actionBelowName, 'action appears beneath the tool name');
 	assert(await card.locator('.hljs-attr').count()>0);
 	const toggle=card.locator('.structured-tool-code > button');
 	assert.equal(await toggle.getAttribute('aria-expanded'),'false');
@@ -38,9 +38,35 @@ try {
 	await page.setViewportSize({width:390,height:844});
 	assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
 	await page.screenshot({path:'tests/scratch/tool-card-mobile.png'});
+	messages[1].content[0].name = 'compress';
+	messages[2].toolName = 'compress';
 	messages[2].content[0].truncated = true;
 	await page.reload();
 	await page.locator('.structured-tool-output').waitFor();
 	assert.equal(await page.locator('.structured-tool-output footer').getByRole('button',{name:'下载完整输出',exact:true}).count(),0);
+	assert.equal(await card.evaluate(el => getComputedStyle(el).borderLeftWidth), '1px');
+	assert.match(await card.locator('.toolcall-name-toggle').innerText(), /compress/i);
+	// Exercise the same transcript renderer with the knowledge tools' own names and arguments.
+	const knowledgeCalls = [
+		['knowledge_sources', {}], ['source_list', { sourceId: 'repo' }],
+		['source_read', { sourceId: 'repo', path: 'src/main.ts' }],
+		['source_search', { sourceId: 'repo', query: 'main' }],
+	];
+	for (const [name, args] of knowledgeCalls) {
+		messages[1].content.push({ type: 'toolCall', id: name, name, argumentsText: JSON.stringify(args) });
+		messages.push({ id: name + '-result', role: 'toolResult', toolCallId: name, toolName: name, content: [{ type: 'text', text: output }] });
+	}
+	await page.reload();
+	for (const [name] of knowledgeCalls) {
+		const heading = page.getByRole('button', { name, exact: true });
+		const tool = page.locator('.transcript-tool').filter({ has: heading });
+		await tool.locator('.structured-tool-output').waitFor();
+		assert.equal(await tool.evaluate(el => getComputedStyle(el).borderLeftWidth), '1px', name);
+		await heading.click();
+		assert.equal(await heading.getAttribute('aria-expanded'), 'false', name);
+		assert.equal(await tool.evaluate(el => getComputedStyle(el).borderLeftWidth), '0px', name);
+		await heading.click();
+		await tool.locator('.structured-tool-output').waitFor();
+	}
 	console.log('PASS action, JSON highlight, expansion, raw download, dark and mobile');
 } finally {await browser?.close();await fixture.stop();}

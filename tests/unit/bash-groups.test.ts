@@ -24,13 +24,15 @@ describe("command groups", () => {
 		expect(groupBashMessages([call("a"), call("b")], 1).owners.size).toBe(0);
 		expect(groupBashMessages([call("a"), call("b")], 0, new Set([1])).owners.size).toBe(0);
 	});
-	it("keeps thinking, reads and a reply's leading rows in the same process list (3a)", () => {
+	it("keeps reads outside command groups and prevents merging across them", () => {
 		const thinking: UiMessage = { id: "t", role: "assistant", content: [{ type: "thinking", thinking: "check" }, { type: "toolCall", id: "read", name: "read" }] };
 		const reply: UiMessage = { id: "r", role: "assistant", content: [{ type: "thinking", thinking: "done" }, { type: "text", text: "Found it." }] };
 		const groups = groupBashMessages([call("a"), result("a"), thinking, reply]);
-		expect(groups.owners.get("t")).toBe("a");
-		expect(groups.projected.get("a")?.content.map(block => block.type)).toEqual(["toolCall", "thinking", "toolCall", "thinking"]);
-		expect(groups.projected.get("r")?.content.map(block => block.type)).toEqual(["text"]);
+		expect(groups.owners.has("t")).toBe(false);
+		expect(groups.projected.get("a")?.content.map(block => block.type)).toEqual(["toolCall", "thinking"]);
+		expect(groups.projected.get("t")?.content.map(block => block.type)).toEqual(["toolCall"]);
+		expect(groups.projected.has("r")).toBe(false);
+		expect(groupBashMessages([call("a"), thinking, call("b")]).owners.has("b")).toBe(false);
 	});
 	it("merges bash_task control calls into the same command list", () => {
 		const task: UiMessage = { id: "t", role: "assistant", content: [{ type: "toolCall", id: "tool-t", name: "bash_task", argumentsText: '{"action":"list"}' }] };

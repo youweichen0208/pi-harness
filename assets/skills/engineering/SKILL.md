@@ -9,6 +9,7 @@ Deliver working software with the lightest workflow that fits the risk. Write in
 
 ## Route
 
+- **Investigation**: when this skill is invoked to check current behavior, support or a suspected gap (“当前似乎还没做到”, “是否支持”), use Understand → Report. Treat uncertainty about present behavior as a question. Start Feature design only when the user asks to implement, fix or 补齐 the gap. If their intent remains unclear, ask whether they want analysis or implementation.
 - **Quick Fix**: a local, reversible change with clear behavior. Use Understand → Build → Verify → Evolve. Keep the work in the conversation and existing tests: no change document, no `grilling` without material ambiguity, `tdd` only when a useful automated seam exists, and Evolve only when the change produced durable knowledge worth recording.
 - **Feature**: new behavior, an API, or a meaningful interface decision. Use Design → Build → Verify → Evolve and one change document.
 - **Complex Change**: core architecture, cross-module behavior, persistence, compatibility, or high risk. Add the relevant specialist skills below.
@@ -16,6 +17,12 @@ Deliver working software with the lightest workflow that fits the risk. Write in
 Upgrade the route when investigation exposes materially greater risk or uncertainty.
 
 Load a selected skill with the native read tool from its entry in `<available_skills>`. The location identifies the actual source. A user or project skill with the same name overrides the bundled copy. Respect that ownership, but do not assume the override satisfies this workflow. Surface a conflict if it requires unauthorized actions or cannot produce the stage's required evidence.
+
+## Investigation
+
+Inspect the relevant local configuration and source. Use read for individual files and batch independent searches or reads with codemode when available. Work from the session cwd or use explicit paths. Count each underlying tool operation toward a maximum of 15, including operations in a batch. Report as soon as the first blocking fact is established, at the budget limit, or after two minutes without a user-visible finding, whichever comes first.
+
+Report current behavior, the gap, its source location, confidence and the next step. Identify any runtime fact that local sources cannot establish. Obtain explicit approval before SSH, SSHRemote or external service probes. End by asking whether to stop with the analysis or proceed with implementation. Until the user requests implementation, stay read-only and skip Design, Build and change documents.
 
 ## Design
 

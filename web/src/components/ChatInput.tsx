@@ -412,8 +412,9 @@ export const ChatInput = memo(function ChatInput({
 		return () => window.removeEventListener("keydown", onKey);
 	}, [showHelp]);
 
-	// Auto-grow the textarea; no scrollbar until it hits the height cap.
-	useEffect(() => {
+	// Older browsers need a measurement fallback before paint. Chromium sizes the field in CSS.
+	useLayoutEffect(() => {
+		if (CSS.supports("field-sizing", "content")) return;
 		const ta = taRef.current;
 		if (!ta) return;
 		ta.style.height = "auto"; // natural height first, then clamp
@@ -800,6 +801,7 @@ export const ChatInput = memo(function ChatInput({
 					</button>
 													<textarea
 														ref={taRef}
+														className="chat-prompt-field"
 					aria-label={t("composerPlaceholder")}
 														value={text}
 														rows={1}

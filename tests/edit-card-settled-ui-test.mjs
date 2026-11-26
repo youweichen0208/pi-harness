@@ -51,7 +51,7 @@ try {
 		await sleep(400);
 		for (const theme of ['light', 'dark']) {
 			await page.evaluate(value => document.documentElement.dataset.appearance = value, theme);
-			assert.equal(await page.locator('.change-card').first().evaluate(el => getComputedStyle(el).borderTopWidth), '0px', 'normal edit rows have no outer border');
+			assert.equal(await page.locator('.change-card').first().evaluate(el => getComputedStyle(el).borderTopWidth), '1px', 'expanded edit preview shares the tool frame');
 		}
 		await page.evaluate(() => document.documentElement.dataset.appearance = 'light');
 	};
@@ -157,6 +157,10 @@ try {
 		{ id: 'edit-result', role: 'toolResult', toolCallId: 'edit1', content: [{ type: 'text', text: 'Wrote 40 lines' }] },
 	]);
 	await body().locator('.changes-line').first().waitFor();
+	const writeBox = await card().boundingBox();
+	const fileBox = await body().locator('.change-summary-file').boundingBox();
+	assert(fileBox.x >= writeBox.x && fileBox.x - writeBox.x <= 2, 'file row aligns inside the Write frame');
+	assert(fileBox.y > writeBox.y && fileBox.y + fileBox.height <= writeBox.y + writeBox.height);
 	assert.equal(await body().locator('.changes-line').count(), 12, 'a new-file write previews at most 12 lines');
 	assert.match((await body().locator('.change-more').textContent()) ?? '', /展开其余 28 行/);
 	await body().locator('.change-more').click();

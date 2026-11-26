@@ -162,6 +162,16 @@ describe("bundled Engineering Skills", () => {
 		expect(engineering).toMatch(/already clear/i);
 	});
 
+	it("routes explicit gap analysis to a bounded read-only investigation", () => {
+		const skill = readFileSync(engineeringSkillPath("engineering", resolve(".")), "utf8");
+		expect(skill).toMatch(/Investigation.*当前似乎还没做到/);
+		const investigation = skill.split("## Investigation")[1].split("## Design")[0];
+		expect(investigation).toMatch(/15.*including operations in a batch/);
+		expect(investigation).toContain("two minutes");
+		expect(investigation).toMatch(/explicit approval before SSH, SSHRemote or external/);
+		expect(investigation).toMatch(/stay read-only and skip Design, Build and change documents/);
+	});
+
 	it("pins learn and ask knowledge-quality contracts without coupling to exact wording", () => {
 		const root = resolve(".");
 		const learn = readFileSync(engineeringSkillPath("learn", root), "utf8");

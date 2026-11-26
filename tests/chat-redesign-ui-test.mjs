@@ -1,5 +1,6 @@
 /** 3a/4a real-app regression with a deterministic, model-free reply. */
 import assert from 'node:assert/strict';
+import { verifyComposerSizing } from './lib/composer-sizing.mjs';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -54,6 +55,8 @@ try {
 	});
 	await page.goto(`http://localhost:${port}`);
 	await page.locator('.question-answer-bar').waitFor();
+	await verifyComposerSizing(page);
+
 	assert.equal(await page.locator('.question-card').count(), 3);
 	assert.equal(await page.locator('.question-option.selected').count(), 2);
 	assert.match(await page.locator('.question-answer-bar').innerText(), /2 \/ 3/);
