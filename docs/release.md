@@ -1,5 +1,9 @@
 # 发布流程
 
+## 2.3.1 Windows 工作区终端
+
+包含 2.3.0 的终端、Skills 与界面更新。Windows 原生终端验证发现 8.3 短路径和长路径可能指向同一工作区，创建终端时现按同一真实目录校验。2.3.0 保留为草稿。[中英双语发布说明](../.github/release-notes/v2.3.1.md)
+
 ## 2.3.0 终端工作区化与 Skills 契约
 
 终端改为归属项目工作区（`TerminalRegistry`），删除对话不再终止进程；移除 Workspace 图谱，跨仓查证统一为 `/ask` 并行调查与源码搜索；grilling 增加 Question Budget，learn 增加 Knowledge Quality status 契约；包含读取预览重排与顶栏导航改进。SDK / pi-ai 保持 1.6.0。本次发布 GitHub 三平台桌面 Release，不发布 npm。[中英双语发布说明](../.github/release-notes/v2.3.0.md)

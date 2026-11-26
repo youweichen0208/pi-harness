@@ -2,7 +2,7 @@
  * commands protocol over WebSocket (no browser needed).
  * Run:  npm run build:server && node terminal-smoke-test.mjs */
 import { spawn, spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, realpathSync } from "node:fs";
+import { mkdtempSync, rmSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,6 +13,14 @@ scrubHostEnv();
 
 const PORT = 20000 + Math.floor(Math.random() * 10000);
 const workdir = mkdtempSync(join(tmpdir(), "piweb-term-"));
+const workspaceId = realpathSync.native(workdir);
+// Only the executed child prints the marker. Neither the command banner nor
+// shell input echo contains it. Compare native paths inside the actual PTY.
+writeFileSync(join(workdir, "pty-probe.cjs"), `
+if (require("node:fs").realpathSync.native(".") !== ${JSON.stringify(workspaceId)}) throw Error("Unexpected terminal cwd " + process.cwd());
+console.log("PTY_OK:" + process.argv[2]);
+`);
+const probeCommand = marker => `node pty-probe.cjs ${marker}`;
 const dataDir = mkdtempSync(join(tmpdir(), "piweb-term-data-"));
 const agentDir = join(dataDir, "agent");
 process.env.PORT = String(PORT);
@@ -82,6 +90,8 @@ let sessionsReply = null; // sessions list
 let snapshotReply = null;
 let terminalList = null; // latest terminal_list payload
 const notices = []; // notice texts from the server
+const probeRan = (id, marker) => (outputs.get(id) ?? "").includes(`PTY_OK:${marker}`);
+const isLive = id => terminalList?.terminals.some(item => item.id === id && item.running);
 
 async function main() {
 	await waitServer();
@@ -271,11 +281,11 @@ async function main() {
 		cols: 80,
 		rows: 24,
 	});
-	check("terminal_list identifies the active conversation", snapshotReply?.conversationId && snapshotReply.conversationId.length > 0);
-	send({ type: "terminal_input", terminalId: t1, data: "echo WS_ECHO_OK\r" });
+	check("terminal_list identifies the canonical workspace and live terminal", await waitFor(() => terminalList?.workspaceId === workspaceId && isLive(t1)));
+	send({ type: "terminal_input", terminalId: t1, data: probeCommand("manual") + "\r" });
 	check(
-		"input echoes through PTY",
-		await waitFor(() => (outputs.get(t1) ?? "").includes("WS_ECHO_OK")),
+		"input executes through PTY",
+		await waitFor(() => probeRan(t1, "manual")),
 	);
 
 	send({ type: "terminal_resize", terminalId: t1, cols: 100, rows: 40 });
@@ -286,46 +296,35 @@ async function main() {
 	send({
 		type: "run_command",
 		terminalId: t2,
-		command: { name: "dev", command: "echo WS_CMD_OK", cwd: "${pwd}" },
+		command: { name: "dev", command: probeCommand("run"), cwd: "${pwd}" },
 		cols: 80,
 		rows: 24,
 	});
-	await sleep(1200);
 	check(
 		"run_command banner shown",
-		(outputs.get(t2) ?? "").includes("WS_CMD_OK"),
+		await waitFor(() => (outputs.get(t2) ?? "").includes("> " + probeCommand("run"))),
 	);
-
-	// ${pwd} resolves to session cwd (= workspace root here)
-	send({ type: "terminal_input", terminalId: t2, data: "pwd\r" });
-	await sleep(600);
-	check(
-		"${pwd} resolved to session cwd",
-		(outputs.get(t2) ?? "").includes(workdir),
-	);
+	check("${pwd} resolved to session cwd", await waitFor(() => probeRan(t2, "run")));
 
 	// -- re-run: run_command on an existing terminal restarts it in place ------
 	send({
 		type: "run_command",
 		terminalId: t2,
-		command: { name: "dev", command: "echo WS_CMD_RERUN", cwd: "${pwd}" },
+		command: { name: "dev", command: probeCommand("restart"), cwd: "${pwd}" },
 		cols: 80,
 		rows: 24,
 	});
-	await sleep(1200);
-	const t2out = outputs.get(t2) ?? "";
-	check("re-run banner appears", t2out.includes("> echo WS_CMD_RERUN"));
-	check("re-run executed", t2out.includes("WS_CMD_RERUN"));
+	check("re-run banner appears", await waitFor(() => (outputs.get(t2) ?? "").includes("> " + probeCommand("restart"))));
+	check("re-run executed", await waitFor(() => probeRan(t2, "restart")));
 	// The replacement shell must accept input (a live PTY, not the killed one).
 	send({
 		type: "terminal_input",
 		terminalId: t2,
-		data: "echo WS_AFTER_RERUN\r",
+		data: probeCommand("interactive") + "\r",
 	});
-	await sleep(600);
 	check(
 		"restarted shell accepts input",
-		(outputs.get(t2) ?? "").includes("WS_AFTER_RERUN"),
+		await waitFor(() => probeRan(t2, "interactive")),
 	);
 
 	// -- rename: user-facing tab label only, never restarts the PTY ------------
@@ -335,10 +334,10 @@ async function main() {
 		await waitFor(() => terminalList?.terminals?.some((item) => item.id === t2 && item.title === "我的 终端")),
 	);
 	const beforeRename = outputs.get(t2) ?? "";
-	send({ type: "terminal_input", terminalId: t2, data: "echo WS_AFTER_RENAME\r" });
+	send({ type: "terminal_input", terminalId: t2, data: probeCommand("renamed") + "\r" });
 	check(
 		"renamed tab keeps the same live PTY",
-		await waitFor(() => (outputs.get(t2) ?? "").includes("WS_AFTER_RENAME")) &&
+		await waitFor(() => probeRan(t2, "renamed")) &&
 			(outputs.get(t2) ?? "").startsWith(beforeRename),
 	);
 	send({ type: "terminal_rename", terminalId: t2, title: "   " });
@@ -359,7 +358,7 @@ async function main() {
 	check("terminal_kill emits exit", await waitFor(() => exits.has(t1)));
 
 	send({ type: "terminal_input", terminalId: t2, data: "exit\r" });
-	check("shell exit emits terminal_exit", await waitFor(() => exits.has(t2)));
+	check("shell exit emits terminal_exit", await waitFor(() => exits.get(t2) === 0));
 	// Exited PTYs leave the live map: the same name can be created again and
 	// accepts input, proving exited entries do not consume the terminal limit.
 	send({
@@ -369,8 +368,9 @@ async function main() {
 		cols: 80,
 		rows: 24,
 	});
-	send({ type: "terminal_input", terminalId: t2, data: "echo REUSED_OK\r" });
-	check("exited terminal name can be reused", await waitFor(() => (outputs.get(t2) ?? "").includes("REUSED_OK")));
+	send({ type: "terminal_input", terminalId: t2, data: probeCommand("reused") + "\r" });
+	check("exited terminal name can be reused", await waitFor(() => probeRan(t2, "reused")));
+	send({ type: "terminal_kill", terminalId: t2 });
 
 	// The command-list spawn path must enforce the same live-terminal cap as
 	// terminal_create; otherwise unique browser IDs could bypass the limit.
@@ -378,7 +378,8 @@ async function main() {
 	for (const id of capIds) {
 		send({ type: "terminal_create", terminalId: id, cwd: workdir, cols: 40, rows: 12 });
 	}
-	await sleep(1200);
+	check("all live slots are occupied before testing overflow", await waitFor(() => capIds.every(isLive)));
+	const beforeOverflow = notices.length;
 	send({
 		type: "run_command",
 		terminalId: "cap-overflow",
@@ -386,7 +387,7 @@ async function main() {
 		cols: 40,
 		rows: 12,
 	});
-	check("run_command enforces terminal limit", await waitFor(() => notices.some((text) => text.includes("终端数量已达上限"))));
+	check("run_command enforces terminal limit", await waitFor(() => notices.slice(beforeOverflow).some((text) => text.includes("终端数量已达上限"))));
 	for (const id of capIds) send({ type: "terminal_kill", terminalId: id });
 
 	// -- key encoding (pure + byte-exact) ------------------------------------
@@ -442,12 +443,11 @@ async function main() {
 		for (const id of histIds) {
 			send({ type: "terminal_create", terminalId: id, cwd: workdir, cols: 40, rows: 12 });
 		}
-		await sleep(1200);
+		check("history fixture starts with 16 live terminals", await waitFor(() => histIds.every(isLive)));
 		send({ type: "terminal_input", terminalId: "hist-0", data: "exit\r" }); // → history
-		for (let i = 0; i < 30 && !exits.has("hist-0"); i++) await sleep(100);
-		check("hist-0 exited and moved to history", exits.has("hist-0"));
+		check("hist-0 exited and moved to history", await waitFor(() => exits.get("hist-0") === 0));
 		send({ type: "terminal_create", terminalId: "hist-fill", cwd: workdir, cols: 40, rows: 12 }); // back to 16 live
-		await sleep(500);
+		check("replacement refills the live slots", await waitFor(() => isLive("hist-fill") && histIds.slice(1).every(isLive)));
 		const before = notices.length;
 		send({
 			type: "run_command",
@@ -456,10 +456,9 @@ async function main() {
 			cols: 40,
 			rows: 12,
 		});
-		await sleep(400);
 		check(
 			"run_command of an exited id at the cap is rejected",
-			notices.slice(before).some((n) => n.includes("终端数量已达上限")),
+			await waitFor(() => notices.slice(before).some((n) => n.includes("终端数量已达上限"))),
 		);
 		for (const id of histIds) send({ type: "terminal_kill", terminalId: id });
 		send({ type: "terminal_kill", terminalId: "hist-fill" });

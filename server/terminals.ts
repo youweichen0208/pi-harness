@@ -736,8 +736,9 @@ export class TerminalManager {
 
 	private safeCwd(raw: string): string | null {
 		try {
-			const root = realpathSync(resolve(this.workspaceRoot));
-			const candidate = realpathSync(isAbsolute(raw) ? resolve(raw) : resolve(root, raw));
+			// Match projectRootKey's native paths, including Windows 8.3 aliases.
+			const root = realpathSync.native(resolve(this.workspaceRoot));
+			const candidate = realpathSync.native(isAbsolute(raw) ? resolve(raw) : resolve(root, raw));
 			const rel = relative(root, candidate);
 			if (rel === "" || (!rel.startsWith(".." + sep) && rel !== ".." && !isAbsolute(rel))) {
 				return candidate;

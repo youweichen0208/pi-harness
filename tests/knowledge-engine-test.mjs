@@ -63,8 +63,15 @@ async function connect(id, wikiCwd) {
 }
 async function prompt(client, text, requestId, expectedCalls) {
 	const before = calls;
+	const previousMessages = client.state.messages.length;
 	client.send({ type: "prompt", text, requestId });
-	await wait(() => calls >= before + expectedCalls && !client.state.isStreaming, `${text} calls=${calls} wire=${JSON.stringify(client.wire.slice(-12))}`);
+	// The model can finish before the client receives its first snapshot for this turn.
+	await wait(() => {
+		const reply = client.state.messages.at(-1);
+		return calls >= before + expectedCalls && !client.state.isStreaming
+			&& client.state.messages.length > previousMessages && reply?.role === "assistant"
+			&& reply.content?.some(part => part.type === "text" && part.text);
+	}, `reply for ${requestId}`);
 	return before;
 }
 async function promptWithConfirm(client, text, requestId, approve) {

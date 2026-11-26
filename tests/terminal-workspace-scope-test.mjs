@@ -35,6 +35,10 @@ const projectB = join(base, "beta");
 const dataDir = join(base, "data");
 const agentDir = join(base, "agent");
 for (const dir of [projectA, projectB, dataDir]) mkdirSync(dir, { recursive: true });
+// Windows may give us an 8.3 alias in tmpdir(). Keep sending the original cwd,
+// but compare workspace identities using the on-disk spelling from the OS.
+const canonicalA = realpathSync.native(projectA);
+const canonicalB = realpathSync.native(projectB);
 
 const seed = (cwd, id, text) => {
 	const dir = join(agentDir, "sessions", `--${cwd.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-")}--`);
@@ -161,7 +165,7 @@ try {
 	await primary.waitForState((state) => state.sessionFile === sessionA1);
 	const workspaceA = primary.state.workspaceId;
 	check("snapshot carries a workspaceId", typeof workspaceA === "string" && workspaceA.length > 0);
-	check("workspaceId is the canonical project root", workspaceA === realpathSync(projectA));
+	check("workspaceId is the canonical project root", workspaceA === canonicalA);
 
 	const terminalA = "term-alpha";
 	primary.send({ type: "terminal_create", terminalId: terminalA, cwd: projectA, cols: 60, rows: 16, workspaceId: workspaceA });
@@ -180,9 +184,9 @@ try {
 
 	// -- 3. project switch swaps the list, no cross-project output ------------
 	primary.send({ type: "set_cwd", path: projectB, source: "ui" });
-	await primary.waitForState((state) => realpathSync(state.cwd) === realpathSync(projectB));
+	await primary.waitForState((state) => realpathSync.native(state.cwd) === canonicalB);
 	const workspaceB = primary.state.workspaceId;
-	check("switching project changes the workspace key", workspaceB === realpathSync(projectB) && workspaceB !== workspaceA);
+	check("switching project changes the workspace key", workspaceB === canonicalB && workspaceB !== workspaceA);
 	const emptyList = await primary.waitForType("terminal_list", (m) => m.workspaceId === workspaceB);
 	check("the new project starts with an empty list", emptyList.terminals.length === 0);
 
@@ -201,7 +205,7 @@ try {
 	// -- 4. the background terminal kept running and replays on return -------
 	primary.send({ type: "terminal_kill", terminalId: "does-not-exist", workspaceId: workspaceA });
 	primary.send({ type: "set_cwd", path: projectA, source: "ui" });
-	await primary.waitForState((state) => realpathSync(state.cwd) === realpathSync(projectA));
+	await primary.waitForState((state) => realpathSync.native(state.cwd) === canonicalA);
 	const backList = await primary.waitForType("terminal_list", (m) => m.workspaceId === workspaceA);
 	check("returning to the project restores its tab", backList.terminals.some((t) => t.id === terminalA && t.running));
 	const replay = await primary.expectOutput(terminalA, "BACKGROUND_NOISE");
@@ -219,9 +223,13 @@ try {
 
 	// -- 6. background kill does not disturb the active project --------------
 	second.send({ type: "set_cwd", path: projectB, source: "ui" });
-	await second.waitForState((state) => realpathSync(state.cwd) === realpathSync(projectB));
-	primary.send({ type: "set_cwd", path: projectB, source: "ui" });
-	await primary.waitForState((state) => realpathSync(state.cwd) === realpathSync(projectB));
+	await second.waitForState((state) => realpathSync.native(state.cwd) === canonicalB);
+	// Both sockets share a client. The snapshot from the second socket's switch
+	// already shows beta, so it cannot confirm the primary socket's request.
+	primary.send({ type: "set_cwd", path: projectB, source: "ui", requestId: "primary-switch-to-beta" });
+	const switched = await primary.waitForType("cwd_result", (m) => m.requestId === "primary-switch-to-beta");
+	assert.equal(switched.ok, true, switched.error);
+	await primary.waitForState((state) => realpathSync.native(state.cwd) === canonicalB);
 	const terminalB = "term-beta";
 	primary.send({ type: "terminal_create", terminalId: terminalB, cwd: projectB, cols: 60, rows: 16 });
 	await primary.waitForType("terminal_list", (m) => m.terminals.some((t) => t.id === terminalB));
