@@ -17,6 +17,7 @@ try {
 		page.setDefaultTimeout(10000);
 		await page.addInitScript(lang => { localStorage.setItem('pi-harness:lang', lang); Object.defineProperty(navigator, 'clipboard', { value: { writeText: async text => { window.__copiedCommand = text; } } }); }, lang);
 		const commands = [];
+		let workspaceId;
 		let checkedRoute = false;
 		const skills = ['user', 'project', 'package'].map((source, i) => ({ id: `fixture-${i}`, name: `sample-${source}`, description: 'A long skill description that remains readable across narrow layouts and wraps without hiding instructions.', enabled: true, path: `/fixture/${source}/SKILL.md`, source, scope: source === 'project' ? 'project' : 'user', canToggle: true, promptVisible: true }));
 		let state = { pi: { status: 'missing' }, node: { status: 'missing' }, npm: { status: 'missing' }, canInstall: false };
@@ -60,7 +61,10 @@ try {
 			});
 			upstream.onMessage(raw => {
 				const message = JSON.parse(String(raw));
-				if (message.type === 'snapshot' || message.type === 'snapshot_delta') message.state.piConfigured = true;
+				if (message.type === 'snapshot' || message.type === 'snapshot_delta') {
+					workspaceId = message.state.workspaceId;
+					message.state.piConfigured = true;
+				}
 				if (message.type !== 'terminal_list') route.send(JSON.stringify(message));
 			});
 		});
@@ -130,7 +134,8 @@ try {
 		for (let i = 0; i < 50 && !commands.length; i++) await page.waitForTimeout(100);
 		assert.equal(commands.length, 1);
 		assert.equal(commands[0].command.command, 'npm install -g --ignore-scripts @earendil-works/pi-coding-agent@latest');
-		assert(commands[0].conversationId);
+		assert(workspaceId);
+		assert.equal(commands[0].workspaceId, workspaceId, 'installation runs in the current project workspace');
 		assert.equal(await page.locator('.settings-modal').count(), 0);
 		// The settings backdrop can outlive the modal for a frame and swallow the click.
 		await page.locator('.modal-backdrop').waitFor({ state: 'detached' });

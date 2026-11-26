@@ -8,8 +8,9 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { chromium } from 'playwright-core';
 import { CHROME_PATH } from './lib/chrome.mjs';
 import { portUp } from './lib/port-utils.mjs';
-import { testEnv } from "./lib/test-env.mjs";
+import { scrubHostEnv, testEnv } from "./lib/test-env.mjs";
 import { contrastRatios } from "./lib/contrast.mjs";
+scrubHostEnv();
 const port = 8999;
 assert.equal(await portUp(port), false, `Port ${port} busy`);
 const root = mkdtempSync(join(tmpdir(), 'pi-changes-'));
@@ -29,9 +30,13 @@ const messages = [
 	{ id:'edit-result',role:'toolResult',toolCallId:'edit1',details:{diff:'-6 const value5 = "old";\n+6 const value5 = "new";',firstChangedLine:6},content:[] },
 	{ id:'answer',role:'assistant',timestamp:Date.now(),content:[{type:'text',text:'Updated the configuration in app.ts.'}] },
 ];
-let server, browser, snapshot, socket, upstreamSocket, forceNotRepo = false, terminalReady = false, regenerated;
+let server, browser, snapshot, socket, upstreamSocket, forceNotRepo = false, regenerated;
 try {
-	server = spawn(process.execPath,['dist/server/index.js'],{env:{...testEnv(),PORT:String(port),PI_WEB_CWD:cwd,PI_WEB_DATA_DIR:join(root,'data'),PI_CODING_AGENT_DIR:join(root,'agent')},stdio:['ignore','pipe','pipe']});
+	// Give the real session the same user turn so new_chat opens a second conversation.
+	process.env.PI_CODING_AGENT_DIR = join(root, 'agent');
+	const { SessionManager } = await import('@earendil-works/pi-coding-agent');
+	SessionManager.create(cwd).appendMessage({ role: 'user', content: messages[0].content, timestamp: Date.now() });
+	server = spawn(process.execPath,['dist/server/index.js'],{env:{...testEnv(),PORT:String(port),PI_WEB_CWD:cwd,PI_WEB_DATA_DIR:join(root,'data')},stdio:['ignore','pipe','pipe']});
 	let log=''; server.stdout.on('data', data=>log+=data); server.stderr.on('data',data=>log+=data);
 	for(let n=0;n<100&&!await portUp(port);n++) await sleep(100); assert(await portUp(port),log);
 	browser=await chromium.launch({executablePath:CHROME_PATH});
@@ -42,7 +47,6 @@ try {
 		upstream.onMessage(wire=>{
 			const msg=JSON.parse(String(wire));
 			if(msg.type==='snapshot') Object.assign(msg.state,{messages,piConfigured:true,isStreaming:false,taskProgress:{id:'task',conversationId:msg.state.conversationId,sourceMessageId:'user',title:'Update',status:'done',startedAt:1,completed:1,steps:[{id:'step',messageId:'edit',title:'Edit',status:'done',startedAt:1,artifacts:[{toolCallId:'edit1',kind:'edit',path:'app.ts',label:'app.ts'}]}]}});
-			if (msg.type === 'terminal_list' && msg.terminals.some(item => item.id === 'changes-fixture')) terminalReady = true;
 			if (msg.type === 'snapshot') snapshot = structuredClone(msg);
 			if (forceNotRepo && msg.type === 'scm_data' && msg.kind === 'status') Object.assign(msg, { notRepo: true, files: [], branches: [] });
 			if(msg.type!=='snapshot_delta') route.send(JSON.stringify(msg));
@@ -146,13 +150,13 @@ try {
 	assert.equal(await page.locator('.change-summary:not(.change-summary-inline)').count(),0, 'turn summary stays hidden while streaming; inline tool diffs remain available');
 	// Preferences are isolated per conversation and restored when returning.
 	const original = snapshot.state.conversationId;
-	upstreamSocket.send(JSON.stringify({type:'terminal_create',terminalId:'changes-fixture',cwd,cols:80,rows:24,conversationId:original}));
-	for (let i=0;i<100&&!terminalReady;i++) await sleep(50); assert(terminalReady);
 	upstreamSocket.send(JSON.stringify({type:'new_chat'}));
 	await page.waitForFunction(id => JSON.parse(sessionStorage.getItem(`pi-harness:changes:${id}`)).open, original);
 	await page.locator('.changes-panel').waitFor({state:'detached'});
+	assert.notEqual(snapshot.state.conversationId, original);
 	upstreamSocket.send(JSON.stringify({type:'switch_conversation',id:original}));
 	await page.locator('.changes-panel').waitFor();
+	assert.equal(snapshot.state.conversationId, original);
 	// The changes toolbar shares the top row with Windows caption buttons.
 	await page.addInitScript(() => { window.electronAPI = { platform:'win32', windowAction(){}, onWindowState(){return ()=>{};} }; });
 	await page.reload(); await page.locator('.changes-panel').waitFor();

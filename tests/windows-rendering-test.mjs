@@ -29,22 +29,32 @@ try {
 		let page;
 		for (let i = 0; i < 200; i++) { page = app.windows().find(p => p.url().startsWith('http://127.0.0.1:')); if (page) break; await sleep(100); }
 		assert(page, 'local app window starts'); page.setDefaultTimeout(15000);
-		let conversation = false, socketRoute, activeConversationId;
+		let conversation = false, socketRoute, workspaceId;
 		await page.routeWebSocket('**/ws*', socket => {
 			socketRoute = socket;
 			const upstream = socket.connectToServer();
 			socket.onMessage(wire => {
 				const message = JSON.parse(wire.toString());
 				if (message.terminalId !== 'render-terminal') { upstream.send(wire); return; }
-				if (message.type === 'terminal_replay') socket.send(JSON.stringify({
-					type: 'terminal_output', conversationId: activeConversationId,
-					terminalId: message.terminalId, reset: true, data: mixed,
-				}));
+				if (message.type === 'terminal_replay') {
+					assert.equal(message.workspaceId, workspaceId, 'terminal replay uses the current project workspace');
+					socket.send(JSON.stringify({ type: 'terminal_output', workspaceId, terminalId: message.terminalId, reset: true, data: mixed }));
+				}
 			});
 			upstream.onMessage(wire => {
 				const message = JSON.parse(wire.toString());
-				if (message.type === 'conversations') activeConversationId = message.activeId;
-				if (message.type === 'snapshot' || message.type === 'snapshot_delta') { message.state.piConfigured = true; message.state.messages = conversation ? transcript : []; message.state.isStreaming = false; message.state.streamingMessage = null; if (message.type === 'snapshot_delta') { message.type = 'snapshot'; delete message.appended; delete message.baseRev; } }
+				if (message.type === 'snapshot' || message.type === 'snapshot_delta') {
+					workspaceId = message.state.workspaceId;
+					message.state.piConfigured = true;
+					message.state.messages = conversation ? transcript : [];
+					message.state.isStreaming = false;
+					message.state.streamingMessage = null;
+					if (message.type === 'snapshot_delta') {
+						message.type = 'snapshot';
+						delete message.appended;
+						delete message.baseRev;
+					}
+				}
 				socket.send(JSON.stringify(message));
 			});
 		});
@@ -322,8 +332,8 @@ try {
 		await page.locator('.settings-modal').waitFor({ state: 'hidden' });
 
 		// Replay deterministic mixed-language output into the actual xterm renderer.
-		assert(activeConversationId);
-		socketRoute.send(JSON.stringify({ type: 'terminal_list', conversationId: activeConversationId, terminals: [
+		assert(workspaceId);
+		socketRoute.send(JSON.stringify({ type: 'terminal_list', workspaceId, terminals: [
 			{ id: 'render-terminal', title: 'Rendering', cwd, cols: 80, rows: 24, running: true, exitCode: null },
 		] }));
 		await page.getByRole('tab', { name: '终端', exact: true }).click();
