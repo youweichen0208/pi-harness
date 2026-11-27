@@ -12383,6 +12383,11 @@ pre.wiki-mermaid-source-hidden > .fp-mermaid-preview { padding-bottom: 0; }
 .process-list .read-group.err .read-group-status { color: var(--red); }
 :root .design-workspace .thinking.live .thinking-toggle { flex-direction: column; align-items: flex-start; gap: 2px; min-height: 0; line-height: 20px; }
 .thinking-status { display: flex; align-items: center; gap: 6px; min-width: 0; color: var(--text-faint); font: 400 13px/20px var(--sans); font-style: normal; }
+:root .design-workspace .knowledge-tool .thinking-toggle { flex-direction: row; align-items: center; width: 100%; min-height: 22px; padding: 2px 0; cursor: default; }
+.design-workspace .knowledge-tool .thinking-label { font-family: var(--mono); font-size: 12.5px; }
+.knowledge-tool-state { margin-left: auto; padding-left: 12px; color: var(--text-faint); font: 12px/20px var(--sans); white-space: nowrap; }
+.knowledge-tool.err .knowledge-tool-state { color: var(--red); }
+@media (prefers-reduced-motion: reduce) { .knowledge-tool .thinking-spinner { animation: none; } }
 :root .design-workspace .thinking.live .thinking-status .thinking-label { flex: none; font-weight: 400; }
 .thinking-chevron { flex: none; width: 12px; height: 12px; transition: transform .15s; }
 .thinking.open .thinking-chevron { transform: rotate(90deg); }
@@ -15911,6 +15916,20 @@ span.rich-math { display: inline-block; }
 .compact-navigation .session-dot { margin-inline: 0; }
 .compact-navigation .navigation-search { border-radius: var(--r-md); }
 .compact-navigation .navigation-search:focus-within { border-color: var(--accent); }
+.compact-navigation .compact-workspace-trigger { border-radius: var(--r-sm); font-weight: 500; }
+.compact-navigation .navigation-search { border-color: var(--border-soft); }
+.compact-navigation .global-entries { gap: 2px; }
+.compact-navigation .global-entries button.active { color: var(--heading); font-weight: 500; }
+.compact-navigation .workspace-directory { margin-top: 14px; padding-top: 0; border-top: 0; }
+.design-workspace .compact-navigation .panel-sessions { margin-inline-start: 20px; padding-inline-start: 0; }
+.design-workspace .compact-navigation .session-item.active { box-shadow: none; }
+.compact-navigation .sidebar-footer { border-top: 0; padding: 10px 8px; }
+.compact-navigation .sidebar-footer button { width: 100%; padding: 5px 8px; border-radius: var(--r-sm); }
+.compact-navigation .sidebar-footer button:hover { background: var(--row-hover); color: var(--heading); }
+.compact-navigation :is(.compact-workspace-trigger, .global-entries button, .project-item, .session-item, .sidebar-footer button, .navigation-search) { transition: border-color 160ms ease, color 160ms ease; }
+@media (prefers-reduced-motion: reduce) {
+	.compact-navigation :is(.compact-workspace-trigger, .global-entries button, .project-item, .session-item, .sidebar-footer button, .navigation-search) { transition: none; }
+}
 
 @container project-directory (max-width: 210px) {
 	.design-workspace .compact-navigation .session-item {

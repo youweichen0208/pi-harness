@@ -304,7 +304,29 @@ type ToolCallBlockProps = {
 	wrap?: boolean;
 };
 
+const KNOWLEDGE_TOOL_NAMES = new Set(["knowledge_sources", "source_list", "source_search", "source_read", "knowledge_investigate", "knowledge_write", "source_report"]);
+
+function KnowledgeToolBlock({ block, view }: ToolCallBlockProps) {
+	const t = useChatT();
+	const abandoned = !!view.abandoned && !view.result && !view.status;
+	const running = !view.result && !view.status && view.streaming && !abandoned;
+	const complete = !!view.result || !!view.status;
+	const failed = view.result?.isError ?? view.status?.isError ?? false;
+	const state = failed ? "err" : complete ? "ok" : running ? "run" : "idle";
+	const status = failed ? t("error") : complete ? t("executionCompleted") : abandoned ? t("toolNotExecuted") : running ? t("processRunning") : t("toolQueued");
+	return <div className={`thinking knowledge-tool ${state}`} data-tool-call-id={block.id} onMouseEnter={() => notifyToolHover(block.id)} onMouseLeave={() => notifyToolHover(null)}>
+		<div className="thinking-toggle">
+			<span className="thinking-status">
+				{running && <RunningIndicator />}
+				<span className={`thinking-label${running ? " streaming-color" : ""}`} title={block.name}>{block.name}</span>
+			</span>
+			<span className="knowledge-tool-state">{status}</span>
+		</div>
+	</div>;
+}
+
 export const ToolCallBlock = memo(function ToolCallBlock(props: ToolCallBlockProps) {
+	if (KNOWLEDGE_TOOL_NAMES.has(props.block.name)) return <KnowledgeToolBlock {...props} />;
 	if (props.block.name === "embedded_browser" && props.view.result && !props.view.result.isError) {
 		let read = false;
 		try { read = JSON.parse(props.block.argumentsText || "{}").action === "read"; } catch { /* Partial arguments use normal tool feedback. */ }

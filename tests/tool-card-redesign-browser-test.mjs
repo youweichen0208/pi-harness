@@ -46,27 +46,36 @@ try {
 	assert.equal(await page.locator('.structured-tool-output footer').getByRole('button',{name:'下载完整输出',exact:true}).count(),0);
 	assert.equal(await card.evaluate(el => getComputedStyle(el).borderLeftWidth), '1px');
 	assert.match(await card.locator('.toolcall-name-toggle').innerText(), /compress/i);
-	// Exercise the same transcript renderer with the knowledge tools' own names and arguments.
+	// Knowledge tools stay as quiet Thinking-style status rows in the same transcript renderer.
 	const knowledgeCalls = [
 		['knowledge_sources', {}], ['source_list', { sourceId: 'repo' }],
 		['source_read', { sourceId: 'repo', path: 'src/main.ts' }],
 		['source_search', { sourceId: 'repo', query: 'main' }],
+		['knowledge_investigate', { tasks: [{ question: 'Verify the source' }] }],
+		['knowledge_write', { path: 'notes/verified.md', text: '# Verified knowledge' }],
+		['source_report', { findings: [{ finding: 'Verified', evidenceIds: ['ev_1'] }] }],
 	];
 	for (const [name, args] of knowledgeCalls) {
 		messages[1].content.push({ type: 'toolCall', id: name, name, argumentsText: JSON.stringify(args) });
 		messages.push({ id: name + '-result', role: 'toolResult', toolCallId: name, toolName: name, content: [{ type: 'text', text: output }] });
 	}
+	await page.setViewportSize({width:1440,height:1000});
 	await page.reload();
+	await page.locator('.knowledge-tool').first().waitFor();
+	assert.equal(await page.locator('.knowledge-tool').count(), knowledgeCalls.length);
+	assert.equal(await page.locator('.toolcall-structured').count(), 1, 'non-knowledge generic tools keep their cards');
 	for (const [name] of knowledgeCalls) {
-		const heading = page.getByRole('button', { name, exact: true });
-		const tool = page.locator('.transcript-tool').filter({ has: heading });
-		await tool.locator('.structured-tool-output').waitFor();
-		assert.equal(await tool.evaluate(el => getComputedStyle(el).borderLeftWidth), '1px', name);
-		await heading.click();
-		assert.equal(await heading.getAttribute('aria-expanded'), 'false', name);
+		const tool = page.locator(`[data-tool-call-id="${name}"]`);
+		await tool.waitFor();
+		assert(await tool.evaluate(el => el.classList.contains('thinking') && el.classList.contains('knowledge-tool')), name);
+		assert.match(await tool.innerText(), new RegExp(name));
+		assert.equal(await tool.getByRole('button').count(), 0, `${name} has no expansion or inspection action`);
+		assert.equal(await tool.locator('.toolcall-parameters,.toolcall-output,.structured-tool-output,.tool-output-download-link,pre').count(), 0, `${name} hides parameters and output`);
+		assert(!(await tool.innerText()).includes('Repository 0'), `${name} does not expose its result`);
 		assert.equal(await tool.evaluate(el => getComputedStyle(el).borderLeftWidth), '0px', name);
-		await heading.click();
-		await tool.locator('.structured-tool-output').waitFor();
 	}
-	console.log('PASS action, JSON highlight, expansion, raw download, dark and mobile');
+	await page.screenshot({path:'tests/scratch/knowledge-tool-rows.png'});
+	await page.setViewportSize({width:390,height:844});
+	assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+	console.log('PASS action, JSON highlight, expansion, raw download, knowledge status rows, dark and mobile');
 } finally {await browser?.close();await fixture.stop();}
