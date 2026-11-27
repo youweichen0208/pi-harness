@@ -36,6 +36,11 @@ export function stopRequestCommands(session: SessionManager) {
 	for (const task of registry.get(session)?.values() ?? []) if (task.request === request) task.stop();
 }
 const backgroundNote = "Running in the background. Completion will be delivered automatically on this conversation branch. Continue other work; do not poll. Silence alone does not indicate a hung command.";
+const backgroundPromptGuidelines = [
+	"When asked to wait, monitor, or be notified on completion or failure, run a command that stays alive until that event and set background: true immediately. A one-shot status query is not monitoring.",
+	"For GitHub Actions, use gh run watch <id> --exit-status rather than a one-time gh run view.",
+	"Promise automatic completion notification only after receiving a background task ID and willNotify: true. Giving the user a command to run does not start an agent-managed monitor.",
+];
 function taskReport(task: Task, cursor?: number) {
 	const v = task.view;
 	const willNotify = v.state === "background" && !task.suppressDelivery;
@@ -113,6 +118,8 @@ export function backgroundBash(session: SessionManager, settings: SettingsManage
 		const native = createBashToolDefinition(session.getCwd(), options);
 		pi.registerTool({
 			...native,
+			description: `${native.description} Set background: true for long-running commands to return a task ID immediately; background completion is delivered automatically. Commands still running after 30 seconds move to the background automatically.`,
+			promptGuidelines: [...(native.promptGuidelines ?? []), ...backgroundPromptGuidelines],
 			// Inherit the native Bash loadout, including configurations that omit Bash.
 			defaultActive: false,
 			parameters: Type.Object({ ...native.parameters.properties, background: Type.Optional(Type.Boolean({ description: "Run in the background and return a task ID immediately. Completion is delivered automatically; do not poll." })) }),

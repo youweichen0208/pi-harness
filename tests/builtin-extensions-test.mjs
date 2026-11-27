@@ -269,7 +269,22 @@ try {
 	await wait(() => calls === before + 1 && !a.state.isStreaming, "native baseline request");
 	const baselineRequest = modelRequests.at(-1);
 	const baselineSystem = baselineRequest.messages.find(message => message.role === "system");
-	assert.match(typeof baselineSystem?.content === "string" ? baselineSystem.content : "", /load the engineering skill if available/, "normal session prompt carries the routing rule");
+	const baselineSystemText = typeof baselineSystem?.content === "string" ? baselineSystem.content : "";
+	assert.match(baselineSystemText, /load the engineering skill if available/, "normal session prompt carries the routing rule");
+	const baselineBash = baselineRequest.tools.find(tool => tool.function?.name === "bash")?.function;
+	assert(baselineBash, "normal session exposes background Bash");
+	assert.match(baselineBash.description, /Set background: true for long-running commands/);
+	assert.match(baselineBash.description, /still running after 30 seconds/);
+	assert.match(baselineBash.parameters.properties.background.description, /Completion is delivered automatically/);
+	for (const pattern of [
+		/wait, monitor, or be notified on completion or failure/,
+		/background: true immediately/,
+		/one-shot status query is not monitoring/,
+		/gh run watch <id> --exit-status/,
+		/one-time gh run view/,
+		/background task ID and willNotify: true/,
+		/Giving the user a command to run does not start an agent-managed monitor/,
+	]) assert.match(baselineSystemText, pattern, "GitHub monitoring and notification contract reaches the model prompt");
 	before = calls;
 	a.send({ type: "prompt", text: "/skill:engineering Preserve $1 and spaces", requestId: "engineering-expansion" });
 	await wait(() => calls === before + 1 && !a.state.isStreaming, "Engineering Skill expansion");

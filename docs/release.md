@@ -1,5 +1,9 @@
 # 发布流程
 
+## 2.4.2 后台监控提醒、设置恢复与桌面控制
+
+继承未公开的 2.4.0 和 2.4.1 全部改动。后台 Bash 明确持续监控、GitHub Actions `gh run watch --exit-status` 和通知承诺契约；保留设置文件损坏时的内置扩展清单、桌面控制默认开启与工具卡片精简。同提交 CI 与三平台桌面打包回归通过后公开 GitHub Release，不发布 npm。[发布说明](../.github/release-notes/v2.4.2.md)
+
 ## 2.4.1 设置文件损坏时保留内置扩展清单
 
 修复 2.4.0 引入的问题：`document-extensions.json` 无法解析时整个内置扩展清单请求失败，桌面控制项从列表消失。改为在受影响条目上报错，清单照常返回。发布 GitHub 三平台桌面 Release，不发布 npm。[发布说明](../.github/release-notes/v2.4.1.md)
