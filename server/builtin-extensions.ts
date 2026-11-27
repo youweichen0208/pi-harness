@@ -12,8 +12,11 @@ const expectedTools: Partial<Record<BuiltinExtensionId, string[]>> = {
 	codemode: ["codemode"], "tool-search": ["tool_search"],
 };
 const owns = (path: string, id: string) => path === `<inline:${id}>` || path === `builtin:${id}`;
-function desktopSettings(): { defaultEnabled: boolean } {
-	return { defaultEnabled: getDocumentSettings().desktopDefaultEnabled };
+function desktopSettings(): { defaultEnabled: boolean; error?: string } {
+	// A broken settings file must not take the whole inventory down: the desktop item still needs to
+	// render so the user can see what to fix.
+	try { return { defaultEnabled: getDocumentSettings().desktopDefaultEnabled }; }
+	catch (error) { return { defaultEnabled: false, error: error instanceof Error ? error.message : String(error) }; }
 }
 export function documentSettingsVersion(): string {
 	return createHash("sha256").update(JSON.stringify(getDocumentSettings())).digest("hex");
@@ -62,7 +65,8 @@ export function builtinExtensionsState(session: AgentSession, conversationId: st
 		const grant = desktopGrant(session.sessionManager);
 		const enabled = !!grant.controller;
 		const helperInstalled = existsSync(join(homedir(), ".pi-desktop-control", process.platform === "win32" ? "Scripts/python.exe" : "bin/python"));
-		items.push({ id: "desktop-control", enabled, status: enabled ? "loaded" : "disabled", settingsVersion: grant.version, commands: [], tools: ["desktop_window"], desktopDefault: desktopSettings().defaultEnabled, helperInstalled });
+		const defaultSettings = desktopSettings();
+		items.push({ id: "desktop-control", enabled, status: defaultSettings.error ? "error" : enabled ? "loaded" : "disabled", ...(defaultSettings.error ? { error: defaultSettings.error } : {}), settingsVersion: grant.version, commands: [], tools: ["desktop_window"], desktopDefault: defaultSettings.defaultEnabled, helperInstalled });
 	}
 	return { conversationId, items, documentVersion, canReload };
 }

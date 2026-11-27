@@ -304,9 +304,14 @@ try {
 	assert.equal(item(await toggle(a, "background-bash", true), "background-bash").status, "loaded");
 	const saved = readFileSync(join(data, "document-extensions.json"), "utf8");
 	writeFileSync(join(data, "document-extensions.json"), "broken-json");
-	// The desktop default flag lives in the same file, so the inventory reports the unreadable settings to every client.
-	const broken = await request(a, "builtin-list", {}, 400); assert.match(broken.error, /document-extensions/);
+	// Unreadable settings are reported per item; the inventory still answers so the page can show what to fix.
+	const broken = await request(a, "builtin-list"); assert.equal(broken.items.length, inventoryCount);
+	assert.equal(item(broken, "background-bash").status, "error"); assert.equal(item(broken, "codemode").status, "loaded");
+	assert.match(item(broken, "background-bash").error, /document-extensions/);
+	if (supportsDesktop) { assert.equal(item(broken, "desktop-control").status, "error"); assert.match(item(broken, "desktop-control").error, /document-extensions/); }
 	writeFileSync(join(data, "document-extensions.json"), saved);
+	// Settings are read again on the next request, so the inventory recovers without a restart.
+	assert.notEqual(item(await request(a, "builtin-list"), "background-bash").status, "error");
 	console.log("PASS built-in inventory, removed conversion/OKF/database tools, version conflicts and new chat settings");
 
 	assert(!existsSync(npxCalls), "retired browser MCP must never launch");
