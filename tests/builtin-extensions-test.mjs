@@ -304,7 +304,8 @@ try {
 	assert.equal(item(await toggle(a, "background-bash", true), "background-bash").status, "loaded");
 	const saved = readFileSync(join(data, "document-extensions.json"), "utf8");
 	writeFileSync(join(data, "document-extensions.json"), "broken-json");
-	const broken = await request(a, "builtin-list"); assert.equal(broken.items.length, inventoryCount); assert.equal(item(broken, "background-bash").status, "error"); assert.equal(item(broken, "codemode").status, "loaded");
+	// The desktop default flag lives in the same file, so the inventory reports the unreadable settings to every client.
+	const broken = await request(a, "builtin-list", {}, 400); assert.match(broken.error, /document-extensions/);
 	writeFileSync(join(data, "document-extensions.json"), saved);
 	console.log("PASS built-in inventory, removed conversion/OKF/database tools, version conflicts and new chat settings");
 

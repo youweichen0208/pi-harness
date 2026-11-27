@@ -484,10 +484,12 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true }: ToolCall
 	// occupying their own row above the code — one less stacked band between
 	// the read row and the file body. The standalone row remains only when
 	// there is no output label to host it (empty file / image-only result).
+	// 图标即可表达：标题与 aria-label 已经说明动作，read 行右侧只留两个紧凑的
+	// 图标按钮，不再把「放大查看」「复制」的文字挤进状态行。
 	const readActions = targetPath && !zoomed ? (
 		<span className="toolcall-read-actions">
-			<button type="button" className="toolcall-expand" title={t("zoomCode")} onClick={() => setZoomed(true)}><FiMaximize2 aria-hidden="true" />{t("zoomCode")}</button>
-			<button type="button" className="toolcall-copy" title={t(copyError ? "copyFailed" : copied ? "copied" : "copyArgs")} onClick={copyArgs}>{copied ? <FiCheck aria-hidden="true" /> : <FiCopy aria-hidden="true" />}{t(copyError ? "copyFailed" : copied ? "copied" : "copy")}</button>
+			<button type="button" className="toolcall-expand" title={t("zoomCode")} aria-label={t("zoomCode")} onClick={() => setZoomed(true)}><FiMaximize2 aria-hidden="true" /></button>
+			<button type="button" className="toolcall-copy" title={t(copyError ? "copyFailed" : copied ? "copied" : "copyArgs")} aria-label={t(copyError ? "copyFailed" : copied ? "copied" : "copyArgs")} onClick={copyArgs}>{copied ? <FiCheck aria-hidden="true" /> : <FiCopy aria-hidden="true" />}</button>
 		</span>
 	) : null;
 	// Line numbers for the read code preview gutter (respect a read offset).
@@ -667,7 +669,7 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true }: ToolCall
 					aria-label={t("zoomCode")}
 					onClick={() => setZoomed(true)}
 				>
-				{generic ? <FiMaximize2 /> : t("zoomCode")}
+					<FiMaximize2 aria-hidden="true" />
 				</button>}
 				{!quietDelegate && <button
 					type="button"
@@ -676,7 +678,7 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true }: ToolCall
 					aria-label={t(copyError ? "copyFailed" : copied ? "copied" : "copyArgs")}
 					onClick={copyArgs}
 				>
-					{generic ? copied ? <FiCheck /> : <FiCopy /> : t(copyError ? "copyFailed" : copied ? "copied" : "copy")}
+					{copied ? <FiCheck aria-hidden="true" /> : <FiCopy aria-hidden="true" />}
 				</button>}
 				{(bashRun || bashDiagnostics.length > 0) && <details className="bash-card-more"><summary aria-label={t("more")}>⋯</summary><div><button type="button" onClick={() => setLineWrap((value) => !value)}>{t("toolWrap")}</button><button type="button" onClick={() => setZoomed(true)}>{t("zoomCode")}</button><button type="button" onClick={() => setOpen((value) => !value)}>{open ? t("collapseCode") : t("expandCode")}</button></div></details>}
 				{!quietDelegate && !bashRun && !bashDiagnostics.length && <button

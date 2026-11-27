@@ -34,7 +34,7 @@ function ChangeBody({ change, state, path, toolId }: { change: EditWriteChange; 
 	// 其余折叠成「展开其余 N 行」；完整的 diff 仍在改动面板与文件预览里。
 	const diffLines = change.hunks.flatMap(hunk => hunk.lines);
 	const previewLines = expanded ? diffLines : clampDiffPreview(diffLines);
-	if (!change.error && !change.empty && state === "done") return <div className="change-card-body"><ChangeSummaryCard inlineDiff files={[{
+	if (!change.error && !change.empty && state === "done") return <div className="change-card-body"><ChangeSummaryCard bare inlineDiff files={[{
 		path, added: change.added, removed: change.removed, counted: true,
 		lines: previewLines, unlocated: change.fromArguments,
 		truncated: change.diffTruncated, toolIds: [toolId],

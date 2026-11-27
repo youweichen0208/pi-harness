@@ -11800,6 +11800,10 @@ pre.wiki-mermaid-source-hidden > .fp-mermaid-preview { padding-bottom: 0; }
 /* Inline edits reuse the summary card without the outer chat-column gutter. */
 :root .design-workspace .change-card-body > .change-summary-inline { width: 100%; max-width: none; margin: 8px 0; }
 .change-summary-inline .changes-file-lines { padding-bottom: 8px; }
+/* Bare inline diff: the edit/write card header already carries verb, path and
+   `+N −M`, so this variant renders the diff only — no surface, no file row. */
+.change-summary.change-summary-bare { margin: 0; padding: 0; border: 0; border-radius: 0; box-shadow: none; background: transparent; }
+.change-summary-bare .changes-file-lines { padding-bottom: 0; }
 .change-summary-file.selected > code { font-weight: 600; }
 .changes-more { width: 100%; padding: 8px; color: var(--text-dim) !important; font-size: 12px !important; }
 .changes-toggle { display: inline-flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: var(--r-sm); font-size: 12px; white-space: nowrap; }
@@ -15483,8 +15487,10 @@ span.rich-math { display: inline-block; }
 .toolcall-read-icon svg { width: 14px; height: 14px; }
 .toolcall-read-chevron { display: inline-grid; place-items: center; flex: none; width: 24px; height: 24px; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--text-faint); cursor: pointer; }
 .toolcall-read-chevron:hover { color: var(--text); background: var(--bg-elev2); }
-.toolcall-read-headrow .toolcall-read-actions { flex: none; padding: 0; gap: 6px; }
-.toolcall-read-headrow .toolcall-read-actions button { display: inline-flex; align-items: center; gap: 5px; width: auto; height: auto; min-height: 26px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--bg-elev); color: var(--text-dim); padding: 3px 10px; font: 11px var(--sans); }
+.toolcall-read-headrow .toolcall-read-actions { flex: none; padding: 0; gap: 4px; }
+/* 图标按钮：文字（放大查看／复制）已去掉，动作由 title／aria-label 表达。
+   方形内边距让两个图标在 read 行右侧保持紧凑、不撑出空白长条。 */
+.toolcall-read-headrow .toolcall-read-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 0; width: 24px; height: 24px; min-height: 24px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--bg-elev); color: var(--text-dim); padding: 0; font: 11px var(--sans); cursor: pointer; }
 .toolcall-read-headrow .toolcall-read-actions button:hover { color: var(--text); border-color: var(--accent); background: var(--bg-elev); }
 .toolcall-read-headrow .toolcall-read-actions button svg { width: 12px; height: 12px; }
 .toolcall-read-state { display: inline-grid; place-items: center; flex: none; width: 12px; font: 11px var(--mono); color: var(--text-faint); }

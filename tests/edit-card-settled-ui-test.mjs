@@ -116,19 +116,20 @@ try {
 	await card().locator('.change-card-toggle').click();
 	const summary = body().locator('.change-summary-inline');
 	await summary.waitFor();
-	assert.equal(await summary.locator('.change-summary-file').count(), 1, 'expanded edit reuses the summary file row');
+	// 卡片头部已经写了 `Edit app.ts +1 −1`，内联 diff 不再重复同一行文件行。
+	assert.equal(await summary.locator('.change-summary-file').count(), 0, 'the inline diff omits the redundant file row; the card header already names the file');
+	assert.equal(await body().locator('.change-summary-bare').count(), 1, 'the inline diff renders through the bare variant');
 	assert.match(await summary.locator('.changes-line.add').innerText(), /new/);
 	assert.match(await summary.locator('.changes-line.del').innerText(), /old/);
-	await summary.locator('.change-summary-file').click();
-	assert.equal(await summary.locator('.changes-file-lines').count(), 0, 'file row folds the inline diff');
-	await summary.locator('.change-summary-file').click();
-	await summary.locator('.changes-file-lines').waitFor();
+	assert.equal((await summary.locator('.changes-line').count()), 2, 'the diff is visible without an extra expand step');
 	for (const theme of ['light', 'dark']) {
 		await page.evaluate(value => document.documentElement.dataset.appearance = value, theme);
 		await summary.screenshot({ path: `/tmp/pi-edit-summary-${theme}.png` });
 	}
-	// 5297c6c 起内联摘要的 header（含「全部查看」）按设计隐藏，不再提供该入口。
-	assert.equal(await summary.locator('> header').evaluate(el => getComputedStyle(el).display), 'none', 'inline summary header stays hidden by design');
+	// 5297c6c 起内联摘要的 header（含「全部查看」）不再提供该入口；
+	// bare diff 干脆不渲染它，文件行也确实只剩卡片头部那一处。
+	assert.equal(await summary.locator('> header').count(), 0, 'the bare inline diff renders no summary header');
+	assert.equal(await body().locator('.change-summary-file').count(), 0, 'no duplicate file row anywhere in the card body');
 	// 6) 几百行的写入不再整段铺开：默认 12 行 + 「展开其余 N 行」。
 	const bigDiff = Array.from({ length: 40 }, (_, index) => `+${index + 1} const value${index + 1} = ${index + 1};`).join('\n');
 	await show([
@@ -158,21 +159,23 @@ try {
 	]);
 	await body().locator('.changes-line').first().waitFor();
 	const writeBox = await card().boundingBox();
-	const fileBox = await body().locator('.change-summary-file').boundingBox();
-	assert(fileBox.x >= writeBox.x && fileBox.x - writeBox.x <= 2, 'file row aligns inside the Write frame');
-	assert(fileBox.y > writeBox.y && fileBox.y + fileBox.height <= writeBox.y + writeBox.height);
+	// 没有文件行时，diff 自己贴着 Write 卡片左边缘对齐。
+	const firstLine = await body().locator('.changes-line').first().boundingBox();
+	assert(firstLine && firstLine.x >= writeBox.x && firstLine.x - writeBox.x <= 24, 'the diff aligns inside the Write frame without a file row');
+	assert(firstLine && firstLine.y > writeBox.y && firstLine.y + firstLine.height <= writeBox.y + writeBox.height);
 	assert.equal(await body().locator('.changes-line').count(), 12, 'a new-file write previews at most 12 lines');
 	assert.match((await body().locator('.change-more').textContent()) ?? '', /展开其余 28 行/);
 	await body().locator('.change-more').click();
 	assert.equal(await body().locator('.changes-line').count(), 40, 'the write card can reveal the whole file');
 
-	// 8) 折叠文件行时，「展开其余 N 行／收起」footer 随 diff 一起隐藏，
-	// 不留一个空框里孤零零的按钮（长写入卡片截图里的问题）。
-	await body().locator('.change-summary-file').click();
-	assert.equal(await body().locator('.changes-line').count(), 0, 'collapsing the file row hides the diff');
-	assert.equal(await body().locator('.change-more').count(), 0, 'the expand/collapse footer hides with the diff, no orphaned button');
-	await body().locator('.change-summary-file').click();
-	assert.equal(await body().locator('.change-more').count(), 1, 're-expanding the file row brings the footer back');
+	// 8) 收起的执行权在卡片头部（唯一入口）。折叠卡片后 diff 与 footer 一起消失，
+	// 不留一个空框里孤零零的「展开其余 N 行」按钮（长写入卡片截图里的问题）。
+	await card().locator('.change-card-toggle').click();
+	assert.equal(await body().count(), 0, 'collapsing the card hides the diff');
+	assert.equal(await card().locator('.change-more').count(), 0, 'the expand/collapse footer hides with the diff, no orphaned button');
+	await card().locator('.change-card-toggle').click();
+	await body().locator('.change-more').waitFor();
+	assert.equal(await card().locator('.change-more').count(), 1, 're-expanding the card brings the footer back');
 
 	assert.deepEqual(errors, [], 'no browser errors');
 	console.log('PASS edits show changes directly and support collapse, expand and historical review');

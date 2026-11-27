@@ -10,12 +10,18 @@ export function ChangeCounts({ files }: { files: Pick<ChangedFile, "added" | "re
 	const added = files.reduce((n, file) => n + file.added, 0), removed = files.reduce((n, file) => n + file.removed, 0);
 	return <span className="change-counts"><span className="add">+{added}</span><span className="del">−{removed}</span></span>;
 }
-export function ChangeSummaryCard({ files, inlineDiff = false, footer }: { files: ChangedFile[]; inlineDiff?: boolean; footer?: ReactNode }) {
+/** `bare` drops the summary container and the file rows, leaving only the diff.
+ *  Edit/write cards already say `Edit server/x.ts +8 −1` in their own header, so
+ *  the file row repeated the same verb, path and counts one line below it. */
+export function ChangeSummaryCard({ files, inlineDiff = false, footer, bare = false }: { files: ChangedFile[]; inlineDiff?: boolean; footer?: ReactNode; bare?: boolean }) {
 	const t = useT(), changes = useChanges();
 	const [all, setAll] = useState(false);
 	const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 	const [gaps, setGaps] = useState<Set<string>>(new Set());
 	if (!files.length || (!changes && !inlineDiff)) return null;
+	if (bare) return <section className="change-summary change-summary-inline change-summary-bare">
+		{files.map(file => <Fragment key={file.path}><ChangeDiff file={file} gaps={gaps} expandGap={id => setGaps(previous => new Set([...previous, id]))} />{footer}</Fragment>)}
+	</section>;
 	return <section className={`change-summary${inlineDiff ? " change-summary-inline" : ""}`}>
 		<header><strong>{t("changesSummary", { n: files.length })}</strong><ChangeCounts files={files} />{changes && <button onClick={() => changes.show(files)}>{t("changesViewAll")}</button>}</header>
 		{(all ? files : files.slice(0, 6)).map(file => <Fragment key={file.path}><button className={`change-summary-file ${changes?.open && changes.selected === file.path ? "selected" : ""}`} aria-expanded={inlineDiff ? !collapsed.has(file.path) : undefined} onClick={() => {
