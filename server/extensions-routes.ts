@@ -2,7 +2,7 @@ import { toggleDesktop } from "./desktop-control.js";
 import { piCliStatus } from "./pi-cli-status.js";
 import { extensionToolFailure } from "./extension-tools.js";
 import { nativeSkills } from "./skills-service.js";
-import { builtinExtensionsState, toggleBuiltinDocument } from "./builtin-extensions.js";
+import { builtinExtensionsState, documentSettingsVersion, toggleBuiltinDocument } from "./builtin-extensions.js";
 import { mkdirSync, readFileSync, writeFileSync, renameSync, statSync, realpathSync, existsSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { killPidTree } from "./process-utils.js";
@@ -98,9 +98,11 @@ export function installExtensionsRoutes(app: Express, service: () => AgentServic
 				if (action === "builtin-toggle") {
 					if (mutation) throw Error("Extension manager busy");
 					if (req.body.id === "desktop-control") {
-							if (cs.activeIsWiki) throw Error("Desktop control requires ordinary chat");
-							toggleDesktop(cs.session.sessionManager, req.body.enabled, req.body.version);
-						} else toggleBuiltinDocument(req.body.id, req.body.enabled, req.body.version);
+						if (cs.activeIsWiki) throw Error("Desktop control requires ordinary chat");
+						// A document-settings version address the service-wide default switch; the grant version addresses this conversation.
+						if (req.body.version === documentSettingsVersion()) toggleBuiltinDocument("desktop-control", req.body.enabled, req.body.version);
+						else toggleDesktop(cs.session.sessionManager, req.body.enabled, req.body.version);
+					} else toggleBuiltinDocument(req.body.id, req.body.enabled, req.body.version);
 				}
 				res.json(builtinExtensionsState(cs.session, conversationId, cs.session.isIdle, cs.activeIsWiki));
 				return;

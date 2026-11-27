@@ -1579,6 +1579,10 @@ export interface BuiltinExtensionState {
 	error?: string;
 	tools: string[];
 	commands: string[];
+	/** desktop-control only: service-wide default-on switch saved in document settings. */
+	desktopDefault?: boolean;
+	/** desktop-control only: the local helper virtualenv exists, so default-on can actually run. */
+	helperInstalled?: boolean;
 }
 export interface BuiltinExtensionsState {
 	conversationId: string;

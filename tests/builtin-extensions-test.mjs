@@ -210,15 +210,35 @@ try {
 	assert.equal(item(state, "pi-harness-subagents"), undefined);
 	assert.match((await request(a, "builtin-toggle", { id: "pi-harness-subagents", enabled: true, version: state.documentVersion }, 400)).error, /Invalid/);
 	if (supportsDesktop) {
-		assert.equal(item(state, "desktop-control").enabled, false);
-		await toggle(a, "desktop-control", true);
-		assert.equal(item(await request(a, "builtin-list"), "desktop-control").enabled, true);
-		assert.equal(item(await request(b, "builtin-list"), "desktop-control").enabled, false);
-		await prompt(a, "Check desktop tool grant", 'text(await tools.desktop_window({action:"view"}));');
-		assert.match(JSON.stringify(a.state.messages.findLast(message => message.role === "toolResult")), /Select a window id/);
+		// New conversations are pre-authorized by the service-wide default; a single conversation can still revoke it.
+		// (`state` is the initial snapshot, so it shows the value used when this conversation was created.)
+		assert.equal(item(state, "desktop-control").desktopDefault, true);
+		assert.equal(item(state, "desktop-control").enabled, true);
 		await toggle(a, "desktop-control", false);
+		assert.equal(item(await request(a, "builtin-list"), "desktop-control").enabled, false);
+		assert.equal(item(await request(b, "builtin-list"), "desktop-control").enabled, true);
 		await prompt(a, "Check desktop tool revoke", 'text(await tools.desktop_window({action:"view"}));');
 		assert.match(JSON.stringify(a.state.messages.findLast(message => message.role === "toolResult")), /Enable desktop control/);
+		await toggle(a, "desktop-control", true);
+		assert.equal(item(await request(a, "builtin-list"), "desktop-control").enabled, true);
+		await prompt(a, "Check desktop tool grant", 'text(await tools.desktop_window({action:"view"}));');
+		assert.match(JSON.stringify(a.state.messages.findLast(message => message.role === "toolResult")), /Select a window id/);
+		// Service-wide default: saved in document settings, applies to conversations started afterwards only.
+		const settings = await request(a, "builtin-list");
+		await request(a, "builtin-toggle", { id: "desktop-control", enabled: false, version: settings.documentVersion });
+		const disabledByDefault = item(await request(a, "builtin-list"), "desktop-control");
+		assert.equal(disabledByDefault.desktopDefault, false);
+		assert.equal(disabledByDefault.enabled, true);
+		assert.equal(item(await request(b, "builtin-list"), "desktop-control").desktopDefault, false);
+		assert.equal(JSON.parse(readFileSync(join(data, "document-extensions.json"), "utf8")).desktopDefaultEnabled, false);
+		const beforeDefault = a.state.conversationId; a.send({ type: "new_chat", fresh: true });
+		await wait(() => a.state.conversationId !== beforeDefault && !a.state.tree?.verifying, "new chat with desktop default off");
+		await wait(async () => item(await request(a, "builtin-list"), "desktop-control").enabled === false, "desktop default opt-out applies to the new chat");
+		await prompt(a, "Check desktop default opt-out", 'text(await tools.desktop_window({action:"view"}));');
+		assert.match(JSON.stringify(a.state.messages.findLast(message => message.role === "toolResult")), /Enable desktop control/);
+		const restored = await request(a, "builtin-list");
+		await request(a, "builtin-toggle", { id: "desktop-control", enabled: true, version: restored.documentVersion });
+		assert.equal(item(await request(a, "builtin-list"), "desktop-control").desktopDefault, true);
 	}
 	assert.equal(item(state, "pi-harness-pdf-markdown"), undefined);
 	assert.match((await request(a, "builtin-toggle", { id: "pi-harness-pdf-markdown", enabled: true, version: state.documentVersion }, 400)).error, /Invalid/);

@@ -12243,6 +12243,8 @@ pre.wiki-mermaid-source-hidden > .fp-mermaid-preview { padding-bottom: 0; }
 .builtin-status[data-status="error"], .builtin-status[data-status="unavailable"] { color: var(--red); }
 .builtin-status[data-status="pending"] { color: var(--yellow-fg); }
 .builtin-row details { margin-top: 12px; }
+.builtin-default { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; font-size: 13px; }
+.builtin-default .settings-description { flex: 1 1 220px; margin: 0; }
 .builtin-row summary { color: var(--accent); cursor: pointer; }
 .builtin-row code { overflow-wrap: anywhere; }
 @media (max-width: 600px) {

@@ -5,6 +5,8 @@ import { join, resolve } from "node:path";
 
 export interface DocumentExtensionSettings {
 	backgroundEnabled: boolean;
+	/** Pre-authorize desktop control for every new conversation of this service. On by default; any single conversation can still be revoked. */
+	desktopDefaultEnabled: boolean;
 }
 
 export function documentDataDir(): string {
@@ -23,8 +25,8 @@ function readSettings(): Record<string, unknown> {
 }
 
 function validate(value: Record<string, unknown>): DocumentExtensionSettings {
-	const result: DocumentExtensionSettings = { backgroundEnabled: true };
-	for (const key of ["backgroundEnabled"] as const) {
+	const result: DocumentExtensionSettings = { backgroundEnabled: true, desktopDefaultEnabled: true };
+	for (const key of ["backgroundEnabled", "desktopDefaultEnabled"] as const) {
 		if (value[key] !== undefined) {
 			if (typeof value[key] !== "boolean") throw new Error(`${key} must be a boolean`);
 			result[key] = value[key];

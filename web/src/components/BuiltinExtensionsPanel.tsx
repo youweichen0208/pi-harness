@@ -73,6 +73,8 @@ export function BuiltinExtensionsPanel({ cwd, conversationId, ready, canReload, 
 					{toggleableItem ? <input className="ext-switch" type="checkbox" role="switch" aria-label={`${t("extEnable")} ${t(title)}`} checked={item.enabled ?? false} disabled={busy || !ready || !version || item.enabled === undefined} onChange={event => void change({ action: "builtin-toggle", conversationId, id: item.id as "background-bash" | "desktop-control", enabled: event.target.checked, version: version! })} />
 						: <button onClick={openNative}>{t("builtinSettings")}</button>}
 				</div>
+				{item.id === "desktop-control" && state?.documentVersion && <label className="builtin-default"><input className="ext-switch" type="checkbox" role="switch" aria-label={t("desktopDefaultOn")} checked={item.desktopDefault ?? false} disabled={busy || !ready} onChange={event => void change({ action: "builtin-toggle", conversationId, id: "desktop-control", enabled: event.target.checked, version: state.documentVersion! })} /><span>{t("desktopDefaultOn")}</span><small className="settings-description">{t("desktopDefaultOnHint")}</small></label>}
+				{item.helperInstalled === false && <p className="settings-description">{t("desktopHelperMissing")}</p>}
 				{item.error && <p className="ext-error">{item.error}</p>}
 				{item.reason && <p className="settings-description">{t(item.reason === "conflict" ? "builtinConflict" : item.reason === "filtered" ? "builtinFiltered" : "builtinMissing")}</p>}
 				{status === "pending" && <p className="settings-description">{t("builtinReloadHint")}</p>}

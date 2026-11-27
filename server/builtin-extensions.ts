@@ -4,15 +4,25 @@ import type { AgentSession } from "@earendil-works/pi-coding-agent";
 import { nativeExtensionRegistry } from "./native-tools.js";
 import { getDocumentSettings, updateDocumentSettings } from "./document-extension-settings.js";
 import type { BuiltinExtensionId, BuiltinExtensionsState, BuiltinExtensionState } from "./protocol.js";
+import { existsSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 
 const expectedTools: Partial<Record<BuiltinExtensionId, string[]>> = {
 	codemode: ["codemode"], "tool-search": ["tool_search"],
 };
 const owns = (path: string, id: string) => path === `<inline:${id}>` || path === `builtin:${id}`;
-function documentSettingsVersion(): string {
+function desktopSettings(): { defaultEnabled: boolean } {
+	return { defaultEnabled: getDocumentSettings().desktopDefaultEnabled };
+}
+export function documentSettingsVersion(): string {
 	return createHash("sha256").update(JSON.stringify(getDocumentSettings())).digest("hex");
 }
 export function toggleBuiltinDocument(id: unknown, enabled: unknown, version: unknown): void {
+	if (id === "desktop-control" && typeof enabled === "boolean" && version === documentSettingsVersion()) {
+		updateDocumentSettings({ desktopDefaultEnabled: enabled });
+		return;
+	}
 	if (id !== "background-bash" || typeof enabled !== "boolean") throw Error("Invalid built-in extension change");
 	if (version !== documentSettingsVersion()) throw Error("Document settings changed; refresh and retry");
 	updateDocumentSettings({ backgroundEnabled: enabled });
@@ -51,7 +61,8 @@ export function builtinExtensionsState(session: AgentSession, conversationId: st
 	if (!wiki && desktopSupported()) {
 		const grant = desktopGrant(session.sessionManager);
 		const enabled = !!grant.controller;
-		items.push({id: "desktop-control", enabled, status: enabled ? "loaded" : "disabled", settingsVersion: grant.version, commands: [], tools: ["desktop_window"]});
+		const helperInstalled = existsSync(join(homedir(), ".pi-desktop-control", process.platform === "win32" ? "Scripts/python.exe" : "bin/python"));
+		items.push({ id: "desktop-control", enabled, status: enabled ? "loaded" : "disabled", settingsVersion: grant.version, commands: [], tools: ["desktop_window"], desktopDefault: desktopSettings().defaultEnabled, helperInstalled });
 	}
 	return { conversationId, items, documentVersion, canReload };
 }

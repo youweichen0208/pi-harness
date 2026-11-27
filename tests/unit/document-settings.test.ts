@@ -14,11 +14,11 @@ function settingsFile() {
 describe("document extension settings", () => {
 	it("defaults to lazy enabled and observes external disables while retaining other settings", () => {
 		const file = settingsFile();
-		expect(getDocumentSettings()).toEqual({ backgroundEnabled: true });
+		expect(getDocumentSettings()).toEqual({ backgroundEnabled: true, desktopDefaultEnabled: true });
 		writeFileSync(file, JSON.stringify({ pdfEnabled: false, okfEnabled: true, databaseEnabled: false, futureOption: "keep" }));
 		expect(getDocumentSettings().backgroundEnabled).toBe(true);
 		updateDocumentSettings({ backgroundEnabled: false });
-		expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({ backgroundEnabled: false, futureOption: "keep" });
+		expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({ backgroundEnabled: false, desktopDefaultEnabled: true, futureOption: "keep" });
 	});
 	it("does not enable features or replace configuration when a saved file is invalid", () => {
 		const file = settingsFile();

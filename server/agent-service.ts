@@ -1,4 +1,5 @@
 import { backgroundBash, commandViews, hasRunningCommand, stopRequestCommands } from "./background-bash.js";
+import { getDocumentSettings } from "./document-extension-settings.js";
 import { engineeringResources } from "./engineering-skills.js";
 import { knowledgeExtension, validKnowledgeTool } from "./knowledge-tools.js";
 import { emptyKnowledgeState, parseKnowledgeCommand, toolsForKnowledgeMode, type DeferredKnowledgePrompt, type KnowledgeRequestContext } from "./knowledge-requests.js";
@@ -660,6 +661,9 @@ export class ClientSession {
 			registerExtensionModuleScope(join(cwd, ".pi", "extensions"));
 			registerExtensionModuleScope(join(cwd, ".pi", "npm"));
 			const settings = conversationSettings(cwd, this.agentDir);
+			// Read per session so the settings switch applies to chats created after saving it.
+			let desktopDefaultEnabled = false;
+			try { desktopDefaultEnabled = getDocumentSettings().desktopDefaultEnabled; } catch {}
 			const executionTrace = this.executionTraces.forSession(sessionManager.getSessionId());
 			const extensionFactories = nativeToolExtensions();
 			if (executionTrace) extensionFactories.push({ name: "pi-harness-execution-trace", replaceable: false, factory: createExecutionTraceExtension(executionTrace) });
@@ -687,7 +691,7 @@ export class ClientSession {
 				extensionFactories.push({
 					name: "pi-harness-desktop",
 					factory: pi => {
-						if (desktopSupported()) desktopControl(sessionManager)(pi);
+						if (desktopSupported()) desktopControl(sessionManager, desktopDefaultEnabled)(pi);
 					},
 				});
 			}
