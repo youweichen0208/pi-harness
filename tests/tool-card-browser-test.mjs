@@ -60,18 +60,13 @@ try {
 	assert.equal(await card.locator('dt').allTextContents().then(x => x.join(',')), 'domainId,kanbanId,sn');
 	assert.equal(await card.locator('.toolcall-head').getByText('展开完整内容', { exact: true }).count(), 0);
 	assert.equal(await card.locator('.toolcall-output').count(), 0, 'no empty output box');
-	await card.getByRole('button', { name: '复制参数', exact: true }).click();
-	await card.getByRole('button', { name: '已复制', exact: true }).waitFor();
 	const downloaded = page.waitForEvent('download');
 	await card.getByRole('button', { name: '下载完整输出', exact: true }).click();
 	assert.equal((await downloaded).suggestedFilename(), 'tree.txt');
-	await card.locator('.toolcall-name-toggle').click();
+	await card.locator('.toolcall-head').click();
 	assert.equal(await card.locator('.toolcall-body').count(), 0);
-	await card.locator('.toolcall-name-toggle').press('Enter');
+	await card.locator('.toolcall-head').press('Enter');
 	await card.locator('.toolcall-body').waitFor();
-	await card.getByRole('button', { name: '放大查看', exact: true }).click();
-	await page.locator('.toolcall-zoom').waitFor();
-	await page.keyboard.press('Escape');
 	await card.locator('.toolcall-section-label').click();
 	mkdirSync('tests/scratch', { recursive: true });
 	await card.screenshot({ path: 'tests/scratch/tool-card-light.png' });
@@ -95,10 +90,10 @@ try {
 		assert.equal(await delegate.locator('.toolcall-head > .toolcall-copy').count(), 0, 'actions stay inside details');
 		if (state === 'failed') assert(await delegate.evaluate(el => el.classList.contains('err')));
 		if (state === 'running') await delegate.locator('.running-indicator').waitFor();
-		await delegate.locator('.toolcall-name-toggle').press('Enter');
+		await delegate.locator('.toolcall-head').press('Enter');
 		await delegate.locator('.toolcall-body').waitFor();
 		await delegate.getByRole('button', { name: '复制参数', exact: true }).waitFor();
-		await delegate.locator('.toolcall-name-toggle').click();
+		await delegate.locator('.toolcall-head').click();
 		assert.equal(await delegate.locator('.toolcall-body').count(), 0);
 	}
 	assert.deepEqual(errors, []);

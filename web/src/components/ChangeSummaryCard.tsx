@@ -13,6 +13,11 @@ export function ChangeCounts({ files }: { files: Pick<ChangedFile, "added" | "re
 /** `bare` drops the summary container and the file rows, leaving only the diff.
  *  Edit/write cards already say `Edit server/x.ts +8 −1` in their own header, so
  *  the file row repeated the same verb, path and counts one line below it. */
+/** GitHub-style diff stat: five squares, green share ≈ added / (added + removed). */
+function DiffSquares({ added, removed }: { added: number; removed: number }) {
+	const green = Math.round((added / (added + removed)) * 5);
+	return <span className="change-ratio" aria-hidden="true">{Array.from({ length: 5 }, (_, square) => <i key={square} className={square < green ? "add" : "del"} />)}</span>;
+}
 export function ChangeSummaryCard({ files, inlineDiff = false, footer, bare = false }: { files: ChangedFile[]; inlineDiff?: boolean; footer?: ReactNode; bare?: boolean }) {
 	const t = useT(), changes = useChanges();
 	const [all, setAll] = useState(false);
@@ -29,7 +34,7 @@ export function ChangeSummaryCard({ files, inlineDiff = false, footer, bare = fa
 			else changes?.show(files, file.path);
 		}}>
 			<FiFile /><span className="change-summary-name" title={file.path}><code>{file.path.split("/").at(-1)}</code><span className="change-directory">{file.path.split("/").slice(0, -1).join("/")}</span></span>
-			{file.counted && file.added + file.removed > 0 && <span className="change-ratio" aria-hidden="true">{file.added > 0 && <i className="add" style={{ flexGrow: file.added }} />}{file.removed > 0 && <i className="del" style={{ flexGrow: file.removed }} />}</span>}
+			{file.counted && file.added + file.removed > 0 && <DiffSquares added={file.added} removed={file.removed} />}
 			{file.counted ? <ChangeCounts files={[file]} /> : <span className="change-summary-unavailable" title={t("changesUnavailable")}>—</span>}{inlineDiff && !collapsed.has(file.path) ? <FiChevronDown /> : <FiChevronRight />}
 		</button>{inlineDiff && !collapsed.has(file.path) && <ChangeDiff file={file} gaps={gaps} expandGap={id => setGaps(previous => new Set([...previous, id]))} />}</Fragment>)}
 		{!all && files.length > 6 && <button className="changes-more" onClick={() => setAll(true)}>{t("changesMore", { n: files.length - 6 })}</button>}

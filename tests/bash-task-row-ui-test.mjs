@@ -102,10 +102,10 @@ try {
 	assert.equal(await page.locator('[data-tool-call-id="t1"] .bash-row-subtitle').textContent(), 'bash_task read toolu_x --cursor 12');
 	assert.equal(await page.locator('[data-tool-call-id="t2"] .bash-row-subtitle').textContent(), 'bash_task stop toolu_x');
 
-	// E) 单条 bash_task：无组头，行本身带终端图标（single-command 形态）。
+	// E) 单条 bash_task：标签行 + 灰块（single-command 形态）。
 	await send([user('u-single', '单独查看'), assistant('a-single', listCall), result(listCall, listOutput)]);
 	await page.locator('.single-command .bash-row.ok').first().waitFor();
-	assert.equal(await page.locator('.process-group-head').count(), 0);
+	assert.equal(await page.locator('.process-group.single-command > .process-group-head.single-head').count(), 1);
 	assert.equal(await page.locator('.process-group-summary-line').count(), 0);
 	assert.equal(await page.locator('.single-command .bash-row-subtitle').textContent(), 'bash_task list');
 
@@ -115,8 +115,32 @@ try {
 	await page.evaluate(() => window.dispatchEvent(new CustomEvent('pi:reveal-tool', { detail: { toolCallId: 't0' } })));
 	await page.locator('[data-tool-call-id="t0"] .bash-row-body').waitFor();
 
+	// G) 无输出的失败/中断后台命令是终态一行：✗ 行首已说明一切，不再展开
+	// 重复命令的 Shell 卡 + 「✗ Error」（用户截图：中断的 npm run dev，0 行）。
+	const devCall = bash('dev1', 'npm run dev');
+	await send([user('u-dev', '起服务'), assistant('a-dev', devCall)], { backgroundCommands: [{ id: 'dev1', state: 'interrupted', startedAt: time - 5000, endedAt: time, output: '', cursor: 0 }] });
+	const quietRow = page.locator('[data-tool-call-id="dev1"].bash-row.err');
+	await quietRow.waitFor();
+	assert.equal(await quietRow.locator('.bash-row-head').isDisabled(), true, 'a quiet failure cannot expand');
+	assert.equal(await quietRow.locator('.bash-row-head').getAttribute('aria-expanded'), 'false');
+	assert.equal(await quietRow.locator('.bash-row-body').count(), 0, 'no redundant Shell body under a 0-line failure');
+	assert.equal(await quietRow.locator('.bash-shell-card').count(), 0);
+	assert.equal(await quietRow.locator('.bash-row-head > svg').evaluate(el => getComputedStyle(el).visibility), 'hidden', 'chevron slot stays but the glyph hides');
+	await quietRow.locator('.bash-row-head').click({ force: true }).catch(() => {});
+	assert.equal(await quietRow.locator('.bash-row-body').count(), 0, 'clicking a quiet failure reveals nothing');
+
+	// H) 有输出的失败后台命令仍然展开错误输出（有用的那一半保留）。
+	await send([user('u-dev2', '再起'), assistant('a-dev2', devCall)], { backgroundCommands: [{ id: 'dev1', state: 'failed', startedAt: time - 5000, endedAt: time, exitCode: 1, output: 'Error: listen EADDRINUSE: port 5173', cursor: 0 }] });
+	const loudRow = page.locator('[data-tool-call-id="dev1"].bash-row.err');
+	await loudRow.waitFor();
+	await page.waitForFunction(() => { const head = document.querySelector('[data-tool-call-id="dev1"] .bash-row-head'); return head && !head.disabled; }, null, { timeout: 10000 });
+	assert.equal(await loudRow.locator('.bash-row-head').isDisabled(), false, 'a failure with output stays expandable');
+	await loudRow.locator('.bash-row-head').click();
+	await loudRow.locator('.bash-row-body').waitFor();
+	assert.match(await loudRow.locator('.bash-numbered-output').innerText(), /EADDRINUSE/);
+
 	assert.deepEqual(errors, []);
-	console.log('PASS bash_task row: merged command list, no generic card, list/read/stop labels, single row, reveal');
+	console.log('PASS bash_task row: merged command list, no generic card, list/read/stop labels, single row, reveal, quiet failures');
 } finally {
 	await browser?.close().catch(() => {});
 	server?.kill('SIGTERM');

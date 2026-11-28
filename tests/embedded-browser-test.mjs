@@ -101,7 +101,7 @@ async function launch() {
 	const browser = switcher.getByRole("button", { name: /^(浏览器|Browser)$/i });
 	const files = switcher.locator(".workspace-files-toggle");
 	await browser.waitFor();
-	assert(await nodes.evaluate(el => el.nextElementSibling?.querySelector("span")?.textContent.match(/^(浏览器|Browser)$/i) && el.nextElementSibling.nextElementSibling?.matches(".workspace-files-toggle")));
+	assert(await nodes.evaluate(el => el.nextElementSibling?.querySelector("span")?.textContent.match(/^(浏览器|Browser)$/i) && !!el.closest(".view-switch").querySelector(".workspace-files-toggle")), "browser follows nodes; files toggle sits inside the view pill");
 	await browser.click();
 	await page.locator(".embedded-viewport").waitFor();
 	assert.equal(await files.getAttribute("aria-expanded"), "false");
@@ -117,7 +117,7 @@ async function launch() {
 	await terminalTab.click();
 	assert.equal(await terminalTab.getAttribute("aria-selected"), "true", "terminal view active");
 	await browser.waitFor();
-	assert.equal(await page.locator(".topbar-more").count(), 0, "no settings fallback dropdown on terminal");
+	await page.locator(".topbar-more").waitFor({ state: "detached", timeout: 5000 });
 	await browser.click();
 	assert.equal(await terminalTab.getAttribute("aria-selected"), "false", "browser click from terminal returns to chat");
 	await page.locator(".embedded-viewport").waitFor();

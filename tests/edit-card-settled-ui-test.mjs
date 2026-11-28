@@ -51,7 +51,7 @@ try {
 		await sleep(400);
 		for (const theme of ['light', 'dark']) {
 			await page.evaluate(value => document.documentElement.dataset.appearance = value, theme);
-			assert.equal(await page.locator('.change-card').first().evaluate(el => getComputedStyle(el).borderTopWidth), '1px', 'expanded edit preview shares the tool frame');
+			assert.equal(await page.locator('.change-card').first().evaluate(el => getComputedStyle(el).borderTopWidth), '0px', 'normal edit rows have no outer border');
 		}
 		await page.evaluate(() => document.documentElement.dataset.appearance = 'light');
 	};
@@ -82,12 +82,20 @@ try {
 	await body().waitFor();
 	assert.equal(await card().locator('.change-state i').count(), 1, 'unsettled edits keep the dot');
 
-	// 2) The mark turns into a green check: the diff must stay open, not be yanked away.
+	// 2) The mark turns into a boxed tool icon: the diff must stay open, not be yanked away.
 	socket.send(JSON.stringify({ type: 'tool_status', conversationId, toolCallId: 'edit1', toolName: 'edit', isError: false, running: false, durationMs: 40 }));
 	await page.waitForFunction(() => document.querySelector('.change-card[data-tool-call-id="edit1"]')?.className.includes('done'));
 	assert.equal(await body().count(), 1, 'the diff stays open the moment the call settles');
 	assert.equal(await card().locator('.change-state.done svg').count(), 1, 'settled edits show a check mark');
 	assert.equal(await card().locator('.change-state i').count(), 0, 'the green dot is gone once done');
+	// DOM presence is not enough: the design-workspace chevron rule once hid the
+	// glyph with display:none, leaving settled rows with no leading icon at all.
+	// Settled edits show a borderless line tool icon (pencil/file), like the
+	// command row's terminal icon — not a green check (2026-11 user decision).
+	const mark = card().locator('.change-state.done svg.change-state-icon');
+	assert.equal(await mark.count(), 1, 'settled edits show a tool icon');
+	assert(await mark.isVisible(), 'the tool icon is actually visible, not display:none');
+	assert.equal(await mark.evaluate(el => getComputedStyle(el).borderTopWidth), '0px', 'the tool icon is borderless like the command icon');
 
 	// 3) The result lands: still open, still green.
 	await show(settled);
@@ -105,6 +113,7 @@ try {
 	// 5) Explicit collapse and expand remain available.
 	await page.locator('.change-card[data-tool-call-id="edit1"] .change-card-toggle').click();
 	assert.equal(await body().count(), 0);
+	assert(await card().locator('.change-state.done svg').isVisible(), 'the collapsed row keeps its visible state glyph');
 	await card().locator('.change-card-toggle').click();
 	await body().waitFor();
 	await show(settled);

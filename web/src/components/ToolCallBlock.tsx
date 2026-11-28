@@ -14,7 +14,6 @@ import { commandPresentation, gitStatusLine, gitStatusSummary, numberedOutputLin
 import { WorkspacePathContext } from "../workspace-context";
 import { Fragment, memo, useContext, useEffect, useRef, useState } from "react";
 import {
-	FiTool,
 	FiCopy,
 	FiCheck,
 	FiMaximize2,
@@ -23,12 +22,12 @@ import {
 	FiChevronUp,
 	FiSquare,
 	FiX,
-	FiBookOpen,
 } from "react-icons/fi";
 import type { ToolStatus, UiMessage, UiTextBlock, UiToolCallBlock } from "../types";
 import { useChatT } from "../i18n";
 import { Markdown } from "./Markdown";
-import { highlightLine, langFromPath } from "../hljs-lite";
+import { highlightLine, highlightLines, langFromPath } from "../hljs-lite";
+import { CopyButton } from "./copy-button";
 import { dedentReadPreview, displayReadPath, readPath, splitFrontmatter } from "../read-presentation";
 import { bashCommand, parseBashDiagnostics, parseLabeledBashSteps, type BashStepRun } from "../bash-steps";
 
@@ -89,7 +88,7 @@ export function ReadGroup({ items, wrap }: { items: { block: UiToolCallBlock; vi
 	if (items.length === 1) return <ToolCallBlock block={items[0].block} view={items[0].view} wrap={wrap} />;
 	return <div className={`read-group ${failed ? "err" : pending ? "run" : completed ? "ok" : "idle"}`}>
 		<button type="button" className="read-group-head" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
-			<span aria-hidden="true">{open ? "⌄" : "›"}</span><UiIcon name="file" />
+			<span aria-hidden="true">{open ? "⌄" : "›"}</span><span className="read-group-icon" aria-hidden="true"><UiIcon name="file" /></span>
 			<strong>{t("readFiles", { n: items.length })}</strong>
 			<span className="read-group-paths" title={paths.join("\n")}>{paths.map((path) => path.split("/").slice(-2).join("/")).join(", ")}</span>
 			<span className="read-group-status">{pending && !failed && <RunningIndicator />} {failed ? t("error") : pending ? t("running") : skipped ? t("toolNotExecuted") : completed ? `${t("done")}${duration ? ` · ${formatDuration(duration)}` : ""}` : t("toolQueued")}</span>
@@ -116,7 +115,7 @@ export function GrepSummary({ block, view, wrap }: { block: UiToolCallBlock; vie
 	const duration = recorded !== undefined ? formatDuration(recorded) : "";
 	return <div className="grep-summary">
 		<button type="button" className="grep-summary-head" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
-			<FiChevronRight className={open ? "open" : ""} /><strong>{t("grepSearch")}</strong><code title={pattern}>{pattern || block.name}</code>
+			<span className="grep-summary-icon" aria-hidden="true"><UiIcon name="search" /></span><strong>{t("grepSearch")}</strong><code title={pattern}>{pattern || block.name}</code>
 			{path && <span title={path}>{t("grepInPath", { path: displayReadPath(path) })}</span>}
 			{view.result && !view.result.isError && <span>{count || noMatches ? t("grepMatches", { n: count }) : t("toolLineCount", { n: resultText.split("\n").filter(Boolean).length })}</span>}
 			{duration && <span className="grep-summary-time">{duration}</span>}
@@ -126,13 +125,14 @@ export function GrepSummary({ block, view, wrap }: { block: UiToolCallBlock; vie
 }
 
 const TOOL_ICONS: Record<string, UiIconName> = {
-	bash: "terminal",
+	bash: "squareTerminal",
 	read: "file",
-	write: "file",
-	edit: "edit",
+	write: "squarePlus",
+	edit: "squarePen",
 	grep: "search",
 	find: "compass",
-	ls: "folder",
+	ls: "folderOpen",
+	task: "fork",
 };
 
 /** `read` rows never dump the whole file: the collapsed row is one line and
@@ -341,7 +341,7 @@ export const ToolCallBlock = memo(function ToolCallBlock(props: ToolCallBlockPro
 });
 
 
-function BashCommandHeader({ command, original, directory, running, elapsed, status, full, onFull, onKill, children }: { command: string; original: string; directory: string | null; running: boolean; elapsed: number; status: string; full: boolean; onFull: () => void; onKill?: () => void; children: React.ReactNode }) {
+function BashCommandHeader({ command, original, directory, running, elapsed, status, full, onFull, onKill, children }: { command: string; original: string; directory: string | null; running: boolean; elapsed: number; status: string; full: boolean; onFull: () => void; onKill?: () => void; children?: React.ReactNode }) {
 	const t = useChatT();
 	const commit = /^git\s+commit\s+(?:-q\s+)?-m\s+(?:"([^"$`]+)"|'([^']+)')\s*$/.exec(command);
 	const label = useRef<HTMLSpanElement>(null);
@@ -356,11 +356,12 @@ function BashCommandHeader({ command, original, directory, running, elapsed, sta
 	}, [command]);
 	return <div className="toolcall-head bash-command-head">
 		{running && <RunningIndicator label={t("running")} />}
-		<button type="button" className="bash-head-command" title={original} disabled={!clipped && !full} aria-expanded={full} aria-label={full ? t("collapseCode") : clipped ? t("bashExpandFullCommand") : command} onClick={onFull}><span className="bash-prompt">$</span>{commit && <span className="bash-command-verb">git commit</span>}<span ref={label} className={`bash-command-text${commit ? " bash-commit-subject" : ""}`}>{commit ? commit[1] ?? commit[2] : command}</span>{(clipped || full) && <FiChevronDown className={full ? "open" : ""} />}</button>
+		<span className="toolcall-icon" aria-hidden="true"><UiIcon name="squareTerminal" /></span>
+		<button type="button" className="bash-head-command" title={original} disabled={!clipped && !full} aria-expanded={full} aria-label={full ? t("collapseCode") : clipped ? t("bashExpandFullCommand") : command} onClick={onFull}>{commit && <span className="bash-command-verb">git commit</span>}<span ref={label} className={`bash-command-text${commit ? " bash-commit-subject" : ""}`}>{commit ? commit[1] ?? commit[2] : command}</span>{(clipped || full) && <FiChevronDown className={full ? "open" : ""} />}</button>
 		{directory && <span className="bash-directory" title={directory}>{directory}</span>}
 		<span className="toolcall-status">{running ? `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, "0")}` : status}</span>
-		{running && onKill && <button type="button" className="toolcall-kill" title={t("stopBashTip")} onClick={onKill}>{t("stopBash")}</button>}
-		<details className="bash-card-more"><summary aria-label={t("more")}>⋯</summary><div>{children}</div></details>
+		{running && onKill && <button type="button" className="toolcall-kill" title={t("stopBashTip")} onClick={onKill}><FiSquare aria-hidden="true" />{t("stopBash")}</button>}
+		{children && <details className="bash-card-more"><summary aria-label={t("more")}>⋯</summary><div>{children}</div></details>}
 	</div>;
 }
 
@@ -373,7 +374,8 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true }: ToolCall
 	const [open, setOpen] = useState(browser || acpDelegate ? false : wrap);
 	const [copyError, setCopyError] = useState(false);
 	const [copied, setCopied] = useState(false);
-	const [lineWrap, setLineWrap] = useState(false);
+	// 读取预览默认软换行（长行不再被截断/横向滚动）；bash 输出保持默认不换行。
+	const [lineWrap, setLineWrap] = useState(block.name === "read");
 	const [bashView, setBashView] = useState<"steps" | "raw">("steps");
 	const [fullCommand, setFullCommand] = useState(false);
 	const [elapsed, setElapsed] = useState(0);
@@ -473,16 +475,20 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true }: ToolCall
 						: t("toolQueued");
 	const recorded = toolDuration(view);
 	const duration = recorded !== undefined ? formatDuration(recorded) : "";
-	if (duration) statusLabel = `${statusLabel} · ${duration}`;
+	// 参考样式：成功的行只留实测耗时，不再写「已完成 · 0.3s」；失败保留错误标签。
+	if (done && !isError && !quietDelegate) statusLabel = duration || statusLabel;
+	else if (duration) statusLabel = `${statusLabel} · ${duration}`;
 	// `read` rows mirror the compact bash rows in the process list: state glyph +
-	// path + size + timing, with the file body only after clicking the row.
+	// path + timing, with the file body only after clicking the row.
 	const readNotExecuted = abandoned && !done && !waitingModel;
 	const readStats = imageReadNotice
 		? duration
 		: readNotExecuted
 			? t("toolNotExecuted")
-			: [outputLines.length > 0 ? t("toolLineCount", { n: outputLines.length }) : "", duration].filter(Boolean).join(" · ");
-	if (bashRun) statusLabel = bashRun.status === "partial" ? t("bashPartial", { ok: bashRun.completed, total: bashRun.steps.length }) : bashRun.status === "failed" ? t("bashFailed") : bashRun.status === "no-match" ? t("bashNoMatch") : bashRun.status === "running" ? `${t("bashRunning")}${elapsed ? ` · ${elapsed}s` : ""}` : `${t("done")}${duration ? ` · ${duration}` : ""}`;
+			: isError
+				? `${t("error")}${duration ? ` · ${duration}` : ""}`
+				: duration;
+	if (bashRun) statusLabel = bashRun.status === "partial" ? t("bashPartial", { ok: bashRun.completed, total: bashRun.steps.length }) : bashRun.status === "failed" ? t("bashFailed") : bashRun.status === "no-match" ? t("bashNoMatch") : bashRun.status === "running" ? `${t("bashRunning")}${elapsed ? ` · ${elapsed}s` : ""}` : duration || t("done");
 	else if (block.name === "bash" && isError) statusLabel = `${t("bashFailed")}${Number.isFinite(bashExit) ? ` · exit ${bashExit}` : ""}${bashDiagnostics.length ? ` · ${t("bashErrorCount", { n: bashDiagnostics.length })}` : ""}`;
 
 	// Live and historical results share the native exit-code projection.
@@ -490,6 +496,13 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true }: ToolCall
 		nativeExitCode !== undefined
 			? `exit ${nativeExitCode}`
 			: "";
+	// 成功的 bash 行不在头部写状态（参考样式与 29a 规则一致）；失败/运行/等待保留。
+	const bashHeadStatus = block.name === "bash" && !isError && done && (!bashRun || bashRun.status === "done") ? "" : statusLabel;
+	// 文本读取的展开正文是一张卡片：文件名头部（换行/放大）+「文件内容·仅供模型读取」+ 行号代码。
+	const readCard = block.name === "read" && !imageReadNotice && !!targetPath;
+	const readDisplayPath = targetPath ? displayReadPath(targetPath) : "";
+	const readBase = readDisplayPath.split("/").at(-1) ?? "";
+	const readDir = readDisplayPath.split("/").slice(0, -1).join("/");
 
 	const copyArgs = (event: React.MouseEvent<HTMLButtonElement>) => {
 		if (block.argumentsText) {
@@ -502,18 +515,6 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true }: ToolCall
 		}
 	};
 
-	// Read-card actions live on the output-label row (right side) instead of
-	// occupying their own row above the code — one less stacked band between
-	// the read row and the file body. The standalone row remains only when
-	// there is no output label to host it (empty file / image-only result).
-	// 图标即可表达：标题与 aria-label 已经说明动作，read 行右侧只留两个紧凑的
-	// 图标按钮，不再把「放大查看」「复制」的文字挤进状态行。
-	const readActions = targetPath && !zoomed ? (
-		<span className="toolcall-read-actions">
-			<button type="button" className="toolcall-expand" title={t("zoomCode")} aria-label={t("zoomCode")} onClick={() => setZoomed(true)}><FiMaximize2 aria-hidden="true" /></button>
-			<button type="button" className="toolcall-copy" title={t(copyError ? "copyFailed" : copied ? "copied" : "copyArgs")} aria-label={t(copyError ? "copyFailed" : copied ? "copied" : "copyArgs")} onClick={copyArgs}>{copied ? <FiCheck aria-hidden="true" /> : <FiCopy aria-hidden="true" />}</button>
-		</span>
-	) : null;
 	// Line numbers for the read code preview gutter (respect a read offset).
 	const previewLineNumbers = (() => {
 		const ls = visibleOutput.replace(/\r\n/g, "\n").split("\n");
@@ -524,10 +525,7 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true }: ToolCall
 	})();
 	// Rendered in place *and* inside the zoom overlay — kept as one value so
 	// the two views can never drift apart.
-	const bodyContent = (
-		<>
-
-			{block.argumentsText && (!targetPath || zoomed) && (!compactBash || fullCommand || zoomed) && (
+	const argsBlock = block.argumentsText && (!targetPath || zoomed) && (!compactBash || fullCommand || zoomed) ? (
 				<div className="toolcall-args">
 					{generic ? <ToolArguments text={block.argumentsText} /> : targetPath ? (
 						<button type="button" className="toolcall-read-path" title={targetPath} onClick={() => setZoomed(true)}>{displayReadPath(targetPath)}</button>
@@ -545,7 +543,9 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true }: ToolCall
 						<pre>{block.argumentsText}</pre>
 					)}
 				</div>
-			)}
+	) : null;
+	const bodyRest = (
+		<>
 			{nestedCalls && <details className="tool-nested-calls" open>
 				<summary>{t("nestedToolCalls", { n: nestedCalls.calls.length })}</summary>
 				{nestedCalls.calls.map(call => <details key={call.id} className="tool-nested-call">
@@ -562,13 +562,15 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true }: ToolCall
 			</div>)}
 			{structured && output && <ToolStructuredOutput key={block.id} output={output} url={view.result?.toolOutputUrl} error={isError} truncated={!!view.result?.content.some(part => part.type === "text" && part.truncated)} />}
 			{output.length > 0 && !imageReadNotice && !structured && (block.name === "bash" ? bashRun && bashView === "steps" ? <BashSteps run={bashRun} wrap={lineWrap} /> : bashDiagnostics.length > 0 ? <BashFailure diagnostics={bashDiagnostics} output={output} wrap={lineWrap} /> : <BashOutput output={output} wrap={lineWrap} cwd={differentCommandDirectory(block.argumentsText, cwd) ?? ""} searchOutput={searchOutputKind(block.argumentsText)} command={commandDisplay?.command ?? ""} /> : (
-				<div className="toolcall-output">
-					{(block.name !== "read" || isError || zoomed) && <div className="toolcall-output-label">
-						{isError ? t("errorOutput") : block.name === "read" ? t("modelReadOnly") : t("output")}
-						{running && (
-							<RunningIndicator />
-						)}
+				<div className={`toolcall-output${readCard ? " toolcall-read-card" : ""}`}>
+					{readCard && <div className="read-card-head">
+						<UiIcon name="file" />
+						<strong>{readBase}</strong>
+						{readDir && <span className="read-card-dir" title={targetPath ?? undefined}>{readDir}</span>}
 						<span className="toolcall-output-spacer" />
+						{codeLang && (
+							<button type="button" className="toolcall-wrap" aria-pressed={lineWrap} onClick={() => setLineWrap((value) => !value)}><UiIcon name="wrap" />{t("toolWrap")}</button>
+						)}
 						{isMarkdown && !isError && (
 							<button
 								type="button"
@@ -583,7 +585,32 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true }: ToolCall
 								{markdownPreview ? t("readRaw") : t("showMarkdownPreview")}
 							</button>
 						)}
+						<button type="button" className="read-card-zoom" aria-label={t("zoomCode")} title={t("zoomCode")} onClick={() => setZoomed(true)}><UiIcon name="maximize" /></button>
 					</div>}
+					<div className="toolcall-output-label">
+						{isError ? t("errorOutput") : block.name === "read" ? t("modelReadOnly") : t("output")}
+						{running && (
+							<RunningIndicator />
+						)}
+						{!readCard && <span className="toolcall-output-spacer" />}
+						{!readCard && codeLang && (
+							<button type="button" className="toolcall-wrap" aria-pressed={lineWrap} onClick={() => setLineWrap((value) => !value)}>{t("toolWrap")}</button>
+						)}
+						{!readCard && isMarkdown && !isError && (
+							<button
+								type="button"
+								className="toolcall-md-toggle"
+								title={
+									markdownPreview
+										? t("showMarkdownSource")
+										: t("showMarkdownPreview")
+								}
+								onClick={() => setMarkdownPreview((v) => !v)}
+							>
+								{markdownPreview ? t("readRaw") : t("showMarkdownPreview")}
+							</button>
+						)}
+					</div>
 					{editDiff ? (
 						<DiffView diff={editDiff} lang={editLang} path={editPath} />
 					) : isMarkdown && markdownPreview && !isError ? (
@@ -592,9 +619,15 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true }: ToolCall
 							<Markdown text={markdownRead?.body ?? visibleOutput} />
 						</div>
 					) : codeLang ? (
-						<div className="toolcall-code numbered">
-							<div className="code-gutter" aria-hidden="true">{previewLineNumbers.map(n => <span key={n}>{n}</span>)}</div>
-							<div className="code-pane"><Markdown text={fenceCodeBlock(readCodeText, codeLang)} /></div>
+						<div className={`toolcall-code numbered${lineWrap ? "" : " no-wrap"}`}>
+							<CopyButton text={readCodeText} />
+							{highlightLines(readCodeText.replace(/\n$/, ""), codeLang).map((html, i) => (
+								<div className="read-code-line" key={previewLineNumbers[i] ?? i}>
+									<span className="read-code-num" aria-hidden="true">{previewLineNumbers[i]}</span>
+									{/* biome-ignore lint: highlightLines only ever returns hljs's own escaped/span-wrapped output (see hljs-lite.ts), never raw input. */}
+									<code className="read-code-text hljs" dangerouslySetInnerHTML={{ __html: html || "\u200b" }} />
+								</div>
+							))}
 						</div>
 					) : (
 						<pre>{readCodeText}</pre>
@@ -605,9 +638,10 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true }: ToolCall
 			{generic && !output && view.result?.toolOutputUrl && <div className="toolcall-result-actions">{!output && <span>{t("toolOutputFileOnly")}</span>}<ToolOutputDownload url={view.result.toolOutputUrl} compact /></div>}
 		</>
 	);
+	const bodyContent = (<>{argsBlock}{bodyRest}</>);
 
 	return (
-		<div data-tool-call-id={browser ? block.id : undefined} className={browser ? "change-card browser-progress" : `toolcall ${(block.name === "read" || generic) && !quietDelegate ? "transcript-tool" : ""} ${block.name === "read" ? "toolcall-read" : ""} ${generic ? "toolcall-generic" : ""} ${structured ? "toolcall-structured" : ""} ${statusClass} ${block.name === "bash" ? "toolcall-bash" : ""} ${bashRun ? "toolcall-steps" : ""} ${bashDiagnostics.length ? "toolcall-diagnostics" : ""} ${quietDelegate ? "toolcall-delegate-quiet" : ""}`} onMouseEnter={() => notifyToolHover(block.id)} onMouseLeave={() => notifyToolHover(null)}>
+		<div data-tool-call-id={browser ? block.id : undefined} className={browser ? "change-card browser-progress" : `toolcall ${block.name === "read" ? "toolcall-read" : ""} ${generic ? "toolcall-generic" : ""} ${structured ? "toolcall-structured" : ""} ${statusClass} ${block.name === "bash" ? "toolcall-bash" : ""} ${bashRun ? "toolcall-steps" : ""} ${bashDiagnostics.length ? "toolcall-diagnostics" : ""} ${quietDelegate ? "toolcall-delegate-quiet" : ""}`} onMouseEnter={() => notifyToolHover(block.id)} onMouseLeave={() => notifyToolHover(null)}>
 			{browser ? <>
 				<button type="button" className="tool-step-head" aria-expanded={open} onClick={() => setOpen(v => !v)}>
 					<FiGlobe className="browser-step-icon" aria-hidden="true" />
@@ -626,31 +660,21 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true }: ToolCall
 				</button>
 				{open && browserTimeout && <p className="browser-progress-update"><strong>{t("browserResponseTimeout")}</strong></p>}
 				{running && output.trim() && <div className="browser-progress-update">{output.trim().split("\n").filter(Boolean).at(-1)?.slice(0, 240)}</div>}
-			</> : commandDisplay ? <BashCommandHeader command={commandDisplay.command} original={command!} directory={commandDisplay.directory ?? differentCommandDirectory(block.argumentsText, cwd)} running={isBashRunning} elapsed={elapsed} status={statusLabel} full={fullCommand} onFull={() => { setFullCommand((value) => !value); setOpen(true); }} onKill={onKillBash}>
+			</> : commandDisplay ? <BashCommandHeader command={commandDisplay.command} original={command!} directory={commandDisplay.directory ?? differentCommandDirectory(block.argumentsText, cwd)} running={isBashRunning} elapsed={elapsed} status={bashHeadStatus} full={fullCommand} onFull={() => { setFullCommand((value) => !value); setOpen(true); }} onKill={onKillBash}>
 				{bashRun && <span className="bash-view-switch"><button type="button" className={bashView === "steps" ? "active" : ""} onClick={() => setBashView("steps")}>{t("bashSteps")}</button><button type="button" className={bashView === "raw" ? "active" : ""} onClick={() => setBashView("raw")}>{t("bashRaw")}</button></span>}
-				<button type="button" className="toolcall-wrap" aria-pressed={lineWrap} onClick={() => setLineWrap((value) => !value)}>{t("toolWrap")}</button>
-				<button type="button" className="toolcall-expand" onClick={() => setExpanded((value) => !value)}>{t(expanded ? "collapseCode" : "expandCode")}</button>
-				<button type="button" className="toolcall-expand" onClick={() => setZoomed(true)}>{t("zoomCode")}</button>
-				<button type="button" className="toolcall-copy" onClick={copyArgs}>{t(copyError ? "copyFailed" : copied ? "copied" : "copy")}</button>
-				<button type="button" className="toolcall-toggle" onClick={() => setOpen((value) => !value)}>{t(open ? "collapseCode" : "expandCode")}</button>
 			</BashCommandHeader> : targetPath ? (
-			<div className="toolcall-read-headrow">
-				<button type="button" className="toolcall-head toolcall-read-head" aria-expanded={open} aria-label={`${t("readVerb")} ${displayReadPath(targetPath)}`} onClick={() => setOpen((v) => !v)}>
-					<span className="toolcall-read-icon" aria-hidden="true"><FiBookOpen /></span>
-					{(statusClass === "run" || statusClass === "err" || readNotExecuted) && <span className={`toolcall-read-state ${statusClass}`} aria-hidden="true">
-						{statusClass === "run" ? <RunningIndicator /> : statusClass === "err" ? "✗" : "−"}
-					</span>}
-					<span className="toolcall-read-title"><span>{t("readVerb")}</span><code title={targetPath}>{displayReadPath(targetPath)}</code></span>
-					{readStats && <span className="toolcall-read-stats">{readStats}</span>}
-				</button>
-				<span className="toolcall-spacer" />
-				{readActions}
-				<button type="button" className="toolcall-read-chevron" aria-label={open ? t("collapseCode") : t("expandCode")} onClick={() => setOpen((v) => !v)}>{open ? <FiChevronDown aria-hidden="true" /> : <FiChevronRight aria-hidden="true" />}</button>
-			</div>
+			<button type="button" className="toolcall-head toolcall-read-head" aria-expanded={open} aria-label={`${t("readVerb")} ${displayReadPath(targetPath)}`} onClick={() => setOpen((v) => !v)}>
+				<span className={`toolcall-read-state ${statusClass}`} aria-hidden="true">
+					{statusClass === "run" ? <RunningIndicator /> : statusClass === "err" ? "✗" : readNotExecuted ? "−" : "✓"}
+				</span>
+				<span className="toolcall-read-icon" aria-hidden="true"><UiIcon name={imageReadNotice ? "image" : "file"} /></span>
+				<span className="toolcall-read-title"><span>{t("readVerb")}</span><code title={targetPath}><UiIcon name={imageReadNotice ? "image" : "file"} /><span>{displayReadPath(targetPath)}</span></code></span>
+				{readStats && <span className="toolcall-read-stats"><UiIcon name="clock" />{readStats}</span>}
+			</button>
 			) : (
-			<div className="toolcall-head">
-				<span className="toolcall-icon">{generic ? <FiTool aria-hidden="true" /> : toolIcon(block.name)}</span>
-				{compactBash ? <code className="bash-head-command" title={command ?? ""}>$ {displayBashCommand(command!, cwd)}</code> : generic ? <button type="button" className="toolcall-name toolcall-name-toggle" title={block.name} aria-expanded={open} onClick={() => setOpen(v => !v)}>{acpDelegate && (open ? <FiChevronDown aria-hidden="true" /> : <FiChevronRight aria-hidden="true" />)}<span>{block.name}</span>{action && <small className="toolcall-action" title={action}>action: {action}</small>}</button> : <span className="toolcall-name">{block.name}</span>}
+			<button type="button" className="toolcall-head" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+				<span className="toolcall-icon" aria-hidden="true">{generic ? <UiIcon name="plug" /> : toolIcon(block.name)}</span>
+				{compactBash ? <code className="bash-head-command" title={command ?? ""}>{displayBashCommand(command!, cwd)}</code> : <span className="toolcall-name" title={block.name}><span>{block.name}</span>{action && <small className="toolcall-action" title={action}>action: {action}</small>}</span>}
 				{compactBash && output && <span className="bash-head-count">{t("toolLineCount", { n: outputLines.length })}</span>}
 				<span className="toolcall-status">
 					{running && !quietDelegate && <RunningIndicator />}
@@ -659,64 +683,15 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true }: ToolCall
 
 					{exitHint && <em className="toolcall-exit">{exitHint}</em>}
 				</span>
-				<span className="toolcall-spacer" />
-				{bashRun && <span className="bash-view-switch"><button type="button" className={bashView === "steps" ? "active" : ""} onClick={() => setBashView("steps")}>{t("bashSteps")}</button><button type="button" className={bashView === "raw" ? "active" : ""} onClick={() => setBashView("raw")}>{t("bashRaw")}</button></span>}
-				{block.name === "bash" && !bashRun && !bashDiagnostics.length && <button type="button" className="toolcall-wrap" aria-pressed={lineWrap} onClick={() => setLineWrap((value) => !value)}>{t("toolWrap")}</button>}
-				{isBashRunning && onKillBash && (
-					<button
-						type="button"
-						className="toolcall-kill"
-						title={t("stopBashTip")}
-						onClick={onKillBash}
-					>
-						<FiSquare />
-						<span>{t("stopBash")}</span>
-					</button>
-				)}
-				{!generic && block.name !== "read" && !bashRun && !bashDiagnostics.length && (
-					<button
-						type="button"
-						disabled={!open}
-						className="toolcall-expand"
-						title={expanded ? t("collapseCode") : t("expandCode")}
-						onClick={() => setExpanded((v) => !v)}
-					>
-						{expanded ? t("collapseCode") : t("expandCode")}
-					</button>
-				)}
-				{!quietDelegate && !bashRun && !bashDiagnostics.length && <button
-					type="button"
-					className="toolcall-expand"
-					title={t("zoomCode")}
-					aria-label={t("zoomCode")}
-					onClick={() => setZoomed(true)}
-				>
-					<FiMaximize2 aria-hidden="true" />
-				</button>}
-				{!quietDelegate && <button
-					type="button"
-					className="toolcall-copy"
-					title={t(copyError ? "copyFailed" : "copyArgs")}
-					aria-label={t(copyError ? "copyFailed" : copied ? "copied" : "copyArgs")}
-					onClick={copyArgs}
-				>
-					{copied ? <FiCheck aria-hidden="true" /> : <FiCopy aria-hidden="true" />}
-				</button>}
-				{(bashRun || bashDiagnostics.length > 0) && <details className="bash-card-more"><summary aria-label={t("more")}>⋯</summary><div><button type="button" onClick={() => setLineWrap((value) => !value)}>{t("toolWrap")}</button><button type="button" onClick={() => setZoomed(true)}>{t("zoomCode")}</button><button type="button" onClick={() => setOpen((value) => !value)}>{open ? t("collapseCode") : t("expandCode")}</button></div></details>}
-				{!quietDelegate && !bashRun && !bashDiagnostics.length && <button
-					type="button"
-					className="toolcall-toggle"
-					aria-label={open ? t("collapseCode") : t("expandCode")}
-					onClick={() => setOpen((v) => !v)}
-				>
-					{open ? <FiChevronDown /> : <FiChevronRight />}
-				</button>}
-			</div>
+			</button>
 			)}
 			{open && (
 				<div className={`toolcall-body ${expanded ? "expanded" : ""}`}>
-					{(quietDelegate || browser) && <div className="delegate-tool-actions"><button type="button" onClick={copyArgs}><FiCopy />{t(copyError ? "copyFailed" : copied ? "copied" : "copyArgs")}</button><button type="button" onClick={() => setZoomed(true)}><FiMaximize2 />{t("zoomCode")}</button></div>}
-					{bodyContent}
+					{browser ? <div className="browser-detail-head">
+						{argsBlock}
+						<span className="delegate-tool-actions"><button type="button" onClick={copyArgs}><FiCopy />{t(copyError ? "copyFailed" : copied ? "copied" : "copyArgs")}</button><button type="button" onClick={() => setZoomed(true)}><FiMaximize2 />{t("zoomCode")}</button></span>
+					</div> : quietDelegate && <div className="delegate-tool-actions"><button type="button" onClick={copyArgs}><FiCopy />{t(copyError ? "copyFailed" : copied ? "copied" : "copyArgs")}</button><button type="button" onClick={() => setZoomed(true)}><FiMaximize2 />{t("zoomCode")}</button></div>}
+					{browser ? bodyRest : bodyContent}
 				</div>
 			)}
 			{zoomed && (
@@ -730,7 +705,7 @@ function RegularToolCallBlock({ block, view, onKillBash, wrap = true }: ToolCall
 						onClick={(e) => e.stopPropagation()}
 					>
 						<div className="toolcall-zoom-head">
-							<span className="toolcall-icon">{generic ? <FiTool aria-hidden="true" /> : toolIcon(block.name)}</span>
+							<span className="toolcall-icon">{generic ? <UiIcon name="plug" /> : toolIcon(block.name)}</span>
 							<span className="toolcall-name">{block.name}</span>
 							<span className="toolcall-spacer" />
 							<button

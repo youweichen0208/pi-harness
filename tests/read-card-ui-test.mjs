@@ -58,8 +58,10 @@ try {
 	});
 	await page.goto(`http://127.0.0.1:${port}`);
 
+	// 读取不进命令组（2026-12 用户决定）：正文行级直接成行，没有组头可点。
 	assert.equal(await page.locator('.process-group-summary-line').count(), 0);
 	await page.locator('.toolcall-read').waitFor();
+	assert.equal(await page.locator('.process-group').count(), 0, 'a lone read renders outside any command group');
 	assert.equal(await page.locator('.read-group-head,.read-file-head').count(), 0, 'single read has no redundant nested rows');
 	assert.equal(await page.locator('.toolcall-read .read-download,.toolcall-read .toolcall-output').count(), 0, 'image read hides full output download and redundant notice');
 	assert.equal(await page.locator('.toolcall-read .tool-image-actions a').count(), 1);
@@ -85,10 +87,8 @@ try {
 	assert(collapsed.height <= 40, `collapsed read row stays one line (got ${collapsed.height}px)`);
 	await page.locator('.toolcall-read .toolcall-read-head').click();
 	await page.locator('.toolcall-read .tool-result-image').waitFor();
-	await page.locator('.toolcall-read .toolcall-expand').click();
-	await page.locator('.toolcall-zoom').waitFor();
 
-	// --- 文本读取：行数 + 最大展示行数 -------------------------------------
+	// --- 文本读取：耗时 + 最大展示行数 -------------------------------------
 	const longText = Array.from({ length: 180 }, (_, index) => `\t\t\tconst line${index + 1} = ${index + 1};`).join('\n');
 	phaseMessages = [
 		{ id: 'user', role: 'user', content: [{ type: 'text', text: 'Read app.ts' }] },
@@ -99,23 +99,28 @@ try {
 	assert.equal(await page.locator('.process-group-summary-line').count(), 0);
 	await page.locator('.toolcall-read').waitFor();
 	const stats = await page.locator('.toolcall-read-stats').textContent();
-	assert.match(stats ?? '', /180/, `read row shows the line count (got ${stats})`);
-	assert.match(stats ?? '', /0\.1s/, 'read row shows the recorded duration');
-	const previewLines = async () => ((await page.locator('.toolcall-read .toolcall-code code').first().textContent()) ?? '').replace(/\n$/, '').split('\n').length;
+	assert.match(stats ?? '', /^0\.1s$/, `read row shows only the recorded duration (got ${stats})`);
+	const previewLines = async () => page.locator('.toolcall-read .toolcall-code .read-code-line').count();
 	assert.equal(await previewLines(), 10, 'expanded read previews at most READ_PREVIEW_LINES lines');
 	await page.locator('.toolcall-read .toolcall-output-more').click();
 	assert.equal(await previewLines(), 180, 'the expand control reveals the whole file');
 	// Tab-indented sources keep a 4-wide tab (not the browser default 8 that
-	// pushed deeply nested code ~300px right), ligatures stay off, zoom/copy sit
-	// as bordered buttons on the header row, and the code has a line-number gutter.
-	const codeStyle = await page.locator('.toolcall-read .toolcall-code pre').evaluate(el => { const s = getComputedStyle(el); return { tabSize: s.tabSize }; });
-	const glyphLigatures = await page.locator('.toolcall-read .toolcall-code pre code').first().evaluate(el => getComputedStyle(el).fontVariantLigatures);
+	// pushed deeply nested code ~300px right), ligatures stay off, the header
+	// row carries no action buttons, and the code has a line-number gutter.
+	const codeStyle = await page.locator('.toolcall-read .toolcall-code .read-code-text').first().evaluate(el => { const s = getComputedStyle(el); return { tabSize: s.tabSize }; });
+	const glyphLigatures = await page.locator('.toolcall-read .toolcall-code .read-code-text').first().evaluate(el => getComputedStyle(el).fontVariantLigatures);
 	assert.equal(codeStyle.tabSize, '4', 'code preview uses tab-size 4');
 	assert.equal(glyphLigatures, 'none', 'code preview renders literal characters, no ligatures');
-	assert.equal(await page.locator('.toolcall-read .toolcall-read-headrow .toolcall-read-actions').count(), 1, 'zoom/copy are header-row buttons');
-	assert.equal(await page.locator('.toolcall-read .toolcall-body > .toolcall-read-actions').count(), 0, 'no separate action band above the code');
-	assert.equal(await page.locator('.toolcall-read .toolcall-code.numbered .code-gutter span').count(), 180, 'line-number gutter matches expanded line count');
-	const previewText = (await page.locator('.toolcall-read .toolcall-code code').first().textContent()) ?? '';
+	assert.equal(await page.locator('.toolcall-read .toolcall-read-actions, .toolcall-read .toolcall-read-chevron').count(), 0, 'read row has no action buttons or chevron');
+	assert.equal(await page.locator('.toolcall-read .toolcall-code.numbered .read-code-num').count(), 180, 'line-number gutter matches expanded line count');
+	// 默认软换行：长行不再被截断，容器不出现横向滚动；「换行」开关可切回横向滚动。
+	assert.equal(await page.locator('.toolcall-read .toolcall-code.numbered.no-wrap').count(), 0, 'read preview wraps long lines by default');
+	assert(await page.locator('.toolcall-read .toolcall-code.numbered').evaluate(el => el.scrollWidth <= el.clientWidth + 1), 'wrapped read preview has no horizontal overflow');
+	await page.locator('.toolcall-read .read-card-head .toolcall-wrap').click();
+	assert.equal(await page.locator('.toolcall-read .toolcall-code.numbered.no-wrap').count(), 1, 'wrap toggle switches to horizontal scrolling');
+	await page.locator('.toolcall-read .read-card-head .toolcall-wrap').click();
+	assert.equal(await page.locator('.toolcall-read .toolcall-code.numbered.no-wrap').count(), 0, 'wrap toggle switches back to soft-wrap');
+	const previewText = (await page.locator('.toolcall-read .toolcall-code .read-code-text').first().textContent()) ?? '';
 	assert(previewText.startsWith('const line1'), `read preview drops the indentation every line shares (got ${JSON.stringify(previewText.slice(0, 20))})`);
 	await page.locator('.toolcall-read').screenshot({ path: '/tmp/pi-read-card-text.png' });
 

@@ -107,9 +107,7 @@ emit({messages:conversation,isStreaming:false,streamingMessage:null});
 await page.locator('.toolcall-bash').nth(1).waitFor();
 for(const card of await page.locator('.toolcall-bash').all()){
 assert.equal(await card.locator('.bash-head-command').isVisible(),true);
-await card.locator('.bash-card-more summary').click();
-assert.equal(await card.locator('.toolcall-copy').isVisible(),true);
-await card.locator('.bash-card-more summary').click();
+assert.equal(await card.locator('.bash-card-more,.toolcall-copy,.toolcall-expand,.toolcall-toggle,.toolcall-kill,.bash-view-switch').count(),0,'bash head carries no action buttons');
 }
 assert.equal(await page.locator('.bash-output-label [title]').count(),0,'current workspace paths do not repeat');
 assert.equal(await page.locator('.bash-line-number').first().textContent(),'1');
@@ -161,7 +159,7 @@ assert.equal(await page.locator('.thinking-spinner:visible,.working-spin:visible
 emit({messages:[...conversation,{id:'read-step',role:'assistant',model:'glm-5.3',content:[{type:'toolCall',id:'read-active',name:'read',argumentsText:JSON.stringify({path:'web/src/components/LeftPanel.tsx'})}]}],isStreaming:true,streamingMessage:null});
 await page.locator('.agent-working',{hasText:'正在读取 LeftPanel.tsx…'}).waitFor();
 socket.send(JSON.stringify({type:'tool_status',toolCallId:'read-active',toolName:'read',isError:false,durationMs:300}));
-await page.locator('.toolcall-read .toolcall-status',{hasText:'完成 · 0.3s'}).waitFor();
+await page.locator('.toolcall-read .toolcall-read-stats',{hasText:'0.3s'}).waitFor();
 await page.locator('.agent-working',{hasText:'等待模型'}).waitFor();
 const reads={id:'reads',role:'assistant',model:'glm-5.3',content:[
 {type:'toolCall',id:'read-one',name:'read',argumentsText:JSON.stringify({path:join(cwd,'CONTEXT.md')})},
@@ -237,10 +235,7 @@ assert.equal(await page.locator('.bash-step.done').count(),1);
 assert.equal(await page.locator('.bash-step.failed').count(),1);
 assert.equal(await page.locator('.bash-step.failed .bash-step-detail:visible').count(),1);
 await page.screenshot({path:'/private/tmp/pi-bash-steps.png'});
-await page.locator('.toolcall-steps .bash-card-more summary').click();
-await page.locator('.bash-view-switch button',{hasText:'原始'}).click();
-await page.locator('.toolcall-steps .bash-card-more summary').click();
-assert.equal(await page.locator('.toolcall-steps .bash-output').count(),1);
+assert.equal(await page.locator('.toolcall-steps .bash-steps').count(),1,'labeled steps are the only bash body view');
 const failureCall={id:'failed',role:'assistant',model:'glm-5.3',content:[{type:'toolCall',id:'failed-bash',name:'bash',argumentsText:JSON.stringify({command:'npm run typecheck'})}]};
 const failureResult={id:'failed-result',role:'toolResult',toolCallId:'failed-bash',toolName:'bash',isError:true,content:[{type:'text',text:'src/problem.ts(1,7): error TS2322: Type number is not assignable to string\nCommand exited with code 2'}]};
 emit({messages:[messages[4],failureCall,failureResult],isStreaming:false,streamingMessage:null});

@@ -1,5 +1,6 @@
 import { BrandWordmark } from "./BrandWordmark";
-import { memo, useEffect, useRef, useState, type ReactNode } from "react";
+import { memo, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import {
 	FiSearch,
 	FiCode,
@@ -34,6 +35,42 @@ import { skillAwarePreview } from "../skill-block";
 import { conversationDisplayTitle } from "../conversation-display-title";
 import { useI18n } from "../i18n";
 import { WorkspaceBook } from "./WorkspaceBook";
+
+/** 行内「更多」菜单。侧栏的滚动容器（workspace-directory / workspace-list）
+ *  会把比面板宽的菜单裁掉（左半边被剪），所以用 portal 挂到 app 根节点，
+ *  按触发按钮的视口坐标 fixed 定位，并在视口内收边/上下翻转。 */
+function LpMenuPopover({ menuKey, className = "", children }: { menuKey: string; className?: string; children: ReactNode }) {
+	const ref = useRef<HTMLDivElement>(null);
+	const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+	useLayoutEffect(() => {
+		const place = () => {
+			const anchor = document.querySelector<HTMLElement>(`.lp-menu-zone[data-menu-key="${CSS.escape(menuKey)}"] .lp-menu-trigger`);
+			const el = ref.current;
+			if (!anchor || !el) return;
+			const rect = anchor.getBoundingClientRect();
+			const width = el.offsetWidth;
+			const height = el.offsetHeight;
+			const left = Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8));
+			let top = rect.bottom + 4;
+			if (top + height > window.innerHeight - 8) top = Math.max(8, rect.top - height - 4);
+			setPos(prev => prev && prev.left === left && prev.top === top ? prev : { left, top });
+		};
+		place();
+		window.addEventListener("resize", place);
+		return () => window.removeEventListener("resize", place);
+	}); // 每次渲染都重算：删除二次确认后菜单变宽，需要重新收边。
+	return createPortal(
+		<div
+			ref={ref}
+			role="menu"
+			className={`lp-menu-popover lp-menu-floating${className ? ` ${className}` : ""}`}
+			style={{ left: pos?.left ?? 0, top: pos?.top ?? 0, visibility: pos ? undefined : "hidden" }}
+		>
+			{children}
+		</div>,
+		document.querySelector(".design-workspace") ?? document.body,
+	);
+}
 
 /** Props are deliberately NARROW (no whole-ChatState object): every field is
  *  stable while tokens stream in, so the shallow-compared memo() below skips
@@ -182,13 +219,21 @@ export const LeftPanel = memo(function LeftPanel({
 	useEffect(() => {
 		if (!openMenu) return;
 		const closeOutside = (event: PointerEvent) => {
+			// 菜单本体已 portal 到 app 根节点，不再位于 .lp-menu-zone 内。
+			if (event.target instanceof Element && event.target.closest(".lp-menu-popover")) return;
 			const zone = event.target instanceof Element ? event.target.closest<HTMLElement>(".lp-menu-zone") : null;
 			if (zone?.dataset.menuKey !== openMenu) setOpenMenu(null);
 		};
 		const closeEscape = (event: KeyboardEvent) => { if (event.key === "Escape") setOpenMenu(null); };
+		// fixed 定位不跟随侧栏滚动：任何容器滚动时直接收起菜单。
+		const closeScroll = (event: Event) => {
+			if (event.target instanceof Element && event.target.closest(".lp-menu-popover")) return;
+			setOpenMenu(null);
+		};
 		document.addEventListener("pointerdown", closeOutside);
 		document.addEventListener("keydown", closeEscape);
-		return () => { document.removeEventListener("pointerdown", closeOutside); document.removeEventListener("keydown", closeEscape); };
+		document.addEventListener("scroll", closeScroll, true);
+		return () => { document.removeEventListener("pointerdown", closeOutside); document.removeEventListener("keydown", closeEscape); document.removeEventListener("scroll", closeScroll, true); };
 	}, [openMenu]);
 
 	// "Open folder": the recent-project list only ever grew as a side effect
@@ -392,13 +437,13 @@ export const LeftPanel = memo(function LeftPanel({
 								</button>
 								<div className={`lp-menu-zone${openMenu === `sess:${s.path}` ? " is-open" : ""}`} data-menu-key={`sess:${s.path}`}>
 									<button type="button" className="lp-menu-trigger" aria-label={`${displayName(s)} · ${t("more")}`} aria-haspopup="menu" aria-expanded={openMenu === `sess:${s.path}`} onClick={() => setOpenMenu((key) => key === `sess:${s.path}` ? null : `sess:${s.path}`)}><FiMoreHorizontal /></button>
-									{openMenu === `sess:${s.path}` && <div className="lp-menu-popover" role="menu">
+									{openMenu === `sess:${s.path}` && <LpMenuPopover menuKey={`sess:${s.path}`}>
 										<button type="button" role="menuitem" onClick={() => { setRenameDraft(s.name ?? displayName(s)); setRenaming(s.path); setOpenMenu(null); }}>{t("renameSession")}</button>
 										<button type="button" role="menuitem" className={confirmDel === `sess:${s.path}` ? "danger" : ""} onClick={() => {
 											if (confirmDel === `sess:${s.path}`) { send({ type: "delete_session", path: s.path }); setConfirmDel(null); setOpenMenu(null); }
 											else setConfirmDel(`sess:${s.path}`);
 										}}>{confirmDel === `sess:${s.path}` ? t("deleteSessionConfirm") : t("deleteSession")}</button>
-									</div>}
+									</LpMenuPopover>}
 								</div>
 							</div>
 						);
@@ -425,11 +470,11 @@ export const LeftPanel = memo(function LeftPanel({
 						<div className="workspace-list">
 					{projectWorkspaces?.workspaces.filter(group => group.name.toLocaleLowerCase().includes(groupQuery.toLocaleLowerCase())).map(group => <div className="workspace-list-row" key={group.id}>
 						<button className={selectedWorkspace === group.id ? "active" : ""} disabled={!!workspacePending} onClick={() => { chooseWorkspace(group.id); onNavigate("chat"); }}><WorkspaceBook /><span>{group.name}</span>{selectedWorkspace === group.id && <FiCheck className="workspace-selected-check" />}</button>
-						<div className="lp-menu-zone" data-menu-key={`ws:${group.id}`}><button className="lp-menu-trigger" aria-label={`${group.name} · ${t("more")}`} aria-haspopup="menu" aria-expanded={openMenu === `ws:${group.id}`} onClick={() => setOpenMenu(openMenu === `ws:${group.id}` ? null : `ws:${group.id}`)}><FiMoreHorizontal /></button>
-							{openMenu === `ws:${group.id}` && <div className="lp-menu-popover" role="menu">
+						<div className={`lp-menu-zone${openMenu === `ws:${group.id}` ? " is-open" : ""}`} data-menu-key={`ws:${group.id}`}><button className="lp-menu-trigger" aria-label={`${group.name} · ${t("more")}`} aria-haspopup="menu" aria-expanded={openMenu === `ws:${group.id}`} onClick={() => setOpenMenu(openMenu === `ws:${group.id}` ? null : `ws:${group.id}`)}><FiMoreHorizontal /></button>
+							{openMenu === `ws:${group.id}` && <LpMenuPopover menuKey={`ws:${group.id}`}>
 								<button role="menuitem" disabled={workspaceBusy} onClick={() => { setWorkspaceName(group.name); setWorkspaceForm(group.id); setOpenMenu(null); setWorkspaceOpen(false); }}>{t("workspaceRename")}</button>
 								<button role="menuitem" disabled={workspaceBusy} onClick={() => { if (window.confirm(t("workspaceDeleteHint"))) { changeWorkspace({ kind: "delete", id: group.id }); setOpenMenu(null); } }}>{t("workspaceDelete")}</button>
-							</div>}
+							</LpMenuPopover>}
 						</div>
 					</div>)}
 						{!projectWorkspaces?.workspaces.some(group => group.name.toLocaleLowerCase().includes(groupQuery.toLocaleLowerCase())) && <p className="panel-empty">{t("workspaceFilterEmpty")}</p>}
@@ -503,13 +548,13 @@ export const LeftPanel = memo(function LeftPanel({
 								<div className={`lp-menu-zone${openMenu === `proj:${p.path}` ? " is-open" : ""}`} data-menu-key={`proj:${p.path}`}>
 									{active && <button type="button" className="lp-project-new" title={t("newChat")} aria-label={`${projectName(p.path)} · ${t("newChat")}`} disabled={!ready} onClick={onNewChat}><FiPlus /></button>}
 									<button type="button" className="lp-menu-trigger" aria-label={`${projectName(p.path)} · ${t("more")}`} aria-haspopup="menu" aria-expanded={openMenu === `proj:${p.path}`} onClick={() => setOpenMenu((key) => key === `proj:${p.path}` ? null : `proj:${p.path}`)}><FiMoreHorizontal /></button>
-									{openMenu === `proj:${p.path}` && <div className="lp-menu-popover workspace-project-menu" role="menu">
+									{openMenu === `proj:${p.path}` && <LpMenuPopover menuKey={`proj:${p.path}`} className="workspace-project-menu">
 										{active && <button type="button" role="menuitem" disabled={!ready} onClick={() => { setOpenMenu(null); onNewChat(); }}>{t("newChat")}</button>}
 										<button type="button" role="menuitem" disabled={workspaceBusy} className={confirmDel === `proj:${p.path}` ? "danger" : ""} onClick={() => {
 											if (confirmDel === `proj:${p.path}`) { changeWorkspace({ kind: "remove", id: selectedGroup.id, path: p.path }); setConfirmDel(null); setOpenMenu(null); }
 											else setConfirmDel(`proj:${p.path}`);
 										}}>{confirmDel === `proj:${p.path}` ? t("deleteProjectConfirm") : t("workspaceRemoveProject")}</button>
-									</div>}
+									</LpMenuPopover>}
 								</div>
 								{expanded && history}
 							</div>

@@ -106,7 +106,8 @@ async function waitToolDone(page, timeout = 180_000) {
 			.locator(".toolcall-status")
 			.textContent()
 			.catch(() => "");
-		if (status === "完成") return true;
+		// 完成的工具行只显示实测耗时（如「0.3s」「<0.1s」），没有实测时退回「完成」。
+		if (status === "完成" || status === "Done" || /^[<\d]/.test(status ?? "")) return true;
 		await sleep(500);
 	}
 	return false;

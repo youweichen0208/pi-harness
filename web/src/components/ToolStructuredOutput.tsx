@@ -26,7 +26,7 @@ export function ToolStructuredOutput({ output, url, truncated, error }: { output
 		const link = document.createElement("a"); link.href = objectUrl; link.download = formatted.json ? "tool-output.json" : "tool-output.txt"; link.click();
 		setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
 	};
-	return <section className="structured-tool-output">
+	return <section className={`structured-tool-output${error ? " err" : ""}`}>
 		<div className="toolcall-section-label">{t(error ? "errorOutput" : "output")}</div>
 		<div className="structured-tool-code"><pre><code dangerouslySetInnerHTML={{ __html: highlightLine(visible, formatted.json ? "json" : null) }} /></pre>
 			{lines.length > 12 && <button type="button" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>{expanded ? t("collapseCode") : t("expandAllLines", { n: lines.length })}</button>}

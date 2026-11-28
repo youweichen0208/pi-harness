@@ -21,6 +21,17 @@ writeFileSync(join(cwd, 'app.ts'), Array.from({length: 120}, (_, n) => `const va
 git('checkout', '-b', 'feature');
 writeFileSync(join(cwd, 'app.ts'), Array.from({length: 120}, (_, n) => `const value${n} = "${n === 5 || n === 25 ? 'new' : 'old'}";`).join('\n')+'\n'); git('commit', '-am', 'edit');
 writeFileSync(join(cwd, 'untracked.txt'), 'new file\n');
+// Seeded transcript with a real user turn. Ordinary attach resumes the most
+// recent session, so the server starts on this non-blank chat: the fixture
+// messages are injected into snapshots only, and without real work new_chat
+// would reuse the blank chat in place instead of opening a fresh one.
+const sessionsDir = join(root, 'agent', 'sessions', `--${cwd.replace(/^[/\\]/, '').replace(/[/\\:]/g, '-')}--`);
+mkdirSync(sessionsDir, { recursive: true });
+const seededSession = join(sessionsDir, '2026-10-19T00-00-00-000Z_seed.jsonl');
+writeFileSync(seededSession, [
+	{ type: 'session', version: 3, id: 'seed', timestamp: '2026-10-19T00:00:00.000Z', cwd },
+	{ type: 'user', id: 'user-seed', parentId: null, timestamp: '2026-10-19T00:00:01.000Z', message: { role: 'user', content: [{ type: 'text', text: 'SEEDED_TURN' }], timestamp: Date.now() } },
+].map(row => JSON.stringify(row)).join('\n') + '\n');
 const messages = [
 	{ id:'user', role:'user', content:[{type:'text',text:'Update the application'}] },
 	{ id:'intro', role:'assistant', content:[{type:'text',text:'先检查应用配置。'}] },
@@ -30,7 +41,7 @@ const messages = [
 	{ id:'edit-result',role:'toolResult',toolCallId:'edit1',details:{diff:'-6 const value5 = "old";\n+6 const value5 = "new";',firstChangedLine:6},content:[] },
 	{ id:'answer',role:'assistant',timestamp:Date.now(),content:[{type:'text',text:'Updated the configuration in app.ts.'}] },
 ];
-let server, browser, snapshot, socket, upstreamSocket, forceNotRepo = false, regenerated;
+let server, browser, snapshot, socket, upstreamSocket, forceNotRepo = false, regenerated, logWire = false;
 try {
 	// Give the real session the same user turn so new_chat opens a second conversation.
 	process.env.PI_CODING_AGENT_DIR = join(root, 'agent');
@@ -49,6 +60,7 @@ try {
 			if(msg.type==='snapshot') Object.assign(msg.state,{messages,piConfigured:true,isStreaming:false,taskProgress:{id:'task',conversationId:msg.state.conversationId,sourceMessageId:'user',title:'Update',status:'done',startedAt:1,completed:1,steps:[{id:'step',messageId:'edit',title:'Edit',status:'done',startedAt:1,artifacts:[{toolCallId:'edit1',kind:'edit',path:'app.ts',label:'app.ts'}]}]}});
 			if (msg.type === 'snapshot') snapshot = structuredClone(msg);
 			if (forceNotRepo && msg.type === 'scm_data' && msg.kind === 'status') Object.assign(msg, { notRepo: true, files: [], branches: [] });
+			if (logWire) console.log('WIRE', msg.type, msg.type==='snapshot' ? JSON.stringify({msgs: msg.state.messages.length, streaming: msg.state.isStreaming, conv: msg.state.conversationId, rev: msg.state.rev, file: msg.state.sessionFile}) : msg.type==='snapshot_delta' ? JSON.stringify({conv: msg.conversationId, baseRev: msg.baseRev}) : '');
 			if(msg.type!=='snapshot_delta') route.send(JSON.stringify(msg));
 		});
 	});
@@ -59,7 +71,10 @@ try {
 	assert.equal(await page.locator('.change-card.done').count(), 1, 'a settled edit stays visible');
 	assert.equal(await page.locator('.change-card.done .change-card-body').count(), 1, 'a settled edit shows its diff');
 	assert.equal(await page.locator('.bash-group.historical-step').count(),1);
-	assert.equal(await page.locator('.process-group-head, .bash-group-head').count(), 0, 'a single successful command does not add a redundant group toggle');
+	assert.equal(await page.locator('.bash-group-head').count(), 0);
+	const singleHead = page.locator('.process-group.single-command > .process-group-head.single-head');
+	assert.equal(await singleHead.count(), 1, 'a single successful command keeps a quiet label row');
+	assert.equal(await singleHead.locator('.process-group-chevron').count(), 0, 'the label row is not a toggle');
 	assert.equal(await page.locator('.command-turn-summary').count(), 0);
 	await page.locator('.bash-row').waitFor({state:'visible'});
 	assert.match(await page.locator('.bash-row').textContent(), /git status/);
@@ -149,8 +164,12 @@ try {
 	assert.equal(await page.locator('[data-change-file="large.txt"] .changes-line').count(),401);
 	assert.equal(await page.locator('.change-summary:not(.change-summary-inline)').count(),0, 'turn summary stays hidden while streaming; inline tool diffs remain available');
 	// Preferences are isolated per conversation and restored when returning.
+	// The resumed seeded transcript makes this chat non-blank, so new_chat
+	// opens a fresh conversation instead of reusing this one in place.
 	const original = snapshot.state.conversationId;
 	upstreamSocket.send(JSON.stringify({type:'new_chat'}));
+	await sleep(1500);
+	console.log('DEBUG3', JSON.stringify({nodeConv: snapshot.state.conversationId, original, panel: await page.locator('.changes-panel').count(), keys: await page.evaluate(() => Object.keys(sessionStorage).filter(k => k.startsWith('pi-harness:changes:')))}));
 	await page.waitForFunction(id => JSON.parse(sessionStorage.getItem(`pi-harness:changes:${id}`)).open, original);
 	await page.locator('.changes-panel').waitFor({state:'detached'});
 	assert.notEqual(snapshot.state.conversationId, original);

@@ -80,8 +80,9 @@ try {
 	assert.doesNotMatch(await summary.innerText(), /\d/, 'pure command header drops the count');
 	assert.equal(await page.locator('.process-group-head').count(), 0, 'collapsed successful group is headless');
 	assert.equal(await summary.locator('.process-group-icon').count(), 1);
-	assert.equal(await summary.locator('.process-group-icon').evaluate(el => getComputedStyle(el).width), '15px');
-	assert.equal(await summary.locator('.process-group-icon').evaluate(el => getComputedStyle(el).height), '15px');
+	assert.equal(await summary.locator('.process-group-icon').evaluate(el => getComputedStyle(el).width), '16px');
+	assert.equal(await summary.locator('.process-group-icon').evaluate(el => getComputedStyle(el).height), '16px');
+	assert.equal(await summary.locator('.process-group-icon').evaluate(el => getComputedStyle(el).borderTopWidth), '0px', 'tool icons are borderless');
 	assert.equal(await summary.locator('.process-group-chevron').count(), 0, 'collapsed GPT-style group has no chevron');
 	assert.equal(await summary.locator('.process-group-summary-text').evaluate(el => getComputedStyle(el).backgroundImage), 'none', 'completed title uses solid gray, not a streaming gradient');
 	assert.equal(await summary.locator('.process-group-summary-text').evaluate(el => getComputedStyle(el).animationName), 'none');
@@ -91,7 +92,7 @@ try {
 	await send(pureTranscript());
 	await summary.locator('.streaming-color').waitFor({ state: 'detached' });
 	const quietColor = await summary.locator('.process-group-summary-text').evaluate(el => getComputedStyle(el).color);
-	const quietBorder = await summary.locator('.process-group-icon').evaluate(el => getComputedStyle(el).borderTopColor);
+	const quietIconColor = await summary.locator('.process-group-icon').evaluate(el => getComputedStyle(el).color);
 	await summary.screenshot({ path: '/tmp/pi-codex-bash-collapsed-light.png' });
 
 	// B) Expand: header icon + adjacent chevron, guide-lined rows with terminal marks.
@@ -101,8 +102,8 @@ try {
 	await page.mouse.move(1000, 500);
 	assert.equal(await head.getAttribute('aria-expanded'), 'true');
 	assert.equal(await head.locator('.process-group-icon').count(), 1);
-	assert.equal(await head.locator('.process-group-icon').evaluate(el => getComputedStyle(el).width), '15px');
-	assert.equal(await head.locator('.process-group-icon').evaluate(el => getComputedStyle(el).borderTopColor), quietBorder);
+	assert.equal(await head.locator('.process-group-icon').evaluate(el => getComputedStyle(el).width), '16px');
+	assert.equal(await head.locator('.process-group-icon').evaluate(el => getComputedStyle(el).color), quietIconColor);
 	assert.equal(await head.locator('.process-group-summary').evaluate(el => getComputedStyle(el).color), quietColor);
 	assert.equal(await head.evaluate(el => getComputedStyle(el).fontWeight), '400');
 	assert.equal(await head.evaluate(el => getComputedStyle(el).fontSize), '14px');
@@ -116,44 +117,44 @@ try {
 		context.fillStyle = getComputedStyle(el).color; context.fillRect(0, 0, 1, 1);
 		return [...context.getImageData(0, 0, 1, 1).data].slice(0, 3);
 	});
-	assert.deepEqual(commandRgb, [153, 153, 153], 'command text uses #999999 on white');
-	assert.equal(await page.locator('.bash-row.ok .bash-row-icon').first().evaluate(el => getComputedStyle(el).width), '15px');
-	assert.equal(await page.locator('.bash-row.ok .bash-row-icon').first().evaluate(el => getComputedStyle(el).borderTopColor), quietBorder);
+	assert.deepEqual(commandRgb, [100, 99, 103], 'command text uses #646367 on white');
 	assert.equal(await page.locator('.bash-row.ok').count(), 4);
-	assert.equal(await page.locator('.bash-row.ok .bash-row-icon').count(), 4, 'successful rows use the terminal icon, not a check');
+	assert.equal(await page.locator('.bash-row.ok .bash-row-icon').count(), 4, 'row icons stay in the DOM');
+	assert.equal(await page.locator('.bash-row.ok .bash-state').first().evaluate(el => getComputedStyle(el).display), 'none', 'expanded group children drop the repeated terminal icon (parent icon carries the tool type)');
 	assert.equal(await page.locator('.bash-row.ok .bash-state').filter({ hasText: '✓' }).count(), 0);
-	assert.equal(await page.locator('.bash-row.ok :is(.bash-row-title, .bash-row-sep, .bash-row-stats, .bash-extra-lines)').count(), 0, 'successful rows contain only the terminal mark and command');
+	assert.equal(await page.locator('.bash-row.ok :is(.bash-row-title, .bash-row-sep, .bash-row-stats, .bash-extra-lines)').count(), 0, 'successful rows contain only the command');
 	// GPT-style rows: the chevron slot exists but stays invisible until hover/focus/expand.
 	const rowArrow = page.locator('.bash-row.ok .bash-row-head > svg').first();
 	assert.equal(await page.locator('.bash-row.ok .bash-row-head > svg').count(), 4, 'every successful row reserves the chevron slot');
 	await page.mouse.move(1000, 900);
 	assert.equal(await rowArrow.evaluate(el => getComputedStyle(el).opacity), '0', 'successful rows hide the chevron at rest');
 	assert.equal(await page.locator('.process-group.open .process-group-rows').first().evaluate(el => getComputedStyle(el).borderLeftWidth), '1px', 'expanded list hangs on a left guide line');
-	// 行列表贴着引导线：线到图标只留 14px（曾为 32px，用户反馈太宽）。
+	// 行列表贴着引导线：线到命令文字只留 14px（曾为 32px，用户反馈太宽）。
 	const indent = await page.evaluate(() => {
 		const rows = document.querySelector('.process-group.open .process-group-rows').getBoundingClientRect();
-		const icon = document.querySelector('.bash-row.ok .bash-row-icon').getBoundingClientRect();
-		return Math.round(icon.left - (rows.left + 1));
+		const text = document.querySelector('.bash-row.ok .bash-row-subtitle').getBoundingClientRect();
+		return Math.round(text.left - (rows.left + 1));
 	});
-	assert(indent <= 16 && indent >= 8, `guide line to row icon gap stays tight (got ${indent}px)`);
+	assert(indent <= 16 && indent >= 8, `guide line to command text gap stays tight (got ${indent}px)`);
 	const cmd = page.locator('[data-tool-call-id="p2"] .bash-row-subtitle');
 	assert.equal(await cmd.textContent(), 'rg -n todo src');
 	assert.equal(await cmd.evaluate(el => getComputedStyle(el).whiteSpace), 'nowrap');
 	assert.equal(await cmd.evaluate(el => getComputedStyle(el).textOverflow), 'ellipsis');
-	assert.match(await cmd.evaluate(el => getComputedStyle(el).fontFamily), /^Inter,/);
+	assert.match(await cmd.evaluate(el => getComputedStyle(el).fontFamily), /JetBrains Mono/);
 	assert.equal(await cmd.evaluate(el => getComputedStyle(el).fontWeight), '400');
-	assert.equal(await cmd.evaluate(el => getComputedStyle(el).fontSize), '14px');
+	assert.equal(await cmd.evaluate(el => getComputedStyle(el).fontSize), '12.5px');
 	assert.equal(await cmd.evaluate(el => getComputedStyle(el).lineHeight), '20px');
 	assert(['0px', 'normal'].includes(await cmd.evaluate(el => getComputedStyle(el).letterSpacing)));
 	const titleX = await head.locator('.process-group-summary').evaluate(el => el.getBoundingClientRect().left);
 	const commandX = await cmd.evaluate(el => el.getBoundingClientRect().left);
-	assert(Math.round(commandX - titleX) >= 28 && Math.round(commandX - titleX) <= 30, `command text is indented 28–30px from the title (got ${Math.round(commandX - titleX)}px)`);
+	assert(Math.round(commandX - titleX) >= -4 && Math.round(commandX - titleX) <= 4, `iconless command text aligns with the title (got ${Math.round(commandX - titleX)}px)`);
 	const firstRowBox = await page.locator('.bash-row.ok .bash-row-head').nth(0).boundingBox();
 	const secondRowBox = await page.locator('.bash-row.ok .bash-row-head').nth(1).boundingBox();
 	assert.equal(Math.round(secondRowBox.y + secondRowBox.height / 2 - firstRowBox.y - firstRowBox.height / 2), 37, 'command row centers are 37px apart');
 	assert.notEqual(await head.locator('.process-group-chevron').evaluate(el => getComputedStyle(el).transform), 'none');
+	const restCommandColor = await cmd.evaluate(el => getComputedStyle(el).color);
 	await page.locator('[data-tool-call-id="p2"] .bash-row-head').hover();
-	assert.notEqual(await cmd.evaluate(el => getComputedStyle(el).color), quietColor, 'hovered command darkens like the reference');
+	assert.notEqual(await cmd.evaluate(el => getComputedStyle(el).color), restCommandColor, 'hovered command darkens like the reference');
 	assert.equal(await page.locator('[data-tool-call-id="p2"] .bash-row-head').evaluate(el => getComputedStyle(el).backgroundColor), 'rgba(0, 0, 0, 0)', 'hover adds no background wash');
 	await page.waitForTimeout(200);
 	assert.equal(await page.locator('[data-tool-call-id="p2"] .bash-row-head > svg').evaluate(el => getComputedStyle(el).opacity), '1', 'hover reveals the trailing chevron');
@@ -204,17 +205,24 @@ try {
 	assert.equal(await mixHead.locator('.process-group-dot').count(), 0);
 	await page.locator('.process-group').first().screenshot({ path: '/tmp/pi-codex-bash-mixed-expanded.png' });
 
-	// F) Single command: no group head, the row itself carries the terminal mark.
+	// F) Single command: a quiet label row above the gray command block.
 	const single = bash('s0', 'echo single');
 	await send([user('u-single', '单条'), assistant('a-s0', single), result(single)]);
 	await page.locator('.single-command .bash-row.ok').first().waitFor();
-	assert.equal(await page.locator('.process-group-head').count(), 0);
+	const singleHead = page.locator('.process-group.single-command > .process-group-head.single-head');
+	assert.equal(await singleHead.count(), 1, 'settled single command keeps a quiet label row');
+	assert.match(await singleHead.innerText(), /运行了命令/);
+	assert.equal(await singleHead.locator('.process-group-chevron').count(), 0, 'the label row has no chevron');
+	assert.equal(await singleHead.evaluate(el => el.tagName), 'DIV', 'the label row is not clickable');
 	assert.equal(await page.locator('.process-group-summary-line').count(), 0);
-	assert.equal(await page.locator('.single-command .bash-row.ok .bash-row-icon').count(), 1);
-
-	const iconGap = await page.locator('.single-command .bash-row-head').evaluate(row =>
-		row.querySelector('.bash-row-subtitle').getBoundingClientRect().left - row.querySelector('.bash-state').getBoundingClientRect().right);
-	assert.equal(Math.round(iconGap), 8, 'single commands use the same icon-to-text spacing as a collapsed group');
+	assert.equal(await page.locator('.single-command .bash-row.ok .bash-state').first().evaluate(el => getComputedStyle(el).display), 'none', 'the gray command block drops the repeated terminal icon');
+	const blockStyle = await page.locator('.single-command .bash-row.ok > .bash-row-head').first().evaluate(el => { const s = getComputedStyle(el); return { bg: s.backgroundColor, radius: s.borderRadius, paddingLeft: s.paddingLeft }; });
+	assert.notEqual(blockStyle.bg, 'rgba(0, 0, 0, 0)', 'single command row is a filled block');
+	assert.equal(blockStyle.radius, '8px', 'command block uses the diff-card radius');
+	assert.equal(blockStyle.paddingLeft, '12px', 'command text starts at the block padding');
+	const labelX = await singleHead.locator('.process-group-summary').evaluate(el => el.getBoundingClientRect().x);
+	const blockX = await page.locator('.single-command .bash-row.ok > .bash-row-head').first().evaluate(el => el.getBoundingClientRect().x);
+	assert(Math.abs(labelX - blockX) <= 1, `gray block aligns under the label text (Δ=${Math.abs(labelX - blockX)}px)`);
 	const commandText = page.locator('.single-command .bash-row-subtitle > span').first();
 	assert.equal(await commandText.evaluate(el => getComputedStyle(el).animationName), 'none');
 	await send([user('u-single-live', '运行单条')], { isStreaming: true, streamingMessage: assistant('a-single-live', single) });
@@ -313,7 +321,7 @@ try {
 	await liveThought.locator('.thinking-toggle').click();
 	await liveSummary.waitFor();
 	assert.equal(await runHead.evaluate(el => getComputedStyle(el, '::after').content), 'none');
-	assert.equal(await runHead.evaluate(el => getComputedStyle(el, '::before').content), 'none');
+	assert.equal(await runHead.evaluate(el => getComputedStyle(el, '::before').content), '""', 'the only ::before is the timeline dot');
 	await page.screenshot({ path: '/tmp/pi-codex-bash-running.png' });
 	await page.emulateMedia({ reducedMotion: 'reduce' });
 	assert.equal(await runHead.evaluate(el => getComputedStyle(el, '::after').content), 'none');
@@ -348,9 +356,9 @@ try {
 	await page.locator('.process-group-summary-line').first().click();
 	const macCommand = page.locator('.bash-row.ok .bash-row-subtitle').first();
 	await macCommand.waitFor();
-	assert.match(await macCommand.evaluate(el => getComputedStyle(el).fontFamily), /^Inter,/, 'macOS command summaries use the configured interface stack');
+	assert.match(await macCommand.evaluate(el => getComputedStyle(el).fontFamily), /JetBrains Mono/, 'macOS command summaries use the monospace stack');
 	assert.equal(await macCommand.evaluate(el => getComputedStyle(el).fontWeight), '400');
-	assert.equal(await macCommand.evaluate(el => getComputedStyle(el).fontSize), '14px');
+	assert.equal(await macCommand.evaluate(el => getComputedStyle(el).fontSize), '12.5px');
 	await page.mouse.move(1000, 500);
 	await page.locator('.process-group').first().screenshot({ path: '/tmp/pi-codex-bash-command-font.png' });
 	await page.locator('.process-group-head').first().click();

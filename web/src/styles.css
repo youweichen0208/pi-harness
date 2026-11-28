@@ -383,7 +383,14 @@
 	--mono: "JetBrains Mono", "Source Han Sans SC", "UI SC", "UI Symbols", "PI Emoji", monospace;
 	--command-font: var(--sans);
 	--shell-font: var(--mono);
-	--tool-text: #999999;
+	--tool-text: #8c8c8c;
+	/* 工具行参考样式：无边框灰色线性图标、浅蓝灰路径胶囊、灰耗时。 */
+	--tool-icon-fg: #6b7280;
+	--tool-dot-done: #f08c28;
+	--tool-pill-bg: #ecf1f6;
+	--tool-pill-fg: #0b63a5;
+	--tool-time-fg: #6e6e73;
+	--tool-command-fg: #646367;
 	--thinking-text: #8f8f8f;
 	--shell-text: #666666;
 	--shell-border: #dedede;
@@ -1072,6 +1079,14 @@ body.panel-resizing {
 }
 .lp-menu-popover button:hover, .lp-menu-popover button:focus-visible { background: var(--row-hover); }
 .lp-menu-popover button.danger { color: var(--red); }
+/* Portal 版行菜单（LpMenuPopover）：坐标由 JS 按视口计算，fixed 定位脱离
+   侧栏滚动容器，窄侧栏不会把菜单左半边裁掉。 */
+.lp-menu-floating {
+	position: fixed;
+	right: auto;
+	top: auto;
+	z-index: 400;
+}
 
 /* Inline editor shared by session rename and "open folder" — replaces the
    row in place rather than opening a modal, so the list never jumps. */
@@ -4696,9 +4711,50 @@ span.msg-editor-hint svg {
 	padding: 7px 12px;
 	font-size: 12px;
 }
+/* 整行可点击展开（参考样式行上不再放折叠箭头和操作按钮）。 */
+button.toolcall-head {
+	width: 100%;
+	border: 0;
+	background: transparent;
+	color: var(--text);
+	text-align: left;
+	font: 12px var(--sans);
+	cursor: pointer;
+}
+button.toolcall-head:hover {
+	background: var(--output-bg);
+}
+button.toolcall-head:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: -2px;
+}
 
-.toolcall-icon {
-	font-size: 13px;
+/* 工具行图标：无边框、透明底的灰色线性图标（Lucide，stroke 1.5），所有工具行共用。 */
+.toolcall-icon,
+.toolcall-read-icon,
+.grep-summary-icon,
+.read-group-icon,
+.bash-state > .bash-row-icon,
+.change-state > .change-state-icon,
+.process-group-icon {
+	display: inline-grid;
+	place-items: center;
+	flex: none;
+	width: 16px;
+	height: 16px;
+	color: var(--tool-icon-fg);
+	stroke-width: 1.5;
+}
+.toolcall-icon svg,
+.toolcall-read-icon svg,
+.grep-summary-icon svg,
+.read-group-icon svg,
+.bash-state > .bash-row-icon svg,
+.change-state > .change-state-icon svg,
+.process-group-icon svg {
+	width: 16px;
+	height: 16px;
+	stroke-width: 1.5;
 }
 
 .toolcall-name {
@@ -4709,23 +4765,18 @@ span.msg-editor-hint svg {
 
 .toolcall-status {
 	font-size: 11px;
-	padding: 1px 8px;
-	border-radius: var(--r-sm);
-	border: 1px solid var(--border);
-	color: var(--text-faint);
+	color: var(--tool-time-fg);
+	white-space: nowrap;
 }
 
 .toolcall.run .toolcall-status {
 	color: var(--yellow-fg);
-	border-color: color-mix(in srgb, var(--yellow) 40%, transparent);
 }
 .toolcall.ok .toolcall-status {
-	color: var(--green);
-	border-color: color-mix(in srgb, var(--green) 35%, transparent);
+	color: var(--tool-time-fg);
 }
 .toolcall.err .toolcall-status {
 	color: var(--red);
-	border-color: color-mix(in srgb, var(--red) 40%, transparent);
 }
 .toolcall-exit {
 	font-style: normal;
@@ -4743,29 +4794,6 @@ span.msg-editor-hint svg {
 
 .toolcall-spacer {
 	flex: 1;
-}
-
-/* Kill button on running bash tool cards — stops ONLY the command;
-   the agent run and conversation continue. */
-.toolcall-kill {
-	display: inline-flex;
-	align-items: center;
-	gap: 4px;
-	border: 1px solid var(--red);
-	background: var(--red-soft);
-	color: var(--red);
-	font-size: 11px;
-	font-weight: 600;
-	padding: 2px 8px;
-	border-radius: var(--r-sm);
-	cursor: pointer;
-	transition:
-		background 0.15s,
-		color 0.15s;
-}
-.toolcall-kill:hover {
-	background: var(--red);
-	color: var(--accent-fg);
 }
 
 .toolcall-copy,
@@ -4967,15 +4995,32 @@ span.msg-editor-hint svg {
 .toolcall-code .codeblock {
 	margin: 0;
 }
-/* Read code preview with a line-number gutter (reference design): the gutter
-   and the code scroll together inside .toolcall-code; line-height matches the
-   highlighted code so numbers stay aligned. */
-.toolcall-code.numbered { display: flex; align-items: stretch; }
-.toolcall-code.numbered .code-gutter { flex: none; display: flex; flex-direction: column; padding: 12px 8px 12px 10px; border: 1px solid var(--border); border-right: 0; border-radius: var(--r-md) 0 0 var(--r-md); background: var(--bg-elev2); color: var(--text-faint); font: 12px/1.55 var(--mono); text-align: right; user-select: none; }
-.toolcall-code.numbered .code-gutter span { display: block; }
-.toolcall-code.numbered .code-pane { flex: 1; min-width: 0; }
-.toolcall-code.numbered .code-pane .md, .toolcall-code.numbered .code-pane .codeblock { margin: 0; }
-.toolcall-code.numbered .code-pane .codeblock pre { border-radius: 0 var(--r-md) var(--r-md) 0; }
+/* Read code preview: one flex row per line (number + highlighted code), so a
+   wrapped long line grows its own row and the number stays top-aligned with
+   it — the old single-column gutter drifted out of sync the moment code
+   wrapped. Default is soft-wrap (nothing clipped, no horizontal scrollbar);
+   .no-wrap restores horizontal scrolling with a sticky number column. Same
+   per-line highlight pipeline as the file preview (highlightLines). */
+/* Flat rows in the edit diff's visual language (.change-lines): same 12px/1.65
+   mono, faint right-aligned number gutter and syntax palette, no outer box.
+   Soft-wrap stays the default (nothing clipped, no horizontal scrollbar); the
+   .no-wrap toggle restores horizontal scrolling, where the sticky number column
+   gets a surface background so code can't show through it. */
+.toolcall-code.numbered { position: relative; display: block; padding: 4px 0; border: 0; border-radius: 0; background: transparent; font: 12px/1.65 var(--mono); font-variant-ligatures: none; }
+.toolcall-code.numbered .read-code-line { display: flex; align-items: flex-start; }
+.toolcall-code.numbered .read-code-num { flex: none; min-width: 40px; padding: 0 8px 0 0; text-align: right; color: var(--text-faint); background: transparent; position: sticky; left: 0; z-index: 1; user-select: none; -webkit-user-select: none; }
+.toolcall-code.numbered .read-code-text { flex: 1; min-width: 0; padding-right: 12px; white-space: pre-wrap; overflow-wrap: anywhere; tab-size: 4; font-variant-ligatures: none; font-feature-settings: "liga" 0, "calt" 0; color: var(--text); background: transparent; }
+.toolcall-code.numbered.no-wrap .read-code-line { width: max-content; min-width: 100%; }
+.toolcall-code.numbered.no-wrap .read-code-text { white-space: pre; overflow-wrap: normal; }
+.toolcall-code.numbered.no-wrap .read-code-num { background: var(--bg-elev); }
+.toolcall-code.numbered:hover .copy-btn { opacity: 1; }
+/* Syntax palette mirrors the edit diff (.change-lines) so a read and an edit
+   of the same file color identically. */
+.toolcall-code.numbered .hljs [class*="hljs-"] { color: var(--text); }
+.toolcall-code.numbered .hljs .hljs-comment, .toolcall-code.numbered .hljs .hljs-quote { color: var(--text-faint); }
+.toolcall-code.numbered .hljs .hljs-keyword, .toolcall-code.numbered .hljs .hljs-type, .toolcall-code.numbered .hljs .hljs-literal { color: var(--red); }
+.toolcall-code.numbered .hljs .hljs-string, .toolcall-code.numbered .hljs .hljs-regexp { color: var(--green); }
+.toolcall-code.numbered .hljs .hljs-number, .toolcall-code.numbered .hljs .hljs-symbol { color: var(--accent); }
 
 /* `edit` tool result — the diff the tool computed server-side (see
    EditDiffDetails/DiffView in ToolCallBlock.tsx), rendered as colored +/-
@@ -9244,7 +9289,7 @@ body { -webkit-font-smoothing: antialiased; }
 	.fp-header-actions { gap: 1px; }
 	.fp-header-action, .fp-view-switch button { padding-inline: 5px; }
 }
-.design-workspace .toolcall > .toolcall-head > .toolcall-kill { opacity: 1; pointer-events: auto; }
+
 @media (hover: none) { .design-workspace .toolcall > .toolcall-head > button { opacity: 1; pointer-events: auto; } }
 .bash-output-lines.has-overflow:not(.wrap) { mask-image: linear-gradient(to right, var(--shadow-color) calc(100% - 20px), transparent); }
 .design-workspace .sidebar-footer { justify-content: flex-start; margin-top: auto; padding: 10px 16px; }
@@ -9330,8 +9375,10 @@ body { -webkit-font-smoothing: antialiased; }
 .change-card-toggle:disabled { cursor: default; opacity: 1; }
 .change-card-toggle svg, .change-group-head svg { width: 13px; height: 13px; flex: none; color: var(--text-faint); transition: transform .15s; }
 .change-card-toggle svg.open, .change-group-head svg.open { transform: rotate(90deg); }
-.change-verb { flex: none; color: var(--text-dim); font: 12px var(--sans); }
-.change-card-toggle code { min-width: 0; flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; font: 12px var(--mono); font-variant-ligatures: none; }
+.change-verb { flex: none; color: var(--text); font: 12px var(--sans); }
+.change-card-toggle code { display: inline-flex; align-items: center; gap: 4px; min-width: 0; flex: 0 1 auto; overflow: hidden; white-space: nowrap; font: 500 11.5px/1.7 var(--mono); font-variant-ligatures: none; background: var(--tool-pill-bg); color: var(--tool-pill-fg); padding: 1px 8px; border-radius: var(--r-sm); }
+.change-card-toggle code > svg { width: 11px; height: 11px; flex: none; }
+.change-card-toggle code > .change-path-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; direction: rtl; text-align: left; }
 .change-counts { display: inline-flex; flex: none; gap: 6px; font: 11px var(--mono); font-variant-ligatures: none; }
 .change-counts .add { color: var(--green); }
 .change-counts .del { color: var(--red); }
@@ -9340,8 +9387,10 @@ body { -webkit-font-smoothing: antialiased; }
 .change-state.err { color: var(--red); }
 .change-state.running { color: var(--progress-text); }
 .change-state i { display: block; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-/* 成功的编辑/写入用绿勾代替绿点（2026-11 用户决定）：圆点只表示进行中/排队等未定状态。 */
-.change-state svg { flex: none; width: 12px; height: 12px; }
+/* 成功的编辑/写入用工具图标（edit 铅笔／write 文件）代替绿勾（2026-11 用户决定，
+   后续用户改要求与命令行终端图标同款）；圆点只表示进行中/排队等未定状态。 */
+.change-state svg { flex: none; width: 12px; height: 12px; color: inherit; }
+
 .change-open { flex: none; padding: 4px 5px; border: 0; border-radius: var(--r-sm); background: none; color: var(--text-dim); font: 11px var(--sans); cursor: pointer; }
 .change-open:hover, .change-raw summary:hover { background: var(--bg-elev2); color: var(--text); }
 .change-raw { position: relative; flex: none; }
@@ -9554,9 +9603,7 @@ body { -webkit-font-smoothing: antialiased; }
 .toolcall-status .working-dots { display: inline-flex; margin-left: 6px; vertical-align: middle; }
 .toolcall-status .working-dots i { width: 3px; height: 3px; }
 .toolcall-steps .toolcall-head, .toolcall-diagnostics .toolcall-head { overflow: visible; }
-.bash-view-switch { display: inline-flex; gap: 2px; padding: 2px; border-radius: var(--r-md); background: var(--bg-elev2); }
-.bash-view-switch button { border: 0; border-radius: var(--r-sm); padding: 4px 8px; background: transparent; color: var(--text-faint); font: 12px var(--sans); cursor: pointer; }
-.bash-view-switch button.active { background: var(--bg-elev); color: var(--text); box-shadow: 0 1px 3px oklch(0.2 0.01 80 / .1); }
+
 .bash-card-more { position: relative; }
 .bash-card-more summary { display: grid; place-items: center; width: 28px; height: 28px; border-radius: var(--r-sm); color: var(--text-dim); cursor: pointer; list-style: none; }
 .bash-card-more summary::-webkit-details-marker { display: none; }
@@ -9603,7 +9650,7 @@ body { -webkit-font-smoothing: antialiased; }
 .grep-summary { margin: 8px 0; border-bottom: 1px solid var(--border-soft); }
 .grep-summary-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 2px; border: 0; background: transparent; color: var(--text-dim); font: 12px var(--sans); text-align: left; cursor: pointer; }
 .grep-summary-head strong { color: var(--text); font-weight: 500; }
-.grep-summary-head code { max-width: 35%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 4px; border-radius: var(--r-sm); background: var(--bg-elev2); font: 11px var(--mono); }
+.grep-summary-head code { max-width: 35%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 1px 8px; border-radius: var(--r-sm); background: var(--tool-pill-bg); color: var(--tool-pill-fg); font: 500 11.5px/1.7 var(--mono); }
 .grep-summary-head > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .grep-summary-time { margin-left: auto; flex: none; }
 .grep-summary-body { padding: 4px 0 8px 20px; }
@@ -9805,7 +9852,7 @@ body { -webkit-font-smoothing: antialiased; }
 .task-artifact-row code { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .task-artifact-row small { flex: none; color: var(--text-faint); white-space: nowrap; }
 .task-step-active-action { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bash-head-command { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font: 12px var(--mono); }
+.bash-head-command { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--tool-command-fg); font: 12px var(--mono); }
 .bash-head-count { flex: none; color: var(--text-faint); font: 11px var(--mono); white-space: nowrap; }
 .design-workspace .toolcall-bash .toolcall-head { min-width: 0; }
 .design-workspace .toolcall-bash .toolcall-head > :not(.bash-head-command):not(.toolcall-spacer) { flex: none; white-space: nowrap; }
@@ -9880,9 +9927,9 @@ html.pi-desktop .design-workspace .topbar-actions > .topbar-more .chip > svg { f
 .design-workspace .toolcall-bash.run { border-color: color-mix(in srgb, var(--progress-text) 40%, var(--border)); }
 .design-workspace .toolcall-bash > .bash-command-head { flex-wrap: nowrap; gap: 8px; padding: 7px 12px; }
 .design-workspace .toolcall > .bash-command-head > .bash-head-command { display: flex; flex: 1 1 0; min-width: 0; gap: 7px; padding: 0; border: 0; background: transparent; text-align: left; justify-content: flex-start; font: 12px/1.6 var(--mono); opacity: 1; pointer-events: auto; cursor: pointer; }
-.design-workspace .toolcall > .bash-command-head > .bash-head-command:disabled { color: var(--text); cursor: default; }
+.design-workspace .toolcall > .bash-command-head > .bash-head-command:disabled { color: var(--tool-command-fg); cursor: default; }
 .bash-command-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: pre; }
-.bash-prompt { flex: none; color: var(--accent); }
+
 .bash-head-command > svg { flex: none; width: 12px; color: var(--text-faint); }
 .bash-head-command > svg.open { transform: rotate(180deg); }
 .bash-directory { max-width: 22%; overflow: hidden; text-overflow: ellipsis; padding: 2px 5px; border-radius: var(--r-sm); background: var(--bg-elev2); color: var(--text-dim); font: 10px var(--mono); }
@@ -9895,8 +9942,7 @@ html.pi-desktop .design-workspace .topbar-actions > .topbar-more .chip > svg { f
 }
 .design-workspace .toolcall-bash.run .toolcall-status { color: var(--progress-text); font: 12px var(--mono); padding: 0; }
 .design-workspace .toolcall-bash.run .toolcall-status::before { display: none; }
-.design-workspace .toolcall > .bash-command-head > .toolcall-kill { flex: none; min-width: 42px; padding: 2px 8px; margin: 0; border: 1px solid var(--border); border-radius: var(--r-sm); background: transparent; color: var(--text-dim); font: 12px/1.5 var(--sans); }
-.design-workspace .toolcall > .bash-command-head > .toolcall-kill:hover { background: var(--bg-elev2); color: var(--text); }
+
 .toolcall-bash:has(.bash-card-more[open]) { position: relative; z-index: 10; overflow: visible; }
 .toolcall-bash .bash-card-more summary { height: 24px; width: 22px; }
 .toolcall-bash .bash-card-more > div { white-space: nowrap; }
@@ -10600,6 +10646,12 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { height: 44px;
 	--red-soft: #452b29;
 	--output-bg: #202329;
 	--tool-text: var(--text-faint);
+	--tool-icon-fg: #9299a4;
+	--tool-dot-done: #f5a453;
+	--tool-pill-bg: rgb(122 152 205 / 0.16);
+	--tool-pill-fg: #8ab6e8;
+	--tool-time-fg: var(--text-faint);
+	--tool-command-fg: var(--text-dim);
 	--thinking-text: var(--text-faint);
 	--shell-text: var(--text-dim);
 	--shell-border: var(--border);
@@ -11309,7 +11361,7 @@ html.pi-desktop-linux .design-workspace .desktop-window-controls { height: 44px;
 .bash-state.run { color: var(--yellow-fg); }
 /* Codex 式成功行标记：圆角方框终端小图标替代绿 ✓（运行/错误/未执行标记不变）。
    边框与字形取同一灰调（--text-faint 混透明），读作一个柔和灰色芯片，贴近 Codex Desktop。 */
-.bash-state > .bash-row-icon { box-sizing: border-box; width: 16px; height: 16px; padding: 2px; border: 1px solid color-mix(in srgb, var(--text-faint) 40%, transparent); border-radius: var(--r-sm); color: color-mix(in srgb, var(--text-faint) 60%, transparent); }
+
 .bash-group-location { margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-dim); font-size: 11px; }
 .bash-group-duration, .bash-row-stats { flex: none; font: 11px var(--mono); color: var(--text-dim); white-space: nowrap; }
 .bash-row { border-top: 1px solid var(--border-soft); }
@@ -11799,7 +11851,7 @@ pre.wiki-mermaid-source-hidden > .fp-mermaid-preview { padding-bottom: 0; }
 .change-summary-file.selected { background: var(--diff-selected); }
 /* Inline edits reuse the summary card without the outer chat-column gutter. */
 :root .design-workspace .change-card-body > .change-summary-inline { width: 100%; max-width: none; margin: 8px 0; }
-.change-summary-inline .changes-file-lines { padding-bottom: 8px; }
+.change-summary-inline .changes-file-lines { padding-bottom: 0; }
 /* Bare inline diff: the edit/write card header already carries verb, path and
    `+N −M`, so this variant renders the diff only — no surface, no file row. */
 .change-summary.change-summary-bare { margin: 0; padding: 0; border: 0; border-radius: 0; box-shadow: none; background: transparent; }
@@ -11889,16 +11941,8 @@ pre.wiki-mermaid-source-hidden > .fp-mermaid-preview { padding-bottom: 0; }
 
 /* Generic tool inspection: identity, parameters, then result actions. */
 .toolcall-generic .toolcall-head { gap: 8px; }
-.toolcall-generic .toolcall-name-toggle {
-	min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-	border: 0; padding: 2px 0; background: transparent; text-align: left; cursor: pointer;
-}
+.toolcall-generic .toolcall-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .toolcall-generic .toolcall-status { flex-shrink: 0; white-space: nowrap; }
-.design-workspace .toolcall-generic > .toolcall-head > button { opacity: 1; pointer-events: auto; }
-.design-workspace .toolcall-generic > .toolcall-head > button:not(.toolcall-name-toggle) {
-	display: inline-flex; align-items: center; justify-content: center;
-	width: 28px; height: 28px; padding: 5px; flex-shrink: 0; border-radius: var(--r-sm);
-}
 .toolcall-generic .toolcall-head svg { width: 14px; height: 14px; }
 .toolcall-parameters { padding: 4px 0 6px; }
 .toolcall-section-label { display: block; color: var(--text-dim); font-size: 11px; margin-bottom: 8px; }
@@ -12359,7 +12403,7 @@ pre.wiki-mermaid-source-hidden > .fp-mermaid-preview { padding-bottom: 0; }
 .process-list .bash-group.historical-step .bash-group-head { background: transparent; font-weight: 400; }
 .process-list .bash-group.historical-step .bash-group-head strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 400 12px var(--mono); }
 .process-list .bash-group.historical-step .bash-group-head > span:not(.bash-state) { flex: none; color: var(--text-dim); }
-.process-list .bash-state { display: inline-grid; place-items: center; flex: none; width: 16px; }
+.process-list .bash-state { display: inline-grid; place-items: center; flex: none; width: 20px; }
 .process-list .bash-state.ok { color: var(--green); }
 .process-list .bash-state .thinking-spinner, .process-list .thinking.live .thinking-spinner { width: 10px; height: 10px; border-width: 2px; }
 .process-list .grep-summary-head > svg, .process-list .thinking-toggle > svg { flex: none; width: 12px; }
@@ -12580,8 +12624,7 @@ pre.wiki-mermaid-source-hidden > .fp-mermaid-preview { padding-bottom: 0; }
 .process-group-chevron { flex: none; width: 12px; height: 12px; transition: transform .15s; }
 .process-group.open .process-group-chevron { transform: rotate(90deg); }
 /* Codex 式组头图标：圆角方框终端图标，收起/展开两种形态共用；边框与字形同灰调。 */
-.process-group-icon { display: inline-grid; place-items: center; flex: none; width: 20px; height: 20px; border: 1px solid color-mix(in srgb, var(--text-faint) 40%, transparent); border-radius: var(--r-sm); color: color-mix(in srgb, var(--text-faint) 60%, transparent); }
-.process-group-icon svg { width: 12px; height: 12px; }
+
 .process-group-summary { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .process-group-dot, .process-group-thought { flex: none; color: var(--text-faint); }
 @media (prefers-reduced-motion: reduce) { .process-group-chevron { transition: none; } }
@@ -12968,8 +13011,8 @@ html.pi-desktop .wiki-window-header .desktop-window-controls { -webkit-app-regio
 .change-summary-name { display: flex; align-items: baseline; gap: 16px; flex: 1; min-width: 0; }
 .change-summary-name code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 12.5px var(--mono); }
 .change-summary-name .change-directory { flex: 1; min-width: 0; color: var(--text-faint); font: 11px var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.change-ratio { display: flex; gap: 3px; width: 48px; height: 5px; flex: none; }
-.change-ratio i { min-width: 3px; border-radius: var(--r-switch); }
+.change-ratio { display: flex; gap: 2px; flex: none; }
+.change-ratio i { width: 10px; height: 10px; border-radius: var(--r-diff-word); }
 .change-ratio .add { background: var(--green); }
 .change-ratio .del { background: var(--red); }
 .change-summary-file .change-counts { justify-content: flex-end; min-width: 64px; }
@@ -13526,7 +13569,7 @@ html.pi-desktop .wiki-window-header .desktop-window-controls { -webkit-app-regio
 .workspace-picker-create:hover, .compact-workspace-trigger:hover { background: var(--row-hover); }
 .compact-navigation .workspace-book, .terminal-view .workspace-book { display: block; flex: none; width: 14px; height: 18px; border: 0; border-radius: 0; background: none; stroke: var(--navigation-book); fill: var(--navigation-book-fill); stroke-width: 1.2; }
 .compact-navigation .workspace-list-row .lp-menu-zone { visibility: hidden; pointer-events: none; }
-.compact-navigation .workspace-list-row:hover .lp-menu-zone, .compact-navigation .workspace-list-row:focus-within .lp-menu-zone { visibility: visible; pointer-events: auto; }
+.compact-navigation .workspace-list-row:hover .lp-menu-zone, .compact-navigation .workspace-list-row:focus-within .lp-menu-zone, .compact-navigation .workspace-list-row .lp-menu-zone.is-open { visibility: visible; pointer-events: auto; }
 .compact-navigation .navigation-search { display: flex; align-items: center; gap: 8px; flex: none; height: 30px; margin: 0 4px 12px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--r-switch); color: var(--text-faint); background: var(--bg); }
 .navigation-search > svg { width: 14px; height: 14px; flex: none; }
 .navigation-search .workspace-project-search { appearance: none; min-width: 0; width: 100%; height: 100%; margin: 0; padding: 0; border: 0; outline: none; box-shadow: none; color: var(--text); background: transparent; font: inherit; }
@@ -14489,7 +14532,7 @@ html.pi-desktop .design-workspace .topbar { height: 48px; min-height: 48px; }
 :root .design-workspace .toolcall-structured { border: 1px solid var(--border-soft); border-radius: var(--r-lg); overflow: hidden; background: var(--bg-elev); }
 :root .design-workspace .toolcall-structured > .toolcall-head { min-height: 66px; gap: 12px; padding: 12px 18px; background: transparent; }
 .toolcall-action { display: block; margin-top: 4px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); font: 11px/1.5 var(--mono); }
-:root .design-workspace .toolcall-structured .toolcall-name-toggle { text-align: left; }
+:root .design-workspace .toolcall-structured .toolcall-name { text-align: left; }
 :root .design-workspace .toolcall-structured.ok > .toolcall-head > .toolcall-status { margin-left: auto; color: var(--text-muted); background: transparent; }
 :root .design-workspace .toolcall-structured > .toolcall-body { padding: 0; }
 :root .design-workspace .toolcall-structured .toolcall-args { padding: 16px 20px; border-bottom: 1px solid var(--border-soft); }
@@ -14503,13 +14546,16 @@ html.pi-desktop .design-workspace .topbar { height: 48px; min-height: 48px; }
 .structured-tool-output button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .structured-tool-code .hljs-attr { color: var(--accent); }
 .structured-tool-code .hljs-string { color: var(--text-dim); }
+/* Failed output reads as an error, not as neutral data. */
+.structured-tool-output.err .toolcall-section-label { color: var(--red); }
+.structured-tool-output.err .structured-tool-code { background: var(--red-soft); border-color: color-mix(in srgb, var(--red) 22%, transparent); }
+.structured-tool-output.err .structured-tool-code pre { color: var(--text); }
 @media (max-width: 600px) {
 	.structured-tool-output { padding-inline: 12px; }
 	.structured-tool-code pre { padding: 12px; }
 }
-:root .design-workspace .toolcall-structured > .toolcall-head > .toolcall-name-toggle { display: flex; flex-direction: column; align-items: flex-start; flex: 1; min-width: 0; gap: 0; }
-:root .design-workspace .toolcall-structured > .toolcall-head > .toolcall-spacer { display: none; }
-:root .design-workspace .toolcall-structured > .toolcall-head > .toolcall-icon { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: var(--r-switch); background: var(--accent-soft); color: var(--term-magenta); }
+:root .design-workspace .toolcall-structured > .toolcall-head > .toolcall-name { display: flex; flex-direction: column; align-items: flex-start; flex: 1; min-width: 0; gap: 0; }
+:root .design-workspace .toolcall-structured > .toolcall-head > .toolcall-icon { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border: 0; border-radius: var(--r-switch); background: var(--accent-soft); color: var(--term-magenta); }
 :root .design-workspace .toolcall-structured > .toolcall-head .toolcall-action { display: block; margin-top: 4px; color: var(--text-muted); }
 
 /* Oil UI report refinement: one conclusion, a readable evidence list. */
@@ -14870,6 +14916,12 @@ span.rich-math { display: inline-block; }
 :root .design-workspace .bash-row-head:is([aria-expanded="true"], :focus-visible) > svg { opacity: 1; }
 :root .design-workspace .bash-row-head:focus { outline: none; }
 :root .design-workspace .bash-row-head:focus-visible > svg { outline: 2px solid var(--text-dim); outline-offset: 2px; border-radius: var(--r-sm); }
+/* 无输出的失败/未执行行是终态事实：✗/− 行首已说明一切，不再展开重复命令的
+   Shell 卡。箭头保留占位但隐藏（stats 自带 margin-left:auto，不会位移），
+   禁用态不响应悬停底色。 */
+.bash-row-head > svg.quiet-chevron { visibility: hidden; }
+.bash-row-head:disabled { cursor: default; }
+:root .design-workspace .bash-row-head:disabled:hover { background: transparent; }
 /* 成功行的箭头紧跟命令文字（GPT 式），不推到行尾；长命令仍在行宽处省略。 */
 :root .design-workspace .process-group .bash-row.ok .bash-row-subtitle { flex: 0 1 auto; }
 :root .design-workspace .bash-row-head :is(.bash-row-stats, .bash-live-line) { margin-left: auto; }
@@ -14902,8 +14954,10 @@ span.rich-math { display: inline-block; }
    看着像排版漏了。命令行（.bash-row-head）同样只有展开才显示箭头，两处的
    行首缩进才能对齐。悬停时行首布局必须保持不变，不能因为鼠标移上去就多出
    一个箭头。 */
-:root .design-workspace .change-card-toggle svg { width: 12px; height: 12px; display: none; }
-:root .design-workspace .change-card-toggle svg.open { display: block; }
+/* 只隐藏直接子级的展开箭头（> svg）：状态标记（.change-state 里的绿勾）
+   嵌在 span 里，不能被这条规则一并藏掉，否则完成态行首没有任何图标。 */
+:root .design-workspace .change-card-toggle > svg { width: 12px; height: 12px; display: none; }
+:root .design-workspace .change-card-toggle > svg.open { display: block; }
 :root .design-workspace .change-card-toggle code { color: var(--text); font: 13px/1.7 var(--mono); }
 :root .design-workspace .change-verb { color: var(--text-dim); font-size: 12.5px; }
 :root .design-workspace .change-state { order: -1; margin-left: 0; }
@@ -15484,38 +15538,25 @@ span.rich-math { display: inline-block; }
    only appears after clicking the row, and it previews a bounded number of
    lines (READ_PREVIEW_LINES) before the `展开全部 · N 行` control. */
 .toolcall.toolcall-read { margin: 0; border: 0; border-radius: 0; box-shadow: none; background: transparent; overflow: visible; }
-.toolcall-read-headrow { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; padding: 0 12px 0 0; }
-.toolcall.toolcall-read .toolcall-read-head { display: flex; align-items: center; gap: 9px; min-width: 0; flex: 0 1 auto; min-height: 34px; padding: 4px 12px; border: 0; background: transparent; color: var(--text); text-align: left; font: 12px/1.5 var(--sans); cursor: pointer; }
+.toolcall.toolcall-read .toolcall-read-head { display: flex; align-items: center; gap: 9px; width: 100%; min-width: 0; min-height: 34px; padding: 4px 12px; border: 0; background: transparent; color: var(--text); text-align: left; font: 12px/1.5 var(--sans); cursor: pointer; }
 .toolcall.toolcall-read .toolcall-read-head:hover { background: var(--output-bg); }
 .toolcall.toolcall-read .toolcall-read-head:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.toolcall-read-icon { display: inline-grid; place-items: center; flex: none; width: 24px; height: 24px; border-radius: var(--r-sm); background: color-mix(in srgb, var(--link) 12%, transparent); color: var(--link); }
-.toolcall-read-icon svg { width: 14px; height: 14px; }
-.toolcall-read-chevron { display: inline-grid; place-items: center; flex: none; width: 24px; height: 24px; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--text-faint); cursor: pointer; }
-.toolcall-read-chevron:hover { color: var(--text); background: var(--bg-elev2); }
-.toolcall-read-headrow .toolcall-read-actions { flex: none; padding: 0; gap: 4px; }
-/* 图标按钮：文字（放大查看／复制）已去掉，动作由 title／aria-label 表达。
-   方形内边距让两个图标在 read 行右侧保持紧凑、不撑出空白长条。 */
-.toolcall-read-headrow .toolcall-read-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 0; width: 24px; height: 24px; min-height: 24px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--bg-elev); color: var(--text-dim); padding: 0; font: 11px var(--sans); cursor: pointer; }
-.toolcall-read-headrow .toolcall-read-actions button:hover { color: var(--text); border-color: var(--accent); background: var(--bg-elev); }
-.toolcall-read-headrow .toolcall-read-actions button svg { width: 12px; height: 12px; }
+
+
 .toolcall-read-state { display: inline-grid; place-items: center; flex: none; width: 12px; font: 11px var(--mono); color: var(--text-faint); }
 .toolcall-read-state.ok { color: var(--green); }
 .toolcall-read-state.err { color: var(--red); }
 .toolcall-read-state.run { color: var(--progress-text); }
 .toolcall-read-state .thinking-spinner { width: 10px; height: 10px; border-width: 2px; }
 .toolcall-read-title { display: flex; align-items: baseline; gap: 10px; min-width: 0; flex: 0 1 auto; max-width: 100%; }
-.toolcall-read-title > span { flex: none; color: var(--text-dim); font-size: 12px; }
-.toolcall-read-title > code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 11.5px/1.7 var(--mono); background: color-mix(in srgb, var(--link) 10%, transparent); color: var(--link); padding: 1px 8px; border-radius: var(--r-sm); }
-.toolcall-read-stats { flex: none; color: var(--text-dim); font: 11px var(--mono); white-space: nowrap; }
+.toolcall-read-title > span { flex: none; color: var(--text); font-size: 12px; }
+.toolcall-read-title > code { display: inline-flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 11.5px/1.7 var(--mono); background: var(--tool-pill-bg); color: var(--tool-pill-fg); padding: 1px 8px; border-radius: var(--r-sm); }
+.toolcall-read-title > code > svg { width: 11px; height: 11px; flex: none; }
+.toolcall-read-title > code > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.toolcall-read-stats { display: inline-flex; align-items: center; gap: 4px; flex: none; color: var(--tool-time-fg); font: 11px var(--mono); white-space: nowrap; }
+.toolcall-read-stats svg { width: 11px; height: 11px; }
 .toolcall.err .toolcall-read-stats { color: var(--red); }
 .toolcall.toolcall-read > .toolcall-body { padding: 0 12px 10px 34px; border: 0; }
-.toolcall-read-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; padding: 2px 0 8px; }
-.toolcall-read-actions button { width: auto; height: auto; min-height: 22px; border: 0; background: transparent; color: var(--text-dim); padding: 2px 0; font: 11px var(--sans); cursor: pointer; }
-.toolcall-read-actions button:hover { color: var(--accent); }
-/* Zoom/copy ride on the output-label row (right side) — no separate action
-   band above the code. The label's uppercase/tracking must not leak into the
-   buttons. */
-.toolcall-output-label .toolcall-read-actions { padding: 0; gap: 4px 12px; text-transform: none; letter-spacing: normal; }
 .toolcall.toolcall-read .toolcall-output { margin-top: 4px; }
 .toolcall-read .tool-image-preview { width: fit-content; max-width: 100%; overflow: hidden; background: var(--bg-elev2); border: 1px solid var(--border-soft); border-radius: var(--r-md); }
 .toolcall-read .tool-image-preview + .tool-image-preview { margin-top: 12px; }
@@ -15529,11 +15570,13 @@ span.rich-math { display: inline-block; }
 /* Multiple consecutive reads: the group head owns the row, items stack beneath. */
 .read-group-items > .toolcall-read + .toolcall-read { border-top: 1px solid var(--border-soft); }
 /* 「展开其余 N 行」留在卡片内部：内联 diff 被截断时它是卡片自己的底部操作，
-   不能飘到卡片外面。 */
-:root .design-workspace .change-summary > .change-more { margin-top: 4px; border-top: 1px solid var(--border-soft); padding-top: 8px; }
-.read-group-items > .toolcall-read .toolcall-read-headrow { padding-left: 14px; }
+   不能飘到卡片外面。不再加 margin-top + border-top + padding-top：那三者在
+   diff 末行和按钮文字之间围出一条空的「盒子」带（用户截图红框），diff 区域
+   自己的底边框已经是分隔。 */
+:root .design-workspace .change-summary > .change-more { margin-top: 0; border-top: 0; padding-top: 6px; }
+.read-group-items > .toolcall-read .toolcall-read-head { padding-left: 26px; }
 @media (max-width: 760px) { .toolcall.toolcall-read > .toolcall-body { padding-left: 12px; } }
-@media (max-width: 760px) { .toolcall-read-stats { display: none; } .toolcall-read-headrow .toolcall-read-actions button { font-size: 0; gap: 0; padding: 3px 7px; } }
+@media (max-width: 760px) { .toolcall-read-stats { display: none; } }
 @media (max-width: 560px) { .toolcall-read-title { flex-basis: auto; } }
 
 /* Expanded commands share the card surface; command and result have distinct sections. */
@@ -16155,6 +16198,25 @@ span.rich-math { display: inline-block; }
 .browser-progress > .toolcall-body :is(.delegate-tool-actions, .structured-tool-output footer) button {
 	padding-inline: 0;
 }
+/* Expanded browser step: one parameters line with inline actions, then a
+   compact output panel — no stacked label bands for a short error. */
+.browser-detail-head { display: flex; align-items: flex-start; gap: 12px; padding: 6px 0 2px; }
+.browser-detail-head .toolcall-args { flex: 1; min-width: 0; padding: 0; }
+.browser-detail-head .toolcall-parameters { display: flex; align-items: baseline; gap: 10px; padding: 0; }
+.browser-detail-head .toolcall-parameters .toolcall-section-label { flex: none; margin: 0; }
+.browser-detail-head .toolcall-parameters dl { gap: 4px 16px; }
+.browser-detail-head .delegate-tool-actions { flex: none; margin-left: auto; padding: 0; gap: 10px; font-size: 12px; }
+.browser-detail-head .delegate-tool-actions button { color: var(--text-dim); }
+.browser-detail-head .delegate-tool-actions button:hover { color: var(--text); }
+.browser-progress .structured-tool-output { padding-top: 8px; }
+.browser-progress .structured-tool-code { margin-top: 6px; }
+.browser-progress .structured-tool-code pre { padding: 10px 12px; line-height: 1.6; }
+.browser-progress .structured-tool-code > button { padding: 8px; }
+.browser-progress .structured-tool-output footer { margin-top: 8px; padding: 8px 0; gap: 12px; }
+@media (max-width: 600px) {
+	.browser-detail-head { flex-wrap: wrap; gap: 6px; }
+	.browser-detail-head .delegate-tool-actions { margin-left: 0; }
+}
 .codemode-card.codemode-compact { margin: 2px 0; background: transparent; border: 0; }
 .codemode-compact > :is(.codemode-tabs, .codemode-body) { margin-inline: var(--step-content-start) var(--step-padding); }
 .codemode-compact > .codemode-tabs, .codemode-compact .codemode-call summary { padding-inline: 0; }
@@ -16402,7 +16464,7 @@ html[data-platform="win32"] :is(.settings-tab-label, .input-tools .chip, .reply-
 }
 
 /* 成功行只显示终端图标与命令，点击后在行下展开 Shell 详情。 */
-:root .design-workspace .bash-row-subtitle { flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--text-dim); font: 400 14px/20px var(--command-font); letter-spacing: 0; }
+:root .design-workspace .bash-row-subtitle { flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--tool-command-fg); font: 400 12.5px/20px var(--mono); letter-spacing: 0; }
 :root .design-workspace .bash-row-body { margin: 6px 0; padding: 0; }
 :root .design-workspace .process-group.single-command .bash-row-body { margin: 6px 0; padding: 0 8px; }
 .bash-detail-card { background: transparent; border-radius: 0; padding: 2px 0; margin: 0 0 12px; }
@@ -16436,25 +16498,41 @@ html[data-platform="win32"] :is(.settings-tab-label, .input-tools .chip, .reply-
 	:root .design-workspace .process-group.run .streaming-color,
 	:root .design-workspace .process-list .thinking.live .streaming-color { animation: none; background: none; color: var(--text-faint); }
 }
-:root .design-workspace .process-group-summary-line .process-group-summary-text:not(.streaming-color) { background: none; color: var(--tool-text); }
-:root .design-workspace .process-group-summary-line .process-group-icon { width: 15px; height: 15px; border-color: color-mix(in srgb, var(--text-faint) 34.3%, transparent); color: color-mix(in srgb, var(--text-faint) 71.3%, transparent); }
-:root .design-workspace .process-group-summary-line .process-group-icon svg { width: 10px; height: 10px; }
+:root .design-workspace .process-group-summary-line .process-group-summary-text:not(.streaming-color) { background: none; color: var(--text); }
 /* Command groups use the supplied native-font reference for both collapsed and expanded heads. */
 :root .design-workspace .process-group-summary-line,
 :root .design-workspace .process-group > .process-group-head { font: 400 14px/20px var(--command-font); letter-spacing: 0; }
-/* Expanded settled groups use the same quiet gray as the collapsed reference. */
-:root .design-workspace .process-group.ok:not(.single-command) > .process-group-head { color: var(--tool-text); }
-:root .design-workspace .process-group.ok:not(.single-command) > .process-group-head:is(:hover, :focus-visible) { color: var(--text); }
-:root .design-workspace .process-group.ok:not(.single-command) > .process-group-head .process-group-icon { width: 15px; height: 15px; border-color: color-mix(in srgb, var(--text-faint) 34.3%, transparent); color: color-mix(in srgb, var(--text-faint) 71.3%, transparent); }
-:root .design-workspace .process-group.ok:not(.single-command) > .process-group-head .process-group-icon svg { width: 10px; height: 10px; }
-:root .design-workspace .process-group .bash-row.ok .bash-row-subtitle { margin-left: 5px; color: var(--tool-text); }
+/* Expanded settled groups use the same dark label as the collapsed reference. */
+:root .design-workspace .process-group.ok:not(.single-command) > .process-group-head { color: var(--text); }
+:root .design-workspace .process-group .bash-row.ok .bash-row-subtitle { color: var(--tool-command-fg); }
 :root .design-workspace .process-group.open:not(.single-command) > .process-group-rows { border-left-color: color-mix(in srgb, var(--text-faint) 14.7%, transparent); }
-:root .design-workspace .process-group .bash-row.ok > .bash-row-head { gap: 12px; min-height: 37px; padding-block: 8px; }
+:root .design-workspace .process-group .bash-row.ok > .bash-row-head { gap: 8px; min-height: 37px; padding-block: 8px; }
+/* 展开的命令组：父级图标已表示工具类型，成功子行不再重复终端图标（2026-11 用户决定
+   「去掉重复图标」）；运行 / 失败 / 未执行保留状态标记。 */
+:root .design-workspace .process-group.open:not(.single-command) .bash-row.ok .bash-state { display: none; }
+:root .design-workspace .process-group.open:not(.single-command) .bash-row.ok .bash-row-body { padding-left: 7px; }
+
+/* 单命令是「运行了命令」标签行 + 下方浅灰命令块：标签行无箭头不可点，灰块缩进到
+   标签文字正下方（16px 图标 + 8px 间距 = 24px），无行内图标、等宽命令、整块可点
+   （2026-11 用户截图）。 */
+:root .design-workspace .process-group.single-command > .process-group-head { color: var(--text); cursor: default; }
+:root .design-workspace .process-group.single-command.ok > .process-group-rows { padding-left: 24px; }
+:root .design-workspace .process-group.single-command .bash-row.ok > .bash-row-head { gap: 0; min-height: 0; margin: 2px 0; padding: 10px 12px; border-radius: var(--r-md); background: var(--code-bg); }
+:root .design-workspace .process-group.single-command .bash-row.ok > .bash-row-head:is(:hover, :focus-visible) { background: var(--code-bg); }
+:root .design-workspace .process-group.single-command .bash-row.ok .bash-state { display: none; }
+:root .design-workspace .process-group.single-command .bash-row.ok .bash-inline-command { flex: 1; max-width: none; color: var(--tool-command-fg); font-size: 12.5px; }
+
+/* 工具行时间线：连续的工具块（命令组、读取、搜索组）共享一条左竖线，每个块头一个圆点（2026-11 用户截图）。 */
+.tool-timeline { position: relative; padding-left: 22px; }
+.tool-timeline::before { content: ""; position: absolute; left: 9px; top: 16px; bottom: 16px; width: 1px; background: color-mix(in srgb, var(--text-faint) 25%, transparent); }
+.tool-timeline > :is(.process-group, .toolcall-read, .read-group) > :is(.process-group-head, .process-group-summary-line, .toolcall-read-head, .read-group-head) { position: relative; }
+.tool-timeline > :is(.process-group, .toolcall-read, .read-group) > :is(.process-group-head, .process-group-summary-line, .toolcall-read-head, .read-group-head)::before { content: ""; position: absolute; left: -15px; top: 50%; width: 5px; height: 5px; margin-top: -2.5px; border-radius: 50%; background: color-mix(in srgb, var(--text-faint) 55%, transparent); }
+/* 完成的步骤点亮橙色圆点（2026-11 用户截图「完成了可以亮橙色的灯」）；运行中/排队保持灰色。 */
+.tool-timeline > :is(.process-group.ok, .toolcall-read.ok, .read-group.ok) > :is(.process-group-head, .process-group-summary-line, .toolcall-read-head, .read-group-head)::before { background: var(--tool-dot-done); }
 :root .design-workspace .process-group.single-command .bash-row > .bash-row-head { column-gap: 8px; }
 :root .design-workspace .process-group.single-command .bash-row .bash-row-subtitle { margin-left: 0; }
 :root .design-workspace .process-group .bash-row.ok .bash-row-head:is(:hover, :focus-visible) { background: transparent; }
 :root .design-workspace .process-group .bash-row.ok .bash-row-head:is(:hover, :focus-visible) .bash-row-subtitle { color: var(--text); }
-:root .design-workspace .process-group .bash-row.ok .bash-row-icon { width: 15px; height: 15px; border-color: color-mix(in srgb, var(--text-faint) 34.3%, transparent); color: color-mix(in srgb, var(--text-faint) 71.3%, transparent); }
 
 /* Shell detail: one quiet terminal card for command, output and terminal state. */
 :root .design-workspace .bash-shell-card { margin: 2px 0 4px; padding: 6px 10px; border: 1px solid var(--shell-border); border-radius: var(--r-lg); background: transparent; }
@@ -16826,37 +16904,63 @@ html[data-platform="win32"] :is(.settings-tab-label, .input-tools .chip, .reply-
 	.inputbox textarea.chat-prompt-field { field-sizing: content; min-width: 0; overflow-y: auto; }
 }
 
-/* A compact tool heading owns its preview. Nested file rows share its left edge. */
-:root .design-workspace .transcript-tool {
-	margin: 2px 0; min-width: 0; border: 0; border-radius: 0;
-	background: transparent; box-shadow: none;
-}
-:root .design-workspace .transcript-tool:has(> :is(.toolcall-body, .change-card-body)) {
-	border: 1px solid var(--review-border); border-radius: var(--r-md); background: var(--review-bg);
-}
-:root .design-workspace .transcript-tool > :is(.change-card-head, .toolcall-read-headrow, .toolcall-head) {
-	min-height: 30px; padding: 2px 6px; gap: 6px; border: 0;
-}
-:root .design-workspace .transcript-tool .toolcall-read-head { min-height: 26px; padding: 0; gap: 8px; }
-:root .design-workspace .transcript-tool > .toolcall-head > .toolcall-icon,
-:root .design-workspace .transcript-tool .toolcall-read-icon { width: 16px; height: 16px; background: transparent; color: var(--text-dim); }
-:root .design-workspace .transcript-tool > :is(.change-card-body, .toolcall-body) {
-	padding: 0; border-top: 1px solid var(--review-border); min-width: 0;
-}
-:root .design-workspace .transcript-tool > .change-card-body > .change-summary-inline {
-	margin: 0; border: 0; border-radius: 0;
-}
-:root .design-workspace .transcript-tool .change-summary-inline > .change-summary-file { padding-inline: 6px; gap: 6px; }
+/* Sidebar polish (equal edges / one system): the search field and footer share
+   the nav rows' outer gutter and icon inset; the time column uses tabular
+   figures so dates/times align. Expanded rail only — the collapsed 56px rail
+   keeps its own metrics. */
+.compact-navigation:not(.directory-collapsed) .navigation-search { margin: 0 0 12px; padding: 0 8px; }
+.compact-navigation:not(.directory-collapsed) .sidebar-footer { padding: 8px; }
+.compact-navigation:not(.directory-collapsed) .sidebar-footer button { padding: 5px 8px; border-radius: var(--r-md); }
+.compact-navigation .session-time { font-variant-numeric: tabular-nums; }
 
-:root .design-workspace .transcript-tool > .toolcall-read-headrow { padding-inline-start: 0; }
-
-:root .design-workspace .toolcall-read .toolcall-output-more { border: 0; box-shadow: none; background: transparent; }
-:root .design-workspace .toolcall-read .toolcall-output { margin-top: 0; }
-
-/* File previews sit directly inside the read card. */
-:root .design-workspace .toolcall-read .toolcall-output > .toolcall-markdown,
-:root .design-workspace .toolcall-read .toolcall-output > pre,
-:root .design-workspace .toolcall-read .toolcall-code.numbered .code-gutter,
-:root .design-workspace .toolcall-read .toolcall-code .codeblock pre {
-	border: 0; border-radius: 0; box-shadow: none;
+/* One quiet icon-button system for the sidebar "+" affordances (new chat /
+   new session): drop the joined segment + 1px divider on the active chat row
+   so the plus sits on the same row ground as the project-row plus; match its
+   size, radius, hover and focus. Touch keeps the 44px target. */
+.compact-navigation .global-entries .global-chat-entry:has(> button:first-child.active) { gap: 2px; }
+.compact-navigation .global-entries .global-chat-entry:has(> button:first-child.active) > button:first-child { border-radius: var(--r-sm); }
+.compact-navigation .global-entries .global-chat-entry:has(> button:first-child.active) .global-new-chat { border-radius: var(--r-sm); background: transparent; }
+.compact-navigation .global-entries .global-chat-entry:has(> button:first-child.active) .global-new-chat::before { content: none; }
+.compact-navigation .global-entries .global-new-chat:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+@media (pointer: fine) {
+	.compact-navigation .global-entries .global-new-chat { width: 27px; min-width: 27px; height: 27px; min-height: 27px; }
+	.compact-navigation .global-entries .global-new-chat svg { width: 18px; height: 18px; }
 }
+
+/* 展开的命令组必须展现层级（用户截图反馈「这应该展现层级啊」）：行列表挂在
+   组头图标下方的 1px 左竖引导线右侧（上方 14874 的提交态规则），曾短暂拉平成
+   单一竖线，展开后父子层级消失，已还原。
+   展开的 Shell 卡再缩进到该行命令标签正下方，不与命令行同层：行左内边距 6px
+   + 16px 状态列 + 8px 间距 + 5px margin = 35px；单命令组无行内边距与 margin，
+   16px + 10px = 26px。 */
+:root .design-workspace .process-group .bash-row-body { padding-left: 35px; }
+:root .design-workspace .process-group.single-command .bash-row-body { padding: 0 8px 0 12px; }
+/* 读取不进「运行了命令」组（2026-12 用户决定，两轮截图反馈「读取应该在外面」）：
+   在正文行级单独成行，沿用 29a 行式语言——无外框、行头左内边距 0、间距 10px；
+   展开正文缩进 24px（标签列）。「读取 N 个文件」子组同样无边框成行，展开项保持
+   14px 子缩进。
+   成功读取不显示 ✓（用户决定「这个去掉」）：与命令行同款——成功行只有工具图标；
+   书本图标改为命令行终端图标同款描边小盒（15×15、同 34.3%/71.3% 混色、透明底），
+   与命令图标落在同一条左线。错误 ✗ / 运行 / 未执行 − 保留 16px 状态符。 */
+:root .design-workspace .msg .read-group { margin: 6px 0; border: 0; border-radius: 0; background: transparent; }
+:root .design-workspace .msg .read-group-head { min-height: 30px; padding: 5px 0; gap: 10px; }
+:root .design-workspace .msg .toolcall-read > .toolcall-read-head { padding-left: 0; gap: 10px; }
+:root .design-workspace .msg .toolcall-read-state { width: 16px; }
+:root .design-workspace .msg .toolcall-read-state.ok { display: none; }
+:root .design-workspace .msg .toolcall-read > .toolcall-body { padding-left: 24px; }
+/* 文本读取的展开正文是卡片（2026-11 用户截图）：文件名头部 + 只读标签 + 行号代码 + 底部「展开全部」。 */
+:root .design-workspace .msg .toolcall-read > .toolcall-body:has(> .toolcall-read-card) { padding-left: 0; }
+.toolcall-read-card { margin: 4px 0 8px; border: 1px solid var(--border-soft); border-radius: var(--r-lg); background: var(--bg-elev); overflow: hidden; }
+.read-card-head { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border-soft); }
+.read-card-head > svg { width: 14px; height: 14px; flex: none; color: var(--tool-icon-fg); }
+.read-card-head strong { font: 600 13px/1.5 var(--sans); color: var(--text); }
+.read-card-dir { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-dim); font-size: 12px; }
+.read-card-head .toolcall-wrap { display: inline-flex; align-items: center; gap: 4px; }
+.read-card-head .toolcall-wrap svg { width: 12px; height: 12px; }
+.read-card-zoom { display: inline-flex; align-items: center; justify-content: center; padding: 2px; border: 0; background: none; color: var(--text-dim); cursor: pointer; }
+.read-card-zoom:hover { color: var(--text); }
+.read-card-zoom svg { width: 13px; height: 13px; }
+.toolcall-read-card .toolcall-output-label { margin: 0; padding: 8px 12px 0; }
+.toolcall-read-card .toolcall-code, .toolcall-read-card .toolcall-markdown, .toolcall-read-card > pre { margin: 0 12px; }
+.toolcall-read-card .toolcall-output-more { display: flex; width: 100%; align-items: center; justify-content: center; gap: 4px; margin: 6px 0 0; padding: 7px 12px; border: 0; border-top: 1px solid var(--border-soft); border-radius: 0; background: none; color: var(--text-dim); font: 12px var(--sans); cursor: pointer; }
+.toolcall-read-card .toolcall-output-more:hover { color: var(--text); }

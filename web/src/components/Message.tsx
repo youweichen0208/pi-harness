@@ -49,6 +49,7 @@ import { preserveUserTree } from "../user-message-presentation";
 import { BashGroup, latestAttemptStates, stateOf } from "./BashGroup";
 import { bashTaskCommand } from "../bash-steps";
 import { emptyProcessStats, ProcessGroup, type ProcessStats } from "./ProcessGroup";
+import { tallyRunningCommand } from "../process-stats";
 import { BackgroundContext, WorkspacePathContext } from "../workspace-context";
 
 /** 编辑重问编辑器里直接拖入/粘贴文件的上限（与服务端 MAX_UPLOAD_BYTES 一致）。 */
@@ -393,9 +394,9 @@ export const Message = memo(function Message({
 
 	const renderContentBlocks = (skipText: boolean): ReactNode[] => {
 
-		// 3a: consecutive thinking/command/search rows share one list.
-		const elements: { node: ReactNode; process: boolean; tally?: (stats: ProcessStats) => void }[] = [];
-		const push = (node: ReactNode, process = false, tally?: (stats: ProcessStats) => void) => elements.push({ node, process, tally });
+		// 3a: consecutive thinking/command/read/search rows share one list.
+		const elements: { node: ReactNode; process: boolean; timeline?: boolean; tally?: (stats: ProcessStats) => void }[] = [];
+		const push = (node: ReactNode, process = false, tally?: (stats: ProcessStats) => void, timeline = false) => elements.push({ node, process, timeline, tally });
 		const tallyTool = (stats: ProcessStats, view: ToolView, id: string) => {
 			stats.toolIds.push(id);
 			const failed = view.result?.isError || view.status?.isError;
@@ -456,7 +457,9 @@ export const Message = memo(function Message({
 					stats.toolIds.push(...rendered.map(call => call.id));
 					for (const { state, view } of latestAttemptStates(items, cwd)) {
 						if (state === "err") stats.failed++;
-						if (state === "run") stats.running = true;
+						// 后台命令（dev server 等）会比本轮活得更久：回合结束后它保留
+						// 自己的 Running 行，但不再让组标题和 Thought 继续流光装忙。
+						if (state === "run") tallyRunningCommand(stats, !!view.background, !!(bashActive ?? toolsRunning ?? streaming));
 						stats.outcomes.push(state === "empty" ? "skip" : state);
 						if (state !== "empty" || view.result || view.status) stats.skipped = false;
 					}
@@ -471,7 +474,10 @@ export const Message = memo(function Message({
 					reads.push(next);
 					i++;
 				}
-				push(<ReadGroup key={`${message.id}-${first.id}`} items={reads.map((item) => ({ block: item, view: viewFor(item) }))} wrap={toolsWrap} />);
+				// 读取不进「运行了命令」组（2026-12 用户决定）：它打断过程 run，
+				// 在调用位置正文行级单独成行；连续读取由 ReadGroup 合并为
+				// 「读取 N 个文件」。组头因此不再附加「已读取 N 个文件」。
+				push(<ReadGroup key={`${message.id}-${first.id}`} items={reads.map((item) => ({ block: item, view: viewFor(item) }))} wrap={toolsWrap} />, false, undefined, true);
 				continue;
 			}
 
@@ -490,9 +496,9 @@ export const Message = memo(function Message({
 				if (streaming && isLast && i === message.content.length - 1) stats.running = true;
 			} : undefined);
 		}
-		const grouped: ReactNode[] = [];
+		const grouped: { node: ReactNode; timeline: boolean }[] = [];
 		for (let i = 0; i < elements.length; i++) {
-			if (!elements[i].process) { grouped.push(elements[i].node); continue; }
+			if (!elements[i].process) { grouped.push({ node: elements[i].node, timeline: !!elements[i].timeline }); continue; }
 			const run: ReactNode[] = [];
 			const start = i;
 			const stats = emptyProcessStats();
@@ -503,9 +509,20 @@ export const Message = memo(function Message({
 			// Key by the first row so appending rows during streaming never remounts the list.
 			const key = `process-${isValidElement(run[0]) ? run[0].key : start}`;
 			// Thinking alone needs no summary header; any tool turns the run into a collapsible group.
-			grouped.push(stats.commands + stats.reads + stats.searches > 0 ? <ProcessGroup key={key} stats={stats} currentCommandId={currentCommandId}>{run}</ProcessGroup> : <div className="process-list" key={key}>{run}</div>);
+			const grouped1 = stats.commands + stats.searches > 0;
+			grouped.push({ node: grouped1 ? <ProcessGroup key={key} stats={stats} currentCommandId={currentCommandId}>{run}</ProcessGroup> : <div className="process-list" key={key}>{run}</div>, timeline: grouped1 });
 		}
-		return grouped;
+		// 连续的工具行（命令组、读取、搜索）包进一条左侧时间线：竖线贯穿、每行一个圆点。
+		const out: ReactNode[] = [];
+		for (let i = 0; i < grouped.length; i++) {
+			if (!grouped[i].timeline) { out.push(grouped[i].node); continue; }
+			const run: ReactNode[] = [];
+			const start = i;
+			while (i < grouped.length && grouped[i].timeline) run.push(grouped[i++].node);
+			i--;
+			out.push(<div className="tool-timeline" key={`timeline-${start}`}>{run}</div>);
+		}
+		return out;
 	};
 
 	return (

@@ -1,7 +1,8 @@
 import { highlightLine } from "../hljs-lite";
 import { copyText } from "../clipboard";
 import { useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { FiChevronDown, FiChevronRight, FiCopy, FiTerminal } from "react-icons/fi";
+import { FiChevronDown, FiChevronRight, FiCopy } from "react-icons/fi";
+import { LuSquareTerminal } from "react-icons/lu";
 import { commandReading, consecutiveAttempts } from "../command-reading";
 import { useChatT } from "../i18n";
 import { BackgroundContext, WorkspacePathContext } from "../workspace-context";
@@ -76,7 +77,7 @@ export function BashGroup({ items, onKill, active = false, flat = false }: { ite
 	}, [items]);
 	return <section className={`bash-group ${state} ${!open ? "historical-step" : ""}`}>
 		{!flat && <button type="button" className="bash-group-head" aria-expanded={open} onClick={() => setOpen(!open)}>
-			<span className={`bash-state ${state}`} aria-label={t(failed ? "error" : running ? "running" : skipped ? "toolNotExecuted" : "done")}>{failed ? "✗" : running ? <FiTerminal className="bash-row-icon" aria-hidden="true" /> : skipped ? "−" : "✓"}</span>
+			<span className={`bash-state ${state}`} aria-label={t(failed ? "error" : running ? "running" : skipped ? "toolNotExecuted" : "done")}>{failed ? "✗" : running ? <LuSquareTerminal className="bash-row-icon" aria-hidden="true" /> : skipped ? "−" : "✓"}</span>
 			<strong>{!open ? commandReading(commandPresentation(items[0].command ?? bashCommand(items[0].block.argumentsText) ?? "", cwd).command).title : t(running ? "bashGroupRunning" : "bashGroupCount", { n: items.length })}</strong>{!open && items.length > 1 && <span className="bash-group-count">{t("changesCommands", { n: items.length })}</span>}
 			{failed > 0 && <span className="bash-state err">{t("bashGroupFailed", { n: failed })}</span>}
 			{measured && seconds(durations.reduce<number>((sum, ms) => sum + (ms ?? 0), 0)) && <span className="bash-group-duration">{seconds(durations.reduce<number>((sum, ms) => sum + (ms ?? 0), 0))}</span>}
@@ -95,8 +96,15 @@ function BashRow({ block, view, currentStep, onKill, revealed, messageId, attemp
 	const { control } = useContext(BackgroundContext);
 	const task = view.background;
 	const state = historical && !view.result ? "empty" : stateOf(view);
+	const output = task ? [task.output, task.error].filter(Boolean).join("\n") : view.result?.content.map((part) => part.type === "text" && typeof part.text === "string" ? part.text : "").join("") ?? view.liveOutput ?? "";
+	const lines = output ? output.replace(/\r\n/g, "\n").replace(/\n$/, "").split("\n") : [];
+	// A failed/never-executed command with no output has nothing to expand: the
+	// ✗/− head already states the failure and the command. Auto-opening it only
+	// repeated the command in a Shell card under an 「✗ Error」 footer (user
+	// screenshot: interrupted `npm run dev`, 0 行). Retries keep their history.
+	const quietFailure = (state === "err" || state === "empty") && lines.length === 0 && !history;
 	// In a process group the group opens on failure; rows stay compact until clicked or revealed.
-	const [open, setOpen] = useState(state === "err" && !compact);
+	const [open, setOpen] = useState(state === "err" && !compact && !quietFailure);
 	const [all, setAll] = useState(false);
 	const [requestOpen, setRequestOpen] = useState(false);
 	const [wrapOutput, setWrapOutput] = useState(true);
@@ -104,13 +112,14 @@ function BashRow({ block, view, currentStep, onKill, revealed, messageId, attemp
 	const [copied, setCopied] = useState<"command" | "output" | null>(null);
 	const copyTimer = useRef<ReturnType<typeof setTimeout>>();
 	useEffect(() => () => clearTimeout(copyTimer.current), []);
-	useEffect(() => { if (state === "err" && !compact || revealed) setOpen(true); }, [state, revealed, compact]);
+	useEffect(() => { if (state === "err" && !compact && !quietFailure || revealed) setOpen(true); }, [state, revealed, compact, quietFailure]);
 	useEffect(() => {
 		const jump = (event: Event) => { if ((event as CustomEvent).detail?.toolCallId === block.id) { setOpen(true); if ((event as CustomEvent).detail?.search) { setAll(true); setRequestOpen(true); } } };
 		window.addEventListener("pi:reveal-tool", jump);
 		return () => window.removeEventListener("pi:reveal-tool", jump);
 	}, [block.id]);
 	const command = commandOverride ?? bashCommand(block.argumentsText) ?? block.argumentsText ?? "bash";
+	// `output`/`lines` are computed above the open state so quiet failures never auto-expand.
 	const display = commandPresentation(command, cwd);
 	const subtitle = commandPreview(command, cwd);
 	const commandLines = display.command.trimEnd().split(/\r?\n/);
@@ -120,8 +129,6 @@ function BashRow({ block, view, currentStep, onKill, revealed, messageId, attemp
 	const requestTimeout = useMemo(() => { try { const a = JSON.parse(block.argumentsText ?? "{}"); return typeof a.timeout === "number" ? a.timeout : undefined; } catch { return undefined; } }, [block.argumentsText]);
 	// Long commands clamp the Shell command to a 6-line preview with an expand toggle.
 	const longRequest = rawCommandLines.length > 6;
-	const output = task ? [task.output, task.error].filter(Boolean).join("\n") : view.result?.content.map((part) => part.type === "text" && typeof part.text === "string" ? part.text : "").join("") ?? view.liveOutput ?? "";
-	const lines = output ? output.replace(/\r\n/g, "\n").replace(/\n$/, "").split("\n") : [];
 	// issue #106: a running command shows its elapsed time and latest output
 	// line right on the row, and tails (not heads) the output when expanded.
 	const mountedSeconds = useLiveSeconds(state === "run" && view.connected !== false);
@@ -146,8 +153,8 @@ function BashRow({ block, view, currentStep, onKill, revealed, messageId, attemp
 		try { await copyText(kind === "command" ? command : output, doc); setCopied(kind); clearTimeout(copyTimer.current); copyTimer.current = setTimeout(() => setCopied(null), 1500); } catch { setCopied(null); setCopyError(kind); }
 	};
 	return <div className={`bash-row ${state}`} data-tool-call-id={block.id} data-msg-id={messageId} onMouseEnter={() => window.dispatchEvent(new CustomEvent("pi:tool-hover", { detail: { toolCallId: block.id } }))} onMouseLeave={() => window.dispatchEvent(new CustomEvent("pi:tool-hover", { detail: { toolCallId: null } }))}>
-		<button type="button" className="bash-row-head" title={command} aria-expanded={open} onClick={() => setOpen(!open)}>
-			<span className={`bash-state ${state}`} aria-label={t(state === "run" ? "running" : state === "err" ? "error" : state === "empty" && view.abandoned ? "toolNotExecuted" : "done")}>{state === "err" ? "✗" : state === "empty" ? "−" : <FiTerminal className="bash-row-icon" aria-hidden="true" />}</span>
+		<button type="button" className="bash-row-head" title={command} aria-expanded={open && !quietFailure} disabled={quietFailure} onClick={() => setOpen(!open)}>
+			<span className={`bash-state ${state}`} aria-label={t(state === "run" ? "running" : state === "err" ? "error" : state === "empty" && view.abandoned ? "toolNotExecuted" : "done")}>{state === "err" ? "✗" : state === "empty" ? "−" : <LuSquareTerminal className="bash-row-icon" aria-hidden="true" />}</span>
 			<span className="bash-row-subtitle" title={command}><span className={shimmer ?? (state === "ok" && currentStep ? "current-command-step" : undefined)}>{subtitle}</span></span>
 			{state !== "ok" && <>
 				{attempts && <span className="bash-attempt-count">{t("commandAttempts", { n: attempts })}</span>}
@@ -156,18 +163,21 @@ function BashRow({ block, view, currentStep, onKill, revealed, messageId, attemp
 				{!feedback && liveLine && <span className="bash-live-line" title={liveLine}>{liveLine}</span>}
 				{compact ? <span className={`bash-row-stats${shimmer ? " streaming-color" : ""}`}>{state === "run" ? runningStats : state === "empty" && view.abandoned ? t("toolNotExecuted") : state === "err" && exitCode !== undefined ? `exit ${exitCode}` : (toolDuration(view) ?? 0) >= 100 ? commandDuration(toolDuration(view)!) : t("toolLineCount", { n: lines.length })}</span> : <span className={`bash-row-stats${shimmer ? " streaming-color" : ""}`}>{state === "run" ? runningStats : state === "empty" && view.abandoned ? t("toolNotExecuted") : exitCode !== undefined && state === "err" ? t("bashExitCode", { n: exitCode }) : t("toolLineCount", { n: lines.length })}{toolDuration(view) !== undefined && seconds(toolDuration(view)!) ? ` · ${seconds(toolDuration(view)!)}` : ""}</span>}
 			</>}
-			{/* GPT-style rows reserve the chevron slot on every state and fade it in on hover/focus/expand, so revealing it never nudges the command. */}
-			{open ? <FiChevronDown /> : <FiChevronRight />}
+			{/* GPT-style rows reserve the chevron slot on every state and fade it in on hover/focus/expand, so revealing it never nudges the command.
+			    Quiet failures keep the slot but hide the glyph: there is nothing to expand. */}
+			{open && !quietFailure ? <FiChevronDown /> : <FiChevronRight className={quietFailure ? "quiet-chevron" : undefined} />}
 		</button>
-		{task && <div className="bash-row-actions">
+		{/* An interrupted task with no exit code has nothing to say here: the ✗ head
+		    already marks the failure and the expanded body keeps the output, so the
+		    actions strip renders only when it carries a real control or fact. */}
+		{task && (task.state === "background" || task.state === "stopped" || task.exitCode !== undefined || state === "run") && <div className="bash-row-actions">
 			{/* Auto-detach at 30s owns backgrounding; the card only offers a clickable entry into the live output. */}
 			{task.state === "background" && <button type="button" aria-expanded={open} onClick={() => setOpen(!open)}>{t("backgroundTask")}{!output && " · " + t("backgroundEmpty")}</button>}
 			{task.state === "stopped" && <span>{t("cancelled")}</span>}
-			{task.state === "interrupted" && <span>{t("backgroundInterrupted")}</span>}
 			{task.exitCode !== undefined && <span>{t("bashExitCode", { n: task.exitCode })}</span>}
 			{state === "run" && <button disabled={view.connected === false} onClick={() => control?.(task.id, "stop")}>{t("backgroundStop")}</button>}
 		</div>}
-		{open && <div className="bash-row-body">
+		{open && !quietFailure && <div className="bash-row-body">
 			{feedback && <div className="bash-output-feedback"><span className={shimmer}>{feedback}</span></div>}
 			{display.directory && <div className="bash-row-directory">{t("bashGroupCwd", { path: display.directory })}</div>}
 			<section className="bash-detail-card bash-shell-card">

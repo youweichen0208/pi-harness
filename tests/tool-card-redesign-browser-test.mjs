@@ -17,9 +17,9 @@ try {
 	const card=page.locator('.toolcall-structured');
 	await card.waitFor();
 	assert.equal(await card.locator('.toolcall-action').textContent(),'action: sources');
-	const actionBelowName = await card.locator('.toolcall-name-toggle').evaluate(button =>
-		button.querySelector('small').getBoundingClientRect().top >= button.querySelector('span').getBoundingClientRect().bottom);
-	assert(actionBelowName, 'action appears beneath the tool name');
+	const nameBox = await card.locator('.toolcall-name > span').boundingBox();
+	const actionBox = await card.locator('.toolcall-action').boundingBox();
+	assert(actionBox.y >= nameBox.y + nameBox.height);
 	assert(await card.locator('.hljs-attr').count()>0);
 	const toggle=card.locator('.structured-tool-code > button');
 	assert.equal(await toggle.getAttribute('aria-expanded'),'false');
@@ -45,7 +45,7 @@ try {
 	await page.locator('.structured-tool-output').waitFor();
 	assert.equal(await page.locator('.structured-tool-output footer').getByRole('button',{name:'下载完整输出',exact:true}).count(),0);
 	assert.equal(await card.evaluate(el => getComputedStyle(el).borderLeftWidth), '1px');
-	assert.match(await card.locator('.toolcall-name-toggle').innerText(), /compress/i);
+	assert.match(await card.locator('.toolcall-name').innerText(), /compress/i);
 	// Knowledge tools stay as quiet Thinking-style status rows in the same transcript renderer.
 	const knowledgeCalls = [
 		['knowledge_sources', {}], ['source_list', { sourceId: 'repo' }],
